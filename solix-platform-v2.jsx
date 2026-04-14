@@ -1120,55 +1120,206 @@ const GlossaryView = ({onToast}) => {
             </div>
           </div>
           <div style={{display:"flex",gap:0,marginBottom:-1}}>
-            {[{id:"overview",l:"Overview"},{id:"terms",l:`Terms & Categories (${allTermsInGlossary.length})`},{id:"health",l:"Health Dashboard"}].map(tab=>(
+            {[{id:"overview",l:"Overview"},{id:"terms",l:`Terms & Categories (${allTermsInGlossary.length})`}].map(tab=>(
               <button key={tab.id} onClick={()=>setGTab(tab.id)} style={{padding:"8px 18px",background:"transparent",border:"none",borderBottom:`2px solid ${gTab===tab.id?T.accent:"transparent"}`,color:gTab===tab.id?T.text:T.textMuted,fontSize:13,fontWeight:gTab===tab.id?600:400,cursor:"pointer",transition:"all .12s"}}>{tab.l}</button>
             ))}
           </div>
         </div>
         <div style={{flex:1,overflowY:"auto"}}>
-          {gTab==="overview"&&(
-            <div style={{padding:"24px 28px"}}>
-              {glossary.categories.length===0&&allTermsInGlossary.length===0&&(
-                <div style={{textAlign:"center",padding:"64px 20px",color:T.textMuted}}>
-                  <div style={{fontSize:36,marginBottom:12}}>📂</div>
-                  <div style={{fontSize:15,fontWeight:600,color:T.textSub,marginBottom:6}}>No categories or terms yet</div>
-                  <div style={{fontSize:13,marginBottom:18}}>Start by adding a category to organize your terms.</div>
-                  <div style={{display:"flex",gap:8,justifyContent:"center"}}><Btn small ghost onClick={()=>openModal("newCategory")}>+ New Category</Btn><Btn small variant="primary" onClick={()=>openModal("newTerm",{})}>+ New Term</Btn></div>
+          {gTab==="overview"&&(()=>{
+            const allT=allTermsInGlossary;
+            const totalTerms=allT.length;
+            const approved=allT.filter(t=>t.status==="Approved").length;
+            const inReview=allT.filter(t=>t.status==="In Review").length;
+            const draft=allT.filter(t=>t.status==="Draft").length;
+            const deprecated=allT.filter(t=>t.status==="Deprecated").length;
+            const conflicts=allT.filter(t=>t.status==="Conflict").length;
+            const coveragePct=totalTerms>0?Math.round((approved/totalTerms)*100):0;
+            const catStats=glossary.categories.map(cat=>{const ct=allT.filter(t=>t.category===cat.id);const ca=ct.filter(t=>t.status==="Approved").length;return{name:cat.name,id:cat.id,total:ct.length,approved:ca,pct:ct.length>0?Math.round((ca/ct.length)*100):0};});
+            const unlinked=allT.filter(t=>(t.linkedAssets||[]).length===0&&t.status!=="Deprecated");
+            const noDefn=allT.filter(t=>(!t.definition||t.definition.length<10)&&t.status!=="Deprecated");
+            const hasData=glossary.categories.length>0||totalTerms>0;
+            if(!hasData) return(
+              <div style={{textAlign:"center",padding:"72px 20px"}}>
+                <div style={{width:52,height:52,borderRadius:14,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",color:T.textSub}}>
+                  <svg width="22" height="22" viewBox="0 0 14 14" fill="none"><path d="M1.5 3h3.8l.9 1.3H12.5a.7.7 0 01.7.7v5.8a.7.7 0 01-.7.7H1.5a.7.7 0 01-.7-.7V3.7a.7.7 0 01.7-.7z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
                 </div>
-              )}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12}}>
-                {glossary.categories.map(cat=>{
-                  const cts=allTermsInGlossary.filter(t=>t.category===cat.id);
-                  return (
-                    <div key={cat.id} onClick={()=>{setSelCat(cat.id);setSelTerm(null);}}
-                      style={{padding:"16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,cursor:"pointer",transition:"all .15s"}}
-                      onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent+"55";e.currentTarget.style.boxShadow="0 2px 12px rgba(0,0,0,.06)";}}
-                      onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
-                      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-                        <div style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.textSub,flexShrink:0}}>
-                          <svg width="15" height="15" viewBox="0 0 14 14" fill="none"><path d="M1.5 3h3.8l.9 1.3H12.5a.7.7 0 01.7.7v5.8a.7.7 0 01-.7.7H1.5a.7.7 0 01-.7-.7V3.7a.7.7 0 01.7-.7z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
-                        </div>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:13.5,fontWeight:700,color:T.text}}>{cat.name}</div>
-                          <div style={{fontSize:11,color:T.textMuted}}>{cts.length} term{cts.length!==1?"s":""}</div>
-                        </div>
-                        <button onClick={e=>{e.stopPropagation();openModal("newTerm",{category:cat.id});}}
-                          style={{width:22,height:22,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0}}
-                          onMouseEnter={e=>{e.currentTarget.style.background=T.accentDim;e.currentTarget.style.color=T.accent;}}
-                          onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;}}><IcPlus/></button>
-                      </div>
-                      {cts.length>0?(
-                        <div>{cts.slice(0,5).map(t=>{const cm=CERT_META[t.cert]||CERT_META.Draft;return(<div key={t.id} style={{display:"flex",alignItems:"center",gap:7,padding:"5px 0",borderTop:`1px solid ${T.border}`}}><span style={{width:5,height:5,borderRadius:"50%",background:cm.color,flexShrink:0}}/><span style={{flex:1,fontSize:12,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.term}</span></div>);})}{cts.length>5&&<div style={{fontSize:11,color:T.textMuted,padding:"5px 0",borderTop:`1px solid ${T.border}`}}>+{cts.length-5} more</div>}</div>
-                      ):(
-                        <div style={{fontSize:12,color:T.textMuted,fontStyle:"italic",paddingTop:8,borderTop:`1px solid ${T.border}`}}>No terms yet</div>
-                      )}
-                    </div>
-                  );
-                })}
+                <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:6}}>No categories or terms yet</div>
+                <div style={{fontSize:13,color:T.textMuted,marginBottom:20}}>Create a category to start organizing your business terms.</div>
+                <div style={{display:"flex",gap:8,justifyContent:"center"}}>
+                  <Btn small ghost onClick={()=>openModal("newCategory")}>+ New Category</Btn>
+                  <Btn small variant="primary" onClick={()=>openModal("newTerm",{})}>+ New Term</Btn>
+                </div>
               </div>
-              {uncategorized.length>0&&<div style={{marginTop:20}}><div style={{fontSize:12,fontWeight:600,color:T.textMuted,marginBottom:10}}>Uncategorized ({uncategorized.length})</div><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:10}}>{uncategorized.map(t=><TermCard key={t.id} t={t}/>)}</div></div>}
-            </div>
-          )}
+            );
+            const coverageColor=coveragePct>=80?"#16a34a":coveragePct>=50?"#d97706":"#e11d48";
+            return(
+              <div style={{padding:"24px 28px",display:"flex",flexDirection:"column",gap:24}}>
+
+                {/* ── SECTION 1: Stats ── */}
+                {totalTerms>0&&(
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10}}>
+                    {[
+                      {label:"Total Terms", value:totalTerms,  sub:"in glossary",   color:T.text,     dimColor:T.textMuted, bg:T.bgSurface,  border:T.border},
+                      {label:"Approved",    value:approved,    sub:"ready to use",  color:"#16a34a",  dimColor:"#86efac",   bg:"#f0fdf4",    border:"#bbf7d0"},
+                      {label:"In Review",   value:inReview,    sub:"pending sign-off",color:"#d97706",dimColor:"#fcd34d",   bg:"#fffbeb",    border:"#fde68a"},
+                      {label:"Conflicts",   value:conflicts,   sub:"need resolution",color:"#7c3aed", dimColor:"#c4b5fd",   bg:"#faf5ff",    border:"#e9d5ff"},
+                      {label:"Coverage",    value:`${coveragePct}%`,sub:"approved ratio",color:coverageColor,dimColor:coverageColor,bg:coveragePct>=80?"#f0fdf4":coveragePct>=50?"#fffbeb":"#fff1f2",border:coveragePct>=80?"#bbf7d0":coveragePct>=50?"#fde68a":"#fecdd3"},
+                    ].map(m=>(
+                      <div key={m.label} style={{padding:"14px 16px",background:m.bg,border:`1px solid ${m.border}`,borderRadius:10}}>
+                        <div style={{fontSize:28,fontWeight:800,color:m.color,fontFamily:"'Geist Mono',monospace",lineHeight:1,marginBottom:4}}>{m.value}</div>
+                        <div style={{fontSize:12,fontWeight:600,color:m.color,marginBottom:2}}>{m.label}</div>
+                        <div style={{fontSize:11,color:m.dimColor,opacity:.75}}>{m.sub}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* ── SECTION 2: Lifecycle bar ── */}
+                {totalTerms>0&&(
+                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px 20px"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                      <span style={{fontSize:13,fontWeight:700,color:T.text}}>Term Lifecycle</span>
+                      <span style={{fontSize:11.5,color:T.textMuted}}>{totalTerms} total</span>
+                    </div>
+                    {/* Stacked bar */}
+                    <div style={{height:10,borderRadius:5,overflow:"hidden",display:"flex",gap:2,marginBottom:12}}>
+                      {[{s:"Approved",n:approved,c:"#16a34a"},{s:"In Review",n:inReview,c:"#d97706"},{s:"Draft",n:draft,c:"#94a3b8"},{s:"Conflict",n:conflicts,c:"#7c3aed"},{s:"Deprecated",n:deprecated,c:"#e11d48"}].filter(x=>x.n>0).map(x=>(
+                        <div key={x.s} title={`${x.s}: ${x.n}`} style={{flex:x.n,background:x.c,minWidth:4,borderRadius:3}}/>
+                      ))}
+                    </div>
+                    {/* Legend */}
+                    <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+                      {[{s:"Approved",n:approved,c:"#16a34a"},{s:"In Review",n:inReview,c:"#d97706"},{s:"Draft",n:draft,c:"#94a3b8"},{s:"Conflict",n:conflicts,c:"#7c3aed"},{s:"Deprecated",n:deprecated,c:"#e11d48"}].filter(x=>x.n>0).map(x=>(
+                        <div key={x.s} style={{display:"flex",alignItems:"center",gap:5}}>
+                          <span style={{width:8,height:8,borderRadius:"50%",background:x.c,flexShrink:0}}/>
+                          <span style={{fontSize:12,color:T.textSub}}>{x.s}</span>
+                          <span style={{fontSize:12,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{x.n}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── SECTION 3: Categories ── */}
+                <div>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                    <span style={{fontSize:13,fontWeight:700,color:T.text}}>Categories <span style={{fontSize:12,fontWeight:400,color:T.textMuted,marginLeft:4}}>{glossary.categories.length} total</span></span>
+                    <Btn small ghost onClick={()=>openModal("newCategory")}>+ New Category</Btn>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(230px,1fr))",gap:10}}>
+                    {glossary.categories.map(cat=>{
+                      const cts=allT.filter(t=>t.category===cat.id);
+                      const approvedCt=cts.filter(t=>t.status==="Approved").length;
+                      const pct=cts.length>0?Math.round((approvedCt/cts.length)*100):0;
+                      const pctColor=pct>=80?"#16a34a":pct>=50?"#d97706":"#e11d48";
+                      return(
+                        <div key={cat.id} onClick={()=>{setSelCat(cat.id);setSelTerm(null);}}
+                          style={{padding:"14px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,cursor:"pointer",transition:"all .15s"}}
+                          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent+"66";e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,.08)";}}
+                          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="none";}}>
+                          {/* Header row */}
+                          <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:12}}>
+                            <div style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.textSub,flexShrink:0}}>
+                              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1.5 3h3.8l.9 1.3H12.5a.7.7 0 01.7.7v5.8a.7.7 0 01-.7.7H1.5a.7.7 0 01-.7-.7V3.7a.7.7 0 01.7-.7z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
+                            </div>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:13.5,fontWeight:700,color:T.text,marginBottom:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cat.name}</div>
+                              <div style={{fontSize:11.5,color:T.textMuted}}>{cts.length} term{cts.length!==1?"s":""}</div>
+                            </div>
+                            <button onClick={e=>{e.stopPropagation();openModal("newTerm",{category:cat.id});}}
+                              style={{width:22,height:22,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,fontSize:14,lineHeight:1}}
+                              onMouseEnter={e=>{e.currentTarget.style.background=T.accentDim;e.currentTarget.style.color=T.accent;e.currentTarget.style.borderColor=T.accent+"55";}}
+                              onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}><IcPlus/></button>
+                          </div>
+                          {/* Coverage bar */}
+                          {cts.length>0?(
+                            <>
+                              <div style={{marginBottom:10}}>
+                                <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                                  <span style={{fontSize:11,color:T.textMuted}}>Approval coverage</span>
+                                  <span style={{fontSize:11,fontWeight:700,color:pctColor}}>{pct}%</span>
+                                </div>
+                                <div style={{height:5,borderRadius:3,background:T.bgElevated,overflow:"hidden"}}>
+                                  <div style={{width:`${pct}%`,height:"100%",background:pctColor,borderRadius:3,transition:"width .4s"}}/>
+                                </div>
+                              </div>
+                              {/* Term preview list */}
+                              <div style={{borderTop:`1px solid ${T.border}`,paddingTop:8}}>
+                                {cts.slice(0,4).map(t=>{const cm=CERT_META[t.cert]||CERT_META.Draft;return(
+                                  <div key={t.id} style={{display:"flex",alignItems:"center",gap:7,paddingBottom:5}}>
+                                    <span style={{width:6,height:6,borderRadius:"50%",background:cm.color,flexShrink:0}}/>
+                                    <span style={{flex:1,fontSize:12,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.term}</span>
+                                    <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>{t.cert}</span>
+                                  </div>
+                                );})}
+                                {cts.length>4&&<div style={{fontSize:11,color:T.textMuted,paddingTop:2}}>+{cts.length-4} more terms</div>}
+                              </div>
+                            </>
+                          ):(
+                            <div style={{borderTop:`1px solid ${T.border}`,paddingTop:10,fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms yet — click + to add one</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* Uncategorized */}
+                  {uncategorized.length>0&&(
+                    <div style={{marginTop:16}}>
+                      <div style={{fontSize:12,fontWeight:600,color:T.textMuted,marginBottom:8}}>Uncategorized <span style={{fontWeight:400}}>({uncategorized.length})</span></div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(230px,1fr))",gap:8}}>{uncategorized.map(t=><TermCard key={t.id} t={t}/>)}</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── SECTION 4: Needs Attention (only shown when issues exist) ── */}
+                {(unlinked.length>0||noDefn.length>0)&&(
+                  <div>
+                    <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Needs Attention</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                      {/* Unlinked terms */}
+                      <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"14px 16px"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                          <span style={{fontSize:16,lineHeight:1}}>⚠</span>
+                          <span style={{fontSize:13,fontWeight:700,color:"#92400e"}}>Unlinked Terms</span>
+                          <span style={{marginLeft:"auto",fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:99,background:"#fef3c7",color:"#d97706",border:"1px solid #fde68a"}}>{unlinked.length}</span>
+                        </div>
+                        <div style={{fontSize:12,color:"#78350f",marginBottom:10}}>These terms are not linked to any data asset yet.</div>
+                        {unlinked.slice(0,5).map(t=>(
+                          <div key={t.id} onClick={()=>goToTerm(t.id)}
+                            style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderTop:"1px solid #fde68a",cursor:"pointer"}}
+                            onMouseEnter={e=>e.currentTarget.style.opacity=".7"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+                            <span style={{fontSize:12.5,fontWeight:600,color:"#d97706",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.term}</span>
+                            <span style={{fontSize:10.5,color:"#92400e",flexShrink:0}}>{glossary.categories.find(c=>c.id===t.category)?.name||"Uncategorized"}</span>
+                          </div>
+                        ))}
+                        {unlinked.length>5&&<div style={{fontSize:11,color:"#92400e",paddingTop:6}}>+{unlinked.length-5} more</div>}
+                      </div>
+                      {/* Missing definitions */}
+                      <div style={{background:"#fff1f2",border:"1px solid #fecdd3",borderRadius:10,padding:"14px 16px"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                          <span style={{fontSize:16,lineHeight:1}}>✕</span>
+                          <span style={{fontSize:13,fontWeight:700,color:"#881337"}}>Missing Definitions</span>
+                          <span style={{marginLeft:"auto",fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:99,background:"#ffe4e6",color:"#e11d48",border:"1px solid #fecdd3"}}>{noDefn.length}</span>
+                        </div>
+                        <div style={{fontSize:12,color:"#9f1239",marginBottom:10}}>These terms have no definition or a very short one.</div>
+                        {noDefn.slice(0,5).map(t=>(
+                          <div key={t.id} onClick={()=>goToTerm(t.id)}
+                            style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderTop:"1px solid #fecdd3",cursor:"pointer"}}
+                            onMouseEnter={e=>e.currentTarget.style.opacity=".7"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+                            <span style={{fontSize:12.5,fontWeight:600,color:"#e11d48",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.term}</span>
+                            <span style={{fontSize:10.5,color:"#881337",flexShrink:0}}>{glossary.categories.find(c=>c.id===t.category)?.name||"Uncategorized"}</span>
+                          </div>
+                        ))}
+                        {noDefn.length>5&&<div style={{fontSize:11,color:"#9f1239",paddingTop:6}}>+{noDefn.length-5} more</div>}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            );
+          })()}
           {gTab==="terms"&&(allTermsInGlossary.length===0?(
             <div style={{textAlign:"center",padding:"64px 20px",color:T.textMuted}}><div style={{fontSize:15,fontWeight:600,color:T.textSub,marginBottom:8}}>No terms yet</div><Btn small variant="primary" onClick={()=>openModal("newTerm",{})}>+ New Term</Btn></div>
           ):(
@@ -1242,108 +1393,6 @@ const GlossaryView = ({onToast}) => {
               );})()}
             </div>
           ))}
-          {gTab==="health"&&(()=>{
-            const allT = allTermsInGlossary;
-            const totalTerms = allT.length;
-            const approved  = allT.filter(t=>t.status==="Approved").length;
-            const inReview  = allT.filter(t=>t.status==="In Review").length;
-            const draft     = allT.filter(t=>t.status==="Draft").length;
-            const deprecated= allT.filter(t=>t.status==="Deprecated").length;
-            const conflicts = allT.filter(t=>t.status==="Conflict").length;
-            const coveragePct = totalTerms>0?Math.round((approved/totalTerms)*100):0;
-            const catStats = glossary.categories.map(cat=>{
-              const ct=allT.filter(t=>t.category===cat.id);
-              const ca=ct.filter(t=>t.status==="Approved").length;
-              return {name:cat.name,total:ct.length,approved:ca,pct:ct.length>0?Math.round((ca/ct.length)*100):0};
-            });
-            const unlinked=allT.filter(t=>(t.linkedAssets||[]).length===0&&t.status!=="Deprecated");
-            const noDefn  =allT.filter(t=>(!t.definition||t.definition.length<10)&&t.status!=="Deprecated");
-            return (
-              <div style={{padding:"24px 28px",maxWidth:880}}>
-                {/* Top KPI cards */}
-                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:24}}>
-                  {[
-                    {label:"Total Terms",    value:totalTerms,    color:T.textSub},
-                    {label:"Approved",       value:approved,      color:"#16a34a"},
-                    {label:"In Review",      value:inReview,      color:"#d97706"},
-                    {label:"Conflicts",      value:conflicts,     color:"#7c3aed"},
-                    {label:"Coverage",       value:`${coveragePct}%`,color:coveragePct>=80?"#16a34a":coveragePct>=50?"#d97706":"#e11d48"},
-                  ].map(m=>(
-                    <div key={m.label} style={{padding:"14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,textAlign:"center"}}>
-                      <div style={{fontSize:24,fontWeight:800,color:m.color,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{m.value}</div>
-                      <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{m.label}</div>
-                    </div>
-                  ))}
-                </div>
-                {/* Lifecycle distribution bar */}
-                <div style={{marginBottom:24,padding:"16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10}}>
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-                    <span style={{fontSize:13,fontWeight:600,color:T.text}}>Term Lifecycle Distribution</span>
-                    <span style={{fontSize:11.5,color:T.textMuted}}>{totalTerms} terms total</span>
-                  </div>
-                  <div style={{height:12,borderRadius:6,background:T.bgElevated,overflow:"hidden",display:"flex"}}>
-                    {[
-                      {s:"Approved",n:approved,c:"#16a34a"},
-                      {s:"In Review",n:inReview,c:"#d97706"},
-                      {s:"Draft",n:draft,c:"#6b7280"},
-                      {s:"Conflict",n:conflicts,c:"#7c3aed"},
-                      {s:"Deprecated",n:deprecated,c:"#e11d48"},
-                    ].filter(x=>x.n>0).map(x=>(
-                      <div key={x.s} title={`${x.s}: ${x.n}`} style={{flex:x.n,background:x.c,minWidth:4,transition:"flex .3s"}}/>
-                    ))}
-                  </div>
-                  <div style={{display:"flex",gap:12,marginTop:8,flexWrap:"wrap"}}>
-                    {[{s:"Approved",n:approved,c:"#16a34a"},{s:"In Review",n:inReview,c:"#d97706"},{s:"Draft",n:draft,c:"#6b7280"},{s:"Conflict",n:conflicts,c:"#7c3aed"},{s:"Deprecated",n:deprecated,c:"#e11d48"}].map(x=>(
-                      <span key={x.s} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,color:T.textSub}}><span style={{width:8,height:8,borderRadius:"50%",background:x.c}}/>{x.s} <strong style={{color:T.text}}>{x.n}</strong></span>
-                    ))}
-                  </div>
-                </div>
-                {/* Coverage by category */}
-                {catStats.length>0&&(
-                <div style={{marginBottom:24}}>
-                  <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:10}}>Coverage by Category</div>
-                  <div style={{display:"flex",flexDirection:"column",gap:0,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                    {catStats.map((cs,i)=>{
-                      const pctColor=cs.pct>=80?"#16a34a":cs.pct>=50?"#d97706":"#e11d48";
-                      return (
-                        <div key={cs.name} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 16px",borderBottom:i<catStats.length-1?`1px solid ${T.border}`:"none",background:i%2===0?T.bgSurface:T.bgElevated}}>
-                          <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{color:T.textMuted,flexShrink:0}}><path d="M1.5 3h3.8l.9 1.3H12.5a.7.7 0 01.7.7v5.8a.7.7 0 01-.7.7H1.5a.7.7 0 01-.7-.7V3.7a.7.7 0 01.7-.7z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
-                          <span style={{fontSize:13,fontWeight:600,color:T.text,width:180,flexShrink:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cs.name}</span>
-                          <div style={{flex:1,height:6,borderRadius:3,background:T.bgElevated,overflow:"hidden"}}>
-                            <div style={{width:`${cs.pct}%`,height:"100%",background:pctColor,borderRadius:3,transition:"width .3s"}}/>
-                          </div>
-                          <span style={{fontSize:12,fontWeight:700,color:pctColor,width:40,textAlign:"right",flexShrink:0}}>{cs.pct}%</span>
-                          <span style={{fontSize:11.5,color:T.textMuted,width:60,textAlign:"right",flexShrink:0}}>{cs.approved}/{cs.total}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-                )}
-                {/* Gap lists */}
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-                  <div style={{padding:"14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10}}>
-                    <div style={{fontSize:12.5,fontWeight:700,color:T.textSub,marginBottom:10,display:"flex",alignItems:"center",gap:6}}><span style={{color:T.amber}}>⚠</span>Unlinked Terms ({unlinked.length})</div>
-                    {unlinked.length===0?<div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>All terms are linked to assets. ✓</div>:unlinked.slice(0,5).map(t=>(
-                      <div key={t.id} onClick={()=>goToTerm(t.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:`1px solid ${T.border}`,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                        <span style={{fontSize:12,color:T.accent,fontWeight:600,flex:1}}>{t.term}</span>
-                        <span style={{fontSize:10.5,color:T.textMuted}}>{glossary.categories.find(c=>c.id===t.category)?.name||"—"}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{padding:"14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10}}>
-                    <div style={{fontSize:12.5,fontWeight:700,color:T.textSub,marginBottom:10,display:"flex",alignItems:"center",gap:6}}><span style={{color:T.rose}}>✕</span>Missing Definitions ({noDefn.length})</div>
-                    {noDefn.length===0?<div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>All terms have definitions. ✓</div>:noDefn.slice(0,5).map(t=>(
-                      <div key={t.id} onClick={()=>goToTerm(t.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:`1px solid ${T.border}`,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                        <span style={{fontSize:12,color:T.accent,fontWeight:600,flex:1}}>{t.term}</span>
-                        <span style={{fontSize:10.5,color:T.textMuted}}>{glossary.categories.find(c=>c.id===t.category)?.name||"—"}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
         </div>
       </div>
     );
