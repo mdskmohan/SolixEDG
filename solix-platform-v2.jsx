@@ -69,6 +69,8 @@ const NavCtx = createContext(()=>{});
 const useNav = () => useContext(NavCtx);
 const RoleCtx = createContext({role:"analyst",roleCfg:null,onSwitch:()=>{},onLogout:()=>{}});
 const useRole = () => useContext(RoleCtx);
+const TagContext = createContext(null);
+const useTagCtx = () => useContext(TagContext);
 
 // ─────────────────────────────────────────────
 // DYNAMIC GLOBAL STYLES
@@ -104,17 +106,190 @@ input,textarea,select{font-family:inherit;font-size:inherit;transition:backgroun
 // MOCK DATA
 // ─────────────────────────────────────────────
 const ASSETS = [
-  {id:1, name:"orders",              type:"Table",     domain:"Commerce",  owner:"maya.chen",  owners:["maya.chen"],               steward:"dev.patel",  stewards:["dev.patel","sarah.kim"],  cert:"Certified",   quality:94, usage:"High", updated:"2h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",   db:"snowflake_prod / COMMERCE / orders",       tier:1, rows:"48.2M",  size:"12.4 GB", tags:["PII","revenue"],          description:"Core transactional orders table. Source of truth for all order data.",     slaFreshness:"2h"},
-  {id:2, name:"customers",           type:"Table",     domain:"Commerce",  owner:"dev.patel",  owners:["dev.patel","maya.chen"],    steward:"dev.patel",  stewards:["dev.patel"],              cert:"Certified",   quality:91, usage:"High", updated:"1d ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",   db:"snowflake_prod / COMMERCE / customers",    tier:1, rows:"3.1M",   size:"2.8 GB",  tags:["PII"],                    description:"Master customer dimension table from Salesforce CRM.",                     slaFreshness:"6h"},
+  {id:1, name:"orders",              type:"Table",     domain:"Commerce",  owner:"maya.chen",  owners:["maya.chen"],               steward:"dev.patel",  stewards:["dev.patel","sarah.kim"],  cert:"Approved",   quality:94, usage:"High", updated:"2h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",   db:"snowflake_prod / COMMERCE / orders",       tier:1, rows:"48.2M",  size:"12.4 GB", tags:["PII","revenue"],          description:"Core transactional orders table. Source of truth for all order data.",     slaFreshness:"2h"},
+  {id:2, name:"customers",           type:"Table",     domain:"Commerce",  owner:"dev.patel",  owners:["dev.patel","maya.chen"],    steward:"dev.patel",  stewards:["dev.patel"],              cert:"Approved",   quality:91, usage:"High", updated:"1d ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",   db:"snowflake_prod / COMMERCE / customers",    tier:1, rows:"3.1M",   size:"2.8 GB",  tags:["PII"],                    description:"Master customer dimension table from Salesforce CRM.",                     slaFreshness:"6h"},
   {id:3, name:"revenue_dashboard",   type:"Dashboard", domain:"Finance",   owner:"sarah.kim",  owners:["sarah.kim"],               steward:"sarah.kim",  stewards:["sarah.kim","james.oh"],   cert:"In Review",   quality:87, usage:"Med",  updated:"3d ago",  service:"looker",     connectionLabel:"Looker",          db:"looker_cloud / FINANCE",                    tier:2, rows:"—",      size:"—",       tags:["finance"],                description:"Executive revenue dashboard used in weekly reporting.",                      slaFreshness:"24h"},
-  {id:4, name:"product_events",      type:"Table",     domain:"Product",   owner:"alex.wu",    owners:["alex.wu"],                 steward:"alex.wu",    stewards:["alex.wu"],                cert:"Uncertified", quality:72, usage:"Med",  updated:"5d ago",  service:"postgres",   connectionLabel:"PostgreSQL Prod",  db:"postgresql_prod / PRODUCT / events",        tier:3, rows:"210M",   size:"38 GB",   tags:["events"],                 description:"Raw product analytics events from web and mobile.",                         slaFreshness:"1h"},
-  {id:5, name:"ml_churn_model",      type:"ML Model",  domain:"ML",        owner:"priya.nair", owners:["priya.nair"],              steward:"priya.nair", stewards:["priya.nair","alex.wu"],   cert:"Certified",   quality:88, usage:"Low",  updated:"1w ago",  service:"mlflow",     connectionLabel:"MLflow",          db:"mlflow_prod / MODELS",                     tier:2, rows:"—",      size:"420 MB",  tags:["model"],                  description:"Gradient-boosted churn prediction model v3.2.",                             slaFreshness:"72h"},
-  {id:6, name:"etl_orders_pipeline", type:"Pipeline",  domain:"Commerce",  owner:"james.oh",   owners:["james.oh"],                steward:"james.oh",   stewards:["james.oh"],               cert:"Certified",   quality:96, usage:"High", updated:"30m ago", service:"airflow",    connectionLabel:"Airflow",         db:"airflow_prod / PIPELINES",                 tier:1, rows:"—",      size:"—",       tags:["etl"],                    description:"Fivetran-powered orders ETL. Runs hourly.",                                 slaFreshness:"2h"},
+  {id:4, name:"product_events",      type:"Table",     domain:"Product",   owner:"alex.wu",    owners:["alex.wu"],                 steward:"alex.wu",    stewards:["alex.wu"],                cert:"Draft", quality:72, usage:"Med",  updated:"5d ago",  service:"postgres",   connectionLabel:"PostgreSQL Prod",  db:"postgresql_prod / PRODUCT / events",        tier:3, rows:"210M",   size:"38 GB",   tags:["events"],                 description:"Raw product analytics events from web and mobile.",                         slaFreshness:"1h"},
+  {id:5, name:"ml_churn_model",      type:"ML Model",  domain:"ML",        owner:"priya.nair", owners:["priya.nair"],              steward:"priya.nair", stewards:["priya.nair","alex.wu"],   cert:"Approved",   quality:88, usage:"Low",  updated:"1w ago",  service:"mlflow",     connectionLabel:"MLflow",          db:"mlflow_prod / MODELS",                     tier:2, rows:"—",      size:"420 MB",  tags:["model"],                  description:"Gradient-boosted churn prediction model v3.2.",                             slaFreshness:"72h"},
+  {id:6, name:"etl_orders_pipeline", type:"Pipeline",  domain:"Commerce",  owner:"james.oh",   owners:["james.oh"],                steward:"james.oh",   stewards:["james.oh"],               cert:"Approved",   quality:96, usage:"High", updated:"30m ago", service:"airflow",    connectionLabel:"Airflow",         db:"airflow_prod / PIPELINES",                 tier:1, rows:"—",      size:"—",       tags:["etl"],                    description:"Fivetran-powered orders ETL. Runs hourly.",                                 slaFreshness:"2h"},
   {id:7, name:"user_sessions",       type:"Table",     domain:"Product",   owner:"alex.wu",    owners:["alex.wu"],                 steward:"alex.wu",    stewards:["alex.wu"],                cert:"Deprecated",  quality:45, usage:"Low",  updated:"2w ago",  service:"postgres",   connectionLabel:"PostgreSQL Prod",  db:"postgresql_prod / PRODUCT / sessions", tier:3, rows:"890M",   size:"142 GB",  tags:["PII","events"],           description:"Legacy session table. Use product_events instead.",                         slaFreshness:"4h"},
-  {id:8, name:"finance_summary",     type:"Dashboard", domain:"Finance",   owner:"sarah.kim",  owners:["sarah.kim","lisa.ray"],    steward:"sarah.kim",  stewards:["sarah.kim","lisa.ray"],   cert:"Certified",   quality:92, usage:"High", updated:"4h ago",  service:"tableau",    connectionLabel:"Tableau Cloud",   db:"tableau_cloud / FINANCE",                   tier:1, rows:"—",      size:"—",       tags:["finance","sensitive"],    description:"Finance summary report for leadership.",                                    slaFreshness:"24h"},
-  {id:9, name:"dim_products",        type:"Table",     domain:"Commerce",  owner:"james.oh",   owners:["james.oh"],                steward:"maya.chen",  stewards:["maya.chen","dev.patel"],  cert:"Certified",   quality:98, usage:"High", updated:"1h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",   db:"snowflake_prod / COMMERCE / dim_products", tier:1, rows:"82K",    size:"45 MB",   tags:["dimension"],              description:"Product dimension with SKU, categories, pricing.",                          slaFreshness:"24h"},
-  {id:10,name:"marketing_attribution",type:"Dashboard",domain:"Marketing", owner:"lisa.ray",   owners:["lisa.ray"],                steward:"lisa.ray",   stewards:["lisa.ray"],               cert:"Uncertified", quality:79, usage:"Med",  updated:"6d ago",  service:"looker",     connectionLabel:"Looker",          db:"looker_cloud / MARKETING",                  tier:3, rows:"—",      size:"—",       tags:["marketing"],              description:"Multi-touch attribution reporting.",                                        slaFreshness:"24h"},
+  {id:8, name:"finance_summary",     type:"Dashboard", domain:"Finance",   owner:"sarah.kim",  owners:["sarah.kim","lisa.ray"],    steward:"sarah.kim",  stewards:["sarah.kim","lisa.ray"],   cert:"Approved",   quality:92, usage:"High", updated:"4h ago",  service:"tableau",    connectionLabel:"Tableau Cloud",   db:"tableau_cloud / FINANCE",                   tier:1, rows:"—",      size:"—",       tags:["finance","sensitive"],    description:"Finance summary report for leadership.",                                    slaFreshness:"24h"},
+  {id:9, name:"dim_products",        type:"Table",     domain:"Commerce",  owner:"james.oh",   owners:["james.oh"],                steward:"maya.chen",  stewards:["maya.chen","dev.patel"],  cert:"Approved",   quality:98, usage:"High", updated:"1h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",   db:"snowflake_prod / COMMERCE / dim_products", tier:1, rows:"82K",    size:"45 MB",   tags:["dimension"],              description:"Product dimension with SKU, categories, pricing.",                          slaFreshness:"24h"},
+  {id:10,name:"marketing_attribution",type:"Dashboard",domain:"Marketing", owner:"lisa.ray",   owners:["lisa.ray"],                steward:"lisa.ray",   stewards:["lisa.ray"],               cert:"Draft", quality:79, usage:"Med",  updated:"6d ago",  service:"looker",     connectionLabel:"Looker",          db:"looker_cloud / MARKETING",                  tier:3, rows:"—",      size:"—",       tags:["marketing"],              description:"Multi-touch attribution reporting.",                                        slaFreshness:"24h"},
 ];
+
+// ─────────────────────────────────────────────
+// TAG MANAGEMENT MOCK DATA
+// ─────────────────────────────────────────────
+const INITIAL_TAG_DEFS = [
+  { id:'t1',  name:'PII',               category:'sensitivity', color:'#ee2424', propagationMode:'both',      propagationLocked:true,  governanceRequired:true,  managedBy:'Priya K.', usageCount:48, description:'Personally identifiable information. Name, email, phone, address, SSN, DOB.',                            sourceAliases:['pii_column','contains_pii','PIIData','pii_flag','is_pii'],          createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin'    },
+  { id:'t2',  name:'PHI',               category:'sensitivity', color:'#ee2424', propagationMode:'both',      propagationLocked:true,  governanceRequired:true,  managedBy:'Priya K.', usageCount:12, description:'Protected health information under HIPAA. Medical records, diagnoses, treatments.',                     sourceAliases:['phi_flag','health_data','phi_column','protected_health'],            createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin'    },
+  { id:'t3',  name:'PCI-DSS',           category:'sensitivity', color:'#ee2424', propagationMode:'both',      propagationLocked:true,  governanceRequired:true,  managedBy:'Priya K.', usageCount:7,  description:'Payment card data. Card numbers, CVV, expiry, cardholder name.',                                        sourceAliases:['pci_scope','pci_data','card_data'],                                  createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin'    },
+  { id:'t4',  name:'GDPR',              category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Priya K.', usageCount:31, description:'EU GDPR. Personal data of EU residents regardless of processing location.',                             sourceAliases:['gdpr_applicable','gdpr_scope','gdpr_flag','is_gdpr'],                createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin'    },
+  { id:'t5',  name:'HIPAA',             category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Rahul M.', usageCount:9,  description:'US health data privacy. Any PHI used in US healthcare operations.',                                     sourceAliases:['hipaa_flag','hipaa_applicable','hipaa_scope'],                       createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin'    },
+  { id:'t6',  name:'CCPA',              category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Rahul M.', usageCount:6,  description:'California Consumer Privacy Act. Personal data of California residents.',                               sourceAliases:['ccpa_scope','ccpa_flag'],                                            createdAt:'2026-02-01T00:00:00Z', createdBy:'Admin'    },
+  { id:'t7',  name:'DPDP',              category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Rahul M.', usageCount:4,  description:'India Digital Personal Data Protection Act 2023.',                                                     sourceAliases:['dpdp_scope'],                                                        createdAt:'2026-03-01T00:00:00Z', createdBy:'Admin'    },
+  { id:'t8',  name:'Finance domain',    category:'business',    color:'#fbbf24', propagationMode:'hierarchy', propagationLocked:false, governanceRequired:false, managedBy:'Rahul M.', usageCount:22, description:'Owned by the Finance domain. Revenue, costs, GL, AR/AP data.',                                         sourceAliases:[],                                                                    createdAt:'2026-02-01T00:00:00Z', createdBy:'Rahul M.' },
+  { id:'t9',  name:'Board reporting',   category:'business',    color:'#fbbf24', propagationMode:'hierarchy', propagationLocked:false, governanceRequired:false, managedBy:'Rahul M.', usageCount:11, description:'Feeds board-level reports and investor materials.',                                                     sourceAliases:[],                                                                    createdAt:'2026-02-15T00:00:00Z', createdBy:'Rahul M.' },
+  { id:'t10', name:'Clinical trial data',category:'business',   color:'#fbbf24', propagationMode:'hierarchy', propagationLocked:false, governanceRequired:true,  managedBy:'Priya K.', usageCount:8,  description:'FDA-regulated clinical trial data. Subject to 21 CFR Part 11.',                                        sourceAliases:['trial_data','clinical_data'],                                        createdAt:'2026-02-20T00:00:00Z', createdBy:'Priya K.' },
+  { id:'t11', name:'Golden record',     category:'business',    color:'#fbbf24', propagationMode:'none',      propagationLocked:false, governanceRequired:false, managedBy:'Rahul M.', usageCount:5,  description:'Master/trusted canonical version of this entity.',                                                     sourceAliases:[],                                                                    createdAt:'2026-03-01T00:00:00Z', createdBy:'Rahul M.' },
+  { id:'t12', name:'crm-source',        category:'custom',      color:'#a1a1aa', propagationMode:'none',      propagationLocked:false, governanceRequired:false, managedBy:null,        usageCount:9,  description:'Data originating from the CRM system.',                                                                sourceAliases:[],                                                                    createdAt:'2026-03-10T00:00:00Z', createdBy:'Maya C.'  },
+  { id:'t13', name:'needs-review',      category:'custom',      color:'#a1a1aa', propagationMode:'none',      propagationLocked:false, governanceRequired:false, managedBy:null,        usageCount:4,  description:'Flagged for steward review. Temporary label.',                                                         sourceAliases:[],                                                                    createdAt:'2026-04-01T00:00:00Z', createdBy:'Analyst'  },
+  { id:'t14', name:'deprecated',        category:'custom',      color:'#a1a1aa', propagationMode:'none',      propagationLocked:false, governanceRequired:false, managedBy:null,        usageCount:7,  description:'Asset or field is deprecated and scheduled for removal.',                                              sourceAliases:[],                                                                    createdAt:'2026-03-15T00:00:00Z', createdBy:'Data Eng' },
+];
+
+// Use a function so INITIAL_ASSIGNMENTS is computed after ASSETS is defined
+const INITIAL_ASSIGNMENTS = {
+  [ASSETS[0].id]: [
+    { id:'a1',  tagId:'t1',  assetId:ASSETS[0].id, origin:'synced',               sourceSystem:'Snowflake', sourceSystems:['Snowflake','dbt'], status:'active',   appliedBy:'system',  appliedAt:'2026-04-15T09:42:00Z', stewardNote:'', propagationChain:[]             },
+    { id:'a2',  tagId:'t4',  assetId:ASSETS[0].id, origin:'propagated_lineage',   sourceSystem:null,        sourceSystems:[],                  status:'active',   appliedBy:'system',  appliedAt:'2026-04-15T09:43:00Z', stewardNote:'', propagationChain:[ASSETS[1].id] },
+    { id:'a3',  tagId:'t8',  assetId:ASSETS[0].id, origin:'manual',              sourceSystem:null,        sourceSystems:[],                  status:'pending',  appliedBy:'Rahul M.',appliedAt:'2026-04-17T14:20:00Z', stewardNote:'', propagationChain:[]             },
+  ],
+  [ASSETS[1].id]: [
+    { id:'a4',  tagId:'t1',  assetId:ASSETS[1].id, origin:'synced',               sourceSystem:'Snowflake', sourceSystems:['Snowflake'],       status:'active',   appliedBy:'system',  appliedAt:'2026-04-15T09:42:00Z', stewardNote:'', propagationChain:[]             },
+    { id:'a5',  tagId:'t5',  assetId:ASSETS[1].id, origin:'synced',               sourceSystem:'dbt',       sourceSystems:['dbt'],             status:'conflict', appliedBy:'system',  appliedAt:'2026-04-18T10:00:00Z', stewardNote:'Patient data is de-identified at this layer.', propagationChain:[] },
+    { id:'a6',  tagId:'t12', assetId:ASSETS[1].id, origin:'manual',              sourceSystem:null,        sourceSystems:[],                  status:'active',   appliedBy:'Maya C.', appliedAt:'2026-04-10T11:00:00Z', stewardNote:'', propagationChain:[]             },
+  ],
+  [ASSETS[2].id]: [
+    { id:'a7',  tagId:'t3',  assetId:ASSETS[2].id, origin:'synced',               sourceSystem:'Snowflake', sourceSystems:['Snowflake'],       status:'conflict', appliedBy:'system',  appliedAt:'2026-04-18T10:00:00Z', stewardNote:'Card number is tokenised before landing here.', propagationChain:[] },
+    { id:'a8',  tagId:'t9',  assetId:ASSETS[2].id, origin:'manual',              sourceSystem:null,        sourceSystems:[],                  status:'active',   appliedBy:'Priya K.',appliedAt:'2026-04-10T11:00:00Z', stewardNote:'', propagationChain:[]             },
+  ],
+  [ASSETS[3].id]: [
+    { id:'a9',  tagId:'t2',  assetId:ASSETS[3].id, origin:'synced',               sourceSystem:'Snowflake', sourceSystems:['Snowflake','BigQuery'], status:'active', appliedBy:'system', appliedAt:'2026-04-01T08:00:00Z', stewardNote:'', propagationChain:[]           },
+    { id:'a10', tagId:'t5',  assetId:ASSETS[3].id, origin:'propagated_both',     sourceSystem:null,        sourceSystems:[],                  status:'active',   appliedBy:'system',  appliedAt:'2026-04-01T08:01:00Z', stewardNote:'', propagationChain:[ASSETS[1].id] },
+    { id:'a11', tagId:'t10', assetId:ASSETS[3].id, origin:'manual',              sourceSystem:null,        sourceSystems:[],                  status:'active',   appliedBy:'Priya K.',appliedAt:'2026-03-20T09:00:00Z', stewardNote:'', propagationChain:[]             },
+  ],
+  [ASSETS[4].id]: [
+    { id:'a12', tagId:'t8',  assetId:ASSETS[4].id, origin:'propagated_hierarchy',sourceSystem:null,        sourceSystems:[],                  status:'active',   appliedBy:'system',  appliedAt:'2026-04-02T07:00:00Z', stewardNote:'', propagationChain:[]             },
+    { id:'a13', tagId:'t9',  assetId:ASSETS[4].id, origin:'manual',              sourceSystem:null,        sourceSystems:[],                  status:'active',   appliedBy:'Rahul M.',appliedAt:'2026-04-05T10:00:00Z', stewardNote:'', propagationChain:[]             },
+    { id:'a14', tagId:'t13', assetId:ASSETS[4].id, origin:'manual',              sourceSystem:null,        sourceSystems:[],                  status:'active',   appliedBy:'Analyst', appliedAt:'2026-04-19T16:00:00Z', stewardNote:'', propagationChain:[]             },
+  ],
+};
+
+const INITIAL_CONNECTOR_CONFIGS = {
+  snowflake:  { connectorId:'snowflake',  syncEnabled:true,  reverseSyncEnabled:true,  reverseSyncApproval:true,  conflictRule:'flag_always',  lastSyncAt:'2026-04-20T10:00:00Z', lastSyncStatus:'partial',  lastSyncNewTags:1, lastSyncConflicts:2,
+    nameMappings:[
+      { id:'m1',  sourceTagName:'pii_column',    edgTagId:'t1', reverseSyncAlias:'pii_column',    status:'mapped'    },
+      { id:'m2',  sourceTagName:'pii_flag',       edgTagId:'t1', reverseSyncAlias:'pii_flag',       status:'mapped'    },
+      { id:'m3',  sourceTagName:'phi_flag',       edgTagId:'t2', reverseSyncAlias:'phi_flag',       status:'mapped'    },
+      { id:'m4',  sourceTagName:'pci_scope',      edgTagId:'t3', reverseSyncAlias:'pci_scope',      status:'mapped'    },
+      { id:'m5',  sourceTagName:'gdpr_scope',     edgTagId:'t4', reverseSyncAlias:'gdpr_scope',     status:'mapped'    },
+      { id:'m6',  sourceTagName:'restricted',     edgTagId:null, reverseSyncAlias:'restricted',     status:'ambiguous' },
+    ]},
+  dbt:        { connectorId:'dbt',        syncEnabled:true,  reverseSyncEnabled:false, reverseSyncApproval:false, conflictRule:'flag_always',  lastSyncAt:'2026-04-20T09:42:00Z', lastSyncStatus:'success',  lastSyncNewTags:1, lastSyncConflicts:0,
+    nameMappings:[
+      { id:'m7',  sourceTagName:'contains_pii',      edgTagId:'t1', reverseSyncAlias:'contains_pii',      status:'mapped'   },
+      { id:'m8',  sourceTagName:'hipaa_flag',         edgTagId:'t5', reverseSyncAlias:'hipaa_flag',         status:'mapped'   },
+      { id:'m9',  sourceTagName:'financial_forecast', edgTagId:null, reverseSyncAlias:'financial_forecast', status:'unmapped' },
+    ]},
+  bigquery:   { connectorId:'bigquery',   syncEnabled:true,  reverseSyncEnabled:false, reverseSyncApproval:false, conflictRule:'steward_wins', lastSyncAt:'2026-04-19T22:00:00Z', lastSyncStatus:'success',  lastSyncNewTags:0, lastSyncConflicts:0,
+    nameMappings:[
+      { id:'m10', sourceTagName:'PIIData',         edgTagId:'t1', reverseSyncAlias:'PIIData',         status:'mapped' },
+      { id:'m11', sourceTagName:'protected_health', edgTagId:'t2', reverseSyncAlias:'protected_health', status:'mapped' },
+    ]},
+  databricks: { connectorId:'databricks', syncEnabled:false, reverseSyncEnabled:false, reverseSyncApproval:false, conflictRule:'flag_always',  lastSyncAt:null,                   lastSyncStatus:null,       lastSyncNewTags:0, lastSyncConflicts:0, nameMappings:[] },
+};
+
+const INITIAL_INBOX = [
+  { id:'i1', type:'new_source_tag',    tagName:'financial_forecast', assetId:ASSETS[0].id, assetName:'fact_revenue',            domain:'Finance',  sourceSystem:'dbt',       note:'Arrived during dbt sync at 09:42. No EDG mapping exists. Auto-scoped as dbt:financial_forecast on 6 assets. Map to an existing tag, promote to a Business tag, keep source-scoped, or discard.', metadata:{ affectedAssets:6, connectorId:'dbt' },                                    createdAt:'2026-04-20T09:42:00Z', resolvedAt:null, resolvedBy:null, resolution:null },
+  { id:'i2', type:'sync_conflict',     tagName:'PCI-DSS',            assetId:ASSETS[2].id, assetName:'payments.card_number',    domain:'Finance',  sourceSystem:'Snowflake', note:'Steward removed PCI-DSS on Apr 14 with note: "tokenised — not in scope at this layer." Snowflake sync at 10:00 re-applied it.',                                                            metadata:{ stewardNote:'tokenised — not in scope at this layer', conflictTagId:'t3' },  createdAt:'2026-04-18T10:00:00Z', resolvedAt:null, resolvedBy:null, resolution:null },
+  { id:'i3', type:'pending_approval',  tagName:'GDPR',               assetId:ASSETS[0].id, assetName:'orders.customer_email',   domain:'Commerce', sourceSystem:null,         note:'Applied by Rahul M. with note: "found raw email stored here." Propagation mode is Lineage — would cascade to 8 downstream assets. Requires steward approval.',                         metadata:{ appliedBy:'Rahul M.', propagationMode:'lineage', downstreamCount:8 },        createdAt:'2026-04-20T08:15:00Z', resolvedAt:null, resolvedBy:null, resolution:null },
+  { id:'i4', type:'sync_conflict',     tagName:'restricted',         assetId:ASSETS[1].id, assetName:'customer_profile',        domain:'Commerce', sourceSystem:'Snowflake', note:'Name collision: Snowflake "restricted" means access-controlled. No matching EDG tag. Needs disambiguation — create a separate tag or map to an existing one.',                        metadata:{ conflictType:'ambiguous_name', connectorId:'snowflake' },                    createdAt:'2026-04-20T10:00:00Z', resolvedAt:null, resolvedBy:null, resolution:null },
+  { id:'i5', type:'propagation_review',tagName:'PHI',                assetId:ASSETS[3].id, assetName:'clinical_trials_master',  domain:'Clinical', sourceSystem:null,         note:'PHI tag applied. Propagation (H+L) will affect 23 downstream assets including 3 BI dashboards and 2 external reports. Review before confirming.',                                   metadata:{ downstreamCount:23, hierarchyCount:14, lineageCount:9 },                    createdAt:'2026-04-19T15:30:00Z', resolvedAt:null, resolvedBy:null, resolution:null },
+];
+
+const INITIAL_TAG_POLICIES = {
+  whoCanCreateCustom:'any', propagationThreshold:10, sensitivityAutoAssign:true,
+  removalFromCertified:'approval', auditLogEnabled:true, notifyOnLargePropagate:true,
+};
+
+// ─────────────────────────────────────────────
+// TAG PROVIDER
+// ─────────────────────────────────────────────
+function TagProvider({ children }) {
+  const [tagDefs,          setTagDefs]          = useState(INITIAL_TAG_DEFS);
+  const [assignments,      setAssignments]      = useState(INITIAL_ASSIGNMENTS);
+  const [connectorConfigs, setConnectorConfigs] = useState(INITIAL_CONNECTOR_CONFIGS);
+  const [inbox,            setInbox]            = useState(INITIAL_INBOX);
+  const [tagPolicies,      setTagPolicies]      = useState(INITIAL_TAG_POLICIES);
+
+  const unresolvedCount = inbox.filter(i => !i.resolvedAt).length;
+  const conflictCount   = Object.values(assignments).flat().filter(a => a.status==='conflict').length;
+  const pendingCount    = Object.values(assignments).flat().filter(a => a.status==='pending').length;
+
+  const getAssetAssignments = (assetId) => assignments[assetId] || [];
+  const getTagDef           = (tagId)   => tagDefs.find(t => t.id===tagId);
+
+  const applyTag = (assetId, tagId, options={}) => {
+    const { origin='manual', sourceSystem=null, appliedBy='Current User' } = options;
+    const tagDef = tagDefs.find(t=>t.id===tagId);
+    if (!tagDef) return;
+    const existing = (assignments[assetId]||[]).find(a=>a.tagId===tagId && a.status!=='rejected');
+    if (existing) return;
+    const status = tagDef.governanceRequired ? 'pending' : 'active';
+    const newA = { id:'a'+Date.now(), tagId, assetId, origin, sourceSystem, sourceSystems:sourceSystem?[sourceSystem]:[], status, appliedBy, appliedAt:new Date().toISOString(), stewardNote:'', propagationChain:[] };
+    setAssignments(prev=>({...prev,[assetId]:[...(prev[assetId]||[]),newA]}));
+    if (status==='pending') {
+      setInbox(prev=>[{ id:'i'+Date.now(), type:'pending_approval', tagName:tagDef.name, assetId, assetName:String(assetId), domain:'Unknown', sourceSystem:null, note:`Applied by ${appliedBy}. Awaiting steward approval.`, metadata:{appliedBy, propagationMode:tagDef.propagationMode, downstreamCount:0}, createdAt:new Date().toISOString(), resolvedAt:null, resolvedBy:null, resolution:null },...prev]);
+    }
+    setTagDefs(prev=>prev.map(t=>t.id===tagId?{...t,usageCount:t.usageCount+1}:t));
+  };
+
+  const removeTag = (assetId, assignmentId, stewardNote='') => {
+    setAssignments(prev=>({...prev,[assetId]:(prev[assetId]||[]).map(a=>a.id===assignmentId?{...a,status:'rejected',stewardNote}:a)}));
+  };
+
+  const resolveInboxItem = (itemId, resolution, note='') => {
+    const item = inbox.find(i=>i.id===itemId);
+    if (!item) return;
+    setInbox(prev=>prev.map(i=>i.id===itemId?{...i,resolvedAt:new Date().toISOString(),resolvedBy:'Current User',resolution}:i));
+    if (item.type==='pending_approval') {
+      setAssignments(prev=>({...prev,[item.assetId]:(prev[item.assetId]||[]).map(a=>{
+        const def=tagDefs.find(t=>t.id===a.tagId);
+        if(!def||def.name!==item.tagName) return a;
+        if(resolution==='approve'||resolution==='approve_propagate') return {...a,status:'active'};
+        if(resolution==='reject') return {...a,status:'rejected',stewardNote:note};
+        return a;
+      })}));
+    }
+    if (item.type==='sync_conflict') {
+      setAssignments(prev=>({...prev,[item.assetId]:(prev[item.assetId]||[]).map(a=>{
+        const def=tagDefs.find(t=>t.id===a.tagId);
+        if(!def||def.name!==item.tagName) return a;
+        if(resolution==='accept_source') return {...a,status:'active',stewardNote:''};
+        if(resolution==='keep_override') return {...a,status:'rejected',stewardNote:note||item.metadata?.stewardNote||''};
+        return a;
+      })}));
+    }
+  };
+
+  const createTagDef = (def) => {
+    setTagDefs(prev=>[...prev,{...def,id:'t'+Date.now(),usageCount:0,sourceAliases:def.sourceAliases||[],createdAt:new Date().toISOString(),createdBy:'Current User'}]);
+  };
+
+  const updateTagDef = (id, patch) => setTagDefs(prev=>prev.map(t=>t.id===id?{...t,...patch}:t));
+
+  const updateConnectorConfig = (connectorId, patch) => setConnectorConfigs(prev=>({...prev,[connectorId]:{...prev[connectorId],...patch}}));
+
+  const upsertNameMapping = (connectorId, mapping) => {
+    setConnectorConfigs(prev=>{
+      const cfg=prev[connectorId];
+      const exists=cfg.nameMappings.find(m=>m.id===mapping.id);
+      const newMappings=exists
+        ? cfg.nameMappings.map(m=>m.id===mapping.id?{...m,...mapping}:m)
+        : [...cfg.nameMappings,{...mapping,id:'m'+Date.now(),status:mapping.edgTagId?'mapped':'unmapped'}];
+      return {...prev,[connectorId]:{...cfg,nameMappings:newMappings}};
+    });
+  };
+
+  const updateTagPolicies = (patch) => setTagPolicies(prev=>({...prev,...patch}));
+
+  return (
+    <TagContext.Provider value={{ tagDefs, assignments, connectorConfigs, inbox, tagPolicies, unresolvedCount, conflictCount, pendingCount, getAssetAssignments, getTagDef, applyTag, removeTag, resolveInboxItem, createTagDef, updateTagDef, updateConnectorConfig, upsertNameMapping, updateTagPolicies }}>
+      {children}
+    </TagContext.Provider>
+  );
+}
 
 const SCHEMA = {
   orders:[
@@ -407,11 +582,11 @@ const ORPHANED_ASSETS_DATA = [
 ];
 
 const CERTIFICATIONS = [
-  {id:1,asset:"orders",         type:"Table",    certifier:"maya.chen", date:"2024-01-15",expires:"2024-07-15",status:"Active", score:94,notes:"Reviewed schema, lineage, PII handling, and quality rules."},
-  {id:2,asset:"customers",      type:"Table",    certifier:"dev.patel",  date:"2024-01-10",expires:"2024-07-10",status:"Active", score:91,notes:"All PII columns tagged. Retention policy applied."},
-  {id:3,asset:"ml_churn_model", type:"ML Model", certifier:"priya.nair", date:"2024-02-01",expires:"2024-08-01",status:"Active", score:88,notes:"Model card complete. Bias audit passed."},
-  {id:4,asset:"revenue_dashboard",type:"Dashboard",certifier:null,       date:null,        expires:null,        status:"Pending",score:87,notes:"Awaiting data steward review."},
-  {id:5,asset:"dim_products",   type:"Table",    certifier:"james.oh",   date:"2024-01-20",expires:"2024-07-20",status:"Active", score:98,notes:"Golden dataset — highest quality in warehouse."},
+  {id:1,asset:"orders",         type:"Table",    certifier:"maya.chen", date:"2024-01-15",expires:"2024-07-15",status:"Approved",  score:94,notes:"Reviewed schema, lineage, PII handling, and quality rules."},
+  {id:2,asset:"customers",      type:"Table",    certifier:"dev.patel",  date:"2024-01-10",expires:"2024-07-10",status:"Approved",  score:91,notes:"All PII columns tagged. Retention policy applied."},
+  {id:3,asset:"ml_churn_model", type:"ML Model", certifier:"priya.nair", date:"2024-02-01",expires:"2024-08-01",status:"Approved",  score:88,notes:"Model card complete. Bias audit passed."},
+  {id:4,asset:"revenue_dashboard",type:"Dashboard",certifier:null,       date:null,        expires:null,        status:"In Review",score:87,notes:"Awaiting data steward review."},
+  {id:5,asset:"dim_products",   type:"Table",    certifier:"james.oh",   date:"2024-01-20",expires:"2024-07-20",status:"Approved",  score:98,notes:"Golden dataset — highest quality in warehouse."},
 ];
 
 const TEAMS_DATA = [
@@ -455,7 +630,7 @@ const GLOSSARY_TERMS = [
    readme:"CLV is used as the primary retention metric in the Commerce domain. Updated quarterly by the Data Steward. See the orders table for the source data."},
 
   {id:"t2",term:"Monthly Recurring Revenue",abbr:"MRR",glossary:"g1",category:"c1",domain:"Commerce",owner:"sarah.kim",steward:"sarah.kim",linked:7,
-   cert:"Conflict", status:"Conflict",
+   cert:"In Review", status:"In Review", conflictFlag:true,
    synonyms:["MRR","Monthly Revenue"],conflictWith:"t6",deprecationReason:null,successorId:null,
    reviewedAt:null,proposedVersion:{definition:"Normalized monthly subscription revenue excluding one-time charges. Computed by summing ARR/12 for all active contracts.",updatedBy:"sarah.kim",updatedAt:"2026-04-01"},
    auditLog:[
@@ -589,22 +764,22 @@ const GLOSSARY_TERMS = [
 ];
 
 const CERT_META = {
-  Verified:    {color:"#16a34a",bg:"rgba(22,163,74,.1)",  border:"rgba(22,163,74,.25)",  icon:"✓"},
-  Approved:    {color:"#16a34a",bg:"rgba(22,163,74,.1)",  border:"rgba(22,163,74,.25)",  icon:"✓"},
-  "In Review": {color:"#d97706",bg:"rgba(217,119,6,.1)",  border:"rgba(217,119,6,.25)",  icon:"⏳"},
   Draft:       {color:"#6b7280",bg:"rgba(107,114,128,.1)",border:"rgba(107,114,128,.25)",icon:"◐"},
-  Deprecated:  {color:"#e11d48",bg:"rgba(225,29,72,.1)",  border:"rgba(225,29,72,.25)",  icon:"✕"},
-  Conflict:    {color:"#7c3aed",bg:"rgba(124,58,237,.1)", border:"rgba(124,58,237,.25)", icon:"⚡"},
+  "In Review": {color:"#d97706",bg:"rgba(217,119,6,.1)",  border:"rgba(217,119,6,.25)",  icon:"⏳"},
+  Approved:    {color:"#16a34a",bg:"rgba(22,163,74,.1)",  border:"rgba(22,163,74,.25)",  icon:"✓"},
+  Rejected:    {color:"#e11d48",bg:"rgba(225,29,72,.1)",  border:"rgba(225,29,72,.25)",  icon:"✕"},
+  Deprecated:  {color:"#7c3aed",bg:"rgba(124,58,237,.1)", border:"rgba(124,58,237,.25)", icon:"—"},
 };
 const STATUS_META = CERT_META;
 
-// Term lifecycle valid transitions
+// Term lifecycle valid transitions — Draft → In Review → Approved → Deprecated
+// Rejected is a terminal state from In Review only
 const LIFECYCLE_TRANSITIONS = {
   Draft:       ["In Review"],
-  "In Review": ["Approved","Draft"],
+  "In Review": ["Approved","Rejected","Draft"],
   Approved:    ["Deprecated","In Review"],
+  Rejected:    [],
   Deprecated:  [],
-  Conflict:    ["In Review","Draft"],
 };
 
 const GlossaryView = ({onToast}) => {
@@ -778,18 +953,20 @@ const GlossaryView = ({onToast}) => {
     const t = terms.find(x=>x.id===id);
     if(!t) return;
     const now = new Date().toISOString().slice(0,10);
-    const logEntry = {action:toStatus==="Approved"?"Approved":toStatus==="In Review"?"Submitted for Review":toStatus==="Deprecated"?"Deprecated":toStatus==="Draft"?"Returned to Draft":"Status changed to "+toStatus, by:CURRENT_USER, at:now, note};
+    const logEntry = {action:toStatus==="Approved"?"Approved":toStatus==="In Review"?"Submitted for Review":toStatus==="Deprecated"?"Deprecated":toStatus==="Draft"?"Returned to Draft":toStatus==="Rejected"?"Rejected":"Status changed to "+toStatus, by:CURRENT_USER, at:now, note};
     const actEntry = {user:CURRENT_USER, avatar:ava(CURRENT_USER), action:logEntry.action+(note?`: ${note}`:""), time:"Just now"};
     const updates = {
       cert:toStatus, status:toStatus,
       auditLog:[logEntry,...(t.auditLog||[])],
       activity:[actEntry,...(t.activity||[])],
     };
-    if(toStatus==="Approved") updates.reviewedAt = now;
-    if(toStatus==="Deprecated") updates.deprecationReason = note||"Deprecated by steward";
+    if(toStatus==="Approved")    updates.reviewedAt = now;
+    if(toStatus==="Deprecated")  updates.deprecationReason = note||"Deprecated by steward";
+    if(toStatus==="Rejected")    updates.rejectionReason = note||"Rejected by steward";
     patchTerm(id, updates);
     setTransitionModal(null); setRejectReason(""); setDeprecateReason("");
-    onToast(`Term ${toStatus==="Approved"?"approved":toStatus==="In Review"?"submitted for review":toStatus==="Deprecated"?"deprecated":"returned to draft"}`,"success");
+    const toastMsg = toStatus==="Approved"?"Term approved":toStatus==="In Review"?"Term submitted for review":toStatus==="Deprecated"?"Term deprecated":toStatus==="Rejected"?"Term rejected":toStatus==="Draft"?"Term returned to draft":"Term updated";
+    onToast(toastMsg, toStatus==="Rejected"?"error":"success");
   };
 
   const detectConflicts = (checkTerm, allTerms) => {
@@ -1133,7 +1310,8 @@ const GlossaryView = ({onToast}) => {
             const inReview=allT.filter(t=>t.status==="In Review").length;
             const draft=allT.filter(t=>t.status==="Draft").length;
             const deprecated=allT.filter(t=>t.status==="Deprecated").length;
-            const conflicts=allT.filter(t=>t.status==="Conflict").length;
+            const rejected=allT.filter(t=>t.status==="Rejected").length;
+            const conflicts=allT.filter(t=>t.conflictFlag).length;
             const coveragePct=totalTerms>0?Math.round((approved/totalTerms)*100):0;
             const catStats=glossary.categories.map(cat=>{const ct=allT.filter(t=>t.category===cat.id);const ca=ct.filter(t=>t.status==="Approved").length;return{name:cat.name,id:cat.id,total:ct.length,approved:ca,pct:ct.length>0?Math.round((ca/ct.length)*100):0};});
             const unlinked=allT.filter(t=>(t.linkedAssets||[]).length===0&&t.status!=="Deprecated");
@@ -1160,10 +1338,10 @@ const GlossaryView = ({onToast}) => {
                 {totalTerms>0&&(
                   <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10}}>
                     {[
-                      {label:"Total Terms", value:totalTerms,  sub:"in glossary",   color:T.text,     dimColor:T.textMuted, bg:T.bgSurface,  border:T.border},
-                      {label:"Approved",    value:approved,    sub:"ready to use",  color:"#16a34a",  dimColor:"#86efac",   bg:"#f0fdf4",    border:"#bbf7d0"},
-                      {label:"In Review",   value:inReview,    sub:"pending sign-off",color:"#d97706",dimColor:"#fcd34d",   bg:"#fffbeb",    border:"#fde68a"},
-                      {label:"Conflicts",   value:conflicts,   sub:"need resolution",color:"#7c3aed", dimColor:"#c4b5fd",   bg:"#faf5ff",    border:"#e9d5ff"},
+                      {label:"Total Terms", value:totalTerms,  sub:"in glossary",      color:T.text,    dimColor:T.textMuted, bg:T.bgSurface, border:T.border},
+                      {label:"Approved",    value:approved,    sub:"ready to use",      color:"#16a34a", dimColor:"#86efac",   bg:"#f0fdf4",   border:"#bbf7d0"},
+                      {label:"In Review",   value:inReview,    sub:"pending sign-off",  color:"#d97706", dimColor:"#fcd34d",   bg:"#fffbeb",   border:"#fde68a"},
+                      {label:"Rejected",    value:rejected,    sub:"needs revision",    color:"#e11d48", dimColor:"#fca5a5",   bg:"#fff1f2",   border:"#fecdd3"},
                       {label:"Coverage",    value:`${coveragePct}%`,sub:"approved ratio",color:coverageColor,dimColor:coverageColor,bg:coveragePct>=80?"#f0fdf4":coveragePct>=50?"#fffbeb":"#fff1f2",border:coveragePct>=80?"#bbf7d0":coveragePct>=50?"#fde68a":"#fecdd3"},
                     ].map(m=>(
                       <div key={m.label} style={{padding:"14px 16px",background:m.bg,border:`1px solid ${m.border}`,borderRadius:10}}>
@@ -1184,13 +1362,13 @@ const GlossaryView = ({onToast}) => {
                     </div>
                     {/* Stacked bar */}
                     <div style={{height:10,borderRadius:5,overflow:"hidden",display:"flex",gap:2,marginBottom:12}}>
-                      {[{s:"Approved",n:approved,c:"#16a34a"},{s:"In Review",n:inReview,c:"#d97706"},{s:"Draft",n:draft,c:"#94a3b8"},{s:"Conflict",n:conflicts,c:"#7c3aed"},{s:"Deprecated",n:deprecated,c:"#e11d48"}].filter(x=>x.n>0).map(x=>(
+                      {[{s:"Approved",n:approved,c:"#16a34a"},{s:"In Review",n:inReview,c:"#d97706"},{s:"Draft",n:draft,c:"#94a3b8"},{s:"Rejected",n:rejected,c:"#e11d48"},{s:"Deprecated",n:deprecated,c:"#7c3aed"}].filter(x=>x.n>0).map(x=>(
                         <div key={x.s} title={`${x.s}: ${x.n}`} style={{flex:x.n,background:x.c,minWidth:4,borderRadius:3}}/>
                       ))}
                     </div>
                     {/* Legend */}
                     <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
-                      {[{s:"Approved",n:approved,c:"#16a34a"},{s:"In Review",n:inReview,c:"#d97706"},{s:"Draft",n:draft,c:"#94a3b8"},{s:"Conflict",n:conflicts,c:"#7c3aed"},{s:"Deprecated",n:deprecated,c:"#e11d48"}].filter(x=>x.n>0).map(x=>(
+                      {[{s:"Approved",n:approved,c:"#16a34a"},{s:"In Review",n:inReview,c:"#d97706"},{s:"Draft",n:draft,c:"#94a3b8"},{s:"Rejected",n:rejected,c:"#e11d48"},{s:"Deprecated",n:deprecated,c:"#7c3aed"}].filter(x=>x.n>0).map(x=>(
                         <div key={x.s} style={{display:"flex",alignItems:"center",gap:5}}>
                           <span style={{width:8,height:8,borderRadius:"50%",background:x.c,flexShrink:0}}/>
                           <span style={{fontSize:12,color:T.textSub}}>{x.s}</span>
@@ -1510,18 +1688,21 @@ const GlossaryView = ({onToast}) => {
               </div>
               <div style={{display:"flex",gap:5,flexShrink:0,flexWrap:"wrap",justifyContent:"flex-end"}}>
                 {term.status==="Draft"&&<Btn small ghost onClick={()=>transitionTerm(term.id,"In Review")} style={{color:"#d97706",borderColor:"rgba(217,119,6,.4)"}}>⏳ Submit for Review</Btn>}
-                {term.status==="In Review"&&<><Btn small ghost onClick={()=>transitionTerm(term.id,"Approved")} style={{color:"#16a34a",borderColor:"rgba(22,163,74,.4)"}}>✓ Approve</Btn><Btn small ghost onClick={()=>setTransitionModal({id:term.id,to:"Draft",label:"Return to Draft"})} style={{color:T.textMuted}}>↩ Return</Btn></>}
-                {term.status==="Approved"&&<><Btn small ghost onClick={()=>setTransitionModal({id:term.id,to:"Deprecated",label:"Deprecate"})} style={{color:T.rose,borderColor:T.rose+"44"}}>Deprecate</Btn><Btn small ghost onClick={()=>transitionTerm(term.id,"In Review")} style={{color:"#d97706",borderColor:"rgba(217,119,6,.4)"}}>Re-Review</Btn></>}
-                {term.status==="Conflict"&&<Btn small ghost onClick={()=>{const rel=terms.find(x=>x.id===term.conflictWith);setConflictModal({termA:term,termB:rel});}} style={{color:"#7c3aed",borderColor:"rgba(124,58,237,.4)"}}>⚡ Resolve Conflict</Btn>}
+                {term.status==="In Review"&&<><Btn small ghost onClick={()=>transitionTerm(term.id,"Approved")} style={{color:"#16a34a",borderColor:"rgba(22,163,74,.4)"}}>✓ Approve</Btn><Btn small ghost onClick={()=>setTransitionModal({id:term.id,to:"Rejected",label:"Reject Term"})} style={{color:"#e11d48",borderColor:"rgba(225,29,72,.4)"}}>✕ Reject</Btn><Btn small ghost onClick={()=>transitionTerm(term.id,"Draft")} style={{color:T.textMuted}}>↩ Return to Draft</Btn></>}
+                {term.status==="Approved"&&<><Btn small ghost onClick={()=>setTransitionModal({id:term.id,to:"Deprecated",label:"Deprecate"})} style={{color:"#7c3aed",borderColor:"rgba(124,58,237,.4)"}}>Deprecate</Btn><Btn small ghost onClick={()=>transitionTerm(term.id,"In Review")} style={{color:"#d97706",borderColor:"rgba(217,119,6,.4)"}}>Re-Review</Btn></>}
+                {term.status==="Rejected"&&<Btn small ghost onClick={()=>transitionTerm(term.id,"Draft")} style={{color:T.textMuted}}>↩ Reopen as Draft</Btn>}
                 {term.status==="Deprecated"&&<Btn small ghost onClick={()=>transitionTerm(term.id,"Draft")} style={{color:T.textMuted}}>Reactivate</Btn>}
+                {term.conflictFlag&&term.conflictWith&&<Btn small ghost onClick={()=>{const rel=terms.find(x=>x.id===term.conflictWith);setConflictModal({termA:term,termB:rel});}} style={{color:"#d97706",borderColor:"rgba(217,119,6,.4)"}}>⚡ Resolve Conflict</Btn>}
                 <Btn small ghost onClick={()=>openModal("editTerm",{id:term.id,term:term.term,abbr:term.abbr,definition:term.definition,domain:term.domain,owner:term.owner,category:term.category,cert:term.cert})}>Edit</Btn>
                 <Btn small ghost onClick={()=>openModal("deleteTerm",{id:term.id,term:term.term})} style={{color:T.rose}}>Delete</Btn>
               </div>
             </div>
-            {/* Conflict banner */}
-            {term.status==="Conflict"&&term.conflictWith&&(()=>{const rival=terms.find(x=>x.id===term.conflictWith);return rival&&(<div style={{margin:"0 0 8px",padding:"8px 14px",background:"rgba(124,58,237,.08)",border:"1px solid rgba(124,58,237,.3)",borderRadius:8,display:"flex",alignItems:"center",gap:10}}><span style={{color:"#7c3aed",fontSize:15}}>⚡</span><span style={{fontSize:12.5,color:"#7c3aed",flex:1}}>Conflict with <strong>{rival.term}</strong> ({rival.domain} domain) — synonyms or name overlap detected.</span><button onClick={()=>setConflictModal({termA:term,termB:rival})} style={{fontSize:11.5,fontWeight:700,color:"#7c3aed",background:"rgba(124,58,237,.1)",border:"1px solid rgba(124,58,237,.35)",borderRadius:6,padding:"3px 10px",cursor:"pointer"}}>Resolve →</button></div>);})()}
+            {/* Conflict banner — shown as a flag independent of lifecycle status */}
+            {term.conflictFlag&&term.conflictWith&&(()=>{const rival=terms.find(x=>x.id===term.conflictWith);return rival&&(<div style={{margin:"0 0 8px",padding:"8px 14px",background:"rgba(217,119,6,.08)",border:"1px solid rgba(217,119,6,.35)",borderRadius:8,display:"flex",alignItems:"center",gap:10}}><span style={{color:"#d97706",fontSize:15}}>⚡</span><span style={{fontSize:12.5,color:"#d97706",flex:1}}>Conflict with <strong>{rival.term}</strong> ({rival.domain} domain) — synonyms or name overlap detected.</span><button onClick={()=>setConflictModal({termA:term,termB:rival})} style={{fontSize:11.5,fontWeight:700,color:"#d97706",background:"rgba(217,119,6,.1)",border:"1px solid rgba(217,119,6,.35)",borderRadius:6,padding:"3px 10px",cursor:"pointer"}}>Resolve →</button></div>);})()}
+            {/* Rejected banner */}
+            {term.status==="Rejected"&&term.rejectionReason&&(<div style={{margin:"0 0 8px",padding:"8px 14px",background:"rgba(225,29,72,.06)",border:"1px solid rgba(225,29,72,.25)",borderRadius:8,fontSize:12.5,color:"#e11d48",lineHeight:1.5}}><strong>Rejected: </strong>{term.rejectionReason}</div>)}
             {/* Deprecation banner */}
-            {term.status==="Deprecated"&&term.deprecationReason&&(<div style={{margin:"0 0 8px",padding:"8px 14px",background:"rgba(225,29,72,.06)",border:"1px solid rgba(225,29,72,.25)",borderRadius:8,fontSize:12.5,color:T.rose,lineHeight:1.5}}><strong>Deprecated: </strong>{term.deprecationReason}</div>)}
+            {term.status==="Deprecated"&&term.deprecationReason&&(<div style={{margin:"0 0 8px",padding:"8px 14px",background:"rgba(124,58,237,.06)",border:"1px solid rgba(124,58,237,.25)",borderRadius:8,fontSize:12.5,color:"#7c3aed",lineHeight:1.5}}><strong>Deprecated: </strong>{term.deprecationReason}</div>)}
             <div style={{display:"flex",gap:0,marginBottom:-1}}>
               {[{id:"overview",l:"Overview"},{id:"assets",l:`Linked Assets (${term.linkedAssets.length})`},{id:"activity",l:`Activity (${term.activity.length})`},{id:"auditlog",l:`Audit Log (${(term.auditLog||[]).length})`}].map(tab=>(
                 <button key={tab.id} onClick={()=>setTermTab(tab.id)} style={{padding:"8px 18px",background:"transparent",border:"none",borderBottom:`2px solid ${termTab===tab.id?T.accent:"transparent"}`,color:termTab===tab.id?T.text:T.textMuted,fontSize:13,fontWeight:termTab===tab.id?600:400,cursor:"pointer",transition:"all .12s"}}>{tab.l}</button>
@@ -1958,7 +2139,7 @@ const GlossaryView = ({onToast}) => {
                 </div>
                 <div><GlLabel>Glossary</GlLabel><GlSelect value={form.glossary||selG||"g1"} onChange={e=>setForm(f=>({...f,glossary:e.target.value}))}>{glossaries.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}</GlSelect></div>
                 <div><GlLabel>Owner</GlLabel><GlSelect value={form.owner||"maya.chen"} onChange={e=>setForm(f=>({...f,owner:e.target.value}))}>{USERS.map(u=><option key={u} value={u}>{u}</option>)}</GlSelect></div>
-                <div><GlLabel>Certificate</GlLabel><GlSelect value={form.cert||"Draft"} onChange={e=>setForm(f=>({...f,cert:e.target.value}))}>{Object.keys(CERT_META).map(c=><option key={c}>{c}</option>)}</GlSelect></div>
+                <div><GlLabel>Status</GlLabel><GlSelect value={form.cert||"Draft"} onChange={e=>setForm(f=>({...f,cert:e.target.value}))}>{["Draft","In Review"].map(c=><option key={c}>{c}</option>)}</GlSelect></div>
               </div>
               <div style={{display:"flex",gap:8,justifyContent:"flex-end",paddingTop:4}}>
                 <button onClick={closeModal} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
@@ -2041,6 +2222,11 @@ const GlossaryView = ({onToast}) => {
     const t = terms.find(x=>x.id===id);
     if(!t) return null;
     const isDeprecate = to==="Deprecated";
+    const isReject    = to==="Rejected";
+    const needsReason = isDeprecate || isReject;
+    const reasonValue = isDeprecate ? deprecateReason : rejectReason;
+    const reasonSetter = isDeprecate ? setDeprecateReason : setRejectReason;
+    const btnColor = isReject ? "#e11d48" : T.rose;
     return (
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(4px)"}}>
         <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,width:440,boxShadow:"0 24px 60px rgba(0,0,0,.3)"}}>
@@ -2051,16 +2237,17 @@ const GlossaryView = ({onToast}) => {
           <div style={{padding:"18px 22px",display:"flex",flexDirection:"column",gap:12}}>
             {isDeprecate&&(<>
               <div style={{fontSize:13,color:T.textSub}}>Provide a reason for deprecation. This will be shown to anyone who references this term.</div>
-              <div>
-                <GlLabel req>Deprecation Reason</GlLabel>
-                <GlTA value={deprecateReason} onChange={e=>setDeprecateReason(e.target.value)} placeholder="e.g. Superseded by Gross Revenue Retention per CFO directive Q1 2026" rows={3}/>
-              </div>
+              <div><GlLabel req>Deprecation Reason</GlLabel><GlTA value={deprecateReason} onChange={e=>setDeprecateReason(e.target.value)} placeholder="e.g. Superseded by Gross Revenue Retention per CFO directive Q1 2026" rows={3}/></div>
             </>)}
-            {!isDeprecate&&<div style={{fontSize:13,color:T.textSub}}>Are you sure you want to move <strong>{t.term}</strong> back to <strong>{to}</strong>? Add an optional note.</div>}
-            {!isDeprecate&&<div><GlLabel>Note (optional)</GlLabel><GlInput value={rejectReason} onChange={e=>setRejectReason(e.target.value)} placeholder="Reason for returning to draft…"/></div>}
+            {isReject&&(<>
+              <div style={{fontSize:13,color:T.textSub}}>Provide a reason for rejection. The submitter will be notified and the term will be marked <strong>Rejected</strong>.</div>
+              <div><GlLabel req>Rejection Reason</GlLabel><GlTA value={rejectReason} onChange={e=>setRejectReason(e.target.value)} placeholder="e.g. Definition conflicts with existing approved term CLV. Please resubmit with a narrower scope." rows={3}/></div>
+            </>)}
+            {!needsReason&&<div style={{fontSize:13,color:T.textSub}}>Are you sure you want to move <strong>{t.term}</strong> back to <strong>{to}</strong>? Add an optional note.</div>}
+            {!needsReason&&<div><GlLabel>Note (optional)</GlLabel><GlInput value={rejectReason} onChange={e=>setRejectReason(e.target.value)} placeholder="Reason for returning to draft…"/></div>}
             <div style={{display:"flex",gap:8,justifyContent:"flex-end",paddingTop:4}}>
               <button onClick={()=>setTransitionModal(null)} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
-              <button onClick={()=>transitionTerm(id,to,isDeprecate?deprecateReason:rejectReason)} disabled={isDeprecate&&!deprecateReason.trim()} style={{padding:"8px 20px",borderRadius:8,background:(isDeprecate&&!deprecateReason.trim())?"rgba(238,36,36,.2)":T.rose,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:(isDeprecate&&!deprecateReason.trim())?"default":"pointer"}}>{label}</button>
+              <button onClick={()=>transitionTerm(id,to,reasonValue)} disabled={needsReason&&!reasonValue.trim()} style={{padding:"8px 20px",borderRadius:8,background:(needsReason&&!reasonValue.trim())?"rgba(107,114,128,.2)":btnColor,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:(needsReason&&!reasonValue.trim())?"default":"pointer"}}>{label}</button>
             </div>
           </div>
         </div>
@@ -2144,6 +2331,10 @@ const Ic = {
   props:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><path d="M4 4h8M4 8h5M4 12h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><circle cx="12" cy="11" r="2.5" stroke="currentColor" strokeWidth="1.2"/><path d="M14 12.5l1.5 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
   refresh:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><path d="M13.5 8A5.5 5.5 0 112.5 5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M2 2.5v3h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>,
   comment:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v7a1 1 0 01-1 1H5.5L2 14V3z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>,
+  tag:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><path d="M2 2h5.5l6.5 6.5-5.5 5.5L2 7.5V2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><circle cx="5" cy="5" r="1" fill="currentColor"/></svg>,
+  inbox:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/><path d="M2 10h3l1.5 2h3L11 10h3" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>,
+  arrowDown:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  arrowRight:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>,
 };
 
 // ─────────────────────────────────────────────
@@ -2195,9 +2386,15 @@ const TypeBadge = ({type})=>{
 };
 
 const CertBadge = ({cert})=>{
-  const map = {Certified:{c:T.accent,bg:T.accentDim},Verified:{c:"#16a34a",bg:"rgba(22,163,74,.1)"},"In Review":{c:T.amber,bg:T.amberDim},Uncertified:{c:T.textMuted,bg:T.bgHover},Deprecated:{c:T.rose,bg:T.roseDim},Draft:{c:"#d97706",bg:"rgba(217,119,6,.1)"}};
+  const map = {
+    Draft:       {c:"#6b7280", bg:"rgba(107,114,128,.1)"},
+    "In Review": {c:"#d97706", bg:"rgba(217,119,6,.1)"},
+    Approved:    {c:"#16a34a", bg:"rgba(22,163,74,.1)"},
+    Rejected:    {c:"#e11d48", bg:"rgba(225,29,72,.1)"},
+    Deprecated:  {c:"#7c3aed", bg:"rgba(124,58,237,.1)"},
+  };
   const s = map[cert]||{c:T.textMuted,bg:T.bgHover};
-  return <span style={{fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:4,background:s.bg,color:s.c}}>{cert}</span>;
+  return <span style={{fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:4,background:s.bg,color:s.c}}>{cert||"Not Certified"}</span>;
 };
 
 const QScore = ({score})=>{
@@ -2423,6 +2620,7 @@ const NOTIF_TYPE_CFG = {
 
 const NotificationsPanel = ({onClose}) => {
   const onNav = useNav();
+  const tagCtx = useTagCtx();
   const [notifs, setNotifs] = useState(NOTIFS.map(n=>({...n})));
   const [filter, setFilter] = useState("all");
   const unreadCount = notifs.filter(n=>n.unread).length;
@@ -2451,6 +2649,39 @@ const NotificationsPanel = ({onClose}) => {
           ))}
         </div>
       </div>
+      {/* Tag governance section */}
+      {tagCtx&&(()=>{
+        const unresolved = tagCtx.unresolvedCount;
+        const conflicts  = tagCtx.conflictCount;
+        const pending    = tagCtx.pendingCount;
+        const allClear   = unresolved===0;
+        return (
+          <div style={{padding:"10px 16px",borderBottom:`1px solid ${T.border}`,background:allClear?"transparent":`${T.amber}08`}}>
+            <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:allClear?0:6}}>
+              {Ic.tag(12)}
+              <span style={{fontSize:11.5,fontWeight:700,color:T.text}}>Tag Governance</span>
+              {allClear
+                ? <span style={{fontSize:10.5,color:"#16a34a",marginLeft:"auto",fontWeight:600}}>✓ All clear</span>
+                : <span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:99,background:"rgba(251,191,36,.15)",color:T.amber,border:"1px solid rgba(251,191,36,.25)",marginLeft:"auto"}}>{unresolved}</span>}
+            </div>
+            {!allClear&&<div style={{display:"flex",gap:10}}>
+              {unresolved>0&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:11}}>
+                <span style={{width:6,height:6,borderRadius:"50%",background:T.amber,display:"block"}}/>
+                <span style={{color:T.textSub}}>{unresolved} unresolved</span>
+              </div>}
+              {conflicts>0&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:11}}>
+                <span style={{width:6,height:6,borderRadius:"50%",background:T.rose,display:"block"}}/>
+                <span style={{color:T.textSub}}>{conflicts} conflicts</span>
+              </div>}
+              {pending>0&&<div style={{display:"flex",alignItems:"center",gap:4,fontSize:11}}>
+                <span style={{width:6,height:6,borderRadius:"50%",background:T.violet,display:"block"}}/>
+                <span style={{color:T.textSub}}>{pending} pending</span>
+              </div>}
+              <button onClick={()=>{onNav("steward-inbox");onClose();}} style={{fontSize:10.5,color:T.accent,background:"none",border:"none",cursor:"pointer",marginLeft:"auto",fontWeight:500,padding:0}}>View →</button>
+            </div>}
+          </div>
+        );
+      })()}
       {/* List */}
       <div style={{flex:1,overflowY:"auto"}}>
         {displayed.length===0&&<div style={{padding:"32px 16px",textAlign:"center",color:T.textMuted,fontSize:12}}>No notifications</div>}
@@ -2871,6 +3102,8 @@ const GROUPS = [
     {key:"access",         icon:"access",        label:"Access Governance"},
     {key:"certifications", icon:"cert",          label:"Certifications"},
     {key:"stewardship",    icon:"steward",       label:"Stewardship"},
+    {key:"tags",           icon:"tag",           label:"Tag Management"},
+    {key:"steward-inbox",  icon:"inbox",         label:"Steward Inbox", badge:true},
   ]},
   {section:"Knowledge",items:[
     {key:"glossary",       icon:"glossary",      label:"Business Glossary"},
@@ -2884,7 +3117,9 @@ const GROUPS = [
 
 const Sidebar = ({active, onNav, exp, setExp}) => {
   const {roleCfg} = useRole();
-  const allowedNav = roleCfg?.nav || ["home","search","catalog","lineage","quality","observability","contracts","policymanager","access","certifications","stewardship","glossary","domains","analytics","settings"];
+  const tagCtx = useTagCtx();
+  const unresolvedCount = tagCtx?.unresolvedCount || 0;
+  const allowedNav = [...(roleCfg?.nav || ["home","search","catalog","lineage","quality","observability","contracts","policymanager","access","certifications","stewardship","glossary","domains","analytics","settings"]), "tags","steward-inbox"];
   return (
     <div style={{position:"fixed",top:0,left:0,height:"100vh",width:exp?EXPANDED_W:COLLAPSED_W,background:T.bgSurface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:100,transition:"width .2s ease",overflow:"hidden"}}>
       {/* Logo */}
@@ -2915,6 +3150,8 @@ const Sidebar = ({active, onNav, exp, setExp}) => {
                     {Ic[item.icon]?Ic[item.icon](15):Ic.catalog(15)}
                   </span>
                   {exp&&<span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",textAlign:"left"}}>{item.label}</span>}
+                  {exp&&item.badge&&unresolvedCount>0&&<span style={{fontSize:9,fontWeight:700,background:T.amber,color:"#000",borderRadius:10,padding:"1px 5px",marginLeft:2,flexShrink:0}}>{unresolvedCount}</span>}
+                  {!exp&&item.badge&&unresolvedCount>0&&<span style={{position:"absolute",top:4,right:4,width:8,height:8,borderRadius:"50%",background:T.amber}}/>}
                 </button>
               );
             })}
@@ -2958,7 +3195,7 @@ const HomeView = ({onNav, onToast}) => {
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
         {[
           {label:"Total Assets",    value:"1,284", sub:"↑ 23 this week",    color:T.accent},
-          {label:"Certified",       value:"847",   sub:"66% certified",     color:"#16a34a"},
+          {label:"Approved",        value:"847",   sub:"66% approved",      color:"#16a34a"},
           {label:"Avg Quality",     value:"89",    sub:"Across all assets", color:"#d97706"},
           {label:"Open Issues",     value:"12",    sub:"3 critical",        color:T.rose},
         ].map((m,i)=><Metric key={i} label={m.label} value={m.value} sub={m.sub} color={m.color}/>)}
@@ -3001,11 +3238,11 @@ const HomeView = ({onNav, onToast}) => {
     certQueue: (
       <Card2 style={{marginBottom:20}}><div style={{padding:16}}>
         <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:14}}>Certification Queue</div>
-        {CERTIFICATIONS.filter(c=>c.status==="Pending").concat(CERTIFICATIONS.filter(c=>c.status==="Active").slice(0,2)).map((c,i)=>(
+        {CERTIFICATIONS.filter(c=>c.status==="In Review").concat(CERTIFICATIONS.filter(c=>c.status==="Approved").slice(0,2)).map((c,i)=>(
           <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:i<2?`1px solid ${T.border}`:"none"}}>
-            <SDot status={c.status==="Active"?"Approved":"Pending"}/>
+            <SDot status={c.status==="Approved"?"passing":"warning"}/>
             <span style={{flex:1,fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text}}>{c.asset}</span>
-            <CertBadge cert={c.status==="Active"?"Certified":"In Review"}/>
+            <CertBadge cert={c.status}/>
           </div>
         ))}
       </div></Card2>
@@ -3107,17 +3344,19 @@ const HomeView = ({onNav, onToast}) => {
 };;
 
 const LineageView = () => {
+  const tagCtx = useTagCtx();
+  const onNav = useNav();
   const [selected, setSelected] = useState(null);
   const [hoveredNode, setHoveredNode] = useState(null);
 
   const nodes = [
-    {id:"n1", label:"etl_orders_pipeline", type:"Pipeline",  x:60,  y:180, cert:"Certified"},
-    {id:"n2", label:"orders",              type:"Table",     x:220, y:100, cert:"Certified"},
-    {id:"n3", label:"customers",           type:"Table",     x:220, y:260, cert:"Certified"},
-    {id:"n4", label:"dim_products",        type:"Table",     x:220, y:180, cert:"Certified"},
+    {id:"n1", label:"etl_orders_pipeline", type:"Pipeline",  x:60,  y:180, cert:"Approved"},
+    {id:"n2", label:"orders",              type:"Table",     x:220, y:100, cert:"Approved"},
+    {id:"n3", label:"customers",           type:"Table",     x:220, y:260, cert:"Approved"},
+    {id:"n4", label:"dim_products",        type:"Table",     x:220, y:180, cert:"Approved"},
     {id:"n5", label:"revenue_dashboard",   type:"Dashboard", x:400, y:100, cert:"In Review"},
-    {id:"n6", label:"finance_summary",     type:"Dashboard", x:400, y:260, cert:"Certified"},
-    {id:"n7", label:"ml_churn_model",      type:"ML Model",  x:400, y:180, cert:"Certified"},
+    {id:"n6", label:"finance_summary",     type:"Dashboard", x:400, y:260, cert:"Approved"},
+    {id:"n7", label:"ml_churn_model",      type:"ML Model",  x:400, y:180, cert:"Approved"},
   ];
 
   const edges = [
@@ -3170,6 +3409,11 @@ const LineageView = () => {
             const tc = typeColors[n.type]||T.accent;
             const isSelected = selected===n.id;
             const isHovered  = hoveredNode===n.id;
+            const asset = ASSETS.find(a=>a.name===n.label);
+            const nodeAsns = asset&&tagCtx ? tagCtx.getAssetAssignments(asset.id).filter(a=>a.status!=='rejected') : [];
+            const hasSensitivity = nodeAsns.some(asn=>{const td=tagCtx?.getTagDef(asn.tagId);return td?.category==='sensitivity';});
+            const hasRegulatory  = nodeAsns.some(asn=>{const td=tagCtx?.getTagDef(asn.tagId);return td?.category==='regulatory';});
+            const dotColor = hasSensitivity ? '#fbbf24' : hasRegulatory ? T.blue : null;
             return (
               <div key={n.id}
                 onClick={()=>setSelected(isSelected?null:n.id)}
@@ -3189,6 +3433,7 @@ const LineageView = () => {
                   userSelect:"none",
                   zIndex:isSelected?10:1,
                 }}>
+                {dotColor&&<span title={hasSensitivity?"Sensitivity tags":"Regulatory tags"} style={{position:"absolute",top:6,right:8,width:6,height:6,borderRadius:"50%",background:dotColor,boxShadow:`0 0 0 2px ${dotColor}44`,display:"block"}}/>}
                 <div style={{fontSize:11,fontWeight:600,color:tc,marginBottom:3}}>{n.type}</div>
                 <div style={{fontSize:12,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.label}</div>
                 <div style={{marginTop:5}}><CertBadge cert={n.cert}/></div>
@@ -3211,17 +3456,27 @@ const LineageView = () => {
               <div style={{marginBottom:12}}>
                 <TypeBadge type={n.type}/> <CertBadge cert={n.cert}/>
               </div>
-              {a&&<>
-                <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginBottom:14}}>{a.description}</div>
-                <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:16}}>
-                  {[{l:"Domain",v:a.domain},{l:"Owner",v:a.owner},{l:"Quality",v:null},{l:"Updated",v:a.updated}].map(({l,v})=>(
-                    <div key={l} style={{display:"flex",justifyContent:"space-between",fontSize:12}}>
-                      <span style={{color:T.textMuted}}>{l}</span>
-                      <span style={{color:T.text}}>{l==="Quality"?<QScore score={a.quality}/>:v}</span>
+              {a&&(()=>{
+                const detailAsns = tagCtx ? tagCtx.getAssetAssignments(a.id).filter(x=>x.status!=='rejected') : [];
+                return <>
+                  <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginBottom:14}}>{a.description}</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:16}}>
+                    {[{l:"Domain",v:a.domain},{l:"Owner",v:a.owner},{l:"Quality",v:null},{l:"Updated",v:a.updated}].map(({l,v})=>(
+                      <div key={l} style={{display:"flex",justifyContent:"space-between",fontSize:12}}>
+                        <span style={{color:T.textMuted}}>{l}</span>
+                        <span style={{color:T.text}}>{l==="Quality"?<QScore score={a.quality}/>:v}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {detailAsns.length>0&&<div style={{marginBottom:14}}>
+                    <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Tags</div>
+                    <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                      {detailAsns.slice(0,5).map(asn=>{const td=tagCtx.getTagDef(asn.tagId);return td?<TagPill key={asn.tagId} tagDef={td} assignment={asn} size="sm"/>:null;})}
                     </div>
-                  ))}
-                </div>
-              </>}
+                    <button onClick={()=>onNav("catalog")} style={{fontSize:10.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:"4px 0 0",display:"block"}} onMouseEnter={e=>e.currentTarget.style.opacity=".7"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>View all tags →</button>
+                  </div>}
+                </>;
+              })()}
               {upstream.length>0&&<>
                 <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Upstream ({upstream.length})</div>
                 {upstream.map(u=><div key={u.id} onClick={()=>setSelected(u.id)} style={{padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,marginBottom:5,cursor:"pointer",fontSize:12,color:T.accent,fontFamily:"'Geist Mono',monospace"}}>{u.label}</div>)}
@@ -5310,12 +5565,11 @@ const CertificationsView = ({onToast}) => {
   const [certs, setCerts] = useState(CERTIFICATIONS.map(c=>({...c})));
   const [filter, setFilter] = useState("All");
 
-  const displayCerts = certs.map(c=>({...c,displayStatus:c.status==="Active"?"Certified":c.status==="Pending"?"In Review":"Deprecated"}));
-  const filtered = filter==="All" ? displayCerts : displayCerts.filter(c=>c.displayStatus===filter);
+  const filtered = filter==="All" ? certs : certs.filter(c=>c.status===filter);
 
   const approve = (id) => {
-    setCerts(p=>p.map(c=>c.id===id?{...c,status:"Active",certifier:"maya.chen",date:new Date().toISOString().slice(0,10)}:c));
-    onToast("Asset certified","success");
+    setCerts(p=>p.map(c=>c.id===id?{...c,status:"Approved",certifier:"maya.chen",date:new Date().toISOString().slice(0,10)}:c));
+    onToast("Asset approved","success");
     setSelected(null);
   };
 
@@ -5326,29 +5580,29 @@ const CertificationsView = ({onToast}) => {
         <div style={{flex:1,overflowY:"auto",padding:28}}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
             {[
-              {label:"Certified",   value:certs.filter(c=>c.status==="Active").length,   color:"#16a34a"},
-              {label:"In Review",   value:certs.filter(c=>c.status==="Pending").length,  color:T.amber},
-              {label:"Avg Score",   value:Math.round(certs.reduce((s,c)=>s+c.score,0)/certs.length), color:T.accent},
-              {label:"Expiring",    value:certs.filter(c=>c.status==="Active").length,   color:"#60a5fa"},
+              {label:"Approved",   value:certs.filter(c=>c.status==="Approved").length,   color:"#16a34a"},
+              {label:"In Review",  value:certs.filter(c=>c.status==="In Review").length,  color:T.amber},
+              {label:"Avg Score",  value:Math.round(certs.reduce((s,c)=>s+c.score,0)/certs.length), color:T.accent},
+              {label:"Deprecated", value:certs.filter(c=>c.status==="Deprecated").length, color:"#7c3aed"},
             ].map((m,i)=><Metric key={i} label={m.label} value={String(m.value)} color={m.color}/>)}
           </div>
           <div style={{display:"flex",gap:6,marginBottom:16,alignItems:"center",justifyContent:"space-between"}}>
             <div style={{display:"flex",gap:6}}>
-              {["All","Certified","In Review","Deprecated"].map(f=>(
+              {["All","Approved","In Review","Rejected","Deprecated"].map(f=>(
                 <button key={f} onClick={()=>setFilter(f)} style={{padding:"5px 14px",borderRadius:99,fontSize:12,fontWeight:filter===f?600:400,border:`1px solid ${filter===f?T.accent:T.border}`,background:filter===f?T.accentDim:"transparent",color:filter===f?T.accent:T.textSub,cursor:"pointer",transition:"all .12s"}}>{f}</button>
               ))}
             </div>
             <Btn icon={Ic.plus(12)} variant="primary" onClick={()=>onToast("Certification workflow opened","success")}>New Certification</Btn>
           </div>
           <DataTable cols={[
-            {key:"asset",        label:"Asset",          render:v=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:12.5,fontWeight:600,color:T.text}}>{v}</span>},
-            {key:"type",         label:"Type",           render:v=><TypeBadge type={v}/>},
-            {key:"displayStatus",label:"Status",         render:v=><CertBadge cert={v}/>},
-            {key:"certifier",    label:"Certifier",      render:v=>v?<span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{v}</span>:<span style={{fontSize:11,color:T.textMuted}}>Pending</span>},
-            {key:"score",        label:"Quality",        render:v=><QScore score={v}/>},
-            {key:"date",         label:"Certified",      render:v=>v?<span style={{fontSize:11,color:T.textMuted}}>{v}</span>:<span style={{fontSize:11,color:T.amber}}>Not yet</span>},
-            {key:"notes",        label:"Notes",          render:v=><span style={{fontSize:11,color:T.textMuted,maxWidth:200,display:"block",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v}</span>},
-          ]} rows={filtered} onRowClick={r=>setSelected(displayCerts.find(c=>c.id===r.id))}/>
+            {key:"asset",     label:"Asset",     render:v=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:12.5,fontWeight:600,color:T.text}}>{v}</span>},
+            {key:"type",      label:"Type",      render:v=><TypeBadge type={v}/>},
+            {key:"status",    label:"Status",    render:v=><CertBadge cert={v}/>},
+            {key:"certifier", label:"Certifier", render:v=>v?<span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{v}</span>:<span style={{fontSize:11,color:T.textMuted}}>Pending</span>},
+            {key:"score",     label:"Quality",   render:v=><QScore score={v}/>},
+            {key:"date",      label:"Approved",  render:v=>v?<span style={{fontSize:11,color:T.textMuted}}>{v}</span>:<span style={{fontSize:11,color:T.amber}}>Not yet</span>},
+            {key:"notes",     label:"Notes",     render:v=><span style={{fontSize:11,color:T.textMuted,maxWidth:200,display:"block",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v}</span>},
+          ]} rows={filtered} onRowClick={r=>setSelected(certs.find(c=>c.id===r.id))}/>
         </div>
         {selected&&(
           <div className="slideIn" style={{width:280,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto",padding:20,flexShrink:0}}>
@@ -5356,7 +5610,7 @@ const CertificationsView = ({onToast}) => {
               <div style={{fontSize:14,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{selected.asset}</div>
               <button onClick={()=>setSelected(null)} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer"}}>{Ic.x(13)}</button>
             </div>
-            <div style={{marginBottom:14}}><TypeBadge type={selected.type}/>&nbsp;<CertBadge cert={selected.displayStatus}/></div>
+            <div style={{marginBottom:14}}><TypeBadge type={selected.type}/>&nbsp;<CertBadge cert={selected.status}/></div>
             {[{l:"Score",v:null},{l:"Certifier",v:selected.certifier||"—"},{l:"Date",v:selected.date||"—"},{l:"Expires",v:selected.expires||"—"}].map(({l,v})=>(
               <div key={l} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:10,alignItems:"center"}}>
                 <span style={{color:T.textMuted}}>{l}</span>
@@ -5364,10 +5618,11 @@ const CertificationsView = ({onToast}) => {
               </div>
             ))}
             <div style={{padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,fontSize:12,color:T.textSub,marginBottom:14,lineHeight:1.5}}>{selected.notes}</div>
-            {selected.status==="Pending"&&(
+            {selected.status==="In Review"&&(
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                <button onClick={()=>approve(selected.id)} style={{padding:"8px",borderRadius:8,background:"rgba(22,163,74,.1)",border:"1px solid rgba(22,163,74,.3)",color:"#16a34a",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>✓ Approve & Certify</button>
-                <Btn ghost small onClick={()=>onToast("Sent back for review","success")}>Request Changes</Btn>
+                <button onClick={()=>approve(selected.id)} style={{padding:"8px",borderRadius:8,background:"rgba(22,163,74,.1)",border:"1px solid rgba(22,163,74,.3)",color:"#16a34a",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>✓ Approve</button>
+                <Btn ghost small onClick={()=>onToast("Sent back to Draft","success")}>↩ Return to Draft</Btn>
+                <Btn ghost small onClick={()=>{setCerts(p=>p.map(c=>c.id===selected.id?{...c,status:"Rejected"}:c));onToast("Certification rejected","error");setSelected(null);}}>✕ Reject</Btn>
               </div>
             )}
           </div>
@@ -5378,6 +5633,8 @@ const CertificationsView = ({onToast}) => {
 };;
 
 const StewardshipView = ({onToast}) => {
+  const tagCtx = useTagCtx();
+  const onNav  = useNav();
   const [tab,        setTab]       = useState("queue");
   const [tasks,      setTasks]     = useState(STEWARDSHIP_TASKS.map(t=>({...t})));
   const [filterP,    setFilterP]   = useState("All");
@@ -5547,11 +5804,48 @@ const StewardshipView = ({onToast}) => {
               </div>
             </div>
           ):(
-            <div style={{width:340,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",borderLeft:`1px solid ${T.border}`,background:T.bgElevated}}>
-              <div style={{textAlign:"center",color:T.textMuted,padding:20}}>
-                <div style={{fontSize:32,marginBottom:8}}>📋</div>
-                <div style={{fontSize:13,color:T.textSub,fontWeight:600}}>Select a task</div>
-                <div style={{fontSize:12,marginTop:4}}>Click any task to view details and take action</div>
+            <div style={{width:340,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgElevated,overflowY:"auto",padding:16}}>
+              {/* Tag governance widget */}
+              {tagCtx&&(()=>{
+                const pending   = tagCtx.pendingCount;
+                const conflicts = tagCtx.conflictCount;
+                const unresolved= tagCtx.unresolvedCount;
+                const recentItems = tagCtx.inbox.filter(x=>!x.resolvedAt).slice(0,5);
+                return (
+                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,marginBottom:14,overflow:"hidden"}}>
+                    <div style={{padding:"10px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:6}}>
+                      {Ic.tag(12)}<span style={{fontSize:12,fontWeight:700,color:T.text,flex:1}}>Tag Governance</span>
+                      {unresolved>0&&<span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:99,background:"rgba(251,191,36,.15)",color:T.amber,border:"1px solid rgba(251,191,36,.3)"}}>{unresolved} open</span>}
+                    </div>
+                    <div style={{padding:"10px 14px",display:"flex",gap:12,borderBottom:`1px solid ${T.border}`}}>
+                      <div style={{flex:1,textAlign:"center"}}>
+                        <div style={{fontSize:20,fontWeight:800,color:T.amber,fontFamily:"'Geist Mono',monospace"}}>{pending}</div>
+                        <div style={{fontSize:10,color:T.textMuted,marginTop:1}}>Pending approval</div>
+                      </div>
+                      <div style={{width:1,background:T.border}}/>
+                      <div style={{flex:1,textAlign:"center"}}>
+                        <div style={{fontSize:20,fontWeight:800,color:T.rose,fontFamily:"'Geist Mono',monospace"}}>{conflicts}</div>
+                        <div style={{fontSize:10,color:T.textMuted,marginTop:1}}>Sync conflicts</div>
+                      </div>
+                    </div>
+                    {recentItems.length>0&&<div style={{padding:"6px 0"}}>
+                      {recentItems.map(item=>(
+                        <div key={item.id} style={{padding:"5px 14px",display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{width:6,height:6,borderRadius:"50%",flexShrink:0,background:item.type==='sync_conflict'?T.rose:item.type==='pending_approval'?T.amber:T.violet,display:"block"}}/>
+                          <span style={{flex:1,fontSize:11,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.assetName}: <span style={{fontFamily:"'Geist Mono',monospace",color:T.text}}>{item.tagName}</span></span>
+                        </div>
+                      ))}
+                    </div>}
+                    <div style={{padding:"8px 14px",borderTop:`1px solid ${T.border}`}}>
+                      <button onClick={()=>onNav("steward-inbox")} style={{fontSize:11.5,color:T.accent,background:"none",border:"none",cursor:"pointer",fontWeight:600,padding:0}} onMouseEnter={e=>e.currentTarget.style.opacity=".7"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>View inbox →</button>
+                    </div>
+                  </div>
+                );
+              })()}
+              <div style={{textAlign:"center",color:T.textMuted,padding:"24px 0 16px"}}>
+                <div style={{fontSize:28,marginBottom:8,opacity:.4}}>📋</div>
+                <div style={{fontSize:12,color:T.textSub,fontWeight:600}}>Select a task</div>
+                <div style={{fontSize:11,marginTop:3}}>Click any task to view details</div>
               </div>
             </div>
           )}
@@ -5962,6 +6256,187 @@ const AssetQualityTab = ({asset})=>{
     </Card2>
   </div>;
 }
+const AssetTagsTab = ({assetId, onToast}) => {
+  const { tagDefs, getAssetAssignments, applyTag, removeTag, resolveInboxItem, getTagDef } = useTagCtx();
+  const navigate = useNav();
+  const [selectedAsgn, setSelectedAsgn] = useState(null);
+  const [applyModalOpen, setApplyModalOpen] = useState(false);
+  const [modalSearch, setModalSearch] = useState('');
+  const [selectedTagId, setSelectedTagId] = useState(null);
+  const [removeNote, setRemoveNote] = useState('');
+  const [removingId, setRemovingId] = useState(null);
+
+  const assignments = getAssetAssignments(assetId);
+  const active = assignments.filter(a => a.status !== 'rejected');
+
+  const catColors = { sensitivity:{bg:T.accentDim,color:T.accent}, regulatory:{bg:T.blueDim,color:T.blue}, business:{bg:T.amberDim,color:T.amber}, custom:{bg:T.bgElevated,color:T.textSub} };
+
+  const catOrder = ['sensitivity','regulatory','business','custom'];
+  const filteredTagDefs = modalSearch ? tagDefs.filter(td=>td.name.toLowerCase().includes(modalSearch.toLowerCase())) : tagDefs;
+  const groupedTags = catOrder.map(cat=>({cat, tags:filteredTagDefs.filter(td=>td.category===cat)})).filter(g=>g.tags.length>0);
+
+  const selectedTagDef = tagDefs.find(t=>t.id===selectedTagId);
+  const impactCount = selectedTagId ? parseInt(selectedTagId.replace('t',''))*3+5 : 0;
+  const propText = { none:'Applies to this asset only.', hierarchy:'Cascades to all child assets in this schema or domain.', lineage:'Cascades to all downstream assets in the data lineage graph.', both:'Maximum coverage — schema children AND downstream lineage assets.' };
+
+  const handleApply = () => {
+    if (!selectedTagId) return;
+    applyTag(assetId, selectedTagId, { origin:'manual', appliedBy:'Current User' });
+    setApplyModalOpen(false);
+    setSelectedTagId(null);
+    setModalSearch('');
+    const def = getTagDef(selectedTagId);
+    onToast(def?.governanceRequired ? `${def.name} submitted for approval` : `${def?.name} applied`,'success');
+  };
+
+  const handleRemove = (asgn) => {
+    const def = getTagDef(asgn.tagId);
+    if (def && (def.category==='sensitivity'||def.category==='regulatory')) {
+      setRemovingId(asgn.id);
+    } else {
+      removeTag(assetId, asgn.id);
+    }
+  };
+
+  const confirmRemove = () => {
+    removeTag(assetId, removingId, removeNote);
+    setRemovingId(null);
+    setRemoveNote('');
+  };
+
+  const originText = (o, src) => {
+    if (o==='manual') return `Applied manually`;
+    if (o==='synced') return `Synced from ${src||'source'}`;
+    if (o==='propagated_hierarchy') return 'Inherited via catalog hierarchy';
+    if (o==='propagated_lineage') return 'Inherited via data lineage from upstream asset';
+    if (o==='propagated_both') return 'Inherited via hierarchy and lineage';
+    return o;
+  };
+
+  const selAsgn = active.find(a=>a.id===selectedAsgn);
+  const selDef  = selAsgn ? getTagDef(selAsgn.tagId) : null;
+
+  return (
+    <div className="fadeIn">
+      {/* Applied tags */}
+      <div style={{marginBottom:4}}>
+        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:10}}>Applied tags</div>
+        {active.length===0 ? (
+          <div style={{fontSize:12,color:T.textMuted,marginBottom:10}}>No tags applied. Click + Add tag to get started.</div>
+        ) : (
+          <div style={{display:'flex',flexWrap:'wrap',gap:8,marginBottom:12}}>
+            {active.map(a=>{
+              const def = getTagDef(a.tagId);
+              if (!def) return null;
+              return (
+                <TagPill key={a.id} tagDef={def} assignment={a} size='md'
+                  onClick={()=>setSelectedAsgn(selectedAsgn===a.id?null:a.id)}
+                  onRemove={()=>handleRemove(a)}/>
+              );
+            })}
+          </div>
+        )}
+        <button onClick={()=>{setApplyModalOpen(true);setModalSearch('');setSelectedTagId(null);}} style={{fontSize:12,color:T.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Add tag</button>
+      </div>
+
+      {/* Remove confirm for governance tags */}
+      {removingId&&(
+        <div style={{background:T.amberDim,border:`1px solid ${T.amber}44`,borderRadius:8,padding:14,margin:'12px 0'}}>
+          <div style={{fontSize:12.5,fontWeight:600,color:T.amber,marginBottom:8}}>This tag is governance-controlled. Add a note:</div>
+          <textarea value={removeNote} onChange={e=>setRemoveNote(e.target.value)} rows={2} placeholder="Reason for removal…" style={{width:'100%',padding:'6px 9px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,fontSize:12,outline:'none',resize:'vertical',marginBottom:8}}/>
+          <div style={{display:'flex',gap:8}}>
+            <button onClick={confirmRemove} style={{padding:'5px 14px',background:T.rose,color:'#fff',border:'none',borderRadius:5,fontSize:12,cursor:'pointer'}}>Remove</button>
+            <button onClick={()=>{setRemovingId(null);setRemoveNote('');}} style={{padding:'5px 14px',background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,borderRadius:5,fontSize:12,cursor:'pointer'}}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Tag detail panel */}
+      {selAsgn&&selDef&&(
+        <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,padding:14,marginTop:16}}>
+          {[
+            {l:'Tag',        v:<TagPill tagDef={selDef} assignment={selAsgn} size='md'/>},
+            {l:'Category',   v:<span style={{fontSize:11,padding:'2px 8px',borderRadius:4,background:catColors[selDef.category]?.bg,color:catColors[selDef.category]?.color,fontWeight:500,textTransform:'capitalize'}}>{selDef.category}</span>},
+            {l:'Origin',     v:<span style={{fontSize:12,color:T.textSub}}>{originText(selAsgn.origin,selAsgn.sourceSystem)}</span>},
+            {l:'Confirmed by',v:selAsgn.sourceSystems?.length>0?<div style={{display:'flex',gap:4,flexWrap:'wrap'}}>{selAsgn.sourceSystems.map(s=><span key={s} style={{fontSize:10,padding:'2px 6px',borderRadius:3,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub}}>{s}</span>)}</div>:<span style={{fontSize:12,color:T.textMuted}}>—</span>},
+            {l:'Propagation', v:<span style={{fontSize:12,color:T.textSub}}>{selDef.propagationMode==='none'?'None — this asset only':selDef.propagationMode==='hierarchy'?'Hierarchy — schema children':selDef.propagationMode==='lineage'?'Lineage — downstream assets':'H+L — maximum coverage'}</span>},
+            {l:'Status',      v:<span style={{fontSize:12,fontWeight:500,color:selAsgn.status==='active'?T.green:selAsgn.status==='pending'?T.amber:selAsgn.status==='conflict'?T.rose:T.textMuted}}>{selAsgn.status==='active'?'Active':selAsgn.status==='pending'?'Pending approval':selAsgn.status==='conflict'?'Conflict':'Rejected'}</span>},
+            {l:'Steward',     v:<span style={{fontSize:12,color:T.textSub}}>{selDef.managedBy||'—'}</span>},
+            {l:'Applied',     v:<span style={{fontSize:12,color:T.textSub}}>{selAsgn.appliedAt?selAsgn.appliedAt.slice(0,10):'—'}</span>},
+          ].map((row,i,arr)=>(
+            <div key={row.l} style={{display:'grid',gridTemplateColumns:'110px 1fr',gap:8,padding:'7px 0',borderBottom:i<arr.length-1?`1px solid ${T.border}`:'none',alignItems:'start'}}>
+              <span style={{fontSize:11,color:T.textMuted,fontWeight:500}}>{row.l}</span>
+              {row.v}
+            </div>
+          ))}
+          {selAsgn.stewardNote&&<div style={{background:T.amberDim,border:`1px solid ${T.amber}33`,borderRadius:6,padding:'8px 12px',marginTop:10,fontSize:11.5,color:T.amber}}>Steward note: "{selAsgn.stewardNote}"</div>}
+          {/* Steward actions */}
+          <div style={{marginTop:12,display:'flex',gap:8,flexWrap:'wrap'}}>
+            {selAsgn.status==='pending'&&<><button onClick={()=>{resolveInboxItem('i'+assetId,'approve');onToast('Tag approved','success');}} style={{padding:'5px 12px',background:'transparent',border:`1px solid ${T.accent}`,color:T.accent,borderRadius:5,fontSize:12,cursor:'pointer'}}>Approve</button><button onClick={()=>{removeTag(assetId,selAsgn.id,'Rejected by steward');onToast('Tag rejected','success');setSelectedAsgn(null);}} style={{padding:'5px 12px',background:'none',border:'none',color:T.textMuted,fontSize:12,cursor:'pointer'}}>Reject</button></>}
+            {selAsgn.status==='conflict'&&<><button onClick={()=>{}} style={{padding:'5px 12px',background:'transparent',border:`1px solid ${T.accent}`,color:T.accent,borderRadius:5,fontSize:12,cursor:'pointer'}}>Keep override</button><button onClick={()=>{}} style={{padding:'5px 12px',background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,borderRadius:5,fontSize:12,cursor:'pointer'}}>Accept source</button></>}
+          </div>
+          {!selDef.propagationLocked ? (
+            <button onClick={()=>{handleRemove(selAsgn);setSelectedAsgn(null);}} style={{fontSize:12,color:T.rose,background:'none',border:'none',cursor:'pointer',marginTop:10,padding:0}}>Remove this tag</button>
+          ) : (
+            <div style={{fontSize:11,color:T.textMuted,marginTop:10}}>Tag is governance-locked. Contact your admin to remove.</div>
+          )}
+        </div>
+      )}
+
+      {/* Apply Modal */}
+      {applyModalOpen&&(
+        <div style={{position:'absolute',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',zIndex:50,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:8}}>
+          <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,width:420,maxHeight:'80vh',display:'flex',flexDirection:'column',boxShadow:'0 16px 48px rgba(0,0,0,0.4)'}}>
+            <div style={{padding:'14px 16px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <div style={{fontSize:13,fontWeight:700,color:T.text}}>Apply tag</div>
+              <button onClick={()=>setApplyModalOpen(false)} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',fontSize:16}}>×</button>
+            </div>
+            <div style={{padding:'10px 12px',borderBottom:`1px solid ${T.border}`}}>
+              <input value={modalSearch} onChange={e=>setModalSearch(e.target.value)} placeholder="Search tags…" autoFocus style={{width:'100%',padding:'7px 10px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,fontSize:12,outline:'none'}}/>
+            </div>
+            <div style={{flex:1,overflowY:'auto',padding:'8px 0'}}>
+              {groupedTags.map(({cat,tags})=>(
+                <div key={cat}>
+                  <div style={{padding:'6px 14px 3px',fontSize:10,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.08em'}}>{cat}</div>
+                  {tags.map(td=>{
+                    const alreadyApplied = active.some(a=>a.tagId===td.id);
+                    const isSelected = selectedTagId===td.id;
+                    return (
+                      <div key={td.id} onClick={()=>!alreadyApplied&&setSelectedTagId(td.id)}
+                        style={{display:'flex',alignItems:'center',gap:10,padding:'7px 14px',cursor:alreadyApplied?'default':'pointer',background:isSelected?T.bgHover:'transparent',opacity:alreadyApplied?0.5:1,transition:'background .1s'}}
+                        onMouseEnter={e=>{if(!alreadyApplied&&!isSelected)e.currentTarget.style.background=T.bgHover;}}
+                        onMouseLeave={e=>{if(!isSelected)e.currentTarget.style.background='transparent';}}>
+                        <TagPill tagDef={td} size='sm'/>
+                        <span style={{flex:1,fontSize:11.5,color:T.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.description}</span>
+                        {alreadyApplied&&<span style={{fontSize:10,color:T.green}}>✓ Applied</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+            {selectedTagDef&&(
+              <div style={{padding:12,borderTop:`1px solid ${T.border}`,background:T.bgSurface,borderRadius:'0 0 8px 8px'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                  <TagPill tagDef={selectedTagDef} size='sm'/>
+                  <span style={{fontSize:11,padding:'2px 7px',borderRadius:4,background:T.bgElevated,color:T.textSub}}>{selectedTagDef.propagationMode}</span>
+                </div>
+                <div style={{fontSize:11.5,color:T.textSub,marginBottom:4}}>{propText[selectedTagDef.propagationMode]}</div>
+                <div style={{fontSize:11,color:T.textMuted,marginBottom:selectedTagDef.governanceRequired?8:0}}>Estimated impact: ~{impactCount} assets</div>
+                {selectedTagDef.governanceRequired&&<div style={{background:T.amberDim,border:`1px solid ${T.amber}33`,borderRadius:5,padding:'6px 10px',fontSize:11.5,color:T.amber}}>Governance required — needs steward approval</div>}
+              </div>
+            )}
+            <div style={{padding:'10px 12px',borderTop:`1px solid ${T.border}`}}>
+              <button onClick={handleApply} disabled={!selectedTagId} style={{width:'100%',padding:'8px',background:selectedTagId?T.accent:T.bgHover,color:selectedTagId?'#fff':T.textMuted,border:'none',borderRadius:6,fontSize:13,fontWeight:600,cursor:selectedTagId?'pointer':'default',marginBottom:6}}>Apply tag</button>
+              <button onClick={()=>setApplyModalOpen(false)} style={{display:'block',width:'100%',background:'none',border:'none',color:T.textMuted,fontSize:12,cursor:'pointer',textAlign:'center'}}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const AssetPoliciesTab = ()=>(
   <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:10}}>
     {POLICIES.slice(0,3).map(p=>(
@@ -6142,13 +6617,14 @@ const AssetDetail = ({asset, onBack, onToast}) => {
 
   // cert meta inline
   const CMETA = {
-    "Certified":   {color:"#16a34a",bg:"rgba(22,163,74,.12)",  border:"rgba(22,163,74,.3)",  icon:"✓"},
-    "In Review":   {color:"#d97706",bg:"rgba(217,119,6,.12)",  border:"rgba(217,119,6,.3)",  icon:"⏳"},
-    "Uncertified": {color:"#6b7280",bg:"rgba(107,114,128,.1)", border:"rgba(107,114,128,.25)",icon:"◐"},
-    "Deprecated":  {color:"#e11d48",bg:"rgba(225,29,72,.12)",  border:"rgba(225,29,72,.3)",  icon:"✕"},
+    "Draft":       {color:"#6b7280",bg:"rgba(107,114,128,.1)", border:"rgba(107,114,128,.25)",icon:"◐"},
+    "In Review":   {color:"#d97706",bg:"rgba(217,119,6,.12)",  border:"rgba(217,119,6,.3)",   icon:"⏳"},
+    "Approved":    {color:"#16a34a",bg:"rgba(22,163,74,.12)",  border:"rgba(22,163,74,.3)",   icon:"✓"},
+    "Rejected":    {color:"#e11d48",bg:"rgba(225,29,72,.12)",  border:"rgba(225,29,72,.3)",   icon:"✕"},
+    "Deprecated":  {color:"#7c3aed",bg:"rgba(124,58,237,.1)",  border:"rgba(124,58,237,.25)", icon:"—"},
   };
 
-  const cm = CMETA[data.cert]||CMETA["Uncertified"];
+  const cm = CMETA[data.cert]||CMETA["Draft"];
   const owners   = Array.isArray(data.owners)  ? data.owners   : (data.owner   ? [data.owner]   : []);
   const stewards = Array.isArray(data.stewards) ? data.stewards : (data.steward ? [data.steward] : []);
 
@@ -6170,13 +6646,14 @@ const AssetDetail = ({asset, onBack, onToast}) => {
   const tabs=[
     {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},
     {key:"lineage",label:"Lineage"},{key:"quality",label:"Quality"},
+    {key:"tags",label:"Tags"},
     {key:"policies",label:"Policies"},{key:"access",label:"Access"},
     {key:"usage",label:"Usage"},{key:"activity",label:"Activity"},
     {key:"comments",label:`Comments (${COMMENTS.length})`},
   ];
 
   const handleCertify=()=>{
-    setData(d=>({...d,cert:"Certified"}));
+    setData(d=>({...d,cert:"Approved"}));
     setCertModal(false);
     onToast(`${asset.name} certified successfully`,"success");
   };
@@ -6202,7 +6679,7 @@ const AssetDetail = ({asset, onBack, onToast}) => {
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:14}}>
         <h2 style={{fontSize:22,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,letterSpacing:"-0.04em",margin:0}}>{data.name}</h2>
         <div style={{display:"flex",gap:7,alignItems:"center",flexShrink:0}}>
-          {data.cert!=="Certified"&&(
+          {data.cert!=="Approved"&&(
             <button onClick={()=>setCertModal(true)}
               style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 14px",borderRadius:8,background:"#16a34a12",border:"1px solid rgba(22,163,74,.3)",color:"#16a34a",fontSize:12.5,fontWeight:600,cursor:"pointer",transition:"opacity .1s"}}
               onMouseEnter={e=>e.currentTarget.style.opacity=".8"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
@@ -6237,6 +6714,7 @@ const AssetDetail = ({asset, onBack, onToast}) => {
         {tab==="schema"    && <AssetSchema asset={asset} onToast={onToast}/>}
         {tab==="lineage"   && <AssetLineageFull asset={asset}/>}
         {tab==="quality"   && <AssetQualityTab asset={data}/>}
+        {tab==="tags"      && <AssetTagsTab assetId={asset.id} onToast={onToast}/>}
         {tab==="policies"  && <AssetPoliciesTab/>}
         {tab==="access"    && <AssetAccessTab onToast={onToast}/>}
         {tab==="usage"     && <AssetUsageTab/>}
@@ -6519,6 +6997,7 @@ const AssetDetail = ({asset, onBack, onToast}) => {
 // CATALOG VIEW
 // ─────────────────────────────────────────────
 const CatalogView = ({onAsset})=>{
+  const tagCtx = useTagCtx();
   const [q,         setQ]         = useState("");
   const [view,      setView]      = useState("table");
   const [sortBy,    setSortBy]    = useState("relevance");
@@ -6567,7 +7046,7 @@ const CatalogView = ({onAsset})=>{
     return false;
   }).length;
 
-  const CERT_COLORS = {"Certified":T.accent,"In Review":T.amber,"Uncertified":T.textMuted,"Deprecated":T.rose};
+  const CERT_COLORS = {"Approved":"#16a34a","In Review":"#d97706","Draft":"#6b7280","Rejected":"#e11d48","Deprecated":"#7c3aed"};
   const TIER_META   = {"1":{color:"#ee2424",label:"Critical"},"2":{color:"#d97706",label:"Important"},"3":{color:"#4b4b60",label:"Exploratory"}};
   const CONN_TYPE_LABELS = {snowflake:"Snowflake",postgres:"PostgreSQL",looker:"Looker",tableau:"Tableau",airflow:"Airflow",mlflow:"MLflow"};
   const allConnTypes = [...new Set(ASSETS.map(a=>a.service))];
@@ -6634,7 +7113,22 @@ const CatalogView = ({onAsset})=>{
     {key:"quality",label:"Quality",render:v=><QScore score={v}/>},
     {key:"usage",label:"Usage",render:v=><Badge color={v==="High"?T.accent:v==="Med"?T.amber:T.textMuted}>{v}</Badge>},
     {key:"updated",label:"Updated",render:v=><span style={{fontSize:11,color:T.textMuted}}>{v}</span>},
-    {key:"tags",label:"Tags",render:v=><div style={{display:"flex",gap:3,flexWrap:"wrap"}}>{v.map(t=><span key={t} style={{fontSize:10,padding:"1px 6px",borderRadius:99,background:t==="PII"?T.roseDim:T.bgHover,color:t==="PII"?T.rose:T.textMuted,border:`1px solid ${t==="PII"?"rgba(253,164,175,.25)":T.border}`}}>{t}</span>)}</div>},
+    {key:"tags",label:"Tags",render:(v,r)=>{
+      const asns = tagCtx ? tagCtx.getAssetAssignments(r.id).filter(a=>a.status!=='rejected') : [];
+      if(asns.length===0) return <span style={{fontSize:10.5,color:T.textMuted,fontStyle:"italic"}}>—</span>;
+      const visible = asns.slice(0,3);
+      const extra   = asns.length - 3;
+      return (
+        <div style={{display:"flex",gap:3,flexWrap:"wrap",alignItems:"center"}} onClick={e=>e.stopPropagation()}>
+          {visible.map(asn=>{
+            const td = tagCtx.getTagDef(asn.tagId);
+            if(!td) return null;
+            return <TagPill key={asn.tagId} tagDef={td} assignment={asn} size="sm" onClick={()=>onAsset(r)}/>;
+          })}
+          {extra>0&&<span style={{fontSize:10,padding:"1px 6px",borderRadius:99,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`,fontWeight:600,cursor:"pointer"}} onClick={()=>onAsset(r)}>+{extra}</span>}
+        </div>
+      );
+    }},
   ];
 
   return (
@@ -6670,7 +7164,7 @@ const CatalogView = ({onAsset})=>{
               items={["Table","Dashboard","Pipeline","ML Model"].map(v=>({val:v,label:v}))}
               sel={selTypes} onToggle={(v,c)=>c?setSelTypes(new Set()):toggle(setSelTypes,v)}/>
             <FacetGroup id="cert" label="Certification" icon={Ic.cert(11)}
-              items={["Certified","In Review","Uncertified","Deprecated"].map(v=>({val:v,label:v}))}
+              items={["Approved","In Review","Draft","Rejected","Deprecated"].map(v=>({val:v,label:v}))}
               sel={selCerts} onToggle={(v,c)=>c?setSelCerts(new Set()):toggle(setSelCerts,v)}
               renderItem={item=><span style={{color:CERT_COLORS[item.val]||T.textSub,fontSize:11.5}}>{item.label}</span>}/>
             <FacetGroup id="tier" label="Tier" icon={Ic.shield(11)}
@@ -6717,11 +7211,11 @@ const CatalogView = ({onAsset})=>{
                 {filtered.map(a=>{
                   // Find glossary terms linked to this asset
                   const linkedTerms = GLOSSARY_TERMS.filter(t=>(t.linkedAssets||[]).some(la=>la.name===a.name)&&t.status!=="Deprecated");
-                  const conflictTerms = linkedTerms.filter(t=>t.status==="Conflict");
+                  const conflictTerms = linkedTerms.filter(t=>t.conflictFlag);
                   return (
-                    <div key={a.id} style={{background:T.bgSurface,border:`1px solid ${conflictTerms.length>0?"rgba(124,58,237,.35)":T.border}`,borderRadius:10,cursor:"pointer",transition:"all .15s",overflow:"hidden"}}
-                      onMouseEnter={e=>{e.currentTarget.style.borderColor=conflictTerms.length>0?"rgba(124,58,237,.5)":T.accent+"55";e.currentTarget.style.background=T.bgHover;}}
-                      onMouseLeave={e=>{e.currentTarget.style.borderColor=conflictTerms.length>0?"rgba(124,58,237,.35)":T.border;e.currentTarget.style.background=T.bgSurface;}}>
+                    <div key={a.id} style={{background:T.bgSurface,border:`1px solid ${conflictTerms.length>0?"rgba(217,119,6,.35)":T.border}`,borderRadius:10,cursor:"pointer",transition:"all .15s",overflow:"hidden"}}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor=conflictTerms.length>0?"rgba(217,119,6,.5)":T.accent+"55";e.currentTarget.style.background=T.bgHover;}}
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor=conflictTerms.length>0?"rgba(217,119,6,.35)":T.border;e.currentTarget.style.background=T.bgSurface;}}>
                       <div onClick={()=>onAsset(a)} style={{display:"flex",alignItems:"center",gap:16,padding:"14px 16px"}}>
                         <ServiceIcon service={a.service} size={32}/>
                         <div style={{flex:"0 0 280px",minWidth:0}}>
@@ -6748,12 +7242,12 @@ const CatalogView = ({onAsset})=>{
                           {linkedTerms.map(t=>{
                             const cm=CERT_META[t.cert]||CERT_META.Draft;
                             return (
-                              <span key={t.id} title={t.definition||t.term} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,padding:"2px 8px",borderRadius:99,background:t.status==="Conflict"?"rgba(124,58,237,.1)":cm.bg,color:t.status==="Conflict"?"#7c3aed":cm.color,border:`1px solid ${t.status==="Conflict"?"rgba(124,58,237,.3)":cm.border}`,fontWeight:600,cursor:"default"}}>
-                                {t.status==="Conflict"&&<span>⚡</span>}{cm.icon} {t.term}{t.abbr&&t.abbr!=="—"&&<span style={{fontWeight:400,opacity:.7}}> ({t.abbr})</span>}
+                              <span key={t.id} title={t.definition||t.term} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,padding:"2px 8px",borderRadius:99,background:t.conflictFlag?"rgba(217,119,6,.1)":cm.bg,color:t.conflictFlag?"#d97706":cm.color,border:`1px solid ${t.conflictFlag?"rgba(217,119,6,.3)":cm.border}`,fontWeight:600,cursor:"default"}}>
+                                {t.conflictFlag&&<span>⚡</span>}{cm.icon} {t.term}{t.abbr&&t.abbr!=="—"&&<span style={{fontWeight:400,opacity:.7}}> ({t.abbr})</span>}
                               </span>
                             );
                           })}
-                          {conflictTerms.length>0&&<span style={{fontSize:10.5,color:"#7c3aed",fontWeight:600}}>⚡ Conflict warning</span>}
+                          {conflictTerms.length>0&&<span style={{fontSize:10.5,color:"#d97706",fontWeight:600}}>⚡ Conflict detected</span>}
                         </div>
                       )}
                     </div>
@@ -6955,6 +7449,7 @@ const ObsView = ({onToast})=>{
 // USAGE ANALYTICS
 // ─────────────────────────────────────────────
 const AnalyticsView = ()=>{
+  const tagCtx = useTagCtx();
   const [tab,setTab]=useState("overview");
   const bars=Array.from({length:30},(_,i)=>40+Math.sin(i*0.4)*15+Math.random()*20+(i/30)*15);
   return <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
@@ -6982,6 +7477,52 @@ const AnalyticsView = ()=>{
             {["30d","25d","20d","15d","10d","5d","Today"].map(l=><span key={l}>{l}</span>)}
           </div>
         </div></Card2>
+        {tagCtx&&(()=>{
+          const taggedAssets = ASSETS.filter(a=>tagCtx.getAssetAssignments(a.id).filter(x=>x.status!=='rejected').length>0);
+          const coverage = Math.round(taggedAssets.length/ASSETS.length*100);
+          const catCounts = ["sensitivity","regulatory","business","custom"].map(cat=>({
+            cat,count:tagCtx.tagDefs.filter(td=>td.category===cat).length
+          }));
+          const catColors = {sensitivity:T.rose,regulatory:T.amber,business:T.blue,custom:T.violet};
+          const topTags = [...tagCtx.tagDefs].sort((a,b)=>(b.usageCount||0)-(a.usageCount||0)).slice(0,5);
+          const ungoverned = ASSETS.length - taggedAssets.length;
+          return (
+            <Card2 style={{marginBottom:16}}><div style={{padding:16}}>
+              <SH title="Tag Coverage" sub={`${coverage}% of assets tagged`}/>
+              <div style={{display:"flex",gap:16,alignItems:"flex-start"}}>
+                <div style={{flex:1}}>
+                  <div style={{marginBottom:12}}>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:5}}>
+                      <span style={{color:T.textSub}}>Overall coverage</span>
+                      <span style={{fontWeight:700,color:T.accent,fontFamily:"'Geist Mono',monospace"}}>{coverage}%</span>
+                    </div>
+                    <div style={{height:6,background:T.bgHover,borderRadius:3}}><div style={{height:"100%",width:`${coverage}%`,background:T.accent,borderRadius:3,transition:"width .4s"}}/></div>
+                  </div>
+                  <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10}}>
+                    {catCounts.map(({cat,count})=>(
+                      <span key={cat} style={{fontSize:10.5,padding:"2px 8px",borderRadius:99,background:`${catColors[cat]||T.accent}15`,color:catColors[cat]||T.accent,border:`1px solid ${catColors[cat]||T.accent}33`,textTransform:"capitalize",fontWeight:600}}>{cat}: {count}</span>
+                    ))}
+                  </div>
+                  {ungoverned>0&&<div style={{fontSize:11.5,color:T.amber,display:"flex",alignItems:"center",gap:5}}>
+                    <span>⚠</span><span><b>{ungoverned}</b> assets have no tags</span>
+                  </div>}
+                </div>
+                <div style={{width:180}}>
+                  <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Top Tags</div>
+                  {topTags.map((td,i)=>(
+                    <div key={td.id} style={{marginBottom:7}}>
+                      <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:3}}>
+                        <span style={{color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:100}}>{td.name}</span>
+                        <span style={{color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{td.usageCount||0}</span>
+                      </div>
+                      <div style={{height:3,background:T.bgHover,borderRadius:2}}><div style={{height:"100%",width:`${Math.min(100,(td.usageCount||0)/50*100)}%`,background:td.color||T.accent,borderRadius:2}}/></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div></Card2>
+          );
+        })()}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
           <Card2><div style={{padding:16}}>
             <SH title="Top Assets (Queries)"/>
@@ -7042,6 +7583,7 @@ const AnalyticsView = ()=>{
 // DOMAINS
 // ─────────────────────────────────────────────
 const DomainsView = ()=>{
+  const tagCtx = useTagCtx();
   const domains=[
     {name:"Commerce",color:T.accent,assets:342,steward:"maya.chen",quality:94,icon:"🛒",description:"Order, product, and customer transactional data."},
     {name:"Finance",color:T.amber,assets:156,steward:"sarah.kim",quality:91,icon:"💰",description:"Revenue, P&L, and financial reporting data."},
@@ -7056,7 +7598,15 @@ const DomainsView = ()=>{
         <Btn icon={Ic.plus(12)}>New Domain</Btn>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:14}}>
-        {domains.map(d=>(
+        {domains.map(d=>{
+          const domainAssets = ASSETS.filter(a=>a.domain===d.name);
+          const taggedCount  = tagCtx ? domainAssets.filter(a=>tagCtx.getAssetAssignments(a.id).filter(x=>x.status!=='rejected').length>0).length : 0;
+          const tagCoverage  = domainAssets.length>0 ? Math.round(taggedCount/domainAssets.length*100) : 0;
+          const hasSensitive = tagCtx ? domainAssets.some(a=>tagCtx.getAssetAssignments(a.id).some(asn=>{const td=tagCtx.getTagDef(asn.tagId);return td?.category==='sensitivity';})) : false;
+          // Collect top 3 unique tag defs across all assets in domain
+          const domainTagIds = tagCtx ? [...new Set(domainAssets.flatMap(a=>tagCtx.getAssetAssignments(a.id).filter(x=>x.status!=='rejected').map(x=>x.tagId)))] : [];
+          const top3Tags = domainTagIds.slice(0,3).map(tid=>tagCtx?.getTagDef(tid)).filter(Boolean);
+          return (
           <Card2 key={d.name} style={{cursor:"pointer",transition:"border-color .15s"}}
             onMouseEnter={e=>e.currentTarget.style.borderColor=d.color}
             onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
@@ -7064,22 +7614,35 @@ const DomainsView = ()=>{
               <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
                 <span style={{fontSize:28}}>{d.icon}</span>
                 <div style={{flex:1}}>
-                  <div style={{fontSize:16,fontWeight:700,color:T.text,marginBottom:2}}>{d.name}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <div style={{fontSize:16,fontWeight:700,color:T.text,marginBottom:2}}>{d.name}</div>
+                    {hasSensitive&&<span title="Contains sensitive data" style={{fontSize:14,marginBottom:2}}>🔒</span>}
+                  </div>
                   <div style={{fontSize:12,color:T.textMuted}}>Steward: {d.steward}</div>
                 </div>
                 <QScore score={d.quality}/>
               </div>
-              <p style={{fontSize:12,color:T.textSub,marginBottom:14,lineHeight:1.6}}>{d.description}</p>
+              <p style={{fontSize:12,color:T.textSub,marginBottom:12,lineHeight:1.6}}>{d.description}</p>
+              {top3Tags.length>0&&(
+                <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:10}} onClick={e=>e.stopPropagation()}>
+                  {top3Tags.map(td=><TagPill key={td.id} tagDef={td} size="sm"/>)}
+                </div>
+              )}
               <div style={{display:"flex",gap:16,alignItems:"center"}}>
                 <div><div style={{fontSize:11,color:T.textMuted,marginBottom:2}}>Assets</div><div style={{fontSize:20,fontWeight:700,color:d.color,fontFamily:"'Geist Mono',monospace"}}>{d.assets}</div></div>
                 <div style={{flex:1}}>
                   <div style={{height:4,background:T.bgHover,borderRadius:2}}><div style={{height:"100%",width:`${d.quality}%`,background:d.color,borderRadius:2}}/></div>
                   <div style={{fontSize:10,color:T.textMuted,marginTop:3}}>Quality Score</div>
                 </div>
+                {tagCtx&&<div style={{textAlign:"right"}}>
+                  <div style={{fontSize:11,color:T.textMuted,marginBottom:2}}>Tag coverage</div>
+                  <div style={{fontSize:13,fontWeight:700,color:tagCoverage>=50?T.accent:T.amber,fontFamily:"'Geist Mono',monospace"}}>{tagCoverage}%</div>
+                </div>}
               </div>
             </div>
           </Card2>
-        ))}
+          );
+        })}
       </div>
     </div>
   </div>;
@@ -7089,69 +7652,161 @@ const DomainsView = ()=>{
 // SEARCH
 // ─────────────────────────────────────────────
 const SearchView = ({onAsset})=>{
+  const tagCtx = useTagCtx();
   const [q,setQ]=useState("");
-  const aResults=q.length>1?ASSETS.filter(a=>a.name.toLowerCase().includes(q.toLowerCase())||a.domain.toLowerCase().includes(q.toLowerCase())||a.tags.some(t=>t.toLowerCase().includes(q.toLowerCase()))):[];
+  const [selTagIds,setSelTagIds]=useState(new Set());
+  const [tagGroupOpen,setTagGroupOpen]=useState({sensitivity:true,regulatory:false,business:false,custom:false});
+
+  const TAG_CATEGORIES = ["sensitivity","regulatory","business","custom"];
+  const tagsByCat = cat => tagCtx ? tagCtx.tagDefs.filter(td=>td.category===cat) : [];
+  const assetTagIds = a => tagCtx ? tagCtx.getAssetAssignments(a.id).filter(asn=>asn.status!=='rejected').map(asn=>asn.tagId) : [];
+  const countForTag = tid => ASSETS.filter(a=>assetTagIds(a).includes(tid)).length;
+
+  const toggleTag = tid => setSelTagIds(prev=>{const n=new Set(prev);n.has(tid)?n.delete(tid):n.add(tid);return n;});
+
+  const baseAssets = ASSETS.filter(a=>{
+    const mq = q.length<2||a.name.toLowerCase().includes(q.toLowerCase())||a.domain.toLowerCase().includes(q.toLowerCase())||a.tags.some(t=>t.toLowerCase().includes(q.toLowerCase()));
+    if(!mq) return false;
+    if(selTagIds.size===0) return true;
+    const aids = assetTagIds(a);
+    return [...selTagIds].every(tid=>aids.includes(tid)); // AND logic
+  });
   const gResults=q.length>1?GLOSSARY_TERMS.filter(t=>t.term.toLowerCase().includes(q.toLowerCase())):[];
-  return <div className="fadeUp" style={{height:"100%",overflowY:"auto"}}>
+
+  const activePills = tagCtx ? [...selTagIds].map(tid=>tagCtx.getTagDef(tid)).filter(Boolean) : [];
+
+  return <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
     <Topbar breadcrumb={[{label:"Search & Discovery"}]}/>
-    <div style={{padding:28,maxWidth:860,margin:"0 auto"}}>
-      <div style={{marginBottom:28}}>
-        <Input2 placeholder="Search assets, columns, owners, tags, glossary…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(16)} style={{fontSize:15,padding:"11px 14px 11px 38px"}}/>
-        {q.length>0&&<div style={{fontSize:11,color:T.textMuted,marginTop:8}}>{aResults.length+gResults.length} results for "{q}"</div>}
+    <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+      {/* Tag filter sidebar */}
+      <div style={{width:200,flexShrink:0,borderRight:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"10px 14px 8px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:6}}>
+          {Ic.tag(11)}<span style={{fontSize:11.5,fontWeight:700,color:T.text}}>Tags</span>
+          {selTagIds.size>0&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:99,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}33`,marginLeft:"auto"}}>{selTagIds.size}</span>}
+        </div>
+        {TAG_CATEGORIES.map(cat=>{
+          const tags = tagsByCat(cat);
+          const open = tagGroupOpen[cat];
+          const selCount = tags.filter(td=>selTagIds.has(td.id)).length;
+          return (
+            <div key={cat} style={{borderBottom:`1px solid ${T.border}`}}>
+              <button onClick={()=>setTagGroupOpen(p=>({...p,[cat]:!p[cat]}))} style={{width:"100%",display:"flex",alignItems:"center",gap:7,padding:"8px 14px",background:"transparent",border:"none",cursor:"pointer",textAlign:"left"}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <span style={{flex:1,fontSize:11,fontWeight:600,color:T.text,textTransform:"capitalize"}}>{cat}</span>
+                {selCount>0&&<span style={{fontSize:9,fontWeight:700,padding:"1px 4px",borderRadius:99,background:T.accentDim,color:T.accent}}>{selCount}</span>}
+                <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,transform:open?"none":"rotate(-90deg)",transition:"transform .15s"}}><path d="M1.5 3.5l3.5 3.5 3.5-3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+              </button>
+              {open&&tags.map(td=>{
+                const active = selTagIds.has(td.id);
+                const cnt = countForTag(td.id);
+                return (
+                  <button key={td.id} onClick={()=>toggleTag(td.id)} style={{width:"100%",display:"flex",alignItems:"center",gap:7,padding:"4px 14px 4px 20px",background:active?T.accentDim:"transparent",border:"none",cursor:"pointer",transition:"background .1s"}}
+                    onMouseEnter={e=>{if(!active)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!active)e.currentTarget.style.background="transparent";}}>
+                    <div style={{width:12,height:12,borderRadius:3,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:active?T.accent:"transparent",border:`1.5px solid ${active?T.accent:T.borderLight}`,transition:"all .12s"}}>
+                      {active&&<svg width="6" height="6" viewBox="0 0 8 8" fill="none"><path d="M1 4l2 2.5L7 1.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    </div>
+                    <span style={{flex:1,fontSize:11,color:active?T.text:T.textSub,fontWeight:active?600:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{td.name}</span>
+                    <span style={{fontSize:10,color:active?T.accent:T.textMuted,fontWeight:active?700:400}}>{cnt}</span>
+                  </button>
+                );
+              })}
+              {open&&tags.length===0&&<div style={{padding:"4px 20px 6px",fontSize:10.5,color:T.textMuted,fontStyle:"italic"}}>No tags</div>}
+            </div>
+          );
+        })}
+        {selTagIds.size>0&&<button onClick={()=>setSelTagIds(new Set())} style={{margin:"8px 14px",padding:"5px 10px",borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,fontSize:11,cursor:"pointer",textAlign:"center"}}
+          onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>Clear tag filters</button>}
       </div>
-      {q.length===0&&<>
-        <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>Recent Searches</div>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:24}}>
-          {["orders","PII","Commerce","CLV","customers","ml_churn"].map(s=><button key={s} onClick={()=>setQ(s)} style={{padding:"5px 14px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>{s}</button>)}
+
+      {/* Main results */}
+      <div style={{flex:1,overflowY:"auto",padding:28}}>
+        <div style={{marginBottom:20}}>
+          <Input2 placeholder="Search assets, columns, owners, tags, glossary…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(16)}/>
+          {(q.length>0||selTagIds.size>0)&&<div style={{fontSize:11,color:T.textMuted,marginTop:6}}>{baseAssets.length+gResults.length} result{baseAssets.length+gResults.length!==1?"s":""}{q.length>1?` for "${q}"`:""}</div>}
         </div>
-        <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>Browse by Type</div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:24}}>
-          {["Table","Dashboard","Pipeline","ML Model","Database","Data Product"].map(t=>(
-            <button key={t} onClick={()=>setQ(t.toLowerCase())} style={{display:"flex",alignItems:"center",gap:9,padding:"10px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,cursor:"pointer",color:T.textSub,fontSize:12,textAlign:"left",transition:"all .15s"}}
-              onMouseEnter={e=>{e.currentTarget.style.borderColor=T.blue;e.currentTarget.style.color=T.text;}}
-              onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
-              <TypeBadge type={t}/>{t}
-            </button>
-          ))}
-        </div>
-        <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>Browse by Domain</div>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          {["Commerce","Finance","Product","ML","Marketing"].map(d=>(
-            <button key={d} onClick={()=>setQ(d.toLowerCase())} style={{padding:"6px 14px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",transition:"all .15s"}}
-              onMouseEnter={e=>{e.currentTarget.style.color=T.text;}}
-              onMouseLeave={e=>{e.currentTarget.style.color=T.textSub;}}>{d}</button>
-          ))}
-        </div>
-      </>}
-      {aResults.length>0&&<div style={{marginBottom:20}}>
-        <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>Assets ({aResults.length})</div>
-        <Card2 style={{overflow:"hidden",padding:0}}>
-          {aResults.map((a,i)=>(
-            <div key={a.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderBottom:i<aResults.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"background .1s"}}
-              onClick={()=>onAsset(a)}
-              onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
-              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-              <TypeBadge type={a.type}/>
-              <div style={{flex:1}}><div style={{fontSize:13,fontFamily:"'Geist Mono',monospace",color:T.text}}>{a.name}</div><div style={{fontSize:11,color:T.textMuted}}>{a.db} · {a.domain}</div></div>
-              <CertBadge cert={a.cert}/><QScore score={a.quality}/>{Ic.chevRight(12)}
-            </div>
-          ))}
-        </Card2>
-      </div>}
-      {gResults.length>0&&<div>
-        <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>Glossary ({gResults.length})</div>
-        <Card2 style={{overflow:"hidden",padding:0}}>
-          {gResults.map((t,i)=>(
-            <div key={t.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderBottom:i<gResults.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"background .1s"}}
-              onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
-              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-              <span style={{fontSize:18}}>📖</span>
-              <div style={{flex:1}}><div style={{fontSize:13,fontWeight:500,color:T.text}}>{t.term}</div><div style={{fontSize:11,color:T.textMuted,lineHeight:1.6}}>{t.definition.slice(0,80)}…</div></div>
-              <Badge color={t.status==="Approved"?T.green:T.amber}>{t.status}</Badge>
-            </div>
-          ))}
-        </Card2>
-      </div>}
+
+        {/* Active tag filter pills */}
+        {activePills.length>0&&(
+          <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:14,alignItems:"center"}}>
+            <span style={{fontSize:10.5,color:T.textMuted,fontWeight:600}}>Filtering by:</span>
+            {activePills.map(td=>(
+              <TagPill key={td.id} tagDef={td} size="sm" onRemove={()=>toggleTag(td.id)}/>
+            ))}
+          </div>
+        )}
+
+        {q.length===0&&selTagIds.size===0&&<>
+          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>Recent Searches</div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:24}}>
+            {["orders","PII","Commerce","CLV","customers","ml_churn"].map(s=><button key={s} onClick={()=>setQ(s)} style={{padding:"5px 14px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>{s}</button>)}
+          </div>
+          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>Browse by Type</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:24}}>
+            {["Table","Dashboard","Pipeline","ML Model","Database","Data Product"].map(t=>(
+              <button key={t} onClick={()=>setQ(t.toLowerCase())} style={{display:"flex",alignItems:"center",gap:9,padding:"10px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,cursor:"pointer",color:T.textSub,fontSize:12,textAlign:"left",transition:"all .15s"}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor=T.blue;e.currentTarget.style.color=T.text;}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+                <TypeBadge type={t}/>{t}
+              </button>
+            ))}
+          </div>
+          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>Browse by Domain</div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {["Commerce","Finance","Product","ML","Marketing"].map(d=>(
+              <button key={d} onClick={()=>setQ(d.toLowerCase())} style={{padding:"6px 14px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",transition:"all .15s"}}
+                onMouseEnter={e=>{e.currentTarget.style.color=T.text;}}
+                onMouseLeave={e=>{e.currentTarget.style.color=T.textSub;}}>{d}</button>
+            ))}
+          </div>
+        </>}
+
+        {(q.length>1||selTagIds.size>0)&&baseAssets.length>0&&<div style={{marginBottom:20}}>
+          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>Assets ({baseAssets.length})</div>
+          <Card2 style={{overflow:"hidden",padding:0}}>
+            {baseAssets.map((a,i)=>{
+              const asns = tagCtx ? tagCtx.getAssetAssignments(a.id).filter(asn=>asn.status!=='rejected') : [];
+              return (
+                <div key={a.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderBottom:i<baseAssets.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"background .1s"}}
+                  onClick={()=>onAsset(a)}
+                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <TypeBadge type={a.type}/>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,fontFamily:"'Geist Mono',monospace",color:T.text}}>{a.name}</div>
+                    <div style={{fontSize:11,color:T.textMuted}}>{a.db} · {a.domain}</div>
+                    {asns.length>0&&(
+                      <div style={{display:"flex",gap:3,flexWrap:"wrap",marginTop:4}} onClick={e=>e.stopPropagation()}>
+                        {asns.slice(0,4).map(asn=>{
+                          const td=tagCtx.getTagDef(asn.tagId);
+                          return td?<TagPill key={asn.tagId} tagDef={td} assignment={asn} size="sm"/>:null;
+                        })}
+                        {asns.length>4&&<span style={{fontSize:10,padding:"1px 6px",borderRadius:99,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`,fontWeight:600}}>+{asns.length-4}</span>}
+                      </div>
+                    )}
+                  </div>
+                  <CertBadge cert={a.cert}/><QScore score={a.quality}/>{Ic.chevRight(12)}
+                </div>
+              );
+            })}
+          </Card2>
+        </div>}
+        {(q.length>1||selTagIds.size>0)&&baseAssets.length===0&&<div style={{padding:"40px 0",textAlign:"center",color:T.textMuted,fontSize:13}}>No assets match your search{selTagIds.size>0?" and tag filters":""}.</div>}
+
+        {gResults.length>0&&<div>
+          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>Glossary ({gResults.length})</div>
+          <Card2 style={{overflow:"hidden",padding:0}}>
+            {gResults.map((t,i)=>(
+              <div key={t.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderBottom:i<gResults.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"background .1s"}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <span style={{fontSize:18}}>📖</span>
+                <div style={{flex:1}}><div style={{fontSize:13,fontWeight:500,color:T.text}}>{t.term}</div><div style={{fontSize:11,color:T.textMuted,lineHeight:1.6}}>{t.definition.slice(0,80)}…</div></div>
+                <Badge color={t.status==="Approved"?T.green:T.amber}>{t.status}</Badge>
+              </div>
+            ))}
+          </Card2>
+        </div>}
+      </div>
     </div>
   </div>;
 };
@@ -7392,6 +8047,202 @@ const PREFLIGHT_STAGES = [
   {name:"Schema Discovery",  desc:"Sampling schemas and table metadata",  result:"4 schemas found"},
 ];
 
+// ─────────────────────────────────────────────
+// TAG SYNC TAB — used inside connector config modal
+// ─────────────────────────────────────────────
+const TagSyncTab = ({connectorId, connectorName}) => {
+  const { tagDefs, connectorConfigs, updateConnectorConfig, upsertNameMapping, getTagDef } = useTagCtx();
+  // Normalize connectorId to match our config keys
+  const cfgKey = ['snowflake','dbt','bigquery','databricks'].find(k=>connectorId.includes(k)) || 'snowflake';
+  const cfg = connectorConfigs[cfgKey] || connectorConfigs.snowflake;
+  const [assignOpen, setAssignOpen] = useState(null);
+  const [assignVal,  setAssignVal]  = useState('');
+  const [editAlias,  setEditAlias]  = useState(null);
+  const [aliasVal,   setAliasVal]   = useState('');
+  const [histOpen,   setHistOpen]   = useState(false);
+  const [newSrcName, setNewSrcName] = useState('');
+  const [newEdgTag,  setNewEdgTag]  = useState('');
+
+  const mapped   = cfg.nameMappings.filter(m=>m.status==='mapped').length;
+  const unmapped = cfg.nameMappings.filter(m=>m.status==='unmapped').length;
+
+  const Toggle = ({on,onChange})=>(
+    <div onClick={onChange} style={{width:32,height:18,borderRadius:10,background:on?T.accent:T.border,position:'relative',cursor:'pointer',transition:'background .2s',flexShrink:0,display:'inline-flex'}}>
+      <div style={{position:'absolute',top:3,left:on?14:3,width:12,height:12,borderRadius:'50%',background:'#fff',transition:'left .2s'}}/>
+    </div>
+  );
+
+  const syncHistory = [
+    {status:'success',time:'2026-04-20 10:00',synced:42,newT:1,conf:2,dur:'3.2s'},
+    {status:'partial', time:'2026-04-19 10:00',synced:40,newT:0,conf:1,dur:'4.1s'},
+    {status:'success',time:'2026-04-18 10:00',synced:40,newT:0,conf:0,dur:'2.9s'},
+    {status:'failed',  time:'2026-04-17 10:00',synced:0, newT:0,conf:0,dur:'8.0s'},
+    {status:'success',time:'2026-04-16 10:00',synced:39,newT:2,conf:0,dur:'3.5s'},
+  ];
+  const statusDot = s => ({success:T.green,partial:T.amber,failed:T.rose}[s]||T.textMuted);
+
+  return (
+    <div className="fadeIn" style={{display:'flex',flexDirection:'column',gap:20}}>
+      {/* Summary cards */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
+        {[
+          {label:'Pull tags',   v:cfg.syncEnabled?'Enabled':'Disabled',   color:cfg.syncEnabled?T.green:T.textMuted},
+          {label:'Push tags',   v:cfg.reverseSyncEnabled?'Enabled':'Disabled', color:cfg.reverseSyncEnabled?T.green:T.textMuted},
+          {label:'Mapped',      v:mapped,   color:T.text},
+          {label:'Unmapped',    v:unmapped, color:unmapped>0?T.amber:T.textSub},
+        ].map(s=>(
+          <div key={s.label} style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,padding:'10px 12px'}}>
+            <div style={{fontSize:10,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:'0.06em'}}>{s.label}</div>
+            <div style={{fontSize:16,fontWeight:700,color:s.color}}>{s.v}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Sync controls */}
+      <div style={{display:'flex',flexDirection:'column',gap:0,border:`1px solid ${T.border}`,borderRadius:8,overflow:'hidden'}}>
+        {/* Pull */}
+        <div style={{padding:'12px 16px',borderBottom:`1px solid ${T.border}`}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}>
+            <div>
+              <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>Pull tags from {connectorName}</div>
+              <div style={{fontSize:11.5,color:T.textMuted}}>Sync tag data during metadata ingestion</div>
+            </div>
+            <Toggle on={cfg.syncEnabled} onChange={()=>updateConnectorConfig(cfgKey,{syncEnabled:!cfg.syncEnabled})}/>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <span style={{fontSize:11,color:T.textMuted}}>Last sync: {cfg.lastSyncAt?'2h ago':'Never'} · {cfg.lastSyncNewTags} new tags · {cfg.lastSyncConflicts} conflicts</span>
+            <button style={{padding:'3px 10px',borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11,cursor:'pointer'}}>Sync now</button>
+          </div>
+        </div>
+
+        {/* Push */}
+        <div style={{padding:'12px 16px',borderBottom:`1px solid ${T.border}`}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+            <div>
+              <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>Push tags to {connectorName} (reverse sync)</div>
+              <div style={{fontSize:11.5,color:T.textMuted}}>Write EDG tag changes back to source system</div>
+            </div>
+            <Toggle on={cfg.reverseSyncEnabled} onChange={()=>updateConnectorConfig(cfgKey,{reverseSyncEnabled:!cfg.reverseSyncEnabled})}/>
+          </div>
+          <div style={{fontSize:11,color:T.amber,marginBottom:8}}>⚠ Requires write permissions on service account</div>
+          <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:T.textSub,cursor:'pointer'}}>
+            <Toggle on={cfg.reverseSyncApproval} onChange={()=>updateConnectorConfig(cfgKey,{reverseSyncApproval:!cfg.reverseSyncApproval})}/>
+            Require steward approval before each push
+          </label>
+        </div>
+
+        {/* Conflict rule */}
+        <div style={{padding:'12px 16px'}}>
+          <div style={{fontSize:12.5,fontWeight:600,color:T.text,marginBottom:6}}>Conflict resolution rule</div>
+          <select value={cfg.conflictRule} onChange={e=>updateConnectorConfig(cfgKey,{conflictRule:e.target.value})} style={{padding:'6px 10px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,outline:'none'}}>
+            <option value="flag_always">Always flag for review</option>
+            <option value="source_wins">Source wins</option>
+            <option value="steward_wins">Steward wins</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Name mapping table */}
+      <div>
+        <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:2}}>Tag name mappings</div>
+        <div style={{fontSize:11.5,color:T.textSub,marginBottom:12}}>Map source tag names to EDG tags. Reverse sync alias controls the name used when pushing back.</div>
+        <table style={{width:'100%',borderCollapse:'collapse',border:`1px solid ${T.border}`,borderRadius:8,overflow:'hidden'}}>
+          <thead>
+            <tr style={{background:T.bgElevated}}>
+              {['Source tag name','EDG tag','Reverse sync alias','Status','Actions'].map(h=>(
+                <th key={h} style={{padding:'7px 10px',textAlign:'left',fontSize:10,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.06em'}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {cfg.nameMappings.map((m,i)=>{
+              const tagDef = m.edgTagId ? getTagDef(m.edgTagId) : null;
+              const isAmb  = m.status==='ambiguous';
+              const isUnm  = m.status==='unmapped';
+              return (
+                <tr key={m.id} style={{borderTop:`1px solid ${T.border}`,background:isAmb?T.amberDim:i%2===0?T.bgSurface:'transparent'}}>
+                  <td style={{padding:'9px 10px'}}>
+                    <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,background:T.bgElevated,color:T.text,padding:'2px 8px',borderRadius:4}}>{m.sourceTagName}</span>
+                    {isAmb&&<span style={{marginLeft:6,fontSize:11,color:T.amber}} title="Name collision between sources — manual review required">⚠</span>}
+                  </td>
+                  <td style={{padding:'9px 10px'}}>
+                    {tagDef ? <TagPill tagDef={tagDef} size='sm'/> : isUnm ? (
+                      <div style={{display:'flex',alignItems:'center',gap:6}}>
+                        <span style={{fontSize:11.5,color:T.amber}}>Not mapped</span>
+                        {assignOpen===m.id ? (
+                          <div style={{display:'flex',gap:4}}>
+                            <select value={assignVal} onChange={e=>setAssignVal(e.target.value)} style={{padding:'3px 6px',borderRadius:4,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:11,outline:'none'}}>
+                              <option value="">Select tag…</option>
+                              {tagDefs.map(td=><option key={td.id} value={td.id}>{td.name}</option>)}
+                            </select>
+                            <button onClick={()=>{if(assignVal){upsertNameMapping(cfgKey,{...m,edgTagId:assignVal,status:'mapped'});setAssignOpen(null);setAssignVal('');}}} style={{padding:'3px 8px',background:T.accent,color:'#fff',border:'none',borderRadius:4,fontSize:11,cursor:'pointer'}}>OK</button>
+                          </div>
+                        ) : (
+                          <button onClick={()=>setAssignOpen(m.id)} style={{fontSize:11,color:T.accent,background:'none',border:'none',cursor:'pointer'}}>Assign →</button>
+                        )}
+                      </div>
+                    ) : <span style={{fontSize:11.5,color:T.rose}}>Needs review</span>}
+                  </td>
+                  <td style={{padding:'9px 10px'}}>
+                    {editAlias===m.id ? (
+                      <input value={aliasVal} onChange={e=>setAliasVal(e.target.value)} onBlur={()=>{upsertNameMapping(cfgKey,{...m,reverseSyncAlias:aliasVal});setEditAlias(null);}} onKeyDown={e=>{if(e.key==='Enter'){upsertNameMapping(cfgKey,{...m,reverseSyncAlias:aliasVal});setEditAlias(null);}}} autoFocus style={{fontFamily:"'Geist Mono',monospace",fontSize:11,padding:'3px 6px',borderRadius:4,border:`1px solid ${T.accent}`,background:T.bgElevated,color:T.text,outline:'none',width:140}}/>
+                    ) : (
+                      <span onClick={()=>{setEditAlias(m.id);setAliasVal(m.reverseSyncAlias);}} style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:T.textSub,cursor:'pointer'}}>{m.reverseSyncAlias}</span>
+                    )}
+                  </td>
+                  <td style={{padding:'9px 10px'}}>
+                    <span style={{fontSize:11,color:{mapped:T.green,unmapped:T.amber,ambiguous:T.rose}[m.status]||T.textMuted}}>● {m.status}</span>
+                  </td>
+                  <td style={{padding:'9px 10px'}}>
+                    <button onClick={()=>{setEditAlias(m.id);setAliasVal(m.reverseSyncAlias);}} style={{fontSize:11.5,color:T.textSub,background:'none',border:'none',cursor:'pointer',marginRight:8}}>Edit</button>
+                    <button style={{fontSize:11.5,color:T.textMuted,background:'none',border:'none',cursor:'pointer'}}>Remove</button>
+                  </td>
+                </tr>
+              );
+            })}
+            {/* Add mapping row */}
+            <tr style={{borderTop:`1px solid ${T.border}`,background:T.bgElevated}}>
+              <td style={{padding:'8px 10px'}}>
+                <input value={newSrcName} onChange={e=>setNewSrcName(e.target.value)} placeholder="Source tag name…" style={{fontFamily:"'Geist Mono',monospace",fontSize:11,padding:'4px 7px',borderRadius:4,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,outline:'none',width:130}}/>
+              </td>
+              <td style={{padding:'8px 10px'}}>
+                <select value={newEdgTag} onChange={e=>setNewEdgTag(e.target.value)} style={{padding:'4px 7px',borderRadius:4,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,fontSize:11,outline:'none'}}>
+                  <option value="">Select EDG tag…</option>
+                  {tagDefs.map(td=><option key={td.id} value={td.id}>{td.name}</option>)}
+                </select>
+              </td>
+              <td colSpan={2} style={{padding:'8px 10px'}}/>
+              <td style={{padding:'8px 10px'}}>
+                <button onClick={()=>{if(newSrcName&&newEdgTag){upsertNameMapping(cfgKey,{sourceTagName:newSrcName,edgTagId:newEdgTag,reverseSyncAlias:newSrcName,status:'mapped'});setNewSrcName('');setNewEdgTag('');}}} style={{padding:'4px 10px',background:T.accent,color:'#fff',border:'none',borderRadius:4,fontSize:11,cursor:'pointer'}}>Add</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* Sync history */}
+      <div>
+        <button onClick={()=>setHistOpen(v=>!v)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:T.textSub,fontSize:12.5,cursor:'pointer',marginBottom:8}}>
+          <span style={{transform:histOpen?'rotate(0deg)':'rotate(-90deg)',transition:'transform .15s',display:'inline-block'}}>▼</span>
+          Sync history (last 10)
+        </button>
+        {histOpen&&(
+          <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:'hidden'}}>
+            {syncHistory.map((h,i)=>(
+              <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'9px 14px',borderBottom:i<syncHistory.length-1?`1px solid ${T.border}`:'none'}}>
+                <span style={{color:statusDot(h.status),flexShrink:0}}>●</span>
+                <span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace",whiteSpace:'nowrap'}}>{h.time}</span>
+                <span style={{flex:1,fontSize:11.5,color:T.textSub}}>{h.synced} tags synced · {h.newT} new · {h.conf} conflicts</span>
+                <span style={{fontSize:11,color:T.textMuted}}>{h.dur}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const IntegrationsView = ({onToast})=>{
   const cats = ["All","Database","Data Warehouse","Dashboard","Pipeline","Messaging","ML Model","Storage","Search","Metadata"];
   const [catFilter, setCatFilter] = useState("All");
@@ -7562,7 +8413,7 @@ const IntegrationsView = ({onToast})=>{
             </div>
             {/* Tabs */}
             <div style={{display:"flex"}}>
-              {["Connection","Preflight","Advanced"].map(tab=>(
+              {["Connection","Preflight","Advanced","Tag sync"].map(tab=>(
                 <button key={tab} onClick={()=>setConfigTab(tab)} style={{
                   padding:"8px 18px",background:"transparent",border:"none",marginBottom:-1,
                   borderBottom:`2px solid ${configTab===tab?T.accent:"transparent"}`,
@@ -7718,6 +8569,9 @@ const IntegrationsView = ({onToast})=>{
             )}
 
             {/* ── Advanced tab ── */}
+            {configTab==="Tag sync"&&configTarget&&(
+              <TagSyncTab connectorId={configTarget.name.toLowerCase().replace(/[^a-z]/g,'').replace('google','')||'snowflake'} connectorName={configTarget.name}/>
+            )}
             {configTab==="Advanced"&&(
               <div className="fadeIn">
                 <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:14}}>Ingestion Filters</div>
@@ -11941,6 +12795,136 @@ const WorkflowView = ({onToast}) => {
 };
 
 // ─────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// TAG POLICIES SECTION — inside Settings
+// ─────────────────────────────────────────────
+const TagPoliciesSection = ({onToast}) => {
+  const { tagPolicies, updateTagPolicies } = useTagCtx();
+  const [draft, setDraft] = useState({...tagPolicies});
+  const [saved, setSaved] = useState(false);
+
+  const doSave = () => {
+    updateTagPolicies(draft);
+    setSaved(true);
+    setTimeout(()=>setSaved(false), 2000);
+    onToast('Tag policies saved','success');
+  };
+
+  const SH = ({label})=><div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:12,marginTop:20}}>{label}</div>;
+  const Row = ({label,desc,right})=>(
+    <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',padding:'12px 14px',background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:8}}>
+      <div style={{flex:1,marginRight:16}}>
+        <div style={{fontSize:12.5,fontWeight:500,color:T.text,marginBottom:2}}>{label}</div>
+        <div style={{fontSize:11.5,color:T.textMuted}}>{desc}</div>
+      </div>
+      {right}
+    </div>
+  );
+  const Toggle = ({on,onChange})=>(
+    <div onClick={onChange} style={{width:36,height:20,borderRadius:10,background:on?T.accent:T.border,position:'relative',cursor:'pointer',transition:'background .2s',flexShrink:0}}>
+      <div style={{position:'absolute',top:4,left:on?16:4,width:12,height:12,borderRadius:'50%',background:'#fff',transition:'left .2s'}}/>
+    </div>
+  );
+
+  return (
+    <div style={{position:'relative',paddingBottom:80}}>
+      <div style={{marginBottom:8}}>
+        <div style={{fontSize:15,fontWeight:700,color:T.text}}>Tag policies</div>
+        <div style={{fontSize:12,color:T.textSub,marginTop:2}}>Org-wide rules for tag creation, propagation, and stewardship</div>
+      </div>
+
+      <SH label="Access control"/>
+      <Row label="Who can create custom tags" desc="Controls who can create free-form custom tags to avoid tag sprawl"
+        right={<select value={draft.whoCanCreateCustom} onChange={e=>setDraft(d=>({...d,whoCanCreateCustom:e.target.value}))} style={{padding:'5px 9px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,outline:'none'}}>
+          <option value="any">Any user</option>
+          <option value="stewards">Data stewards only</option>
+          <option value="admins">Admins only</option>
+        </select>}/>
+      <Row label="Who can create business tags" desc="Business tags define domain ownership. Keep creation controlled."
+        right={<select style={{padding:'5px 9px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,outline:'none'}}>
+          <option>Data stewards only</option>
+          <option>Admins only</option>
+        </select>}/>
+      <Row label="Sensitivity tag application" desc="PII, PHI, PCI-DSS — who can apply these without steward approval"
+        right={<select style={{padding:'5px 9px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,outline:'none'}}>
+          <option>Data stewards only (recommended)</option>
+          <option>Any user (requires approval)</option>
+        </select>}/>
+
+      <SH label="Propagation rules"/>
+      <Row label="Confirmation threshold" desc="Show impact preview and require explicit confirmation when propagation affects more than N assets"
+        right={<div style={{display:'flex',alignItems:'center',gap:6}}>
+          <input type="number" value={draft.propagationThreshold} min={1} onChange={e=>setDraft(d=>({...d,propagationThreshold:Number(e.target.value)}))} style={{width:60,padding:'5px 8px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,outline:'none',textAlign:'center'}}/>
+          <span style={{fontSize:12,color:T.textMuted}}>assets</span>
+        </div>}/>
+
+      {/* Propagation defaults table */}
+      <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:'hidden',marginBottom:8}}>
+        <table style={{width:'100%',borderCollapse:'collapse'}}>
+          <thead>
+            <tr style={{background:T.bgElevated}}>
+              {['Category','Default mode','Stewards can change?','Confirm above'].map(h=>(
+                <th key={h} style={{padding:'8px 12px',textAlign:'left',fontSize:10,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.06em'}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              {cat:'sensitivity',catLabel:'Sensitivity',mode:'both',   modeFixed:true, changeable:'No (locked)',   changeFixed:true,  confirm:'Any propagation', confirmFixed:true},
+              {cat:'regulatory', catLabel:'Regulatory', mode:'lineage', modeFixed:false,changeable:'Yes',          changeFixed:false, confirm:'5+ assets',       confirmFixed:false},
+              {cat:'business',   catLabel:'Business',   mode:'hierarchy',modeFixed:false,changeable:'Yes',         changeFixed:false, confirm:'10+ assets',      confirmFixed:false},
+              {cat:'custom',     catLabel:'Custom',     mode:'none',    modeFixed:true, changeable:'No (locked)',   changeFixed:true,  confirm:'N/A',             confirmFixed:true},
+            ].map((row,i,arr)=>{
+              const catColors2 = {sensitivity:{bg:T.accentDim,color:T.accent},regulatory:{bg:T.blueDim,color:T.blue},business:{bg:T.amberDim,color:T.amber},custom:{bg:T.bgElevated,color:T.textSub}};
+              const cc = catColors2[row.cat];
+              return (
+                <tr key={row.cat} style={{borderTop:`1px solid ${T.border}`}}>
+                  <td style={{padding:'9px 12px'}}><span style={{fontSize:11,padding:'2px 8px',borderRadius:4,background:cc.bg,color:cc.color,fontWeight:500,textTransform:'capitalize'}}>{row.catLabel}</span></td>
+                  <td style={{padding:'9px 12px'}}>
+                    {row.modeFixed ? <span style={{fontSize:12,color:T.textSub}}>{row.mode}</span> : (
+                      <select defaultValue={row.mode} style={{padding:'3px 7px',borderRadius:5,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:11,outline:'none'}}>
+                        <option value="none">None</option>
+                        <option value="hierarchy">Hierarchy</option>
+                        <option value="lineage">Lineage</option>
+                        <option value="both">H + L</option>
+                      </select>
+                    )}
+                  </td>
+                  <td style={{padding:'9px 12px'}}>
+                    {row.changeFixed ? <span style={{fontSize:12,color:T.textMuted}}>{row.changeable}</span> : (
+                      <select defaultValue="Yes" style={{padding:'3px 7px',borderRadius:5,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:11,outline:'none'}}>
+                        <option>Yes</option><option>No</option>
+                      </select>
+                    )}
+                  </td>
+                  <td style={{padding:'9px 12px',fontSize:12,color:row.confirmFixed?T.textMuted:T.textSub}}>{row.confirm}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <SH label="Stewardship automation"/>
+      <Row label="Auto-assign steward on sensitivity tag" desc="Applying PII, PHI, or PCI-DSS auto-assigns the domain steward if none exists"
+        right={<Toggle on={draft.sensitivityAutoAssign} onChange={()=>setDraft(d=>({...d,sensitivityAutoAssign:!d.sensitivityAutoAssign}))}/>}/>
+      <Row label="Require approval to remove tags from certified assets" desc="Prevents removing compliance tags from Gold-certified datasets without steward sign-off"
+        right={<Toggle on={draft.removalFromCertified==='approval'} onChange={()=>setDraft(d=>({...d,removalFromCertified:d.removalFromCertified==='approval'?'free':'approval'}))}/>}/>
+      <Row label="Audit log" desc="Record every tag event in the immutable audit trail"
+        right={<Toggle on={draft.auditLogEnabled} onChange={()=>setDraft(d=>({...d,auditLogEnabled:!d.auditLogEnabled}))}/>}/>
+      <Row label="Notify steward on large propagation" desc={`In-app notification when a tag propagates to more than ${draft.propagationThreshold} assets`}
+        right={<Toggle on={draft.notifyOnLargePropagate} onChange={()=>setDraft(d=>({...d,notifyOnLargePropagate:!d.notifyOnLargePropagate}))}/>}/>
+
+      {/* Sticky save bar */}
+      <div style={{position:'sticky',bottom:0,background:T.bgSurface,borderTop:`1px solid ${T.border}`,padding:'12px 0',display:'flex',alignItems:'center',gap:12,marginTop:16}}>
+        <button onClick={doSave} style={{padding:'7px 20px',background:T.accent,color:'#fff',border:'none',borderRadius:6,fontSize:12.5,fontWeight:600,cursor:'pointer'}}>Save changes</button>
+        <button onClick={()=>setDraft({...tagPolicies})} style={{background:'none',border:'none',color:T.textMuted,fontSize:12,cursor:'pointer'}}>Reset to defaults</button>
+        {saved&&<span style={{fontSize:12,color:T.green,fontWeight:500}}>Saved ✓</span>}
+      </div>
+    </div>
+  );
+};
+
 const SettingsView = ({onToast})=>{
   const {isDark, toggleTheme:onThemeToggle} = useTheme();
   const [section,   setSection]   = useState("connections");
@@ -11969,6 +12953,9 @@ const SettingsView = ({onToast})=>{
       {key:"bots",         icon:"bot",     label:"Bots",                 desc:"Service accounts"},
       {key:"personas",     icon:"persona", label:"Personas",             desc:"UX role customization"},
       {key:"sso",          icon:"sso",     label:"SSO",                  desc:"Identity providers"},
+    ]},
+    {label:"Governance", items:[
+      {key:"tag_policies", icon:"tag",     label:"Tag Policies",         desc:"Tag creation, propagation & stewardship rules"},
     ]},
     {label:"Platform", items:[
       {key:"notifications",icon:"notif",   label:"Notifications",        desc:"Alerts & channels"},
@@ -12617,6 +13604,9 @@ const SettingsView = ({onToast})=>{
               </div>
             </>}
 
+            {/* ══ TAG POLICIES ══ */}
+            {section==="tag_policies"&&<TagPoliciesSection onToast={onToast}/>}
+
             {/* ══ API KEYS ══ */}
             {section==="api"&&<>
               <SettSH icon={Ic.apikey(16)} title="API Keys" desc="Generate and manage API keys for programmatic access to the Solix platform."
@@ -12687,6 +13677,581 @@ const SettingsView = ({onToast})=>{
 
 
 // ─────────────────────────────────────────────
+// TAG PILL — atomic tag display component
+// ─────────────────────────────────────────────
+function TagPill({ tagDef, assignment, size='md', onRemove=null, onClick=null }) {
+  const [hovered, setHovered] = useState(false);
+  if (!tagDef) return null;
+
+  const isConflict = assignment?.status === 'conflict';
+  const isPending  = assignment?.status === 'pending';
+  const isRejected = assignment?.status === 'rejected';
+
+  const baseColor = isConflict ? T.rose : tagDef.color;
+  const bg        = baseColor + '1a';
+  const border    = isPending  ? `1px dashed ${baseColor}`
+                  : isConflict ? `1px dashed ${baseColor}`
+                  : isRejected ? `1px solid ${T.border}` : 'none';
+  const opacity   = isRejected ? 0.4 : 1;
+
+  const sizeMap = { sm:['2px 6px','11px',3], md:['3px 9px','12px',5], lg:['5px 12px','13px',6] };
+  const [pad, fs, gap] = sizeMap[size] || sizeMap.md;
+
+  const pm = tagDef.propagationMode;
+  let propText = pm==='both' ? 'H+L' : pm==='lineage' ? 'L' : pm==='hierarchy' ? 'H' : '';
+  if (tagDef.propagationLocked && propText) propText += '🔒';
+
+  const srcCount  = (assignment?.sourceSystems?.length||0) > 1 ? `${assignment.sourceSystems.length}src` : '';
+  const inherited = assignment?.origin?.startsWith('propagated') ? 'inherited' : '';
+  const statusTxt = isPending ? 'pending' : isConflict ? 'conflict' : '';
+
+  const propColor   = pm==='both'||pm==='hierarchy' ? T.amber : pm==='lineage' ? T.blue : T.textMuted;
+  const statusColor = isPending ? T.amber : isConflict ? T.rose : T.textMuted;
+
+  const PillBadge = ({ text, color }) => !text ? null : (
+    <span style={{ fontSize:9, background:color+'22', color, borderRadius:2, padding:'1px 4px', fontWeight:400, whiteSpace:'nowrap' }}>{text}</span>
+  );
+
+  return (
+    <span
+      onMouseEnter={()=>setHovered(true)}
+      onMouseLeave={()=>setHovered(false)}
+      onClick={onClick}
+      style={{ display:'inline-flex', alignItems:'center', gap, padding:pad, borderRadius:4, background:bg, color:baseColor, border, fontSize:fs, fontWeight:500, cursor:onClick?'pointer':'default', opacity, userSelect:'none', transition:'opacity 0.15s' }}
+    >
+      {tagDef.name}
+      <PillBadge text={propText}  color={propColor}   />
+      <PillBadge text={srcCount}  color={T.textSub}   />
+      <PillBadge text={inherited} color={T.textSub}   />
+      <PillBadge text={statusTxt} color={statusColor} />
+      {onRemove && hovered && !tagDef.propagationLocked && (
+        <span onClick={e=>{e.stopPropagation();onRemove();}} style={{fontSize:11,cursor:'pointer',opacity:0.7,marginLeft:1}}>×</span>
+      )}
+    </span>
+  );
+}
+
+// ─────────────────────────────────────────────
+// TAG MANAGEMENT VIEW — Surface 1
+// ─────────────────────────────────────────────
+const TagManagementView = ({onToast}) => {
+  const { tagDefs, assignments, connectorConfigs, inbox, pendingCount, conflictCount, createTagDef, updateTagDef, updateConnectorConfig, upsertNameMapping, getTagDef } = useTagCtx();
+  const navigate = useNav();
+  const [subTab,       setSubTab]       = useState('registry');
+  const [catFilter,    setCatFilter]    = useState('all');
+  const [search,       setSearch]       = useState('');
+  const [editingId,    setEditingId]    = useState(null);
+  const [editDraft,    setEditDraft]    = useState(null);
+  const [newPanelOpen, setNewPanelOpen] = useState(false);
+  const [newDraft,     setNewDraft]     = useState({ name:'', category:'custom', description:'', propagationMode:'none', governanceRequired:false, managedBy:'Current User', color:'#a1a1aa', sourceAliases:[] });
+  const [aliasInput,   setAliasInput]   = useState('');
+  const [newAliasInput,setNewAliasInput]= useState('');
+  const [flashId,      setFlashId]      = useState(null);
+  const [assignMapOpen,setAssignMapOpen]= useState(null); // {connectorId, mappingId}
+  const [assignTarget, setAssignTarget] = useState('');
+
+  const catColors = { sensitivity:{bg:T.accentDim,color:T.accent}, regulatory:{bg:T.blueDim,color:T.blue}, business:{bg:T.amberDim,color:T.amber}, custom:{bg:T.bgElevated,color:T.textSub} };
+  const propBadge = (pm, locked) => {
+    const map = { both:{bg:T.violetDim,color:T.violet,label:'H+L'}, lineage:{bg:T.blueDim,color:T.blue,label:'Lineage'}, hierarchy:{bg:T.amberDim,color:T.amber,label:'Hierarchy'}, none:{bg:T.bgElevated,color:T.textMuted,label:'None'} };
+    const m = map[pm]||map.none;
+    return <span style={{fontSize:10,padding:'2px 7px',borderRadius:4,background:m.bg,color:m.color,fontWeight:500,whiteSpace:'nowrap'}}>{m.label}{locked?' 🔒':''}</span>;
+  };
+
+  const filtered = tagDefs.filter(td => {
+    if (catFilter!=='all' && td.category!==catFilter) return false;
+    if (search && !td.name.toLowerCase().includes(search.toLowerCase()) && !td.description.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
+  const startEdit = (td) => {
+    setEditingId(td.id);
+    setEditDraft({...td, sourceAliases:[...td.sourceAliases]});
+    setAliasInput('');
+  };
+
+  const saveEdit = () => {
+    updateTagDef(editingId, editDraft);
+    setEditingId(null);
+    onToast('Tag updated','success');
+  };
+
+  const handleCreate = () => {
+    if (!newDraft.name.trim()) return;
+    createTagDef(newDraft);
+    const id = 't'+Date.now();
+    setFlashId(id);
+    setTimeout(()=>setFlashId(null),1200);
+    setNewPanelOpen(false);
+    setNewDraft({ name:'', category:'custom', description:'', propagationMode:'none', governanceRequired:false, managedBy:'Current User', color:'#a1a1aa', sourceAliases:[] });
+    onToast('Tag created','success');
+  };
+
+  const catDefaults = { sensitivity:{propagationMode:'both',governanceRequired:true,color:'#ee2424'}, regulatory:{propagationMode:'lineage',governanceRequired:true,color:'#7dd3fc'}, business:{propagationMode:'hierarchy',governanceRequired:false,color:'#fbbf24'}, custom:{propagationMode:'none',governanceRequired:false,color:'#a1a1aa'} };
+
+  // Sync status computed
+  const syncedCount    = Object.values(assignments).flat().filter(a=>a.origin==='synced').length;
+  const unmappedCount  = inbox.filter(i=>i.type==='new_source_tag'&&!i.resolvedAt).length;
+  const allLastSyncs   = Object.values(connectorConfigs).filter(c=>c.lastSyncAt).map(c=>c.lastSyncAt).sort().reverse();
+  const lastSyncStr    = allLastSyncs.length ? '2h ago' : 'Never';
+
+  const activityLog = [
+    {icon:'↑',color:T.blue,  msg:'system applied PII to',       asset:'orders',                time:'2h ago'},
+    {icon:'↑',color:T.blue,  msg:'system applied GDPR to',      asset:'orders',                time:'2h ago'},
+    {icon:'↑',color:T.amber, msg:'Rahul M. applied Finance domain to', asset:'revenue_dashboard', time:'3d ago'},
+    {icon:'↑',color:T.amber, msg:'Priya K. applied Board reporting to',asset:'revenue_dashboard',time:'10d ago'},
+    {icon:'⚠',color:T.rose,  msg:'Sync conflict detected: PCI-DSS on',asset:'revenue_dashboard',time:'2d ago'},
+    {icon:'×',color:T.rose,  msg:'Steward removed HIPAA from',  asset:'customers',             time:'2d ago'},
+    {icon:'↑',color:T.blue,  msg:'system applied PHI to',       asset:'product_events',        time:'1d ago'},
+    {icon:'↑',color:T.amber, msg:'Priya K. applied Clinical trial data to', asset:'product_events', time:'5d ago'},
+    {icon:'↑',color:T.blue,  msg:'system applied PII to',       asset:'customers',             time:'2h ago'},
+    {icon:'⚠',color:T.amber, msg:'New tag financial_forecast arrived from', asset:'dbt',       time:'2h ago'},
+    {icon:'↑',color:T.blue,  msg:'system applied GDPR to',      asset:'ml_churn_model',        time:'3d ago'},
+    {icon:'✓',color:T.green, msg:'Steward approved GDPR on',    asset:'orders',                time:'4h ago'},
+    {icon:'↑',color:T.amber, msg:'Analyst applied needs-review to', asset:'ml_churn_model',    time:'1d ago'},
+    {icon:'↑',color:T.blue,  msg:'system applied PHI to',       asset:'customers',             time:'12h ago'},
+  ];
+
+  const Row = ({style,children})=><tr style={style}><td colSpan={8}>{children}</td></tr>;
+
+  return (
+    <div className="fadeUp" style={{height:'100%',display:'flex',flexDirection:'column'}}>
+      <Topbar breadcrumb={[{label:'Tag Management'}]}/>
+      <div style={{flex:1,overflowY:'auto',padding:24}}>
+        {/* Header */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:700,color:T.text}}>Tag management</div>
+            <div style={{fontSize:12,color:T.textMuted,marginTop:2}}>{tagDefs.length} tags · {pendingCount} pending · {conflictCount} conflicts</div>
+          </div>
+          <button onClick={()=>setNewPanelOpen(true)} style={{padding:'7px 16px',background:T.accent,color:'#fff',border:'none',borderRadius:6,fontSize:12.5,fontWeight:600,cursor:'pointer'}}>+ New tag</button>
+        </div>
+
+        {/* Sub-nav */}
+        <div style={{display:'flex',gap:0,borderBottom:`1px solid ${T.border}`,marginBottom:20}}>
+          {['registry','sync','activity'].map(k=>{
+            const labels={registry:'Registry',sync:'Sync status',activity:'Activity log'};
+            return <button key={k} onClick={()=>setSubTab(k)} style={{padding:'8px 16px',background:'transparent',border:'none',borderBottom:`2px solid ${subTab===k?T.accent:'transparent'}`,color:subTab===k?T.text:T.textMuted,fontSize:13,fontWeight:subTab===k?600:400,cursor:'pointer'}}>{labels[k]}</button>;
+          })}
+        </div>
+
+        {/* ── REGISTRY TAB ── */}
+        {subTab==='registry'&&(
+          <div style={{position:'relative'}}>
+            {/* Filter bar */}
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14}}>
+              {['all','sensitivity','regulatory','business','custom'].map(c=>(
+                <button key={c} onClick={()=>setCatFilter(c)} style={{padding:'4px 12px',borderRadius:99,border:`1px solid ${catFilter===c?T.accent:T.border}`,background:catFilter===c?T.accentDim:'transparent',color:catFilter===c?T.accent:T.textSub,fontSize:11.5,fontWeight:catFilter===c?600:400,cursor:'pointer',textTransform:'capitalize'}}>
+                  {c==='all'?'All':c.charAt(0).toUpperCase()+c.slice(1)}
+                </button>
+              ))}
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search tags…" style={{marginLeft:'auto',padding:'5px 10px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,outline:'none',width:180}}/>
+            </div>
+
+            {/* Table */}
+            <table style={{width:'100%',borderCollapse:'collapse'}}>
+              <thead>
+                <tr style={{borderBottom:`1px solid ${T.border}`}}>
+                  {['Tag','Category','Description','Propagation','Source aliases','Used on','Steward',''].map(h=>(
+                    <th key={h} style={{padding:'7px 10px',textAlign:'left',fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.06em',whiteSpace:'nowrap'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((td,i)=>{
+                  const isEditing = editingId===td.id;
+                  const isFlash   = flashId===td.id;
+                  return (
+                    <React.Fragment key={td.id}>
+                      <tr
+                        className="row-hover"
+                        style={{borderBottom:`1px solid ${T.border}`,background:isFlash?T.green+'18':'transparent',transition:'background 0.5s'}}
+                        onClick={()=>!isEditing&&startEdit(td)}
+                      >
+                        <td style={{padding:'9px 10px'}}>
+                          <div style={{display:'flex',alignItems:'center',gap:5}}>
+                            {td.governanceRequired&&<span style={{color:T.accent,fontSize:10}} title="Governance required">🛡</span>}
+                            <TagPill tagDef={td} size='md'/>
+                          </div>
+                        </td>
+                        <td style={{padding:'9px 10px'}}>
+                          <span style={{fontSize:10,padding:'2px 8px',borderRadius:4,background:catColors[td.category]?.bg,color:catColors[td.category]?.color,fontWeight:500,textTransform:'capitalize'}}>{td.category}</span>
+                        </td>
+                        <td style={{padding:'9px 10px',maxWidth:200}}>
+                          <div style={{fontSize:12,color:T.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.description}</div>
+                        </td>
+                        <td style={{padding:'9px 10px'}}>{propBadge(td.propagationMode,td.propagationLocked)}</td>
+                        <td style={{padding:'9px 10px'}}>
+                          {td.sourceAliases.length===0 ? <span style={{color:T.textMuted,fontSize:12}}>—</span> : (
+                            <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                              {td.sourceAliases.slice(0,2).map(a=>(
+                                <span key={a} style={{fontFamily:"'Geist Mono',monospace",fontSize:10,background:T.bgElevated,color:T.textSub,padding:'2px 6px',borderRadius:3}}>{a}</span>
+                              ))}
+                              {td.sourceAliases.length>2&&<span style={{fontSize:10,color:T.textMuted}}>+{td.sourceAliases.length-2}</span>}
+                            </div>
+                          )}
+                        </td>
+                        <td style={{padding:'9px 10px',fontSize:12,color:td.usageCount>0?T.textSub:T.textMuted}}>{td.usageCount>0?`${td.usageCount} assets`:'—'}</td>
+                        <td style={{padding:'9px 10px',fontSize:12,color:T.textSub}}>{td.managedBy||'—'}</td>
+                        <td style={{padding:'9px 10px'}}>
+                          <button onClick={e=>{e.stopPropagation();startEdit(td);}} style={{fontSize:11.5,color:T.textSub,background:'none',border:'none',cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.color=T.accent} onMouseLeave={e=>e.currentTarget.style.color=T.textSub}>Edit</button>
+                        </td>
+                      </tr>
+                      {isEditing&&editDraft&&(
+                        <tr><td colSpan={8} style={{padding:0}}>
+                          <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,padding:16,margin:'0 0 2px 0'}}>
+                            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+                              <div>
+                                <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:'0.06em'}}>Name</div>
+                                <input value={editDraft.name} onChange={e=>setEditDraft(d=>({...d,name:e.target.value}))} disabled={td.category==='sensitivity'||td.category==='regulatory'} style={{width:'100%',padding:'6px 9px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,fontSize:12,outline:'none',opacity:(td.category==='sensitivity'||td.category==='regulatory')?0.5:1}}/>
+                              </div>
+                              <div>
+                                <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:'0.06em'}}>Managed by</div>
+                                <input value={editDraft.managedBy||''} onChange={e=>setEditDraft(d=>({...d,managedBy:e.target.value}))} style={{width:'100%',padding:'6px 9px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,fontSize:12,outline:'none'}}/>
+                              </div>
+                            </div>
+                            <div style={{marginBottom:14}}>
+                              <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:'0.06em'}}>Description</div>
+                              <textarea value={editDraft.description} onChange={e=>setEditDraft(d=>({...d,description:e.target.value}))} rows={2} style={{width:'100%',padding:'6px 9px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,fontSize:12,outline:'none',resize:'vertical'}}/>
+                            </div>
+                            <div style={{marginBottom:14}}>
+                              <div style={{fontSize:10.5,color:T.textMuted,marginBottom:8,textTransform:'uppercase',letterSpacing:'0.06em'}}>Propagation mode</div>
+                              {td.propagationLocked ? (
+                                <div style={{fontSize:12,color:T.textMuted}}>{editDraft.propagationMode} — <em style={{fontSize:11}}>Locked by admin</em></div>
+                              ) : (
+                                <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                                  {[['none','None — Applies to this asset only'],['hierarchy','Hierarchy — Flows down catalog tree (schema → table → column)'],['lineage','Lineage — Flows downstream via data lineage graph'],['both','H + L — Maximum coverage — hierarchy and lineage combined']].map(([v,label])=>(
+                                    <label key={v} style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:T.textSub,cursor:'pointer'}}>
+                                      <input type="radio" name="propMode" value={v} checked={editDraft.propagationMode===v} onChange={()=>setEditDraft(d=>({...d,propagationMode:v}))} style={{accentColor:T.accent}}/>
+                                      {label}
+                                    </label>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <div style={{marginBottom:14,display:'flex',alignItems:'center',gap:10}}>
+                              <div style={{fontSize:10.5,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.06em'}}>Governance required</div>
+                              <input type="checkbox" checked={editDraft.governanceRequired} onChange={e=>setEditDraft(d=>({...d,governanceRequired:e.target.checked}))} style={{accentColor:T.accent,width:14,height:14}}/>
+                            </div>
+                            {/* Source aliases */}
+                            <div style={{marginBottom:16}}>
+                              <div style={{fontSize:10.5,color:T.textMuted,marginBottom:6,textTransform:'uppercase',letterSpacing:'0.06em'}}>Source aliases</div>
+                              <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
+                                {editDraft.sourceAliases.map(a=>(
+                                  <span key={a} style={{fontFamily:"'Geist Mono',monospace",fontSize:10,background:T.bgSurface,color:T.textSub,border:`1px solid ${T.border}`,padding:'2px 8px',borderRadius:3,display:'inline-flex',alignItems:'center',gap:4}}>
+                                    {a}<span onClick={()=>setEditDraft(d=>({...d,sourceAliases:d.sourceAliases.filter(x=>x!==a)}))} style={{cursor:'pointer',opacity:0.6,fontSize:11}}>×</span>
+                                  </span>
+                                ))}
+                              </div>
+                              <div style={{display:'flex',gap:6}}>
+                                <input value={aliasInput} onChange={e=>setAliasInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&aliasInput.trim()){setEditDraft(d=>({...d,sourceAliases:[...d.sourceAliases,aliasInput.trim()]}));setAliasInput('');}}} placeholder="Add alias…" style={{flex:1,padding:'5px 8px',borderRadius:5,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,fontSize:11,outline:'none'}}/>
+                                <button onClick={()=>{if(aliasInput.trim()){setEditDraft(d=>({...d,sourceAliases:[...d.sourceAliases,aliasInput.trim()]}));setAliasInput('');}}} style={{padding:'5px 12px',borderRadius:5,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11,cursor:'pointer'}}>Add</button>
+                              </div>
+                              <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>Source tag names that map to this EDG tag. Used for deduplication and reverse sync.</div>
+                            </div>
+                            <div style={{display:'flex',gap:8}}>
+                              <button onClick={saveEdit} style={{padding:'6px 16px',background:T.accent,color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer'}}>Save changes</button>
+                              <button onClick={()=>setEditingId(null)} style={{padding:'6px 16px',background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,borderRadius:6,fontSize:12,cursor:'pointer'}}>Cancel</button>
+                            </div>
+                          </div>
+                        </td></tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            {/* New tag slide-in panel */}
+            {newPanelOpen&&(
+              <div style={{position:'fixed',top:0,right:0,width:320,height:'100vh',background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:200,display:'flex',flexDirection:'column',boxShadow:'-4px 0 24px rgba(0,0,0,0.3)',overflowY:'auto'}}>
+                <div style={{padding:16,borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                  <div style={{fontSize:13,fontWeight:700,color:T.text}}>New tag</div>
+                  <button onClick={()=>setNewPanelOpen(false)} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',fontSize:16}}>×</button>
+                </div>
+                <div style={{padding:16,flex:1,display:'flex',flexDirection:'column',gap:12}}>
+                  <div>
+                    <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:'0.06em'}}>Name</div>
+                    <input value={newDraft.name} onChange={e=>setNewDraft(d=>({...d,name:e.target.value}))} placeholder="e.g. Internal only" style={{width:'100%',padding:'7px 10px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,outline:'none'}}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:'0.06em'}}>Category</div>
+                    <select value={newDraft.category} onChange={e=>{const c=e.target.value;setNewDraft(d=>({...d,category:c,...catDefaults[c]}));}} style={{width:'100%',padding:'7px 10px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,outline:'none'}}>
+                      <option value="sensitivity">Sensitivity</option>
+                      <option value="regulatory">Regulatory</option>
+                      <option value="business">Business</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:'0.06em'}}>Description</div>
+                    <textarea value={newDraft.description} onChange={e=>setNewDraft(d=>({...d,description:e.target.value}))} rows={3} style={{width:'100%',padding:'7px 10px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,outline:'none',resize:'vertical'}}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10.5,color:T.textMuted,marginBottom:6,textTransform:'uppercase',letterSpacing:'0.06em'}}>Propagation mode</div>
+                    {[['none','None — This asset only'],['hierarchy','Hierarchy — Schema children'],['lineage','Lineage — Downstream assets'],['both','H + L — Maximum coverage']].map(([v,l])=>(
+                      <label key={v} style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:T.textSub,cursor:'pointer',marginBottom:6}}>
+                        <input type="radio" name="newPropMode" value={v} checked={newDraft.propagationMode===v} onChange={()=>setNewDraft(d=>({...d,propagationMode:v}))} style={{accentColor:T.accent}}/>
+                        {l}
+                      </label>
+                    ))}
+                  </div>
+                  <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:T.textSub,cursor:'pointer'}}>
+                    <input type="checkbox" checked={newDraft.governanceRequired} onChange={e=>setNewDraft(d=>({...d,governanceRequired:e.target.checked}))} style={{accentColor:T.accent,width:14,height:14}}/>
+                    Governance required
+                    <span style={{fontSize:10.5,color:T.textMuted}}>— needs steward approval</span>
+                  </label>
+                  <div>
+                    <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:'0.06em'}}>Managed by</div>
+                    <input value={newDraft.managedBy} onChange={e=>setNewDraft(d=>({...d,managedBy:e.target.value}))} style={{width:'100%',padding:'7px 10px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,outline:'none'}}/>
+                  </div>
+                  <div style={{marginTop:'auto',paddingTop:12}}>
+                    <button onClick={handleCreate} style={{width:'100%',padding:'9px',background:T.accent,color:'#fff',border:'none',borderRadius:6,fontSize:13,fontWeight:600,cursor:'pointer'}}>Create tag</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── SYNC STATUS TAB ── */}
+        {subTab==='sync'&&(
+          <div>
+            {/* Summary cards */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:24}}>
+              {[
+                {label:'Synced tags',  value:syncedCount,    color:T.text},
+                {label:'Conflicts',    value:conflictCount,  color:conflictCount>0?T.rose:T.textSub},
+                {label:'Unmapped',     value:unmappedCount,  color:unmappedCount>0?T.amber:T.textSub},
+                {label:'Last sync',    value:lastSyncStr,    color:T.textSub},
+              ].map(s=>(
+                <div key={s.label} style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,padding:'10px 12px'}}>
+                  <div style={{fontSize:10,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:'0.06em'}}>{s.label}</div>
+                  <div style={{fontSize:20,fontWeight:700,color:s.color,fontFamily:"'Geist Mono',monospace"}}>{s.value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Connector table */}
+            <table style={{width:'100%',borderCollapse:'collapse'}}>
+              <thead>
+                <tr style={{borderBottom:`1px solid ${T.border}`}}>
+                  {['Connector','Status','Last sync','New tags','Conflicts','Pull','Push','Configure'].map(h=>(
+                    <th key={h} style={{padding:'7px 10px',textAlign:'left',fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.06em'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Object.values(connectorConfigs).map(cfg=>{
+                  const statusMap = {success:{color:T.green,dot:'●',label:'Success'},partial:{color:T.amber,dot:'●',label:'Partial'},failed:{color:T.rose,dot:'●',label:'Failed'},null:{color:T.textMuted,dot:'○',label:'Never'}};
+                  const s = statusMap[cfg.lastSyncStatus]||statusMap.null;
+                  const Toggle = ({on,onChange})=>(
+                    <div onClick={onChange} style={{width:32,height:18,borderRadius:10,background:on?T.accent:T.border,position:'relative',cursor:'pointer',transition:'background .2s',flexShrink:0}}>
+                      <div style={{position:'absolute',top:3,left:on?14:3,width:12,height:12,borderRadius:'50%',background:'#fff',transition:'left .2s'}}/>
+                    </div>
+                  );
+                  return (
+                    <tr key={cfg.connectorId} style={{borderBottom:`1px solid ${T.border}`}}>
+                      <td style={{padding:'10px 10px'}}>
+                        <div style={{display:'flex',alignItems:'center',gap:6}}>
+                          <ServiceIcon service={cfg.connectorId} size={16}/>
+                          <span style={{fontSize:12.5,fontWeight:500,textTransform:'capitalize',color:T.text}}>{cfg.connectorId}</span>
+                        </div>
+                      </td>
+                      <td style={{padding:'10px 10px'}}><span style={{fontSize:11.5,color:s.color}}>{s.dot} {s.label}</span></td>
+                      <td style={{padding:'10px 10px',fontSize:11.5,color:T.textMuted}}>{cfg.lastSyncAt?'2h ago':'—'}</td>
+                      <td style={{padding:'10px 10px'}}><span style={{fontSize:11.5,color:cfg.lastSyncNewTags>0?T.amber:T.textMuted}}>{cfg.lastSyncNewTags>0?`+${cfg.lastSyncNewTags}`:cfg.lastSyncNewTags}</span></td>
+                      <td style={{padding:'10px 10px'}}><span style={{fontSize:11.5,color:cfg.lastSyncConflicts>0?T.rose:T.textMuted}}>{cfg.lastSyncConflicts}</span></td>
+                      <td style={{padding:'10px 10px'}}><Toggle on={cfg.syncEnabled} onChange={()=>updateConnectorConfig(cfg.connectorId,{syncEnabled:!cfg.syncEnabled})}/></td>
+                      <td style={{padding:'10px 10px'}}><Toggle on={cfg.reverseSyncEnabled} onChange={()=>updateConnectorConfig(cfg.connectorId,{reverseSyncEnabled:!cfg.reverseSyncEnabled})}/></td>
+                      <td style={{padding:'10px 10px'}}><button onClick={()=>navigate('settings')} style={{fontSize:11.5,color:T.accent,background:'none',border:'none',cursor:'pointer'}}>Configure →</button></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* ── ACTIVITY LOG TAB ── */}
+        {subTab==='activity'&&(
+          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,overflow:'hidden'}}>
+            {activityLog.map((entry,i)=>(
+              <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',borderBottom:i<activityLog.length-1?`1px solid ${T.border}`:'none'}}>
+                <span style={{fontSize:13,color:entry.color,flexShrink:0,width:16,textAlign:'center'}}>{entry.icon}</span>
+                <div style={{flex:1,fontSize:12,color:T.textSub}}>{entry.msg} <span style={{fontFamily:"'Geist Mono',monospace",background:T.bgElevated,color:T.text,padding:'1px 6px',borderRadius:3,fontSize:11}}>{entry.asset}</span></div>
+                <span style={{fontSize:11,color:T.textMuted,flexShrink:0,whiteSpace:'nowrap'}}>{entry.time}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
+// STEWARD INBOX VIEW — Surface 2
+// ─────────────────────────────────────────────
+const StewardInboxView = ({onToast}) => {
+  const { inbox, tagDefs, resolveInboxItem, createTagDef, upsertNameMapping, getTagDef } = useTagCtx();
+  const navigate = useNav();
+  const [filter,      setFilter]      = useState('all');
+  const [resolvedIds, setResolvedIds] = useState([]);
+  const [rejectNote,  setRejectNote]  = useState({});
+  const [mapSelect,   setMapSelect]   = useState({});
+  const [promoteForm, setPromoteForm] = useState({});
+  const [showResolved,setShowResolved]= useState(false);
+
+  const unresolved = inbox.filter(i=>!i.resolvedAt);
+  const resolved   = inbox.filter(i=>!!i.resolvedAt);
+
+  const filterMap = { all:'all', 'new_source_tag':'New tags', sync_conflict:'Conflicts', pending_approval:'Pending approval', propagation_review:'Propagation' };
+  const filtered  = filter==='all' ? unresolved : unresolved.filter(i=>i.type===filter);
+
+  const doResolve = (itemId, resolution, note='') => {
+    setResolvedIds(prev=>[...prev,itemId]);
+    setTimeout(()=>{
+      resolveInboxItem(itemId, resolution, note);
+      setResolvedIds(prev=>prev.filter(x=>x!==itemId));
+    }, 320);
+  };
+
+  const typeBadge = (type) => {
+    const map = {
+      new_source_tag:   {bg:T.blueDim,   color:T.blue,   label:'New tag'},
+      sync_conflict:    {bg:T.amberDim,  color:T.amber,  label:'Sync conflict'},
+      pending_approval: {bg:T.violetDim, color:T.violet, label:'Pending'},
+      propagation_review:{bg:T.bgElevated,color:T.green, label:'Propagation'},
+    };
+    const m=map[type]||{bg:T.bgElevated,color:T.textMuted,label:type};
+    return <span style={{fontSize:10,padding:'2px 8px',borderRadius:4,background:m.bg,color:m.color,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.06em'}}>{m.label}</span>;
+  };
+
+  const renderCard = (item, isResolved=false) => {
+    const tagDef = tagDefs.find(t=>t.name===item.tagName);
+    const isAnimOut = resolvedIds.includes(item.id);
+    const domainChip = <span style={{fontSize:10,padding:'2px 7px',borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>{item.domain}</span>;
+    const srcChip = item.sourceSystem ? <span style={{fontSize:10,padding:'2px 7px',borderRadius:4,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`,fontFamily:"'Geist Mono',monospace"}}>{item.sourceSystem}</span> : null;
+    const timeAgo = item.type==='pending_approval'?'5h ago':item.type==='new_source_tag'?'2h ago':item.type==='sync_conflict'?'2d ago':'1d ago';
+
+    return (
+      <div key={item.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,padding:'14px 16px',marginBottom:8,opacity:isAnimOut||isResolved?isResolved?0.5:0:1,maxHeight:isAnimOut?0:800,overflow:'hidden',transition:'opacity .3s, max-height .35s',}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+          {typeBadge(item.type)}
+          <span style={{fontSize:12.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{item.assetName}</span>
+          {domainChip}
+          {srcChip}
+          <span style={{marginLeft:'auto',fontSize:11,color:T.textMuted}}>{timeAgo}</span>
+        </div>
+        <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginBottom:10}}>{item.note}</div>
+        <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:isResolved?0:12}}>
+          {tagDef ? <TagPill tagDef={tagDef} size='sm'/> : <span style={{fontSize:11,padding:'2px 8px',borderRadius:4,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`}}>{item.tagName}</span>}
+          {srcChip}
+        </div>
+        {!isResolved&&(
+          <div style={{borderTop:`1px solid ${T.border}`,paddingTop:12}}>
+            {/* new_source_tag actions */}
+            {item.type==='new_source_tag'&&(
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                  <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                    <select value={mapSelect[item.id]||''} onChange={e=>setMapSelect(p=>({...p,[item.id]:e.target.value}))} style={{padding:'5px 8px',borderRadius:5,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:11,outline:'none'}}>
+                      <option value="">Select EDG tag…</option>
+                      {tagDefs.map(td=><option key={td.id} value={td.id}>{td.name}</option>)}
+                    </select>
+                    <button onClick={()=>{if(mapSelect[item.id]){upsertNameMapping(item.metadata?.connectorId||'dbt',{sourceTagName:item.tagName,edgTagId:mapSelect[item.id],reverseSyncAlias:item.tagName,status:'mapped'});doResolve(item.id,'map_to_existing');}}} style={{padding:'5px 12px',background:T.accent,color:'#fff',border:'none',borderRadius:5,fontSize:11,fontWeight:600,cursor:'pointer'}}>Map to existing tag</button>
+                  </div>
+                  <button onClick={()=>{const d={name:item.tagName,category:'business',description:'Promoted from source tag.',propagationMode:'hierarchy',governanceRequired:false,managedBy:'Current User',color:'#fbbf24',sourceAliases:[item.tagName]};createTagDef(d);doResolve(item.id,'promoted');}} style={{padding:'5px 12px',background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,borderRadius:5,fontSize:11,cursor:'pointer'}}>Promote to business tag</button>
+                  <button onClick={()=>doResolve(item.id,'keep_scoped')} style={{padding:'5px 12px',background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,borderRadius:5,fontSize:11,cursor:'pointer'}}>Keep source-scoped</button>
+                  <button onClick={()=>doResolve(item.id,'discard')} style={{padding:'5px 0',background:'none',border:'none',color:T.textMuted,fontSize:11,cursor:'pointer'}}>Discard</button>
+                </div>
+              </div>
+            )}
+            {/* sync_conflict actions */}
+            {item.type==='sync_conflict'&&(
+              <div>
+                {item.metadata?.stewardNote&&<div style={{background:T.amberDim,border:`1px solid ${T.amber}33`,borderRadius:6,padding:'8px 12px',marginBottom:10,fontSize:11.5,color:T.amber}}>Steward note: "{item.metadata.stewardNote}"</div>}
+                <div style={{display:'flex',gap:8}}>
+                  <button onClick={()=>doResolve(item.id,'keep_override',item.metadata?.stewardNote)} style={{padding:'6px 14px',background:T.accent,color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer'}}>Keep my override</button>
+                  <button onClick={()=>doResolve(item.id,'accept_source')} style={{padding:'6px 14px',background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,borderRadius:6,fontSize:12,cursor:'pointer'}}>Accept source tag</button>
+                  <button onClick={()=>doResolve(item.id,'lock_conflict')} style={{padding:'6px 14px',background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,borderRadius:6,fontSize:12,cursor:'pointer'}}>Lock — always flag</button>
+                </div>
+              </div>
+            )}
+            {/* pending_approval actions */}
+            {item.type==='pending_approval'&&(
+              <div>
+                {item.metadata?.downstreamCount>0&&<div style={{fontSize:11.5,color:T.blue,marginBottom:8,background:T.blueDim,padding:'6px 10px',borderRadius:5}}>Will propagate to {item.metadata.downstreamCount} assets</div>}
+                <div style={{display:'flex',gap:8,alignItems:'flex-start'}}>
+                  <button onClick={()=>doResolve(item.id,'approve_propagate')} style={{padding:'6px 14px',background:T.accent,color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer'}}>Approve + propagate</button>
+                  <button onClick={()=>doResolve(item.id,'approve')} style={{padding:'6px 14px',background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,borderRadius:6,fontSize:12,cursor:'pointer'}}>Approve, this asset only</button>
+                  <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                    {rejectNote[item.id]!==undefined&&<textarea value={rejectNote[item.id]} onChange={e=>setRejectNote(p=>({...p,[item.id]:e.target.value}))} placeholder="Rejection note…" rows={2} style={{padding:'5px 8px',borderRadius:5,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:11,outline:'none',resize:'vertical',width:200}}/>}
+                    <button onClick={()=>{if(rejectNote[item.id]===undefined){setRejectNote(p=>({...p,[item.id]:''}));}else{doResolve(item.id,'reject',rejectNote[item.id]);}}} style={{padding:'6px 12px',background:'none',border:'none',color:T.textMuted,fontSize:12,cursor:'pointer'}}>{rejectNote[item.id]!==undefined?'Confirm rejection':'Reject'}</button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* propagation_review actions */}
+            {item.type==='propagation_review'&&(
+              <div style={{display:'flex',gap:8}}>
+                <button onClick={()=>doResolve(item.id,'confirm')} style={{padding:'6px 14px',background:T.accent,color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer'}}>Confirm propagation</button>
+                <button onClick={()=>doResolve(item.id,'reduce')} style={{padding:'6px 14px',background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,borderRadius:6,fontSize:12,cursor:'pointer'}}>Reduce scope</button>
+                <button onClick={()=>doResolve(item.id,'cancel')} style={{padding:'6px 0',background:'none',border:'none',color:T.textMuted,fontSize:12,cursor:'pointer'}}>Cancel</button>
+              </div>
+            )}
+          </div>
+        )}
+        {isResolved&&item.resolvedAt&&(
+          <div style={{fontSize:11,color:T.textMuted,fontStyle:'italic',marginTop:6}}>{item.resolution} · Apr 20 · {item.resolvedBy||'System'}</div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="fadeUp" style={{height:'100%',display:'flex',flexDirection:'column'}}>
+      <Topbar breadcrumb={[{label:'Steward Inbox'}]}/>
+      <div style={{flex:1,overflowY:'auto',padding:24}}>
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:15,fontWeight:700,color:T.text}}>Steward inbox</div>
+          <div style={{fontSize:12,color:T.textMuted,marginTop:2}}>{unresolved.length} items need attention</div>
+        </div>
+
+        {/* Filter tabs */}
+        <div style={{display:'flex',gap:0,borderBottom:`1px solid ${T.border}`,marginBottom:20}}>
+          {Object.entries(filterMap).map(([k,v])=>(
+            <button key={k} onClick={()=>setFilter(k)} style={{padding:'7px 14px',background:'transparent',border:'none',borderBottom:`2px solid ${filter===k?T.accent:'transparent'}`,color:filter===k?T.text:T.textMuted,fontSize:12.5,fontWeight:filter===k?600:400,cursor:'pointer',whiteSpace:'nowrap'}}>{v}</button>
+          ))}
+        </div>
+
+        {/* Cards */}
+        {filtered.length===0 ? (
+          <div style={{textAlign:'center',padding:'60px 0'}}>
+            <div style={{fontSize:32,marginBottom:12}}>✓</div>
+            <div style={{fontSize:15,fontWeight:500,color:T.green,marginBottom:4}}>All caught up</div>
+            <div style={{fontSize:13,color:T.textMuted}}>No items need attention</div>
+          </div>
+        ) : (
+          filtered.map(item=>renderCard(item))
+        )}
+
+        {/* Resolved section */}
+        {resolved.length>0&&(
+          <div style={{marginTop:24}}>
+            <button onClick={()=>setShowResolved(v=>!v)} style={{display:'flex',alignItems:'center',gap:8,background:'none',border:'none',color:T.textMuted,fontSize:12.5,cursor:'pointer',marginBottom:10}}>
+              <span style={{transform:showResolved?'rotate(0deg)':'rotate(-90deg)',transition:'transform .15s',display:'inline-block'}}>▼</span>
+              Resolved today ({resolved.length})
+            </button>
+            {showResolved&&resolved.map(item=>renderCard(item,true))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
 // ROOT APP
 // ─────────────────────────────────────────────
 export default function App(){
@@ -12734,6 +14299,8 @@ export default function App(){
       case "access":        return <AccessView onToast={showToast}/>;
       case "certifications":return <CertificationsView onToast={showToast}/>;
       case "stewardship":   return <StewardshipView onToast={showToast}/>;
+      case "tags":          return <TagManagementView onToast={showToast}/>;
+      case "steward-inbox": return <StewardInboxView onToast={showToast}/>;
       case "glossary":      return <GlossaryView onToast={showToast}/>;
       case "domains":       return <DomainsView/>;
       case "observability": return <ObsView onToast={showToast}/>;
@@ -12756,6 +14323,7 @@ export default function App(){
   }
 
   return (
+    <TagProvider>
     <RoleCtx.Provider value={{role, roleCfg, onSwitch:handleRole, onLogout:handleLogout}}>
     <NavCtx.Provider value={handleNav}>
     <ThemeCtx.Provider value={{isDark,toggleTheme}}>
@@ -12770,5 +14338,6 @@ export default function App(){
     </ThemeCtx.Provider>
     </NavCtx.Provider>
     </RoleCtx.Provider>
+    </TagProvider>
   );
 }
