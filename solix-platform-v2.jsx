@@ -8928,7 +8928,7 @@ const ROLES_CONFIG = {
     badge: "rgba(238,36,36,0.15)",
     desc:  "Full platform access including settings, user management, and all configurations.",
     rbacRole: "admin",
-    nav: ["home","search","catalog","lineage","quality","contracts","policymanager","access","certifications","stewardship","glossary","domains","observability","analytics","settings"],
+    nav: ["home","search","catalog","lineage","quality","contracts","policymanager","access","certifications","stewardship","tags","steward-inbox","glossary","domains","observability","analytics","settings"],
     homeWidgets: ["metrics","tasks","quality","recentAssets","services","activity"],
   },
   steward: {
