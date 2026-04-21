@@ -6646,7 +6646,6 @@ const AssetDetail = ({asset, onBack, onToast}) => {
   const tabs=[
     {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},
     {key:"lineage",label:"Lineage"},{key:"quality",label:"Quality"},
-    {key:"tags",label:"Tags"},
     {key:"policies",label:"Policies"},{key:"access",label:"Access"},
     {key:"usage",label:"Usage"},{key:"activity",label:"Activity"},
     {key:"comments",label:`Comments (${COMMENTS.length})`},
@@ -6714,8 +6713,7 @@ const AssetDetail = ({asset, onBack, onToast}) => {
         {tab==="schema"    && <AssetSchema asset={asset} onToast={onToast}/>}
         {tab==="lineage"   && <AssetLineageFull asset={asset}/>}
         {tab==="quality"   && <AssetQualityTab asset={data}/>}
-        {tab==="tags"      && <AssetTagsTab assetId={asset.id} onToast={onToast}/>}
-        {tab==="policies"  && <AssetPoliciesTab/>}
+{tab==="policies"  && <AssetPoliciesTab/>}
         {tab==="access"    && <AssetAccessTab onToast={onToast}/>}
         {tab==="usage"     && <AssetUsageTab/>}
         {tab==="activity"  && <AssetActivityTab/>}
@@ -7113,33 +7111,11 @@ const CatalogView = ({onAsset})=>{
     {key:"quality",label:"Quality",render:v=><QScore score={v}/>},
     {key:"usage",label:"Usage",render:v=><Badge color={v==="High"?T.accent:v==="Med"?T.amber:T.textMuted}>{v}</Badge>},
     {key:"updated",label:"Updated",render:v=><span style={{fontSize:11,color:T.textMuted}}>{v}</span>},
-    {key:"tags",label:"Tags",render:(v,r)=>{
-      const asns = tagCtx ? tagCtx.getAssetAssignments(r.id).filter(a=>a.status!=='rejected') : [];
-      if(asns.length===0) return <span style={{fontSize:10.5,color:T.textMuted,fontStyle:"italic"}}>—</span>;
-      const visible = asns.slice(0,3);
-      const extra   = asns.length - 3;
-      return (
-        <div style={{display:"flex",gap:3,flexWrap:"wrap",alignItems:"center"}} onClick={e=>e.stopPropagation()}>
-          {visible.map(asn=>{
-            const td = tagCtx.getTagDef(asn.tagId);
-            if(!td) return null;
-            return <TagPill key={asn.tagId} tagDef={td} assignment={asn} size="sm" onClick={()=>onAsset(r)}/>;
-          })}
-          {extra>0&&<span style={{fontSize:10,padding:"1px 6px",borderRadius:99,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`,fontWeight:600,cursor:"pointer"}} onClick={()=>onAsset(r)}>+{extra}</span>}
-        </div>
-      );
-    }},
   ];
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <Topbar breadcrumb={[{label:"Data Catalog"}]} actions={
-        <div style={{display:"flex",borderRadius:7,border:`1px solid ${T.border}`,overflow:"hidden"}}>
-          {[{v:"table",icon:<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="2.5" rx=".8" fill="currentColor"/><rect x="1" y="5.25" width="12" height="2.5" rx=".8" fill="currentColor" opacity=".45"/><rect x="1" y="9.5" width="12" height="2.5" rx=".8" fill="currentColor" opacity=".2"/></svg>},
-           {v:"card",icon:<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="4" rx="1" fill="currentColor"/><rect x="1" y="6" width="12" height="4" rx="1" fill="currentColor" opacity=".5"/><rect x="1" y="11" width="12" height="2" rx=".8" fill="currentColor" opacity=".25"/></svg>},
-          ].map(btn=>(<button key={btn.v} onClick={()=>setView(btn.v)} style={{padding:"6px 9px",border:"none",background:view===btn.v?T.accent:"transparent",color:view===btn.v?"#fff":T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",transition:"all .15s"}}>{btn.icon}</button>))}
-        </div>
-      }/>
+      <Topbar breadcrumb={[{label:"Data Catalog"}]}/>
       <div style={{flex:1,display:"flex",overflow:"hidden"}}>
         {/* Filter panel */}
         <div style={{width:panelOpen?212:0,minWidth:panelOpen?212:0,flexShrink:0,overflow:"hidden",borderRight:`1px solid ${T.border}`,background:T.bgSurface,display:"flex",flexDirection:"column",transition:"width .2s ease,min-width .2s ease"}}>
@@ -7180,18 +7156,41 @@ const CatalogView = ({onAsset})=>{
 
         {/* Results */}
         <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0}}>
-          <div style={{padding:"9px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:9,alignItems:"center",flexShrink:0,background:T.bgSurface}}>
-            <button onClick={()=>setPanelOpen(v=>!v)} style={{width:28,height:28,borderRadius:6,background:panelOpen?T.accentDim:"transparent",border:`1px solid ${panelOpen?T.accent+"55":T.border}`,color:panelOpen?T.accent:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .15s"}}>{Ic.filter(12)}</button>
-            <div style={{flex:1}}><Input2 placeholder="Search assets, descriptions, tags, owners…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(12)}/></div>
-            <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
-              <span style={{fontSize:10.5,color:T.textMuted,marginRight:2,whiteSpace:"nowrap"}}>Sort:</span>
-              {sorts.map(s=>(
-                <button key={s.v} onClick={()=>setSortBy(s.v)} style={{padding:"4px 10px",borderRadius:99,fontSize:11,fontWeight:sortBy===s.v?600:400,border:`1px solid ${sortBy===s.v?T.accent:T.border}`,background:sortBy===s.v?T.accentDim:"transparent",color:sortBy===s.v?T.accent:T.textSub,cursor:"pointer",whiteSpace:"nowrap",transition:"all .12s"}}
-                  onMouseEnter={e=>{if(sortBy!==s.v){e.currentTarget.style.background=T.bgHover;e.currentTarget.style.borderColor=T.borderLight;}}}
-                  onMouseLeave={e=>{if(sortBy!==s.v){e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor=T.border;}}}>{s.l}</button>
+          <div style={{padding:"8px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:8,alignItems:"center",flexShrink:0,background:T.bgSurface}}>
+            {/* Filter toggle — icon only */}
+            <button onClick={()=>setPanelOpen(v=>!v)} title={panelOpen?"Hide filters":"Show filters"}
+              style={{width:32,height:32,borderRadius:7,background:panelOpen?T.accentDim:"transparent",border:`1px solid ${panelOpen?T.accent+"66":T.border}`,color:panelOpen?T.accent:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .15s",position:"relative"}}
+              onMouseEnter={e=>{if(!panelOpen){e.currentTarget.style.background=T.bgHover;e.currentTarget.style.borderColor=T.borderLight;}}}
+              onMouseLeave={e=>{if(!panelOpen){e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor=T.border;}}}>
+              {Ic.filter(13)}
+              {totalActive>0&&<span style={{position:"absolute",top:-4,right:-4,width:14,height:14,borderRadius:"50%",background:T.accent,color:"#fff",fontSize:8,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>{totalActive}</span>}
+            </button>
+            {/* Search */}
+            <div style={{flex:1}}><Input2 placeholder="Search assets, descriptions, owners…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(12)}/></div>
+            {/* Sort dropdown */}
+            <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+              <span style={{fontSize:11,color:T.textMuted,whiteSpace:"nowrap"}}>Sort</span>
+              <select value={sortBy} onChange={e=>setSortBy(e.target.value)}
+                style={{padding:"5px 28px 5px 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,fontSize:12,outline:"none",cursor:"pointer",appearance:"none",backgroundImage:`url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236b7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,backgroundRepeat:"no-repeat",backgroundPosition:"right 8px center"}}>
+                {sorts.map(s=><option key={s.v} value={s.v}>{s.l}</option>)}
+              </select>
+            </div>
+            {/* View toggle — table / card */}
+            <div style={{display:"flex",borderRadius:7,border:`1px solid ${T.border}`,overflow:"hidden",flexShrink:0}}>
+              {[
+                {v:"table",icon:<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="2.5" rx=".8" fill="currentColor"/><rect x="1" y="5.25" width="12" height="2.5" rx=".8" fill="currentColor" opacity=".5"/><rect x="1" y="9.5" width="12" height="2.5" rx=".8" fill="currentColor" opacity=".25"/></svg>},
+                {v:"card", icon:<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5.5" height="5.5" rx="1" fill="currentColor"/><rect x="7.5" y="1" width="5.5" height="5.5" rx="1" fill="currentColor" opacity=".5"/><rect x="1" y="7.5" width="5.5" height="5.5" rx="1" fill="currentColor" opacity=".5"/><rect x="7.5" y="7.5" width="5.5" height="5.5" rx="1" fill="currentColor" opacity=".25"/></svg>},
+              ].map(btn=>(
+                <button key={btn.v} onClick={()=>setView(btn.v)} title={btn.v==="table"?"Table view":"Card view"}
+                  style={{padding:"6px 9px",border:"none",background:view===btn.v?T.accent:"transparent",color:view===btn.v?"#fff":T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",transition:"all .15s"}}
+                  onMouseEnter={e=>{if(view!==btn.v)e.currentTarget.style.background=T.bgHover;}}
+                  onMouseLeave={e=>{if(view!==btn.v)e.currentTarget.style.background="transparent";}}>
+                  {btn.icon}
+                </button>
               ))}
             </div>
-            <span style={{fontSize:11.5,color:T.textMuted,whiteSpace:"nowrap",flexShrink:0}}><b style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{filtered.length}</b><span style={{color:T.textMuted}}> / {ASSETS.length}</span></span>
+            {/* Result count */}
+            <span style={{fontSize:11,color:T.textMuted,whiteSpace:"nowrap",flexShrink:0,fontFamily:"'Geist Mono',monospace"}}><b style={{color:T.text}}>{filtered.length}</b>/{ASSETS.length}</span>
           </div>
           {activeChips.length>0&&(
             <div style={{padding:"6px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:5,flexWrap:"wrap",alignItems:"center",background:T.bgElevated,flexShrink:0}}>
@@ -8928,7 +8927,7 @@ const ROLES_CONFIG = {
     badge: "rgba(238,36,36,0.15)",
     desc:  "Full platform access including settings, user management, and all configurations.",
     rbacRole: "admin",
-    nav: ["home","search","catalog","lineage","quality","contracts","policymanager","access","certifications","stewardship","tags","steward-inbox","glossary","domains","observability","analytics","settings"],
+    nav: ["home","search","catalog","lineage","quality","contracts","policymanager","access","certifications","stewardship","glossary","domains","observability","analytics","settings"],
     homeWidgets: ["metrics","tasks","quality","recentAssets","services","activity"],
   },
   steward: {
@@ -13688,44 +13687,30 @@ function TagPill({ tagDef, assignment, size='md', onRemove=null, onClick=null })
   const isRejected = assignment?.status === 'rejected';
 
   const baseColor = isConflict ? T.rose : tagDef.color;
-  const bg        = baseColor + '1a';
-  const border    = isPending  ? `1px dashed ${baseColor}`
-                  : isConflict ? `1px dashed ${baseColor}`
-                  : isRejected ? `1px solid ${T.border}` : 'none';
+  const bg        = baseColor + '18';
+  const border    = isPending  ? `1px dashed ${baseColor}99`
+                  : isConflict ? `1px dashed ${T.rose}99`
+                  : `1px solid ${baseColor}33`;
   const opacity   = isRejected ? 0.4 : 1;
 
-  const sizeMap = { sm:['2px 6px','11px',3], md:['3px 9px','12px',5], lg:['5px 12px','13px',6] };
+  const sizeMap = { sm:['2px 7px','11px',4], md:['3px 10px','12px',5], lg:['5px 13px','13px',6] };
   const [pad, fs, gap] = sizeMap[size] || sizeMap.md;
 
-  const pm = tagDef.propagationMode;
-  let propText = pm==='both' ? 'H+L' : pm==='lineage' ? 'L' : pm==='hierarchy' ? 'H' : '';
-  if (tagDef.propagationLocked && propText) propText += '🔒';
-
-  const srcCount  = (assignment?.sourceSystems?.length||0) > 1 ? `${assignment.sourceSystems.length}src` : '';
-  const inherited = assignment?.origin?.startsWith('propagated') ? 'inherited' : '';
-  const statusTxt = isPending ? 'pending' : isConflict ? 'conflict' : '';
-
-  const propColor   = pm==='both'||pm==='hierarchy' ? T.amber : pm==='lineage' ? T.blue : T.textMuted;
-  const statusColor = isPending ? T.amber : isConflict ? T.rose : T.textMuted;
-
-  const PillBadge = ({ text, color }) => !text ? null : (
-    <span style={{ fontSize:9, background:color+'22', color, borderRadius:2, padding:'1px 4px', fontWeight:400, whiteSpace:'nowrap' }}>{text}</span>
-  );
+  const statusColor = isPending ? T.amber : isConflict ? T.rose : null;
+  const statusDot   = statusColor ? <span style={{width:5,height:5,borderRadius:'50%',background:statusColor,flexShrink:0,display:'block'}}/> : null;
 
   return (
     <span
       onMouseEnter={()=>setHovered(true)}
       onMouseLeave={()=>setHovered(false)}
       onClick={onClick}
-      style={{ display:'inline-flex', alignItems:'center', gap, padding:pad, borderRadius:4, background:bg, color:baseColor, border, fontSize:fs, fontWeight:500, cursor:onClick?'pointer':'default', opacity, userSelect:'none', transition:'opacity 0.15s' }}
+      style={{ display:'inline-flex', alignItems:'center', gap, padding:pad, borderRadius:99, background:bg, color:baseColor, border, fontSize:fs, fontWeight:500, cursor:onClick?'pointer':'default', opacity, userSelect:'none', transition:'all 0.15s', whiteSpace:'nowrap' }}
     >
+      {statusDot}
       {tagDef.name}
-      <PillBadge text={propText}  color={propColor}   />
-      <PillBadge text={srcCount}  color={T.textSub}   />
-      <PillBadge text={inherited} color={T.textSub}   />
-      <PillBadge text={statusTxt} color={statusColor} />
-      {onRemove && hovered && !tagDef.propagationLocked && (
-        <span onClick={e=>{e.stopPropagation();onRemove();}} style={{fontSize:11,cursor:'pointer',opacity:0.7,marginLeft:1}}>×</span>
+      {tagDef.propagationLocked && <span style={{fontSize:9,opacity:.7}}>🔒</span>}
+      {onRemove && hovered && (
+        <span onClick={e=>{e.stopPropagation();onRemove();}} style={{fontSize:12,cursor:'pointer',opacity:0.6,lineHeight:1,marginLeft:1}} onMouseEnter={e=>e.currentTarget.style.opacity='1'} onMouseLeave={e=>e.currentTarget.style.opacity='.6'}>×</span>
       )}
     </span>
   );
@@ -13735,359 +13720,435 @@ function TagPill({ tagDef, assignment, size='md', onRemove=null, onClick=null })
 // TAG MANAGEMENT VIEW — Surface 1
 // ─────────────────────────────────────────────
 const TagManagementView = ({onToast}) => {
-  const { tagDefs, assignments, connectorConfigs, inbox, pendingCount, conflictCount, createTagDef, updateTagDef, updateConnectorConfig, upsertNameMapping, getTagDef } = useTagCtx();
+  const { tagDefs, assignments, connectorConfigs, inbox, createTagDef, updateTagDef, updateConnectorConfig, upsertNameMapping, getTagDef, updateTagPolicies } = useTagCtx();
   const navigate = useNav();
-  const [subTab,       setSubTab]       = useState('registry');
-  const [catFilter,    setCatFilter]    = useState('all');
+
+  // ── Left panel state ──
   const [search,       setSearch]       = useState('');
-  const [editingId,    setEditingId]    = useState(null);
-  const [editDraft,    setEditDraft]    = useState(null);
+  const [selCat,       setSelCat]       = useState('all');
+  const [selTagId,     setSelTagId]     = useState(null);
   const [newPanelOpen, setNewPanelOpen] = useState(false);
-  const [newDraft,     setNewDraft]     = useState({ name:'', category:'custom', description:'', propagationMode:'none', governanceRequired:false, managedBy:'Current User', color:'#a1a1aa', sourceAliases:[] });
+  const [newDraft,     setNewDraft]     = useState({ name:'', category:'custom', description:'', propagationMode:'none', governanceRequired:false, managedBy:'', color:'#6366f1', sourceAliases:[] });
+  const [newAlias,     setNewAlias]     = useState('');
+
+  // ── Right panel state ──
+  const [detailTab,    setDetailTab]    = useState('overview');
+  const [editing,      setEditing]      = useState(false);
+  const [editDraft,    setEditDraft]    = useState(null);
   const [aliasInput,   setAliasInput]   = useState('');
-  const [newAliasInput,setNewAliasInput]= useState('');
-  const [flashId,      setFlashId]      = useState(null);
-  const [assignMapOpen,setAssignMapOpen]= useState(null); // {connectorId, mappingId}
-  const [assignTarget, setAssignTarget] = useState('');
+  const [flashSaved,   setFlashSaved]   = useState(false);
 
-  const catColors = { sensitivity:{bg:T.accentDim,color:T.accent}, regulatory:{bg:T.blueDim,color:T.blue}, business:{bg:T.amberDim,color:T.amber}, custom:{bg:T.bgElevated,color:T.textSub} };
-  const propBadge = (pm, locked) => {
-    const map = { both:{bg:T.violetDim,color:T.violet,label:'H+L'}, lineage:{bg:T.blueDim,color:T.blue,label:'Lineage'}, hierarchy:{bg:T.amberDim,color:T.amber,label:'Hierarchy'}, none:{bg:T.bgElevated,color:T.textMuted,label:'None'} };
-    const m = map[pm]||map.none;
-    return <span style={{fontSize:10,padding:'2px 7px',borderRadius:4,background:m.bg,color:m.color,fontWeight:500,whiteSpace:'nowrap'}}>{m.label}{locked?' 🔒':''}</span>;
-  };
+  const CATS = ['all','sensitivity','regulatory','business','custom'];
+  const CAT_COLORS = { sensitivity:{color:T.rose,bg:T.roseDim}, regulatory:{color:T.amber,bg:T.amberDim}, business:{color:T.blue,bg:T.blueDim}, custom:{color:T.textSub,bg:T.bgElevated} };
+  const PROP_LABELS = { both:'Both directions', lineage:'Lineage only', hierarchy:'Hierarchy only', none:'No propagation' };
+  const PROP_COLORS = { both:T.violet, lineage:T.blue, hierarchy:T.amber, none:T.textMuted };
 
-  const filtered = tagDefs.filter(td => {
-    if (catFilter!=='all' && td.category!==catFilter) return false;
-    if (search && !td.name.toLowerCase().includes(search.toLowerCase()) && !td.description.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
+  const filteredTags = tagDefs.filter(td => {
+    const mCat = selCat==='all' || td.category===selCat;
+    const mSearch = !search || td.name.toLowerCase().includes(search.toLowerCase()) || td.description?.toLowerCase().includes(search.toLowerCase());
+    return mCat && mSearch;
   });
 
-  const startEdit = (td) => {
-    setEditingId(td.id);
-    setEditDraft({...td, sourceAliases:[...td.sourceAliases]});
-    setAliasInput('');
-  };
+  const groupedTags = CATS.slice(1).map(cat => ({
+    cat,
+    tags: filteredTags.filter(td=>td.category===cat),
+  })).filter(g=>g.tags.length>0);
 
+  const selTag = selTagId ? tagDefs.find(td=>td.id===selTagId) : null;
+
+  const assetCount = (tagId) => Object.values(assignments).flat().filter(a=>a.tagId===tagId&&a.status!=='rejected').length;
+  const syncConflicts = (tagId) => inbox.filter(i=>i.tagName===tagDefs.find(td=>td.id===tagId)?.name&&i.type==='sync_conflict'&&!i.resolvedAt).length;
+
+  const startEdit = () => { setEditDraft({...selTag, sourceAliases:[...(selTag.sourceAliases||[])]}); setEditing(true); };
+  const cancelEdit = () => { setEditing(false); setEditDraft(null); setAliasInput(''); };
   const saveEdit = () => {
-    updateTagDef(editingId, editDraft);
-    setEditingId(null);
+    updateTagDef(selTag.id, editDraft);
+    setEditing(false); setEditDraft(null);
+    setFlashSaved(true); setTimeout(()=>setFlashSaved(false),2000);
     onToast('Tag updated','success');
   };
 
-  const handleCreate = () => {
-    if (!newDraft.name.trim()) return;
+  const addNewTag = () => {
+    if(!newDraft.name.trim()) return;
     createTagDef(newDraft);
-    const id = 't'+Date.now();
-    setFlashId(id);
-    setTimeout(()=>setFlashId(null),1200);
     setNewPanelOpen(false);
-    setNewDraft({ name:'', category:'custom', description:'', propagationMode:'none', governanceRequired:false, managedBy:'Current User', color:'#a1a1aa', sourceAliases:[] });
+    setNewDraft({ name:'', category:'custom', description:'', propagationMode:'none', governanceRequired:false, managedBy:'', color:'#6366f1', sourceAliases:[] });
+    setNewAlias('');
     onToast('Tag created','success');
   };
 
-  const catDefaults = { sensitivity:{propagationMode:'both',governanceRequired:true,color:'#ee2424'}, regulatory:{propagationMode:'lineage',governanceRequired:true,color:'#7dd3fc'}, business:{propagationMode:'hierarchy',governanceRequired:false,color:'#fbbf24'}, custom:{propagationMode:'none',governanceRequired:false,color:'#a1a1aa'} };
+  // Per-tag sync status from connectorConfigs
+  const tagSyncRows = selTag ? Object.entries(connectorConfigs).flatMap(([connId, cfg]) =>
+    (cfg.nameMappings||[]).filter(m=>m.edgTagId===selTag.id).map(m=>({connId, cfg, m}))
+  ) : [];
 
-  // Sync status computed
-  const syncedCount    = Object.values(assignments).flat().filter(a=>a.origin==='synced').length;
-  const unmappedCount  = inbox.filter(i=>i.type==='new_source_tag'&&!i.resolvedAt).length;
-  const allLastSyncs   = Object.values(connectorConfigs).filter(c=>c.lastSyncAt).map(c=>c.lastSyncAt).sort().reverse();
-  const lastSyncStr    = allLastSyncs.length ? '2h ago' : 'Never';
-
-  const activityLog = [
-    {icon:'↑',color:T.blue,  msg:'system applied PII to',       asset:'orders',                time:'2h ago'},
-    {icon:'↑',color:T.blue,  msg:'system applied GDPR to',      asset:'orders',                time:'2h ago'},
-    {icon:'↑',color:T.amber, msg:'Rahul M. applied Finance domain to', asset:'revenue_dashboard', time:'3d ago'},
-    {icon:'↑',color:T.amber, msg:'Priya K. applied Board reporting to',asset:'revenue_dashboard',time:'10d ago'},
-    {icon:'⚠',color:T.rose,  msg:'Sync conflict detected: PCI-DSS on',asset:'revenue_dashboard',time:'2d ago'},
-    {icon:'×',color:T.rose,  msg:'Steward removed HIPAA from',  asset:'customers',             time:'2d ago'},
-    {icon:'↑',color:T.blue,  msg:'system applied PHI to',       asset:'product_events',        time:'1d ago'},
-    {icon:'↑',color:T.amber, msg:'Priya K. applied Clinical trial data to', asset:'product_events', time:'5d ago'},
-    {icon:'↑',color:T.blue,  msg:'system applied PII to',       asset:'customers',             time:'2h ago'},
-    {icon:'⚠',color:T.amber, msg:'New tag financial_forecast arrived from', asset:'dbt',       time:'2h ago'},
-    {icon:'↑',color:T.blue,  msg:'system applied GDPR to',      asset:'ml_churn_model',        time:'3d ago'},
-    {icon:'✓',color:T.green, msg:'Steward approved GDPR on',    asset:'orders',                time:'4h ago'},
-    {icon:'↑',color:T.amber, msg:'Analyst applied needs-review to', asset:'ml_churn_model',    time:'1d ago'},
-    {icon:'↑',color:T.blue,  msg:'system applied PHI to',       asset:'customers',             time:'12h ago'},
-  ];
-
-  const Row = ({style,children})=><tr style={style}><td colSpan={8}>{children}</td></tr>;
+  // Per-tag activity log (inbox items for this tag)
+  const tagActivity = selTag ? [
+    ...inbox.filter(i=>i.tagName===selTag.name).map(i=>({
+      date: i.createdAt?.slice(0,10)||'—', action: i.type==='sync_conflict'?'Sync conflict':i.type==='pending_approval'?'Approval requested':'Inbox item',
+      by: i.sourceSystem||'System', detail: i.note||i.assetName||'', resolved:!!i.resolvedAt
+    })),
+    {date:'2026-01-10',action:'Tag created',by:'Admin',detail:'Initial definition',resolved:true},
+  ] : [];
 
   return (
     <div className="fadeUp" style={{height:'100%',display:'flex',flexDirection:'column'}}>
-      <Topbar breadcrumb={[{label:'Tag Management'}]}/>
-      <div style={{flex:1,overflowY:'auto',padding:24}}>
-        {/* Header */}
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
-          <div>
-            <div style={{fontSize:15,fontWeight:700,color:T.text}}>Tag management</div>
-            <div style={{fontSize:12,color:T.textMuted,marginTop:2}}>{tagDefs.length} tags · {pendingCount} pending · {conflictCount} conflicts</div>
+      <Topbar breadcrumb={[{label:'Tag Management'}]} actions={
+        <button onClick={()=>{setNewPanelOpen(true);setSelTagId(null);}} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 14px',borderRadius:7,background:T.accent,border:'none',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>
+          {Ic.plus(11)} New Tag
+        </button>
+      }/>
+
+      <div style={{flex:1,display:'flex',overflow:'hidden'}}>
+
+        {/* ── LEFT: Tag list ── */}
+        <div style={{width:240,flexShrink:0,borderRight:`1px solid ${T.border}`,background:T.bgSurface,display:'flex',flexDirection:'column'}}>
+          {/* Search */}
+          <div style={{padding:'10px 12px',borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+            <Input2 placeholder="Search tags…" value={search} onChange={e=>setSearch(e.target.value)} icon={Ic.search(11)}/>
           </div>
-          <button onClick={()=>setNewPanelOpen(true)} style={{padding:'7px 16px',background:T.accent,color:'#fff',border:'none',borderRadius:6,fontSize:12.5,fontWeight:600,cursor:'pointer'}}>+ New tag</button>
-        </div>
-
-        {/* Sub-nav */}
-        <div style={{display:'flex',gap:0,borderBottom:`1px solid ${T.border}`,marginBottom:20}}>
-          {['registry','sync','activity'].map(k=>{
-            const labels={registry:'Registry',sync:'Sync status',activity:'Activity log'};
-            return <button key={k} onClick={()=>setSubTab(k)} style={{padding:'8px 16px',background:'transparent',border:'none',borderBottom:`2px solid ${subTab===k?T.accent:'transparent'}`,color:subTab===k?T.text:T.textMuted,fontSize:13,fontWeight:subTab===k?600:400,cursor:'pointer'}}>{labels[k]}</button>;
-          })}
-        </div>
-
-        {/* ── REGISTRY TAB ── */}
-        {subTab==='registry'&&(
-          <div style={{position:'relative'}}>
-            {/* Filter bar */}
-            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14}}>
-              {['all','sensitivity','regulatory','business','custom'].map(c=>(
-                <button key={c} onClick={()=>setCatFilter(c)} style={{padding:'4px 12px',borderRadius:99,border:`1px solid ${catFilter===c?T.accent:T.border}`,background:catFilter===c?T.accentDim:'transparent',color:catFilter===c?T.accent:T.textSub,fontSize:11.5,fontWeight:catFilter===c?600:400,cursor:'pointer',textTransform:'capitalize'}}>
-                  {c==='all'?'All':c.charAt(0).toUpperCase()+c.slice(1)}
-                </button>
-              ))}
-              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search tags…" style={{marginLeft:'auto',padding:'5px 10px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,outline:'none',width:180}}/>
-            </div>
-
-            {/* Table */}
-            <table style={{width:'100%',borderCollapse:'collapse'}}>
-              <thead>
-                <tr style={{borderBottom:`1px solid ${T.border}`}}>
-                  {['Tag','Category','Description','Propagation','Source aliases','Used on','Steward',''].map(h=>(
-                    <th key={h} style={{padding:'7px 10px',textAlign:'left',fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.06em',whiteSpace:'nowrap'}}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((td,i)=>{
-                  const isEditing = editingId===td.id;
-                  const isFlash   = flashId===td.id;
+          {/* Category filter pills */}
+          <div style={{padding:'8px 12px',borderBottom:`1px solid ${T.border}`,display:'flex',gap:4,flexWrap:'wrap',flexShrink:0}}>
+            {CATS.map(cat=>(
+              <button key={cat} onClick={()=>setSelCat(cat)} style={{padding:'2px 9px',borderRadius:99,fontSize:11,fontWeight:selCat===cat?600:400,border:`1px solid ${selCat===cat?(CAT_COLORS[cat]?.color||T.accent):T.border}`,background:selCat===cat?(CAT_COLORS[cat]?.bg||T.accentDim):'transparent',color:selCat===cat?(CAT_COLORS[cat]?.color||T.accent):T.textMuted,cursor:'pointer',transition:'all .12s',textTransform:'capitalize'}}>
+                {cat==='all'?`All (${tagDefs.length})`:cat}
+              </button>
+            ))}
+          </div>
+          {/* Tag list grouped by category */}
+          <div style={{flex:1,overflowY:'auto'}}>
+            {filteredTags.length===0&&<div style={{padding:'32px 16px',textAlign:'center',color:T.textMuted,fontSize:12}}>No tags found</div>}
+            {groupedTags.map(({cat,tags})=>(
+              <div key={cat}>
+                <div style={{padding:'8px 14px 4px',fontSize:10,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.08em',position:'sticky',top:0,background:T.bgSurface,zIndex:1}}>{cat}</div>
+                {tags.map(td=>{
+                  const isSel = selTagId===td.id;
+                  const cc = CAT_COLORS[td.category]||CAT_COLORS.custom;
+                  const conflicts = syncConflicts(td.id);
+                  const cnt = assetCount(td.id);
                   return (
-                    <React.Fragment key={td.id}>
-                      <tr
-                        className="row-hover"
-                        style={{borderBottom:`1px solid ${T.border}`,background:isFlash?T.green+'18':'transparent',transition:'background 0.5s'}}
-                        onClick={()=>!isEditing&&startEdit(td)}
-                      >
-                        <td style={{padding:'9px 10px'}}>
-                          <div style={{display:'flex',alignItems:'center',gap:5}}>
-                            {td.governanceRequired&&<span style={{color:T.accent,fontSize:10}} title="Governance required">🛡</span>}
-                            <TagPill tagDef={td} size='md'/>
-                          </div>
-                        </td>
-                        <td style={{padding:'9px 10px'}}>
-                          <span style={{fontSize:10,padding:'2px 8px',borderRadius:4,background:catColors[td.category]?.bg,color:catColors[td.category]?.color,fontWeight:500,textTransform:'capitalize'}}>{td.category}</span>
-                        </td>
-                        <td style={{padding:'9px 10px',maxWidth:200}}>
-                          <div style={{fontSize:12,color:T.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.description}</div>
-                        </td>
-                        <td style={{padding:'9px 10px'}}>{propBadge(td.propagationMode,td.propagationLocked)}</td>
-                        <td style={{padding:'9px 10px'}}>
-                          {td.sourceAliases.length===0 ? <span style={{color:T.textMuted,fontSize:12}}>—</span> : (
-                            <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
-                              {td.sourceAliases.slice(0,2).map(a=>(
-                                <span key={a} style={{fontFamily:"'Geist Mono',monospace",fontSize:10,background:T.bgElevated,color:T.textSub,padding:'2px 6px',borderRadius:3}}>{a}</span>
-                              ))}
-                              {td.sourceAliases.length>2&&<span style={{fontSize:10,color:T.textMuted}}>+{td.sourceAliases.length-2}</span>}
-                            </div>
-                          )}
-                        </td>
-                        <td style={{padding:'9px 10px',fontSize:12,color:td.usageCount>0?T.textSub:T.textMuted}}>{td.usageCount>0?`${td.usageCount} assets`:'—'}</td>
-                        <td style={{padding:'9px 10px',fontSize:12,color:T.textSub}}>{td.managedBy||'—'}</td>
-                        <td style={{padding:'9px 10px'}}>
-                          <button onClick={e=>{e.stopPropagation();startEdit(td);}} style={{fontSize:11.5,color:T.textSub,background:'none',border:'none',cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.color=T.accent} onMouseLeave={e=>e.currentTarget.style.color=T.textSub}>Edit</button>
-                        </td>
-                      </tr>
-                      {isEditing&&editDraft&&(
-                        <tr><td colSpan={8} style={{padding:0}}>
-                          <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,padding:16,margin:'0 0 2px 0'}}>
-                            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
-                              <div>
-                                <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:'0.06em'}}>Name</div>
-                                <input value={editDraft.name} onChange={e=>setEditDraft(d=>({...d,name:e.target.value}))} disabled={td.category==='sensitivity'||td.category==='regulatory'} style={{width:'100%',padding:'6px 9px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,fontSize:12,outline:'none',opacity:(td.category==='sensitivity'||td.category==='regulatory')?0.5:1}}/>
-                              </div>
-                              <div>
-                                <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:'0.06em'}}>Managed by</div>
-                                <input value={editDraft.managedBy||''} onChange={e=>setEditDraft(d=>({...d,managedBy:e.target.value}))} style={{width:'100%',padding:'6px 9px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,fontSize:12,outline:'none'}}/>
-                              </div>
-                            </div>
-                            <div style={{marginBottom:14}}>
-                              <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:'0.06em'}}>Description</div>
-                              <textarea value={editDraft.description} onChange={e=>setEditDraft(d=>({...d,description:e.target.value}))} rows={2} style={{width:'100%',padding:'6px 9px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,fontSize:12,outline:'none',resize:'vertical'}}/>
-                            </div>
-                            <div style={{marginBottom:14}}>
-                              <div style={{fontSize:10.5,color:T.textMuted,marginBottom:8,textTransform:'uppercase',letterSpacing:'0.06em'}}>Propagation mode</div>
-                              {td.propagationLocked ? (
-                                <div style={{fontSize:12,color:T.textMuted}}>{editDraft.propagationMode} — <em style={{fontSize:11}}>Locked by admin</em></div>
-                              ) : (
-                                <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                                  {[['none','None — Applies to this asset only'],['hierarchy','Hierarchy — Flows down catalog tree (schema → table → column)'],['lineage','Lineage — Flows downstream via data lineage graph'],['both','H + L — Maximum coverage — hierarchy and lineage combined']].map(([v,label])=>(
-                                    <label key={v} style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:T.textSub,cursor:'pointer'}}>
-                                      <input type="radio" name="propMode" value={v} checked={editDraft.propagationMode===v} onChange={()=>setEditDraft(d=>({...d,propagationMode:v}))} style={{accentColor:T.accent}}/>
-                                      {label}
-                                    </label>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                            <div style={{marginBottom:14,display:'flex',alignItems:'center',gap:10}}>
-                              <div style={{fontSize:10.5,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.06em'}}>Governance required</div>
-                              <input type="checkbox" checked={editDraft.governanceRequired} onChange={e=>setEditDraft(d=>({...d,governanceRequired:e.target.checked}))} style={{accentColor:T.accent,width:14,height:14}}/>
-                            </div>
-                            {/* Source aliases */}
-                            <div style={{marginBottom:16}}>
-                              <div style={{fontSize:10.5,color:T.textMuted,marginBottom:6,textTransform:'uppercase',letterSpacing:'0.06em'}}>Source aliases</div>
-                              <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
-                                {editDraft.sourceAliases.map(a=>(
-                                  <span key={a} style={{fontFamily:"'Geist Mono',monospace",fontSize:10,background:T.bgSurface,color:T.textSub,border:`1px solid ${T.border}`,padding:'2px 8px',borderRadius:3,display:'inline-flex',alignItems:'center',gap:4}}>
-                                    {a}<span onClick={()=>setEditDraft(d=>({...d,sourceAliases:d.sourceAliases.filter(x=>x!==a)}))} style={{cursor:'pointer',opacity:0.6,fontSize:11}}>×</span>
-                                  </span>
-                                ))}
-                              </div>
-                              <div style={{display:'flex',gap:6}}>
-                                <input value={aliasInput} onChange={e=>setAliasInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&aliasInput.trim()){setEditDraft(d=>({...d,sourceAliases:[...d.sourceAliases,aliasInput.trim()]}));setAliasInput('');}}} placeholder="Add alias…" style={{flex:1,padding:'5px 8px',borderRadius:5,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,fontSize:11,outline:'none'}}/>
-                                <button onClick={()=>{if(aliasInput.trim()){setEditDraft(d=>({...d,sourceAliases:[...d.sourceAliases,aliasInput.trim()]}));setAliasInput('');}}} style={{padding:'5px 12px',borderRadius:5,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11,cursor:'pointer'}}>Add</button>
-                              </div>
-                              <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>Source tag names that map to this EDG tag. Used for deduplication and reverse sync.</div>
-                            </div>
-                            <div style={{display:'flex',gap:8}}>
-                              <button onClick={saveEdit} style={{padding:'6px 16px',background:T.accent,color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer'}}>Save changes</button>
-                              <button onClick={()=>setEditingId(null)} style={{padding:'6px 16px',background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,borderRadius:6,fontSize:12,cursor:'pointer'}}>Cancel</button>
-                            </div>
-                          </div>
-                        </td></tr>
-                      )}
-                    </React.Fragment>
+                    <button key={td.id} onClick={()=>{setSelTagId(td.id);setDetailTab('overview');setEditing(false);setEditDraft(null);}}
+                      style={{width:'100%',display:'flex',alignItems:'center',gap:9,padding:'8px 14px',background:isSel?T.accentDim:'transparent',border:'none',borderLeft:`2px solid ${isSel?T.accent:'transparent'}`,cursor:'pointer',transition:'background .1s',textAlign:'left'}}
+                      onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background='transparent';}}>
+                      <span style={{width:8,height:8,borderRadius:'50%',background:td.color,flexShrink:0,display:'block'}}/>
+                      <span style={{flex:1,fontSize:12.5,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
+                      {conflicts>0&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:99,background:T.roseDim,color:T.rose,border:`1px solid ${T.rose}33`}}>{conflicts}</span>}
+                      <span style={{fontSize:10,color:T.textMuted,flexShrink:0,fontFamily:"'Geist Mono',monospace"}}>{cnt}</span>
+                    </button>
                   );
                 })}
-              </tbody>
-            </table>
-
-            {/* New tag slide-in panel */}
-            {newPanelOpen&&(
-              <div style={{position:'fixed',top:0,right:0,width:320,height:'100vh',background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:200,display:'flex',flexDirection:'column',boxShadow:'-4px 0 24px rgba(0,0,0,0.3)',overflowY:'auto'}}>
-                <div style={{padding:16,borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                  <div style={{fontSize:13,fontWeight:700,color:T.text}}>New tag</div>
-                  <button onClick={()=>setNewPanelOpen(false)} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',fontSize:16}}>×</button>
-                </div>
-                <div style={{padding:16,flex:1,display:'flex',flexDirection:'column',gap:12}}>
-                  <div>
-                    <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:'0.06em'}}>Name</div>
-                    <input value={newDraft.name} onChange={e=>setNewDraft(d=>({...d,name:e.target.value}))} placeholder="e.g. Internal only" style={{width:'100%',padding:'7px 10px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,outline:'none'}}/>
-                  </div>
-                  <div>
-                    <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:'0.06em'}}>Category</div>
-                    <select value={newDraft.category} onChange={e=>{const c=e.target.value;setNewDraft(d=>({...d,category:c,...catDefaults[c]}));}} style={{width:'100%',padding:'7px 10px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,outline:'none'}}>
-                      <option value="sensitivity">Sensitivity</option>
-                      <option value="regulatory">Regulatory</option>
-                      <option value="business">Business</option>
-                      <option value="custom">Custom</option>
-                    </select>
-                  </div>
-                  <div>
-                    <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:'0.06em'}}>Description</div>
-                    <textarea value={newDraft.description} onChange={e=>setNewDraft(d=>({...d,description:e.target.value}))} rows={3} style={{width:'100%',padding:'7px 10px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,outline:'none',resize:'vertical'}}/>
-                  </div>
-                  <div>
-                    <div style={{fontSize:10.5,color:T.textMuted,marginBottom:6,textTransform:'uppercase',letterSpacing:'0.06em'}}>Propagation mode</div>
-                    {[['none','None — This asset only'],['hierarchy','Hierarchy — Schema children'],['lineage','Lineage — Downstream assets'],['both','H + L — Maximum coverage']].map(([v,l])=>(
-                      <label key={v} style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:T.textSub,cursor:'pointer',marginBottom:6}}>
-                        <input type="radio" name="newPropMode" value={v} checked={newDraft.propagationMode===v} onChange={()=>setNewDraft(d=>({...d,propagationMode:v}))} style={{accentColor:T.accent}}/>
-                        {l}
-                      </label>
-                    ))}
-                  </div>
-                  <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:T.textSub,cursor:'pointer'}}>
-                    <input type="checkbox" checked={newDraft.governanceRequired} onChange={e=>setNewDraft(d=>({...d,governanceRequired:e.target.checked}))} style={{accentColor:T.accent,width:14,height:14}}/>
-                    Governance required
-                    <span style={{fontSize:10.5,color:T.textMuted}}>— needs steward approval</span>
-                  </label>
-                  <div>
-                    <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:'0.06em'}}>Managed by</div>
-                    <input value={newDraft.managedBy} onChange={e=>setNewDraft(d=>({...d,managedBy:e.target.value}))} style={{width:'100%',padding:'7px 10px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,outline:'none'}}/>
-                  </div>
-                  <div style={{marginTop:'auto',paddingTop:12}}>
-                    <button onClick={handleCreate} style={{width:'100%',padding:'9px',background:T.accent,color:'#fff',border:'none',borderRadius:6,fontSize:13,fontWeight:600,cursor:'pointer'}}>Create tag</button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── SYNC STATUS TAB ── */}
-        {subTab==='sync'&&(
-          <div>
-            {/* Summary cards */}
-            <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:24}}>
-              {[
-                {label:'Synced tags',  value:syncedCount,    color:T.text},
-                {label:'Conflicts',    value:conflictCount,  color:conflictCount>0?T.rose:T.textSub},
-                {label:'Unmapped',     value:unmappedCount,  color:unmappedCount>0?T.amber:T.textSub},
-                {label:'Last sync',    value:lastSyncStr,    color:T.textSub},
-              ].map(s=>(
-                <div key={s.label} style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,padding:'10px 12px'}}>
-                  <div style={{fontSize:10,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:'0.06em'}}>{s.label}</div>
-                  <div style={{fontSize:20,fontWeight:700,color:s.color,fontFamily:"'Geist Mono',monospace"}}>{s.value}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Connector table */}
-            <table style={{width:'100%',borderCollapse:'collapse'}}>
-              <thead>
-                <tr style={{borderBottom:`1px solid ${T.border}`}}>
-                  {['Connector','Status','Last sync','New tags','Conflicts','Pull','Push','Configure'].map(h=>(
-                    <th key={h} style={{padding:'7px 10px',textAlign:'left',fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.06em'}}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {Object.values(connectorConfigs).map(cfg=>{
-                  const statusMap = {success:{color:T.green,dot:'●',label:'Success'},partial:{color:T.amber,dot:'●',label:'Partial'},failed:{color:T.rose,dot:'●',label:'Failed'},null:{color:T.textMuted,dot:'○',label:'Never'}};
-                  const s = statusMap[cfg.lastSyncStatus]||statusMap.null;
-                  const Toggle = ({on,onChange})=>(
-                    <div onClick={onChange} style={{width:32,height:18,borderRadius:10,background:on?T.accent:T.border,position:'relative',cursor:'pointer',transition:'background .2s',flexShrink:0}}>
-                      <div style={{position:'absolute',top:3,left:on?14:3,width:12,height:12,borderRadius:'50%',background:'#fff',transition:'left .2s'}}/>
-                    </div>
-                  );
-                  return (
-                    <tr key={cfg.connectorId} style={{borderBottom:`1px solid ${T.border}`}}>
-                      <td style={{padding:'10px 10px'}}>
-                        <div style={{display:'flex',alignItems:'center',gap:6}}>
-                          <ServiceIcon service={cfg.connectorId} size={16}/>
-                          <span style={{fontSize:12.5,fontWeight:500,textTransform:'capitalize',color:T.text}}>{cfg.connectorId}</span>
-                        </div>
-                      </td>
-                      <td style={{padding:'10px 10px'}}><span style={{fontSize:11.5,color:s.color}}>{s.dot} {s.label}</span></td>
-                      <td style={{padding:'10px 10px',fontSize:11.5,color:T.textMuted}}>{cfg.lastSyncAt?'2h ago':'—'}</td>
-                      <td style={{padding:'10px 10px'}}><span style={{fontSize:11.5,color:cfg.lastSyncNewTags>0?T.amber:T.textMuted}}>{cfg.lastSyncNewTags>0?`+${cfg.lastSyncNewTags}`:cfg.lastSyncNewTags}</span></td>
-                      <td style={{padding:'10px 10px'}}><span style={{fontSize:11.5,color:cfg.lastSyncConflicts>0?T.rose:T.textMuted}}>{cfg.lastSyncConflicts}</span></td>
-                      <td style={{padding:'10px 10px'}}><Toggle on={cfg.syncEnabled} onChange={()=>updateConnectorConfig(cfg.connectorId,{syncEnabled:!cfg.syncEnabled})}/></td>
-                      <td style={{padding:'10px 10px'}}><Toggle on={cfg.reverseSyncEnabled} onChange={()=>updateConnectorConfig(cfg.connectorId,{reverseSyncEnabled:!cfg.reverseSyncEnabled})}/></td>
-                      <td style={{padding:'10px 10px'}}><button onClick={()=>navigate('settings')} style={{fontSize:11.5,color:T.accent,background:'none',border:'none',cursor:'pointer'}}>Configure →</button></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* ── ACTIVITY LOG TAB ── */}
-        {subTab==='activity'&&(
-          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,overflow:'hidden'}}>
-            {activityLog.map((entry,i)=>(
-              <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',borderBottom:i<activityLog.length-1?`1px solid ${T.border}`:'none'}}>
-                <span style={{fontSize:13,color:entry.color,flexShrink:0,width:16,textAlign:'center'}}>{entry.icon}</span>
-                <div style={{flex:1,fontSize:12,color:T.textSub}}>{entry.msg} <span style={{fontFamily:"'Geist Mono',monospace",background:T.bgElevated,color:T.text,padding:'1px 6px',borderRadius:3,fontSize:11}}>{entry.asset}</span></div>
-                <span style={{fontSize:11,color:T.textMuted,flexShrink:0,whiteSpace:'nowrap'}}>{entry.time}</span>
               </div>
             ))}
           </div>
-        )}
+        </div>
+
+        {/* ── RIGHT: Tag detail or empty state ── */}
+        <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',background:T.bg}}>
+          {!selTag&&!newPanelOpen&&(
+            <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:12,color:T.textMuted}}>
+              <div style={{opacity:.2}}>{Ic.tag(48)}</div>
+              <div style={{fontSize:14,fontWeight:600,color:T.textSub}}>Select a tag to view details</div>
+              <div style={{fontSize:12,color:T.textMuted}}>or create a new one</div>
+              <button onClick={()=>setNewPanelOpen(true)} style={{marginTop:4,padding:'7px 18px',borderRadius:8,background:T.accent,border:'none',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ New Tag</button>
+            </div>
+          )}
+
+          {/* ── New Tag panel ── */}
+          {newPanelOpen&&(
+            <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+              <div style={{padding:'14px 24px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0,background:T.bgSurface}}>
+                <span style={{fontSize:15,fontWeight:700,color:T.text}}>New Tag</span>
+                <button onClick={()=>setNewPanelOpen(false)} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',fontSize:18,lineHeight:1}}>×</button>
+              </div>
+              <div style={{flex:1,overflowY:'auto',padding:'24px'}}>
+                <div style={{maxWidth:520,display:'flex',flexDirection:'column',gap:16}}>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                    <div>
+                      <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Tag Name <span style={{color:T.rose}}>*</span></label>
+                      <Input2 placeholder="e.g. Internal Use Only" value={newDraft.name} onChange={e=>setNewDraft(d=>({...d,name:e.target.value}))}/>
+                    </div>
+                    <div>
+                      <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Category</label>
+                      <select value={newDraft.category} onChange={e=>setNewDraft(d=>({...d,category:e.target.value}))} style={{width:'100%',padding:'7px 10px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:'none'}}>
+                        {['sensitivity','regulatory','business','custom'].map(c=><option key={c} value={c} style={{textTransform:'capitalize'}}>{c.charAt(0).toUpperCase()+c.slice(1)}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Description</label>
+                    <textarea value={newDraft.description} onChange={e=>setNewDraft(d=>({...d,description:e.target.value}))} rows={3} style={{width:'100%',padding:'8px 10px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:'none',resize:'vertical',boxSizing:'border-box',fontFamily:'inherit'}} placeholder="Describe when this tag should be applied…"/>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                    <div>
+                      <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Propagation</label>
+                      <select value={newDraft.propagationMode} onChange={e=>setNewDraft(d=>({...d,propagationMode:e.target.value}))} style={{width:'100%',padding:'7px 10px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:'none'}}>
+                        {Object.entries(PROP_LABELS).map(([v,l])=><option key={v} value={v}>{l}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Color</label>
+                      <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                        {['#ee2424','#d97706','#16a34a','#2563eb','#7c3aed','#6366f1','#0891b2','#6b7280'].map(c=>(
+                          <button key={c} onClick={()=>setNewDraft(d=>({...d,color:c}))} style={{width:22,height:22,borderRadius:'50%',background:c,border:newDraft.color===c?`2px solid ${T.text}`:'2px solid transparent',cursor:'pointer'}}/>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Steward</label>
+                    <select value={newDraft.managedBy} onChange={e=>setNewDraft(d=>({...d,managedBy:e.target.value}))} style={{width:'100%',padding:'7px 10px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:newDraft.managedBy?T.text:T.textMuted,fontSize:12,outline:'none'}}>
+                      <option value="">Unassigned</option>
+                      {TEAMS_DATA.filter(u=>u.status==='Active').map(u=><option key={u.id} value={u.name}>{u.name} — {u.role}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Source Aliases <span style={{fontWeight:400,color:T.textMuted}}>(optional)</span></label>
+                    <div style={{display:'flex',gap:6,marginBottom:6}}>
+                      <Input2 placeholder="Add alias…" value={newAlias} onChange={e=>setNewAlias(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&newAlias.trim()){setNewDraft(d=>({...d,sourceAliases:[...d.sourceAliases,newAlias.trim()]}));setNewAlias('');}}}/>
+                      <button onClick={()=>{if(newAlias.trim()){setNewDraft(d=>({...d,sourceAliases:[...d.sourceAliases,newAlias.trim()]}));setNewAlias('');}}} style={{padding:'0 12px',borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:'pointer',flexShrink:0}}>Add</button>
+                    </div>
+                    {newDraft.sourceAliases.length>0&&<div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+                      {newDraft.sourceAliases.map((a,i)=>(
+                        <span key={i} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,padding:'2px 8px',borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>
+                          {a}<button onClick={()=>setNewDraft(d=>({...d,sourceAliases:d.sourceAliases.filter((_,j)=>j!==i)}))} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',padding:0,fontSize:12,lineHeight:1}}>×</button>
+                        </span>
+                      ))}
+                    </div>}
+                  </div>
+                  <div style={{display:'flex',gap:8,paddingTop:4}}>
+                    <button onClick={addNewTag} disabled={!newDraft.name.trim()} style={{padding:'8px 20px',borderRadius:8,background:newDraft.name.trim()?T.accent:'rgba(100,100,120,.3)',border:'none',color:'#fff',fontSize:12.5,fontWeight:700,cursor:newDraft.name.trim()?'pointer':'default'}}>Create Tag</button>
+                    <button onClick={()=>setNewPanelOpen(false)} style={{padding:'8px 16px',borderRadius:8,background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:'pointer'}}>Cancel</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Tag detail panel ── */}
+          {selTag&&!newPanelOpen&&(()=>{
+            const cc = CAT_COLORS[selTag.category]||CAT_COLORS.custom;
+            const draft = editing ? editDraft : selTag;
+            const affectedAssets = ASSETS.filter(a=>Object.values(assignments).flat().some(asn=>asn.tagId===selTag.id&&asn.status!=='rejected'&&(asn.assetId===a.id||asn.assetName===a.name)));
+            return (
+              <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+                {/* Detail header */}
+                <div style={{padding:'16px 24px',borderBottom:`1px solid ${T.border}`,background:T.bgSurface,flexShrink:0}}>
+                  <div style={{display:'flex',alignItems:'center',gap:12}}>
+                    <span style={{width:12,height:12,borderRadius:'50%',background:selTag.color,flexShrink:0,display:'block',boxShadow:`0 0 0 3px ${selTag.color}33`}}/>
+                    <div style={{flex:1}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8}}>
+                        <span style={{fontSize:17,fontWeight:700,color:T.text}}>{selTag.name}</span>
+                        <span style={{fontSize:11,padding:'2px 9px',borderRadius:99,background:cc.bg,color:cc.color,fontWeight:600,textTransform:'capitalize'}}>{selTag.category}</span>
+                        {selTag.propagationLocked&&<span style={{fontSize:11,color:T.textMuted}}>🔒 Locked</span>}
+                      </div>
+                      <div style={{fontSize:12,color:T.textMuted,marginTop:3}}>{selTag.description||<span style={{fontStyle:'italic'}}>No description</span>}</div>
+                    </div>
+                    <div style={{display:'flex',gap:6,flexShrink:0}}>
+                      {!editing
+                        ? <button onClick={startEdit} style={{padding:'6px 14px',borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:'pointer',fontWeight:500}} onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>Edit</button>
+                        : <>
+                          <button onClick={saveEdit} style={{padding:'6px 14px',borderRadius:7,background:T.accent,border:'none',color:'#fff',fontSize:12,cursor:'pointer',fontWeight:600}}>{flashSaved?'Saved ✓':'Save'}</button>
+                          <button onClick={cancelEdit} style={{padding:'6px 12px',borderRadius:7,background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:'pointer'}}>Cancel</button>
+                        </>
+                      }
+                    </div>
+                  </div>
+                  {/* Sub-tabs */}
+                  <div style={{display:'flex',gap:0,marginTop:14,marginLeft:-24,marginRight:-24,paddingLeft:24,borderTop:`1px solid ${T.border}`}}>
+                    {['overview','sync','activity'].map(t=>(
+                      <button key={t} onClick={()=>setDetailTab(t)} style={{padding:'8px 16px',background:'none',border:'none',borderBottom:`2px solid ${detailTab===t?T.accent:'transparent'}`,color:detailTab===t?T.text:T.textMuted,fontSize:12.5,fontWeight:detailTab===t?600:400,cursor:'pointer',marginBottom:-1,transition:'all .12s',textTransform:'capitalize'}}>
+                        {t==='sync'?'Sync Status':t==='activity'?'Activity Log':'Overview'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tab content */}
+                <div style={{flex:1,overflowY:'auto',padding:'24px'}}>
+
+                  {/* ── OVERVIEW TAB ── */}
+                  {detailTab==='overview'&&(
+                    <div style={{maxWidth:680,display:'flex',flexDirection:'column',gap:20}}>
+                      {/* Core fields */}
+                      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
+                        <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.border}`,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Tag Definition</div>
+                        <div style={{padding:'4px 0'}}>
+                          {[
+                            {l:'Name', v: editing
+                              ? <Input2 value={draft.name} onChange={e=>setEditDraft(d=>({...d,name:e.target.value}))} style={{maxWidth:260}}/>
+                              : <span style={{fontWeight:600,color:T.text}}>{draft.name}</span>},
+                            {l:'Category', v: editing
+                              ? <select value={draft.category} onChange={e=>setEditDraft(d=>({...d,category:e.target.value}))} style={{padding:'5px 10px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:'none'}}>
+                                  {['sensitivity','regulatory','business','custom'].map(c=><option key={c} value={c}>{c}</option>)}
+                                </select>
+                              : <span style={{fontSize:11,padding:'2px 9px',borderRadius:99,background:cc.bg,color:cc.color,fontWeight:600,textTransform:'capitalize'}}>{draft.category}</span>},
+                            {l:'Description', v: editing
+                              ? <textarea value={draft.description||''} onChange={e=>setEditDraft(d=>({...d,description:e.target.value}))} rows={2} style={{width:'100%',padding:'6px 8px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:'none',resize:'vertical',fontFamily:'inherit',maxWidth:380,boxSizing:'border-box'}}/>
+                              : <span style={{color:T.textSub,fontSize:12}}>{draft.description||<em style={{color:T.textMuted}}>—</em>}</span>},
+                            {l:'Propagation', v: editing
+                              ? <select value={draft.propagationMode} onChange={e=>setEditDraft(d=>({...d,propagationMode:e.target.value}))} style={{padding:'5px 10px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:'none'}}>
+                                  {Object.entries(PROP_LABELS).map(([v,l])=><option key={v} value={v}>{l}</option>)}
+                                </select>
+                              : <span style={{fontSize:12,color:PROP_COLORS[draft.propagationMode]||T.textMuted,fontWeight:500}}>{PROP_LABELS[draft.propagationMode]||'—'}</span>},
+                            {l:'Governance Required', v: editing
+                              ? <input type="checkbox" checked={!!draft.governanceRequired} onChange={e=>setEditDraft(d=>({...d,governanceRequired:e.target.checked}))} style={{width:14,height:14,cursor:'pointer'}}/>
+                              : <span style={{fontSize:12,color:draft.governanceRequired?T.accent:T.textMuted,fontWeight:500}}>{draft.governanceRequired?'Yes':'No'}</span>},
+                            {l:'Color', v: editing
+                              ? <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                                  {['#ee2424','#d97706','#16a34a','#2563eb','#7c3aed','#6366f1','#0891b2','#6b7280'].map(c=>(
+                                    <button key={c} onClick={()=>setEditDraft(d=>({...d,color:c}))} style={{width:20,height:20,borderRadius:'50%',background:c,border:draft.color===c?`2px solid ${T.text}`:'2px solid transparent',cursor:'pointer'}}/>
+                                  ))}
+                                </div>
+                              : <span style={{display:'inline-flex',alignItems:'center',gap:6}}><span style={{width:12,height:12,borderRadius:'50%',background:draft.color,display:'block'}}/><span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{draft.color}</span></span>},
+                          ].map(({l,v})=>(
+                            <div key={l} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 16px',borderBottom:`1px solid ${T.border}`}}>
+                              <span style={{width:140,fontSize:12,color:T.textMuted,flexShrink:0}}>{l}</span>
+                              <div style={{flex:1}}>{v}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Steward assignment */}
+                      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
+                        <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.border}`,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Steward</div>
+                        <div style={{padding:'14px 16px',display:'flex',alignItems:'center',gap:12}}>
+                          {editing
+                            ? <select value={draft.managedBy||''} onChange={e=>setEditDraft(d=>({...d,managedBy:e.target.value}))} style={{flex:1,padding:'7px 10px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:draft.managedBy?T.text:T.textMuted,fontSize:12.5,outline:'none'}}>
+                                <option value="">Unassigned</option>
+                                {TEAMS_DATA.filter(u=>u.status==='Active').map(u=><option key={u.id} value={u.name}>{u.name} — {u.role}</option>)}
+                              </select>
+                            : draft.managedBy
+                              ? (()=>{
+                                  const member = TEAMS_DATA.find(u=>u.name===draft.managedBy||u.name.toLowerCase().includes(draft.managedBy?.toLowerCase()||''));
+                                  return (
+                                    <div style={{display:'flex',alignItems:'center',gap:10}}>
+                                      <div style={{width:32,height:32,borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}33`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,color:T.accent,flexShrink:0}}>
+                                        {(member?.name||draft.managedBy).split(' ').map(s=>s[0]).join('').slice(0,2).toUpperCase()}
+                                      </div>
+                                      <div>
+                                        <div style={{fontSize:13,fontWeight:600,color:T.text}}>{member?.name||draft.managedBy}</div>
+                                        <div style={{fontSize:11,color:T.textMuted}}>{member?.role||'Data Steward'} · {member?.team||''}</div>
+                                      </div>
+                                    </div>
+                                  );
+                                })()
+                              : <div style={{display:'flex',alignItems:'center',gap:8}}>
+                                  <div style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px dashed ${T.border}`,display:'flex',alignItems:'center',justifyContent:'center',color:T.textMuted}}>
+                                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="6" r="3" stroke="currentColor" strokeWidth="1.3"/><path d="M3 14c0-2.8 2.2-5 5-5s5 2.2 5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                                  </div>
+                                  <div>
+                                    <div style={{fontSize:12.5,color:T.amber,fontWeight:600}}>Unassigned</div>
+                                    <div style={{fontSize:11,color:T.textMuted}}>No steward — tag is ungoverned</div>
+                                  </div>
+                                </div>
+                          }
+                          {!editing&&<button onClick={startEdit} style={{marginLeft:'auto',fontSize:11,color:T.accent,background:'none',border:'none',cursor:'pointer',padding:0}} onMouseEnter={e=>e.currentTarget.style.opacity='.7'} onMouseLeave={e=>e.currentTarget.style.opacity='1'}>Reassign</button>}
+                        </div>
+                      </div>
+
+                      {/* Source aliases */}
+                      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
+                        <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.border}`,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Source Aliases</div>
+                        <div style={{padding:'12px 16px'}}>
+                          {(draft.sourceAliases||[]).length>0
+                            ? <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:editing?10:0}}>
+                                {(draft.sourceAliases||[]).map((a,i)=>(
+                                  <span key={i} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11.5,padding:'3px 9px',borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>
+                                    {a}
+                                    {editing&&<button onClick={()=>setEditDraft(d=>({...d,sourceAliases:d.sourceAliases.filter((_,j)=>j!==i)}))} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',padding:0,fontSize:12,lineHeight:1}}>×</button>}
+                                  </span>
+                                ))}
+                              </div>
+                            : <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No aliases defined</span>}
+                          {editing&&<div style={{display:'flex',gap:6,marginTop:8}}>
+                            <Input2 placeholder="Add alias…" value={aliasInput} onChange={e=>setAliasInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&aliasInput.trim()){setEditDraft(d=>({...d,sourceAliases:[...(d.sourceAliases||[]),aliasInput.trim()]}));setAliasInput('');}}}/>
+                            <button onClick={()=>{if(aliasInput.trim()){setEditDraft(d=>({...d,sourceAliases:[...(d.sourceAliases||[]),aliasInput.trim()]}));setAliasInput('');}}} style={{padding:'0 12px',borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:'pointer',flexShrink:0}}>Add</button>
+                          </div>}
+                        </div>
+                      </div>
+
+                      {/* Applied to assets */}
+                      {affectedAssets.length>0&&(
+                        <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
+                          <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                            <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Applied To</span>
+                            <span style={{fontSize:11,color:T.accent,fontWeight:600}}>{affectedAssets.length} asset{affectedAssets.length!==1?'s':''}</span>
+                          </div>
+                          {affectedAssets.slice(0,5).map((a,i)=>(
+                            <div key={a.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 16px',borderBottom:i<Math.min(affectedAssets.length,5)-1?`1px solid ${T.border}`:'none'}}>
+                              <ServiceIcon service={a.service} size={16}/>
+                              <span style={{flex:1,fontSize:12.5,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{a.name}</span>
+                              <TypeBadge type={a.type}/>
+                              <span style={{fontSize:11,color:T.textMuted}}>{a.domain}</span>
+                            </div>
+                          ))}
+                          {affectedAssets.length>5&&<div style={{padding:'8px 16px',fontSize:11,color:T.textMuted,fontStyle:'italic'}}>+{affectedAssets.length-5} more assets</div>}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── SYNC STATUS TAB ── */}
+                  {detailTab==='sync'&&(
+                    <div style={{maxWidth:680}}>
+                      {tagSyncRows.length===0
+                        ? <div style={{padding:'48px 0',textAlign:'center',color:T.textMuted,fontSize:13}}>
+                            <div style={{fontSize:28,marginBottom:8,opacity:.3}}>⇄</div>
+                            No connector mappings for this tag yet.<br/>
+                            <button onClick={()=>navigate('integrations')} style={{marginTop:10,fontSize:12,color:T.accent,background:'none',border:'none',cursor:'pointer',fontWeight:500}}>Configure in Integrations →</button>
+                          </div>
+                        : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
+                            <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.border}`,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Connector Mappings</div>
+                            {tagSyncRows.map(({connId,cfg,m},i)=>(
+                              <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderBottom:i<tagSyncRows.length-1?`1px solid ${T.border}`:'none'}}>
+                                <ServiceIcon service={connId} size={20}/>
+                                <div style={{flex:1}}>
+                                  <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{connId.charAt(0).toUpperCase()+connId.slice(1)}</div>
+                                  <div style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{m.sourceTagName}</div>
+                                </div>
+                                <span style={{fontSize:11,padding:'2px 8px',borderRadius:4,background:m.status==='ambiguous'?T.amberDim:m.status==='unmapped'?T.bgElevated:'rgba(22,163,74,.12)',color:m.status==='ambiguous'?T.amber:m.status==='unmapped'?T.textMuted:'#16a34a',fontWeight:500}}>{m.status==='ambiguous'?'⚠ Ambiguous':m.status==='unmapped'?'Unmapped':'✓ Mapped'}</span>
+                              </div>
+                            ))}
+                          </div>
+                      }
+                    </div>
+                  )}
+
+                  {/* ── ACTIVITY LOG TAB ── */}
+                  {detailTab==='activity'&&(
+                    <div style={{maxWidth:680}}>
+                      {tagActivity.length===0
+                        ? <div style={{padding:'48px 0',textAlign:'center',color:T.textMuted,fontSize:13}}>No activity recorded for this tag.</div>
+                        : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
+                            {tagActivity.map((entry,i)=>(
+                              <div key={i} style={{display:'flex',alignItems:'flex-start',gap:12,padding:'12px 16px',borderBottom:i<tagActivity.length-1?`1px solid ${T.border}`:'none'}}>
+                                <span style={{width:6,height:6,borderRadius:'50%',background:entry.resolved?T.textMuted:T.accent,marginTop:4,flexShrink:0,display:'block'}}/>
+                                <div style={{flex:1}}>
+                                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
+                                    <span style={{fontSize:12.5,fontWeight:500,color:T.text}}>{entry.action}</span>
+                                    <span style={{fontSize:11,color:T.textMuted,flexShrink:0,fontFamily:"'Geist Mono',monospace"}}>{entry.date}</span>
+                                  </div>
+                                  {entry.detail&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{entry.detail}</div>}
+                                  <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>by {entry.by}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                      }
+                    </div>
+                  )}
+
+                </div>
+              </div>
+            );
+          })()}
+        </div>
       </div>
     </div>
   );
 };
+
 
 // ─────────────────────────────────────────────
 // STEWARD INBOX VIEW — Surface 2
