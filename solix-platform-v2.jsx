@@ -2677,7 +2677,7 @@ const NotificationsPanel = ({onClose}) => {
                 <span style={{width:6,height:6,borderRadius:"50%",background:T.violet,display:"block"}}/>
                 <span style={{color:T.textSub}}>{pending} pending</span>
               </div>}
-              <button onClick={()=>{onNav("steward-inbox");onClose();}} style={{fontSize:10.5,color:T.accent,background:"none",border:"none",cursor:"pointer",marginLeft:"auto",fontWeight:500,padding:0}}>View →</button>
+              <button onClick={()=>{onNav("stewardship");onClose();}} style={{fontSize:10.5,color:T.accent,background:"none",border:"none",cursor:"pointer",marginLeft:"auto",fontWeight:500,padding:0}}>View →</button>
             </div>}
           </div>
         );
@@ -3090,6 +3090,7 @@ const GROUPS = [
   {section:"Workspace",items:[
     {key:"home",           icon:"home",          label:"Home"},
     {key:"search",         icon:"search",        label:"Search"},
+    {key:"stewardship",    icon:"steward",       label:"My Workspace",  badge:true},
   ]},
   {section:"Catalog",items:[
     {key:"catalog",        icon:"catalog",       label:"Data Catalog"},
@@ -3101,9 +3102,7 @@ const GROUPS = [
     {key:"policymanager",  icon:"policies",      label:"Policy Manager"},
     {key:"access",         icon:"access",        label:"Access Governance"},
     {key:"certifications", icon:"cert",          label:"Certifications"},
-    {key:"stewardship",    icon:"steward",       label:"Stewardship"},
     {key:"tags",           icon:"tag",           label:"Tag Management"},
-    {key:"steward-inbox",  icon:"inbox",         label:"Steward Inbox", badge:true},
   ]},
   {section:"Knowledge",items:[
     {key:"glossary",       icon:"glossary",      label:"Business Glossary"},
@@ -3119,7 +3118,7 @@ const Sidebar = ({active, onNav, exp, setExp}) => {
   const {roleCfg} = useRole();
   const tagCtx = useTagCtx();
   const unresolvedCount = tagCtx?.unresolvedCount || 0;
-  const allowedNav = [...(roleCfg?.nav || ["home","search","catalog","lineage","quality","observability","contracts","policymanager","access","certifications","stewardship","glossary","domains","analytics","settings"]), "tags","steward-inbox"];
+  const allowedNav = [...(roleCfg?.nav || ["home","search","catalog","lineage","quality","observability","contracts","policymanager","access","certifications","stewardship","glossary","domains","analytics","settings"]), "tags"];
   return (
     <div style={{position:"fixed",top:0,left:0,height:"100vh",width:exp?EXPANDED_W:COLLAPSED_W,background:T.bgSurface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:100,transition:"width .2s ease",overflow:"hidden"}}>
       {/* Logo */}
@@ -5632,16 +5631,31 @@ const CertificationsView = ({onToast}) => {
   );
 };;
 
-const StewardshipView = ({onToast}) => {
+const StewardshipView = ({onToast, initialTab}) => {
   const tagCtx = useTagCtx();
   const onNav  = useNav();
-  const [tab,        setTab]       = useState("queue");
+  const [tab,        setTab]       = useState(initialTab || "inbox");
   const [tasks,      setTasks]     = useState(STEWARDSHIP_TASKS.map(t=>({...t})));
   const [filterP,    setFilterP]   = useState("All");
   const [filterType, setFilterType]= useState("All");
   const [selTask,    setSelTask]    = useState(null);
   const [newModal,   setNewModal]  = useState(false);
   const [form,       setForm]      = useState({type:"certification_review",asset:"",priority:"High",assigned:"maya.chen",dueDate:"2026-04-20"});
+
+  // ── Inbox tab state ──
+  const [inboxFilter,  setInboxFilter]  = useState('all');
+  const [resolvedIds,  setResolvedIds]  = useState([]);
+  const [rejectNote,   setRejectNote]   = useState({});
+  const [mapSelect,    setMapSelect]    = useState({});
+  const [showResolved, setShowResolved] = useState(false);
+  const inboxItems      = tagCtx?.inbox || [];
+  const inboxUnresolved = inboxItems.filter(i=>!i.resolvedAt);
+  const inboxResolved   = inboxItems.filter(i=>!!i.resolvedAt);
+  const inboxFiltered   = inboxFilter==='all' ? inboxUnresolved : inboxUnresolved.filter(i=>i.type===inboxFilter);
+  const doInboxResolve  = (itemId, resolution, note='') => {
+    setResolvedIds(prev=>[...prev,itemId]);
+    setTimeout(()=>{ tagCtx?.resolveInboxItem(itemId,resolution,note); setResolvedIds(prev=>prev.filter(x=>x!==itemId)); }, 320);
+  };
 
   const priorityOrder = {Critical:0,High:1,Medium:2,Low:3};
   const priorityColor = p=>p==="Critical"?"#e11d48":p==="High"?"#d97706":p==="Medium"?"#2563eb":"#6b7280";
@@ -5668,14 +5682,14 @@ const StewardshipView = ({onToast}) => {
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <Topbar breadcrumb={[{label:"Stewardship"}]}/>
+      <Topbar breadcrumb={[{label:"My Workspace"}]}/>
       {/* Header metrics */}
       <div style={{padding:"12px 28px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:20,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
         {[
-          {label:"Open Tasks",    value:activeTasks.length, color:T.textSub},
-          {label:"Critical",      value:criticalN,           color:"#e11d48"},
-          {label:"High Priority", value:highN,               color:"#d97706"},
-          {label:"SLA At Risk",   value:slaBreachN,          color:"#7c3aed"},
+          {label:"Inbox",         value:inboxUnresolved.length, color:inboxUnresolved.length>0?T.amber:T.green},
+          {label:"Open Tasks",    value:activeTasks.length,     color:T.textSub},
+          {label:"Critical",      value:criticalN,              color:"#e11d48"},
+          {label:"SLA At Risk",   value:slaBreachN,             color:"#7c3aed"},
         ].map(m=>(
           <div key={m.label} style={{display:"flex",alignItems:"center",gap:8,paddingRight:20,borderRight:`1px solid ${T.border}`}}>
             <span style={{fontSize:22,fontWeight:800,color:m.color,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{m.value}</span>
@@ -5683,15 +5697,117 @@ const StewardshipView = ({onToast}) => {
           </div>
         ))}
         <div style={{marginLeft:"auto",display:"flex",gap:8}}>
-          <Btn small ghost onClick={()=>setNewModal(true)}>+ New Task</Btn>
+          {tab==="queue"&&<Btn small ghost onClick={()=>setNewModal(true)}>+ New Task</Btn>}
         </div>
       </div>
       {/* Tabs */}
       <div style={{padding:"0 28px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-        <Tabs2 tabs={[{key:"queue",label:"Priority Queue"},{key:"orphaned",label:"Orphaned Assets"},{key:"stewards",label:"Stewards"}]} active={tab} onChange={t=>{setTab(t);setSelTask(null);}}/>
+        <Tabs2 tabs={[
+          {key:"inbox",    label:inboxUnresolved.length>0?`Inbox (${inboxUnresolved.length})`:"Inbox"},
+          {key:"queue",    label:"My Tasks"},
+          {key:"orphaned", label:"Orphaned Assets"},
+          {key:"stewards", label:"Team"},
+        ]} active={tab} onChange={t=>{setTab(t);setSelTask(null);}}/>
       </div>
 
       <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+
+        {/* ── INBOX TAB ── */}
+        {tab==="inbox"&&(
+          <div style={{flex:1,overflowY:'auto',padding:'20px 28px'}}>
+            {/* Filter strip */}
+            <div style={{display:'flex',gap:0,borderBottom:`1px solid ${T.border}`,marginBottom:20}}>
+              {[['all','All'],['new_source_tag','New tags'],['sync_conflict','Conflicts'],['pending_approval','Pending approval'],['propagation_review','Propagation']].map(([k,v])=>(
+                <button key={k} onClick={()=>setInboxFilter(k)} style={{padding:'7px 14px',background:'transparent',border:'none',borderBottom:`2px solid ${inboxFilter===k?T.accent:'transparent'}`,color:inboxFilter===k?T.text:T.textMuted,fontSize:12.5,fontWeight:inboxFilter===k?600:400,cursor:'pointer',whiteSpace:'nowrap'}}>{v}</button>
+              ))}
+            </div>
+            {inboxFiltered.length===0 ? (
+              <div style={{textAlign:'center',padding:'60px 0'}}>
+                <div style={{fontSize:32,marginBottom:12}}>✓</div>
+                <div style={{fontSize:15,fontWeight:500,color:T.green,marginBottom:4}}>All caught up</div>
+                <div style={{fontSize:13,color:T.textMuted}}>No items need attention</div>
+              </div>
+            ) : inboxFiltered.map(item=>{
+              const tagDef   = tagCtx?.tagDefs?.find(t=>t.name===item.tagName);
+              const isAnimOut= resolvedIds.includes(item.id);
+              const domainChip=<span style={{fontSize:10,padding:'2px 7px',borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>{item.domain}</span>;
+              const srcChip  = item.sourceSystem?<span style={{fontSize:10,padding:'2px 7px',borderRadius:4,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`,fontFamily:"'Geist Mono',monospace"}}>{item.sourceSystem}</span>:null;
+              const tbMap    = {new_source_tag:{bg:T.blueDim,color:T.blue,label:'New tag'},sync_conflict:{bg:T.amberDim,color:T.amber,label:'Sync conflict'},pending_approval:{bg:T.violetDim,color:T.violet,label:'Pending'},propagation_review:{bg:T.bgElevated,color:T.green,label:'Propagation'}};
+              const tbm      = tbMap[item.type]||{bg:T.bgElevated,color:T.textMuted,label:item.type};
+              const timeAgo  = item.type==='pending_approval'?'5h ago':item.type==='new_source_tag'?'2h ago':item.type==='sync_conflict'?'2d ago':'1d ago';
+              return (
+                <div key={item.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,padding:'14px 16px',marginBottom:8,opacity:isAnimOut?0:1,maxHeight:isAnimOut?0:800,overflow:'hidden',transition:'opacity .3s, max-height .35s'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+                    <span style={{fontSize:10,padding:'2px 8px',borderRadius:4,background:tbm.bg,color:tbm.color,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.06em'}}>{tbm.label}</span>
+                    <span style={{fontSize:12.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{item.assetName}</span>
+                    {domainChip}{srcChip}
+                    <span style={{marginLeft:'auto',fontSize:11,color:T.textMuted}}>{timeAgo}</span>
+                  </div>
+                  <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginBottom:10}}>{item.note}</div>
+                  <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:12}}>
+                    {tagDef?<TagPill tagDef={tagDef} size='sm'/>:<span style={{fontSize:11,padding:'2px 8px',borderRadius:4,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`}}>{item.tagName}</span>}
+                  </div>
+                  <div style={{borderTop:`1px solid ${T.border}`,paddingTop:12}}>
+                    {item.type==='new_source_tag'&&(
+                      <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                        <select value={mapSelect[item.id]||''} onChange={e=>setMapSelect(p=>({...p,[item.id]:e.target.value}))} style={{padding:'5px 8px',borderRadius:5,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:11,outline:'none'}}>
+                          <option value="">Select EDG tag…</option>
+                          {(tagCtx?.tagDefs||[]).map(td=><option key={td.id} value={td.id}>{td.name}</option>)}
+                        </select>
+                        <button onClick={()=>{if(mapSelect[item.id]){tagCtx?.upsertNameMapping(item.metadata?.connectorId||'dbt',{sourceTagName:item.tagName,edgTagId:mapSelect[item.id],reverseSyncAlias:item.tagName,status:'mapped'});doInboxResolve(item.id,'map_to_existing');}}} style={{padding:'5px 12px',background:T.accent,color:'#fff',border:'none',borderRadius:5,fontSize:11,fontWeight:600,cursor:'pointer'}}>Map to existing</button>
+                        <button onClick={()=>{tagCtx?.createTagDef({name:item.tagName,category:'business',description:'Promoted from source.',propagationMode:'hierarchy',governanceRequired:false,managedBy:'',color:'#fbbf24',sourceAliases:[item.tagName]});doInboxResolve(item.id,'promoted');}} style={{padding:'5px 12px',background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,borderRadius:5,fontSize:11,cursor:'pointer'}}>Promote to tag</button>
+                        <button onClick={()=>doInboxResolve(item.id,'keep_scoped')} style={{padding:'5px 12px',background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,borderRadius:5,fontSize:11,cursor:'pointer'}}>Keep scoped</button>
+                        <button onClick={()=>doInboxResolve(item.id,'discard')} style={{padding:'5px 0',background:'none',border:'none',color:T.textMuted,fontSize:11,cursor:'pointer'}}>Discard</button>
+                      </div>
+                    )}
+                    {item.type==='sync_conflict'&&(
+                      <div style={{display:'flex',gap:8}}>
+                        <button onClick={()=>doInboxResolve(item.id,'keep_override')} style={{padding:'6px 14px',background:T.accent,color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer'}}>Keep my override</button>
+                        <button onClick={()=>doInboxResolve(item.id,'accept_source')} style={{padding:'6px 14px',background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,borderRadius:6,fontSize:12,cursor:'pointer'}}>Accept source tag</button>
+                        <button onClick={()=>doInboxResolve(item.id,'lock_conflict')} style={{padding:'6px 14px',background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,borderRadius:6,fontSize:12,cursor:'pointer'}}>Lock — always flag</button>
+                      </div>
+                    )}
+                    {item.type==='pending_approval'&&(
+                      <div style={{display:'flex',gap:8,alignItems:'flex-start',flexWrap:'wrap'}}>
+                        {item.metadata?.downstreamCount>0&&<div style={{fontSize:11.5,color:T.blue,background:T.blueDim,padding:'6px 10px',borderRadius:5,alignSelf:'center'}}>Propagates to {item.metadata.downstreamCount} assets</div>}
+                        <button onClick={()=>doInboxResolve(item.id,'approve_propagate')} style={{padding:'6px 14px',background:T.accent,color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer'}}>Approve + propagate</button>
+                        <button onClick={()=>doInboxResolve(item.id,'approve')} style={{padding:'6px 14px',background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,borderRadius:6,fontSize:12,cursor:'pointer'}}>Approve only</button>
+                        <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                          {rejectNote[item.id]!==undefined&&<textarea value={rejectNote[item.id]} onChange={e=>setRejectNote(p=>({...p,[item.id]:e.target.value}))} placeholder="Rejection note…" rows={2} style={{padding:'5px 8px',borderRadius:5,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:11,outline:'none',resize:'vertical',width:200}}/>}
+                          <button onClick={()=>{if(rejectNote[item.id]===undefined)setRejectNote(p=>({...p,[item.id]:''}));else doInboxResolve(item.id,'reject',rejectNote[item.id]);}} style={{padding:'6px 12px',background:'none',border:'none',color:T.textMuted,fontSize:12,cursor:'pointer'}}>{rejectNote[item.id]!==undefined?'Confirm rejection':'Reject'}</button>
+                        </div>
+                      </div>
+                    )}
+                    {item.type==='propagation_review'&&(
+                      <div style={{display:'flex',gap:8}}>
+                        <button onClick={()=>doInboxResolve(item.id,'confirm')} style={{padding:'6px 14px',background:T.accent,color:'#fff',border:'none',borderRadius:6,fontSize:12,fontWeight:600,cursor:'pointer'}}>Confirm propagation</button>
+                        <button onClick={()=>doInboxResolve(item.id,'reduce')} style={{padding:'6px 14px',background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,borderRadius:6,fontSize:12,cursor:'pointer'}}>Reduce scope</button>
+                        <button onClick={()=>doInboxResolve(item.id,'cancel')} style={{padding:'6px 0',background:'none',border:'none',color:T.textMuted,fontSize:12,cursor:'pointer'}}>Cancel</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {inboxResolved.length>0&&(
+              <div style={{marginTop:24}}>
+                <button onClick={()=>setShowResolved(v=>!v)} style={{display:'flex',alignItems:'center',gap:8,background:'none',border:'none',color:T.textMuted,fontSize:12.5,cursor:'pointer',marginBottom:10}}>
+                  <span style={{transform:showResolved?'rotate(0deg)':'rotate(-90deg)',transition:'transform .15s',display:'inline-block'}}>▼</span>
+                  Resolved today ({inboxResolved.length})
+                </button>
+                {showResolved&&inboxResolved.map(item=>(
+                  <div key={item.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,padding:'12px 16px',marginBottom:8,opacity:0.5}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8}}>
+                      <span style={{fontSize:11,color:T.textMuted}}>{item.tagName}</span>
+                      <span style={{fontSize:11,color:T.textMuted}}>·</span>
+                      <span style={{fontSize:11,color:T.textMuted,fontStyle:'italic'}}>{item.resolution} · {item.resolvedBy||'System'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── QUEUE TAB ── */}
         {tab==="queue"&&<>
@@ -5837,7 +5953,7 @@ const StewardshipView = ({onToast}) => {
                       ))}
                     </div>}
                     <div style={{padding:"8px 14px",borderTop:`1px solid ${T.border}`}}>
-                      <button onClick={()=>onNav("steward-inbox")} style={{fontSize:11.5,color:T.accent,background:"none",border:"none",cursor:"pointer",fontWeight:600,padding:0}} onMouseEnter={e=>e.currentTarget.style.opacity=".7"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>View inbox →</button>
+                      <button onClick={()=>{setTab("inbox");setSelTask(null);}} style={{fontSize:11.5,color:T.accent,background:"none",border:"none",cursor:"pointer",fontWeight:600,padding:0}} onMouseEnter={e=>e.currentTarget.style.opacity=".7"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>View inbox →</button>
                     </div>
                   </div>
                 );
@@ -14326,7 +14442,7 @@ export default function App(){
   const [sideExp,  setSideExp]  = useState(false);
 
   const roleCfg    = ROLES_CONFIG[role] || ROLES_CONFIG.analyst;
-  const allowedNav = roleCfg.nav;
+  const allowedNav = [...(roleCfg.nav || []), "tags"];
 
   const handleLogin  = (r) => { setRole(r); setNav("home"); setLoggedIn(true); };
   const handleLogout = () => { setLoggedIn(false); setNav("home"); setAsset(null); };
@@ -14361,7 +14477,7 @@ export default function App(){
       case "certifications":return <CertificationsView onToast={showToast}/>;
       case "stewardship":   return <StewardshipView onToast={showToast}/>;
       case "tags":          return <TagManagementView onToast={showToast}/>;
-      case "steward-inbox": return <StewardInboxView onToast={showToast}/>;
+      case "steward-inbox": return <StewardshipView onToast={showToast} initialTab="inbox"/>;
       case "glossary":      return <GlossaryView onToast={showToast}/>;
       case "domains":       return <DomainsView/>;
       case "observability": return <ObsView onToast={showToast}/>;
