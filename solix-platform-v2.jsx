@@ -13925,31 +13925,59 @@ const TagManagementView = ({onToast}) => {
           </div>
           {/* Category filter pills */}
           <div style={{padding:'8px 12px',borderBottom:`1px solid ${T.border}`,display:'flex',gap:4,flexWrap:'wrap',flexShrink:0}}>
-            {CATS.map(cat=>(
-              <button key={cat} onClick={()=>setSelCat(cat)} style={{padding:'2px 9px',borderRadius:99,fontSize:11,fontWeight:selCat===cat?600:400,border:`1px solid ${selCat===cat?(CAT_COLORS[cat]?.color||T.accent):T.border}`,background:selCat===cat?(CAT_COLORS[cat]?.bg||T.accentDim):'transparent',color:selCat===cat?(CAT_COLORS[cat]?.color||T.accent):T.textMuted,cursor:'pointer',transition:'all .12s',textTransform:'capitalize'}}>
-                {cat==='all'?`All (${tagDefs.length})`:cat}
-              </button>
-            ))}
+            {CATS.map(cat=>{
+              const catCount = cat==='all' ? tagDefs.length : tagDefs.filter(t=>t.category===cat).length;
+              return (
+                <button key={cat} onClick={()=>setSelCat(cat)} style={{padding:'2px 9px',borderRadius:99,fontSize:11,fontWeight:selCat===cat?600:400,border:`1px solid ${selCat===cat?(CAT_COLORS[cat]?.color||T.accent):T.border}`,background:selCat===cat?(CAT_COLORS[cat]?.bg||T.accentDim):'transparent',color:selCat===cat?(CAT_COLORS[cat]?.color||T.accent):T.textMuted,cursor:'pointer',transition:'all .12s',textTransform:'capitalize'}}>
+                  {cat==='all'?`All (${catCount})`:`${cat.charAt(0).toUpperCase()+cat.slice(1)} (${catCount})`}
+                </button>
+              );
+            })}
           </div>
+          {/* Active filter strip */}
+          {(search||selCat!=='all')&&(
+            <div style={{padding:'5px 12px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',gap:6,flexShrink:0,flexWrap:'wrap',background:T.bgElevated}}>
+              <span style={{fontSize:10.5,color:T.textMuted,flexShrink:0}}>Showing {filteredTags.length} result{filteredTags.length!==1?'s':''}:</span>
+              {selCat!=='all'&&<span style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:10.5,padding:'1px 7px',borderRadius:99,background:CAT_COLORS[selCat]?.bg||T.accentDim,color:CAT_COLORS[selCat]?.color||T.accent,border:`1px solid ${CAT_COLORS[selCat]?.color||T.accent}44`,fontWeight:600,textTransform:'capitalize'}}>
+                {selCat}<button onClick={()=>setSelCat('all')} style={{background:'none',border:'none',cursor:'pointer',color:'inherit',padding:0,fontSize:11,lineHeight:1,marginLeft:2}}>×</button>
+              </span>}
+              {search&&<span style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:10.5,padding:'1px 7px',borderRadius:99,background:T.bgSurface,color:T.textSub,border:`1px solid ${T.border}`,fontFamily:"'Geist Mono',monospace"}}>
+                "{search}"<button onClick={()=>setSearch('')} style={{background:'none',border:'none',cursor:'pointer',color:T.textMuted,padding:0,fontSize:11,lineHeight:1,marginLeft:2}}>×</button>
+              </span>}
+              {(search&&selCat!=='all')&&<button onClick={()=>{setSearch('');setSelCat('all');}} style={{marginLeft:'auto',fontSize:10.5,color:T.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>Clear all</button>}
+            </div>
+          )}
           {/* Tag list grouped by category */}
           <div style={{flex:1,overflowY:'auto'}}>
-            {filteredTags.length===0&&<div style={{padding:'32px 16px',textAlign:'center',color:T.textMuted,fontSize:12}}>No tags found</div>}
+            {filteredTags.length===0&&(
+              <div style={{padding:'32px 16px',textAlign:'center'}}>
+                <div style={{fontSize:24,marginBottom:8,opacity:.3}}>{Ic.tag(24)}</div>
+                <div style={{fontSize:12.5,fontWeight:600,color:T.textSub,marginBottom:4}}>
+                  {search?`No tags match "${search}"`:  'No tags in this category'}
+                </div>
+                <div style={{fontSize:11,color:T.textMuted,marginBottom:12}}>
+                  {search?'Try a different search term':'Create one to get started'}
+                </div>
+                <button onClick={()=>{setNewPanelOpen(true);setSelTagId(null);}} style={{fontSize:11,padding:'5px 14px',borderRadius:7,background:T.accent,border:'none',color:'#fff',cursor:'pointer',fontWeight:600}}>
+                  {search?`+ Create "${search}" as new tag`:'+ New Tag'}
+                </button>
+              </div>
+            )}
             {groupedTags.map(({cat,tags})=>(
               <div key={cat}>
-                <div style={{padding:'8px 14px 4px',fontSize:10,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.08em',position:'sticky',top:0,background:T.bgSurface,zIndex:1}}>{cat}</div>
+                {selCat==='all'&&<div style={{padding:'8px 14px 4px',fontSize:10,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.08em',position:'sticky',top:0,background:T.bgSurface,zIndex:1,borderBottom:`1px solid ${T.border}44`}}>{cat}</div>}
                 {tags.map(td=>{
                   const isSel = selTagId===td.id;
-                  const cc = CAT_COLORS[td.category]||CAT_COLORS.custom;
                   const conflicts = syncConflicts(td.id);
                   const cnt = assetCount(td.id);
                   return (
                     <button key={td.id} onClick={()=>{setSelTagId(td.id);setDetailTab('overview');setEditing(false);setEditDraft(null);}}
-                      style={{width:'100%',display:'flex',alignItems:'center',gap:9,padding:'8px 14px',background:isSel?T.accentDim:'transparent',border:'none',borderLeft:`2px solid ${isSel?T.accent:'transparent'}`,cursor:'pointer',transition:'background .1s',textAlign:'left'}}
+                      style={{width:'100%',display:'flex',alignItems:'center',gap:9,padding:'8px 14px',background:isSel?T.accentDim:'transparent',border:'none',borderLeft:`2.5px solid ${isSel?T.accent:'transparent'}`,cursor:'pointer',transition:'background .1s',textAlign:'left'}}
                       onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background='transparent';}}>
-                      <span style={{width:8,height:8,borderRadius:'50%',background:td.color,flexShrink:0,display:'block'}}/>
+                      <span style={{width:8,height:8,borderRadius:'50%',background:td.color,flexShrink:0,display:'block',boxShadow:isSel?`0 0 0 2px ${td.color}44`:'none'}}/>
                       <span style={{flex:1,fontSize:12.5,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
-                      {conflicts>0&&<span style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:99,background:T.roseDim,color:T.rose,border:`1px solid ${T.rose}33`}}>{conflicts}</span>}
-                      <span style={{fontSize:10,color:T.textMuted,flexShrink:0,fontFamily:"'Geist Mono',monospace"}}>{cnt}</span>
+                      {conflicts>0&&<span title={`${conflicts} sync conflict${conflicts!==1?'s':''}`} style={{fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:99,background:T.roseDim,color:T.rose,border:`1px solid ${T.rose}33`}}>⚡{conflicts}</span>}
+                      <span title={`${cnt} asset${cnt!==1?'s':''}`} style={{fontSize:10,color:T.textMuted,flexShrink:0,fontFamily:"'Geist Mono',monospace",minWidth:12,textAlign:'right'}}>{cnt}</span>
                     </button>
                   );
                 })}
@@ -13961,11 +13989,10 @@ const TagManagementView = ({onToast}) => {
         {/* ── RIGHT: Tag detail or empty state ── */}
         <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',background:T.bg}}>
           {!selTag&&!newPanelOpen&&(
-            <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:12,color:T.textMuted}}>
-              <div style={{opacity:.2}}>{Ic.tag(48)}</div>
+            <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,color:T.textMuted}}>
+              <div style={{opacity:.15}}>{Ic.tag(48)}</div>
               <div style={{fontSize:14,fontWeight:600,color:T.textSub}}>Select a tag to view details</div>
-              <div style={{fontSize:12,color:T.textMuted}}>or create a new one</div>
-              <button onClick={()=>setNewPanelOpen(true)} style={{marginTop:4,padding:'7px 18px',borderRadius:8,background:T.accent,border:'none',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>+ New Tag</button>
+              <div style={{fontSize:12,color:T.textMuted}}>Choose a tag from the list ←</div>
             </div>
           )}
 
@@ -14018,7 +14045,7 @@ const TagManagementView = ({onToast}) => {
                     </select>
                   </div>
                   <div>
-                    <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Source Aliases <span style={{fontWeight:400,color:T.textMuted}}>(optional)</span></label>
+                    <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Connector Mappings <span style={{fontWeight:400,color:T.textMuted}}>— how this tag appears in source systems (optional)</span></label>
                     <div style={{display:'flex',gap:6,marginBottom:6}}>
                       <Input2 placeholder="Add alias…" value={newAlias} onChange={e=>setNewAlias(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&newAlias.trim()){setNewDraft(d=>({...d,sourceAliases:[...d.sourceAliases,newAlias.trim()]}));setNewAlias('');}}}/>
                       <button onClick={()=>{if(newAlias.trim()){setNewDraft(d=>({...d,sourceAliases:[...d.sourceAliases,newAlias.trim()]}));setNewAlias('');}}} style={{padding:'0 12px',borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:'pointer',flexShrink:0}}>Add</button>
@@ -14055,7 +14082,7 @@ const TagManagementView = ({onToast}) => {
                       <div style={{display:'flex',alignItems:'center',gap:8}}>
                         <span style={{fontSize:17,fontWeight:700,color:T.text}}>{selTag.name}</span>
                         <span style={{fontSize:11,padding:'2px 9px',borderRadius:99,background:cc.bg,color:cc.color,fontWeight:600,textTransform:'capitalize'}}>{selTag.category}</span>
-                        {selTag.propagationLocked&&<span style={{fontSize:11,color:T.textMuted}}>🔒 Locked</span>}
+                        {selTag.propagationLocked&&<span title="Propagation settings are locked and cannot be changed. Managed by the system. Contact an Admin to unlock." style={{fontSize:11,color:T.textMuted,cursor:'help',borderBottom:`1px dashed ${T.textMuted}`,paddingBottom:1}}>🔒 Propagation locked</span>}
                       </div>
                       <div style={{fontSize:12,color:T.textMuted,marginTop:3}}>{selTag.description||<span style={{fontStyle:'italic'}}>No description</span>}</div>
                     </div>
@@ -14071,9 +14098,14 @@ const TagManagementView = ({onToast}) => {
                   </div>
                   {/* Sub-tabs */}
                   <div style={{display:'flex',gap:0,marginTop:14,marginLeft:-24,marginRight:-24,paddingLeft:24,borderTop:`1px solid ${T.border}`}}>
-                    {['overview','sync','activity'].map(t=>(
-                      <button key={t} onClick={()=>setDetailTab(t)} style={{padding:'8px 16px',background:'none',border:'none',borderBottom:`2px solid ${detailTab===t?T.accent:'transparent'}`,color:detailTab===t?T.text:T.textMuted,fontSize:12.5,fontWeight:detailTab===t?600:400,cursor:'pointer',marginBottom:-1,transition:'all .12s',textTransform:'capitalize'}}>
-                        {t==='sync'?'Sync Status':t==='activity'?'Activity Log':'Overview'}
+                    {[
+                      {key:'overview', label:'Overview',    count:null},
+                      {key:'sync',     label:'Sync Status', count:tagSyncRows.length},
+                      {key:'activity', label:'Activity Log',count:tagActivity.length},
+                    ].map(({key:t,label,count})=>(
+                      <button key={t} onClick={()=>setDetailTab(t)} style={{display:'flex',alignItems:'center',gap:5,padding:'8px 16px',background:'none',border:'none',borderBottom:`2px solid ${detailTab===t?T.accent:'transparent'}`,color:detailTab===t?T.text:T.textMuted,fontSize:12.5,fontWeight:detailTab===t?600:400,cursor:'pointer',marginBottom:-1,transition:'all .12s'}}>
+                        {label}
+                        {count>0&&<span style={{fontSize:9.5,fontWeight:700,padding:'1px 5px',borderRadius:99,background:detailTab===t?T.accentDim:T.bgElevated,color:detailTab===t?T.accent:T.textMuted,border:`1px solid ${detailTab===t?T.accent+'44':T.border}`}}>{count}</span>}
                       </button>
                     ))}
                   </div>
@@ -14087,7 +14119,7 @@ const TagManagementView = ({onToast}) => {
                     <div style={{maxWidth:680,display:'flex',flexDirection:'column',gap:20}}>
                       {/* Core fields */}
                       <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
-                        <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.border}`,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Tag Definition</div>
+                        <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.border}`,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Properties</div>
                         <div style={{padding:'4px 0'}}>
                           {[
                             {l:'Name', v: editing
@@ -14163,9 +14195,12 @@ const TagManagementView = ({onToast}) => {
                         </div>
                       </div>
 
-                      {/* Source aliases */}
+                      {/* Connector Mappings (formerly Source Aliases) */}
                       <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
-                        <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.border}`,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Source Aliases</div>
+                        <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.border}`}}>
+                          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Connector Mappings</div>
+                          <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>How this tag appears in source systems</div>
+                        </div>
                         <div style={{padding:'12px 16px'}}>
                           {(draft.sourceAliases||[]).length>0
                             ? <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:editing?10:0}}>
