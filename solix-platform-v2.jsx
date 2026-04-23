@@ -3872,7 +3872,7 @@ const QualityView = () => {
                         </button>
                         {/* Edit */}
                         <button title="Edit test case"
-                          onClick={e=>{e.stopPropagation();setTcDetail(t);}}
+                          onClick={e=>{e.stopPropagation();setTcDetail(t);setTcDetailEditing(true);setTcDetailDraft({name:t.name,params:{...(t.params||{})}});}}
                           style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer",flexShrink:0,transition:"all .1s"}}
                           onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
                           <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M8.5 1.5l2 2-7 7H1.5v-2l7-7z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
@@ -4518,8 +4518,7 @@ const QualityView = () => {
                   </div>
                 </div>
                 <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
-                  {tcDetailEditing&&<button onClick={()=>{setTcDetailEditing(false);setTcDetailDraft(null);}} style={{fontSize:11,padding:"5px 10px",borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer"}}>Cancel</button>}
-                  <button onClick={()=>setTcDetail(null)} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+                  <button onClick={()=>{setTcDetail(null);setTcDetailEditing(false);setTcDetailDraft(null);}} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
                 </div>
               </div>
             </div>
@@ -9546,29 +9545,27 @@ const HealthBadge = ({health,status}) => {
 // ─────────────────────────────────────────────
 // SETTINGS HELPER COMPONENTS (top-level to satisfy Rules of Hooks)
 // ─────────────────────────────────────────────
-const RunRow = ({run}) => {
+const RunRow = ({run, onShowLogs}) => {
   const [expanded, setExpanded] = useState(false);
   const sc = run.status==="success"?T.accent:run.status==="failed"?T.rose:run.status==="running"?"#60a5fa":T.amber;
-  const runLogs = run.status==="failed"
-    ? [`[${run.ts}] Starting ingestion pipeline…`,"[00:00:01] Connecting to source…",`[00:00:03] ${run.errorMsg||"Connection failed"}`,"[00:00:03] Pipeline aborted — see error above"]
-    : run.status==="warning"
-    ? [`[${run.ts}] Starting ingestion pipeline…`,"[00:00:01] Connected successfully","[00:00:04] Extracting metadata…",`[00:00:08] Warning: ${run.warnMsg||"schema drift detected"}`,`[00:00:${run.duration||"12s"}] Completed with warnings — ${run.records?.toLocaleString()||0} records processed`]
-    : [`[${run.ts}] Starting ingestion pipeline…`,"[00:00:01] Connected successfully","[00:00:03] Extracting metadata…","[00:00:06] Transforming schema…",`[00:00:09] Loading ${run.records?.toLocaleString()||0} records…`,`[00:00:${run.duration||"10s"}] Done — ingestion completed successfully`];
   return (
     <div style={{background:T.bgElevated,border:`1px solid ${run.status==="failed"?T.rose+"44":T.border}`,borderRadius:9,overflow:"hidden"}}>
       <div onClick={()=>setExpanded(v=>!v)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",cursor:"pointer"}}>
         <span style={{width:8,height:8,borderRadius:"50%",background:sc,flexShrink:0,boxShadow:`0 0 5px ${sc}`}}/>
         <div style={{flex:1}}>
-          <div style={{fontSize:12,fontWeight:500,color:T.text}}>{run.ts}</div>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:12,fontWeight:500,color:T.text}}>{run.ts}</span>
+            <span style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:4,padding:"1px 5px"}}>{run.id}</span>
+          </div>
           <div style={{display:"flex",gap:10,fontSize:10,color:T.textMuted,marginTop:2}}>
-            {run.duration!=="—"&&<span>{run.duration}</span>}
+            {run.duration&&run.duration!=="—"&&<span>{run.duration}</span>}
             {run.records>0&&<span>{run.records.toLocaleString()} records</span>}
             {run.errors>0&&<span style={{color:T.rose}}>{run.errors} error{run.errors>1?"s":""}</span>}
             {run.warnings>0&&<span style={{color:T.amber}}>{run.warnings} warning{run.warnings>1?"s":""}</span>}
           </div>
         </div>
-        <span style={{fontSize:10,fontWeight:700,color:sc,textTransform:"capitalize"}}>{run.status}</span>
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{transform:expanded?"rotate(180deg)":"none",transition:"transform .2s",color:T.textMuted}}>
+        <span style={{fontSize:10,fontWeight:700,color:sc,textTransform:"capitalize",flexShrink:0}}>{run.status}</span>
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{transform:expanded?"rotate(180deg)":"none",transition:"transform .2s",color:T.textMuted,flexShrink:0}}>
           <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
         </svg>
       </div>
@@ -9591,15 +9588,18 @@ const RunRow = ({run}) => {
               </div>
             </div>
           )}
-          {/* Logs */}
-          <div style={{padding:"10px 12px"}}>
-            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Run Log</div>
-            <div style={{background:T.bg,borderRadius:6,padding:"8px 10px",border:`1px solid ${T.border}`,fontFamily:"'Geist Mono',monospace",fontSize:10,color:T.textMuted,lineHeight:1.8}}>
-              {runLogs.map((l,i)=>(
-                <div key={i} style={{color:i===runLogs.length-1?(run.status==="failed"?T.rose:run.status==="warning"?T.amber:"#60a5fa"):T.textMuted}}>{l}</div>
-              ))}
+          {/* View logs button */}
+          {onShowLogs&&(
+            <div style={{padding:"8px 12px",display:"flex",justifyContent:"flex-end"}}>
+              <button onClick={e=>{e.stopPropagation();onShowLogs(run);}}
+                style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",fontWeight:500,transition:"all .12s"}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="2.5" width="9" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M4 5.5h4M4 7.5h2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                View Full Logs
+              </button>
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>
@@ -10000,8 +10000,8 @@ const AddServiceWizard = ({onClose, onDone}) => {
           {step===2&&connMeta&&(
             <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:22}}>
 
-              {/* Row 1: Identity only */}
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+              {/* Row 1: Identity — full width */}
+              <div>
 
                 {/* Identity card */}
                 <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
@@ -10010,20 +10010,22 @@ const AddServiceWizard = ({onClose, onDone}) => {
                     <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Connection Identity</span>
                   </div>
                   <div style={{display:"flex",flexDirection:"column",gap:13}}>
-                    <div>
-                      <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>Connection Name <span style={{color:"#ee2424"}}>*</span></label>
-                      <input value={svcName} onChange={e=>setSvcName(e.target.value)}
-                        placeholder={connMeta?.name.toLowerCase().replace(/ /g,"_")+"_prod"}
-                        style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${svcName.length>=2?"#ee2424":T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",transition:"border .15s"}}
-                        onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=svcName.length>=2?"#ee2424":T.border}/>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
+                      <div>
+                        <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>Connection Name <span style={{color:"#ee2424"}}>*</span></label>
+                        <input value={svcName} onChange={e=>setSvcName(e.target.value)}
+                          placeholder={connMeta?.name.toLowerCase().replace(/ /g,"_")+"_prod"}
+                          style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${svcName.length>=2?"#ee2424":T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",transition:"border .15s"}}
+                          onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=svcName.length>=2?"#ee2424":T.border}/>
+                      </div>
+                      <div>
+                        <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>Description <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
+                        <input value={svcDesc} onChange={e=>setSvcDesc(e.target.value)} placeholder="What does this pipeline power?"
+                          style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"}}
+                          onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
+                      </div>
                     </div>
-                    <div>
-                      <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>Description <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
-                      <input value={svcDesc} onChange={e=>setSvcDesc(e.target.value)} placeholder="What does this pipeline power?"
-                        style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"}}
-                        onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
-                    </div>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
                       <div>
                         <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>Environment</label>
                         <select value={svcEnv} onChange={e=>setSvcEnv(e.target.value)} style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",cursor:"pointer"}}>
@@ -10085,77 +10087,94 @@ const AddServiceWizard = ({onClose, onDone}) => {
 
               </div>
 
-              {/* Row 2: Auth Type */}
+              {/* Row 2: Credentials — auth type selector + dynamic fields */}
               {(()=>{
-                const authOpts=[
-                  {id:"userpass",label:"Username / Password",desc:"Standard credentials",icon:"👤"},
-                  {id:"oauth",   label:"OAuth 2.0",          desc:"Token-based auth flow",icon:"🔑"},
-                  {id:"keypair", label:"Key Pair",            desc:"Private key + passphrase",icon:"🗝"},
-                  {id:"token",   label:"API Token",           desc:"Service account token",icon:"⚡"},
+                const AUTH_OPTS=[
+                  {id:"userpass",label:"Username / Password",icon:"👤",desc:"Standard DB credentials"},
+                  {id:"oauth",   label:"OAuth 2.0",          icon:"🔑",desc:"Token-based auth"},
+                  {id:"keypair", label:"Key Pair",            icon:"🗝", desc:"Private key + passphrase"},
+                  {id:"token",   label:"API Token",           icon:"⚡",desc:"Service account token"},
                 ];
-                const supported = connMeta?.authTypes || ["userpass","oauth","keypair","token"];
-                const available = authOpts.filter(a=>supported.includes(a.id));
+                const AUTH_FIELDS = {
+                  userpass:[
+                    {k:"host",     l:"Host / URL",    ph:"db.company.com",   type:"text",req:true},
+                    {k:"port",     l:"Port",           ph:"5432",             type:"text"},
+                    {k:"database", l:"Database",       ph:"warehouse",        type:"text"},
+                    {k:"username", l:"Username",       ph:"solix_reader",     type:"text",req:true},
+                    {k:"password", l:"Password",       ph:"••••••••",         type:"password",req:true},
+                    {k:"ssl",      l:"Enable SSL",     type:"toggle",         val:true},
+                  ],
+                  oauth:[
+                    {k:"host",          l:"Host / URL",    ph:"api.company.com",         type:"text",req:true},
+                    {k:"port",          l:"Port",           ph:"443",                     type:"text"},
+                    {k:"client_id",     l:"Client ID",      ph:"client_abc123",           type:"text",req:true},
+                    {k:"client_secret", l:"Client Secret",  ph:"••••••••",               type:"password",req:true},
+                    {k:"token_url",     l:"Token URL",      ph:"https://…/oauth/token",  type:"text",req:true},
+                    {k:"scope",         l:"Scope",          ph:"read:metadata",           type:"text"},
+                  ],
+                  keypair:[
+                    {k:"host",        l:"Host / URL",  ph:"db.company.com",                     type:"text",req:true},
+                    {k:"port",        l:"Port",         ph:"5432",                               type:"text"},
+                    {k:"database",    l:"Database",     ph:"warehouse",                          type:"text"},
+                    {k:"username",    l:"Username",     ph:"solix_reader",                       type:"text",req:true},
+                    {k:"private_key", l:"Private Key",  ph:"-----BEGIN RSA PRIVATE KEY-----…",  type:"textarea",req:true},
+                    {k:"passphrase",  l:"Passphrase",   ph:"key passphrase (leave blank if none)", type:"password"},
+                  ],
+                  token:[
+                    {k:"host",      l:"Host / URL",  ph:"api.company.com",  type:"text",req:true},
+                    {k:"port",      l:"Port",         ph:"443",              type:"text"},
+                    {k:"api_token", l:"API Token",    ph:"tok_••••••••",     type:"password",req:true},
+                  ],
+                };
+                const activeFields = AUTH_FIELDS[authType] || AUTH_FIELDS.userpass;
                 return (
                   <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
-                      <div style={{width:3,height:16,borderRadius:2,background:"#8b5cf6",flexShrink:0}}/>
-                      <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Authentication Type</span>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
+                      <div style={{width:3,height:16,borderRadius:2,background:"#ee2424",flexShrink:0}}/>
+                      <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Credentials</span>
+                      <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>All fields encrypted at rest</span>
                     </div>
-                    <div style={{display:"grid",gridTemplateColumns:`repeat(${Math.min(available.length,4)},1fr)`,gap:8}}>
-                      {available.map(a=>{
+                    {/* Auth type selector */}
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:20,paddingBottom:18,borderBottom:`1px solid ${T.border}`}}>
+                      {AUTH_OPTS.map(a=>{
                         const sel=authType===a.id;
                         return (
-                          <button key={a.id} onClick={()=>setAuthType(a.id)} style={{padding:"12px",borderRadius:10,textAlign:"left",border:`2px solid ${sel?"#8b5cf6":T.border}`,background:sel?"rgba(139,92,246,.07)":T.bgSurface,cursor:"pointer",transition:"all .15s"}}
-                            onMouseEnter={e=>{if(!sel)e.currentTarget.style.borderColor="#8b5cf655";}}
-                            onMouseLeave={e=>{if(!sel)e.currentTarget.style.borderColor=T.border;}}>
-                            <div style={{fontSize:16,marginBottom:5}}>{a.icon}</div>
-                            <div style={{fontSize:12,fontWeight:700,color:sel?T.text:T.textSub,marginBottom:2}}>{a.label}</div>
-                            <div style={{fontSize:10.5,color:T.textMuted}}>{a.desc}</div>
-                            {sel&&<div style={{marginTop:6,fontSize:10,fontWeight:700,color:"#8b5cf6",textTransform:"uppercase",letterSpacing:"0.06em"}}>Selected ✓</div>}
+                          <button key={a.id} onClick={()=>setAuthType(a.id)} style={{padding:"11px 10px",borderRadius:10,textAlign:"left",border:`2px solid ${sel?"#8b5cf6":T.border}`,background:sel?"rgba(139,92,246,.07)":T.bgSurface,cursor:"pointer",transition:"all .14s"}}
+                            onMouseEnter={e=>{if(!sel){e.currentTarget.style.borderColor="#8b5cf655";e.currentTarget.style.background="rgba(139,92,246,.04)";}}}
+                            onMouseLeave={e=>{if(!sel){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.bgSurface;}}}>
+                            <div style={{fontSize:15,marginBottom:5}}>{a.icon}</div>
+                            <div style={{fontSize:11.5,fontWeight:700,color:sel?"#8b5cf6":T.textSub,lineHeight:1.2}}>{a.label}</div>
+                            <div style={{fontSize:10,color:T.textMuted,marginTop:3}}>{a.desc}</div>
                           </button>
                         );
                       })}
                     </div>
+                    {/* Dynamic credential fields based on auth type */}
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:13}}>
+                      {activeFields.map(f=>(
+                        <div key={f.k} style={f.type==="textarea"?{gridColumn:"1 / -1"}:{}}>
+                          <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>
+                            {f.l}{f.req&&<span style={{color:"#ee2424",marginLeft:3}}>*</span>}
+                          </label>
+                          {f.type==="toggle"
+                            ? <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",paddingTop:4}}>
+                                <Toggle on={fields[f.k]!==undefined?fields[f.k]:!!f.val} onChange={()=>setFields(p=>({...p,[f.k]:!(p[f.k]!==undefined?p[f.k]:f.val)}))}/>
+                                <span style={{fontSize:12,color:T.textSub}}>{(fields[f.k]!==undefined?fields[f.k]:!!f.val)?"Enabled":"Disabled"}</span>
+                              </label>
+                            : f.type==="textarea"
+                            ? <textarea value={fields[f.k]||""} onChange={e=>setFields(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph} rows={4}
+                                style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:11.5,outline:"none",resize:"vertical",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box",lineHeight:1.6}}
+                                onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
+                            : <input type={f.type||"text"} value={fields[f.k]||""} onChange={e=>setFields(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph}
+                                style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",transition:"border .15s",fontFamily:f.type==="password"?"'Geist Mono',monospace":"inherit"}}
+                                onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
+                          }
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 );
               })()}
-
-              {/* Row 3: Credentials */}
-              <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
-                  <div style={{width:3,height:16,borderRadius:2,background:"#ee2424",flexShrink:0}}/>
-                  <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Credentials</span>
-                  <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>All fields encrypted at rest</span>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:13}}>
-                  {fieldDefs.map(f=>(
-                    <div key={f.k}>
-                      <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>
-                        {f.l}
-                        {(f.k==="host"||f.k==="project"||f.k==="account"||f.k==="bootstrap")&&<span style={{color:"#ee2424",marginLeft:3}}>*</span>}
-                      </label>
-                      {f.type==="toggle"
-                        ? <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",paddingTop:4}}>
-                            <Toggle on={fields[f.k]!==undefined?fields[f.k]:!!f.val} onChange={()=>setFields(p=>({...p,[f.k]:!(p[f.k]!==undefined?p[f.k]:f.val)}))}/>
-                            <span style={{fontSize:12,color:T.textSub}}>{(fields[f.k]!==undefined?fields[f.k]:!!f.val)?"Enabled":"Disabled"}</span>
-                          </label>
-                        : f.type==="select"
-                        ? <select value={fields[f.k]||f.opts?.[0]||""} onChange={e=>setFields(p=>({...p,[f.k]:e.target.value}))}
-                            style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",cursor:"pointer"}}>
-                            {(f.opts||[]).map(o=><option key={o}>{o}</option>)}
-                          </select>
-                        : f.type==="textarea"
-                        ? <textarea value={fields[f.k]||""} onChange={e=>setFields(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph} rows={3}
-                            style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box",lineHeight:1.6}}
-                            onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
-                        : <input type={f.type||"text"} value={fields[f.k]||""} onChange={e=>setFields(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph}
-                            style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",transition:"border .15s",fontFamily:f.type==="password"?"'Geist Mono',monospace":"inherit"}}
-                            onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
-                      }
-                    </div>
-                  ))}
-                </div>
-              </div>
 
               {/* Row 3: Object Types */}
               <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
@@ -10475,6 +10494,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
 /* connection detail panel */
 const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
   const [cfgTab, setCfgTab] = useState("overview");
+  const [runLogModal, setRunLogModal] = useState(null); // run object for log modal
   const progress = svc.status==="running" ? Math.min(98,(44+(tick*3))%100) : 100;
   // Configuration tab state
   const [svcFilterMode,   setSvcFilterMode]   = useState("selection");
@@ -10525,7 +10545,7 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
         </div>
         {/* tabs */}
         <div style={{display:"flex",gap:0}}>
-          {["overview","apps","runs","configuration","assets"].map(t=>(
+          {["overview","configuration","assets"].map(t=>(
             <button key={t} onClick={()=>setCfgTab(t)} style={{padding:"7px 14px",background:"transparent",border:"none",marginBottom:-1,
               borderBottom:`2px solid ${cfgTab===t?T.accent:"transparent"}`,
               color:cfgTab===t?T.text:T.textSub,fontSize:12,fontWeight:cfgTab===t?600:400,cursor:"pointer",
@@ -10622,61 +10642,16 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
           </div>
 
           {/* quick actions */}
-          <div style={{display:"flex",gap:6}}>
+          <div style={{display:"flex",gap:6,marginBottom:20}}>
             {svc.status!=="disconnected"&&<button onClick={()=>onToast(`${svc.displayName} ingestion triggered`,"success")} style={{flex:1,padding:"8px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>▶ Run Now</button>}
             <Btn small ghost onClick={()=>setCfgTab("configuration")}>Configure</Btn>
             {svc.status==="connected"&&<Btn small variant="danger" onClick={()=>onToast("Service paused","success")}>Pause</Btn>}
           </div>
-        </>}
 
-        {/* ── APPS TAB ── */}
-          {cfgTab==="apps"&&<>
-            <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6,marginBottom:16,padding:"10px 12px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>
-              <b style={{color:T.text}}>Apps</b> are the automated workflows that run against this service. Each app has a specific purpose — pulling schema metadata, tracing lineage, profiling column statistics, or collecting usage data. They all run independently on their own schedule.
-            </div>
-            {[
-              {type:"Ingestion",   color:"#38bdf8", desc:"Extracts schema, tables, columns and relationships from the source.",            sched:svc.schedule,       lastRun:svc.lastRun,   status:svc.status==="connected"?"Active":svc.status==="running"?"Running":svc.status==="warning"?"Warning":"Disconnected", supported:true},
-              {type:"Lineage",     color:"#a78bfa", desc:"Traces data flow — which tables feed into which, and how columns map.",           sched:"On ingestion",      lastRun:"14m ago",     status:["dbt","RDBMS","Cloud DWH","Streaming"].includes(svc.category)?"Active":"Not Available", supported:!["SaaS","BI / Dashboards"].includes(svc.category)},
-              {type:"Profiling",   color:"#fbbf24", desc:"Scans column statistics: null %, distinct values, min/max, distributions.",      sched:"0 3 * * 0",        lastRun:"3d ago",      status:["RDBMS","Cloud DWH"].includes(svc.category)?"Active":"Not Available", supported:["RDBMS","Cloud DWH","dbt"].includes(svc.category)},
-              {type:"Usage",       color:"#fb923c", desc:"Collects query logs and dashboard view counts to surface popular assets.",        sched:"*/30 * * * *",     lastRun:"28m ago",     status:["BI / Dashboards","Cloud DWH"].includes(svc.category)?"Active":"Not Available", supported:["BI / Dashboards","Cloud DWH"].includes(svc.category)},
-            ].map((p,i)=>{
-              const isActive = p.status==="Active"||p.status==="Running";
-              const isNA     = p.status==="Not Available";
-              const sc       = p.status==="Active"?T.accent:p.status==="Running"?"#60a5fa":p.status==="Warning"?T.amber:isNA?T.border:T.rose;
-              return (
-                <div key={i} style={{marginBottom:10,padding:"13px 14px",background:T.bgElevated,border:`1.5px solid ${isActive?p.color+"33":T.border}`,borderRadius:10,opacity:isNA?.5:1}}>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:isNA?0:8}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,background:`${p.color}18`,color:p.color}}>{p.type}</span>
-                      {!isNA&&<span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,fontWeight:600,color:sc}}>
-                        <span style={{width:5,height:5,borderRadius:"50%",background:sc,display:"inline-block"}}/>{p.status}
-                      </span>}
-                      {isNA&&<span style={{fontSize:10,color:T.textMuted}}>Not supported for this connector type</span>}
-                    </div>
-                    {!isNA&&<button onClick={()=>onToast(`${p.type} app triggered`,"success")} style={{padding:"3px 8px",borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:10,cursor:"pointer",transition:"all .12s"}}
-                      onMouseEnter={e=>{e.currentTarget.style.borderColor=p.color;e.currentTarget.style.color=p.color;}}
-                      onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>Run</button>}
-                  </div>
-                  {!isNA&&<>
-                    <div style={{fontSize:11,color:T.textMuted,marginBottom:8,lineHeight:1.4}}>{p.desc}</div>
-                    <div style={{display:"flex",gap:14,fontSize:10.5,color:T.textMuted}}>
-                      <span>Schedule: <b style={{color:T.textSub,fontFamily:"'Geist Mono',monospace",fontSize:10}}>{p.sched}</b></span>
-                      <span>Last run: <b style={{color:T.textSub}}>{p.lastRun}</b></span>
-                    </div>
-                  </>}
-                </div>
-              );
-            })}
-          </>}
-
-        {/* ── RUNS TAB ── */}
-        {cfgTab==="runs"&&<>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-            <div style={{fontSize:13,fontWeight:600,color:T.text}}>Run History</div>
-            <Btn small ghost>View Logs</Btn>
-          </div>
+          {/* ── Run History (inline) ── */}
+          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Run History</div>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {svc.runs.map((run)=><RunRow key={run.id} run={run}/>)}
+            {svc.runs.map((run)=><RunRow key={run.id} run={run} onShowLogs={(r)=>setRunLogModal(r)}/>)}
           </div>
         </>}
 
@@ -10856,6 +10831,43 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
 
       </div>
     </div>
+
+    {/* ── Run Log Modal ── */}
+    {runLogModal&&(
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",zIndex:1200,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(4px)"}}
+        onClick={()=>setRunLogModal(null)}>
+        <div onClick={e=>e.stopPropagation()} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:16,width:680,maxHeight:"80vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,.45)"}}>
+          <div style={{padding:"18px 24px",borderBottom:`1px solid ${T.border}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:2}}>
+                <span style={{width:8,height:8,borderRadius:"50%",background:runLogModal.status==="success"?T.accent:runLogModal.status==="failed"?T.rose:T.amber,display:"inline-block",flexShrink:0}}/>
+                <span style={{fontSize:14,fontWeight:700,color:T.text}}>Run Logs</span>
+                <span style={{fontSize:11,padding:"1px 8px",borderRadius:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{runLogModal.id}</span>
+              </div>
+              <div style={{fontSize:11.5,color:T.textMuted,paddingLeft:18}}>{runLogModal.ts} · {runLogModal.duration||"—"}</div>
+            </div>
+            <button onClick={()=>setRunLogModal(null)} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 2l8 8M10 2L2 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+          <div style={{flex:1,overflowY:"auto",padding:"16px 24px"}}>
+            <div style={{background:T.bg,borderRadius:10,padding:"14px 16px",border:`1px solid ${T.border}`,fontFamily:"'Geist Mono',monospace",fontSize:11.5,lineHeight:1.9}}>
+              {(runLogModal.status==="failed"
+                ? [`[${runLogModal.ts}] Starting ingestion pipeline…`,"[00:00:01] Connecting to source…",`[00:00:03] ${runLogModal.errorMsg||"Connection failed"}`,"[00:00:03] Pipeline aborted — see error above"]
+                : runLogModal.status==="warning"
+                ? [`[${runLogModal.ts}] Starting ingestion pipeline…`,"[00:00:01] Connected successfully","[00:00:04] Extracting metadata…",`[00:00:08] Warning: ${runLogModal.warnMsg||"schema drift detected"}`,`[00:00:${runLogModal.duration||"12s"}] Completed with warnings — ${runLogModal.records?.toLocaleString()||0} records`]
+                : [`[${runLogModal.ts}] Starting ingestion pipeline…`,"[00:00:01] Connected successfully","[00:00:03] Extracting metadata…","[00:00:06] Transforming schema…",`[00:00:09] Loading ${runLogModal.records?.toLocaleString()||0} records…`,`[00:00:${runLogModal.duration||"10s"}] Done — ingestion completed successfully`]
+              ).map((l,i,arr)=>(
+                <div key={i} style={{color:i===arr.length-1?(runLogModal.status==="failed"?T.rose:runLogModal.status==="warning"?T.amber:"#60a5fa"):T.textMuted,paddingBottom:2}}>{l}</div>
+              ))}
+            </div>
+          </div>
+          <div style={{padding:"12px 24px",borderTop:`1px solid ${T.border}`,flexShrink:0,display:"flex",justifyContent:"flex-end"}}>
+            <button onClick={()=>setRunLogModal(null)} style={{padding:"7px 18px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",fontWeight:500}}>Close</button>
+          </div>
+        </div>
+      </div>
+    )}
   );
 };
 
@@ -14276,8 +14288,10 @@ const TagManagementView = ({onToast}) => {
   const [customCategories, setCustomCategories] = useState([]);
   const [dotMenuOpen,      setDotMenuOpen]      = useState(null); // tagId or 'cat:name'
   const [deleteConfirm,    setDeleteConfirm]    = useState(null); // {type:'tag'|'category', id, name}
+  const [catOpen,          setCatOpen]          = useState(false); // new-tag category dropdown
   const plusMenuRef = useRef(null);
   const dotMenuRef  = useRef(null);
+  const catRef      = useRef(null);
 
   // ── Right panel state ──
   const [detailTab,    setDetailTab]    = useState('overview');
@@ -14305,6 +14319,7 @@ const TagManagementView = ({onToast}) => {
       if(filterRef.current&&!filterRef.current.contains(e.target)) setFilterOpen(false);
       if(plusMenuRef.current&&!plusMenuRef.current.contains(e.target)) setPlusMenuOpen(false);
       if(dotMenuRef.current&&!dotMenuRef.current.contains(e.target)) setDotMenuOpen(null);
+      if(catRef.current&&!catRef.current.contains(e.target)) setCatOpen(false);
       setTagOwnerInput(false);
       setTagStewardInput(false);
     };
@@ -14795,15 +14810,8 @@ const TagManagementView = ({onToast}) => {
 
                   {/* Category — searchable select + create new */}
                   {(()=>{
-                    const [catOpen, setCatOpen] = React.useState(false);
-                    const catRef = React.useRef(null);
                     const activeCategory = newDraft.category || newCatInput.trim();
                     const filteredCats = allCategories.filter(c=>!newCatInput||c.toLowerCase().includes(newCatInput.toLowerCase()));
-                    React.useEffect(()=>{
-                      if(!catOpen) return;
-                      const h=(e)=>{ if(catRef.current&&!catRef.current.contains(e.target)) setCatOpen(false); };
-                      document.addEventListener('mousedown',h); return ()=>document.removeEventListener('mousedown',h);
-                    },[catOpen]);
                     return (
                       <div ref={catRef} style={{position:'relative'}}>
                         <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:4}}>Category <span style={{fontSize:10,fontWeight:400,color:T.textMuted}}>— optional</span></label>
@@ -15121,24 +15129,6 @@ const TagManagementView = ({onToast}) => {
                     {/* Right sidebar */}
                     <div style={{width:256,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:'auto',padding:'20px 16px',display:'flex',flexDirection:'column',gap:0}}>
 
-                      {/* Color */}
-                      <div style={{marginBottom:18}}>
-                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Color</div>
-                        {editing
-                          ? <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                              {['#ee2424','#d97706','#16a34a','#2563eb','#7c3aed','#6366f1','#0891b2','#6b7280'].map(c=>(
-                                <button key={c} onClick={()=>setEditDraft(d=>({...d,color:c}))} style={{width:22,height:22,borderRadius:'50%',background:c,border:draft.color===c?`3px solid ${T.text}`:'3px solid transparent',cursor:'pointer',padding:0,flexShrink:0,transition:'border .12s'}}/>
-                              ))}
-                            </div>
-                          : <div style={{display:'flex',alignItems:'center',gap:8}}>
-                              <span style={{width:13,height:13,borderRadius:'50%',background:selTag.color,display:'block',boxShadow:`0 0 0 3px ${selTag.color}33`,flexShrink:0}}/>
-                              <span style={{fontSize:12,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{selTag.color}</span>
-                            </div>
-                        }
-                      </div>
-
-                      <div style={{height:1,background:T.border,marginBottom:18}}/>
-
                       {/* Category */}
                       <div style={{marginBottom:18}}>
                         <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Category</div>
@@ -15152,6 +15142,39 @@ const TagManagementView = ({onToast}) => {
                           : <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>Uncategorized</span>
                         }
                       </div>
+
+                      <div style={{height:1,background:T.border,marginBottom:18}}/>
+
+                      {/* Domain */}
+                      {(()=>{
+                        const DOMAIN_LIST = ["Commerce","Finance","Product","Marketing","ML","Engineering"];
+                        const DOMAIN_COLORS = {Commerce:T.amber,Finance:T.green,Product:T.accent,Marketing:T.rose,ML:T.violet,Engineering:T.blue};
+                        const tagDomain = (editing?editDraft?.domain:null)||(selTag.domain)||null;
+                        return (
+                          <div style={{marginBottom:18}}>
+                            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Domain</div>
+                            {editing
+                              ? <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+                                  {DOMAIN_LIST.map(d=>{
+                                    const sel=(editDraft?.domain||'')=== d;
+                                    const dc=DOMAIN_COLORS[d]||T.accent;
+                                    return (
+                                      <button key={d} onClick={()=>setEditDraft(p=>({...p,domain:sel?'':d}))}
+                                        style={{padding:'3px 10px',borderRadius:99,fontSize:11,fontWeight:sel?600:400,border:`1.5px solid ${sel?dc:T.border}`,background:sel?`${dc}15`:'transparent',color:sel?dc:T.textMuted,cursor:'pointer',transition:'all .12s'}}>
+                                        {d}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              : tagDomain
+                                ? <span style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 10px',borderRadius:99,background:`${DOMAIN_COLORS[tagDomain]||T.accent}15`,border:`1px solid ${DOMAIN_COLORS[tagDomain]||T.accent}44`,fontSize:11.5,fontWeight:600,color:DOMAIN_COLORS[tagDomain]||T.accent}}>
+                                    {tagDomain}
+                                  </span>
+                                : <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No domain assigned</span>
+                            }
+                          </div>
+                        );
+                      })()}
 
                       <div style={{height:1,background:T.border,marginBottom:18}}/>
 
