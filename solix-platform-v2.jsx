@@ -10414,6 +10414,31 @@ const AddServiceWizard = ({onClose, onDone}) => {
 const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
   const [cfgTab, setCfgTab] = useState("overview");
   const progress = svc.status==="running" ? Math.min(98,(44+(tick*3))%100) : 100;
+  // Configuration tab state
+  const [svcFilterMode,   setSvcFilterMode]   = useState("selection");
+  const [svcInclSchemas,  setSvcInclSchemas]  = useState([]);
+  const [svcExclSchemas,  setSvcExclSchemas]  = useState([]);
+  const [svcInclTables,   setSvcInclTables]   = useState([]);
+  const [svcExclTables,   setSvcExclTables]   = useState([]);
+  const SvcTagInput = ({tags, onAdd, onRemove, placeholder, color}) => {
+    const [val, setSvcTagVal] = React.useState("");
+    const add = () => { const t=val.trim(); if(t&&!tags.includes(t)) onAdd(t); setSvcTagVal(""); };
+    return (
+      <div style={{border:`1.5px solid ${T.border}`,borderRadius:9,padding:"6px 10px",background:T.bgSurface,display:"flex",flexWrap:"wrap",gap:5,alignItems:"center",minHeight:38,cursor:"text"}}
+        onClick={e=>e.currentTarget.querySelector("input")?.focus()}>
+        {tags.map(t=>(
+          <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 9px",borderRadius:99,background:`${color}18`,border:`1px solid ${color}33`,fontSize:11,color:color,fontFamily:"'Geist Mono',monospace",fontWeight:500}}>
+            {t}
+            <button onClick={e=>{e.stopPropagation();onRemove(t);}} style={{background:"none",border:"none",cursor:"pointer",color:color,fontSize:13,padding:"0 0 0 2px",lineHeight:1,opacity:.65}}>×</button>
+          </span>
+        ))}
+        <input value={val} onChange={e=>setSvcTagVal(e.target.value)}
+          onKeyDown={e=>{if(e.key==="Enter"||e.key===","){e.preventDefault();add();}if(e.key==="Backspace"&&!val&&tags.length)onRemove(tags[tags.length-1]);}}
+          placeholder={tags.length===0?placeholder:"+ add"}
+          style={{flex:"1 1 70px",minWidth:40,border:"none",outline:"none",background:"transparent",fontSize:11,color:T.text,fontFamily:"'Geist Mono',monospace"}}/>
+      </div>
+    );
+  };
   const stageIdx = svc.status==="running" ? Math.floor(progress/22) : (svc.status==="disconnected"?-1:4);
   const hc = HEALTH_COLOR[svc.health]||T.textMuted;
 
@@ -10623,27 +10648,79 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
               </div>
             ))}
           </div>
-          <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:12}}>Schedule</div>
-          <div style={{padding:12,background:T.bgElevated,borderRadius:9,border:`1px solid ${T.border}`,marginBottom:16}}>
-            <div style={{display:"flex",gap:8,marginBottom:10}}>
-              {["Manual","Scheduled","Event-driven"].map(opt=>(
-                <button key={opt} onClick={()=>onToast(`Trigger set to ${opt}`,"success")} style={{flex:1,padding:"6px",borderRadius:6,
-                  border:`1px solid ${svc.schedule==="Event-driven"&&opt==="Event-driven"||svc.schedule!=="Event-driven"&&opt==="Scheduled"?T.accent:T.border}`,
-                  background:svc.schedule==="Event-driven"&&opt==="Event-driven"||svc.schedule!=="Event-driven"&&opt==="Scheduled"?T.accentDim:"transparent",
-                  color:svc.schedule==="Event-driven"&&opt==="Event-driven"||svc.schedule!=="Event-driven"&&opt==="Scheduled"?T.accent:T.textSub,
-                  fontSize:11,fontWeight:500,cursor:"pointer"}}>
+          {/* ── Ingestion Filters ── */}
+          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10,marginTop:4}}>Ingestion Filters</div>
+          <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",marginBottom:20}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+              <div style={{fontSize:12,color:T.textMuted,lineHeight:1.5}}>Narrow ingestion scope. Leave blank to ingest everything.</div>
+              <div style={{display:"flex",gap:5}}>
+                {["selection","regex"].map(m=>(
+                  <button key={m} onClick={()=>setSvcFilterMode(m)} style={{padding:"4px 12px",borderRadius:6,fontSize:11,fontWeight:svcFilterMode===m?600:400,cursor:"pointer",transition:"all .12s",border:`1.5px solid ${svcFilterMode===m?T.accent:T.border}`,background:svcFilterMode===m?`${T.accent}10`:"transparent",color:svcFilterMode===m?T.accent:T.textSub,textTransform:"capitalize"}}>
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {svcFilterMode==="selection"?(
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                {[
+                  {label:"Include Schemas",tags:svcInclSchemas,onAdd:t=>setSvcInclSchemas(p=>[...p,t]),onRemove:t=>setSvcInclSchemas(p=>p.filter(x=>x!==t)),ph:"public, analytics…",color:"#10b981"},
+                  {label:"Exclude Schemas",tags:svcExclSchemas,onAdd:t=>setSvcExclSchemas(p=>[...p,t]),onRemove:t=>setSvcExclSchemas(p=>p.filter(x=>x!==t)),ph:"pg_catalog, sys…",color:"#f87171"},
+                  {label:"Include Tables", tags:svcInclTables, onAdd:t=>setSvcInclTables(p=>[...p,t]), onRemove:t=>setSvcInclTables(p=>p.filter(x=>x!==t)), ph:"orders, users…",color:"#10b981"},
+                  {label:"Exclude Tables", tags:svcExclTables, onAdd:t=>setSvcExclTables(p=>[...p,t]), onRemove:t=>setSvcExclTables(p=>p.filter(x=>x!==t)), ph:"tmp_*, _bak…",color:"#f87171"},
+                ].map(({label,tags,onAdd,onRemove,ph,color})=>(
+                  <div key={label}>
+                    <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>
+                      <span style={{width:7,height:7,borderRadius:2,background:color,display:"block",flexShrink:0}}/>
+                      {label}
+                    </label>
+                    <SvcTagInput tags={tags} onAdd={onAdd} onRemove={onRemove} placeholder={ph} color={color}/>
+                  </div>
+                ))}
+              </div>
+            ):(
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {[
+                  {label:"Schema Include Pattern",ph:"^(?!pg_).*",hint:"Regex applied to schema names to include"},
+                  {label:"Schema Exclude Pattern",ph:"^(pg_catalog|information_schema)$",hint:"Regex applied to schema names to exclude"},
+                  {label:"Table Include Pattern", ph:"^(orders|users|products)$",hint:"Regex applied to table names to include"},
+                  {label:"Table Exclude Pattern", ph:"^(tmp_|_bak|test_)",hint:"Regex applied to table names to exclude"},
+                ].map(({label,ph,hint})=>(
+                  <div key={label}>
+                    <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:4}}>{label}</label>
+                    <input placeholder={ph} style={{width:"100%",padding:"8px 11px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:11.5,outline:"none",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box"}}
+                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                    <div style={{fontSize:10.5,color:T.textMuted,marginTop:3}}>{hint}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* ── Schedule ── */}
+          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Schedule</div>
+          <div style={{padding:14,background:T.bgElevated,borderRadius:9,border:`1px solid ${T.border}`,marginBottom:16}}>
+            <div style={{display:"flex",gap:6,marginBottom:12}}>
+              {["Manual","Scheduled"].map(opt=>(
+                <button key={opt} onClick={()=>onToast(`Trigger set to ${opt}`,"success")} style={{flex:1,padding:"7px",borderRadius:7,
+                  border:`1px solid ${opt==="Scheduled"?T.accent:T.border}`,
+                  background:opt==="Scheduled"?T.accentDim:"transparent",
+                  color:opt==="Scheduled"?T.accent:T.textSub,
+                  fontSize:11.5,fontWeight:opt==="Scheduled"?600:400,cursor:"pointer",transition:"all .12s"}}>
                   {opt}
                 </button>
               ))}
             </div>
             <div>
-              <div style={{fontSize:11,color:T.textMuted,marginBottom:4}}>Cron expression</div>
-              <Input2 value={svc.schedule.startsWith("0")||svc.schedule.startsWith("*")?svc.schedule:"—"} style={{width:"100%",fontFamily:"'Geist Mono',monospace"}} onChange={()=>{}}/>
-              <div style={{fontSize:10,color:T.textMuted,marginTop:4}}>Next run: {svc.nextRun}</div>
+              <div style={{fontSize:11,fontWeight:600,color:T.textMuted,marginBottom:5}}>Cron Expression</div>
+              <Input2 value={svc.schedule.startsWith("0")||svc.schedule.startsWith("*")?svc.schedule:"0 0 * * *"} style={{width:"100%",fontFamily:"'Geist Mono',monospace"}} onChange={()=>{}}/>
+              <div style={{display:"flex",justifyContent:"space-between",marginTop:5}}>
+                <span style={{fontSize:10.5,color:T.textMuted}}>Use standard cron syntax (min hour day month weekday)</span>
+                <span style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>Next: {svc.nextRun}</span>
+              </div>
             </div>
           </div>
           <div style={{display:"flex",gap:6}}>
-            <button onClick={()=>onToast("Configuration saved","success")} style={{flex:1,padding:"8px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Save Changes</button>
+            <button onClick={()=>onToast("Configuration saved","success")} style={{flex:1,padding:"9px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Save Changes</button>
             <Btn small ghost>Test Connection</Btn>
           </div>
         </>}
@@ -13234,9 +13311,6 @@ const SettingsView = ({onToast})=>{
       {key:"personas",     icon:"persona", label:"Personas",             desc:"UX role customization"},
       {key:"sso",          icon:"sso",     label:"SSO",                  desc:"Identity providers"},
     ]},
-    {label:"Governance", items:[
-      {key:"tag_policies", icon:"tag",     label:"Tag Policies",         desc:"Tag creation, propagation & stewardship rules"},
-    ]},
     {label:"Platform", items:[
       {key:"notifications",icon:"notif",   label:"Notifications",        desc:"Alerts & channels"},
       {key:"preferences",  icon:"palette", label:"Preferences",          desc:"Theme & display"},
@@ -14081,6 +14155,12 @@ const TagManagementView = ({onToast}) => {
   const [plusMenuOpen,     setPlusMenuOpen]     = useState(false);
   const [newDraft,         setNewDraft]         = useState({ name:'', category:'', description:'', propagationMode:'none', governanceRequired:false, owner:'', managedBy:'', color:'#6366f1', sourceAliases:[] });
   const [newAlias,         setNewAlias]         = useState('');
+  const [newOwners,        setNewOwners]        = useState([]);
+  const [newOwnerInput,    setNewOwnerInput]    = useState(false);
+  const [newOwnerSearch,   setNewOwnerSearch]   = useState('');
+  const [newStewards,      setNewStewards]      = useState([]);
+  const [newStewardInput,  setNewStewardInput]  = useState(false);
+  const [newStewardSearch, setNewStewardSearch] = useState('');
   const [newCatInput,      setNewCatInput]      = useState('');
   const [newCatDraft,      setNewCatDraft]      = useState({ name:'', description:'', color:'#6366f1' });
   const [customCategories, setCustomCategories] = useState([]);
@@ -14209,10 +14289,11 @@ const TagManagementView = ({onToast}) => {
   const addNewTag = () => {
     if(!newDraft.name.trim()) return;
     const finalCat = newDraft.category || newCatInput.trim() || '';
-    createTagDef({...newDraft, category: finalCat});
+    createTagDef({...newDraft, category: finalCat, owner: newOwners[0]||'', managedBy: newStewards[0]||''});
     setNewPanelOpen(false);
     setNewDraft({ name:'', category:'', description:'', propagationMode:'none', governanceRequired:false, owner:'', managedBy:'', color:'#6366f1', sourceAliases:[] });
     setNewAlias(''); setNewCatInput('');
+    setNewOwners([]); setNewStewards([]); setNewOwnerInput(false); setNewStewardInput(false);
     onToast('Tag created','success');
   };
 
@@ -14635,13 +14716,83 @@ const TagManagementView = ({onToast}) => {
                   <div>
                     <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Ownership</label>
                     <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                      <div>
+                      {/* Owner chips */}
+                      <div style={{position:'relative'}}>
                         <div style={{fontSize:10.5,color:T.textMuted,marginBottom:5,textTransform:'uppercase',letterSpacing:'0.05em',fontWeight:600}}>Owner</div>
-                        <PersonPicker value={newDraft.owner} onChange={v=>setNewDraft(d=>({...d,owner:v}))} placeholder="No owner"/>
+                        <div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:4}}>
+                          {newOwners.map((o,i)=>(
+                            <div key={i} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 8px 3px 5px',borderRadius:99,background:T.accentDim,border:`1px solid ${T.accent}33`,fontSize:11.5,color:T.text}}>
+                              <div style={{width:18,height:18,borderRadius:'50%',background:T.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,color:'#fff',flexShrink:0}}>{tava(o)}</div>
+                              <span style={{fontWeight:500}}>{o}</span>
+                              <button onMouseDown={e=>{e.stopPropagation();setNewOwners(p=>p.filter((_,j)=>j!==i));}} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',padding:0,fontSize:13,lineHeight:1,display:'flex',alignItems:'center'}}>{Ic.x(8)}</button>
+                            </div>
+                          ))}
+                          <button onMouseDown={e=>{e.stopPropagation();setNewOwnerInput(p=>!p);setNewOwnerSearch('');}}
+                            style={{display:'inline-flex',alignItems:'center',gap:4,padding:'3px 9px',borderRadius:99,fontSize:11,color:T.textMuted,background:'transparent',border:`1.5px dashed ${T.border}`,cursor:'pointer',transition:'all .12s'}}
+                            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
+                            {Ic.plus(9)} Add owner
+                          </button>
+                        </div>
+                        {newOwnerInput&&(
+                          <div onMouseDown={e=>e.stopPropagation()} style={{position:'absolute',top:'100%',left:0,right:0,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',overflow:'hidden'}}>
+                            <div style={{padding:'6px 8px',borderBottom:`1px solid ${T.border}`}}>
+                              <input autoFocus value={newOwnerSearch} onChange={e=>setNewOwnerSearch(e.target.value)} placeholder="Search users…"
+                                style={{width:'100%',padding:'5px 8px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:5,color:T.text,fontSize:11,outline:'none',boxSizing:'border-box'}}/>
+                            </div>
+                            <div style={{maxHeight:150,overflowY:'auto'}}>
+                              {TAG_USERS.filter(u=>!newOwnerSearch||u.includes(newOwnerSearch.toLowerCase())).map(u=>(
+                                <button key={u} onMouseDown={e=>{e.stopPropagation();setNewOwners(p=>p.includes(u)?p.filter(x=>x!==u):[...p,u]);}}
+                                  style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:newOwners.includes(u)?T.accentDim:'transparent',border:'none',cursor:'pointer',textAlign:'left'}}
+                                  onMouseEnter={e=>{if(!newOwners.includes(u))e.currentTarget.style.background=T.bgHover;}}
+                                  onMouseLeave={e=>{if(!newOwners.includes(u))e.currentTarget.style.background='transparent';}}>
+                                  <div style={{width:20,height:20,borderRadius:'50%',background:T.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,color:'#fff',flexShrink:0}}>{tava(u)}</div>
+                                  <span style={{fontSize:11.5,color:T.text,flex:1}}>{u}</span>
+                                  {newOwners.includes(u)&&<span style={{fontSize:10,color:T.accent}}>✓</span>}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <div>
+                      {/* Steward chips */}
+                      <div style={{position:'relative'}}>
                         <div style={{fontSize:10.5,color:T.textMuted,marginBottom:5,textTransform:'uppercase',letterSpacing:'0.05em',fontWeight:600}}>Steward</div>
-                        <PersonPicker value={newDraft.managedBy} onChange={v=>setNewDraft(d=>({...d,managedBy:v}))} placeholder="No steward"/>
+                        <div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:4}}>
+                          {newStewards.map((o,i)=>(
+                            <div key={i} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 8px 3px 5px',borderRadius:99,background:T.accentDim,border:`1px solid ${T.accent}33`,fontSize:11.5,color:T.text}}>
+                              <div style={{width:18,height:18,borderRadius:'50%',background:T.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,color:'#fff',flexShrink:0}}>{tava(o)}</div>
+                              <span style={{fontWeight:500}}>{o}</span>
+                              <button onMouseDown={e=>{e.stopPropagation();setNewStewards(p=>p.filter((_,j)=>j!==i));}} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',padding:0,fontSize:13,lineHeight:1,display:'flex',alignItems:'center'}}>{Ic.x(8)}</button>
+                            </div>
+                          ))}
+                          <button onMouseDown={e=>{e.stopPropagation();setNewStewardInput(p=>!p);setNewStewardSearch('');}}
+                            style={{display:'inline-flex',alignItems:'center',gap:4,padding:'3px 9px',borderRadius:99,fontSize:11,color:T.textMuted,background:'transparent',border:`1.5px dashed ${T.border}`,cursor:'pointer',transition:'all .12s'}}
+                            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
+                            {Ic.plus(9)} Add steward
+                          </button>
+                        </div>
+                        {newStewardInput&&(
+                          <div onMouseDown={e=>e.stopPropagation()} style={{position:'absolute',top:'100%',left:0,right:0,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',overflow:'hidden'}}>
+                            <div style={{padding:'6px 8px',borderBottom:`1px solid ${T.border}`}}>
+                              <input autoFocus value={newStewardSearch} onChange={e=>setNewStewardSearch(e.target.value)} placeholder="Search users…"
+                                style={{width:'100%',padding:'5px 8px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:5,color:T.text,fontSize:11,outline:'none',boxSizing:'border-box'}}/>
+                            </div>
+                            <div style={{maxHeight:150,overflowY:'auto'}}>
+                              {TAG_USERS.filter(u=>!newStewardSearch||u.includes(newStewardSearch.toLowerCase())).map(u=>(
+                                <button key={u} onMouseDown={e=>{e.stopPropagation();setNewStewards(p=>p.includes(u)?p.filter(x=>x!==u):[...p,u]);}}
+                                  style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:newStewards.includes(u)?T.accentDim:'transparent',border:'none',cursor:'pointer',textAlign:'left'}}
+                                  onMouseEnter={e=>{if(!newStewards.includes(u))e.currentTarget.style.background=T.bgHover;}}
+                                  onMouseLeave={e=>{if(!newStewards.includes(u))e.currentTarget.style.background='transparent';}}>
+                                  <div style={{width:20,height:20,borderRadius:'50%',background:T.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,color:'#fff',flexShrink:0}}>{tava(u)}</div>
+                                  <span style={{fontSize:11.5,color:T.text,flex:1}}>{u}</span>
+                                  {newStewards.includes(u)&&<span style={{fontSize:10,color:T.accent}}>✓</span>}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -14738,6 +14889,7 @@ const TagManagementView = ({onToast}) => {
                   <div style={{display:'flex',gap:0}}>
                     {[
                       {key:'overview',   label:'Overview'},
+                      {key:'assets',     label:'Linked Assets', count:affectedAssets.length},
                       {key:'connectors', label:'Assignments', count:tagSyncRows.length},
                       {key:'activity',   label:'Activity',   count:tagActivity.length},
                     ].map(({key:t,label,count})=>(
@@ -15007,6 +15159,51 @@ const TagManagementView = ({onToast}) => {
                 {/* Assignments & Activity tabs — single column */}
                 {detailTab!=='overview'&&(
                   <div style={{flex:1,overflowY:'auto',padding:'20px 24px'}}>
+
+                  {/* ── LINKED ASSETS TAB ── */}
+                  {detailTab==='assets'&&(
+                    <div style={{maxWidth:700}}>
+                      {/* Summary bar */}
+                      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16,padding:'10px 14px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9}}>
+                        <span style={{color:T.accent,display:'flex'}}>{Ic.catalog(14)}</span>
+                        <span style={{fontSize:13,fontWeight:600,color:T.text}}>{affectedAssets.length} asset{affectedAssets.length!==1?'s':''} tagged with</span>
+                        <span style={{display:'inline-flex',alignItems:'center',gap:5,padding:'2px 10px',borderRadius:99,background:(selTag.color||T.accent)+'18',border:`1px solid ${(selTag.color||T.accent)}33`,fontSize:12,fontWeight:600,color:selTag.color||T.accent}}>
+                          {selTag.name}
+                        </span>
+                      </div>
+                      {affectedAssets.length===0
+                        ? <div style={{padding:'56px 0',textAlign:'center'}}>
+                            <div style={{fontSize:28,marginBottom:12,opacity:.2}}>🏷</div>
+                            <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:4}}>No assets tagged yet</div>
+                            <div style={{fontSize:12,color:T.textMuted}}>Apply this tag to assets in the Data Catalog to see them here.</div>
+                          </div>
+                        : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
+                            <div style={{display:'grid',gridTemplateColumns:'1fr auto auto',padding:'9px 14px',borderBottom:`1px solid ${T.border}`,background:T.bgElevated}}>
+                              {['Asset Name','Type','Status'].map(h=>(
+                                <div key={h} style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>{h}</div>
+                              ))}
+                            </div>
+                            {affectedAssets.map((a,i)=>{
+                              const typeColors = {table:T.accent,view:T.violet,dashboard:T.amber,topic:T.blue,pipeline:T.green,metric:T.rose};
+                              const tc = typeColors[a.type]||T.textSub;
+                              return (
+                                <div key={a.id||i} className="row-hover" style={{display:'grid',gridTemplateColumns:'1fr auto auto',padding:'11px 14px',borderBottom:i<affectedAssets.length-1?`1px solid ${T.border}`:'none',alignItems:'center',gap:12}}>
+                                  <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}>
+                                    <span style={{color:tc,display:'flex',flexShrink:0}}>{Ic.catalog(13)}</span>
+                                    <div style={{minWidth:0}}>
+                                      <div style={{fontSize:12.5,fontWeight:500,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name}</div>
+                                      {a.schema&&<div style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace",marginTop:1}}>{a.schema}.{a.name}</div>}
+                                    </div>
+                                  </div>
+                                  <span style={{fontSize:10.5,fontWeight:600,padding:'2px 8px',borderRadius:4,background:`${tc}15`,color:tc,textTransform:'capitalize',whiteSpace:'nowrap'}}>{a.type}</span>
+                                  <span style={{fontSize:10.5,fontWeight:600,padding:'2px 8px',borderRadius:4,background:'rgba(16,185,129,.12)',color:'#10b981',whiteSpace:'nowrap'}}>Tagged</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                      }
+                    </div>
+                  )}
 
                   {/* ── CONNECTORS TAB ── */}
                   {detailTab==='connectors'&&(
