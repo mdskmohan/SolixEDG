@@ -600,6 +600,13 @@ const TEAMS_DATA = [
   {id:"u8",name:"Tom Vance",   email:"tom.vance@jnj.com",   role:"Data Steward",  team:"Governance",       status:"Inactive",joined:"Mar 2022"},
 ];
 
+const CONNECTOR_ADMINS = [
+  {id:"u5",name:"James Oh",    email:"james.oh@jnj.com",    role:"Connector Admin", team:"Data Engineering"},
+  {id:"u2",name:"Dev Patel",   email:"dev.patel@jnj.com",   role:"Connector Admin", team:"Analytics"},
+  {id:"u6",name:"Priya Nair",  email:"priya.nair@jnj.com",  role:"Connector Admin", team:"Data Engineering"},
+  {id:"u4",name:"Alex Rivera", email:"alex.rivera@jnj.com", role:"Connector Admin", team:"Platform"},
+];
+
 
 const GLOSSARY_DATA = [
   {id:"g1",name:"Commerce Glossary",icon:"🛒",desc:"Core commerce and revenue metrics used across J&J data products.",
@@ -4766,38 +4773,41 @@ const QualityView = () => {
                 </div>
               )}
 
-              {/* Test Type dropdown */}
-              {tcSelTable&&(tcLevel!=="column"||tcSelCol)&&(
-                <div>
-                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Test Type <span style={{color:T.rose}}>*</span></label>
-                  <select
-                    value={tcCustomSQL?"__custom__":tcSelType?.id||""}
-                    onChange={e=>{
-                      if(e.target.value==="__custom__"){setTcCustomSQL(true);setTcSelType(null);}
-                      else if(e.target.value===""){setTcCustomSQL(false);setTcSelType(null);}
-                      else{const def=definitions.find(d=>d.id===e.target.value);setTcSelType(def||null);setTcCustomSQL(false);}
-                    }}
-                    style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${(tcSelType||tcCustomSQL)?T.accent:T.border}`,borderRadius:9,color:(tcSelType||tcCustomSQL)?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
+              {/* Test Type — always visible with toggle */}
+              <div>
+                <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Test Type <span style={{color:T.rose}}>*</span></div>
+                {/* Toggle switch */}
+                <div style={{display:"inline-flex",borderRadius:8,overflow:"hidden",border:`1px solid ${T.border}`,marginBottom:10,background:T.bgElevated}}>
+                  <button onClick={()=>{setTcCustomSQL(false);}}
+                    style={{padding:"7px 16px",background:!tcCustomSQL?T.accent:"transparent",border:"none",color:!tcCustomSQL?"#fff":T.textSub,fontSize:11.5,fontWeight:!tcCustomSQL?700:400,cursor:"pointer",transition:"all .12s"}}>
+                    Preset Type
+                  </button>
+                  <button onClick={()=>{setTcCustomSQL(true);setTcSelType(null);}}
+                    style={{padding:"7px 16px",background:tcCustomSQL?T.accent:"transparent",border:"none",color:tcCustomSQL?"#fff":T.textSub,fontSize:11.5,fontWeight:tcCustomSQL?700:400,cursor:"pointer",transition:"all .12s"}}>
+                    Custom SQL
+                  </button>
+                </div>
+                {/* Preset dropdown */}
+                {!tcCustomSQL&&(
+                  <select value={tcSelType?.id||""} onChange={e=>{const def=definitions.find(d=>d.id===e.target.value);setTcSelType(def||null);}}
+                    style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${tcSelType?T.accent:T.border}`,borderRadius:9,color:tcSelType?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
                     <option value="">Select a test type…</option>
-                    <option value="__custom__">✦ Custom SQL Query</option>
                     {definitions.filter(d=>tcLevel==="column"?d.entityType==="COLUMN":d.entityType==="TABLE").map(def=>(
                       <option key={def.id} value={def.id}>{def.name}</option>
                     ))}
                   </select>
-                </div>
-              )}
-
-              {/* Custom SQL textarea */}
-              {tcCustomSQL&&(
-                <div>
-                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>SQL Query <span style={{color:T.rose}}>*</span></label>
-                  <textarea value={tcSQLQuery} onChange={e=>setTcSQLQuery(e.target.value)} rows={4}
-                    placeholder={"SELECT COUNT(*) FROM {{table}} WHERE amount < 0"}
-                    style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${tcSQLQuery?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box",lineHeight:1.6}}
-                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=tcSQLQuery?T.accent:T.border}/>
-                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>Use <code style={{fontFamily:"'Geist Mono',monospace",background:T.bgElevated,padding:"1px 5px",borderRadius:4}}>{`{{table}}`}</code> to reference the selected table. Result &gt; 0 = fail.</div>
-                </div>
-              )}
+                )}
+                {/* Custom SQL textarea */}
+                {tcCustomSQL&&(
+                  <div>
+                    <textarea value={tcSQLQuery} onChange={e=>setTcSQLQuery(e.target.value)} rows={4}
+                      placeholder={"SELECT COUNT(*) FROM {{table}} WHERE amount < 0"}
+                      style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${tcSQLQuery?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box",lineHeight:1.6}}
+                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=tcSQLQuery?T.accent:T.border}/>
+                    <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>Use <code style={{fontFamily:"'Geist Mono',monospace",background:T.bgElevated,padding:"1px 5px",borderRadius:4}}>{`{{table}}`}</code> to reference the selected table. Result &gt; 0 = fail.</div>
+                  </div>
+                )}
+              </div>
 
               {/* Parameters */}
               {!tcCustomSQL&&tcSelType&&tcSelType.params.length>0&&(
@@ -9549,6 +9559,8 @@ const AddServiceWizard = ({onClose, onDone}) => {
   const [svcDesc,      setSvcDesc]     = useState("");
   const [svcEnv,       setSvcEnv]      = useState("Production");
   const [svcOwner,     setSvcOwner]    = useState("data-eng");
+  const [svcAdmins,    setSvcAdmins]   = useState([]);
+  const [svcAdminOpen, setSvcAdminOpen]= useState(false);
   const [schedule,     setSchedule]    = useState("0 2 * * *");
   const [schedMode,    setSchedMode]   = useState("scheduled");
   const [fields,       setFields]      = useState({});
@@ -9845,11 +9857,54 @@ const AddServiceWizard = ({onClose, onDone}) => {
                         </select>
                       </div>
                       <div>
-                        <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>Owner Team</label>
+                        <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>Team</label>
                         <select value={svcOwner} onChange={e=>setSvcOwner(e.target.value)} style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",cursor:"pointer"}}>
                           {["data-eng","analytics","platform","ai-team","governance"].map(o=><option key={o}>{o}</option>)}
                         </select>
                       </div>
+                    </div>
+                    {/* Connector Admin */}
+                    <div style={{position:"relative"}}>
+                      <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>Connector Admin</label>
+                      <div onClick={()=>setSvcAdminOpen(o=>!o)}
+                        style={{display:"flex",flexWrap:"wrap",gap:5,padding:"7px 10px",background:T.bgSurface,border:`1.5px solid ${svcAdminOpen?T.accent:T.border}`,borderRadius:9,minHeight:42,alignItems:"center",cursor:"pointer",transition:"border .15s"}}>
+                        {svcAdmins.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic",flex:1}}>Select connector admins…</span>}
+                        {svcAdmins.map(u=>(
+                          <span key={u.id} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:99,background:"rgba(238,36,36,.1)",border:"1px solid rgba(238,36,36,.25)",fontSize:11.5,color:"#ee2424",fontWeight:500}}>
+                            {u.name}
+                            <button onClick={e=>{e.stopPropagation();setSvcAdmins(p=>p.filter(x=>x.id!==u.id));}} style={{background:"none",border:"none",cursor:"pointer",color:"#ee2424",fontSize:13,padding:"0 0 0 2px",lineHeight:1,opacity:.65}}>×</button>
+                          </span>
+                        ))}
+                        <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{marginLeft:"auto",flexShrink:0,color:T.textMuted,transform:svcAdminOpen?"rotate(180deg)":"rotate(0deg)",transition:"transform .15s"}}><path d="M1.5 3.5l3.5 3.5 3.5-3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </div>
+                      {svcAdminOpen&&(
+                        <>
+                          <div style={{position:"fixed",inset:0,zIndex:199}} onClick={()=>setSvcAdminOpen(false)}/>
+                          <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 8px 24px rgba(0,0,0,.18)",zIndex:200,overflow:"hidden"}}>
+                            <div style={{maxHeight:180,overflowY:"auto"}}>
+                              {CONNECTOR_ADMINS.map(u=>{
+                                const sel=svcAdmins.some(x=>x.id===u.id);
+                                const ini=u.name.split(' ').map(s=>s[0]).join('').slice(0,2).toUpperCase();
+                                return (
+                                  <button key={u.id} onClick={()=>setSvcAdmins(p=>sel?p.filter(x=>x.id!==u.id):[...p,u])}
+                                    style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"9px 12px",background:sel?"rgba(238,36,36,.07)":"transparent",border:"none",cursor:"pointer",textAlign:"left"}}
+                                    onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
+                                    <div style={{width:26,height:26,borderRadius:6,background:"rgba(238,36,36,.1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#ee2424",flexShrink:0}}>{ini}</div>
+                                    <div style={{flex:1,minWidth:0}}>
+                                      <div style={{fontSize:12,fontWeight:sel?600:400,color:T.text}}>{u.name}</div>
+                                      <div style={{fontSize:10.5,color:T.textMuted}}>{u.team}</div>
+                                    </div>
+                                    {sel&&<span style={{fontSize:11,color:"#ee2424",flexShrink:0}}>✓</span>}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <div style={{padding:"8px 10px",borderTop:`1px solid ${T.border}`}}>
+                              <button onClick={()=>setSvcAdminOpen(false)} style={{width:"100%",padding:"5px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Done</button>
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -13853,6 +13908,7 @@ const TagManagementView = ({onToast}) => {
   const [catFilters,       setCatFilters]       = useState([]);
   const [filterOpen,       setFilterOpen]       = useState(false);
   const [selTagId,         setSelTagId]         = useState(null);
+  const [selCatId,         setSelCatId]         = useState(null);
   const [newPanelOpen,     setNewPanelOpen]     = useState(false);
   const [newCatPanelOpen,  setNewCatPanelOpen]  = useState(false);
   const [plusMenuOpen,     setPlusMenuOpen]     = useState(false);
@@ -13979,13 +14035,13 @@ const TagManagementView = ({onToast}) => {
                 </button>
                 {plusMenuOpen&&(
                   <div style={{position:'absolute',top:'calc(100% + 4px)',right:0,width:170,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.18)',zIndex:300,overflow:'hidden'}}>
-                    <button onClick={()=>{setNewCatPanelOpen(true);setNewPanelOpen(false);setSelTagId(null);setPlusMenuOpen(false);}}
+                    <button onClick={()=>{setNewCatPanelOpen(true);setNewPanelOpen(false);setSelTagId(null);setSelCatId(null);setPlusMenuOpen(false);}}
                       style={{width:'100%',padding:'10px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',display:'flex',alignItems:'center',gap:9,color:T.text,fontSize:12,fontWeight:500,borderBottom:`1px solid ${T.border}`}}
                       onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                       <span style={{width:20,height:20,borderRadius:5,background:'rgba(99,102,241,.12)',display:'flex',alignItems:'center',justifyContent:'center',color:'#6366f1',flexShrink:0}}>{Ic.catalog(10)}</span>
                       New Category
                     </button>
-                    <button onClick={()=>{setNewPanelOpen(true);setNewCatPanelOpen(false);setSelTagId(null);setPlusMenuOpen(false);}}
+                    <button onClick={()=>{setNewPanelOpen(true);setNewCatPanelOpen(false);setSelTagId(null);setSelCatId(null);setPlusMenuOpen(false);}}
                       style={{width:'100%',padding:'10px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',display:'flex',alignItems:'center',gap:9,color:T.text,fontSize:12,fontWeight:500}}
                       onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                       <span style={{width:20,height:20,borderRadius:5,background:`${T.accent}14`,display:'flex',alignItems:'center',justifyContent:'center',color:T.accent,flexShrink:0}}>{Ic.tag(10)}</span>
@@ -14072,8 +14128,11 @@ const TagManagementView = ({onToast}) => {
               {groupedTags.map(({cat,tags})=>(
                 <div key={cat}>
                   {/* Category header with 3-dot */}
-                  <div style={{padding:'8px 14px 4px',fontSize:10,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.08em',position:'sticky',top:0,background:T.bgSurface,zIndex:2,borderBottom:`1px solid ${T.border}44`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                    <span>{cat}</span>
+                  <div style={{padding:'8px 14px 4px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',position:'sticky',top:0,background:selCatId===cat?T.accentDim:T.bgSurface,zIndex:2,borderBottom:`1px solid ${T.border}44`,display:'flex',alignItems:'center',justifyContent:'space-between',borderLeft:`2.5px solid ${selCatId===cat?T.accent:'transparent'}`}}>
+                    <button onClick={()=>{setSelCatId(c=>c===cat?null:cat);setSelTagId(null);setNewPanelOpen(false);setNewCatPanelOpen(false);setEditing(false);}}
+                      style={{background:'none',border:'none',cursor:'pointer',padding:0,textAlign:'left',flex:1,color:selCatId===cat?T.accent:T.textMuted}}>
+                      {cat}
+                    </button>
                     <div ref={dotMenuOpen===`cat:${cat}`?dotMenuRef:undefined} style={{position:'relative'}}>
                       <button onClick={e=>{e.stopPropagation();setDotMenuOpen(o=>o===`cat:${cat}`?null:`cat:${cat}`);}}
                         style={{width:20,height:20,borderRadius:4,background:'transparent',border:'none',color:T.textMuted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:0.6,fontSize:14,lineHeight:1,fontWeight:700}}
@@ -14104,7 +14163,7 @@ const TagManagementView = ({onToast}) => {
                       <div key={td.id} style={{position:'relative',display:'flex',alignItems:'center'}}
                         onMouseEnter={e=>e.currentTarget.querySelector('.tag-dot-btn').style.opacity='1'}
                         onMouseLeave={e=>e.currentTarget.querySelector('.tag-dot-btn').style.opacity='0'}>
-                        <button onClick={()=>{setSelTagId(td.id);setDetailTab('overview');setEditing(false);setEditDraft(null);setNewPanelOpen(false);setNewCatPanelOpen(false);}}
+                        <button onClick={()=>{setSelTagId(td.id);setSelCatId(null);setDetailTab('overview');setEditing(false);setEditDraft(null);setNewPanelOpen(false);setNewCatPanelOpen(false);}}
                           style={{flex:1,display:'flex',alignItems:'center',gap:9,padding:'7px 8px 7px 14px',background:isSel?T.accentDim:'transparent',border:'none',borderLeft:`2.5px solid ${isSel?T.accent:'transparent'}`,cursor:'pointer',transition:'background .1s',textAlign:'left',minWidth:0}}
                           onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background='transparent';}}>
                           <span style={{width:8,height:8,borderRadius:'50%',background:td.color,flexShrink:0,display:'block',boxShadow:isSel?`0 0 0 2px ${td.color}44`:'none'}}/>
@@ -14118,7 +14177,7 @@ const TagManagementView = ({onToast}) => {
                           </button>
                           {dotMenuOpen===td.id&&(
                             <div style={{position:'absolute',top:'100%',right:0,width:140,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',zIndex:300,overflow:'hidden'}}>
-                              <button onClick={e=>{e.stopPropagation();setSelTagId(td.id);startEdit();setDotMenuOpen(null);}}
+                              <button onClick={e=>{e.stopPropagation();setSelTagId(td.id);setSelCatId(null);startEdit();setDotMenuOpen(null);}}
                                 style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.text,display:'flex',alignItems:'center',gap:8,borderBottom:`1px solid ${T.border}`}}
                                 onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                                 <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -14147,7 +14206,7 @@ const TagManagementView = ({onToast}) => {
                       <div key={td.id} style={{position:'relative',display:'flex',alignItems:'center'}}
                         onMouseEnter={e=>e.currentTarget.querySelector('.tag-dot-btn').style.opacity='1'}
                         onMouseLeave={e=>e.currentTarget.querySelector('.tag-dot-btn').style.opacity='0'}>
-                        <button onClick={()=>{setSelTagId(td.id);setDetailTab('overview');setEditing(false);setEditDraft(null);setNewPanelOpen(false);setNewCatPanelOpen(false);}}
+                        <button onClick={()=>{setSelTagId(td.id);setSelCatId(null);setDetailTab('overview');setEditing(false);setEditDraft(null);setNewPanelOpen(false);setNewCatPanelOpen(false);}}
                           style={{flex:1,display:'flex',alignItems:'center',gap:9,padding:'7px 8px 7px 14px',background:isSel?T.accentDim:'transparent',border:'none',borderLeft:`2.5px solid ${isSel?T.accent:'transparent'}`,cursor:'pointer',transition:'background .1s',textAlign:'left',minWidth:0}}
                           onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background='transparent';}}>
                           <span style={{width:8,height:8,borderRadius:'50%',background:td.color,flexShrink:0,display:'block'}}/>
@@ -14161,7 +14220,7 @@ const TagManagementView = ({onToast}) => {
                           </button>
                           {dotMenuOpen===td.id&&(
                             <div style={{position:'absolute',top:'100%',right:0,width:140,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',zIndex:300,overflow:'hidden'}}>
-                              <button onClick={e=>{e.stopPropagation();setSelTagId(td.id);startEdit();setDotMenuOpen(null);}}
+                              <button onClick={e=>{e.stopPropagation();setSelTagId(td.id);setSelCatId(null);startEdit();setDotMenuOpen(null);}}
                                 style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.text,display:'flex',alignItems:'center',gap:8,borderBottom:`1px solid ${T.border}`}}
                                 onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                                 <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -14187,13 +14246,68 @@ const TagManagementView = ({onToast}) => {
 
         {/* ── RIGHT: Tag detail or empty state ── */}
         <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',background:T.bg}}>
-          {!selTag&&!newPanelOpen&&!newCatPanelOpen&&(
+          {!selTag&&!selCatId&&!newPanelOpen&&!newCatPanelOpen&&(
             <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,color:T.textMuted}}>
               <div style={{opacity:.15}}>{Ic.tag(48)}</div>
-              <div style={{fontSize:14,fontWeight:600,color:T.textSub}}>Select a tag to view details</div>
-              <div style={{fontSize:12,color:T.textMuted}}>Choose a tag from the list ←</div>
+              <div style={{fontSize:14,fontWeight:600,color:T.textSub}}>Select a category or tag</div>
+              <div style={{fontSize:12,color:T.textMuted}}>Click a category header or tag from the list ←</div>
             </div>
           )}
+
+          {/* ── Category detail panel ── */}
+          {selCatId&&!selTag&&!newPanelOpen&&!newCatPanelOpen&&(()=>{
+            const catTags = tagDefs.filter(td=>td.category===selCatId);
+            const cc = getCatStyle(selCatId);
+            return (
+              <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+                {/* Header */}
+                <div style={{padding:'16px 24px',borderBottom:`1px solid ${T.border}`,background:T.bgSurface,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:10}}>
+                    <span style={{width:13,height:13,borderRadius:'50%',background:cc.color||T.accent,display:'block',flexShrink:0,boxShadow:`0 0 0 3px ${(cc.color||T.accent)}33`}}/>
+                    <div>
+                      <div style={{fontSize:17,fontWeight:700,color:T.text,textTransform:'capitalize'}}>{selCatId}</div>
+                      <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{catTags.length} tag{catTags.length!==1?'s':''} in this category</div>
+                    </div>
+                  </div>
+                  <button onClick={()=>{setNewCatPanelOpen(true);setNewCatDraft({name:selCatId,description:'',color:'#6366f1'});}}
+                    style={{padding:'6px 14px',borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:'pointer',fontWeight:500}}
+                    onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+                    Edit
+                  </button>
+                </div>
+                {/* Body */}
+                <div style={{flex:1,overflowY:'auto',padding:'20px 24px'}}>
+                  <div style={{maxWidth:680,display:'flex',flexDirection:'column',gap:16}}>
+                    {/* Tags in this category */}
+                    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
+                      <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                        <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Tags</span>
+                        <button onClick={()=>{setNewPanelOpen(true);setNewDraft(d=>({...d,category:selCatId}));setSelCatId(null);}}
+                          style={{fontSize:11,padding:'3px 10px',borderRadius:6,background:T.accent,border:'none',color:'#fff',cursor:'pointer',fontWeight:600}}>+ New Tag</button>
+                      </div>
+                      {catTags.length===0
+                        ? <div style={{padding:'32px 16px',textAlign:'center',fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No tags in this category yet</div>
+                        : catTags.map((td,i)=>{
+                            const cnt=assetCount(td.id);
+                            return (
+                              <div key={td.id} onClick={()=>{setSelTagId(td.id);setSelCatId(null);setDetailTab('overview');}}
+                                style={{display:'flex',alignItems:'center',gap:10,padding:'11px 16px',borderBottom:i<catTags.length-1?`1px solid ${T.border}`:'none',cursor:'pointer',transition:'background .1s'}}
+                                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                <span style={{width:9,height:9,borderRadius:'50%',background:td.color,flexShrink:0,display:'block'}}/>
+                                <span style={{flex:1,fontSize:13,color:T.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
+                                {td.propagationMode&&td.propagationMode!=='none'&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:99,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`,fontWeight:500,textTransform:'capitalize',flexShrink:0}}>{PROP_LABELS[td.propagationMode]}</span>}
+                                <span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace",flexShrink:0}}>{cnt} asset{cnt!==1?'s':''}</span>
+                                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,flexShrink:0}}><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                              </div>
+                            );
+                          })
+                      }
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* ── New Category panel ── */}
           {newCatPanelOpen&&(
@@ -14390,7 +14504,7 @@ const TagManagementView = ({onToast}) => {
                   <div style={{display:'flex',gap:0}}>
                     {[
                       {key:'overview',   label:'Overview'},
-                      {key:'connectors', label:'Connectors', count:tagSyncRows.length},
+                      {key:'connectors', label:'Assignments', count:tagSyncRows.length},
                       {key:'activity',   label:'Activity',   count:tagActivity.length},
                     ].map(({key:t,label,count})=>(
                       <button key={t} onClick={()=>setDetailTab(t)}
@@ -14427,61 +14541,23 @@ const TagManagementView = ({onToast}) => {
                         </div>
                       </div>
 
-                      {/* Properties */}
-                      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
-                        <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.border}`,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Properties</div>
-                        <div>
-                          {/* Category */}
-                          <div style={{display:'grid',gridTemplateColumns:'130px 1fr',gap:12,padding:'10px 16px',borderBottom:`1px solid ${T.border}`,alignItems:'center'}}>
-                            <span style={{fontSize:12,color:T.textMuted,flexShrink:0}}>Category</span>
-                            {editing
-                              ? <div style={{display:'flex',gap:5,flexWrap:'wrap',alignItems:'center'}}>
-                                  {allCategories.map(c=>(
-                                    <button key={c} onClick={()=>setEditDraft(d=>({...d,category:c}))} style={{padding:'3px 10px',borderRadius:99,fontSize:11,border:`1.5px solid ${draft.category===c?T.accent:T.border}`,background:draft.category===c?T.accentDim:'transparent',color:draft.category===c?T.accent:T.textMuted,cursor:'pointer',textTransform:'capitalize'}}>{c}</button>
-                                  ))}
-                                </div>
-                              : draft.category
-                                ? <span style={{fontSize:11.5,padding:'2px 9px',borderRadius:99,background:cc.bg,color:cc.color,fontWeight:600,textTransform:'capitalize',display:'inline-block',width:'fit-content'}}>{draft.category}</span>
-                                : <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>None</span>
-                            }
+                      {/* Propagation */}
+                      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:'14px 16px',display:'flex',alignItems:'center',gap:12}}>
+                        <span style={{fontSize:12,color:T.textMuted,minWidth:100,flexShrink:0,fontWeight:500}}>Propagation</span>
+                        {editing
+                          ? <select value={draft.propagationMode} onChange={e=>setEditDraft(d=>({...d,propagationMode:e.target.value}))} style={{padding:'5px 10px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:'none'}}>
+                              {Object.entries(PROP_LABELS).map(([v,l])=><option key={v} value={v}>{l}</option>)}
+                            </select>
+                          : <span style={{fontSize:12.5,color:PROP_COLORS[draft.propagationMode]||T.textMuted,fontWeight:600}}>{PROP_LABELS[draft.propagationMode]||'—'}</span>
+                        }
+                        {editing&&(
+                          <div style={{marginLeft:'auto',display:'flex',gap:6,flexWrap:'wrap'}}>
+                            <span style={{fontSize:11,color:T.textMuted,alignSelf:'center'}}>Color:</span>
+                            {['#ee2424','#d97706','#16a34a','#2563eb','#7c3aed','#6366f1','#0891b2','#6b7280'].map(c=>(
+                              <button key={c} onClick={()=>setEditDraft(d=>({...d,color:c}))} style={{width:18,height:18,borderRadius:'50%',background:c,border:draft.color===c?`3px solid ${T.text}`:'3px solid transparent',cursor:'pointer',padding:0,flexShrink:0}}/>
+                            ))}
                           </div>
-                          {/* Propagation */}
-                          <div style={{display:'grid',gridTemplateColumns:'130px 1fr',gap:12,padding:'10px 16px',borderBottom:`1px solid ${T.border}`,alignItems:'center'}}>
-                            <span style={{fontSize:12,color:T.textMuted,flexShrink:0}}>Propagation</span>
-                            {editing
-                              ? <select value={draft.propagationMode} onChange={e=>setEditDraft(d=>({...d,propagationMode:e.target.value}))} style={{padding:'5px 10px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:'none',width:'fit-content'}}>
-                                  {Object.entries(PROP_LABELS).map(([v,l])=><option key={v} value={v}>{l}</option>)}
-                                </select>
-                              : <span style={{fontSize:12,color:PROP_COLORS[draft.propagationMode]||T.textMuted,fontWeight:500}}>{PROP_LABELS[draft.propagationMode]||'—'}</span>
-                            }
-                          </div>
-                          {/* Governance */}
-                          <div style={{display:'grid',gridTemplateColumns:'130px 1fr',gap:12,padding:'10px 16px',borderBottom:`1px solid ${T.border}`,alignItems:'center'}}>
-                            <span style={{fontSize:12,color:T.textMuted,flexShrink:0}}>Governance</span>
-                            {editing
-                              ? <label style={{display:'flex',alignItems:'center',gap:7,cursor:'pointer'}}>
-                                  <input type="checkbox" checked={!!draft.governanceRequired} onChange={e=>setEditDraft(d=>({...d,governanceRequired:e.target.checked}))} style={{width:14,height:14,cursor:'pointer'}}/>
-                                  <span style={{fontSize:12,color:T.textSub}}>Approval required to apply</span>
-                                </label>
-                              : <span style={{fontSize:12,color:draft.governanceRequired?T.accent:T.textMuted,fontWeight:500}}>{draft.governanceRequired?'Approval required':'Not required'}</span>
-                            }
-                          </div>
-                          {/* Color */}
-                          <div style={{display:'grid',gridTemplateColumns:'130px 1fr',gap:12,padding:'10px 16px',alignItems:'center'}}>
-                            <span style={{fontSize:12,color:T.textMuted,flexShrink:0}}>Color</span>
-                            {editing
-                              ? <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                                  {['#ee2424','#d97706','#16a34a','#2563eb','#7c3aed','#6366f1','#0891b2','#6b7280'].map(c=>(
-                                    <button key={c} onClick={()=>setEditDraft(d=>({...d,color:c}))} style={{width:20,height:20,borderRadius:'50%',background:c,border:draft.color===c?`3px solid ${T.text}`:'3px solid transparent',cursor:'pointer',padding:0}}/>
-                                  ))}
-                                </div>
-                              : <span style={{display:'inline-flex',alignItems:'center',gap:7}}>
-                                  <span style={{width:13,height:13,borderRadius:'50%',background:draft.color,display:'block',flexShrink:0}}/>
-                                  <span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{draft.color}</span>
-                                </span>
-                            }
-                          </div>
-                        </div>
+                        )}
                       </div>
 
                       {/* Ownership — Owner + Steward side by side */}
