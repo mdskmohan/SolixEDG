@@ -11581,6 +11581,56 @@ const InlinePillSelect = ({value, options, onChange, colorMap, placeholder}) => 
 };
 
 // ─── Teams, Access, Personas top-level section components ───
+/* ── Multi-chip picker — reusable inside TeamsSection ── */
+const MultiChipPicker = ({values=[], options=[], colorMap={}, onChange, placeholder="None", neutral=false}) => {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(()=>{
+    const h = e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};
+    document.addEventListener("mousedown",h);
+    return ()=>document.removeEventListener("mousedown",h);
+  },[]);
+  const available = options.filter(o=>!values.includes(o));
+  return (
+    <div ref={ref} style={{position:"relative",display:"flex",flexWrap:"wrap",gap:4,alignItems:"center"}}>
+      {values.length===0&&<span style={{fontSize:11,color:T.textMuted,fontStyle:"italic"}}>{placeholder}</span>}
+      {values.map(v=>{
+        const color = neutral?"#6b7280":(colorMap[v]||T.accent);
+        return (
+          <span key={v} style={{display:"inline-flex",alignItems:"center",gap:3,padding:"2px 7px 2px 8px",borderRadius:99,background:`${color}15`,border:`1px solid ${color}33`,fontSize:10.5,fontWeight:600,color,whiteSpace:"nowrap"}}>
+            {v}
+            <button onClick={e=>{e.stopPropagation();onChange(values.filter(x=>x!==v));}} style={{background:"none",border:"none",cursor:"pointer",color,padding:0,lineHeight:1,display:"flex",opacity:.6,fontSize:13,marginLeft:1}}>×</button>
+          </span>
+        );
+      })}
+      {available.length>0&&(
+        <button onClick={e=>{e.stopPropagation();setOpen(o=>!o);}} style={{width:18,height:18,borderRadius:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,lineHeight:1,flexShrink:0,transition:"all .1s"}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>+</button>
+      )}
+      {open&&(
+        <>
+          <div style={{position:"fixed",inset:0,zIndex:299}} onClick={()=>setOpen(false)}/>
+          <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,minWidth:170,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 8px 24px rgba(0,0,0,.2)",zIndex:300,overflow:"hidden",padding:"4px 0"}}>
+            {available.map(o=>{
+              const color = neutral?"#6b7280":(colorMap[o]||T.accent);
+              return (
+                <button key={o} onClick={()=>{onChange([...values,o]);setOpen(false);}}
+                  style={{width:"100%",padding:"7px 12px",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",fontSize:12,color:T.text,display:"flex",alignItems:"center",gap:8}}
+                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <span style={{width:8,height:8,borderRadius:"50%",background:color,flexShrink:0,display:"block"}}/>
+                  {o}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
 const TeamsSection = ({onToast}) => {
 
   const ROLE_LIST    = ["Admin","Data Steward","Data Analyst","Data Engineer","Viewer"];
@@ -11590,14 +11640,14 @@ const TeamsSection = ({onToast}) => {
   // ── Shared state ──
   const [activeTab,   setActiveTab]   = useState("teams");
   const [members,     setMembers]     = useState([
-    {id:"u1",name:"Maya Chen",    email:"maya.chen@jnj.com",    role:"Data Steward",  team:"Governance",       status:"Active",  joined:"Jan 2023",avatar:"MC",color:"#d97706"},
-    {id:"u2",name:"Dev Patel",    email:"dev.patel@jnj.com",    role:"Data Analyst",  team:"Analytics",        status:"Active",  joined:"Mar 2023",avatar:"DP",color:"#0284c7"},
-    {id:"u3",name:"Sarah Kim",    email:"sarah.kim@jnj.com",    role:"Viewer",        team:"Finance",          status:"Active",  joined:"Feb 2022",avatar:"SK",color:"#4b4b60"},
-    {id:"u4",name:"Alex Rivera",  email:"alex.rivera@jnj.com",  role:"Admin",         team:"Platform",         status:"Active",  joined:"Jun 2022",avatar:"AR",color:"#ee2424"},
-    {id:"u5",name:"James Oh",     email:"james.oh@jnj.com",     role:"Data Engineer", team:"Data Engineering", status:"Active",  joined:"Nov 2022",avatar:"JO",color:"#7c3aed"},
-    {id:"u6",name:"Priya Nair",   email:"priya.nair@jnj.com",   role:"Data Engineer", team:"Data Engineering", status:"Active",  joined:"Sep 2023",avatar:"PN",color:"#7c3aed"},
-    {id:"u7",name:"Lisa Ray",     email:"lisa.ray@jnj.com",     role:"Data Analyst",  team:"Analytics",        status:"Active",  joined:"Jan 2024",avatar:"LR",color:"#0284c7"},
-    {id:"u8",name:"Tom Vance",    email:"tom.vance@jnj.com",    role:"Data Steward",  team:"Governance",       status:"Inactive",joined:"Mar 2022",avatar:"TV",color:"#d97706"},
+    {id:"u1",name:"Maya Chen",    email:"maya.chen@jnj.com",    roles:["Data Steward","Data Analyst"],  teams:["Governance","Analytics"],       status:"Active",  joined:"Jan 2023",avatar:"MC",color:"#d97706"},
+    {id:"u2",name:"Dev Patel",    email:"dev.patel@jnj.com",    roles:["Data Analyst"],                 teams:["Analytics"],                    status:"Active",  joined:"Mar 2023",avatar:"DP",color:"#0284c7"},
+    {id:"u3",name:"Sarah Kim",    email:"sarah.kim@jnj.com",    roles:["Viewer"],                       teams:["Finance"],                      status:"Active",  joined:"Feb 2022",avatar:"SK",color:"#4b4b60"},
+    {id:"u4",name:"Alex Rivera",  email:"alex.rivera@jnj.com",  roles:["Admin"],                        teams:["Platform","Governance"],         status:"Active",  joined:"Jun 2022",avatar:"AR",color:"#ee2424"},
+    {id:"u5",name:"James Oh",     email:"james.oh@jnj.com",     roles:["Data Engineer","Data Analyst"], teams:["Data Engineering","Analytics"],  status:"Active",  joined:"Nov 2022",avatar:"JO",color:"#7c3aed"},
+    {id:"u6",name:"Priya Nair",   email:"priya.nair@jnj.com",   roles:["Data Engineer"],                teams:["Data Engineering"],              status:"Active",  joined:"Sep 2023",avatar:"PN",color:"#7c3aed"},
+    {id:"u7",name:"Lisa Ray",     email:"lisa.ray@jnj.com",     roles:["Data Analyst","Data Steward"],  teams:["Analytics","Finance"],           status:"Active",  joined:"Jan 2024",avatar:"LR",color:"#0284c7"},
+    {id:"u8",name:"Tom Vance",    email:"tom.vance@jnj.com",    roles:["Data Steward"],                 teams:["Governance"],                   status:"Inactive",joined:"Mar 2022",avatar:"TV",color:"#d97706"},
   ]);
   const [teams, setTeams] = useState([
     {id:"t1",name:"Data Engineering",desc:"Manages pipelines, ingestion, and data infrastructure.",  color:"#7c3aed",created:"Nov 2022"},
@@ -11612,8 +11662,8 @@ const TeamsSection = ({onToast}) => {
   const [selectedTeam,  setSelectedTeam]  = useState("all");
   const [memberModal,   setMemberModal]   = useState(false);
   const [inviteEmail,   setInviteEmail]   = useState("");
-  const [inviteRole,    setInviteRole]    = useState("Data Analyst");
-  const [inviteTeam,    setInviteTeam]    = useState("");
+  const [inviteRoles,   setInviteRoles]   = useState([]);
+  const [inviteTeams,   setInviteTeams]   = useState([]);
 
   // ── Teams tab state ──
   const [teamDetail,        setTeamDetail]        = useState(null);
@@ -11631,28 +11681,33 @@ const TeamsSection = ({onToast}) => {
 
   const filteredMembers = members.filter(m => {
     const matchSearch = !memberSearch || m.name.toLowerCase().includes(memberSearch.toLowerCase()) || m.email.toLowerCase().includes(memberSearch.toLowerCase());
-    const matchTeam   = selectedTeam === "all" || m.team === selectedTeam;
+    const matchTeam   = selectedTeam === "all" || (m.teams||[]).includes(selectedTeam);
     return matchSearch && matchTeam;
   });
 
-  const teamCounts = teams.reduce((acc,t) => ({...acc,[t.name]:members.filter(m=>m.team===t.name).length}), {});
+  const teamCounts = teams.reduce((acc,t) => ({...acc,[t.name]:members.filter(m=>(m.teams||[]).includes(t.name)).length}), {});
 
   // ── Handlers ──
   const handleInvite = () => {
     if(!inviteEmail.trim()) return;
     const name = inviteEmail.split("@")[0].replace(/[._]/g," ").replace(/\b\w/g,c=>c.toUpperCase());
     const avatar = name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
+    const primaryRole = inviteRoles[0]||"Viewer";
     setMembers(prev=>[...prev,{
-      id:`u${Date.now()}`,name,email:inviteEmail,role:inviteRole,
-      team:inviteTeam||"",status:"Pending",joined:"Just now",
-      avatar,color:ROLE_COLORS[inviteRole]||T.accent,
+      id:`u${Date.now()}`,name,email:inviteEmail,
+      roles:inviteRoles.length?inviteRoles:["Viewer"],
+      teams:inviteTeams,
+      status:"Pending",joined:"Just now",
+      avatar,color:ROLE_COLORS[primaryRole]||T.accent,
     }]);
-    setMemberModal(false); setInviteEmail(""); onToast(`Invite sent to ${inviteEmail}`,"success");
+    setMemberModal(false); setInviteEmail(""); setInviteRoles([]); setInviteTeams([]);
+    onToast(`Invite sent to ${inviteEmail}`,"success");
   };
 
-  const handleRoleChange = (userId, newRole) => {
-    setMembers(prev=>prev.map(m=>m.id===userId?{...m,role:newRole,color:ROLE_COLORS[newRole]||T.accent}:m));
-    onToast("Role updated","success");
+  const handleRolesChange = (userId, newRoles) => {
+    const primary = newRoles[0]||"Viewer";
+    setMembers(prev=>prev.map(m=>m.id===userId?{...m,roles:newRoles,color:ROLE_COLORS[primary]||T.accent}:m));
+    onToast("Roles updated","success");
   };
 
   const handleDeactivate = (userId) => {
@@ -11665,9 +11720,9 @@ const TeamsSection = ({onToast}) => {
     onToast("Member removed","success");
   };
 
-  const handleMoveTeam = (userId, newTeam) => {
-    setMembers(prev=>prev.map(m=>m.id===userId?{...m,team:newTeam}:m));
-    onToast("Team updated","success");
+  const handleTeamsChange = (userId, newTeams) => {
+    setMembers(prev=>prev.map(m=>m.id===userId?{...m,teams:newTeams}:m));
+    onToast("Teams updated","success");
   };
 
   const handleCreateTeam = () => {
@@ -11681,26 +11736,26 @@ const TeamsSection = ({onToast}) => {
   const handleDeleteTeam = (teamId) => {
     const team = teams.find(t=>t.id===teamId);
     if(!team) return;
-    setMembers(prev=>prev.map(m=>m.team===team.name?{...m,team:""}:m));
+    setMembers(prev=>prev.map(m=>({...m,teams:(m.teams||[]).filter(t=>t!==team.name)})));
     setTeams(prev=>prev.filter(t=>t.id!==teamId));
     setTeamDetail(null);
     onToast(`Team "${team.name}" deleted`,"error");
   };
 
   const handleRemoveFromTeam = (userId, teamName) => {
-    setMembers(prev=>prev.map(m=>m.id===userId&&m.team===teamName?{...m,team:""}:m));
+    setMembers(prev=>prev.map(m=>m.id===userId?{...m,teams:(m.teams||[]).filter(t=>t!==teamName)}:m));
     onToast("Removed from team","success");
   };
 
   const handleAddToTeam = (userId, teamName) => {
-    setMembers(prev=>prev.map(m=>m.id===userId?{...m,team:teamName}:m));
+    setMembers(prev=>prev.map(m=>m.id===userId&&!(m.teams||[]).includes(teamName)?{...m,teams:[...(m.teams||[]),teamName]}:m));
     onToast("Added to team","success");
   };
 
   const handleSaveTeamEdit = (teamId) => {
     const oldTeam = teams.find(t=>t.id===teamId);
     if(oldTeam && oldTeam.name !== editTeamName) {
-      setMembers(prev=>prev.map(m=>m.team===oldTeam.name?{...m,team:editTeamName}:m));
+      setMembers(prev=>prev.map(m=>({...m,teams:(m.teams||[]).map(t=>t===oldTeam.name?editTeamName:t)})));
     }
     setTeams(prev=>prev.map(t=>t.id===teamId?{...t,name:editTeamName,desc:editTeamDesc}:t));
     setEditingTeam(false);
@@ -11712,8 +11767,8 @@ const TeamsSection = ({onToast}) => {
   };
 
   const currentTeam = teams.find(t=>t.id===teamDetail);
-  const teamMembers = currentTeam ? members.filter(m=>m.team===currentTeam.name) : [];
-  const nonTeamMembers = currentTeam ? members.filter(m=>m.team!==currentTeam.name) : [];
+  const teamMembers = currentTeam ? members.filter(m=>(m.teams||[]).includes(currentTeam.name)) : [];
+  const nonTeamMembers = currentTeam ? members.filter(m=>!(m.teams||[]).includes(currentTeam.name)) : [];
   const filteredNonTeam = nonTeamMembers.filter(m=>
     !memberPickSearch ||
     m.name.toLowerCase().includes(memberPickSearch.toLowerCase()) ||
@@ -11741,7 +11796,7 @@ const TeamsSection = ({onToast}) => {
           </button>
         ))}
       </div>
-      {activeTab==="users"&&<AddBtn label="Invite User" onClick={()=>{setInviteTeam(teams[0]?.name||"");setMemberModal(true);}}/>}
+      {activeTab==="users"&&<AddBtn label="Invite User" onClick={()=>{setInviteRoles([]);setInviteTeams([]);setMemberModal(true);}}/>}
       {activeTab==="teams"&&<AddBtn label="Create Team" onClick={()=>setCreateTeamModal(true)}/>}
     </div>
 
@@ -11767,59 +11822,61 @@ const TeamsSection = ({onToast}) => {
       </div>
       {/* Members table */}
       <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-        <div style={{display:"grid",gridTemplateColumns:"2fr 1.4fr 1.5fr 0.8fr 0.8fr 80px",padding:"8px 14px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
-          {["Member","Role","Team","Status","Joined",""].map((h,i)=>(
+        <div style={{display:"grid",gridTemplateColumns:"1.8fr 2fr 2fr 0.8fr 0.7fr 60px",padding:"8px 14px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
+          {["Member","Roles","Teams","Status","Joined",""].map((h,i)=>(
             <div key={i} style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</div>
           ))}
         </div>
         {filteredMembers.length===0&&<div style={{padding:"32px 0",textAlign:"center",color:T.textMuted,fontSize:12}}>No members match your search</div>}
-        {filteredMembers.map((m,i)=>{
-          const rc = ROLE_COLORS[m.role]||T.textMuted;
-          return (
-            <div key={m.id} style={{display:"grid",gridTemplateColumns:"2fr 1.4fr 1.5fr 0.8fr 0.8fr 80px",padding:"11px 14px",borderBottom:i<filteredMembers.length-1?`1px solid ${T.border}`:"none",alignItems:"center",transition:"background .1s"}}
-              onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
-              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-              <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
-                <div style={{width:32,height:32,borderRadius:8,background:`${m.color}18`,border:`1px solid ${m.color}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10.5,fontWeight:700,color:m.color,flexShrink:0}}>{m.avatar}</div>
-                <div style={{minWidth:0}}>
-                  <div style={{fontSize:12.5,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.name}</div>
-                  <div style={{fontSize:10.5,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.email}</div>
-                </div>
-              </div>
-              <div>
-                <InlinePillSelect value={m.role} options={ROLE_LIST} onChange={v=>handleRoleChange(m.id,v)} colorMap={ROLE_COLORS}/>
-              </div>
-              {/* Team — inline editable */}
-              <div>
-                <InlinePillSelect value={m.team} options={teamNames} onChange={v=>handleMoveTeam(m.id,v)} placeholder="— No team —" neutral/>
-              </div>
-              <div>
-                <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:99,
-                  background:m.status==="Active"?T.accentDim:m.status==="Pending"?"rgba(251,191,36,.12)":T.bgHover,
-                  color:m.status==="Active"?T.accent:m.status==="Pending"?T.amber:T.textMuted,
-                  border:`1px solid ${m.status==="Active"?T.accent+"44":m.status==="Pending"?T.amber+"44":T.border}`}}>
-                  <span style={{width:4,height:4,borderRadius:"50%",background:"currentColor",display:"inline-block"}}/>
-                  {m.status}
-                </span>
-              </div>
-              <div style={{fontSize:11,color:T.textMuted}}>{m.joined}</div>
-              <div style={{display:"flex",gap:4,justifyContent:"flex-end"}}>
-                <button title={m.status==="Active"?"Deactivate":"Activate"} onClick={()=>handleDeactivate(m.id)}
-                  style={{width:26,height:26,borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .12s"}}
-                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.amber;e.currentTarget.style.color=T.amber;}}
-                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
-                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M4 6h4M6 4v4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-                </button>
-                <button title="Remove" onClick={()=>handleRemoveUser(m.id)}
-                  style={{width:26,height:26,borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .12s"}}
-                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.rose;e.currentTarget.style.color=T.rose;}}
-                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
-                  {Ic.trash(11)}
-                </button>
+        {filteredMembers.map((m,i)=>(
+          <div key={m.id} style={{display:"grid",gridTemplateColumns:"1.8fr 2fr 2fr 0.8fr 0.7fr 60px",padding:"11px 14px",borderBottom:i<filteredMembers.length-1?`1px solid ${T.border}`:"none",alignItems:"center",transition:"background .1s"}}
+            onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
+            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+            {/* Member */}
+            <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+              <div style={{width:32,height:32,borderRadius:8,background:`${m.color}18`,border:`1px solid ${m.color}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10.5,fontWeight:700,color:m.color,flexShrink:0}}>{m.avatar}</div>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:12.5,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.name}</div>
+                <div style={{fontSize:10.5,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.email}</div>
               </div>
             </div>
-          );
-        })}
+            {/* Roles — multi-chip */}
+            <div style={{paddingRight:8}}>
+              <MultiChipPicker values={m.roles||[]} options={ROLE_LIST} colorMap={ROLE_COLORS} onChange={v=>handleRolesChange(m.id,v)} placeholder="No roles"/>
+            </div>
+            {/* Teams — multi-chip */}
+            <div style={{paddingRight:8}}>
+              <MultiChipPicker values={m.teams||[]} options={teamNames} onChange={v=>handleTeamsChange(m.id,v)} placeholder="No teams" neutral/>
+            </div>
+            {/* Status */}
+            <div>
+              <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:99,
+                background:m.status==="Active"?T.accentDim:m.status==="Pending"?"rgba(251,191,36,.12)":T.bgHover,
+                color:m.status==="Active"?T.accent:m.status==="Pending"?T.amber:T.textMuted,
+                border:`1px solid ${m.status==="Active"?T.accent+"44":m.status==="Pending"?T.amber+"44":T.border}`}}>
+                <span style={{width:4,height:4,borderRadius:"50%",background:"currentColor",display:"inline-block"}}/>
+                {m.status}
+              </span>
+            </div>
+            {/* Joined */}
+            <div style={{fontSize:11,color:T.textMuted}}>{m.joined}</div>
+            {/* Actions */}
+            <div style={{display:"flex",gap:4,justifyContent:"flex-end"}}>
+              <button title={m.status==="Active"?"Deactivate":"Activate"} onClick={()=>handleDeactivate(m.id)}
+                style={{width:26,height:26,borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .12s"}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor=T.amber;e.currentTarget.style.color=T.amber;}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M4 6h4M6 4v4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+              </button>
+              <button title="Remove" onClick={()=>handleRemoveUser(m.id)}
+                style={{width:26,height:26,borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .12s"}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor=T.rose;e.currentTarget.style.color=T.rose;}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
+                {Ic.trash(11)}
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
     </>}
 
@@ -11834,7 +11891,7 @@ const TeamsSection = ({onToast}) => {
       )}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:14}}>
         {teams.map(team=>{
-          const tMembers = members.filter(m=>m.team===team.name);
+          const tMembers = members.filter(m=>(m.teams||[]).includes(team.name));
           const visibleAvatars = tMembers.slice(0,4);
           const overflow = tMembers.length-4;
           return (
@@ -11904,23 +11961,50 @@ const TeamsSection = ({onToast}) => {
                 onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}
                 onKeyDown={e=>e.key==="Enter"&&handleInvite()}/>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-              <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Role</label>
-                <select value={inviteRole} onChange={e=>setInviteRole(e.target.value)} style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none"}}>
-                  {ROLE_LIST.map(r=><option key={r}>{r}</option>)}
-                </select>
+            {/* Roles — chip toggle picker */}
+            <div>
+              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Roles <span style={{color:T.textMuted,fontWeight:400}}>(select one or more)</span></label>
+              <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                {ROLE_LIST.map(r=>{
+                  const sel = inviteRoles.includes(r);
+                  const color = ROLE_COLORS[r]||T.accent;
+                  return (
+                    <button key={r} onClick={()=>setInviteRoles(p=>sel?p.filter(x=>x!==r):[...p,r])}
+                      style={{padding:"5px 13px",borderRadius:99,fontSize:11.5,fontWeight:sel?700:500,cursor:"pointer",transition:"all .12s",
+                        border:`1.5px solid ${sel?color:T.border}`,
+                        background:sel?`${color}15`:"transparent",
+                        color:sel?color:T.textSub,
+                        display:"flex",alignItems:"center",gap:5}}>
+                      {sel&&<svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      {r}
+                    </button>
+                  );
+                })}
               </div>
-              <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Team <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
-                <select value={inviteTeam} onChange={e=>setInviteTeam(e.target.value)} style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none"}}>
-                  <option value="">— No team —</option>
-                  {teamNames.map(t=><option key={t}>{t}</option>)}
-                </select>
+            </div>
+            {/* Teams — chip toggle picker */}
+            <div>
+              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Teams <span style={{color:T.textMuted,fontWeight:400}}>(optional, select one or more)</span></label>
+              <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                {teamNames.map(t=>{
+                  const sel = inviteTeams.includes(t);
+                  const teamColor = teams.find(x=>x.name===t)?.color||T.accent;
+                  return (
+                    <button key={t} onClick={()=>setInviteTeams(p=>sel?p.filter(x=>x!==t):[...p,t])}
+                      style={{padding:"5px 13px",borderRadius:99,fontSize:11.5,fontWeight:sel?700:500,cursor:"pointer",transition:"all .12s",
+                        border:`1.5px solid ${sel?teamColor:T.border}`,
+                        background:sel?`${teamColor}15`:"transparent",
+                        color:sel?teamColor:T.textSub,
+                        display:"flex",alignItems:"center",gap:5}}>
+                      {sel&&<svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      {t}
+                    </button>
+                  );
+                })}
               </div>
             </div>
             <div style={{padding:"10px 12px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`,fontSize:11,color:T.textMuted,lineHeight:1.55}}>
-              An email will be sent with a link to join. Until they accept, their status shows as <b style={{color:T.amber}}>Pending</b>. Their role determines what they can see and do — you can change it any time.
+              An email will be sent with a link to join. Until they accept, their status shows as <b style={{color:T.amber}}>Pending</b>. Users with multiple roles receive the combined permissions of all assigned roles.
             </div>
             <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
               <button onClick={()=>setMemberModal(false)} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
@@ -12057,7 +12141,7 @@ const TeamsSection = ({onToast}) => {
                         <div style={{width:26,height:26,borderRadius:7,background:`${m.color}18`,border:`1px solid ${m.color}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9.5,fontWeight:700,color:m.color}}>{m.avatar}</div>
                         <div>
                           <div style={{fontSize:12,fontWeight:600,color:T.text}}>{m.name}</div>
-                          <div style={{fontSize:10.5,color:T.textMuted}}>{m.team?`Currently in ${m.team}`:"No team"}</div>
+                          <div style={{fontSize:10.5,color:T.textMuted}}>{(m.teams||[]).length>0?`In: ${m.teams.join(", ")}`:"No teams yet"}</div>
                         </div>
                       </div>
                       <button onClick={()=>handleAddToTeam(m.id,currentTeam.name)} style={{padding:"4px 12px",borderRadius:6,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:11,fontWeight:600,cursor:"pointer"}}>Add</button>
@@ -12070,29 +12154,29 @@ const TeamsSection = ({onToast}) => {
             {/* Current member list */}
             {teamMembers.length===0
               ? <div style={{padding:"28px 0",textAlign:"center",color:T.textMuted,fontSize:12}}>No members yet. Use "Add Members" above to get started.</div>
-              : teamMembers.map((m,i)=>{
-                  const rc = ROLE_COLORS[m.role]||T.textMuted;
-                  return (
-                    <div key={m.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 0",borderBottom:i<teamMembers.length-1?`1px solid ${T.border}`:"none"}}>
-                      <div style={{display:"flex",alignItems:"center",gap:10}}>
-                        <div style={{width:32,height:32,borderRadius:8,background:`${m.color}18`,border:`1px solid ${m.color}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10.5,fontWeight:700,color:m.color}}>{m.avatar}</div>
-                        <div>
-                          <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{m.name}</div>
-                          <div style={{fontSize:10.5,color:T.textMuted}}>{m.email}</div>
-                        </div>
-                      </div>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <span style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:99,background:`${rc}15`,color:rc,border:`1px solid ${rc}33`}}>{m.role}</span>
-                        <button title="Remove from team" onClick={()=>handleRemoveFromTeam(m.id,currentTeam.name)}
-                          style={{width:24,height:24,borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .12s"}}
-                          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.rose;e.currentTarget.style.color=T.rose;}}
-                          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
-                          {Ic.trash(10)}
-                        </button>
+              : teamMembers.map((m,i)=>(
+                  <div key={m.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 0",borderBottom:i<teamMembers.length-1?`1px solid ${T.border}`:"none"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      <div style={{width:32,height:32,borderRadius:8,background:`${m.color}18`,border:`1px solid ${m.color}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10.5,fontWeight:700,color:m.color}}>{m.avatar}</div>
+                      <div>
+                        <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{m.name}</div>
+                        <div style={{fontSize:10.5,color:T.textMuted}}>{m.email}</div>
                       </div>
                     </div>
-                  );
-                })
+                    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",justifyContent:"flex-end",maxWidth:220}}>
+                      {(m.roles||[]).map(r=>{
+                        const rc=ROLE_COLORS[r]||T.textMuted;
+                        return <span key={r} style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:99,background:`${rc}15`,color:rc,border:`1px solid ${rc}33`,whiteSpace:"nowrap"}}>{r}</span>;
+                      })}
+                      <button title="Remove from team" onClick={()=>handleRemoveFromTeam(m.id,currentTeam.name)}
+                        style={{width:24,height:24,borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .12s",flexShrink:0}}
+                        onMouseEnter={e=>{e.currentTarget.style.borderColor=T.rose;e.currentTarget.style.color=T.rose;}}
+                        onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
+                        {Ic.trash(10)}
+                      </button>
+                    </div>
+                  </div>
+                ))
             }
           </div>
 
@@ -13632,6 +13716,24 @@ const SettingsView = ({onToast})=>{
   const [addSvcOpen,setAddSvcOpen]= useState(false);
   const timerRef = useRef(null);
 
+  // ── LDAP SSO state ──
+  const MOCK_LDAP_GROUPS = ["LDAP_ADMINS","LDAP_DATA_STEWARDS","LDAP_DATA_ANALYSTS","LDAP_DATA_ENGINEERS","LDAP_VIEWERS","LDAP_GOVERNANCE","LDAP_FINANCE","LDAP_MARKETING","LDAP_PLATFORM","LDAP_ANALYTICS"];
+  const [ldapPanelOpen,   setLdapPanelOpen]   = useState(false);
+  const [ldapTab,         setLdapTab]         = useState("connection");
+  const [ldapSaved,       setLdapSaved]       = useState(false);
+  const [ldapTestState,   setLdapTestState]   = useState("idle"); // idle | testing | success | error
+  const [ldapGroups,      setLdapGroups]      = useState([]);
+  const [ldapSearchRows,  setLdapSearchRows]  = useState([{context:"",attribute:"sAMAccountName"}]);
+  const [ldapForm,        setLdapForm]        = useState({configName:"",authLevel:"group",sslEnabled:false,url:"",principal:"",credentials:""});
+  const [ldapDesc,        setLdapDesc]        = useState("");
+  const [ldapMapping,     setLdapMapping]     = useState({
+    onBoardUsers:true, firstNameAttr:"givenName", lastNameAttr:"sn", emailAttr:"mail",
+    autoSyncTeams:true, syncAllGroups:true, selectedGroups:[],
+    autoAssignRoles:true,
+    roleGroups:{Admin:[],DataSteward:[],DataAnalyst:[],DataEngineer:[],Viewer:[]},
+  });
+  const [ldapRoleGroupOpen, setLdapRoleGroupOpen] = useState({});
+
   // Simulate live progress for "running" services
   useEffect(()=>{
     timerRef.current = setInterval(()=>setTick(t=>t+1), 1200);
@@ -13907,7 +14009,7 @@ const SettingsView = ({onToast})=>{
   const ROLES=[{name:"Admin",users:3,icon:"settings",desc:"Full platform access including settings and user management."},{name:"Data Steward",users:8,icon:"steward",desc:"Govern assets: apply policies, certify data, manage glossary."},{name:"Data Analyst",users:32,icon:"search",desc:"Browse catalog, run queries, view lineage and quality scores."},{name:"Viewer",users:21,icon:"access",desc:"Read-only access to approved domains and dashboards."},{name:"Bot",users:3,icon:"bot",desc:"Service accounts for automated ingestion and processing."}];
   const BOTS=[{id:"b1",name:"ingestion-bot",scope:"Read metadata · Write lineage",token:"bot_ing_••••••",created:"2024-01-10",active:true},{id:"b2",name:"quality-bot",scope:"Read assets · Write quality results",token:"bot_qlt_••••••",created:"2024-02-01",active:true},{id:"b3",name:"notification-bot",scope:"Read all · Send notifications",token:"bot_ntf_••••••",created:"2024-03-15",active:false}];
   const PERSONAS=[{id:"p1",name:"Data Engineer",color:"#38bdf8",users:14,desc:"Full access to pipelines, lineage and technical metadata."},{id:"p2",name:"Data Analyst",color:"#34d399",users:32,desc:"Read access to catalog, dashboards and quality metrics."},{id:"p3",name:"Data Steward",color:"#fbbf24",users:8,desc:"Write access to governance: policies, glossary, certs."},{id:"p4",name:"Exec Viewer",color:"#a78bfa",users:6,desc:"High-level dashboards and compliance summaries only."}];
-  const SSO_PROVIDERS=[{id:"okta",name:"Okta",logo:"okta",connected:true,users:54},{id:"azure",name:"Azure AD",logo:"azure",connected:false,users:0},{id:"google",name:"Google Workspace",logo:"google",connected:false,users:0},{id:"saml",name:"SAML 2.0",logo:"saml",connected:false,users:0}];
+  const SSO_PROVIDERS=[];
   const CUSTOM_PROPS=[{name:"data_classification",type:"Enum",entity:"Table",required:false,vals:"Public, Internal, Confidential, Restricted"},{name:"retention_days",type:"Integer",entity:"Table",required:true,vals:""},{name:"business_criticality",type:"Enum",entity:"Dashboard",required:false,vals:"Low, Medium, High, Critical"},{name:"cost_center",type:"String",entity:"Pipeline",required:false,vals:""},{name:"data_product_owner",type:"User",entity:"Domain",required:true,vals:""}];
 
   // derived
@@ -14188,30 +14290,358 @@ const SettingsView = ({onToast})=>{
             </>}
 
             {section==="sso"&&<>
-              <SettSH icon={Ic.sso(16)} title="SSO Configuration" desc="Connect your identity provider to enable single sign-on for your entire organization."/>
-              <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:24}}>
-                {SSO_PROVIDERS.map(p=>(
-                  <div key={p.id} style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",background:T.bgSurface,border:`1px solid ${p.connected?T.accent:T.border}`,borderRadius:10}}>
-                    <div style={{width:40,height:40,borderRadius:10,background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:T.accent}}>
-                    {p.logo==="okta"&&<svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="9" stroke="currentColor" strokeWidth="1.5"/><circle cx="11" cy="11" r="4" fill="currentColor" opacity=".7"/></svg>}
-                    {p.logo==="azure"&&<svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M4 17.5L9.5 4.5l4 8-4.5 1.5L14 17.5H4Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/><path d="M9.5 4.5L18 17.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>}
-                    {p.logo==="google"&&<svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="9" stroke="currentColor" strokeWidth="1.5"/><path d="M15.5 11h-5v3h3.2a3 3 0 01-3.2 2 4 4 0 010-8c1 0 2 .4 2.7 1l2-2A7 7 0 004 11a7 7 0 007 7 6.5 6.5 0 006.5-7.5H15.5Z" fill="currentColor" opacity=".7"/></svg>}
-                    {p.logo==="saml"&&Ic.sso(18)}
+              <SettSH icon={Ic.sso(16)} title="SSO / LDAP" desc="Connect your Active Directory or LDAP server to enable single sign-on, auto-provision users, sync teams, and assign roles."/>
+
+              {/* LDAP card */}
+              <div style={{display:"flex",alignItems:"center",gap:16,padding:"18px 20px",background:T.bgSurface,border:`1.5px solid ${ldapSaved?T.accent:T.border}`,borderRadius:12,transition:"border-color .2s"}}>
+                <div style={{width:44,height:44,borderRadius:11,background:ldapSaved?T.accentDim:"rgba(99,102,241,.1)",border:`1.5px solid ${ldapSaved?T.accent+"44":"rgba(99,102,241,.25)"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:ldapSaved?T.accent:"#6366f1"}}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M8 21h8M12 17v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="10" r="2" stroke="currentColor" strokeWidth="1.3"/><path d="M13 9h4M13 11h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:14,fontWeight:700,color:T.text}}>LDAP / Active Directory</div>
+                  <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>
+                    {ldapSaved
+                      ? `Connected · ${ldapForm.url||"ldap://configured"} · users auto-provisioned on login`
+                      : "Directory-based authentication — connect once to auto-create users, sync teams, and assign roles"}
                   </div>
-                    <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:T.text}}>{p.name}</div>{p.connected&&<div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{p.users} users synced</div>}</div>
-                    {p.connected?<><span style={{fontSize:11,fontWeight:600,color:T.accent}}>● Active</span><Btn small ghost>Configure</Btn><Btn small variant="danger">Disconnect</Btn></>:<button onClick={()=>onToast(`Connecting ${p.name}…`,"success")} style={{padding:"5px 12px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Connect</button>}
-                  </div>
-                ))}
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+                  {ldapSaved&&(
+                    <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:99,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}44`}}>
+                      <span style={{width:5,height:5,borderRadius:"50%",background:T.accent,display:"inline-block"}}/>Active
+                    </span>
+                  )}
+                  <button onClick={()=>{setLdapPanelOpen(true);setLdapTab("connection");}}
+                    style={{padding:"7px 16px",borderRadius:8,background:ldapSaved?T.bgElevated:T.accent,border:`1px solid ${ldapSaved?T.border:T.accent}`,color:ldapSaved?T.textSub:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",transition:"all .12s"}}
+                    onMouseEnter={e=>{e.currentTarget.style.opacity=".85";}} onMouseLeave={e=>{e.currentTarget.style.opacity="1";}}>
+                    {ldapSaved?"Configure":"Configure →"}
+                  </button>
+                  {ldapSaved&&<Btn small variant="danger" onClick={()=>{setLdapSaved(false);setLdapTestState("idle");setLdapGroups([]);}}>Disconnect</Btn>}
+                </div>
               </div>
-              <div style={{padding:16,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10}}>
-                <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:14}}>SAML 2.0 / OIDC Endpoints</div>
-                {[{l:"Entity ID",v:"https://app.solix.io/saml/metadata"},{l:"ACS URL",v:"https://app.solix.io/saml/acs"},{l:"Login URL",v:"https://app.solix.io/saml/login"}].map(f=>(
-                  <div key={f.l} style={{marginBottom:12}}>
-                    <div style={{fontSize:11,color:T.textMuted,marginBottom:4}}>{f.l}</div>
-                    <div style={{display:"flex",gap:6}}><div style={{flex:1,fontFamily:"'Geist Mono',monospace",fontSize:11,color:T.textSub,background:T.bgHover,padding:"7px 10px",borderRadius:6,border:`1px solid ${T.border}`}}>{f.v}</div><Btn small ghost icon={Ic.copy(10)}>Copy</Btn></div>
+
+              {/* LDAP right slide-in panel */}
+              {ldapPanelOpen&&(
+                <>
+                  <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:700}} onClick={()=>setLdapPanelOpen(false)}/>
+                  <div className="slideIn" style={{position:"fixed",top:0,right:0,bottom:0,width:560,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:800,display:"flex",flexDirection:"column",boxShadow:"-8px 0 40px rgba(0,0,0,.25)"}}>
+
+                    {/* Panel header */}
+                    <div style={{padding:"18px 22px 0",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                        <div style={{display:"flex",alignItems:"center",gap:10}}>
+                          <div style={{width:34,height:34,borderRadius:9,background:"rgba(99,102,241,.1)",border:"1.5px solid rgba(99,102,241,.25)",display:"flex",alignItems:"center",justifyContent:"center",color:"#6366f1"}}>
+                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M8 21h8M12 17v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="10" r="2" stroke="currentColor" strokeWidth="1.3"/><path d="M13 9h4M13 11h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                          </div>
+                          <div>
+                            <div style={{fontSize:14,fontWeight:700,color:T.text}}>LDAP Configuration</div>
+                            <div style={{fontSize:11,color:T.textMuted}}>Active Directory / OpenLDAP</div>
+                          </div>
+                        </div>
+                        <button onClick={()=>setLdapPanelOpen(false)} style={{width:28,height:28,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+                      </div>
+                      {/* Tabs */}
+                      <div style={{display:"flex",gap:0}}>
+                        {[["connection","Connection"],["mapping","Role Mapping"]].map(([k,l])=>(
+                          <button key={k} onClick={()=>setLdapTab(k)} style={{padding:"8px 18px",fontSize:12,fontWeight:ldapTab===k?700:500,cursor:"pointer",background:"transparent",border:"none",borderBottom:`2.5px solid ${ldapTab===k?T.accent:"transparent"}`,color:ldapTab===k?T.accent:T.textMuted,transition:"all .12s"}}>
+                            {l}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Panel body */}
+                    <div style={{flex:1,overflowY:"auto",padding:"22px 22px 0"}}>
+
+                      {/* ── CONNECTION TAB ── */}
+                      {ldapTab==="connection"&&(
+                        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+                          {/* Row 1: Config name + Auth level */}
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+                            <div>
+                              <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>LDAP Config Name <span style={{color:"#ee2424"}}>*</span></label>
+                              <input value={ldapForm.configName} onChange={e=>setLdapForm(p=>({...p,configName:e.target.value}))} placeholder="e.g. LDAP_AUTO_MAPPING"
+                                style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                            </div>
+                            <div>
+                              <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Auth Level <span style={{color:"#ee2424"}}>*</span></label>
+                              <div style={{display:"flex",gap:8,paddingTop:4}}>
+                                {["group","user"].map(v=>(
+                                  <label key={v} style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:12.5,fontWeight:ldapForm.authLevel===v?600:400,color:ldapForm.authLevel===v?T.text:T.textSub}}>
+                                    <input type="radio" checked={ldapForm.authLevel===v} onChange={()=>setLdapForm(p=>({...p,authLevel:v}))} style={{accentColor:T.accent}}/>
+                                    {v.charAt(0).toUpperCase()+v.slice(1)}
+                                  </label>
+                                ))}
+                              </div>
+                              <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>{ldapForm.authLevel==="group"?"User must belong to a mapped group":"Any valid LDAP user can log in"}</div>
+                            </div>
+                          </div>
+                          {/* Row 2: SSL + URL */}
+                          <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:14,alignItems:"start"}}>
+                            <div>
+                              <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>SSL Enable</label>
+                              <div style={{paddingTop:6}}>
+                                <Toggle on={ldapForm.sslEnabled} onChange={()=>setLdapForm(p=>({...p,sslEnabled:!p.sslEnabled}))}/>
+                              </div>
+                            </div>
+                            <div>
+                              <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>LDAP URL <span style={{color:"#ee2424"}}>*</span></label>
+                              <input value={ldapForm.url} onChange={e=>setLdapForm(p=>({...p,url:e.target.value}))} placeholder={ldapForm.sslEnabled?"ldaps://10.2.152.25:636":"ldap://10.2.152.25:3268"}
+                                style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"'Geist Mono',monospace"}}
+                                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                            </div>
+                          </div>
+                          {/* Row 3: Principal + Credentials */}
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+                            <div>
+                              <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Security Principal <span style={{color:"#ee2424"}}>*</span></label>
+                              <input value={ldapForm.principal} onChange={e=>setLdapForm(p=>({...p,principal:e.target.value}))} placeholder="ldapadmin@company.com"
+                                style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                            </div>
+                            <div>
+                              <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Security Credentials <span style={{color:"#ee2424"}}>*</span></label>
+                              <input type="password" value={ldapForm.credentials} onChange={e=>setLdapForm(p=>({...p,credentials:e.target.value}))} placeholder="••••••••••••"
+                                style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"'Geist Mono',monospace"}}
+                                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                            </div>
+                          </div>
+                          {/* Search context rows */}
+                          <div>
+                            <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:8}}>Search Context & Attribute <span style={{color:"#ee2424"}}>*</span></label>
+                            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                              {ldapSearchRows.map((row,idx)=>(
+                                <div key={idx} style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:8,alignItems:"center"}}>
+                                  <input value={row.context} onChange={e=>setLdapSearchRows(p=>p.map((r,i)=>i===idx?{...r,context:e.target.value}:r))} placeholder="OU=Users,DC=company,DC=com"
+                                    style={{padding:"8px 11px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box",fontFamily:"'Geist Mono',monospace"}}
+                                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                                  <input value={row.attribute} onChange={e=>setLdapSearchRows(p=>p.map((r,i)=>i===idx?{...r,attribute:e.target.value}:r))} placeholder="sAMAccountName"
+                                    style={{padding:"8px 11px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box",fontFamily:"'Geist Mono',monospace"}}
+                                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                                  {ldapSearchRows.length>1&&(
+                                    <button onClick={()=>setLdapSearchRows(p=>p.filter((_,i)=>i!==idx))} style={{width:28,height:28,borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
+                                      onMouseEnter={e=>{e.currentTarget.style.borderColor=T.rose;e.currentTarget.style.color=T.rose;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
+                                      {Ic.x(9)}
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                            <button onClick={()=>setLdapSearchRows(p=>[...p,{context:"",attribute:"sAMAccountName"}])}
+                              style={{marginTop:8,display:"flex",alignItems:"center",gap:5,fontSize:11.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:600}}>
+                              <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                              Add Row
+                            </button>
+                          </div>
+                          {/* Description */}
+                          <div>
+                            <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Description <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
+                            <textarea value={ldapDesc} onChange={e=>setLdapDesc(e.target.value)} placeholder="Notes about this LDAP configuration…" rows={3}
+                              style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box",lineHeight:1.5}}
+                              onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                          </div>
+                          {/* Test result banner */}
+                          {ldapTestState==="success"&&(
+                            <div style={{padding:"10px 14px",background:"rgba(16,185,129,.08)",border:"1px solid rgba(16,185,129,.3)",borderRadius:9,display:"flex",alignItems:"center",gap:8,fontSize:12,color:"#10b981",fontWeight:600}}>
+                              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.4"/><path d="M4.5 7l2 2 3-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                              Connection successful — {MOCK_LDAP_GROUPS.length} groups loaded from directory
+                            </div>
+                          )}
+                          {ldapTestState==="error"&&(
+                            <div style={{padding:"10px 14px",background:"rgba(239,68,68,.08)",border:"1px solid rgba(239,68,68,.3)",borderRadius:9,display:"flex",alignItems:"center",gap:8,fontSize:12,color:"#ef4444",fontWeight:600}}>
+                              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.4"/><path d="M5 5l4 4M9 5l-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                              Connection failed — check URL, principal, and credentials
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* ── ROLE MAPPING TAB ── */}
+                      {ldapTab==="mapping"&&(
+                        <div style={{display:"flex",flexDirection:"column",gap:20}}>
+
+                          {ldapTestState!=="success"&&(
+                            <div style={{padding:"10px 14px",background:`${T.amber}10`,border:`1px solid ${T.amber}44`,borderRadius:9,fontSize:11.5,color:T.amber,fontWeight:500}}>
+                              ⚠ Run <b>Test Connection</b> first on the Connection tab to load available LDAP groups for role assignment.
+                            </div>
+                          )}
+
+                          {/* Section 1 — User Provisioning */}
+                          <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:12,padding:"16px 18px"}}>
+                            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                              <div style={{width:3,height:16,borderRadius:2,background:"#6366f1",flexShrink:0}}/>
+                              <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>User Provisioning</span>
+                            </div>
+                            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:ldapMapping.onBoardUsers?16:0}}>
+                              <div>
+                                <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>On Board Users</div>
+                                <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>Auto-create EDG users on first LDAP login</div>
+                              </div>
+                              <Toggle on={ldapMapping.onBoardUsers} onChange={()=>setLdapMapping(p=>({...p,onBoardUsers:!p.onBoardUsers}))}/>
+                            </div>
+                            {ldapMapping.onBoardUsers&&(
+                              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+                                {[{l:"First Name Attribute",k:"firstNameAttr",ph:"givenName"},{l:"Last Name Attribute",k:"lastNameAttr",ph:"sn"},{l:"Email Attribute",k:"emailAttr",ph:"mail"}].map(f=>(
+                                  <div key={f.k}>
+                                    <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>{f.l} <span style={{color:"#ee2424"}}>*</span></label>
+                                    <input value={ldapMapping[f.k]} onChange={e=>setLdapMapping(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph}
+                                      style={{width:"100%",padding:"7px 10px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box",fontFamily:"'Geist Mono',monospace"}}
+                                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Section 2 — Team Sync */}
+                          <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:12,padding:"16px 18px"}}>
+                            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                              <div style={{width:3,height:16,borderRadius:2,background:"#0284c7",flexShrink:0}}/>
+                              <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Team Sync</span>
+                            </div>
+                            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:ldapMapping.autoSyncTeams?14:0}}>
+                              <div>
+                                <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>Auto-Sync Teams</div>
+                                <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>LDAP Groups automatically become EDG Teams</div>
+                              </div>
+                              <Toggle on={ldapMapping.autoSyncTeams} onChange={()=>setLdapMapping(p=>({...p,autoSyncTeams:!p.autoSyncTeams}))}/>
+                            </div>
+                            {ldapMapping.autoSyncTeams&&(
+                              <>
+                                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 12px",background:T.bgSurface,borderRadius:8,border:`1px solid ${T.border}`,marginBottom:10}}>
+                                  <div>
+                                    <div style={{fontSize:12,fontWeight:600,color:T.text}}>Sync All Groups</div>
+                                    <div style={{fontSize:11,color:T.textMuted}}>Every LDAP group becomes a team</div>
+                                  </div>
+                                  <Toggle on={ldapMapping.syncAllGroups} onChange={()=>setLdapMapping(p=>({...p,syncAllGroups:!p.syncAllGroups,selectedGroups:[]}))}/>
+                                </div>
+                                {!ldapMapping.syncAllGroups&&(
+                                  <div>
+                                    <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Select groups to sync as teams</div>
+                                    {ldapTestState!=="success"
+                                      ? <div style={{fontSize:11.5,color:T.textMuted,fontStyle:"italic"}}>Connect to LDAP first to see available groups</div>
+                                      : <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                                          {MOCK_LDAP_GROUPS.map(g=>{
+                                            const sel=ldapMapping.selectedGroups.includes(g);
+                                            return (
+                                              <button key={g} onClick={()=>setLdapMapping(p=>({...p,selectedGroups:sel?p.selectedGroups.filter(x=>x!==g):[...p.selectedGroups,g]}))}
+                                                style={{padding:"4px 11px",borderRadius:99,fontSize:11,fontWeight:sel?700:400,cursor:"pointer",border:`1.5px solid ${sel?"#0284c7":T.border}`,background:sel?"rgba(2,132,199,.1)":"transparent",color:sel?"#0284c7":T.textSub,display:"flex",alignItems:"center",gap:5,transition:"all .1s"}}>
+                                                {sel&&<svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                                {g}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                    }
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+
+                          {/* Section 3 — Role Assignment */}
+                          <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:12,padding:"16px 18px"}}>
+                            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                              <div style={{width:3,height:16,borderRadius:2,background:"#ee2424",flexShrink:0}}/>
+                              <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Role Assignment</span>
+                            </div>
+                            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:ldapMapping.autoAssignRoles?14:0}}>
+                              <div>
+                                <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>Auto-Assign Roles</div>
+                                <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>Map LDAP groups → EDG roles. Users in multiple groups get all matched roles.</div>
+                              </div>
+                              <Toggle on={ldapMapping.autoAssignRoles} onChange={()=>setLdapMapping(p=>({...p,autoAssignRoles:!p.autoAssignRoles}))}/>
+                            </div>
+                            {ldapMapping.autoAssignRoles&&(
+                              <div style={{display:"flex",flexDirection:"column",gap:0,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>
+                                {[
+                                  {role:"Admin",       key:"Admin",        color:"#ee2424"},
+                                  {role:"Data Steward",key:"DataSteward",  color:"#d97706"},
+                                  {role:"Data Analyst",key:"DataAnalyst",  color:"#0284c7"},
+                                  {role:"Data Engineer",key:"DataEngineer",color:"#7c3aed"},
+                                  {role:"Viewer",      key:"Viewer",       color:"#4b4b60"},
+                                ].map((r,ri,arr)=>{
+                                  const assigned = ldapMapping.roleGroups[r.key]||[];
+                                  const available = ldapTestState==="success" ? MOCK_LDAP_GROUPS.filter(g=>!Object.entries(ldapMapping.roleGroups).some(([k,v])=>k!==r.key&&v.includes(g))) : [];
+                                  const isOpen = ldapRoleGroupOpen[r.key];
+                                  return (
+                                    <div key={r.key} style={{padding:"11px 14px",borderBottom:ri<arr.length-1?`1px solid ${T.border}`:"none",background:T.bgSurface}}>
+                                      <div style={{display:"flex",alignItems:"center",gap:10}}>
+                                        <span style={{fontSize:11.5,fontWeight:700,color:r.color,minWidth:100,flexShrink:0}}>{r.role}</span>
+                                        <div style={{flex:1,display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}>
+                                          {assigned.length===0&&<span style={{fontSize:11,color:T.textMuted,fontStyle:"italic"}}>No groups assigned</span>}
+                                          {assigned.map(g=>(
+                                            <span key={g} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:99,background:`${r.color}12`,border:`1px solid ${r.color}33`,fontSize:10.5,fontWeight:600,color:r.color}}>
+                                              {g}
+                                              <button onClick={()=>setLdapMapping(p=>({...p,roleGroups:{...p.roleGroups,[r.key]:p.roleGroups[r.key].filter(x=>x!==g)}}))} style={{background:"none",border:"none",cursor:"pointer",color:r.color,padding:0,lineHeight:1,opacity:.6,fontSize:12}}>×</button>
+                                            </span>
+                                          ))}
+                                          {ldapTestState==="success"&&available.length>0&&(
+                                            <div style={{position:"relative"}}>
+                                              <button onClick={()=>setLdapRoleGroupOpen(p=>({...p,[r.key]:!p[r.key]}))}
+                                                style={{width:20,height:20,borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,lineHeight:1}}
+                                                onMouseEnter={e=>{e.currentTarget.style.borderColor=r.color;e.currentTarget.style.color=r.color;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>+</button>
+                                              {isOpen&&(
+                                                <>
+                                                  <div style={{position:"fixed",inset:0,zIndex:899}} onClick={()=>setLdapRoleGroupOpen(p=>({...p,[r.key]:false}))}/>
+                                                  <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,minWidth:200,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 8px 24px rgba(0,0,0,.2)",zIndex:900,overflow:"hidden",padding:"4px 0"}}>
+                                                    {available.map(g=>(
+                                                      <button key={g} onClick={()=>{setLdapMapping(p=>({...p,roleGroups:{...p.roleGroups,[r.key]:[...p.roleGroups[r.key],g]}}));setLdapRoleGroupOpen(p=>({...p,[r.key]:false}));}}
+                                                        style={{width:"100%",padding:"7px 12px",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",fontSize:11.5,color:T.text,display:"flex",alignItems:"center",gap:7}}
+                                                        onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                                                        <span style={{width:7,height:7,borderRadius:"50%",background:r.color,flexShrink:0,display:"block"}}/>
+                                                        {g}
+                                                      </button>
+                                                    ))}
+                                                  </div>
+                                                </>
+                                              )}
+                                            </div>
+                                          )}
+                                          {ldapTestState!=="success"&&<span style={{fontSize:10.5,color:T.textMuted,fontStyle:"italic"}}>Test connection to load groups</span>}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Panel footer */}
+                    <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,alignItems:"center",flexShrink:0,background:T.bgSurface}}>
+                      {ldapTab==="connection"&&(
+                        <button onClick={()=>{
+                            setLdapTestState("testing");
+                            setTimeout(()=>{
+                              const ok = ldapForm.url.trim()&&ldapForm.principal.trim()&&ldapForm.credentials.trim();
+                              setLdapTestState(ok?"success":"error");
+                              if(ok) setLdapGroups(MOCK_LDAP_GROUPS);
+                            },1400);
+                          }}
+                          style={{flex:1,padding:"9px",borderRadius:8,background:"transparent",border:`1.5px solid ${T.accent}`,color:T.accent,fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7,transition:"background .12s"}}
+                          onMouseEnter={e=>e.currentTarget.style.background=T.accentDim} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                          {ldapTestState==="testing"
+                            ? <><svg width="13" height="13" viewBox="0 0 12 12" fill="none" style={{animation:"spin 1s linear infinite"}}><circle cx="6" cy="6" r="4.5" stroke="rgba(238,36,36,.3)" strokeWidth="1.5"/><path d="M6 1.5A4.5 4.5 0 0110.5 6" stroke={T.accent} strokeWidth="1.5" strokeLinecap="round"/></svg>Testing…</>
+                            : "Test Connection"}
+                        </button>
+                      )}
+                      <button onClick={()=>{setLdapSaved(true);setLdapPanelOpen(false);onToast("LDAP configuration saved","success");}}
+                        style={{flex:1,padding:"9px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                        Save
+                      </button>
+                      <button onClick={()=>setLdapPanelOpen(false)}
+                        style={{padding:"9px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>
+                        Cancel
+                      </button>
+                    </div>
                   </div>
-                ))}
-              </div>
+                </>
+              )}
             </>}
 
             {/* ══ NOTIFICATIONS ══ */}
