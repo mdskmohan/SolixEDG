@@ -13909,6 +13909,8 @@ const TagManagementView = ({onToast}) => {
   const [filterOpen,       setFilterOpen]       = useState(false);
   const [selTagId,         setSelTagId]         = useState(null);
   const [selCatId,         setSelCatId]         = useState(null);
+  const [expCat,           setExpCat]           = useState({});
+  const [hovItem,          setHovItem]          = useState(null);
   const [newPanelOpen,     setNewPanelOpen]     = useState(false);
   const [newCatPanelOpen,  setNewCatPanelOpen]  = useState(false);
   const [plusMenuOpen,     setPlusMenuOpen]     = useState(false);
@@ -13945,6 +13947,14 @@ const TagManagementView = ({onToast}) => {
 
   // Dynamic categories derived from tag data + custom ones
   const allCategories = [...new Set([...tagDefs.map(td=>td.category).filter(Boolean),...customCategories])].sort();
+
+  useEffect(()=>{
+    setExpCat(p=>{
+      const next={...p};
+      allCategories.forEach(cat=>{ if(!(cat in next)) next[cat]=true; });
+      return next;
+    });
+  },[allCategories.join(',')]);
 
   const addNewCategory = () => {
     if(!newCatDraft.name.trim()) return;
@@ -14113,7 +14123,7 @@ const TagManagementView = ({onToast}) => {
             </div>
           )}
 
-          {/* Tag list grouped by category */}
+          {/* Tag list — collapsible categories like Business Glossary */}
           <div style={{flex:1,overflowY:'auto',position:'relative'}}>
             {filteredTags.length===0 ? (
               <div style={{padding:'32px 16px',textAlign:'center'}}>
@@ -14125,97 +14135,117 @@ const TagManagementView = ({onToast}) => {
                 </button>
               </div>
             ) : (<>
-              {groupedTags.map(({cat,tags})=>(
-                <div key={cat}>
-                  {/* Category header with 3-dot */}
-                  <div style={{padding:'8px 14px 4px',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',position:'sticky',top:0,background:selCatId===cat?T.accentDim:T.bgSurface,zIndex:2,borderBottom:`1px solid ${T.border}44`,display:'flex',alignItems:'center',justifyContent:'space-between',borderLeft:`2.5px solid ${selCatId===cat?T.accent:'transparent'}`}}>
-                    <button onClick={()=>{setSelCatId(c=>c===cat?null:cat);setSelTagId(null);setNewPanelOpen(false);setNewCatPanelOpen(false);setEditing(false);}}
-                      style={{background:'none',border:'none',cursor:'pointer',padding:0,textAlign:'left',flex:1,color:selCatId===cat?T.accent:T.textMuted}}>
-                      {cat}
-                    </button>
-                    <div ref={dotMenuOpen===`cat:${cat}`?dotMenuRef:undefined} style={{position:'relative'}}>
-                      <button onClick={e=>{e.stopPropagation();setDotMenuOpen(o=>o===`cat:${cat}`?null:`cat:${cat}`);}}
-                        style={{width:20,height:20,borderRadius:4,background:'transparent',border:'none',color:T.textMuted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:0.6,fontSize:14,lineHeight:1,fontWeight:700}}
-                        onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;e.currentTarget.style.opacity='1';}} onMouseLeave={e=>{e.currentTarget.style.background='transparent';e.currentTarget.style.opacity='0.6';}}>
-                        ···
+              {groupedTags.map(({cat,tags})=>{
+                const expanded = expCat[cat]!==false;
+                const isCatSel = selCatId===cat;
+                const catHov   = hovItem===`cat:${cat}`;
+                return (
+                  <div key={cat}>
+                    {/* Category row — like Glossary row */}
+                    <div style={{display:'flex',alignItems:'center',paddingRight:6,background:isCatSel?T.accentDim:catHov?T.bgHover:'transparent',borderLeft:`2.5px solid ${isCatSel?T.accent:'transparent'}`,transition:'background .1s'}}
+                      onMouseEnter={()=>setHovItem(`cat:${cat}`)}
+                      onMouseLeave={()=>setHovItem(null)}>
+                      <button onClick={()=>{setSelCatId(c=>c===cat?null:cat);setSelTagId(null);setNewPanelOpen(false);setNewCatPanelOpen(false);setEditing(false);}}
+                        style={{flex:1,display:'flex',alignItems:'center',gap:5,padding:'6px 6px 6px 8px',background:'none',border:'none',cursor:'pointer',textAlign:'left',minWidth:0}}>
+                        {/* Chevron */}
+                        <span onClick={e=>{e.stopPropagation();setExpCat(p=>({...p,[cat]:!expanded}));}}
+                          style={{width:14,height:14,display:'flex',alignItems:'center',justifyContent:'center',color:T.textMuted,flexShrink:0,transform:expanded?'rotate(90deg)':'rotate(0deg)',transition:'transform .18s',cursor:'pointer'}}>
+                          <svg width="7" height="10" viewBox="0 0 7 10" fill="none"><path d="M1.5 1.5l4 3.5-4 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </span>
+                        {/* Folder icon */}
+                        <svg width="13" height="12" viewBox="0 0 16 14" fill="none" style={{flexShrink:0,color:isCatSel?T.accent:T.textMuted}}>
+                          <path d="M1 3a1 1 0 011-1h4.5L8 4h7a1 1 0 011 1v7a1 1 0 01-1 1H2a1 1 0 01-1-1V3z" fill="currentColor" opacity=".2" stroke="currentColor" strokeWidth="1.2"/>
+                        </svg>
+                        <span style={{flex:1,fontSize:12,fontWeight:isCatSel?600:500,color:isCatSel?T.accent:T.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',textTransform:'capitalize'}}>{cat}</span>
+                        <span style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace",flexShrink:0,marginRight:2}}>{tags.length}</span>
                       </button>
-                      {dotMenuOpen===`cat:${cat}`&&(
-                        <div style={{position:'absolute',top:'100%',right:0,width:150,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',zIndex:300,overflow:'hidden'}}>
-                          <button onClick={e=>{e.stopPropagation();setNewCatPanelOpen(true);setNewCatDraft({name:cat,description:'',color:'#6366f1'});setDotMenuOpen(null);}}
-                            style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.text,display:'flex',alignItems:'center',gap:8,borderBottom:`1px solid ${T.border}`}}
-                            onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                            <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                            Edit Category
-                          </button>
-                          <button onClick={e=>{e.stopPropagation();setDeleteConfirm({type:'category',id:cat,name:cat});setDotMenuOpen(null);}}
-                            style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.rose,display:'flex',alignItems:'center',gap:8}}
-                            onMouseEnter={e=>e.currentTarget.style.background=T.roseDim} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                            <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 5l.5 5M8 5l-.5 5M3 3l.5 7h5L9 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                            Delete Category
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {tags.map(td=>{
-                    const isSel=selTagId===td.id; const cnt=assetCount(td.id);
-                    return (
-                      <div key={td.id} style={{position:'relative',display:'flex',alignItems:'center'}}
-                        onMouseEnter={e=>e.currentTarget.querySelector('.tag-dot-btn').style.opacity='1'}
-                        onMouseLeave={e=>e.currentTarget.querySelector('.tag-dot-btn').style.opacity='0'}>
-                        <button onClick={()=>{setSelTagId(td.id);setSelCatId(null);setDetailTab('overview');setEditing(false);setEditDraft(null);setNewPanelOpen(false);setNewCatPanelOpen(false);}}
-                          style={{flex:1,display:'flex',alignItems:'center',gap:9,padding:'7px 8px 7px 14px',background:isSel?T.accentDim:'transparent',border:'none',borderLeft:`2.5px solid ${isSel?T.accent:'transparent'}`,cursor:'pointer',transition:'background .1s',textAlign:'left',minWidth:0}}
-                          onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background='transparent';}}>
-                          <span style={{width:8,height:8,borderRadius:'50%',background:td.color,flexShrink:0,display:'block',boxShadow:isSel?`0 0 0 2px ${td.color}44`:'none'}}/>
-                          <span style={{flex:1,fontSize:12.5,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
-                          <span style={{fontSize:10,color:T.textMuted,flexShrink:0,fontFamily:"'Geist Mono',monospace",marginRight:2}}>{cnt}</span>
+                      {/* Hover ··· */}
+                      <div ref={dotMenuOpen===`cat:${cat}`?dotMenuRef:undefined} style={{position:'relative',flexShrink:0}}>
+                        <button onClick={e=>{e.stopPropagation();setDotMenuOpen(o=>o===`cat:${cat}`?null:`cat:${cat}`);}}
+                          style={{width:20,height:20,borderRadius:4,background:'transparent',border:'none',color:T.textMuted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:catHov||dotMenuOpen===`cat:${cat}`?1:0,transition:'opacity .12s',fontSize:14,fontWeight:700,lineHeight:1}}>
+                          ···
                         </button>
-                        <div ref={dotMenuOpen===td.id?dotMenuRef:undefined} style={{position:'relative',flexShrink:0,paddingRight:6}}>
-                          <button className="tag-dot-btn" onClick={e=>{e.stopPropagation();setDotMenuOpen(o=>o===td.id?null:td.id);}}
-                            style={{width:20,height:20,borderRadius:4,background:'transparent',border:'none',color:T.textMuted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,lineHeight:1,opacity:0,transition:'opacity .12s'}}>
-                            ···
-                          </button>
-                          {dotMenuOpen===td.id&&(
-                            <div style={{position:'absolute',top:'100%',right:0,width:140,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',zIndex:300,overflow:'hidden'}}>
-                              <button onClick={e=>{e.stopPropagation();setSelTagId(td.id);setSelCatId(null);startEdit();setDotMenuOpen(null);}}
-                                style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.text,display:'flex',alignItems:'center',gap:8,borderBottom:`1px solid ${T.border}`}}
-                                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                                <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                                Edit Tag
-                              </button>
-                              <button onClick={e=>{e.stopPropagation();setDeleteConfirm({type:'tag',id:td.id,name:td.name});setDotMenuOpen(null);}}
-                                style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.rose,display:'flex',alignItems:'center',gap:8}}
-                                onMouseEnter={e=>e.currentTarget.style.background=T.roseDim} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                                <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 5l.5 5M8 5l-.5 5M3 3l.5 7h5L9 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                                Delete Tag
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                        {dotMenuOpen===`cat:${cat}`&&(
+                          <div style={{position:'absolute',top:'100%',right:0,width:150,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',zIndex:300,overflow:'hidden'}}>
+                            <button onClick={e=>{e.stopPropagation();setNewCatPanelOpen(true);setNewCatDraft({name:cat,description:'',color:'#6366f1'});setDotMenuOpen(null);}}
+                              style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.text,display:'flex',alignItems:'center',gap:8,borderBottom:`1px solid ${T.border}`}}
+                              onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                              <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                              Edit Category
+                            </button>
+                            <button onClick={e=>{e.stopPropagation();setDeleteConfirm({type:'category',id:cat,name:cat});setDotMenuOpen(null);}}
+                              style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.rose,display:'flex',alignItems:'center',gap:8}}
+                              onMouseEnter={e=>e.currentTarget.style.background=T.roseDim} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                              <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 5l.5 5M8 5l-.5 5M3 3l.5 7h5L9 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                              Delete Category
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    );
-                  })}
-                </div>
-              ))}
+                    </div>
+                    {/* Tags under category — indented, shown when expanded */}
+                    {expanded&&tags.map(td=>{
+                      const isSel=selTagId===td.id;
+                      const tagHov=hovItem===`t:${td.id}`;
+                      const cnt=assetCount(td.id);
+                      return (
+                        <div key={td.id} style={{display:'flex',alignItems:'center',background:isSel?T.accentDim:tagHov?T.bgHover:'transparent',borderLeft:`2.5px solid ${isSel?T.accent:'transparent'}`,transition:'background .1s'}}
+                          onMouseEnter={()=>setHovItem(`t:${td.id}`)}
+                          onMouseLeave={()=>setHovItem(null)}>
+                          <button onClick={()=>{setSelTagId(td.id);setSelCatId(null);setDetailTab('overview');setEditing(false);setEditDraft(null);setNewPanelOpen(false);setNewCatPanelOpen(false);}}
+                            style={{flex:1,display:'flex',alignItems:'center',gap:7,padding:'5px 6px 5px 30px',background:'none',border:'none',cursor:'pointer',textAlign:'left',minWidth:0}}>
+                            <span style={{width:7,height:7,borderRadius:'50%',background:td.color,flexShrink:0,display:'block',boxShadow:isSel?`0 0 0 2px ${td.color}44`:'none'}}/>
+                            <span style={{flex:1,fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
+                            <span style={{fontSize:10,color:T.textMuted,flexShrink:0,fontFamily:"'Geist Mono',monospace",marginRight:2}}>{cnt}</span>
+                          </button>
+                          <div ref={dotMenuOpen===td.id?dotMenuRef:undefined} style={{position:'relative',flexShrink:0,paddingRight:6}}>
+                            <button onClick={e=>{e.stopPropagation();setDotMenuOpen(o=>o===td.id?null:td.id);}}
+                              style={{width:20,height:20,borderRadius:4,background:'transparent',border:'none',color:T.textMuted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:tagHov||dotMenuOpen===td.id?1:0,transition:'opacity .12s',fontSize:14,fontWeight:700,lineHeight:1}}>
+                              ···
+                            </button>
+                            {dotMenuOpen===td.id&&(
+                              <div style={{position:'absolute',top:'100%',right:0,width:140,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',zIndex:300,overflow:'hidden'}}>
+                                <button onClick={e=>{e.stopPropagation();setSelTagId(td.id);setSelCatId(null);startEdit();setDotMenuOpen(null);}}
+                                  style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.text,display:'flex',alignItems:'center',gap:8,borderBottom:`1px solid ${T.border}`}}
+                                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                  Edit Tag
+                                </button>
+                                <button onClick={e=>{e.stopPropagation();setDeleteConfirm({type:'tag',id:td.id,name:td.name});setDotMenuOpen(null);}}
+                                  style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.rose,display:'flex',alignItems:'center',gap:8}}
+                                  onMouseEnter={e=>e.currentTarget.style.background=T.roseDim} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 5l.5 5M8 5l-.5 5M3 3l.5 7h5L9 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                  Delete Tag
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
               {uncategorized.length>0&&(
                 <div>
-                  <div style={{padding:'8px 14px 4px',fontSize:10,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.08em',position:'sticky',top:0,background:T.bgSurface,zIndex:2,borderBottom:`1px solid ${T.border}44`}}>Uncategorized</div>
+                  <div style={{padding:'6px 10px 5px',fontSize:10,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.08em',background:T.bgSurface,borderBottom:`1px solid ${T.border}44`}}>Uncategorized</div>
                   {uncategorized.map(td=>{
-                    const isSel=selTagId===td.id; const cnt=assetCount(td.id);
+                    const isSel=selTagId===td.id;
+                    const tagHov=hovItem===`t:${td.id}`;
+                    const cnt=assetCount(td.id);
                     return (
-                      <div key={td.id} style={{position:'relative',display:'flex',alignItems:'center'}}
-                        onMouseEnter={e=>e.currentTarget.querySelector('.tag-dot-btn').style.opacity='1'}
-                        onMouseLeave={e=>e.currentTarget.querySelector('.tag-dot-btn').style.opacity='0'}>
+                      <div key={td.id} style={{display:'flex',alignItems:'center',background:isSel?T.accentDim:tagHov?T.bgHover:'transparent',borderLeft:`2.5px solid ${isSel?T.accent:'transparent'}`,transition:'background .1s'}}
+                        onMouseEnter={()=>setHovItem(`t:${td.id}`)}
+                        onMouseLeave={()=>setHovItem(null)}>
                         <button onClick={()=>{setSelTagId(td.id);setSelCatId(null);setDetailTab('overview');setEditing(false);setEditDraft(null);setNewPanelOpen(false);setNewCatPanelOpen(false);}}
-                          style={{flex:1,display:'flex',alignItems:'center',gap:9,padding:'7px 8px 7px 14px',background:isSel?T.accentDim:'transparent',border:'none',borderLeft:`2.5px solid ${isSel?T.accent:'transparent'}`,cursor:'pointer',transition:'background .1s',textAlign:'left',minWidth:0}}
-                          onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background='transparent';}}>
-                          <span style={{width:8,height:8,borderRadius:'50%',background:td.color,flexShrink:0,display:'block'}}/>
-                          <span style={{flex:1,fontSize:12.5,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
+                          style={{flex:1,display:'flex',alignItems:'center',gap:7,padding:'5px 6px 5px 14px',background:'none',border:'none',cursor:'pointer',textAlign:'left',minWidth:0}}>
+                          <span style={{width:7,height:7,borderRadius:'50%',background:td.color,flexShrink:0,display:'block'}}/>
+                          <span style={{flex:1,fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
                           <span style={{fontSize:10,color:T.textMuted,flexShrink:0,fontFamily:"'Geist Mono',monospace",marginRight:2}}>{cnt}</span>
                         </button>
                         <div ref={dotMenuOpen===td.id?dotMenuRef:undefined} style={{position:'relative',flexShrink:0,paddingRight:6}}>
-                          <button className="tag-dot-btn" onClick={e=>{e.stopPropagation();setDotMenuOpen(o=>o===td.id?null:td.id);}}
-                            style={{width:20,height:20,borderRadius:4,background:'transparent',border:'none',color:T.textMuted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,lineHeight:1,opacity:0,transition:'opacity .12s'}}>
+                          <button onClick={e=>{e.stopPropagation();setDotMenuOpen(o=>o===td.id?null:td.id);}}
+                            style={{width:20,height:20,borderRadius:4,background:'transparent',border:'none',color:T.textMuted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:tagHov||dotMenuOpen===td.id?1:0,transition:'opacity .12s',fontSize:14,fontWeight:700,lineHeight:1}}>
                             ···
                           </button>
                           {dotMenuOpen===td.id&&(
@@ -14481,6 +14511,18 @@ const TagManagementView = ({onToast}) => {
 
                 {/* ── Header ── */}
                 <div style={{padding:'16px 24px 0',borderBottom:`1px solid ${T.border}`,background:T.bgSurface,flexShrink:0}}>
+                  {/* Breadcrumb */}
+                  {selTag.category&&(
+                    <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:10,fontSize:11,color:T.textMuted}}>
+                      <button onClick={()=>{setSelCatId(selTag.category);setSelTagId(null);setEditing(false);setEditDraft(null);}}
+                        style={{background:'none',border:'none',cursor:'pointer',color:T.textMuted,fontSize:11,padding:0,textTransform:'capitalize'}}
+                        onMouseEnter={e=>e.currentTarget.style.color=T.accent} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
+                        {selTag.category}
+                      </button>
+                      <svg width="7" height="10" viewBox="0 0 7 10" fill="none"><path d="M1.5 1.5l4 3.5-4 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      <span style={{color:T.textSub,fontWeight:500}}>{selTag.name}</span>
+                    </div>
+                  )}
                   <div style={{display:'flex',alignItems:'flex-start',gap:12,marginBottom:14}}>
                     <span style={{width:12,height:12,borderRadius:'50%',background:selTag.color,flexShrink:0,display:'block',marginTop:4,boxShadow:`0 0 0 3px ${selTag.color}33`}}/>
                     <div style={{flex:1,minWidth:0}}>
@@ -14520,50 +14562,34 @@ const TagManagementView = ({onToast}) => {
                 </div>
 
                 {/* ── Tab content ── */}
-                <div style={{flex:1,overflowY:'auto',padding:'20px 24px'}}>
 
-                  {/* ── OVERVIEW TAB ── */}
-                  {detailTab==='overview'&&(
-                    <div style={{maxWidth:680,display:'flex',flexDirection:'column',gap:16}}>
+                {/* Overview — two-column layout like Business Glossary */}
+                {detailTab==='overview'&&(
+                  <div style={{flex:1,display:'flex',overflow:'hidden'}}>
 
-                      {/* Description — standalone section */}
-                      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
-                        <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.border}`,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Description</div>
-                        <div style={{padding:'14px 16px'}}>
-                          {editing
-                            ? <textarea value={draft.description||''} onChange={e=>setEditDraft(d=>({...d,description:e.target.value}))} rows={3}
-                                style={{width:'100%',padding:'8px 10px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12.5,outline:'none',resize:'vertical',fontFamily:'inherit',boxSizing:'border-box'}}
-                                placeholder="Describe when this tag should be applied…"/>
-                            : <p style={{fontSize:13,color:draft.description?T.textSub:T.textMuted,lineHeight:1.65,margin:0,fontStyle:draft.description?'normal':'italic'}}>
-                                {draft.description||'No description. Click Edit to add one.'}
-                              </p>
-                          }
-                        </div>
-                      </div>
+                    {/* Left content column */}
+                    <div style={{flex:1,overflowY:'auto',padding:'24px 28px',display:'flex',flexDirection:'column',gap:20}}>
 
-                      {/* Propagation */}
-                      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:'14px 16px',display:'flex',alignItems:'center',gap:12}}>
-                        <span style={{fontSize:12,color:T.textMuted,minWidth:100,flexShrink:0,fontWeight:500}}>Propagation</span>
+                      {/* Description */}
+                      <div>
+                        <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:10}}>Description</div>
                         {editing
-                          ? <select value={draft.propagationMode} onChange={e=>setEditDraft(d=>({...d,propagationMode:e.target.value}))} style={{padding:'5px 10px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:'none'}}>
-                              {Object.entries(PROP_LABELS).map(([v,l])=><option key={v} value={v}>{l}</option>)}
-                            </select>
-                          : <span style={{fontSize:12.5,color:PROP_COLORS[draft.propagationMode]||T.textMuted,fontWeight:600}}>{PROP_LABELS[draft.propagationMode]||'—'}</span>
+                          ? <textarea value={draft.description||''} onChange={e=>setEditDraft(d=>({...d,description:e.target.value}))} rows={4}
+                              style={{width:'100%',padding:'10px 12px',background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:13,outline:'none',resize:'vertical',fontFamily:'inherit',boxSizing:'border-box',lineHeight:1.65}}
+                              onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}
+                              placeholder="Describe when this tag should be applied…"/>
+                          : <p style={{fontSize:13.5,color:draft.description?T.textSub:T.textMuted,lineHeight:1.75,margin:0,fontStyle:draft.description?'normal':'italic'}}>
+                              {draft.description||'No description. Click Edit to add one.'}
+                            </p>
                         }
-                        {editing&&(
-                          <div style={{marginLeft:'auto',display:'flex',gap:6,flexWrap:'wrap'}}>
-                            <span style={{fontSize:11,color:T.textMuted,alignSelf:'center'}}>Color:</span>
-                            {['#ee2424','#d97706','#16a34a','#2563eb','#7c3aed','#6366f1','#0891b2','#6b7280'].map(c=>(
-                              <button key={c} onClick={()=>setEditDraft(d=>({...d,color:c}))} style={{width:18,height:18,borderRadius:'50%',background:c,border:draft.color===c?`3px solid ${T.text}`:'3px solid transparent',cursor:'pointer',padding:0,flexShrink:0}}/>
-                            ))}
-                          </div>
-                        )}
                       </div>
 
-                      {/* Ownership — Owner + Steward side by side */}
-                      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
-                        <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.border}`,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Ownership</div>
-                        <div style={{padding:'14px 16px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                      <hr style={{border:'none',borderTop:`1px solid ${T.border}`,margin:0}}/>
+
+                      {/* Ownership */}
+                      <div>
+                        <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:12}}>Ownership</div>
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
                           <div>
                             <div style={{fontSize:10.5,color:T.textMuted,marginBottom:6,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.05em'}}>Owner</div>
                             <PersonPicker value={draft.owner||''} onChange={v=>editing&&setEditDraft(d=>({...d,owner:v}))} placeholder="No owner assigned" disabled={!editing}/>
@@ -14575,50 +14601,127 @@ const TagManagementView = ({onToast}) => {
                         </div>
                       </div>
 
-                      {/* Connector aliases */}
-                      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
-                        <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.border}`}}>
-                          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Connector Aliases</div>
-                          <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>How this tag is named in source systems</div>
+                      {relatedTags.length>0&&<>
+                        <hr style={{border:'none',borderTop:`1px solid ${T.border}`,margin:0}}/>
+                        {/* Related Tags */}
+                        <div>
+                          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:10}}>Related Tags <span style={{fontWeight:400,textTransform:'none',letterSpacing:0}}>— same category</span></div>
+                          <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden',background:T.bgSurface}}>
+                            {relatedTags.map((td,i)=>(
+                              <button key={td.id} onClick={()=>{setSelTagId(td.id);setDetailTab('overview');setEditing(false);setEditDraft(null);}}
+                                style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 16px',background:'transparent',border:'none',cursor:'pointer',textAlign:'left',borderBottom:i<relatedTags.length-1?`1px solid ${T.border}`:'none'}}
+                                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                <span style={{width:8,height:8,borderRadius:'50%',background:td.color,flexShrink:0,display:'block'}}/>
+                                <span style={{flex:1,fontSize:12.5,color:T.text}}>{td.name}</span>
+                                <span style={{fontSize:11,color:T.textMuted}}>{assetCount(td.id)} assets</span>
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        <div style={{padding:'12px 16px'}}>
-                          {(draft.sourceAliases||[]).length>0
-                            ? <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:editing?10:0}}>
-                                {(draft.sourceAliases||[]).map((a,i)=>(
-                                  <span key={i} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11.5,padding:'3px 9px',borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>
-                                    {a}{editing&&<button onClick={()=>setEditDraft(d=>({...d,sourceAliases:d.sourceAliases.filter((_,j)=>j!==i)}))} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',padding:0,fontSize:12,lineHeight:1}}>×</button>}
-                                  </span>
-                                ))}
-                              </div>
-                            : <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No aliases defined</span>
-                          }
-                          {editing&&<div style={{display:'flex',gap:6,marginTop:8}}>
-                            <Input2 placeholder="Add alias…" value={aliasInput} onChange={e=>setAliasInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&aliasInput.trim()){setEditDraft(d=>({...d,sourceAliases:[...(d.sourceAliases||[]),aliasInput.trim()]}));setAliasInput('');}}}/>
-                            <button onClick={()=>{if(aliasInput.trim()){setEditDraft(d=>({...d,sourceAliases:[...(d.sourceAliases||[]),aliasInput.trim()]}));setAliasInput('');}}} style={{padding:'0 12px',borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:'pointer',flexShrink:0}}>Add</button>
-                          </div>}
-                        </div>
+                      </>}
+
+                      <hr style={{border:'none',borderTop:`1px solid ${T.border}`,margin:0}}/>
+
+                      {/* Connector Aliases */}
+                      <div>
+                        <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:4}}>Connector Aliases</div>
+                        <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>How this tag is named in source systems</div>
+                        {(draft.sourceAliases||[]).length>0
+                          ? <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:editing?10:0}}>
+                              {(draft.sourceAliases||[]).map((a,i)=>(
+                                <span key={i} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11.5,padding:'3px 9px',borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>
+                                  {a}{editing&&<button onClick={()=>setEditDraft(d=>({...d,sourceAliases:d.sourceAliases.filter((_,j)=>j!==i)}))} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',padding:0,fontSize:12,lineHeight:1}}>×</button>}
+                                </span>
+                              ))}
+                            </div>
+                          : <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No aliases defined</span>
+                        }
+                        {editing&&<div style={{display:'flex',gap:6,marginTop:8}}>
+                          <Input2 placeholder="Add alias…" value={aliasInput} onChange={e=>setAliasInput(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&aliasInput.trim()){setEditDraft(d=>({...d,sourceAliases:[...(d.sourceAliases||[]),aliasInput.trim()]}));setAliasInput('');}}}/>
+                          <button onClick={()=>{if(aliasInput.trim()){setEditDraft(d=>({...d,sourceAliases:[...(d.sourceAliases||[]),aliasInput.trim()]}));setAliasInput('');}}} style={{padding:'0 12px',borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:'pointer',flexShrink:0}}>Add</button>
+                        </div>}
                       </div>
 
-                      {/* Applied to assets */}
-                      {affectedAssets.length>0&&(
-                        <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
-                          <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                            <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Applied To</span>
-                            <span style={{fontSize:11,color:T.accent,fontWeight:600}}>{affectedAssets.length} asset{affectedAssets.length!==1?'s':''}</span>
-                          </div>
-                          {affectedAssets.slice(0,5).map((a,i)=>(
-                            <div key={a.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 16px',borderBottom:i<Math.min(affectedAssets.length,5)-1?`1px solid ${T.border}`:'none'}}>
-                              <ServiceIcon service={a.service} size={16}/>
-                              <span style={{flex:1,fontSize:12.5,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name}</span>
-                              <TypeBadge type={a.type}/>
-                              <span style={{fontSize:11,color:T.textMuted,flexShrink:0}}>{a.domain}</span>
-                            </div>
-                          ))}
-                          {affectedAssets.length>5&&<div style={{padding:'8px 16px',fontSize:11,color:T.textMuted,fontStyle:'italic'}}>+{affectedAssets.length-5} more</div>}
-                        </div>
-                      )}
                     </div>
-                  )}
+
+                    {/* Right sidebar */}
+                    <div style={{width:256,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:'auto',padding:'20px 16px',display:'flex',flexDirection:'column',gap:0}}>
+
+                      {/* Color */}
+                      <div style={{marginBottom:18}}>
+                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Color</div>
+                        {editing
+                          ? <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                              {['#ee2424','#d97706','#16a34a','#2563eb','#7c3aed','#6366f1','#0891b2','#6b7280'].map(c=>(
+                                <button key={c} onClick={()=>setEditDraft(d=>({...d,color:c}))} style={{width:22,height:22,borderRadius:'50%',background:c,border:draft.color===c?`3px solid ${T.text}`:'3px solid transparent',cursor:'pointer',padding:0,flexShrink:0,transition:'border .12s'}}/>
+                              ))}
+                            </div>
+                          : <div style={{display:'flex',alignItems:'center',gap:8}}>
+                              <span style={{width:13,height:13,borderRadius:'50%',background:selTag.color,display:'block',boxShadow:`0 0 0 3px ${selTag.color}33`,flexShrink:0}}/>
+                              <span style={{fontSize:12,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{selTag.color}</span>
+                            </div>
+                        }
+                      </div>
+
+                      <div style={{height:1,background:T.border,marginBottom:18}}/>
+
+                      {/* Category */}
+                      <div style={{marginBottom:18}}>
+                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Category</div>
+                        {selTag.category
+                          ? <button onClick={()=>{setSelCatId(selTag.category);setSelTagId(null);setEditing(false);setEditDraft(null);}}
+                              style={{display:'inline-flex',alignItems:'center',gap:6,padding:'4px 10px',borderRadius:99,background:getCatStyle(selTag.category).bg,border:`1px solid ${getCatStyle(selTag.category).color}44`,cursor:'pointer',outline:'none'}}
+                              onMouseEnter={e=>e.currentTarget.style.opacity='0.75'} onMouseLeave={e=>e.currentTarget.style.opacity='1'}>
+                              <span style={{width:7,height:7,borderRadius:'50%',background:getCatStyle(selTag.category).color,display:'block'}}/>
+                              <span style={{fontSize:12,fontWeight:600,color:getCatStyle(selTag.category).color,textTransform:'capitalize'}}>{selTag.category}</span>
+                            </button>
+                          : <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>Uncategorized</span>
+                        }
+                      </div>
+
+                      <div style={{height:1,background:T.border,marginBottom:18}}/>
+
+                      {/* Propagation */}
+                      <div style={{marginBottom:18}}>
+                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Propagation</div>
+                        {editing
+                          ? <select value={draft.propagationMode} onChange={e=>setEditDraft(d=>({...d,propagationMode:e.target.value}))} style={{width:'100%',padding:'6px 10px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:'none'}}>
+                              {Object.entries(PROP_LABELS).map(([v,l])=><option key={v} value={v}>{l}</option>)}
+                            </select>
+                          : <span style={{fontSize:12.5,color:PROP_COLORS[draft.propagationMode]||T.textMuted,fontWeight:600}}>{PROP_LABELS[draft.propagationMode]||'—'}</span>
+                        }
+                      </div>
+
+                      <div style={{height:1,background:T.border,marginBottom:18}}/>
+
+                      {/* Applied Assets */}
+                      <div>
+                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                          <span>Applied Assets</span>
+                          {affectedAssets.length>0&&<span style={{fontSize:11,color:T.accent,fontWeight:600}}>{affectedAssets.length}</span>}
+                        </div>
+                        {affectedAssets.length===0
+                          ? <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No assets tagged</span>
+                          : <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                              {affectedAssets.slice(0,6).map(a=>(
+                                <div key={a.id} style={{display:'flex',alignItems:'center',gap:7,padding:'5px 8px',borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                                  <ServiceIcon service={a.service} size={13}/>
+                                  <span style={{flex:1,fontSize:11.5,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name}</span>
+                                  <TypeBadge type={a.type}/>
+                                </div>
+                              ))}
+                              {affectedAssets.length>6&&<div style={{fontSize:11,color:T.textMuted,fontStyle:'italic',paddingLeft:4}}>+{affectedAssets.length-6} more</div>}
+                            </div>
+                        }
+                      </div>
+
+                    </div>
+                  </div>
+                )}
+
+                {/* Assignments & Activity tabs — single column */}
+                {detailTab!=='overview'&&(
+                  <div style={{flex:1,overflowY:'auto',padding:'20px 24px'}}>
 
                   {/* ── CONNECTORS TAB ── */}
                   {detailTab==='connectors'&&(
@@ -14678,26 +14781,7 @@ const TagManagementView = ({onToast}) => {
                         }
                       </div>
 
-                      {/* Related tags — same category */}
-                      {relatedTags.length>0&&(
-                        <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
-                          <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.border}`,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Related Tags <span style={{fontWeight:400,textTransform:'none',fontSize:11,color:T.textMuted}}>— same category</span></div>
-                          {relatedTags.map((td,i)=>{
-                            const rc=getCatStyle(td.category);
-                            return (
-                              <button key={td.id} onClick={()=>{setSelTagId(td.id);setDetailTab('overview');setEditing(false);setEditDraft(null);}}
-                                style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 16px',background:'transparent',border:'none',cursor:'pointer',textAlign:'left',borderBottom:i<relatedTags.length-1?`1px solid ${T.border}`:'none'}}
-                                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                                <span style={{width:8,height:8,borderRadius:'50%',background:td.color,flexShrink:0,display:'block'}}/>
-                                <span style={{flex:1,fontSize:12.5,color:T.text}}>{td.name}</span>
-                                <span style={{fontSize:11,color:T.textMuted}}>{assetCount(td.id)} assets</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-
-                      {/* Access policy note — no settings redirect */}
+                      {/* Access policy note */}
                       <div style={{padding:'11px 14px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,display:'flex',gap:10,alignItems:'flex-start'}}>
                         <span style={{fontSize:15,flexShrink:0,marginTop:1}}>ℹ</span>
                         <div>
@@ -14734,7 +14818,8 @@ const TagManagementView = ({onToast}) => {
                     </div>
                   )}
 
-                </div>
+                  </div>
+                )}
               </div>
             );
           })()}
