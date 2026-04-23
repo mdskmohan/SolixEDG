@@ -10497,6 +10497,9 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
   const [runLogModal, setRunLogModal] = useState(null); // run object for log modal
   const progress = svc.status==="running" ? Math.min(98,(44+(tick*3))%100) : 100;
   // Configuration tab state
+  const [cfgEditing,    setCfgEditing]    = useState(false);
+  const [cfgDraft,      setCfgDraft]      = useState(null);
+  const [cfgAuthType,   setCfgAuthType]   = useState("userpass");
   const [svcFilterMode,   setSvcFilterMode]   = useState("selection");
   const [svcInclSchemas,  setSvcInclSchemas]  = useState([]);
   const [svcExclSchemas,  setSvcExclSchemas]  = useState([]);
@@ -10658,34 +10661,180 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
 
         {/* ── CONFIGURATION TAB ── */}
         {cfgTab==="configuration"&&<>
-          {/* ── Identity & Governance ── */}
-          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Identity & Governance</div>
-          <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
-            {[
-              {l:"Connection Name", v:svc.displayName||svc.name},
-              {l:"Environment",     v:"Production"},
-              {l:"Team",            v:"Data Engineering"},
-              {l:"Connector Admin", v:svc.config?.user||"solix_reader"},
-              {l:"Description",     v:`${svc.type} connector for ${svc.category} — managed by the Data Engineering team.`},
-            ].map(f=>(
-              <div key={f.l}>
-                <div style={{fontSize:11,color:T.textMuted,marginBottom:4,fontWeight:500}}>{f.l}</div>
-                <div style={{display:"flex",gap:6}}><Input2 value={f.v} style={{flex:1}} onChange={()=>{}}/></div>
-              </div>
-            ))}
+          {/* ── Tab header: Edit / Save / Cancel ── */}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+            <div style={{fontSize:13,fontWeight:700,color:T.text}}>Configuration</div>
+            {cfgEditing
+              ? <div style={{display:"flex",gap:6}}>
+                  <Btn small ghost onClick={()=>{setCfgEditing(false);setCfgDraft(null);}}>Cancel</Btn>
+                  <button onClick={()=>{setCfgEditing(false);setCfgDraft(null);onToast("Configuration saved","success");}}
+                    style={{padding:"6px 16px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                    Save
+                  </button>
+                </div>
+              : <button onClick={()=>{
+                    setCfgEditing(true);
+                    setCfgDraft({
+                      name:svc.displayName||svc.name,
+                      env:"Production",
+                      team:"Data Engineering",
+                      admin:svc.config?.user||"solix_reader",
+                      desc:`${svc.type} connector for ${svc.category} — managed by the Data Engineering team.`,
+                      authType:cfgAuthType,
+                      fields:{host:svc.host||"",port:"5432",database:svc.database||"",...svc.config},
+                    });
+                  }}
+                  style={{padding:"6px 14px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:5,transition:"background .12s"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
+                  onMouseLeave={e=>e.currentTarget.style.background=T.bgElevated}>
+                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  Edit
+                </button>
+            }
           </div>
-          {/* ── Connection Settings ── */}
-          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Connection Settings</div>
-          <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
-            {[{l:"Host / URL",v:svc.host},{l:"Database / Schema",v:svc.database||"—"},...Object.entries(svc.config).map(([k,v])=>({l:k.replace(/([A-Z])/g," $1").replace(/^./,s=>s.toUpperCase()),v:String(v)}))].map(f=>(
-              <div key={f.l}>
-                <div style={{fontSize:11,color:T.textMuted,marginBottom:4,fontWeight:500}}>{f.l}</div>
-                {typeof f.v==="boolean"
-                  ?<Toggle on={f.v} onChange={()=>onToast("Setting updated","success")}/>
-                  :<div style={{display:"flex",gap:6}}><Input2 value={f.v} style={{flex:1}} onChange={()=>{}}/></div>}
-              </div>
-            ))}
+
+          {/* ── Identity & Governance card ── */}
+          <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px",marginBottom:14}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
+              <div style={{width:3,height:16,borderRadius:2,background:T.accent,flexShrink:0}}/>
+              <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Identity & Governance</span>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              {[
+                {l:"Connection Name", k:"name",  span:2},
+                {l:"Environment",     k:"env"},
+                {l:"Team",            k:"team"},
+                {l:"Connector Admin", k:"admin"},
+                {l:"Description",     k:"desc",  span:2, textarea:true},
+              ].map(f=>{
+                const roVal = f.k==="name"?svc.displayName||svc.name
+                  :f.k==="env"?"Production"
+                  :f.k==="team"?"Data Engineering"
+                  :f.k==="admin"?svc.config?.user||"solix_reader"
+                  :`${svc.type} connector for ${svc.category} — managed by the Data Engineering team.`;
+                return (
+                  <div key={f.k} style={f.span?{gridColumn:`span ${f.span}`}:{}}>
+                    <div style={{fontSize:11,color:T.textMuted,marginBottom:5,fontWeight:500}}>{f.l}</div>
+                    {cfgEditing
+                      ? f.textarea
+                        ? <textarea value={cfgDraft?.[f.k]||""} onChange={e=>setCfgDraft(p=>({...p,[f.k]:e.target.value}))} rows={2}
+                            style={{width:"100%",padding:"8px 11px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",resize:"vertical",boxSizing:"border-box",lineHeight:1.5,fontFamily:"inherit"}}
+                            onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                        : <input value={cfgDraft?.[f.k]||""} onChange={e=>setCfgDraft(p=>({...p,[f.k]:e.target.value}))}
+                            style={{width:"100%",padding:"8px 11px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",transition:"border .15s"}}
+                            onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                      : <div style={{padding:"8px 11px",background:T.bgSurface,border:`1px solid ${T.border}44`,borderRadius:8,fontSize:12,color:T.textSub,lineHeight:1.5}}>
+                          {roVal}
+                        </div>
+                    }
+                  </div>
+                );
+              })}
+            </div>
           </div>
+
+          {/* ── Credentials card ── */}
+          {(()=>{
+            const CFG_AUTH_OPTS=[
+              {id:"userpass",label:"Username / Password",icon:"👤",desc:"Standard DB credentials"},
+              {id:"oauth",   label:"OAuth 2.0",          icon:"🔑",desc:"Token-based auth"},
+              {id:"keypair", label:"Key Pair",            icon:"🗝", desc:"Private key + passphrase"},
+              {id:"token",   label:"API Token",           icon:"⚡",desc:"Service account token"},
+            ];
+            const CFG_AUTH_FIELDS = {
+              userpass:[
+                {k:"host",     l:"Host / URL",  ph:"db.company.com",  type:"text",    req:true},
+                {k:"port",     l:"Port",         ph:"5432",            type:"text"},
+                {k:"database", l:"Database",     ph:"warehouse",       type:"text"},
+                {k:"username", l:"Username",     ph:"solix_reader",    type:"text",    req:true},
+                {k:"password", l:"Password",     ph:"••••••••",        type:"password",req:true},
+                {k:"ssl",      l:"Enable SSL",   type:"toggle",        val:true},
+              ],
+              oauth:[
+                {k:"host",          l:"Host / URL",    ph:"api.company.com",       type:"text",    req:true},
+                {k:"port",          l:"Port",           ph:"443",                   type:"text"},
+                {k:"client_id",     l:"Client ID",      ph:"client_abc123",         type:"text",    req:true},
+                {k:"client_secret", l:"Client Secret",  ph:"••••••••",             type:"password",req:true},
+                {k:"token_url",     l:"Token URL",      ph:"https://…/oauth/token",type:"text",    req:true},
+                {k:"scope",         l:"Scope",          ph:"read:metadata",         type:"text"},
+              ],
+              keypair:[
+                {k:"host",        l:"Host / URL",  ph:"db.company.com",                    type:"text",    req:true},
+                {k:"port",        l:"Port",         ph:"5432",                              type:"text"},
+                {k:"database",    l:"Database",     ph:"warehouse",                         type:"text"},
+                {k:"username",    l:"Username",     ph:"solix_reader",                      type:"text",    req:true},
+                {k:"private_key", l:"Private Key",  ph:"-----BEGIN RSA PRIVATE KEY-----…", type:"textarea",req:true},
+                {k:"passphrase",  l:"Passphrase",   ph:"key passphrase (leave blank if none)",type:"password"},
+              ],
+              token:[
+                {k:"host",      l:"Host / URL",  ph:"api.company.com", type:"text",    req:true},
+                {k:"port",      l:"Port",         ph:"443",             type:"text"},
+                {k:"api_token", l:"API Token",    ph:"tok_••••••••",    type:"password",req:true},
+              ],
+            };
+            const curAt = cfgEditing?(cfgDraft?.authType||cfgAuthType):cfgAuthType;
+            const activeFields = CFG_AUTH_FIELDS[curAt]||CFG_AUTH_FIELDS.userpass;
+            const roFields = {host:svc.host||"",database:svc.database||"",...svc.config};
+            const edFields = cfgDraft?.fields||{};
+            return (
+              <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px",marginBottom:14}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
+                  <div style={{width:3,height:16,borderRadius:2,background:"#ee2424",flexShrink:0}}/>
+                  <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Credentials</span>
+                  <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>Encrypted at rest</span>
+                </div>
+                {/* Auth type tiles */}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:20,paddingBottom:18,borderBottom:`1px solid ${T.border}`,opacity:cfgEditing?1:0.65,pointerEvents:cfgEditing?"auto":"none"}}>
+                  {CFG_AUTH_OPTS.map(a=>{
+                    const sel=curAt===a.id;
+                    return (
+                      <button key={a.id}
+                        onClick={()=>{if(cfgEditing){setCfgAuthType(a.id);setCfgDraft(p=>({...p,authType:a.id}));}}}
+                        style={{padding:"11px 10px",borderRadius:10,textAlign:"left",border:`2px solid ${sel?"#8b5cf6":T.border}`,background:sel?"rgba(139,92,246,.07)":T.bgSurface,cursor:cfgEditing?"pointer":"default",transition:"all .14s"}}>
+                        <div style={{fontSize:15,marginBottom:5}}>{a.icon}</div>
+                        <div style={{fontSize:11.5,fontWeight:700,color:sel?"#8b5cf6":T.textSub,lineHeight:1.2}}>{a.label}</div>
+                        <div style={{fontSize:10,color:T.textMuted,marginTop:3}}>{a.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* Dynamic credential fields */}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:13}}>
+                  {activeFields.map(f=>(
+                    <div key={f.k} style={f.type==="textarea"?{gridColumn:"1 / -1"}:{}}>
+                      <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>
+                        {f.l}{f.req&&<span style={{color:"#ee2424",marginLeft:3}}>*</span>}
+                      </label>
+                      {f.type==="toggle"
+                        ? <label style={{display:"flex",alignItems:"center",gap:10,cursor:cfgEditing?"pointer":"default",paddingTop:4}}>
+                            <Toggle on={cfgEditing?(edFields[f.k]!==undefined?edFields[f.k]:!!f.val):(roFields[f.k]!==undefined?!!roFields[f.k]:!!f.val)}
+                              onChange={()=>{if(cfgEditing)setCfgDraft(p=>({...p,fields:{...(p.fields||{}),[f.k]:!(p.fields?.[f.k]!==undefined?p.fields[f.k]:f.val)}}));}}/>
+                            <span style={{fontSize:12,color:T.textSub}}>
+                              {(cfgEditing?(edFields[f.k]!==undefined?edFields[f.k]:!!f.val):(roFields[f.k]!==undefined?!!roFields[f.k]:!!f.val))?"Enabled":"Disabled"}
+                            </span>
+                          </label>
+                        : f.type==="textarea"
+                        ? <textarea
+                            value={cfgEditing?(edFields[f.k]||""):(roFields[f.k]||"")}
+                            onChange={e=>{if(cfgEditing)setCfgDraft(p=>({...p,fields:{...(p.fields||{}),[f.k]:e.target.value}}));}}
+                            readOnly={!cfgEditing} placeholder={f.ph} rows={4}
+                            style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:11.5,outline:"none",resize:"vertical",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box",lineHeight:1.6,opacity:cfgEditing?1:0.75}}
+                            onFocus={e=>{if(cfgEditing)e.target.style.borderColor="#ee2424";}} onBlur={e=>e.target.style.borderColor=T.border}/>
+                        : <input
+                            type={f.type||"text"}
+                            value={cfgEditing?(edFields[f.k]||""):(roFields[f.k]!=null?String(roFields[f.k]):"")}
+                            onChange={e=>{if(cfgEditing)setCfgDraft(p=>({...p,fields:{...(p.fields||{}),[f.k]:e.target.value}}));}}
+                            readOnly={!cfgEditing} placeholder={f.ph}
+                            style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${cfgEditing?T.border:T.border+"44"}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",transition:"border .15s",fontFamily:f.type==="password"?"'Geist Mono',monospace":"inherit",opacity:cfgEditing?1:0.8}}
+                            onFocus={e=>{if(cfgEditing)e.target.style.borderColor="#ee2424";}} onBlur={e=>e.target.style.borderColor=cfgEditing?T.border:T.border+"44"}/>
+                      }
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* ── Ingestion Filters ── */}
           <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10,marginTop:4}}>Ingestion Filters</div>
           <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",marginBottom:20}}>
@@ -10757,9 +10906,18 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
               </div>
             </div>
           </div>
-          <div style={{display:"flex",gap:6}}>
-            <button onClick={()=>onToast("Configuration saved","success")} style={{flex:1,padding:"9px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Save Changes</button>
-            <Btn small ghost>Test Connection</Btn>
+          {/* ── Test Connection — always visible ── */}
+          <div style={{padding:"14px 16px",background:T.bgElevated,border:`1px solid ${T.accent}28`,borderRadius:10,marginBottom:4,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+            <div>
+              <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>Test Connection</div>
+              <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>Verify credentials and connectivity before saving</div>
+            </div>
+            <button onClick={()=>onToast("Connection test passed ✓","success")}
+              style={{flexShrink:0,padding:"8px 18px",borderRadius:8,background:"transparent",border:`1.5px solid ${T.accent}`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer",transition:"background .12s,color .12s"}}
+              onMouseEnter={e=>{e.currentTarget.style.background=T.accent;e.currentTarget.style.color="#fff";}}
+              onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.accent;}}>
+              Test
+            </button>
           </div>
         </>}
 
@@ -14594,6 +14752,7 @@ const TagManagementView = ({onToast}) => {
                           onMouseLeave={()=>setHovItem(null)}>
                           <button onClick={()=>{setSelTagId(td.id);setSelCatId(null);setDetailTab('overview');setEditing(false);setEditDraft(null);setNewPanelOpen(false);setNewCatPanelOpen(false);}}
                             style={{flex:1,display:'flex',alignItems:'center',gap:7,padding:'5px 6px 5px 30px',background:'none',border:'none',cursor:'pointer',textAlign:'left',minWidth:0}}>
+                            {td.color&&<span style={{width:8,height:8,borderRadius:'50%',background:td.color,flexShrink:0,display:'block'}}/>}
                             <span style={{flex:1,fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
                             <span style={{fontSize:10,color:T.textMuted,flexShrink:0,fontFamily:"'Geist Mono',monospace",marginRight:2}}>{cnt}</span>
                           </button>
@@ -14638,6 +14797,7 @@ const TagManagementView = ({onToast}) => {
                         onMouseLeave={()=>setHovItem(null)}>
                         <button onClick={()=>{setSelTagId(td.id);setSelCatId(null);setDetailTab('overview');setEditing(false);setEditDraft(null);setNewPanelOpen(false);setNewCatPanelOpen(false);}}
                           style={{flex:1,display:'flex',alignItems:'center',gap:7,padding:'5px 6px 5px 14px',background:'none',border:'none',cursor:'pointer',textAlign:'left',minWidth:0}}>
+                          {td.color&&<span style={{width:8,height:8,borderRadius:'50%',background:td.color,flexShrink:0,display:'block'}}/>}
                           <span style={{flex:1,fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
                           <span style={{fontSize:10,color:T.textMuted,flexShrink:0,fontFamily:"'Geist Mono',monospace",marginRight:2}}>{cnt}</span>
                         </button>
