@@ -342,6 +342,8 @@ const DQ_TEST_DEFINITIONS = [
   {id:"td23", name:"Column Values To Match Regex Pattern",   entityType:"COLUMN", dim:"Validity",     testPlatforms:["OpenMetadata"],           enabled:true,  params:["regex"],                          fn:"columnValuesToMatchRegex",          desc:"This schema defines the test ColumnValuesToMatchRegex. Test the values in a column match a regex pattern."},
   {id:"td24", name:"Column Values To Not Match Regex",       entityType:"COLUMN", dim:"Validity",     testPlatforms:["OpenMetadata"],           enabled:true,  params:["forbiddenPattern"],               fn:"columnValuesToNotMatchRegex",       desc:"This schema defines the test ColumnValuesToNotMatchRegex. Test the values in a column do not match a regex pattern."},
   {id:"td25", name:"Column Values Sum To Be Between",        entityType:"COLUMN", dim:"Accuracy",     testPlatforms:["OpenMetadata"],           enabled:true,  params:["minValue","maxValue"],            fn:"columnValuesSumToBeBetween",        desc:"Test the sum of values in a column is between min and max."},
+  {id:"td26", name:"Column Value Count To Be Between",       entityType:"COLUMN", dim:"Completeness", testPlatforms:["OpenMetadata"],           enabled:true,  params:["minValue","maxValue"],            fn:"columnValueCountToBeBetween",       desc:"This schema defines the test ColumnValueCountToBeBetween. Test the number of values in a column is between min and max."},
+  {id:"td27", name:"Column Values Distinct Ratio To Be Between", entityType:"COLUMN", dim:"Uniqueness", testPlatforms:["OpenMetadata"],        enabled:true,  params:["minValue","maxValue"],            fn:"columnValuesDistinctRatioToBeBetween", desc:"This schema defines the test ColumnValuesDistinctRatioToBeBetween. Test the ratio of distinct values to total values in a column is between min and max."},
 ];
 
 const DQ_SUITES = [
@@ -1386,78 +1388,7 @@ const GlossaryView = ({onToast}) => {
                   </div>
                 )}
 
-                {/* ── SECTION 3: Categories ── */}
-                <div>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-                    <span style={{fontSize:13,fontWeight:700,color:T.text}}>Categories <span style={{fontSize:12,fontWeight:400,color:T.textMuted,marginLeft:4}}>{glossary.categories.length} total</span></span>
-                    <Btn small ghost onClick={()=>openModal("newCategory")}>+ New Category</Btn>
-                  </div>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(230px,1fr))",gap:10}}>
-                    {glossary.categories.map(cat=>{
-                      const cts=allT.filter(t=>t.category===cat.id);
-                      const approvedCt=cts.filter(t=>t.status==="Approved").length;
-                      const pct=cts.length>0?Math.round((approvedCt/cts.length)*100):0;
-                      const pctColor=pct>=80?"#16a34a":pct>=50?"#d97706":"#e11d48";
-                      return(
-                        <div key={cat.id} onClick={()=>{setSelCat(cat.id);setSelTerm(null);}}
-                          style={{padding:"14px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,cursor:"pointer",transition:"all .15s"}}
-                          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent+"66";e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,.08)";}}
-                          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="none";}}>
-                          {/* Header row */}
-                          <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:12}}>
-                            <div style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.textSub,flexShrink:0}}>
-                              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1.5 3h3.8l.9 1.3H12.5a.7.7 0 01.7.7v5.8a.7.7 0 01-.7.7H1.5a.7.7 0 01-.7-.7V3.7a.7.7 0 01.7-.7z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
-                            </div>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{fontSize:13.5,fontWeight:700,color:T.text,marginBottom:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cat.name}</div>
-                              <div style={{fontSize:11.5,color:T.textMuted}}>{cts.length} term{cts.length!==1?"s":""}</div>
-                            </div>
-                            <button onClick={e=>{e.stopPropagation();openModal("newTerm",{category:cat.id});}}
-                              style={{width:22,height:22,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,fontSize:14,lineHeight:1}}
-                              onMouseEnter={e=>{e.currentTarget.style.background=T.accentDim;e.currentTarget.style.color=T.accent;e.currentTarget.style.borderColor=T.accent+"55";}}
-                              onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}><IcPlus/></button>
-                          </div>
-                          {/* Coverage bar */}
-                          {cts.length>0?(
-                            <>
-                              <div style={{marginBottom:10}}>
-                                <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                                  <span style={{fontSize:11,color:T.textMuted}}>Approval coverage</span>
-                                  <span style={{fontSize:11,fontWeight:700,color:pctColor}}>{pct}%</span>
-                                </div>
-                                <div style={{height:5,borderRadius:3,background:T.bgElevated,overflow:"hidden"}}>
-                                  <div style={{width:`${pct}%`,height:"100%",background:pctColor,borderRadius:3,transition:"width .4s"}}/>
-                                </div>
-                              </div>
-                              {/* Term preview list */}
-                              <div style={{borderTop:`1px solid ${T.border}`,paddingTop:8}}>
-                                {cts.slice(0,4).map(t=>{const cm=CERT_META[t.cert]||CERT_META.Draft;return(
-                                  <div key={t.id} style={{display:"flex",alignItems:"center",gap:7,paddingBottom:5}}>
-                                    <span style={{width:6,height:6,borderRadius:"50%",background:cm.color,flexShrink:0}}/>
-                                    <span style={{flex:1,fontSize:12,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.term}</span>
-                                    <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>{t.cert}</span>
-                                  </div>
-                                );})}
-                                {cts.length>4&&<div style={{fontSize:11,color:T.textMuted,paddingTop:2}}>+{cts.length-4} more terms</div>}
-                              </div>
-                            </>
-                          ):(
-                            <div style={{borderTop:`1px solid ${T.border}`,paddingTop:10,fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms yet — click + to add one</div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {/* Uncategorized */}
-                  {uncategorized.length>0&&(
-                    <div style={{marginTop:16}}>
-                      <div style={{fontSize:12,fontWeight:600,color:T.textMuted,marginBottom:8}}>Uncategorized <span style={{fontWeight:400}}>({uncategorized.length})</span></div>
-                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(230px,1fr))",gap:8}}>{uncategorized.map(t=><TermCard key={t.id} t={t}/>)}</div>
-                    </div>
-                  )}
-                </div>
-
-                {/* ── SECTION 4: Needs Attention (only shown when issues exist) ── */}
+                {/* ── SECTION 3: Needs Attention (only shown when issues exist) ── */}
                 {(unlinked.length>0||noDefn.length>0)&&(
                   <div>
                     <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Needs Attention</div>
@@ -4671,14 +4602,7 @@ const QualityView = () => {
                 </div>
               )}
 
-              {/* Suite membership */}
-              <div>
-                <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:8,textTransform:"uppercase"}}>Suite</div>
-                <div style={{padding:"10px 14px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                  <span style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.accent}}>{suites.find(s=>s.id===tcDetail.suiteId)?.name||tcDetail.suiteId}</span>
-                  <button onClick={()=>{setTab("testsuites");setExpandedSuite(tcDetail.suiteId);setTcDetail(null);}} style={{fontSize:11,padding:"4px 9px",borderRadius:6,background:T.accentDim,border:`1px solid ${T.accent}22`,color:T.accent,cursor:"pointer"}}>View suite →</button>
-                </div>
-              </div>
+              {/* Suite membership — hidden per UX decision */}
             </div>
             {/* Footer actions */}
             <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgElevated,display:"flex",alignItems:"center",gap:8}}>
@@ -6278,6 +6202,10 @@ const AssetLineageFull = ({asset})=>{
 
 const AssetQualityTab = ({asset})=>{
   const [runningIds,setRunningIds]=useState(new Set());
+  const [selectedIds,setSelectedIds]=useState(new Set());
+  const [addTestOpen,setAddTestOpen]=useState(false);
+  const [addTestLevel,setAddTestLevel]=useState("TABLE");
+  const [addTestDefId,setAddTestDefId]=useState("");
   const [localCases,setLocalCases]=useState(()=>{
     // match DQ test cases to this asset — table field is like "commerce.orders", asset.name is "orders"
     const matched=DQ_TEST_CASES.filter(t=>t.table.endsWith("."+asset.name)||t.table===asset.name);
@@ -6338,19 +6266,79 @@ const AssetQualityTab = ({asset})=>{
     {/* Test Cases table */}
     <Card2 style={{padding:0,overflow:"hidden"}}>
       <div style={{padding:"11px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",background:T.bgElevated}}>
-        <span style={{fontSize:11.5,fontWeight:700,color:T.text}}>Test Cases ({localCases.length})</span>
-        <span style={{fontSize:11.5,color:T.textMuted}}>
-          <span style={{color:"#16a34a",fontWeight:600}}>{tcSuccess} passing</span>
-          {tcFailed>0&&<span style={{color:T.rose,fontWeight:600,marginLeft:8}}>{tcFailed} failing</span>}
-          {tcAborted>0&&<span style={{color:T.amber,fontWeight:600,marginLeft:8}}>{tcAborted} aborted</span>}
-        </span>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:11.5,fontWeight:700,color:T.text}}>Test Cases ({localCases.length})</span>
+          <span style={{fontSize:11.5,color:T.textMuted}}>
+            <span style={{color:"#16a34a",fontWeight:600}}>{tcSuccess} passing</span>
+            {tcFailed>0&&<span style={{color:T.rose,fontWeight:600,marginLeft:8}}>{tcFailed} failing</span>}
+            {tcAborted>0&&<span style={{color:T.amber,fontWeight:600,marginLeft:8}}>{tcAborted} aborted</span>}
+          </span>
+        </div>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          {selectedIds.size>0&&(
+            <button onClick={()=>{[...selectedIds].forEach(id=>runTest(id));setSelectedIds(new Set());}}
+              style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:7,background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+              <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
+              Run Selected ({selectedIds.size})
+            </button>
+          )}
+          <button onClick={()=>{localCases.forEach(t=>runTest(t.id));}}
+            style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,fontWeight:500,cursor:"pointer"}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+            <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
+            Run All
+          </button>
+          <button onClick={()=>setAddTestOpen(o=>!o)}
+            style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+            + Add Test Case
+          </button>
+        </div>
       </div>
+      {/* Add test case panel */}
+      {addTestOpen&&(
+        <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`,background:T.bgElevated,display:"flex",gap:10,alignItems:"flex-end",flexWrap:"wrap"}}>
+          <div>
+            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".05em",marginBottom:5}}>Level</div>
+            <div style={{display:"flex",borderRadius:7,overflow:"hidden",border:`1px solid ${T.border}`}}>
+              {["TABLE","COLUMN"].map(lv=>(
+                <button key={lv} onClick={()=>{setAddTestLevel(lv);setAddTestDefId("");}}
+                  style={{padding:"5px 12px",background:addTestLevel===lv?T.accent:"transparent",border:"none",color:addTestLevel===lv?"#fff":T.textMuted,fontSize:11.5,cursor:"pointer",fontWeight:addTestLevel===lv?600:400}}>
+                  {lv}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={{flex:1,minWidth:160}}>
+            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".05em",marginBottom:5}}>Test Type</div>
+            <select value={addTestDefId} onChange={e=>setAddTestDefId(e.target.value)}
+              style={{width:"100%",padding:"6px 10px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none"}}>
+              <option value="">Select a test type…</option>
+              {DQ_TEST_DEFINITIONS.filter(d=>d.entityType===addTestLevel&&d.enabled).map(d=>(
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+          </div>
+          <div style={{display:"flex",gap:6}}>
+            <button onClick={()=>{if(!addTestDefId)return;const def=DQ_TEST_DEFINITIONS.find(d=>d.id===addTestDefId);if(!def)return;const newCase={id:`tc_new_${Date.now()}`,name:`${asset.name} — ${def.name}`,suiteId:"ts1",table:asset.name,col:addTestLevel==="COLUMN"?"column_name":null,defId:def.id,defName:def.name,dim:def.dim,status:"Success",lastVal:"—",expected:"—",lastRun:"never",history:[],params:{},failedReason:"",incidentId:null};setLocalCases(p=>[...p,newCase]);setAddTestOpen(false);setAddTestDefId("");}}
+              disabled={!addTestDefId}
+              style={{padding:"6px 16px",borderRadius:7,background:addTestDefId?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:addTestDefId?"pointer":"default"}}>
+              Add
+            </button>
+            <button onClick={()=>setAddTestOpen(false)} style={{padding:"6px 12px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+          </div>
+        </div>
+      )}
       {localCases.length===0
         ? <div style={{padding:"40px",textAlign:"center",color:T.textMuted,fontSize:13}}>No test cases linked to this asset yet.</div>
         : <table style={{width:"100%",borderCollapse:"collapse"}}>
             <thead>
               <tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
-                {["","Name","Column","Dimension","Last Run","Actions"].map((h,i)=>(
+                <th style={{padding:"8px 8px 8px 14px",width:28}}>
+                  <input type="checkbox" checked={selectedIds.size===localCases.length&&localCases.length>0}
+                    onChange={e=>setSelectedIds(e.target.checked?new Set(localCases.map(t=>t.id)):new Set())}
+                    style={{cursor:"pointer",accentColor:T.accent}}/>
+                </th>
+                {["Status","Name","Column","Dimension","Last Run","Actions"].map((h,i)=>(
                   <th key={i} style={{padding:"8px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textAlign:"left",textTransform:"uppercase",letterSpacing:".05em",whiteSpace:"nowrap"}}>{h}</th>
                 ))}
               </tr>
@@ -6359,9 +6347,13 @@ const AssetQualityTab = ({asset})=>{
               {localCases.map((t,i)=>{
                 const cfg=TC_CFG[t.status]||TC_CFG.Success;
                 const isRunning=runningIds.has(t.id);
+                const isSel=selectedIds.has(t.id);
                 return (
-                  <tr key={t.id} style={{borderBottom:i<localCases.length-1?`1px solid ${T.border}`:"none",transition:"background .1s"}}
-                    onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <tr key={t.id} style={{borderBottom:i<localCases.length-1?`1px solid ${T.border}`:"none",transition:"background .1s",background:isSel?T.accentDim:"transparent"}}
+                    onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
+                    <td style={{padding:"10px 8px 10px 14px",width:28}}>
+                      <input type="checkbox" checked={isSel} onChange={e=>setSelectedIds(p=>{const n=new Set(p);e.target.checked?n.add(t.id):n.delete(t.id);return n;})} style={{cursor:"pointer",accentColor:T.accent}}/>
+                    </td>
                     <td style={{padding:"10px 14px",width:32}}>
                       <div style={{width:8,height:8,borderRadius:"50%",background:isRunning?T.amber:cfg.color,animation:isRunning?"pulse2 1s infinite":""}}/>
                     </td>
@@ -7151,7 +7143,8 @@ const CatalogView = ({onAsset})=>{
   const [selTiers,   setSelTiers]   = useState(new Set());
   const [selConns,   setSelConns]   = useState(new Set());
   const [selOwners,  setSelOwners]  = useState(new Set());
-  const [openGroup,  setOpenGroup]  = useState({conntype:true,connection:false,domain:true,type:false,cert:false,tier:false,owner:false});
+  const [selTags,    setSelTags]    = useState(new Set());
+  const [openGroup,  setOpenGroup]  = useState({conntype:true,connection:false,domain:true,type:false,cert:false,tier:false,owner:false,tags:false});
 
   const toggle = (setter, val) => setter(prev => { const next = new Set(prev); next.has(val)?next.delete(val):next.add(val); return next; });
   const sorts = [{v:"relevance",l:"Relevance"},{v:"quality",l:"Quality ↓"},{v:"name",l:"Name A–Z"},{v:"updated",l:"Recently Updated"},{v:"usage",l:"Popularity"}];
@@ -7165,7 +7158,8 @@ const CatalogView = ({onAsset})=>{
     const mti = selTiers.size===0   || selTiers.has(String(a.tier));
     const ms  = selConns.size===0   || selConns.has(a.connectionLabel);
     const mo  = selOwners.size===0  || selOwners.has(a.owner);
-    return mq&&mct&&mt&&md&&mc&&mti&&ms&&mo;
+    const mTag= selTags.size===0    || (a.tags||[]).some(t=>selTags.has(t));
+    return mq&&mct&&mt&&md&&mc&&mti&&ms&&mo&&mTag;
   }).sort((a,b)=>{
     if(sortBy==="quality") return b.quality-a.quality;
     if(sortBy==="name")    return a.name.localeCompare(b.name);
@@ -7173,8 +7167,8 @@ const CatalogView = ({onAsset})=>{
     return 0;
   });
 
-  const totalActive = selConnTypes.size+selTypes.size+selDomains.size+selCerts.size+selTiers.size+selConns.size+selOwners.size;
-  const clearAll = () => { setSelConnTypes(new Set()); setSelTypes(new Set()); setSelDomains(new Set()); setSelCerts(new Set()); setSelTiers(new Set()); setSelConns(new Set()); setSelOwners(new Set()); };
+  const totalActive = selConnTypes.size+selTypes.size+selDomains.size+selCerts.size+selTiers.size+selConns.size+selOwners.size+selTags.size;
+  const clearAll = () => { setSelConnTypes(new Set()); setSelTypes(new Set()); setSelDomains(new Set()); setSelCerts(new Set()); setSelTiers(new Set()); setSelConns(new Set()); setSelOwners(new Set()); setSelTags(new Set()); };
   const countFor = (field, val) => ASSETS.filter(a => {
     const mq = !q || a.name.toLowerCase().includes(q.toLowerCase());
     if(!mq) return false;
@@ -7238,6 +7232,7 @@ const CatalogView = ({onAsset})=>{
     ...[...selTiers].map(v=>({label:`Tier ${v}`,clear:()=>toggle(setSelTiers,v)})),
     ...[...selConns].map(v=>({label:v,clear:()=>toggle(setSelConns,v)})),
     ...[...selOwners].map(v=>({label:v,clear:()=>toggle(setSelOwners,v)})),
+    ...[...selTags].map(v=>({label:v,clear:()=>toggle(setSelTags,v)})),
   ];
 
   const cols=[
@@ -7295,6 +7290,15 @@ const CatalogView = ({onAsset})=>{
               items={[...new Set(ASSETS.map(a=>a.owner))].map(v=>({val:v,label:v}))}
               sel={selOwners} onToggle={(v,c)=>c?setSelOwners(new Set()):toggle(setSelOwners,v)}
               renderItem={item=><div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:15,height:15,borderRadius:3,background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:6,fontWeight:700,color:T.accent,flexShrink:0}}>{item.val.split(".").map(s=>s[0].toUpperCase()).join("")}</div><span style={{fontSize:11,color:T.textSub}}>{item.label}</span></div>}/>
+            <FacetGroup id="tags" label="Tags" icon={Ic.tag(11)}
+              items={[...new Set(ASSETS.flatMap(a=>a.tags||[]))].sort().map(v=>({val:v,label:v}))}
+              sel={selTags} onToggle={(v,c)=>c?setSelTags(new Set()):toggle(setSelTags,v)}
+              renderItem={item=><div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:7,height:7,borderRadius:"50%",background:T.accent,display:"block",flexShrink:0,opacity:.7}}/><span style={{fontSize:11,color:T.textSub}}>{item.label}</span></div>}/>
+            <FacetGroup id="glossary" label="Business Glossary" icon={Ic.catalog(11)}
+              items={[...new Set(tagCtx.tagDefs.map(t=>t.category).filter(Boolean))].sort().map(v=>({val:v,label:v}))}
+              sel={new Set()} onToggle={()=>{}}
+              headerNote="Link assets to glossary terms to enable filtering"
+              renderItem={item=><span style={{fontSize:11,color:T.textSub,textTransform:"capitalize"}}>{item.label}</span>}/>
           </div>
         </div>
 
@@ -14584,23 +14588,6 @@ const TagManagementView = ({onToast}) => {
                         }
                       </div>
 
-                      <hr style={{border:'none',borderTop:`1px solid ${T.border}`,margin:0}}/>
-
-                      {/* Ownership */}
-                      <div>
-                        <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:12}}>Ownership</div>
-                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
-                          <div>
-                            <div style={{fontSize:10.5,color:T.textMuted,marginBottom:6,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.05em'}}>Owner</div>
-                            <PersonPicker value={draft.owner||''} onChange={v=>editing&&setEditDraft(d=>({...d,owner:v}))} placeholder="No owner assigned" disabled={!editing}/>
-                          </div>
-                          <div>
-                            <div style={{fontSize:10.5,color:T.textMuted,marginBottom:6,fontWeight:600,textTransform:'uppercase',letterSpacing:'0.05em'}}>Steward</div>
-                            <PersonPicker value={draft.managedBy||''} onChange={v=>editing&&setEditDraft(d=>({...d,managedBy:v}))} placeholder="No steward assigned" disabled={!editing}/>
-                          </div>
-                        </div>
-                      </div>
-
                       {relatedTags.length>0&&<>
                         <hr style={{border:'none',borderTop:`1px solid ${T.border}`,margin:0}}/>
                         {/* Related Tags */}
@@ -14676,6 +14663,42 @@ const TagManagementView = ({onToast}) => {
                               <span style={{fontSize:12,fontWeight:600,color:getCatStyle(selTag.category).color,textTransform:'capitalize'}}>{selTag.category}</span>
                             </button>
                           : <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>Uncategorized</span>
+                        }
+                      </div>
+
+                      <div style={{height:1,background:T.border,marginBottom:18}}/>
+
+                      {/* Owner */}
+                      <div style={{marginBottom:18}}>
+                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Owner</div>
+                        {editing
+                          ? <PersonPicker value={draft.owner||''} onChange={v=>setEditDraft(d=>({...d,owner:v}))} placeholder="No owner"/>
+                          : draft.owner
+                            ? <div style={{display:'inline-flex',alignItems:'center',gap:6,padding:'3px 8px 3px 5px',borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                                <div style={{width:20,height:20,borderRadius:'50%',background:T.accentDim,border:`1px solid ${T.accent}33`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:7.5,fontWeight:700,color:T.accent,flexShrink:0}}>
+                                  {draft.owner.split('.').map(s=>s[0]?.toUpperCase()||'').join('')}
+                                </div>
+                                <span style={{fontSize:12,color:T.text,fontWeight:500}}>{draft.owner}</span>
+                              </div>
+                            : <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No owner</span>
+                        }
+                      </div>
+
+                      <div style={{height:1,background:T.border,marginBottom:18}}/>
+
+                      {/* Steward */}
+                      <div style={{marginBottom:18}}>
+                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Steward</div>
+                        {editing
+                          ? <PersonPicker value={draft.managedBy||''} onChange={v=>setEditDraft(d=>({...d,managedBy:v}))} placeholder="No steward"/>
+                          : draft.managedBy
+                            ? <div style={{display:'inline-flex',alignItems:'center',gap:6,padding:'3px 8px 3px 5px',borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                                <div style={{width:20,height:20,borderRadius:'50%',background:'rgba(217,119,6,.12)',border:'1px solid rgba(217,119,6,.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:7.5,fontWeight:700,color:'#d97706',flexShrink:0}}>
+                                  {draft.managedBy.split('.').map(s=>s[0]?.toUpperCase()||'').join('')}
+                                </div>
+                                <span style={{fontSize:12,color:T.text,fontWeight:500}}>{draft.managedBy}</span>
+                              </div>
+                            : <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No steward</span>
                         }
                       </div>
 
