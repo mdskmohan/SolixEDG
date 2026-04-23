@@ -6204,8 +6204,19 @@ const AssetQualityTab = ({asset})=>{
   const [runningIds,setRunningIds]=useState(new Set());
   const [selectedIds,setSelectedIds]=useState(new Set());
   const [addTestOpen,setAddTestOpen]=useState(false);
-  const [addTestLevel,setAddTestLevel]=useState("TABLE");
-  const [addTestDefId,setAddTestDefId]=useState("");
+  // Full DQ wizard state
+  const [aqTcName,      setAqTcName]      = useState("");
+  const [aqTcDesc,      setAqTcDesc]      = useState("");
+  const [aqTcLevel,     setAqTcLevel]     = useState("table");
+  const [aqTcSelCol,    setAqTcSelCol]    = useState("");
+  const [aqTcSelType,   setAqTcSelType]   = useState(null);
+  const [aqTcCustomSQL, setAqTcCustomSQL] = useState(false);
+  const [aqTcSQLQuery,  setAqTcSQLQuery]  = useState("");
+  const [aqTcParams,    setAqTcParams]    = useState({});
+  const [aqTcTags,      setAqTcTags]      = useState([]);
+  const [aqTcTagInput,  setAqTcTagInput]  = useState("");
+  const [aqTcGlossary,  setAqTcGlossary]  = useState([]);
+  const [aqTcGlInput,   setAqTcGlInput]   = useState("");
   const [localCases,setLocalCases]=useState(()=>{
     // match DQ test cases to this asset — table field is like "commerce.orders", asset.name is "orders"
     const matched=DQ_TEST_CASES.filter(t=>t.table.endsWith("."+asset.name)||t.table===asset.name);
@@ -6288,45 +6299,170 @@ const AssetQualityTab = ({asset})=>{
             <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
             Run All
           </button>
-          <button onClick={()=>setAddTestOpen(o=>!o)}
+          <button onClick={()=>{setAddTestOpen(true);setAqTcName("");setAqTcDesc("");setAqTcLevel("table");setAqTcSelCol("");setAqTcSelType(null);setAqTcCustomSQL(false);setAqTcSQLQuery("");setAqTcParams({});setAqTcTags([]);setAqTcGlossary([]);}}
             style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
             + Add Test Case
           </button>
         </div>
       </div>
-      {/* Add test case panel */}
-      {addTestOpen&&(
-        <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`,background:T.bgElevated,display:"flex",gap:10,alignItems:"flex-end",flexWrap:"wrap"}}>
-          <div>
-            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".05em",marginBottom:5}}>Level</div>
-            <div style={{display:"flex",borderRadius:7,overflow:"hidden",border:`1px solid ${T.border}`}}>
-              {["TABLE","COLUMN"].map(lv=>(
-                <button key={lv} onClick={()=>{setAddTestLevel(lv);setAddTestDefId("");}}
-                  style={{padding:"5px 12px",background:addTestLevel===lv?T.accent:"transparent",border:"none",color:addTestLevel===lv?"#fff":T.textMuted,fontSize:11.5,cursor:"pointer",fontWeight:addTestLevel===lv?600:400}}>
-                  {lv}
-                </button>
-              ))}
+      {/* Full Add Test Case wizard panel — fixed right-side overlay */}
+      {addTestOpen&&createPortal(
+        <div style={{position:"fixed",inset:0,zIndex:800,display:"flex",justifyContent:"flex-end"}} onClick={()=>setAddTestOpen(false)}>
+          <div onClick={e=>e.stopPropagation()} className="slideIn" style={{width:480,height:"100%",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,boxShadow:"-8px 0 32px rgba(0,0,0,.28)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+            {/* Header */}
+            <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,background:T.bgElevated}}>
+              <div>
+                <div style={{fontSize:14,fontWeight:700,color:T.text}}>Add Test Case</div>
+                <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>Asset: <span style={{color:T.textSub,fontWeight:500,fontFamily:"'Geist Mono',monospace"}}>{asset.name}</span></div>
+              </div>
+              <button onClick={()=>setAddTestOpen(false)} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+            </div>
+            {/* Body */}
+            <div style={{flex:1,overflowY:"auto",padding:"20px"}}>
+              <div style={{display:"flex",flexDirection:"column",gap:16}}>
+
+                {/* Name */}
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Test Case Name <span style={{color:T.rose}}>*</span></label>
+                  <Input2 placeholder="e.g. orders.amount value range check" value={aqTcName} onChange={e=>setAqTcName(e.target.value)}/>
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Description</label>
+                  <textarea value={aqTcDesc} onChange={e=>setAqTcDesc(e.target.value)} rows={2}
+                    placeholder="What does this test validate and why is it important?"
+                    style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",resize:"none",fontFamily:"inherit",lineHeight:1.6,boxSizing:"border-box"}}
+                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                </div>
+
+                {/* Test Level */}
+                <div>
+                  <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Test Level</div>
+                  <div style={{display:"flex",gap:6}}>
+                    {[{k:"table",l:"Table Level"},{k:"column",l:"Column Level"}].map(({k,l})=>(
+                      <button key={k} onClick={()=>{setAqTcLevel(k);setAqTcSelType(null);setAqTcSelCol("");setAqTcCustomSQL(false);setAqTcSQLQuery("");}} style={{flex:1,padding:"9px 12px",borderRadius:9,border:`1.5px solid ${aqTcLevel===k?T.accent:T.border}`,background:aqTcLevel===k?`${T.accent}08`:T.bgElevated,cursor:"pointer",textAlign:"center",transition:"all .12s"}}>
+                        <div style={{fontSize:12,fontWeight:700,color:aqTcLevel===k?T.accent:T.text}}>{l}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Column (if column level) */}
+                {aqTcLevel==="column"&&(
+                  <div>
+                    <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Column <span style={{color:T.rose}}>*</span></label>
+                    <Input2 placeholder="e.g. amount, status, user_id…" value={aqTcSelCol} onChange={e=>{setAqTcSelCol(e.target.value);setAqTcSelType(null);}}/>
+                  </div>
+                )}
+
+                {/* Test Type — Preset / Custom SQL toggle */}
+                <div>
+                  <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Test Type <span style={{color:T.rose}}>*</span></div>
+                  <div style={{display:"inline-flex",borderRadius:8,overflow:"hidden",border:`1px solid ${T.border}`,marginBottom:10,background:T.bgElevated}}>
+                    <button onClick={()=>{setAqTcCustomSQL(false);}}
+                      style={{padding:"7px 16px",background:!aqTcCustomSQL?T.accent:"transparent",border:"none",color:!aqTcCustomSQL?"#fff":T.textSub,fontSize:11.5,fontWeight:!aqTcCustomSQL?700:400,cursor:"pointer",transition:"all .12s"}}>
+                      Preset Type
+                    </button>
+                    <button onClick={()=>{setAqTcCustomSQL(true);setAqTcSelType(null);}}
+                      style={{padding:"7px 16px",background:aqTcCustomSQL?T.accent:"transparent",border:"none",color:aqTcCustomSQL?"#fff":T.textSub,fontSize:11.5,fontWeight:aqTcCustomSQL?700:400,cursor:"pointer",transition:"all .12s"}}>
+                      Custom SQL
+                    </button>
+                  </div>
+                  {!aqTcCustomSQL&&(
+                    <select value={aqTcSelType?.id||""} onChange={e=>{const def=DQ_TEST_DEFINITIONS.find(d=>d.id===e.target.value);setAqTcSelType(def||null);setAqTcParams({});}}
+                      style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${aqTcSelType?T.accent:T.border}`,borderRadius:9,color:aqTcSelType?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
+                      <option value="">Select a test type…</option>
+                      {DQ_TEST_DEFINITIONS.filter(d=>aqTcLevel==="column"?d.entityType==="COLUMN":d.entityType==="TABLE").map(def=>(
+                        <option key={def.id} value={def.id}>{def.name}</option>
+                      ))}
+                    </select>
+                  )}
+                  {aqTcSelType&&!aqTcCustomSQL&&(
+                    <div style={{marginTop:8,padding:"10px 14px",background:T.bgElevated,borderRadius:9,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textSub,lineHeight:1.6}}>{aqTcSelType.desc}</div>
+                  )}
+                  {aqTcCustomSQL&&(
+                    <div>
+                      <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>SQL Expression <span style={{color:T.rose}}>*</span></label>
+                      <textarea value={aqTcSQLQuery} onChange={e=>setAqTcSQLQuery(e.target.value)} rows={4}
+                        placeholder="SELECT COUNT(*) FROM table WHERE condition = 0"
+                        style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"'Geist Mono',monospace",lineHeight:1.6,boxSizing:"border-box"}}
+                        onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                    </div>
+                  )}
+                </div>
+
+                {/* Parameters */}
+                {aqTcSelType&&(aqTcSelType.params||[]).length>0&&(
+                  <div>
+                    <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:10}}>Parameters</div>
+                    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                      {aqTcSelType.params.map(p=>(
+                        <div key={p}>
+                          <label style={{display:"block",fontSize:11,color:T.textMuted,marginBottom:4,textTransform:"capitalize"}}>{p.replace(/([A-Z])/g," $1").replace(/^./,s=>s.toUpperCase())}</label>
+                          <Input2 placeholder={p} value={aqTcParams[p]||""} onChange={e=>setAqTcParams(prev=>({...prev,[p]:e.target.value}))}/>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Tags */}
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Tags</label>
+                  <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:aqTcTags.length>0?8:0}}>
+                    {aqTcTags.map((tag,i)=>(
+                      <span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"3px 9px",borderRadius:99,background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent}}>
+                        {tag}
+                        <button onClick={()=>setAqTcTags(p=>p.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:T.accent,padding:0,lineHeight:1}}>{Ic.x(8)}</button>
+                      </span>
+                    ))}
+                  </div>
+                  <div style={{display:"flex",gap:6}}>
+                    <Input2 placeholder="Add tag…" value={aqTcTagInput} onChange={e=>setAqTcTagInput(e.target.value)}
+                      onKeyDown={e=>{if(e.key==="Enter"&&aqTcTagInput.trim()){setAqTcTags(p=>[...p,aqTcTagInput.trim()]);setAqTcTagInput("");}}}/>
+                    <button onClick={()=>{if(aqTcTagInput.trim()){setAqTcTags(p=>[...p,aqTcTagInput.trim()]);setAqTcTagInput("");}}} style={{padding:"0 12px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",flexShrink:0}}>Add</button>
+                  </div>
+                </div>
+
+                {/* Glossary Terms */}
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Glossary Terms</label>
+                  <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:aqTcGlossary.length>0?8:0}}>
+                    {aqTcGlossary.map((term,i)=>(
+                      <span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"3px 9px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>
+                        {term}
+                        <button onClick={()=>setAqTcGlossary(p=>p.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,lineHeight:1}}>{Ic.x(8)}</button>
+                      </span>
+                    ))}
+                  </div>
+                  <div style={{display:"flex",gap:6}}>
+                    <Input2 placeholder="Add glossary term…" value={aqTcGlInput} onChange={e=>setAqTcGlInput(e.target.value)}
+                      onKeyDown={e=>{if(e.key==="Enter"&&aqTcGlInput.trim()){setAqTcGlossary(p=>[...p,aqTcGlInput.trim()]);setAqTcGlInput("");}}}/>
+                    <button onClick={()=>{if(aqTcGlInput.trim()){setAqTcGlossary(p=>[...p,aqTcGlInput.trim()]);setAqTcGlInput("");}}} style={{padding:"0 12px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",flexShrink:0}}>Add</button>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+            {/* Footer */}
+            <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,flexShrink:0,background:T.bgSurface}}>
+              <button onClick={()=>{
+                if(!aqTcName.trim()) return;
+                const def=aqTcSelType||{id:"custom",name:"Custom SQL",dim:"Integrity"};
+                const newCase={id:`tc_new_${Date.now()}`,name:aqTcName.trim(),suiteId:"ts1",table:asset.name,col:aqTcLevel==="column"?aqTcSelCol||"column_name":null,defId:def.id,defName:def.name,dim:def.dim,status:"Success",lastVal:"—",expected:Object.entries(aqTcParams).map(([k,v])=>`${k}: ${v}`).join(", ")||"—",lastRun:"never",history:[],params:aqTcParams,failedReason:"",incidentId:null};
+                setLocalCases(p=>[...p,newCase]);
+                setAddTestOpen(false);
+              }}
+                disabled={!aqTcName.trim()||(!aqTcSelType&&!aqTcCustomSQL)||(aqTcCustomSQL&&!aqTcSQLQuery.trim())}
+                style={{flex:1,padding:"9px",borderRadius:9,background:(aqTcName.trim()&&(aqTcSelType||(aqTcCustomSQL&&aqTcSQLQuery.trim())))?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:13,fontWeight:700,cursor:(aqTcName.trim()&&(aqTcSelType||(aqTcCustomSQL&&aqTcSQLQuery.trim())))?"pointer":"default",transition:"background .15s"}}>
+                Add Test Case
+              </button>
+              <button onClick={()=>setAddTestOpen(false)} style={{padding:"9px 18px",borderRadius:9,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer"}}>Cancel</button>
             </div>
           </div>
-          <div style={{flex:1,minWidth:160}}>
-            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".05em",marginBottom:5}}>Test Type</div>
-            <select value={addTestDefId} onChange={e=>setAddTestDefId(e.target.value)}
-              style={{width:"100%",padding:"6px 10px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none"}}>
-              <option value="">Select a test type…</option>
-              {DQ_TEST_DEFINITIONS.filter(d=>d.entityType===addTestLevel&&d.enabled).map(d=>(
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </select>
-          </div>
-          <div style={{display:"flex",gap:6}}>
-            <button onClick={()=>{if(!addTestDefId)return;const def=DQ_TEST_DEFINITIONS.find(d=>d.id===addTestDefId);if(!def)return;const newCase={id:`tc_new_${Date.now()}`,name:`${asset.name} — ${def.name}`,suiteId:"ts1",table:asset.name,col:addTestLevel==="COLUMN"?"column_name":null,defId:def.id,defName:def.name,dim:def.dim,status:"Success",lastVal:"—",expected:"—",lastRun:"never",history:[],params:{},failedReason:"",incidentId:null};setLocalCases(p=>[...p,newCase]);setAddTestOpen(false);setAddTestDefId("");}}
-              disabled={!addTestDefId}
-              style={{padding:"6px 16px",borderRadius:7,background:addTestDefId?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:addTestDefId?"pointer":"default"}}>
-              Add
-            </button>
-            <button onClick={()=>setAddTestOpen(false)} style={{padding:"6px 12px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
-          </div>
-        </div>
+        </div>,
+        document.body
       )}
       {localCases.length===0
         ? <div style={{padding:"40px",textAlign:"center",color:T.textMuted,fontSize:13}}>No test cases linked to this asset yet.</div>
@@ -7143,8 +7279,9 @@ const CatalogView = ({onAsset})=>{
   const [selTiers,   setSelTiers]   = useState(new Set());
   const [selConns,   setSelConns]   = useState(new Set());
   const [selOwners,  setSelOwners]  = useState(new Set());
-  const [selTags,    setSelTags]    = useState(new Set());
-  const [openGroup,  setOpenGroup]  = useState({conntype:true,connection:false,domain:true,type:false,cert:false,tier:false,owner:false,tags:false});
+  const [selTags,          setSelTags]          = useState(new Set());
+  const [selGlossaryTerms, setSelGlossaryTerms] = useState(new Set());
+  const [openGroup,  setOpenGroup]  = useState({conntype:true,connection:false,domain:true,type:false,cert:false,tier:false,owner:false,tags:false,glossary:false});
 
   const toggle = (setter, val) => setter(prev => { const next = new Set(prev); next.has(val)?next.delete(val):next.add(val); return next; });
   const sorts = [{v:"relevance",l:"Relevance"},{v:"quality",l:"Quality ↓"},{v:"name",l:"Name A–Z"},{v:"updated",l:"Recently Updated"},{v:"usage",l:"Popularity"}];
@@ -7159,7 +7296,8 @@ const CatalogView = ({onAsset})=>{
     const ms  = selConns.size===0   || selConns.has(a.connectionLabel);
     const mo  = selOwners.size===0  || selOwners.has(a.owner);
     const mTag= selTags.size===0    || (a.tags||[]).some(t=>selTags.has(t));
-    return mq&&mct&&mt&&md&&mc&&mti&&ms&&mo&&mTag;
+    const mGT = selGlossaryTerms.size===0 || GLOSSARY_TERMS.filter(t=>selGlossaryTerms.has(t.id)).some(t=>(t.linkedAssets||[]).some(la=>la.name===a.name));
+    return mq&&mct&&mt&&md&&mc&&mti&&ms&&mo&&mTag&&mGT;
   }).sort((a,b)=>{
     if(sortBy==="quality") return b.quality-a.quality;
     if(sortBy==="name")    return a.name.localeCompare(b.name);
@@ -7167,8 +7305,8 @@ const CatalogView = ({onAsset})=>{
     return 0;
   });
 
-  const totalActive = selConnTypes.size+selTypes.size+selDomains.size+selCerts.size+selTiers.size+selConns.size+selOwners.size+selTags.size;
-  const clearAll = () => { setSelConnTypes(new Set()); setSelTypes(new Set()); setSelDomains(new Set()); setSelCerts(new Set()); setSelTiers(new Set()); setSelConns(new Set()); setSelOwners(new Set()); setSelTags(new Set()); };
+  const totalActive = selConnTypes.size+selTypes.size+selDomains.size+selCerts.size+selTiers.size+selConns.size+selOwners.size+selTags.size+selGlossaryTerms.size;
+  const clearAll = () => { setSelConnTypes(new Set()); setSelTypes(new Set()); setSelDomains(new Set()); setSelCerts(new Set()); setSelTiers(new Set()); setSelConns(new Set()); setSelOwners(new Set()); setSelTags(new Set()); setSelGlossaryTerms(new Set()); };
   const countFor = (field, val) => ASSETS.filter(a => {
     const mq = !q || a.name.toLowerCase().includes(q.toLowerCase());
     if(!mq) return false;
@@ -7179,6 +7317,7 @@ const CatalogView = ({onAsset})=>{
     if(field==="tier")       return String(a.tier)===val;
     if(field==="connection") return a.connectionLabel===val;
     if(field==="owner")      return a.owner===val;
+    if(field==="glossary")   return (GLOSSARY_TERMS.find(t=>t.id===val)?.linkedAssets||[]).some(la=>la.name===a.name);
     return false;
   }).length;
 
@@ -7233,6 +7372,7 @@ const CatalogView = ({onAsset})=>{
     ...[...selConns].map(v=>({label:v,clear:()=>toggle(setSelConns,v)})),
     ...[...selOwners].map(v=>({label:v,clear:()=>toggle(setSelOwners,v)})),
     ...[...selTags].map(v=>({label:v,clear:()=>toggle(setSelTags,v)})),
+    ...[...selGlossaryTerms].map(v=>({label:GLOSSARY_TERMS.find(t=>t.id===v)?.term||v,clear:()=>toggle(setSelGlossaryTerms,v)})),
   ];
 
   const cols=[
@@ -7294,11 +7434,15 @@ const CatalogView = ({onAsset})=>{
               items={[...new Set(ASSETS.flatMap(a=>a.tags||[]))].sort().map(v=>({val:v,label:v}))}
               sel={selTags} onToggle={(v,c)=>c?setSelTags(new Set()):toggle(setSelTags,v)}
               renderItem={item=><div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:7,height:7,borderRadius:"50%",background:T.accent,display:"block",flexShrink:0,opacity:.7}}/><span style={{fontSize:11,color:T.textSub}}>{item.label}</span></div>}/>
-            <FacetGroup id="glossary" label="Business Glossary" icon={Ic.catalog(11)}
-              items={[...new Set(tagCtx.tagDefs.map(t=>t.category).filter(Boolean))].sort().map(v=>({val:v,label:v}))}
-              sel={new Set()} onToggle={()=>{}}
-              headerNote="Link assets to glossary terms to enable filtering"
-              renderItem={item=><span style={{fontSize:11,color:T.textSub,textTransform:"capitalize"}}>{item.label}</span>}/>
+            <FacetGroup id="glossary" label="Business Glossary" icon={Ic.glossary(11)}
+              items={GLOSSARY_TERMS.map(t=>({val:t.id,label:t.term,abbr:t.abbr,status:t.status}))}
+              sel={selGlossaryTerms} onToggle={(v,c)=>c?setSelGlossaryTerms(new Set()):toggle(setSelGlossaryTerms,v)}
+              renderItem={item=>(
+                <div style={{display:'flex',alignItems:'center',gap:6,minWidth:0}}>
+                  <span style={{flex:1,fontSize:11,color:T.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{item.label}</span>
+                  {item.abbr&&item.abbr!=='—'&&<span style={{fontSize:9.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace",flexShrink:0}}>{item.abbr}</span>}
+                </div>
+              )}/>
           </div>
         </div>
 
@@ -10451,7 +10595,24 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
 
         {/* ── CONFIGURATION TAB ── */}
         {cfgTab==="configuration"&&<>
-          <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:16}}>Connection Settings</div>
+          {/* ── Identity & Governance ── */}
+          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Identity & Governance</div>
+          <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
+            {[
+              {l:"Connection Name", v:svc.displayName||svc.name},
+              {l:"Environment",     v:"Production"},
+              {l:"Team",            v:"Data Engineering"},
+              {l:"Connector Admin", v:svc.config?.user||"solix_reader"},
+              {l:"Description",     v:`${svc.type} connector for ${svc.category} — managed by the Data Engineering team.`},
+            ].map(f=>(
+              <div key={f.l}>
+                <div style={{fontSize:11,color:T.textMuted,marginBottom:4,fontWeight:500}}>{f.l}</div>
+                <div style={{display:"flex",gap:6}}><Input2 value={f.v} style={{flex:1}} onChange={()=>{}}/></div>
+              </div>
+            ))}
+          </div>
+          {/* ── Connection Settings ── */}
+          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Connection Settings</div>
           <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
             {[{l:"Host / URL",v:svc.host},{l:"Database / Schema",v:svc.database||"—"},...Object.entries(svc.config).map(([k,v])=>({l:k.replace(/([A-Z])/g," $1").replace(/^./,s=>s.toUpperCase()),v:String(v)}))].map(f=>(
               <div key={f.l}>
@@ -13936,6 +14097,16 @@ const TagManagementView = ({onToast}) => {
   const [flashSaved,   setFlashSaved]   = useState(false);
   const [syncDirs,     setSyncDirs]     = useState({});   // {connId::tagId: 'forward'|'reverse'|'both'|'off'}
 
+  // ── Tag owner/steward state (BG-style avatar chips) ──
+  const [tagOwners,       setTagOwners]       = useState([]);
+  const [tagOwnerInput,   setTagOwnerInput]   = useState(false);
+  const [tagOwnerSearch,  setTagOwnerSearch]  = useState('');
+  const [tagStewards,     setTagStewards]     = useState([]);
+  const [tagStewardInput, setTagStewardInput] = useState(false);
+  const [tagStewardSearch,setTagStewardSearch]= useState('');
+  const TAG_USERS = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
+  const tava = (name) => (name||"?").split(".").map(s=>s[0]?.toUpperCase()||"").join("");
+
   const filterRef = useRef(null);
 
   // Close dropdowns on outside click
@@ -13944,10 +14115,27 @@ const TagManagementView = ({onToast}) => {
       if(filterRef.current&&!filterRef.current.contains(e.target)) setFilterOpen(false);
       if(plusMenuRef.current&&!plusMenuRef.current.contains(e.target)) setPlusMenuOpen(false);
       if(dotMenuRef.current&&!dotMenuRef.current.contains(e.target)) setDotMenuOpen(null);
+      setTagOwnerInput(false);
+      setTagStewardInput(false);
     };
     document.addEventListener('mousedown',handler);
     return ()=>document.removeEventListener('mousedown',handler);
   },[]);
+
+  // Sync tagOwners/tagStewards when selected tag changes
+  useEffect(()=>{
+    if(selTag){
+      setTagOwners(selTag.owner?[selTag.owner]:[]);
+      setTagStewards(selTag.managedBy?[selTag.managedBy]:[]);
+    } else {
+      setTagOwners([]);
+      setTagStewards([]);
+    }
+    setTagOwnerInput(false);
+    setTagStewardInput(false);
+    setTagOwnerSearch('');
+    setTagStewardSearch('');
+  },[selTagId]);
 
   // Dynamic categories derived from tag data + custom ones
   const allCategories = [...new Set([...tagDefs.map(td=>td.category).filter(Boolean),...customCategories])].sort();
@@ -14668,38 +14856,112 @@ const TagManagementView = ({onToast}) => {
 
                       <div style={{height:1,background:T.border,marginBottom:18}}/>
 
-                      {/* Owner */}
-                      <div style={{marginBottom:18}}>
+                      {/* Owner — BG-style avatar chips */}
+                      <div style={{marginBottom:18,position:'relative'}}>
                         <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Owner</div>
-                        {editing
-                          ? <PersonPicker value={draft.owner||''} onChange={v=>setEditDraft(d=>({...d,owner:v}))} placeholder="No owner"/>
-                          : draft.owner
-                            ? <div style={{display:'inline-flex',alignItems:'center',gap:6,padding:'3px 8px 3px 5px',borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}>
-                                <div style={{width:20,height:20,borderRadius:'50%',background:T.accentDim,border:`1px solid ${T.accent}33`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:7.5,fontWeight:700,color:T.accent,flexShrink:0}}>
-                                  {draft.owner.split('.').map(s=>s[0]?.toUpperCase()||'').join('')}
-                                </div>
-                                <span style={{fontSize:12,color:T.text,fontWeight:500}}>{draft.owner}</span>
-                              </div>
-                            : <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No owner</span>
-                        }
+                        <div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:tagOwners.length>0?8:0}}>
+                          {tagOwners.map((o,i)=>(
+                            <div key={i} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 8px 3px 5px',borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,transition:'border-color .1s'}}
+                              onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderLight} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                              <div style={{width:20,height:20,borderRadius:'50%',background:T.accentDim,border:`1px solid ${T.accent}33`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:7.5,fontWeight:700,color:T.accent,flexShrink:0}}>{tava(o)}</div>
+                              <span style={{fontSize:12,color:T.text,fontWeight:500}}>{o}</span>
+                              <button onMouseDown={e=>{e.stopPropagation();const no=tagOwners.filter((_,j)=>j!==i);setTagOwners(no);if(editing)setEditDraft(d=>({...d,owner:no[0]||''}));}}
+                                style={{background:'none',border:'none',cursor:'pointer',color:T.textMuted,padding:0,display:'flex',lineHeight:1}}
+                                onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
+                                {Ic.x(8)}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        <button onMouseDown={e=>{e.stopPropagation();setTagOwnerInput(p=>{if(!p)setTagOwnerSearch('');return !p;});setTagStewardInput(false);}}
+                          style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:11.5,color:tagOwnerInput?T.accent:T.textMuted,background:'none',border:`1px dashed ${tagOwnerInput?T.accent:T.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',transition:'all .12s'}}
+                          onMouseEnter={e=>{if(!tagOwnerInput){e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}}
+                          onMouseLeave={e=>{if(!tagOwnerInput){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}}>
+                          {Ic.plus(9)} Add owner
+                        </button>
+                        {tagOwnerInput&&(
+                          <div onMouseDown={e=>e.stopPropagation()} style={{position:'absolute',left:0,right:0,top:'calc(100% - 2px)',zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:'0 8px 28px rgba(0,0,0,.22)',overflow:'hidden'}}>
+                            <div style={{padding:'8px 10px',borderBottom:`1px solid ${T.border}`}}>
+                              <input autoFocus placeholder="Search users…" value={tagOwnerSearch} onChange={e=>setTagOwnerSearch(e.target.value)}
+                                style={{width:'100%',padding:'5px 9px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:'none'}}
+                                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                            </div>
+                            <div style={{maxHeight:168,overflowY:'auto'}}>
+                              {TAG_USERS.filter(u=>!tagOwnerSearch||u.toLowerCase().includes(tagOwnerSearch.toLowerCase())).map(u=>{
+                                const sel=tagOwners.includes(u);
+                                return (
+                                  <button key={u} onMouseDown={e=>{e.stopPropagation();
+                                    const no=sel?tagOwners.filter(x=>x!==u):[...tagOwners,u];
+                                    setTagOwners(no);
+                                    if(editing)setEditDraft(d=>({...d,owner:no[0]||''}));
+                                    if(!sel)setTagOwnerInput(false);
+                                  }}
+                                    style={{width:'100%',display:'flex',alignItems:'center',gap:9,padding:'8px 12px',background:sel?T.bgElevated:'transparent',border:'none',cursor:'pointer',textAlign:'left'}}
+                                    onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background='transparent';}}>
+                                    <div style={{width:24,height:24,borderRadius:'50%',background:T.accentDim,border:`1px solid ${T.accent}33`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8.5,fontWeight:700,color:T.accent,flexShrink:0}}>{tava(u)}</div>
+                                    <span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>
+                                    {sel&&<span style={{fontSize:12,color:T.accent,fontWeight:700}}>✓</span>}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <div style={{height:1,background:T.border,marginBottom:18}}/>
 
-                      {/* Steward */}
-                      <div style={{marginBottom:18}}>
+                      {/* Steward — BG-style avatar chips */}
+                      <div style={{marginBottom:18,position:'relative'}}>
                         <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Steward</div>
-                        {editing
-                          ? <PersonPicker value={draft.managedBy||''} onChange={v=>setEditDraft(d=>({...d,managedBy:v}))} placeholder="No steward"/>
-                          : draft.managedBy
-                            ? <div style={{display:'inline-flex',alignItems:'center',gap:6,padding:'3px 8px 3px 5px',borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}>
-                                <div style={{width:20,height:20,borderRadius:'50%',background:'rgba(217,119,6,.12)',border:'1px solid rgba(217,119,6,.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:7.5,fontWeight:700,color:'#d97706',flexShrink:0}}>
-                                  {draft.managedBy.split('.').map(s=>s[0]?.toUpperCase()||'').join('')}
-                                </div>
-                                <span style={{fontSize:12,color:T.text,fontWeight:500}}>{draft.managedBy}</span>
-                              </div>
-                            : <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No steward</span>
-                        }
+                        <div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:tagStewards.length>0?8:0}}>
+                          {tagStewards.map((s,i)=>(
+                            <div key={i} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 8px 3px 5px',borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,transition:'border-color .1s'}}
+                              onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderLight} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                              <div style={{width:20,height:20,borderRadius:'50%',background:'rgba(217,119,6,.12)',border:'1px solid rgba(217,119,6,.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:7.5,fontWeight:700,color:'#d97706',flexShrink:0}}>{tava(s)}</div>
+                              <span style={{fontSize:12,color:T.text,fontWeight:500}}>{s}</span>
+                              <button onMouseDown={e=>{e.stopPropagation();const ns=tagStewards.filter((_,j)=>j!==i);setTagStewards(ns);if(editing)setEditDraft(d=>({...d,managedBy:ns[0]||''}));}}
+                                style={{background:'none',border:'none',cursor:'pointer',color:T.textMuted,padding:0,display:'flex',lineHeight:1}}
+                                onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
+                                {Ic.x(8)}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        <button onMouseDown={e=>{e.stopPropagation();setTagStewardInput(p=>{if(!p)setTagStewardSearch('');return !p;});setTagOwnerInput(false);}}
+                          style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:11.5,color:tagStewardInput?'#d97706':T.textMuted,background:'none',border:`1px dashed ${tagStewardInput?'#d97706':T.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',transition:'all .12s'}}
+                          onMouseEnter={e=>{if(!tagStewardInput){e.currentTarget.style.borderColor='#d97706';e.currentTarget.style.color='#d97706';}}}
+                          onMouseLeave={e=>{if(!tagStewardInput){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}}>
+                          {Ic.plus(9)} Add steward
+                        </button>
+                        {tagStewardInput&&(
+                          <div onMouseDown={e=>e.stopPropagation()} style={{position:'absolute',left:0,right:0,top:'calc(100% - 2px)',zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:'0 8px 28px rgba(0,0,0,.22)',overflow:'hidden'}}>
+                            <div style={{padding:'8px 10px',borderBottom:`1px solid ${T.border}`}}>
+                              <input autoFocus placeholder="Search users…" value={tagStewardSearch} onChange={e=>setTagStewardSearch(e.target.value)}
+                                style={{width:'100%',padding:'5px 9px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:'none'}}
+                                onFocus={e=>e.target.style.borderColor='#d97706'} onBlur={e=>e.target.style.borderColor=T.border}/>
+                            </div>
+                            <div style={{maxHeight:168,overflowY:'auto'}}>
+                              {TAG_USERS.filter(u=>!tagStewardSearch||u.toLowerCase().includes(tagStewardSearch.toLowerCase())).map(u=>{
+                                const sel=tagStewards.includes(u);
+                                return (
+                                  <button key={u} onMouseDown={e=>{e.stopPropagation();
+                                    const ns=sel?tagStewards.filter(x=>x!==u):[...tagStewards,u];
+                                    setTagStewards(ns);
+                                    if(editing)setEditDraft(d=>({...d,managedBy:ns[0]||''}));
+                                    if(!sel)setTagStewardInput(false);
+                                  }}
+                                    style={{width:'100%',display:'flex',alignItems:'center',gap:9,padding:'8px 12px',background:sel?T.bgElevated:'transparent',border:'none',cursor:'pointer',textAlign:'left'}}
+                                    onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background='transparent';}}>
+                                    <div style={{width:24,height:24,borderRadius:'50%',background:'rgba(217,119,6,.12)',border:'1px solid rgba(217,119,6,.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:8.5,fontWeight:700,color:'#d97706',flexShrink:0}}>{tava(u)}</div>
+                                    <span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>
+                                    {sel&&<span style={{fontSize:12,color:'#d97706',fontWeight:700}}>✓</span>}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       <div style={{height:1,background:T.border,marginBottom:18}}/>
