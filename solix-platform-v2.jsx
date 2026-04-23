@@ -10525,6 +10525,7 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
   const hc = HEALTH_COLOR[svc.health]||T.textMuted;
 
   return (
+    <>
     <div className="slideIn" style={{width:440,flexShrink:0,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",background:T.bgSurface,overflow:"hidden"}}>
       {/* panel header */}
       <div style={{padding:"16px 18px 0",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
@@ -10868,6 +10869,7 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
         </div>
       </div>
     )}
+    </>
   );
 };
 
