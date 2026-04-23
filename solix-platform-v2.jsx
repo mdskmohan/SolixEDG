@@ -3487,6 +3487,8 @@ const QualityView = () => {
   const [tcStatusFilter,setTcStatusFilter]= useState("all");
   const [tcSearch,      setTcSearch]      = useState("");
   const [tcDetail,      setTcDetail]      = useState(null);
+  const [tcDetailEditing, setTcDetailEditing] = useState(false);
+  const [tcDetailDraft,   setTcDetailDraft]   = useState(null);
   const [tcAdvOpen,     setTcAdvOpen]     = useState(false);
 
   // test suites tab
@@ -4397,27 +4399,10 @@ const QualityView = () => {
                             <div style={{background:T.bgElevated,borderTop:`1px solid ${T.border}`}}>
                               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0,borderBottom:`1px solid ${T.border}`}}>
 
-                                {/* LEFT: Description, root cause, resolution */}
+                                {/* LEFT: Description + resolution */}
                                 <div style={{padding:"18px 20px",borderRight:`1px solid ${T.border}`}}>
                                   <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:8,textTransform:"uppercase"}}>Description</div>
                                   <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.7,marginBottom:16}}>{inc.desc}</div>
-
-                                  <div style={{marginBottom:16}}>
-                                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:8,textTransform:"uppercase"}}>Root Cause</div>
-                                    {isResolved
-                                      ? <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6,padding:"10px 12px",background:T.bgSurface,borderRadius:8,border:`1px solid ${T.border}`}}>{inc.rootCause||<span style={{color:T.textMuted,fontStyle:"italic"}}>Not documented</span>}</div>
-                                      : <textarea
-                                          value={inc.rootCause||""}
-                                          onChange={e=>setIncidents(prev=>prev.map(ii=>ii.id===inc.id?{...ii,rootCause:e.target.value}:ii))}
-                                          onClick={e=>e.stopPropagation()}
-                                          placeholder="Document the root cause once identified…"
-                                          rows={3}
-                                          style={{width:"100%",padding:"10px 12px",background:T.bgSurface,border:`1.5px solid ${inc.rootCause?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"inherit",lineHeight:1.5,boxSizing:"border-box",transition:"border-color .15s"}}
-                                          onFocus={e=>e.target.style.borderColor=T.accent}
-                                          onBlur={e=>e.target.style.borderColor=inc.rootCause?T.accent:T.border}
-                                        />
-                                    }
-                                  </div>
 
                                   {isResolved&&inc.resolutionReason&&(
                                     <div style={{marginBottom:16}}>
@@ -4521,14 +4506,21 @@ const QualityView = () => {
             <div style={{padding:"20px 24px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
               <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
                 <div style={{flex:1}}>
-                  <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:7}}>{tcDetail.name}</div>
+                  {tcDetailEditing
+                    ? <input value={tcDetailDraft?.name||""} onChange={e=>setTcDetailDraft(d=>({...d,name:e.target.value}))}
+                        style={{fontSize:15,fontWeight:700,color:T.text,background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:7,padding:"4px 8px",outline:"none",width:"100%",boxSizing:"border-box",marginBottom:7}}/>
+                    : <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:7}}>{tcDetail.name}</div>
+                  }
                   <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                     <DQStatusBadge status={tcDetail.status} size="lg"/>
                     <span style={{fontSize:11.5,padding:"2px 8px",borderRadius:5,background:`${dimColor(tcDetail.dim)}12`,color:dimColor(tcDetail.dim),fontWeight:600,border:`1px solid ${dimColor(tcDetail.dim)}22`}}>{tcDetail.dim}</span>
                     <span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{tcDetail.table}{tcDetail.col?`.${tcDetail.col}`:""}</span>
                   </div>
                 </div>
-                <button onClick={()=>setTcDetail(null)} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.x(11)}</button>
+                <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+                  {tcDetailEditing&&<button onClick={()=>{setTcDetailEditing(false);setTcDetailDraft(null);}} style={{fontSize:11,padding:"5px 10px",borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer"}}>Cancel</button>}
+                  <button onClick={()=>setTcDetail(null)} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+                </div>
               </div>
             </div>
             <div style={{flex:1,overflowY:"auto",padding:"20px 24px",display:"flex",flexDirection:"column",gap:20}}>
@@ -4537,17 +4529,14 @@ const QualityView = () => {
               {(()=>{
                 const sc=TC_STATUS_CFG[tcDetail.status]||TC_STATUS_CFG.Success;
                 return (
-                  <div style={{padding:"16px 18px",background:sc.bg,border:`1.5px solid ${sc.color}28`,borderRadius:11}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                  <div style={{padding:"14px 16px",background:sc.bg,border:`1.5px solid ${sc.color}28`,borderRadius:10}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
                       <DQStatusDot status={tcDetail.status}/>
                       <span style={{fontSize:11,fontWeight:700,color:sc.color}}>{sc.label}</span>
                       <span style={{fontSize:11,color:T.textMuted,marginLeft:"auto"}}>{tcDetail.lastRun}</span>
                     </div>
                     {tcDetail.failedReason&&(
-                      <div style={{fontSize:12.5,color:sc.color,lineHeight:1.6,padding:"8px 12px",background:`${sc.color}10`,borderRadius:7,border:`1px solid ${sc.color}22`,fontFamily:"inherit"}}>{tcDetail.failedReason}</div>
-                    )}
-                    {!tcDetail.failedReason&&tcDetail.status==="Success"&&(
-                      <div style={{fontSize:12.5,color:"#16a34a",lineHeight:1.6}}>All checks passed for this test case.</div>
+                      <div style={{marginTop:8,fontSize:12.5,color:sc.color,lineHeight:1.6,padding:"8px 12px",background:`${sc.color}10`,borderRadius:7,border:`1px solid ${sc.color}22`,fontFamily:"inherit"}}>{tcDetail.failedReason}</div>
                     )}
                     {tcDetail.incidentId&&(
                       <button onClick={()=>{setExpandedInc(tcDetail.incidentId);setTab("incidents");setTcDetail(null);}}
@@ -4578,24 +4567,27 @@ const QualityView = () => {
               {/* Definition */}
               <div>
                 <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:8,textTransform:"uppercase"}}>Test Definition</div>
-                <div style={{padding:"13px 16px",background:T.bgElevated,borderRadius:10,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:3}}>{tcDetail.defName}</div>
-                    <code style={{fontSize:11,color:T.violet,fontFamily:"'Geist Mono',monospace"}}>{DQ_TEST_DEFINITIONS.find(d=>d.id===tcDetail.defId)?.fn||""}</code>
-                  </div>
-                  <button onClick={()=>{setTab("rules");setTcDetail(null);}} style={{fontSize:11,padding:"5px 10px",borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer"}}>View →</button>
+                <div style={{padding:"13px 16px",background:T.bgElevated,borderRadius:10,border:`1px solid ${T.border}`}}>
+                  <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:3}}>{tcDetail.defName}</div>
+                  <code style={{fontSize:11,color:T.violet,fontFamily:"'Geist Mono',monospace"}}>{DQ_TEST_DEFINITIONS.find(d=>d.id===tcDetail.defId)?.fn||""}</code>
                 </div>
               </div>
 
-              {/* Parameters */}
+              {/* Parameters — read or edit */}
               {Object.keys(tcDetail.params||{}).length>0&&(
                 <div>
                   <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:8,textTransform:"uppercase"}}>Parameters</div>
                   <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                    {Object.entries(tcDetail.params).map(([k,v])=>(
-                      <div key={k} style={{display:"flex",gap:12,padding:"9px 13px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`,alignItems:"center"}}>
-                        <span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.textMuted,minWidth:130}}>{k}</span>
-                        <span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.violet,flex:1}}>{Array.isArray(v)?v.join(", "):String(v)}</span>
+                    {Object.entries(tcDetailEditing?tcDetailDraft?.params||tcDetail.params:tcDetail.params).map(([k,v])=>(
+                      <div key={k} style={{display:"flex",gap:12,padding:"9px 13px",background:T.bgElevated,borderRadius:8,border:`1px solid ${tcDetailEditing?T.accent:T.border}`,alignItems:"center"}}>
+                        <span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,minWidth:130,flexShrink:0}}>{k}</span>
+                        {tcDetailEditing
+                          ? <input value={Array.isArray(v)?v.join(", "):String(v)}
+                              onChange={e=>setTcDetailDraft(d=>({...d,params:{...(d.params||tcDetail.params),[k]:e.target.value}}))}
+                              style={{flex:1,padding:"3px 8px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:5,color:T.text,fontSize:12,fontFamily:"'Geist Mono',monospace",outline:"none"}}
+                              onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                          : <span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.violet,flex:1}}>{Array.isArray(v)?v.join(", "):String(v)}</span>
+                        }
                       </div>
                     ))}
                   </div>
@@ -4606,15 +4598,32 @@ const QualityView = () => {
             </div>
             {/* Footer actions */}
             <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgElevated,display:"flex",alignItems:"center",gap:8}}>
-              <button onClick={()=>{showT("Test queued for immediate execution");}}
-                style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 16px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
-                <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
-                Run Now
-              </button>
-              <button style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 16px",borderRadius:8,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:500,cursor:"pointer",whiteSpace:"nowrap"}}>
-                <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M8.5 1.5l2 2-7 7H1.5v-2l7-7z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
-                Edit
-              </button>
+              {tcDetailEditing ? <>
+                <button onClick={()=>{
+                  setTestCases(prev=>prev.map(t=>t.id===tcDetail.id?{...t,...tcDetailDraft}:t));
+                  setTcDetail(prev=>({...prev,...tcDetailDraft}));
+                  setTcDetailEditing(false); setTcDetailDraft(null);
+                  showT("Test case updated","success");
+                }}
+                  style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 18px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                  Save Changes
+                </button>
+                <button onClick={()=>{setTcDetailEditing(false);setTcDetailDraft(null);}}
+                  style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>
+                  Cancel
+                </button>
+              </> : <>
+                <button onClick={()=>{showT("Test queued for immediate execution");}}
+                  style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 16px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
+                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
+                  Run Now
+                </button>
+                <button onClick={()=>{setTcDetailEditing(true);setTcDetailDraft({name:tcDetail.name,params:{...(tcDetail.params||{})}});}}
+                  style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 16px",borderRadius:8,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:500,cursor:"pointer",whiteSpace:"nowrap"}}>
+                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M8.5 1.5l2 2-7 7H1.5v-2l7-7z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
+                  Edit
+                </button>
+              </>}
               <button onClick={()=>{setTestCases(prev=>prev.filter(t=>t.id!==tcDetail.id));setTcDetail(null);showT("Test case deleted","error");}}
                 style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.rose,fontSize:12,cursor:"pointer",marginLeft:"auto",whiteSpace:"nowrap"}}
                 onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.borderColor=T.rose+"44";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor=T.border;}}>
@@ -9540,6 +9549,11 @@ const HealthBadge = ({health,status}) => {
 const RunRow = ({run}) => {
   const [expanded, setExpanded] = useState(false);
   const sc = run.status==="success"?T.accent:run.status==="failed"?T.rose:run.status==="running"?"#60a5fa":T.amber;
+  const runLogs = run.status==="failed"
+    ? [`[${run.ts}] Starting ingestion pipeline…`,"[00:00:01] Connecting to source…",`[00:00:03] ${run.errorMsg||"Connection failed"}`,"[00:00:03] Pipeline aborted — see error above"]
+    : run.status==="warning"
+    ? [`[${run.ts}] Starting ingestion pipeline…`,"[00:00:01] Connected successfully","[00:00:04] Extracting metadata…",`[00:00:08] Warning: ${run.warnMsg||"schema drift detected"}`,`[00:00:${run.duration||"12s"}] Completed with warnings — ${run.records?.toLocaleString()||0} records processed`]
+    : [`[${run.ts}] Starting ingestion pipeline…`,"[00:00:01] Connected successfully","[00:00:03] Extracting metadata…","[00:00:06] Transforming schema…",`[00:00:09] Loading ${run.records?.toLocaleString()||0} records…`,`[00:00:${run.duration||"10s"}] Done — ingestion completed successfully`];
   return (
     <div style={{background:T.bgElevated,border:`1px solid ${run.status==="failed"?T.rose+"44":T.border}`,borderRadius:9,overflow:"hidden"}}>
       <div onClick={()=>setExpanded(v=>!v)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",cursor:"pointer"}}>
@@ -9548,7 +9562,7 @@ const RunRow = ({run}) => {
           <div style={{fontSize:12,fontWeight:500,color:T.text}}>{run.ts}</div>
           <div style={{display:"flex",gap:10,fontSize:10,color:T.textMuted,marginTop:2}}>
             {run.duration!=="—"&&<span>{run.duration}</span>}
-            {run.records>0&&<span>{run.records.toLocaleString()} rows</span>}
+            {run.records>0&&<span>{run.records.toLocaleString()} records</span>}
             {run.errors>0&&<span style={{color:T.rose}}>{run.errors} error{run.errors>1?"s":""}</span>}
             {run.warnings>0&&<span style={{color:T.amber}}>{run.warnings} warning{run.warnings>1?"s":""}</span>}
           </div>
@@ -9558,22 +9572,33 @@ const RunRow = ({run}) => {
           <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
         </svg>
       </div>
-      {expanded&&(run.errorMsg||run.warnMsg)&&(
-        <div style={{padding:"0 12px 10px",borderTop:`1px solid ${T.border}`}}>
-          <div style={{marginTop:8,padding:"8px 10px",background:run.errorMsg?T.roseDim:T.amberDim,borderRadius:6,fontSize:11,color:run.errorMsg?T.rose:T.amber,fontFamily:"'Geist Mono',monospace"}}>
-            {run.errorMsg||run.warnMsg}
-          </div>
-        </div>
-      )}
-      {expanded&&run.status==="success"&&(
-        <div style={{padding:"0 12px 10px",borderTop:`1px solid ${T.border}`}}>
-          <div style={{marginTop:8,display:"flex",gap:12}}>
-            {[{l:"Records",v:run.records.toLocaleString()},{l:"Duration",v:run.duration},{l:"Errors",v:run.errors},{l:"Warnings",v:run.warnings}].map(m=>(
-              <div key={m.l} style={{textAlign:"center"}}>
-                <div style={{fontSize:13,fontWeight:700,color:T.text}}>{m.v}</div>
-                <div style={{fontSize:9,color:T.textMuted}}>{m.l}</div>
+      {expanded&&(
+        <div style={{borderTop:`1px solid ${T.border}`}}>
+          {/* Stats row */}
+          <div style={{display:"flex",gap:0,borderBottom:`1px solid ${T.border}`}}>
+            {[{l:"Records",v:run.records?.toLocaleString()||"0"},{l:"Duration",v:run.duration||"—"},{l:"Errors",v:run.errors||0},{l:"Warnings",v:run.warnings||0}].map((m,i,a)=>(
+              <div key={m.l} style={{flex:1,textAlign:"center",padding:"10px 0",borderRight:i<a.length-1?`1px solid ${T.border}`:"none"}}>
+                <div style={{fontSize:13,fontWeight:700,color:m.l==="Errors"&&m.v>0?T.rose:m.l==="Warnings"&&m.v>0?T.amber:T.text}}>{m.v}</div>
+                <div style={{fontSize:9.5,color:T.textMuted,marginTop:1}}>{m.l}</div>
               </div>
             ))}
+          </div>
+          {/* Error/warning message */}
+          {(run.errorMsg||run.warnMsg)&&(
+            <div style={{padding:"8px 12px",borderBottom:`1px solid ${T.border}`}}>
+              <div style={{padding:"7px 10px",background:run.errorMsg?T.roseDim:T.amberDim,borderRadius:6,fontSize:11,color:run.errorMsg?T.rose:T.amber,fontFamily:"'Geist Mono',monospace"}}>
+                {run.errorMsg||run.warnMsg}
+              </div>
+            </div>
+          )}
+          {/* Logs */}
+          <div style={{padding:"10px 12px"}}>
+            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Run Log</div>
+            <div style={{background:T.bg,borderRadius:6,padding:"8px 10px",border:`1px solid ${T.border}`,fontFamily:"'Geist Mono',monospace",fontSize:10,color:T.textMuted,lineHeight:1.8}}>
+              {runLogs.map((l,i)=>(
+                <div key={i} style={{color:i===runLogs.length-1?(run.status==="failed"?T.rose:run.status==="warning"?T.amber:"#60a5fa"):T.textMuted}}>{l}</div>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -9711,6 +9736,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
   const [svcAdminOpen, setSvcAdminOpen]= useState(false);
   const [schedule,     setSchedule]    = useState("0 2 * * *");
   const [schedMode,    setSchedMode]   = useState("scheduled");
+  const [authType,     setAuthType]    = useState("userpass"); // userpass|oauth|keypair|token
   const [fields,       setFields]      = useState({});
   const [objTypes,     setObjTypes]    = useState([]);
   const [enableLineage,   setEnableLineage]   = useState(true);
@@ -9974,7 +10000,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
           {step===2&&connMeta&&(
             <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:22}}>
 
-              {/* Row 1: Identity + Schedule side by side */}
+              {/* Row 1: Identity only */}
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
 
                 {/* Identity card */}
@@ -10057,45 +10083,44 @@ const AddServiceWizard = ({onClose, onDone}) => {
                   </div>
                 </div>
 
-                {/* Schedule card */}
-                <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
-                    <div style={{width:3,height:16,borderRadius:2,background:"#f59e0b",flexShrink:0}}/>
-                    <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Sync Schedule</span>
-                  </div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
-                    {[{id:"once",label:"Run Once",desc:"Manual trigger only"},{id:"scheduled",label:"Scheduled",desc:"Repeats automatically"}].map(m=>{
-                      const sel=schedMode===m.id;
-                      return (
-                        <button key={m.id} onClick={()=>setSchedMode(m.id)} style={{padding:"11px 12px",borderRadius:10,textAlign:"left",border:`2px solid ${sel?"#f59e0b":T.border}`,background:sel?"rgba(245,158,11,.07)":T.bgSurface,cursor:"pointer",transition:"all .15s"}}
-                          onMouseEnter={e=>{if(!sel){e.currentTarget.style.borderColor="#f59e0b55";}}}
-                          onMouseLeave={e=>{if(!sel){e.currentTarget.style.borderColor=T.border;}}}>
-                          <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4}}>
-                            <div style={{width:13,height:13,borderRadius:"50%",border:`2px solid ${sel?"#f59e0b":T.border}`,background:sel?"#f59e0b":"transparent",flexShrink:0}}/>
-                            <span style={{fontSize:12,fontWeight:700,color:sel?T.text:T.textSub}}>{m.label}</span>
-                          </div>
-                          <div style={{fontSize:10.5,color:T.textMuted,paddingLeft:20}}>{m.desc}</div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {schedMode==="scheduled"&&(
-                    <div>
-                      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
-                        {SCHED_PRESETS.map(p=>(
-                          <button key={p.v} onClick={()=>setSchedule(p.v)} style={{padding:"5px 12px",borderRadius:99,fontSize:11.5,fontWeight:500,cursor:"pointer",transition:"all .12s",border:`1.5px solid ${schedule===p.v?"#f59e0b":T.border}`,background:schedule===p.v?"rgba(245,158,11,.1)":"transparent",color:schedule===p.v?"#f59e0b":T.textSub}}>{p.l}</button>
-                        ))}
-                      </div>
-                      <input value={schedule} onChange={e=>setSchedule(e.target.value)}
-                        style={{width:"100%",padding:"8px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box"}}
-                        onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
-                      <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>Next: <b style={{color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{schedLabel(schedule)}</b></div>
-                    </div>
-                  )}
-                </div>
               </div>
 
-              {/* Row 2: Credentials */}
+              {/* Row 2: Auth Type */}
+              {(()=>{
+                const authOpts=[
+                  {id:"userpass",label:"Username / Password",desc:"Standard credentials",icon:"👤"},
+                  {id:"oauth",   label:"OAuth 2.0",          desc:"Token-based auth flow",icon:"🔑"},
+                  {id:"keypair", label:"Key Pair",            desc:"Private key + passphrase",icon:"🗝"},
+                  {id:"token",   label:"API Token",           desc:"Service account token",icon:"⚡"},
+                ];
+                const supported = connMeta?.authTypes || ["userpass","oauth","keypair","token"];
+                const available = authOpts.filter(a=>supported.includes(a.id));
+                return (
+                  <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                      <div style={{width:3,height:16,borderRadius:2,background:"#8b5cf6",flexShrink:0}}/>
+                      <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Authentication Type</span>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:`repeat(${Math.min(available.length,4)},1fr)`,gap:8}}>
+                      {available.map(a=>{
+                        const sel=authType===a.id;
+                        return (
+                          <button key={a.id} onClick={()=>setAuthType(a.id)} style={{padding:"12px",borderRadius:10,textAlign:"left",border:`2px solid ${sel?"#8b5cf6":T.border}`,background:sel?"rgba(139,92,246,.07)":T.bgSurface,cursor:"pointer",transition:"all .15s"}}
+                            onMouseEnter={e=>{if(!sel)e.currentTarget.style.borderColor="#8b5cf655";}}
+                            onMouseLeave={e=>{if(!sel)e.currentTarget.style.borderColor=T.border;}}>
+                            <div style={{fontSize:16,marginBottom:5}}>{a.icon}</div>
+                            <div style={{fontSize:12,fontWeight:700,color:sel?T.text:T.textSub,marginBottom:2}}>{a.label}</div>
+                            <div style={{fontSize:10.5,color:T.textMuted}}>{a.desc}</div>
+                            {sel&&<div style={{marginTop:6,fontSize:10,fontWeight:700,color:"#8b5cf6",textTransform:"uppercase",letterSpacing:"0.06em"}}>Selected ✓</div>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Row 3: Credentials */}
               <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
                   <div style={{width:3,height:16,borderRadius:2,background:"#ee2424",flexShrink:0}}/>
@@ -10157,7 +10182,44 @@ const AddServiceWizard = ({onClose, onDone}) => {
                 {objTypes.length===0&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:10}}>Select at least one object type to extract from this source.</div>}
               </div>
 
-              {/* Row 4: Test Connection */}
+              {/* Row 5: Sync Schedule */}
+              <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                  <div style={{width:3,height:16,borderRadius:2,background:"#f59e0b",flexShrink:0}}/>
+                  <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Sync Schedule</span>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+                  {[{id:"once",label:"Run Once",desc:"Manual trigger only"},{id:"scheduled",label:"Scheduled",desc:"Repeats on a cron schedule"}].map(m=>{
+                    const sel=schedMode===m.id;
+                    return (
+                      <button key={m.id} onClick={()=>setSchedMode(m.id)} style={{padding:"11px 12px",borderRadius:10,textAlign:"left",border:`2px solid ${sel?"#f59e0b":T.border}`,background:sel?"rgba(245,158,11,.07)":T.bgSurface,cursor:"pointer",transition:"all .15s"}}
+                        onMouseEnter={e=>{if(!sel)e.currentTarget.style.borderColor="#f59e0b55";}}
+                        onMouseLeave={e=>{if(!sel)e.currentTarget.style.borderColor=T.border;}}>
+                        <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4}}>
+                          <div style={{width:13,height:13,borderRadius:"50%",border:`2px solid ${sel?"#f59e0b":T.border}`,background:sel?"#f59e0b":"transparent",flexShrink:0}}/>
+                          <span style={{fontSize:12,fontWeight:700,color:sel?T.text:T.textSub}}>{m.label}</span>
+                        </div>
+                        <div style={{fontSize:10.5,color:T.textMuted,paddingLeft:20}}>{m.desc}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+                {schedMode==="scheduled"&&(
+                  <div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
+                      {SCHED_PRESETS.map(p=>(
+                        <button key={p.v} onClick={()=>setSchedule(p.v)} style={{padding:"5px 12px",borderRadius:99,fontSize:11.5,fontWeight:500,cursor:"pointer",transition:"all .12s",border:`1.5px solid ${schedule===p.v?"#f59e0b":T.border}`,background:schedule===p.v?"rgba(245,158,11,.1)":"transparent",color:schedule===p.v?"#f59e0b":T.textSub}}>{p.l}</button>
+                      ))}
+                    </div>
+                    <input value={schedule} onChange={e=>setSchedule(e.target.value)}
+                      style={{width:"100%",padding:"8px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box"}}
+                      onFocus={e=>e.target.style.borderColor="#f59e0b"} onBlur={e=>e.target.style.borderColor=T.border}/>
+                    <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>Next: <b style={{color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{schedLabel(schedule)}</b></div>
+                  </div>
+                )}
+              </div>
+
+              {/* Row 6: Test Connection */}
               <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
                   <div style={{width:3,height:16,borderRadius:2,background:testState==="success"?"#10b981":"#6366f1",flexShrink:0,transition:"background .3s"}}/>
@@ -10727,21 +10789,69 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
 
         {/* ── ASSETS TAB ── */}
         {cfgTab==="assets"&&<>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-            <div style={{fontSize:13,fontWeight:600,color:T.text}}>{svc.assets.total.toLocaleString()} assets indexed</div>
-            <Btn small ghost onClick={()=>onToast("Opening catalog…","success")}>View in Catalog</Btn>
+          {/* Summary stats */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:16}}>
+            {[
+              {l:"Total Assets",v:svc.assets.total.toLocaleString(),color:T.accent},
+              {l:"Last Indexed",v:svc.lastRun,color:T.textSub},
+              {l:"Health",v:svc.health==="healthy"?"Good":svc.health==="warning"?"Degraded":"Error",color:svc.health==="healthy"?T.green:svc.health==="warning"?T.amber:T.rose},
+            ].map(m=>(
+              <div key={m.l} style={{padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,textAlign:"center"}}>
+                <div style={{fontSize:14,fontWeight:700,color:m.color}}>{m.v}</div>
+                <div style={{fontSize:10,color:T.textMuted,marginTop:2}}>{m.l}</div>
+              </div>
+            ))}
           </div>
-          {[{label:"Tables",count:svc.assets.tables,icn:"catalog",color:T.accent},{label:"Views",count:svc.assets.views,icn:"lineage",color:T.violet},{label:"Topics / Apps",count:svc.assets.pipelines,icn:"workflow",color:T.amber}].filter(a=>a.count>0).map((a,i)=>(
-            <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,marginBottom:8,cursor:"pointer",transition:"border-color .12s"}}
-              onMouseEnter={e=>e.currentTarget.style.borderColor=a.color+"55"}
-              onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-              <span style={{color:a.color,display:"flex"}}>{Ic[a.icn]?Ic[a.icn](18):null}</span>
-              <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:T.text}}>{a.label}</div><div style={{fontSize:11,color:T.textMuted}}>Click to browse in catalog</div></div>
-              <div style={{fontSize:15,fontWeight:700,color:a.color,fontFamily:"'Geist Mono',monospace"}}>{a.count.toLocaleString()}</div>
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 1.5l3.5 3.5L3 8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" style={{color:T.textMuted}}/></svg>
+          {/* Asset type breakdown */}
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Asset Breakdown</div>
+            <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+              {[
+                {label:"Tables",count:svc.assets.tables,icn:"catalog",color:T.accent,desc:"Structured relational tables"},
+                {label:"Views",count:svc.assets.views,icn:"lineage",color:T.violet,desc:"Derived virtual tables"},
+                {label:"Topics / Streams",count:svc.assets.pipelines,icn:"workflow",color:T.amber,desc:"Kafka topics, event streams"},
+              ].filter(a=>a.count>0).map((a,i,arr)=>(
+                <div key={i} onClick={()=>onToast("Filtering catalog…","success")} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"background .1s"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <div style={{width:34,height:34,borderRadius:8,background:`${a.color}15`,border:`1px solid ${a.color}33`,display:"flex",alignItems:"center",justifyContent:"center",color:a.color,flexShrink:0}}>
+                    {Ic[a.icn]?Ic[a.icn](15):null}
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{a.label}</div>
+                    <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{a.desc}</div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:16,fontWeight:700,color:a.color,fontFamily:"'Geist Mono',monospace"}}>{a.count.toLocaleString()}</div>
+                    <div style={{fontSize:10,color:T.textMuted}}>assets</div>
+                  </div>
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 1.5l3.5 3.5L3 8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" style={{color:T.textMuted}}/></svg>
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
+          {/* Coverage bar */}
+          {svc.assets.total>0&&(()=>{
+            const types=[{l:"Tables",v:svc.assets.tables,c:T.accent},{l:"Views",v:svc.assets.views,c:T.violet},{l:"Topics",v:svc.assets.pipelines,c:T.amber}].filter(t=>t.v>0);
+            return (
+              <div>
+                <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Distribution</div>
+                <div style={{height:10,borderRadius:5,overflow:"hidden",display:"flex",marginBottom:8}}>
+                  {types.map(t=><div key={t.l} style={{flex:t.v,background:t.c,transition:"flex .3s"}}/>)}
+                </div>
+                <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
+                  {types.map(t=>(
+                    <div key={t.l} style={{display:"flex",alignItems:"center",gap:5}}>
+                      <span style={{width:8,height:8,borderRadius:2,background:t.c,display:"block",flexShrink:0}}/>
+                      <span style={{fontSize:11,color:T.textMuted}}>{t.l} <strong style={{color:T.text}}>{Math.round(t.v/svc.assets.total*100)}%</strong></span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
           {svc.assets.total===0&&<div style={{textAlign:"center",padding:"32px 0",color:T.textMuted,fontSize:12}}>No assets indexed yet — run ingestion to populate the catalog.</div>}
+          <div style={{marginTop:16}}><Btn ghost onClick={()=>onToast("Opening catalog…","success")}>Browse all in Catalog →</Btn></div>
         </>}
 
       </div>
@@ -12830,7 +12940,7 @@ const WF_DATA = [
       {ts:"3 days ago",    status:"success", duration:"4m 01s",  records:47644, errors:0},
       {ts:"4 days ago",    status:"success", duration:"3m 55s",  records:47520, errors:0},
     ],
-    stages:["Connect","Extract","Transform","Profile","Index"],
+    stages:["Connect","Extract","Transform","Load","Done"],
     currentStage:null,
   },
   {
@@ -13341,7 +13451,7 @@ const SettingsView = ({onToast})=>{
         {id:"r3",ts:"2d ago 02:00",duration:"8m 34s",status:"failed",records:0,errors:3,warnings:0,errorMsg:"Connection timeout after 30s — host unreachable"},
         {id:"r4",ts:"3d ago 02:00",duration:"4m 01s",status:"success",records:47644,errors:0,warnings:1},
       ],
-      stages:["Connect","Extract","Transform","Profile","Index"],
+      stages:["Connect","Extract","Transform","Load","Done"],
       currentStage:null, progress:100,
       config:{user:"solix_reader",ssl:true,includeViews:true,sampleRows:1000},
     },
@@ -13357,7 +13467,7 @@ const SettingsView = ({onToast})=>{
         {id:"r2",ts:"Today 06:00",duration:"6m 18s",status:"success",records:12340,errors:0,warnings:0},
         {id:"r3",ts:"Yesterday 18:00",duration:"6m 02s",status:"success",records:12290,errors:0,warnings:0},
       ],
-      stages:["Connect","Extract","Transform","Profile","Index"],
+      stages:["Connect","Extract","Transform","Load","Done"],
       currentStage:2, progress:44,
       config:{apiVersion:"57.0",includeCustomFields:true,objectFilter:"Account,Contact,Opportunity"},
     },
@@ -13373,7 +13483,7 @@ const SettingsView = ({onToast})=>{
         {id:"r2",ts:"Today 14:30",duration:"22s",status:"success",records:238,errors:0,warnings:0},
         {id:"r3",ts:"Today 14:15",duration:"19s",status:"success",records:251,errors:0,warnings:0},
       ],
-      stages:["Connect","Extract","Transform","Profile","Index"],
+      stages:["Connect","Extract","Transform","Load","Done"],
       currentStage:null, progress:100,
       config:{bootstrapServers:"kafka.jnj.internal:9092",schemaRegistry:"http://schema-registry:8081"},
     },
@@ -13389,7 +13499,7 @@ const SettingsView = ({onToast})=>{
         {id:"r2",ts:"Today 09:00",duration:"13m 55s",status:"success",records:101200,errors:0,warnings:0},
         {id:"r3",ts:"Today 06:00",duration:"13m 48s",status:"success",records:100800,errors:0,warnings:0},
       ],
-      stages:["Connect","Extract","Transform","Profile","Index"],
+      stages:["Connect","Extract","Transform","Load","Done"],
       currentStage:null, progress:100,
       config:{account:"jnj.us-east-1",warehouse:"COMPUTE_WH",role:"SOLIX_READER"},
     },
@@ -13404,7 +13514,7 @@ const SettingsView = ({onToast})=>{
         {id:"r1",ts:"Today 14:32",duration:"2m 04s",status:"success",records:234,errors:0,warnings:0},
         {id:"r2",ts:"Today 11:17",duration:"1m 58s",status:"success",records:231,errors:0,warnings:0},
       ],
-      stages:["Connect","Extract","Transform","Profile","Index"],
+      stages:["Connect","Extract","Transform","Load","Done"],
       currentStage:null, progress:100,
       config:{projectId:"123456",environment:"production",generateLineage:true},
     },
@@ -13418,7 +13528,7 @@ const SettingsView = ({onToast})=>{
       runs:[
         {id:"r1",ts:"3d ago 01:00",duration:"—",status:"failed",records:0,errors:1,warnings:0,errorMsg:"Authentication token expired — please reconnect"},
       ],
-      stages:["Connect","Extract","Transform","Profile","Index"],
+      stages:["Connect","Extract","Transform","Load","Done"],
       currentStage:null, progress:0,
       config:{site:"jnj",personalAccessTokenName:"solix-ingest"},
     },
@@ -14467,7 +14577,6 @@ const TagManagementView = ({onToast}) => {
                           onMouseLeave={()=>setHovItem(null)}>
                           <button onClick={()=>{setSelTagId(td.id);setSelCatId(null);setDetailTab('overview');setEditing(false);setEditDraft(null);setNewPanelOpen(false);setNewCatPanelOpen(false);}}
                             style={{flex:1,display:'flex',alignItems:'center',gap:7,padding:'5px 6px 5px 30px',background:'none',border:'none',cursor:'pointer',textAlign:'left',minWidth:0}}>
-                            <span style={{width:7,height:7,borderRadius:'50%',background:td.color,flexShrink:0,display:'block',boxShadow:isSel?`0 0 0 2px ${td.color}44`:'none'}}/>
                             <span style={{flex:1,fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
                             <span style={{fontSize:10,color:T.textMuted,flexShrink:0,fontFamily:"'Geist Mono',monospace",marginRight:2}}>{cnt}</span>
                           </button>
@@ -14512,7 +14621,6 @@ const TagManagementView = ({onToast}) => {
                         onMouseLeave={()=>setHovItem(null)}>
                         <button onClick={()=>{setSelTagId(td.id);setSelCatId(null);setDetailTab('overview');setEditing(false);setEditDraft(null);setNewPanelOpen(false);setNewCatPanelOpen(false);}}
                           style={{flex:1,display:'flex',alignItems:'center',gap:7,padding:'5px 6px 5px 14px',background:'none',border:'none',cursor:'pointer',textAlign:'left',minWidth:0}}>
-                          <span style={{width:7,height:7,borderRadius:'50%',background:td.color,flexShrink:0,display:'block'}}/>
                           <span style={{flex:1,fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
                           <span style={{fontSize:10,color:T.textMuted,flexShrink:0,fontFamily:"'Geist Mono',monospace",marginRight:2}}>{cnt}</span>
                         </button>
@@ -14685,24 +14793,63 @@ const TagManagementView = ({onToast}) => {
                     </div>
                   </div>
 
-                  {/* Category — dynamic with free-text creation */}
-                  <div>
-                    <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:4}}>Category <span style={{fontSize:10,fontWeight:400,color:T.textMuted}}>— groups tags for navigation (optional)</span></label>
-                    {allCategories.length>0&&(
-                      <div style={{display:'flex',gap:5,flexWrap:'wrap',marginBottom:8}}>
-                        {allCategories.map(cat=>{
-                          const cc=getCatStyle(cat); const sel=newDraft.category===cat&&!newCatInput;
-                          return <button key={cat} onClick={()=>{setNewDraft(d=>({...d,category:sel?'':cat}));setNewCatInput('');}}
-                            style={{padding:'3px 10px',borderRadius:99,fontSize:11.5,fontWeight:sel?600:400,border:`1.5px solid ${sel?cc.color:T.border}`,background:sel?cc.bg:'transparent',color:sel?cc.color:T.textMuted,cursor:'pointer',textTransform:'capitalize',transition:'all .12s'}}>
-                            {cat}
-                          </button>;
-                        })}
+                  {/* Category — searchable select + create new */}
+                  {(()=>{
+                    const [catOpen, setCatOpen] = React.useState(false);
+                    const catRef = React.useRef(null);
+                    const activeCategory = newDraft.category || newCatInput.trim();
+                    const filteredCats = allCategories.filter(c=>!newCatInput||c.toLowerCase().includes(newCatInput.toLowerCase()));
+                    React.useEffect(()=>{
+                      if(!catOpen) return;
+                      const h=(e)=>{ if(catRef.current&&!catRef.current.contains(e.target)) setCatOpen(false); };
+                      document.addEventListener('mousedown',h); return ()=>document.removeEventListener('mousedown',h);
+                    },[catOpen]);
+                    return (
+                      <div ref={catRef} style={{position:'relative'}}>
+                        <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:4}}>Category <span style={{fontSize:10,fontWeight:400,color:T.textMuted}}>— optional</span></label>
+                        <div onClick={()=>setCatOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:T.bgElevated,border:`1px solid ${catOpen?T.accent:T.border}`,borderRadius:8,cursor:'pointer',transition:'border .12s',minHeight:38}}>
+                          {activeCategory
+                            ? <><span style={{flex:1,fontSize:12.5,color:T.text,fontWeight:500,textTransform:'capitalize'}}>{activeCategory}</span>
+                                <button onMouseDown={e=>{e.stopPropagation();setNewDraft(d=>({...d,category:''}));setNewCatInput('');}} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',padding:'0 2px',fontSize:14,lineHeight:1}}>×</button></>
+                            : <span style={{flex:1,fontSize:12,color:T.textMuted,fontStyle:'italic'}}>Select or create category…</span>
+                          }
+                          <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:T.textMuted,transform:catOpen?'rotate(180deg)':'none',transition:'transform .15s'}}><path d="M1.5 3.5l3.5 3.5 3.5-3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </div>
+                        {catOpen&&(
+                          <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,right:0,zIndex:400,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',overflow:'hidden'}}>
+                            <div style={{padding:'7px 9px',borderBottom:`1px solid ${T.border}`}}>
+                              <input autoFocus value={newCatInput} onChange={e=>{setNewCatInput(e.target.value);setNewDraft(d=>({...d,category:''}));}} placeholder="Search or type new category…"
+                                style={{width:'100%',padding:'5px 8px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:5,color:T.text,fontSize:11.5,outline:'none',boxSizing:'border-box'}}/>
+                            </div>
+                            <div style={{maxHeight:180,overflowY:'auto'}}>
+                              {filteredCats.map(cat=>{
+                                const cc=getCatStyle(cat);
+                                return (
+                                  <button key={cat} onMouseDown={()=>{setNewDraft(d=>({...d,category:cat}));setNewCatInput('');setCatOpen(false);}}
+                                    style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:newDraft.category===cat?T.accentDim:'transparent',border:'none',cursor:'pointer',textAlign:'left'}}
+                                    onMouseEnter={e=>{if(newDraft.category!==cat)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(newDraft.category!==cat)e.currentTarget.style.background='transparent';}}>
+                                    <span style={{width:8,height:8,borderRadius:2,background:cc.color||T.accent,display:'block',flexShrink:0}}/>
+                                    <span style={{flex:1,fontSize:12.5,color:T.text,textTransform:'capitalize'}}>{cat}</span>
+                                    {newDraft.category===cat&&<span style={{fontSize:11,color:T.accent}}>✓</span>}
+                                  </button>
+                                );
+                              })}
+                              {newCatInput.trim()&&!allCategories.map(c=>c.toLowerCase()).includes(newCatInput.trim().toLowerCase())&&(
+                                <button onMouseDown={()=>{setNewCatInput(newCatInput.trim());setNewDraft(d=>({...d,category:''}));setCatOpen(false);}}
+                                  style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'transparent',border:'none',cursor:'pointer',textAlign:'left',borderTop:filteredCats.length>0?`1px solid ${T.border}`:'none'}}
+                                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                  <span style={{width:8,height:8,borderRadius:2,background:T.accent,display:'block',flexShrink:0}}/>
+                                  <span style={{flex:1,fontSize:12.5,color:T.accent}}>Create "<strong>{newCatInput.trim()}</strong>"</span>
+                                  <span style={{fontSize:10,padding:'1px 6px',borderRadius:4,background:T.accentDim,color:T.accent,fontWeight:600}}>new</span>
+                                </button>
+                              )}
+                              {filteredCats.length===0&&!newCatInput.trim()&&<div style={{padding:'16px 12px',fontSize:12,color:T.textMuted,textAlign:'center',fontStyle:'italic'}}>No categories yet — type to create one</div>}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    )}
-                    <Input2 placeholder={allCategories.length>0?'Or type a new category…':'Type a category name…'} value={newCatInput}
-                      onChange={e=>{setNewCatInput(e.target.value);if(e.target.value) setNewDraft(d=>({...d,category:''}));}}/>
-                    {newCatInput.trim()&&<div style={{fontSize:11,color:T.textMuted,marginTop:4}}>Creates new category: <strong style={{color:T.text,textTransform:'capitalize'}}>"{newCatInput.trim()}"</strong></div>}
-                  </div>
+                    );
+                  })()}
 
                   {/* Description */}
                   <div>
@@ -15114,42 +15261,6 @@ const TagManagementView = ({onToast}) => {
                             </div>
                           </div>
                         )}
-                      </div>
-
-                      <div style={{height:1,background:T.border,marginBottom:18}}/>
-
-                      {/* Propagation */}
-                      <div style={{marginBottom:18}}>
-                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Propagation</div>
-                        {editing
-                          ? <select value={draft.propagationMode} onChange={e=>setEditDraft(d=>({...d,propagationMode:e.target.value}))} style={{width:'100%',padding:'6px 10px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:'none'}}>
-                              {Object.entries(PROP_LABELS).map(([v,l])=><option key={v} value={v}>{l}</option>)}
-                            </select>
-                          : <span style={{fontSize:12.5,color:PROP_COLORS[draft.propagationMode]||T.textMuted,fontWeight:600}}>{PROP_LABELS[draft.propagationMode]||'—'}</span>
-                        }
-                      </div>
-
-                      <div style={{height:1,background:T.border,marginBottom:18}}/>
-
-                      {/* Applied Assets */}
-                      <div>
-                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                          <span>Applied Assets</span>
-                          {affectedAssets.length>0&&<span style={{fontSize:11,color:T.accent,fontWeight:600}}>{affectedAssets.length}</span>}
-                        </div>
-                        {affectedAssets.length===0
-                          ? <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No assets tagged</span>
-                          : <div style={{display:'flex',flexDirection:'column',gap:5}}>
-                              {affectedAssets.slice(0,6).map(a=>(
-                                <div key={a.id} style={{display:'flex',alignItems:'center',gap:7,padding:'5px 8px',borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`}}>
-                                  <ServiceIcon service={a.service} size={13}/>
-                                  <span style={{flex:1,fontSize:11.5,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{a.name}</span>
-                                  <TypeBadge type={a.type}/>
-                                </div>
-                              ))}
-                              {affectedAssets.length>6&&<div style={{fontSize:11,color:T.textMuted,fontStyle:'italic',paddingLeft:4}}>+{affectedAssets.length-6} more</div>}
-                            </div>
-                        }
                       </div>
 
                     </div>
