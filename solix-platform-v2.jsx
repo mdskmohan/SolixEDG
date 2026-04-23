@@ -3586,10 +3586,13 @@ const QualityView = () => {
   const [tcSelTable,  setTcSelTable]  = useState("");
   const [tcSelCol,    setTcSelCol]    = useState("");
   const [tcSelType,   setTcSelType]   = useState(null);        // selected TestDefinition
-  const [tcName,      setTcName]      = useState("");
-  const [tcDesc,      setTcDesc]      = useState("");
-  const [tcTags,      setTcTags]      = useState("");
-  const [tcParams,    setTcParams]    = useState({});
+  const [tcName,       setTcName]      = useState("");
+  const [tcDesc,       setTcDesc]      = useState("");
+  const [tcTags,       setTcTags]      = useState([]);
+  const [tcGlossary,   setTcGlossary]  = useState([]);
+  const [tcCustomSQL,  setTcCustomSQL] = useState(false);
+  const [tcSQLQuery,   setTcSQLQuery]  = useState("");
+  const [tcParams,     setTcParams]    = useState({});
 
   // Add Bundle Suite modal
   const [newSuiteModal, setNewSuiteModal] = useState(false);
@@ -3663,7 +3666,7 @@ const QualityView = () => {
   const confirmResolve   = ()=>{if(!incResolveReason.trim())return;setIncidents(prev=>prev.map(i=>i.id===incResolveId?{...i,status:"Resolved",resolved:"Just now",resolutionReason:incResolveReason,timeline:[...(i.timeline||[]),{action:"Resolved",by:"dev.patel",at:"Just now",note:incResolveReason}]}:i));setIncResolveModal(false);showT("Incident resolved");};
   const addIncComment    = (id)=>{const txt=(incCommentText[id]||"").trim();if(!txt)return;setIncidents(prev=>prev.map(i=>i.id===id?{...i,comments:[...(i.comments||[]),{text:txt,by:"dev.patel",at:"Just now"}]}:i));setIncCommentText(prev=>({...prev,[id]:""}));};
 
-  const openTCModal = ()=>{setNewTCModal(true);setTcLevel("table");setTcSelTable("");setTcSelCol("");setTcSelType(null);setTcName("");setTcDesc("");setTcTags("");setTcParams({});};
+  const openTCModal = ()=>{setNewTCModal(true);setTcLevel("table");setTcSelTable("");setTcSelCol("");setTcSelType(null);setTcName("");setTcDesc("");setTcTags([]);setTcGlossary([]);setTcCustomSQL(false);setTcSQLQuery("");setTcParams({});};
   const handleAddTC = ()=>{
     if(!tcSelType||!tcSelTable) return;
     const level = tcLevel;
@@ -3710,8 +3713,7 @@ const QualityView = () => {
   };
 
   const TABS = [
-    {key:"testcases",  label:`Test Cases`},
-    {key:"rules",      label:"Data Quality Rules"},
+    {key:"testcases",  label:"Test Cases"},
     {key:"incidents",  label:newIncCount>0?`Incident Manager (${newIncCount} new)`:openIncCount>0?`Incident Manager (${openIncCount} open)`:"Incident Manager"},
   ];
 
@@ -3764,7 +3766,6 @@ const QualityView = () => {
         </div>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           {tab==="testcases" &&<Btn icon={Ic.plus(12)} variant="primary" onClick={openTCModal}>Add Test Case</Btn>}
-          {tab==="rules"     &&<Btn icon={Ic.plus(12)} variant="primary" onClick={()=>setAddDefPanel(true)}>Add Test Definition</Btn>}
         </div>
       </div>
       <div style={{flex:1,overflowY:"auto",padding:28,position:"relative"}}>
@@ -4749,29 +4750,43 @@ const QualityView = () => {
                 {/* Test Type */}
                 {tcSelTable&&(tcLevel!=="column"||tcSelCol)&&(
                   <div>
-                    <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Test Type <span style={{color:T.rose}}>*</span></div>
-                    <div style={{display:"flex",flexDirection:"column",gap:5,maxHeight:200,overflowY:"auto",padding:"2px 0"}}>
-                      {definitions.filter(d=>tcLevel==="column"?d.entityType==="COLUMN":d.entityType==="TABLE").map(def=>{
-                        const isSel=tcSelType?.id===def.id;
-                        return (
-                          <div key={def.id} onClick={()=>setTcSelType(def)} style={{padding:"10px 12px",borderRadius:9,border:`1.5px solid ${isSel?T.accent:T.border}`,background:isSel?`${T.accent}08`:T.bgElevated,cursor:"pointer",display:"flex",alignItems:"center",gap:10,transition:"all .12s"}}
-                            onMouseEnter={e=>{if(!isSel)e.currentTarget.style.borderColor=T.borderLight;}} onMouseLeave={e=>{if(!isSel)e.currentTarget.style.borderColor=T.border;}}>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{fontSize:12.5,fontWeight:isSel?700:500,color:isSel?T.accent:T.text,marginBottom:2}}>{def.name}</div>
-                              <div style={{display:"flex",gap:5}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                      <div style={{fontSize:11,fontWeight:600,color:T.textSub}}>Test Type <span style={{color:T.rose}}>*</span></div>
+                      <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:11.5,color:tcCustomSQL?T.accent:T.textMuted,fontWeight:tcCustomSQL?600:400}}>
+                        <input type="checkbox" checked={tcCustomSQL} onChange={e=>{setTcCustomSQL(e.target.checked);setTcSelType(null);}} style={{accentColor:T.accent,cursor:"pointer"}}/>
+                        Custom SQL Query
+                      </label>
+                    </div>
+                    {tcCustomSQL?(
+                      <div>
+                        <textarea value={tcSQLQuery} onChange={e=>setTcSQLQuery(e.target.value)} rows={4}
+                          placeholder={"SELECT COUNT(*) FROM {{table}} WHERE amount < 0"}
+                          style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${tcSQLQuery?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box",lineHeight:1.6}}
+                          onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=tcSQLQuery?T.accent:T.border}/>
+                        <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>Use <code style={{fontFamily:"'Geist Mono',monospace",background:T.bgElevated,padding:"1px 5px",borderRadius:4}}>{`{{table}}`}</code> to reference the selected table.</div>
+                      </div>
+                    ):(
+                      <div style={{display:"flex",flexDirection:"column",gap:5,maxHeight:200,overflowY:"auto",padding:"2px 0"}}>
+                        {definitions.filter(d=>tcLevel==="column"?d.entityType==="COLUMN":d.entityType==="TABLE").map(def=>{
+                          const isSel=tcSelType?.id===def.id;
+                          return (
+                            <div key={def.id} onClick={()=>setTcSelType(def)} style={{padding:"9px 12px",borderRadius:9,border:`1.5px solid ${isSel?T.accent:T.border}`,background:isSel?`${T.accent}08`:T.bgElevated,cursor:"pointer",display:"flex",alignItems:"center",gap:10,transition:"all .12s"}}
+                              onMouseEnter={e=>{if(!isSel)e.currentTarget.style.borderColor=T.borderLight;}} onMouseLeave={e=>{if(!isSel)e.currentTarget.style.borderColor=T.border;}}>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:12,fontWeight:isSel?700:500,color:isSel?T.accent:T.text,marginBottom:2}}>{def.name}</div>
                                 <span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:`${dimColor(def.dim)}12`,color:dimColor(def.dim),fontWeight:600}}>{def.dim}</span>
                               </div>
+                              {isSel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{flexShrink:0,color:T.accent}}><path d="M2.5 7l4 4 5-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                             </div>
-                            {isSel&&<svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{flexShrink:0,color:T.accent}}><path d="M2.5 7l4 4 5-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {/* Parameters */}
-                {tcSelType&&tcSelType.params.length>0&&(
+                {!tcCustomSQL&&tcSelType&&tcSelType.params.length>0&&(
                   <div>
                     <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Parameters</div>
                     {tcSelType.params.map(param=>(
@@ -4786,44 +4801,88 @@ const QualityView = () => {
                   </div>
                 )}
 
-                {/* Name override */}
+                {/* Name */}
                 <div>
                   <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Test Case Name <span style={{color:T.textMuted,fontWeight:400}}>(auto-generated if blank)</span></label>
                   <input value={tcName} onChange={e=>setTcName(e.target.value)}
-                    placeholder={tcSelTable&&tcSelType?`${tcSelTable}${tcSelCol?"."+tcSelCol:""} — ${tcSelType.name}`:"Name will be auto-generated"}
-                    style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box"}}
+                    placeholder={tcSelTable&&(tcSelType||tcCustomSQL)?`${tcSelTable}${tcSelCol?"."+tcSelCol:""}${tcSelType?" — "+tcSelType.name:tcCustomSQL?" — custom_sql":""}`:"Name will be auto-generated"}
+                    style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"}}
                     onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Description <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
+                  <textarea value={tcDesc} onChange={e=>setTcDesc(e.target.value)} rows={2}
+                    placeholder="What does this test validate and why is it important?"
+                    style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",resize:"none",fontFamily:"inherit",lineHeight:1.6,boxSizing:"border-box"}}
+                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                </div>
+
+                {/* Tags */}
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Tags</label>
+                  <div style={{border:`1.5px solid ${T.border}`,borderRadius:9,padding:"6px 10px",background:T.bgElevated,display:"flex",flexWrap:"wrap",gap:5,alignItems:"center",minHeight:38,cursor:"text"}}
+                    onClick={e=>e.currentTarget.querySelector("input")?.focus()}>
+                    {tcTags.map(t=>(
+                      <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:99,background:`${T.accent}14`,border:`1px solid ${T.accent}30`,fontSize:11,color:T.accent,fontWeight:500}}>
+                        {t}<button onClick={e=>{e.stopPropagation();setTcTags(p=>p.filter(x=>x!==t));}} style={{background:"none",border:"none",cursor:"pointer",color:T.accent,fontSize:13,padding:"0 0 0 2px",lineHeight:1,opacity:.65}}>×</button>
+                      </span>
+                    ))}
+                    <input placeholder={tcTags.length===0?"Add tags…":"+ tag"} onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&e.currentTarget.value.trim()){e.preventDefault();const v=e.currentTarget.value.trim();if(!tcTags.includes(v))setTcTags(p=>[...p,v]);e.currentTarget.value="";}if(e.key==="Backspace"&&!e.currentTarget.value&&tcTags.length)setTcTags(p=>p.slice(0,-1));}}
+                      style={{flex:"1 1 80px",minWidth:50,border:"none",outline:"none",background:"transparent",fontSize:11.5,color:T.text}}/>
+                  </div>
+                </div>
+
+                {/* Glossary Terms */}
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Glossary Terms</label>
+                  <div style={{border:`1.5px solid ${T.border}`,borderRadius:9,padding:"6px 10px",background:T.bgElevated,display:"flex",flexWrap:"wrap",gap:5,alignItems:"center",minHeight:38,cursor:"text"}}
+                    onClick={e=>e.currentTarget.querySelector("input")?.focus()}>
+                    {tcGlossary.map(t=>(
+                      <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:99,background:`${T.violet}14`,border:`1px solid ${T.violet}30`,fontSize:11,color:T.violet,fontWeight:500}}>
+                        {t}<button onClick={e=>{e.stopPropagation();setTcGlossary(p=>p.filter(x=>x!==t));}} style={{background:"none",border:"none",cursor:"pointer",color:T.violet,fontSize:13,padding:"0 0 0 2px",lineHeight:1,opacity:.65}}>×</button>
+                      </span>
+                    ))}
+                    <input placeholder={tcGlossary.length===0?"Link glossary terms…":"+ term"} onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&e.currentTarget.value.trim()){e.preventDefault();const v=e.currentTarget.value.trim();if(!tcGlossary.includes(v))setTcGlossary(p=>[...p,v]);e.currentTarget.value="";}if(e.key==="Backspace"&&!e.currentTarget.value&&tcGlossary.length)setTcGlossary(p=>p.slice(0,-1));}}
+                      style={{flex:"1 1 80px",minWidth:50,border:"none",outline:"none",background:"transparent",fontSize:11.5,color:T.text}}/>
+                  </div>
                 </div>
 
               </div>
 
               {/* RIGHT: help panel */}
-              <div style={{width:280,borderLeft:`1px solid ${T.border}`,background:T.bgElevated,padding:"20px 20px",overflowY:"auto",flexShrink:0}}>
-                {tcSelType?(
+              <div style={{width:260,borderLeft:`1px solid ${T.border}`,background:T.bgElevated,padding:"20px 18px",overflowY:"auto",flexShrink:0}}>
+                {tcCustomSQL?(
+                  <div>
+                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:10,textTransform:"uppercase"}}>Custom SQL</div>
+                    <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:8}}>Write your own check</div>
+                    <div style={{fontSize:12,color:T.textSub,lineHeight:1.7,marginBottom:14}}>Use any SQL expression. The query should return a single numeric value — zero means the test passes.</div>
+                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:6,textTransform:"uppercase"}}>Example</div>
+                    <code style={{fontSize:11,color:T.violet,fontFamily:"'Geist Mono',monospace",background:`${T.violet}10`,padding:"8px 10px",borderRadius:6,display:"block",lineHeight:1.7}}>
+                      SELECT COUNT(*){"\n"}FROM orders{"\n"}WHERE total &lt; 0
+                    </code>
+                    <div style={{fontSize:11,color:T.textMuted,marginTop:10,lineHeight:1.6}}>Result &gt; 0 = test fails. Result = 0 = test passes.</div>
+                  </div>
+                ):tcSelType?(
                   <>
-                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:10,textTransform:"uppercase"}}>Test Definition</div>
-                    <div style={{fontSize:13.5,fontWeight:700,color:T.text,marginBottom:6}}>{tcSelType.name}</div>
+                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:10,textTransform:"uppercase"}}>Selected Test Type</div>
+                    <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:6}}>{tcSelType.name}</div>
                     <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10}}>
                       <span style={{fontSize:10,padding:"2px 8px",borderRadius:5,background:`${dimColor(tcSelType.dim)}12`,color:dimColor(tcSelType.dim),fontWeight:600}}>{tcSelType.dim}</span>
                       <span style={{fontSize:10,padding:"2px 8px",borderRadius:5,background:tcSelType.entityType==="TABLE"?T.accentDim:T.violetDim,color:tcSelType.entityType==="TABLE"?T.accent:T.violet,fontWeight:600}}>{tcSelType.entityType}</span>
                     </div>
                     <div style={{fontSize:12,color:T.textSub,lineHeight:1.7,marginBottom:14}}>{tcSelType.desc}</div>
-                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:6,textTransform:"uppercase"}}>Function Name</div>
-                    <code style={{fontSize:11,color:T.violet,fontFamily:"'Geist Mono',monospace",background:`${T.violet}10`,padding:"4px 9px",borderRadius:6,display:"block",marginBottom:14}}>{tcSelType.fn}</code>
                     {tcSelType.params.length>0&&(<>
                       <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:6,textTransform:"uppercase"}}>Parameters</div>
-                      {tcSelType.params.map(p=><div key={p} style={{fontSize:11,padding:"4px 0",color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{p}</div>)}
+                      {tcSelType.params.map(p=><div key={p} style={{fontSize:11,padding:"3px 0",color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{p}</div>)}
                     </>)}
-                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:6,marginTop:14,textTransform:"uppercase"}}>Test Platforms</div>
-                    <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                      {tcSelType.testPlatforms.map(p=><span key={p} style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub}}>{p}</span>)}
-                    </div>
                   </>
                 ):(
-                  <div style={{textAlign:"center",padding:"32px 8px"}}>
-                    <div style={{fontSize:32,marginBottom:12,opacity:.15}}>⚗️</div>
-                    <div style={{fontSize:12.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Select a Test Type</div>
-                    <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>Choose a table, then a test type to see its description, parameters, and supported platforms here.</div>
+                  <div style={{textAlign:"center",padding:"28px 8px"}}>
+                    <div style={{fontSize:28,marginBottom:10,opacity:.15}}>⚗️</div>
+                    <div style={{fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>Select a Test Type</div>
+                    <div style={{fontSize:11,color:T.textMuted,lineHeight:1.6}}>Pick a table then a test type to see its description and parameters here. Or enable Custom SQL to write your own check.</div>
                   </div>
                 )}
               </div>
@@ -4832,8 +4891,8 @@ const QualityView = () => {
             {/* Footer */}
             <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgElevated,borderRadius:"0 0 16px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
               <button onClick={()=>setNewTCModal(false)} style={{padding:"8px 18px",borderRadius:9,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer",fontWeight:500}}>Cancel</button>
-              <button onClick={handleAddTC} disabled={!tcSelType||!tcSelTable||(tcLevel==="column"&&!tcSelCol)}
-                style={{padding:"9px 22px",borderRadius:9,background:tcSelType&&tcSelTable&&(tcLevel!=="column"||tcSelCol)?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:tcSelType&&tcSelTable?"pointer":"default"}}>
+              <button onClick={handleAddTC} disabled={(!tcSelType&&!tcCustomSQL)||!tcSelTable||(tcLevel==="column"&&!tcSelCol)||(tcCustomSQL&&!tcSQLQuery.trim())}
+                style={{padding:"9px 22px",borderRadius:9,background:(tcSelType||tcCustomSQL)&&tcSelTable&&(tcLevel!=="column"||tcSelCol)&&(!tcCustomSQL||tcSQLQuery.trim())?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:(tcSelType||tcCustomSQL)&&tcSelTable?"pointer":"default"}}>
                 Add Test Case
               </button>
             </div>
@@ -9492,38 +9551,62 @@ const CONNECTOR_FIELDS = {
 
 const AddServiceWizard = ({onClose, onDone}) => {
   const STEPS = [
-    {id:"source",      label:"Source"},
-    {id:"connector",   label:"Connector"},
-    {id:"authenticate",label:"Authenticate"},
-    {id:"identity",    label:"Identity"},
-    {id:"advanced",    label:"Advanced"},
-    {id:"launch",      label:"Launch"},
+    {id:"source",    label:"Select Source"},
+    {id:"connector", label:"Select Connector"},
+    {id:"configure", label:"Configure Connection"},
+    {id:"filters",   label:"Filters"},
   ];
 
-  const [step,            setStep]           = useState(0);
-  const [category,        setCategory]       = useState(null);
-  const [connector,       setConnector]      = useState(null);
-  const [connSearch,      setConnSearch]     = useState("");
-  const [svcName,         setSvcName]        = useState("");
-  const [svcDesc,         setSvcDesc]        = useState("");
-  const [svcEnv,          setSvcEnv]         = useState("Production");
-  const [svcOwner,        setSvcOwner]       = useState("data-eng");
-  const [schedule,        setSchedule]       = useState("0 2 * * *");
-  const [schedMode,       setSchedMode]      = useState("scheduled");
-  const [fields,          setFields]         = useState({});
-  const [inclSchemas,     setInclSchemas]    = useState([]);
-  const [exclSchemas,     setExclSchemas]    = useState([]);
-  const [inclTables,      setInclTables]     = useState([]);
-  const [exclTables,      setExclTables]     = useState([]);
-  const [authState,       setAuthState]      = useState("idle");
-  const [authStep,        setAuthStep]       = useState(0);
-  const [authLogs,        setAuthLogs]       = useState([]);
-  const [enableLineage,   setEnableLineage]  = useState(true);
-  const [enableProfiling, setEnableProfiling]= useState(false);
-  const [enableUsage,     setEnableUsage]    = useState(false);
-  const [preflightState,  setPreflightState] = useState("idle");
-  const [preflightStep,   setPreflightStep]  = useState(0);
-  const [preflightLogs,   setPreflightLogs]  = useState([]);
+  // Object types available per source category
+  const OBJECT_TYPES_BY_CATEGORY = {
+    "Databases":      ["Databases","Schemas","Tables","Views","Stored Procedures","Columns"],
+    "Cloud Storage":  ["Buckets","Prefixes / Paths","Files"],
+    "SaaS & APIs":    ["Projects","Datasets","Reports","Dashboards"],
+    "Streaming":      ["Topics","Consumer Groups","Schemas"],
+    "BI & Analytics": ["Projects","Models","Metrics","Dashboards","Explores"],
+    "File Systems":   ["Directories","Files"],
+  };
+
+  // Connection test phases (auth + discovery combined)
+  const TEST_PHASES = [
+    {s:"DNS Resolution",      d:"Resolving hostname to IP"},
+    {s:"TCP Connection",      d:"Opening port connection"},
+    {s:"TLS Handshake",       d:"Negotiating secure channel"},
+    {s:"Credential Check",    d:"Validating username & password"},
+    {s:"Permission Scan",     d:"Verifying read access"},
+    {s:"Schema Discovery",    d:"Sampling metadata structure"},
+    {s:"Asset Estimation",    d:"Counting tables, views, columns"},
+  ];
+
+  // Discovery result (simulated)
+  const DISCOVERY_RESULT = {databases:3, schemas:47, tables:1203, views:89, columns:14820};
+
+  const [step,         setStep]        = useState(0);
+  const [category,     setCategory]    = useState(null);
+  const [connector,    setConnector]   = useState(null);
+  const [connSearch,   setConnSearch]  = useState("");
+  // Configure Connection fields
+  const [svcName,      setSvcName]     = useState("");
+  const [svcDesc,      setSvcDesc]     = useState("");
+  const [svcEnv,       setSvcEnv]      = useState("Production");
+  const [svcOwner,     setSvcOwner]    = useState("data-eng");
+  const [schedule,     setSchedule]    = useState("0 2 * * *");
+  const [schedMode,    setSchedMode]   = useState("scheduled");
+  const [fields,       setFields]      = useState({});
+  const [objTypes,     setObjTypes]    = useState([]);
+  const [enableLineage,   setEnableLineage]   = useState(true);
+  const [enableProfiling, setEnableProfiling] = useState(false);
+  const [enableUsage,     setEnableUsage]     = useState(false);
+  // Test connection state (combined auth + discovery)
+  const [testState,    setTestState]   = useState("idle"); // idle|running|success|error
+  const [testPhase,    setTestPhase]   = useState(0);
+  const [discovery,    setDiscovery]   = useState(null);
+  // Filters
+  const [filterMode,   setFilterMode]  = useState("selection"); // selection|regex
+  const [inclSchemas,  setInclSchemas] = useState([]);
+  const [exclSchemas,  setExclSchemas] = useState([]);
+  const [inclTables,   setInclTables]  = useState([]);
+  const [exclTables,   setExclTables]  = useState([]);
   const timerRef = useRef(null);
   useEffect(() => () => clearTimeout(timerRef.current), []);
 
@@ -9532,6 +9615,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
   const connMeta = connector ? connList.find(c=>c.id===connector) : null;
   const fieldDefs= CONNECTOR_FIELDS[connector] || CONNECTOR_FIELDS.default;
   const catMeta  = category ? ADD_SERVICE_CONNECTORS[category] : null;
+  const availObjTypes = category ? (OBJECT_TYPES_BY_CATEGORY[category] || OBJECT_TYPES_BY_CATEGORY["Databases"]) : [];
 
   const SCHED_PRESETS = [
     {l:"15 min",  v:"*/15 * * * *"},
@@ -9540,22 +9624,6 @@ const AddServiceWizard = ({onClose, onDone}) => {
     {l:"Daily",   v:"0 2 * * *"},
     {l:"Weekly",  v:"0 2 * * 0"},
     {l:"Monthly", v:"0 2 1 * *"},
-  ];
-
-  const AUTH_STAGES = [
-    {s:"DNS Resolution",   d:"Resolving hostname to IP address"},
-    {s:"TCP Connection",   d:"Opening connection on port"},
-    {s:"TLS Handshake",    d:"Negotiating encrypted channel"},
-    {s:"Authentication",   d:"Validating credentials"},
-    {s:"Read Permissions", d:"Verifying schema access rights"},
-  ];
-
-  const PREFLIGHT_STAGES = [
-    {s:"Schema Discovery",  d:"Sampling table and column metadata"},
-    {s:"Filter Validation", d:"Checking include/exclude patterns"},
-    {s:"Permission Audit",  d:"Verifying read access on matched tables"},
-    {s:"Lineage Sources",   d:"Detecting transformation lineage hooks"},
-    {s:"Asset Estimation",  d:"Estimating total assets to ingest"},
   ];
 
   const schedLabel = (v) => {
@@ -9571,40 +9639,30 @@ const AddServiceWizard = ({onClose, onDone}) => {
   const canNext = () => {
     if(step===0) return !!category;
     if(step===1) return !!connector;
-    if(step===2) return authState === "success";
-    if(step===3) return svcName.trim().length >= 2;
-    if(step===4) return true;
+    if(step===2) return testState === "success" && svcName.trim().length >= 2;
+    if(step===3) return true;
     return true;
   };
 
-  const runAuth = () => {
-    setAuthState("running"); setAuthLogs([]); setAuthStep(0);
+  const runTestConnection = () => {
+    setTestState("running"); setTestPhase(0); setDiscovery(null);
     let i = 0;
     const tick = () => {
-      if(i < AUTH_STAGES.length) {
-        setAuthStep(i+1);
-        setAuthLogs(p=>[...p, {msg:AUTH_STAGES[i].s, ts:new Date().toLocaleTimeString('en',{hour12:false})}]);
-        i++; timerRef.current = setTimeout(tick, 600 + Math.random()*500);
-      } else { setAuthState("success"); }
+      if(i < TEST_PHASES.length) {
+        setTestPhase(i+1);
+        i++; timerRef.current = setTimeout(tick, 550 + Math.random()*450);
+      } else {
+        setTestState("success");
+        setDiscovery(DISCOVERY_RESULT);
+      }
     };
-    timerRef.current = setTimeout(tick, 300);
+    timerRef.current = setTimeout(tick, 200);
   };
 
-  const runPreflight = () => {
-    setPreflightState("running"); setPreflightLogs([]); setPreflightStep(0);
-    let i = 0;
-    const tick = () => {
-      if(i < PREFLIGHT_STAGES.length) {
-        setPreflightStep(i+1);
-        setPreflightLogs(p=>[...p, {msg:PREFLIGHT_STAGES[i].s, ts:new Date().toLocaleTimeString('en',{hour12:false})}]);
-        i++; timerRef.current = setTimeout(tick, 600 + Math.random()*500);
-      } else { setPreflightState("success"); }
-    };
-    timerRef.current = setTimeout(tick, 300);
-  };
+  const toggleObjType = (t) => setObjTypes(prev => prev.includes(t) ? prev.filter(x=>x!==t) : [...prev, t]);
 
   const handleNext = () => {
-    if(step===5) { onDone(svcName, connector, category); }
+    if(step===3) { onDone(svcName, connector, category); }
     else setStep(s=>s+1);
   };
 
@@ -9612,7 +9670,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
     if(step===0) onClose();
     else {
       if(step===1) setConnSearch("");
-      if(step===2){setAuthState("idle");setAuthLogs([]);setAuthStep(0);}
+      if(step===2){ setTestState("idle"); setTestPhase(0); setDiscovery(null); }
       setStep(s=>s-1);
     }
   };
@@ -9793,125 +9851,15 @@ const AddServiceWizard = ({onClose, onDone}) => {
             </div>
           )}
 
-          {/* ── STEP 2: Authenticate ── */}
+          {/* ── STEP 2: Configure Connection ── */}
           {step===2&&connMeta&&(
-            <div className="fadeIn">
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:28}}>
+            <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:22}}>
 
-                {/* LEFT col: credential fields */}
-                <div>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
-                    <div style={{width:3,height:16,borderRadius:2,background:"#ee2424",flexShrink:0}}/>
-                    <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Connection Details</span>
-                  </div>
-                  <div style={{display:"flex",flexDirection:"column",gap:13}}>
-                    {fieldDefs.map(f=>(
-                      <div key={f.k}>
-                        <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>
-                          {f.l}
-                          {(f.k==="host"||f.k==="project"||f.k==="account"||f.k==="bootstrap")&&<span style={{color:"#ee2424",marginLeft:3}}>*</span>}
-                        </label>
-                        {f.type==="toggle"
-                          ? <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",paddingTop:2}}>
-                              <Toggle on={fields[f.k]!==undefined?fields[f.k]:!!f.val} onChange={()=>setFields(p=>({...p,[f.k]:!(p[f.k]!==undefined?p[f.k]:f.val)}))}/>
-                              <span style={{fontSize:12,color:T.textSub}}>{(fields[f.k]!==undefined?fields[f.k]:!!f.val)?"Enabled":"Disabled"}</span>
-                            </label>
-                          : f.type==="select"
-                          ? <select value={fields[f.k]||f.opts?.[0]||""} onChange={e=>setFields(p=>({...p,[f.k]:e.target.value}))}
-                              style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",cursor:"pointer"}}>
-                              {(f.opts||[]).map(o=><option key={o}>{o}</option>)}
-                            </select>
-                          : f.type==="textarea"
-                          ? <textarea value={fields[f.k]||""} onChange={e=>setFields(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph} rows={3}
-                              style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box",lineHeight:1.6}}
-                              onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
-                          : <input type={f.type||"text"} value={fields[f.k]||""} onChange={e=>setFields(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph}
-                              style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",transition:"border .15s",fontFamily:f.type==="password"?"'Geist Mono',monospace":"inherit"}}
-                              onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
-                        }
-                      </div>
-                    ))}
-                  </div>
-                </div>
+              {/* Row 1: Identity + Schedule side by side */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
 
-                {/* RIGHT col: Auth Test panel */}
-                <div style={{display:"flex",flexDirection:"column",gap:16}}>
-                  <div>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                      <div style={{width:3,height:16,borderRadius:2,background:"#6366f1",flexShrink:0}}/>
-                      <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Authentication Test</span>
-                    </div>
-                    <p style={{margin:"0 0 16px",fontSize:12.5,color:T.textMuted,lineHeight:1.6}}>Fill in your credentials then test the connection before continuing.</p>
-                    <button
-                      onClick={()=>{if(authState!=="running") runAuth();}}
-                      disabled={authState==="running"}
-                      style={{
-                        width:"100%",padding:"13px 0",borderRadius:10,border:"none",cursor:authState==="running"?"default":"pointer",
-                        fontSize:13.5,fontWeight:700,transition:"all .15s",
-                        background:authState==="success"?"#10b981":authState==="running"?"rgba(238,36,36,.18)":"#ee2424",
-                        color:authState==="running"?"rgba(255,255,255,.5)":"#fff",
-                        boxShadow:authState==="running"?"none":authState==="success"?"0 4px 14px rgba(16,185,129,.4)":"0 4px 14px rgba(238,36,36,.38)",
-                      }}
-                      onMouseEnter={e=>{if(authState!=="running"&&authState!=="success"){e.currentTarget.style.opacity=".88";e.currentTarget.style.transform="translateY(-1px)";}}}
-                      onMouseLeave={e=>{e.currentTarget.style.opacity="1";e.currentTarget.style.transform="none";}}>
-                      {authState==="running"
-                        ? <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:9}}>
-                            <svg width="14" height="14" viewBox="0 0 12 12" fill="none" style={{animation:"spin 1s linear infinite"}}><circle cx="6" cy="6" r="4.5" stroke="rgba(255,255,255,.3)" strokeWidth="1.5"/><path d="M6 1.5A4.5 4.5 0 0110.5 6" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                            Testing…
-                          </span>
-                        : authState==="success" ? "✓ Authentication Passed" : "Test Authentication"}
-                    </button>
-                  </div>
-
-                  {/* Auth stages checklist */}
-                  {(authState==="running"||authState==="success")&&(
-                    <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:13,overflow:"hidden"}}>
-                      {AUTH_STAGES.map((stage,i)=>{
-                        const done=i<authStep, active=i===authStep-1&&authState==="running";
-                        return (
-                          <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 16px",borderBottom:i<AUTH_STAGES.length-1?`1px solid ${T.border}`:"none",transition:"background .3s",background:active?"rgba(96,165,250,.04)":"transparent"}}>
-                            <div style={{width:20,height:20,borderRadius:"50%",flexShrink:0,transition:"all .3s",
-                              background:done?"#10b981":active?"rgba(96,165,250,.15)":"transparent",
-                              border:`2px solid ${done?"#10b981":active?"#60a5fa":T.border}`,
-                              display:"flex",alignItems:"center",justifyContent:"center"}}>
-                              {done
-                                ? <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                                : active ? <span style={{width:5,height:5,borderRadius:"50%",background:"#60a5fa",display:"block",animation:"pulse2 1s infinite"}}/>
-                                : null}
-                            </div>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{fontSize:12,fontWeight:done||active?600:400,color:done||active?T.text:T.textMuted,transition:"color .3s"}}>{stage.s}</div>
-                            </div>
-                            {done&&<span style={{fontSize:11,color:"#10b981",fontWeight:700}}>✓</span>}
-                            {active&&<span style={{fontSize:11,color:"#60a5fa",animation:"pulse2 1.2s infinite"}}>…</span>}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Success banner */}
-                  {authState==="success"&&(
-                    <div className="fadeIn" style={{padding:"14px 18px",background:"rgba(16,185,129,.07)",border:"1px solid rgba(16,185,129,.28)",borderRadius:12,display:"flex",gap:12,alignItems:"center"}}>
-                      <div style={{width:28,height:28,borderRadius:"50%",background:"#10b981",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 3px 10px rgba(16,185,129,.35)"}}>
-                        <svg width="13" height="13" viewBox="0 0 12 12" fill="none"><path d="M2 6l2.5 2.5 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      </div>
-                      <div style={{fontSize:13,fontWeight:700,color:"#10b981"}}>Connection verified</div>
-                    </div>
-                  )}
-                </div>
-
-              </div>
-            </div>
-          )}
-
-          {/* ── STEP 3: Identity ── */}
-          {step===3&&(
-            <div className="fadeIn">
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:28}}>
-
-                {/* LEFT col: Connection Identity */}
-                <div>
+                {/* Identity card */}
+                <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
                     <div style={{width:3,height:16,borderRadius:2,background:"#6366f1",flexShrink:0}}/>
                     <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Connection Identity</span>
@@ -9933,13 +9881,13 @@ const AddServiceWizard = ({onClose, onDone}) => {
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                       <div>
                         <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>Environment</label>
-                        <select value={svcEnv} onChange={e=>setSvcEnv(e.target.value)} style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none"}}>
+                        <select value={svcEnv} onChange={e=>setSvcEnv(e.target.value)} style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",cursor:"pointer"}}>
                           {["Production","Staging","Development","Testing"].map(o=><option key={o}>{o}</option>)}
                         </select>
                       </div>
                       <div>
                         <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>Owner Team</label>
-                        <select value={svcOwner} onChange={e=>setSvcOwner(e.target.value)} style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none"}}>
+                        <select value={svcOwner} onChange={e=>setSvcOwner(e.target.value)} style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",cursor:"pointer"}}>
                           {["data-eng","analytics","platform","ai-team","governance"].map(o=><option key={o}>{o}</option>)}
                         </select>
                       </div>
@@ -9947,197 +9895,189 @@ const AddServiceWizard = ({onClose, onDone}) => {
                   </div>
                 </div>
 
-                {/* RIGHT col: Sync Schedule */}
-                <div>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
+                {/* Schedule card */}
+                <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
                     <div style={{width:3,height:16,borderRadius:2,background:"#f59e0b",flexShrink:0}}/>
                     <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Sync Schedule</span>
                   </div>
-
-                  {/* Mode toggle: Run Once vs Scheduled */}
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:18}}>
-                    {[
-                      {id:"once",      label:"Run Once",  desc:"Runs immediately after launch. No automatic repeats — trigger manually anytime."},
-                      {id:"scheduled", label:"Scheduled", desc:"Automatically repeats on your chosen interval or custom cron expression."},
-                    ].map(m=>{
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+                    {[{id:"once",label:"Run Once",desc:"Manual trigger only"},{id:"scheduled",label:"Scheduled",desc:"Repeats automatically"}].map(m=>{
                       const sel=schedMode===m.id;
                       return (
-                        <button key={m.id} onClick={()=>setSchedMode(m.id)} style={{
-                          padding:"14px 14px",borderRadius:12,textAlign:"left",border:`2px solid ${sel?"#f59e0b":T.border}`,
-                          background:sel?"rgba(245,158,11,.07)":T.bgElevated,cursor:"pointer",transition:"all .15s",
-                        }}
-                          onMouseEnter={e=>{if(!sel){e.currentTarget.style.borderColor="#f59e0b55";e.currentTarget.style.background="rgba(245,158,11,.04)";}}}
-                          onMouseLeave={e=>{if(!sel){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.bgElevated;}}}>
-                          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                            <div style={{width:14,height:14,borderRadius:"50%",border:`2px solid ${sel?"#f59e0b":T.border}`,background:sel?"#f59e0b":"transparent",flexShrink:0,transition:"all .15s"}}/>
-                            <span style={{fontSize:13,fontWeight:700,color:sel?T.text:T.textSub}}>{m.label}</span>
+                        <button key={m.id} onClick={()=>setSchedMode(m.id)} style={{padding:"11px 12px",borderRadius:10,textAlign:"left",border:`2px solid ${sel?"#f59e0b":T.border}`,background:sel?"rgba(245,158,11,.07)":T.bgSurface,cursor:"pointer",transition:"all .15s"}}
+                          onMouseEnter={e=>{if(!sel){e.currentTarget.style.borderColor="#f59e0b55";}}}
+                          onMouseLeave={e=>{if(!sel){e.currentTarget.style.borderColor=T.border;}}}>
+                          <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4}}>
+                            <div style={{width:13,height:13,borderRadius:"50%",border:`2px solid ${sel?"#f59e0b":T.border}`,background:sel?"#f59e0b":"transparent",flexShrink:0}}/>
+                            <span style={{fontSize:12,fontWeight:700,color:sel?T.text:T.textSub}}>{m.label}</span>
                           </div>
-                          <div style={{fontSize:11,color:T.textMuted,lineHeight:1.5,paddingLeft:22}}>{m.desc}</div>
+                          <div style={{fontSize:10.5,color:T.textMuted,paddingLeft:20}}>{m.desc}</div>
                         </button>
                       );
                     })}
                   </div>
-
-                  {/* Scheduled options */}
                   {schedMode==="scheduled"&&(
                     <div>
-                      <div style={{display:"flex",flexWrap:"wrap",gap:7,marginBottom:12}}>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
                         {SCHED_PRESETS.map(p=>(
-                          <button key={p.v} onClick={()=>setSchedule(p.v)} style={{
-                            padding:"6px 14px",borderRadius:99,fontSize:12,fontWeight:500,cursor:"pointer",transition:"all .12s",
-                            border:`1.5px solid ${schedule===p.v?"#f59e0b":T.border}`,
-                            background:schedule===p.v?"rgba(245,158,11,.1)":"transparent",
-                            color:schedule===p.v?"#f59e0b":T.textSub,
-                          }}>{p.l}</button>
+                          <button key={p.v} onClick={()=>setSchedule(p.v)} style={{padding:"5px 12px",borderRadius:99,fontSize:11.5,fontWeight:500,cursor:"pointer",transition:"all .12s",border:`1.5px solid ${schedule===p.v?"#f59e0b":T.border}`,background:schedule===p.v?"rgba(245,158,11,.1)":"transparent",color:schedule===p.v?"#f59e0b":T.textSub}}>{p.l}</button>
                         ))}
                       </div>
-                      <div>
-                        <label style={{display:"block",fontSize:11.5,color:T.textMuted,marginBottom:6}}>Custom cron expression</label>
-                        <input value={schedule} onChange={e=>setSchedule(e.target.value)}
-                          style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box"}}
-                          onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
-                        <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>
-                          Next run: <b style={{color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{schedLabel(schedule)}</b>
-                        </div>
-                      </div>
+                      <input value={schedule} onChange={e=>setSchedule(e.target.value)}
+                        style={{width:"100%",padding:"8px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box"}}
+                        onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
+                      <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>Next: <b style={{color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{schedLabel(schedule)}</b></div>
                     </div>
                   )}
                 </div>
-
               </div>
-            </div>
-          )}
 
-          {/* ── STEP 4: Advanced ── */}
-          {step===4&&(
-            <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:24}}>
-
-              {/* Section A: Apps to Activate */}
-              <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:13,padding:"20px 22px"}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                  <div style={{width:3,height:16,borderRadius:2,background:"#10b981",flexShrink:0}}/>
-                  <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Apps to Activate</span>
+              {/* Row 2: Credentials */}
+              <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
+                  <div style={{width:3,height:16,borderRadius:2,background:"#ee2424",flexShrink:0}}/>
+                  <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Credentials</span>
+                  <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>All fields encrypted at rest</span>
                 </div>
-                <p style={{margin:"0 0 16px",fontSize:12.5,color:T.textMuted,lineHeight:1.6}}>Choose which ingestion apps to run against this connection.</p>
-                <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                  {[
-                    {key:"metadata", label:"Metadata Ingestion", desc:"Extracts tables, columns, schema and relationships. Always runs.", value:true, disabled:true},
-                    {key:"lineage",  label:"Lineage",            desc:"Traces data flow between tables and transformations.",          value:enableLineage,   setter:setEnableLineage,   disabled:false},
-                    {key:"profiling",label:"Data Profiling",     desc:"Samples column statistics: null %, distinct count, distributions.", value:enableProfiling, setter:setEnableProfiling, disabled:false},
-                    {key:"usage",    label:"Usage Analytics",    desc:"Collects query logs to surface popular and unused assets.",     value:enableUsage,     setter:setEnableUsage,     disabled:false},
-                  ].map(app=>(
-                    <div key={app.key} style={{display:"flex",alignItems:"center",gap:16,padding:"13px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10}}>
-                      <Toggle on={app.value} onChange={app.disabled?undefined:()=>app.setter(v=>!v)} disabled={app.disabled}/>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:600,color:app.disabled?T.textMuted:T.text}}>{app.label}{app.disabled&&<span style={{fontSize:10,fontWeight:500,color:T.textMuted,marginLeft:8,padding:"2px 7px",background:T.bgHover,borderRadius:5}}>always on</span>}</div>
-                        <div style={{fontSize:11.5,color:T.textMuted,marginTop:2,lineHeight:1.45}}>{app.desc}</div>
-                      </div>
-                      <div style={{width:8,height:8,borderRadius:"50%",background:app.value?"#10b981":T.border,flexShrink:0,transition:"background .2s"}}/>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:13}}>
+                  {fieldDefs.map(f=>(
+                    <div key={f.k}>
+                      <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>
+                        {f.l}
+                        {(f.k==="host"||f.k==="project"||f.k==="account"||f.k==="bootstrap")&&<span style={{color:"#ee2424",marginLeft:3}}>*</span>}
+                      </label>
+                      {f.type==="toggle"
+                        ? <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",paddingTop:4}}>
+                            <Toggle on={fields[f.k]!==undefined?fields[f.k]:!!f.val} onChange={()=>setFields(p=>({...p,[f.k]:!(p[f.k]!==undefined?p[f.k]:f.val)}))}/>
+                            <span style={{fontSize:12,color:T.textSub}}>{(fields[f.k]!==undefined?fields[f.k]:!!f.val)?"Enabled":"Disabled"}</span>
+                          </label>
+                        : f.type==="select"
+                        ? <select value={fields[f.k]||f.opts?.[0]||""} onChange={e=>setFields(p=>({...p,[f.k]:e.target.value}))}
+                            style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",cursor:"pointer"}}>
+                            {(f.opts||[]).map(o=><option key={o}>{o}</option>)}
+                          </select>
+                        : f.type==="textarea"
+                        ? <textarea value={fields[f.k]||""} onChange={e=>setFields(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph} rows={3}
+                            style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box",lineHeight:1.6}}
+                            onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
+                        : <input type={f.type||"text"} value={fields[f.k]||""} onChange={e=>setFields(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph}
+                            style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",transition:"border .15s",fontFamily:f.type==="password"?"'Geist Mono',monospace":"inherit"}}
+                            onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
+                      }
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* Section B: Data Filters */}
-              <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:13,padding:"20px 22px"}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                  <div style={{width:3,height:16,borderRadius:2,background:"#14b8a6",flexShrink:0}}/>
-                  <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Data Filters</span>
+              {/* Row 3: Object Types */}
+              <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{width:3,height:16,borderRadius:2,background:"#10b981",flexShrink:0}}/>
+                    <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Object Types to Extract</span>
+                  </div>
+                  <button onClick={()=>setObjTypes(objTypes.length===availObjTypes.length?[]:availObjTypes)} style={{fontSize:11.5,color:T.accent,background:"none",border:"none",cursor:"pointer",fontWeight:600,padding:0}}>
+                    {objTypes.length===availObjTypes.length?"Deselect All":"Select All"}
+                  </button>
                 </div>
-                <p style={{margin:"0 0 16px",fontSize:12.5,color:T.textMuted,lineHeight:1.6}}>Narrow ingestion scope using include/exclude patterns. Leave blank to ingest everything.</p>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-                  <div>
-                    <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:600,color:T.textSub,marginBottom:7}}>
-                      <span style={{width:8,height:8,borderRadius:2,background:"#10b981",display:"block",flexShrink:0}}/>Include Schemas
-                    </label>
-                    <TagInput tags={inclSchemas} onAdd={t=>setInclSchemas(p=>[...p,t])} onRemove={t=>setInclSchemas(p=>p.filter(x=>x!==t))} placeholder="public, analytics…" color="#10b981"/>
-                  </div>
-                  <div>
-                    <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:600,color:T.textSub,marginBottom:7}}>
-                      <span style={{width:8,height:8,borderRadius:2,background:"#f87171",display:"block",flexShrink:0}}/>Exclude Schemas
-                    </label>
-                    <TagInput tags={exclSchemas} onAdd={t=>setExclSchemas(p=>[...p,t])} onRemove={t=>setExclSchemas(p=>p.filter(x=>x!==t))} placeholder="pg_catalog, sys…" color="#f87171"/>
-                  </div>
-                  <div>
-                    <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:600,color:T.textSub,marginBottom:7}}>
-                      <span style={{width:8,height:8,borderRadius:2,background:"#10b981",display:"block",flexShrink:0}}/>Include Tables
-                    </label>
-                    <TagInput tags={inclTables} onAdd={t=>setInclTables(p=>[...p,t])} onRemove={t=>setInclTables(p=>p.filter(x=>x!==t))} placeholder="orders, users…" color="#10b981"/>
-                  </div>
-                  <div>
-                    <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:600,color:T.textSub,marginBottom:7}}>
-                      <span style={{width:8,height:8,borderRadius:2,background:"#f87171",display:"block",flexShrink:0}}/>Exclude Tables
-                    </label>
-                    <TagInput tags={exclTables} onAdd={t=>setExclTables(p=>[...p,t])} onRemove={t=>setExclTables(p=>p.filter(x=>x!==t))} placeholder="tmp_*, _bak…" color="#f87171"/>
-                  </div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                  {availObjTypes.map(t=>{
+                    const sel=objTypes.includes(t);
+                    return (
+                      <button key={t} onClick={()=>toggleObjType(t)} style={{padding:"7px 14px",borderRadius:8,fontSize:12,fontWeight:sel?600:400,cursor:"pointer",transition:"all .12s",border:`1.5px solid ${sel?"#10b981":T.border}`,background:sel?"rgba(16,185,129,.08)":"transparent",color:sel?"#10b981":T.textSub,display:"flex",alignItems:"center",gap:6}}>
+                        {sel&&<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                        {t}
+                      </button>
+                    );
+                  })}
                 </div>
+                {objTypes.length===0&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:10}}>Select at least one object type to extract from this source.</div>}
               </div>
 
-              {/* Section C: Preflight Checks */}
-              <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:13,padding:"20px 22px"}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                  <div style={{width:3,height:16,borderRadius:2,background:"#3b82f6",flexShrink:0}}/>
-                  <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Preflight Checks</span>
+              {/* Row 4: Test Connection */}
+              <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                  <div style={{width:3,height:16,borderRadius:2,background:testState==="success"?"#10b981":"#6366f1",flexShrink:0,transition:"background .3s"}}/>
+                  <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Test Connection</span>
+                  <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>Auth + discovery · required before continuing</span>
                 </div>
-                <p style={{margin:"0 0 16px",fontSize:12.5,color:T.textMuted,lineHeight:1.6}}>Validate your configuration before launch. Recommended but not required.</p>
-                <button
-                  onClick={()=>{if(preflightState!=="running") runPreflight();}}
-                  disabled={preflightState==="running"}
-                  style={{
-                    width:"100%",padding:"11px 0",borderRadius:9,fontSize:13,fontWeight:600,cursor:preflightState==="running"?"default":"pointer",transition:"all .15s",
-                    border:`1.5px solid ${preflightState==="success"?"#10b981":"#3b82f6"}`,
-                    background:preflightState==="success"?"rgba(16,185,129,.06)":preflightState==="running"?"rgba(59,130,246,.06)":"transparent",
-                    color:preflightState==="success"?"#10b981":preflightState==="running"?"#60a5fa":"#3b82f6",
-                    marginBottom:14,
+                <p style={{margin:"0 0 14px",fontSize:12.5,color:T.textMuted,lineHeight:1.6}}>Fills in your credentials, verifies access, and discovers what objects are available in this source.</p>
+
+                <button onClick={()=>{if(testState!=="running") runTestConnection();}} disabled={testState==="running"||svcName.trim().length<2}
+                  style={{width:"100%",padding:"13px 0",borderRadius:10,border:"none",cursor:(testState==="running"||svcName.trim().length<2)?"default":"pointer",fontSize:13,fontWeight:700,transition:"all .2s",
+                    background:svcName.trim().length<2?"rgba(100,100,120,.2)":testState==="success"?"#10b981":testState==="running"?"rgba(99,102,241,.3)":"#6366f1",
+                    color:svcName.trim().length<2?"rgba(255,255,255,.3)":"#fff",
+                    boxShadow:testState==="success"?"0 4px 14px rgba(16,185,129,.35)":testState==="running"||svcName.trim().length<2?"none":"0 4px 14px rgba(99,102,241,.35)",
                   }}
-                  onMouseEnter={e=>{if(preflightState!=="running"&&preflightState!=="success"){e.currentTarget.style.background="rgba(59,130,246,.07)";}}}
-                  onMouseLeave={e=>{if(preflightState!=="running"&&preflightState!=="success"){e.currentTarget.style.background="transparent";}}}>
-                  {preflightState==="running"
-                    ? <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-                        <svg width="13" height="13" viewBox="0 0 12 12" fill="none" style={{animation:"spin 1s linear infinite"}}><circle cx="6" cy="6" r="4.5" stroke="rgba(96,165,250,.3)" strokeWidth="1.5"/><path d="M6 1.5A4.5 4.5 0 0110.5 6" stroke="#60a5fa" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                        Running Preflight…
+                  onMouseEnter={e=>{if(testState==="idle"&&svcName.trim().length>=2){e.currentTarget.style.opacity=".88";e.currentTarget.style.transform="translateY(-1px)";}}}
+                  onMouseLeave={e=>{e.currentTarget.style.opacity="1";e.currentTarget.style.transform="none";}}>
+                  {testState==="running"
+                    ? <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:9}}>
+                        <svg width="14" height="14" viewBox="0 0 12 12" fill="none" style={{animation:"spin 1s linear infinite"}}><circle cx="6" cy="6" r="4.5" stroke="rgba(255,255,255,.3)" strokeWidth="1.5"/><path d="M6 1.5A4.5 4.5 0 0110.5 6" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                        Testing Connection…
                       </span>
-                    : preflightState==="success" ? "✓ All Checks Passed — Re-run?" : "Run Preflight"}
+                    : testState==="success"
+                    ? "✓ Connection Verified — Re-test?"
+                    : svcName.trim().length<2
+                    ? "Enter a connection name first"
+                    : "Test Connection"}
                 </button>
 
-                {(preflightState==="running"||preflightState==="success")&&(
-                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,overflow:"hidden",marginBottom:14}}>
-                    {PREFLIGHT_STAGES.map((stage,i)=>{
-                      const done=i<preflightStep, active=i===preflightStep-1&&preflightState==="running";
+                {/* Progress phases */}
+                {(testState==="running"||testState==="success")&&(
+                  <div style={{marginTop:14,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
+                    {TEST_PHASES.map((phase,i)=>{
+                      const done=i<testPhase, active=i===testPhase-1&&testState==="running";
+                      const isAuth=i<5, isDisc=i>=5;
+                      const sectionLabel=i===0?"Auth":i===5?"Discovery":null;
                       return (
-                        <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 16px",borderBottom:i<PREFLIGHT_STAGES.length-1?`1px solid ${T.border}`:"none",transition:"background .3s",background:active?"rgba(59,130,246,.04)":"transparent"}}>
-                          <div style={{width:20,height:20,borderRadius:"50%",flexShrink:0,transition:"all .3s",
-                            background:done?"#10b981":active?"rgba(96,165,250,.15)":"transparent",
-                            border:`2px solid ${done?"#10b981":active?"#60a5fa":T.border}`,
-                            display:"flex",alignItems:"center",justifyContent:"center"}}>
-                            {done
-                              ? <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                              : active ? <span style={{width:5,height:5,borderRadius:"50%",background:"#60a5fa",display:"block",animation:"pulse2 1s infinite"}}/>
-                              : null}
+                        <React.Fragment key={i}>
+                          {sectionLabel&&(
+                            <div style={{padding:"7px 16px",background:isAuth?"rgba(99,102,241,.04)":"rgba(16,185,129,.04)",borderBottom:`1px solid ${T.border}`,borderTop:i>0?`1px solid ${T.border}`:"none"}}>
+                              <span style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.1em",color:isAuth?"#6366f1":"#10b981"}}>{sectionLabel}</span>
+                            </div>
+                          )}
+                          <div style={{display:"flex",alignItems:"center",gap:12,padding:"9px 16px",borderBottom:i<TEST_PHASES.length-1?`1px solid ${T.border}`:"none",transition:"background .25s",background:active?"rgba(99,102,241,.04)":"transparent"}}>
+                            <div style={{width:18,height:18,borderRadius:"50%",flexShrink:0,transition:"all .3s",
+                              background:done?"#10b981":active?"rgba(99,102,241,.2)":"transparent",
+                              border:`2px solid ${done?"#10b981":active?"#6366f1":T.border}`,
+                              display:"flex",alignItems:"center",justifyContent:"center"}}>
+                              {done
+                                ? <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                : active ? <span style={{width:5,height:5,borderRadius:"50%",background:"#6366f1",display:"block",animation:"pulse2 1s infinite"}}/>
+                                : null}
+                            </div>
+                            <div style={{flex:1}}>
+                              <div style={{fontSize:12,fontWeight:done||active?600:400,color:done?"#10b981":active?T.text:T.textMuted,transition:"color .3s"}}>{phase.s}</div>
+                              <div style={{fontSize:10.5,color:T.textMuted}}>{phase.d}</div>
+                            </div>
+                            {done&&<span style={{fontSize:11,color:"#10b981",fontWeight:700}}>✓</span>}
+                            {active&&<span style={{fontSize:10.5,color:"#6366f1",animation:"pulse2 1.2s infinite",fontWeight:600}}>…</span>}
                           </div>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:12,fontWeight:done||active?600:400,color:done||active?T.text:T.textMuted,transition:"color .3s"}}>{stage.s}</div>
-                            <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{stage.d}</div>
-                          </div>
-                          {done&&<span style={{fontSize:11,color:"#10b981",fontWeight:700}}>✓</span>}
-                          {active&&<span style={{fontSize:11,color:"#60a5fa",animation:"pulse2 1.2s infinite"}}>…</span>}
-                        </div>
+                        </React.Fragment>
                       );
                     })}
                   </div>
                 )}
 
-                {preflightState==="success"&&(
-                  <div className="fadeIn" style={{padding:"12px 16px",background:"rgba(16,185,129,.07)",border:"1px solid rgba(16,185,129,.28)",borderRadius:11,display:"flex",gap:10,alignItems:"center"}}>
-                    <div style={{width:24,height:24,borderRadius:"50%",background:"#10b981",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                      <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l2.5 2.5 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                {/* Discovery result banner */}
+                {testState==="success"&&discovery&&(
+                  <div className="fadeIn" style={{marginTop:14,padding:"16px 20px",background:"rgba(16,185,129,.06)",border:"1px solid rgba(16,185,129,.22)",borderRadius:12}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+                      <div style={{width:26,height:26,borderRadius:"50%",background:"#10b981",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 3px 8px rgba(16,185,129,.35)"}}>
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l2.5 2.5 5-5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </div>
+                      <div style={{fontSize:13,fontWeight:700,color:"#10b981"}}>Connection verified — discovery complete</div>
                     </div>
-                    <div style={{fontSize:12.5,fontWeight:700,color:"#10b981"}}>All checks passed</div>
-                  </div>
-                )}
-                {preflightState==="idle"&&(
-                  <div style={{fontSize:11.5,color:T.textMuted,textAlign:"center",paddingTop:2}}>
-                    You can skip this and run preflight from the connection detail page.
+                    <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+                      {Object.entries(discovery).map(([k,v])=>(
+                        <div key={k} style={{padding:"8px 14px",background:T.bgSurface,borderRadius:9,border:`1px solid ${T.border}`,textAlign:"center",minWidth:80}}>
+                          <div style={{fontSize:16,fontWeight:800,color:T.text}}>{v.toLocaleString()}</div>
+                          <div style={{fontSize:10.5,color:T.textMuted,textTransform:"capitalize",marginTop:2}}>{k}</div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -10145,72 +10085,122 @@ const AddServiceWizard = ({onClose, onDone}) => {
             </div>
           )}
 
-          {/* ── STEP 5: Launch ── */}
-          {step===5&&(
-            <div className="fadeIn">
-              {/* Big connector banner */}
-              <div style={{display:"flex",alignItems:"center",gap:20,padding:"22px 26px",background:"linear-gradient(135deg,rgba(238,36,36,.07),rgba(99,102,241,.06))",border:"1px solid rgba(238,36,36,.18)",borderRadius:16,marginBottom:22}}>
-                {getLogo(connector, 56)}
-                <div style={{flex:1}}>
-                  <div style={{fontSize:19,fontWeight:700,color:T.text,marginBottom:4}}>{svcName||connMeta?.name}</div>
-                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                    <span style={{fontSize:12,color:T.textMuted}}>{connMeta?.name}</span>
-                    <span style={{fontSize:11,color:T.border}}>·</span>
-                    <span style={{padding:"3px 10px",borderRadius:99,fontSize:11.5,fontWeight:600,
-                      background:svcEnv==="Production"?"rgba(238,36,36,.1)":svcEnv==="Staging"?"rgba(245,158,11,.1)":svcEnv==="Development"?"rgba(99,102,241,.1)":"rgba(16,185,129,.1)",
-                      color:svcEnv==="Production"?"#ee2424":svcEnv==="Staging"?"#f59e0b":svcEnv==="Development"?"#6366f1":"#10b981",
-                      border:`1px solid ${svcEnv==="Production"?"rgba(238,36,36,.25)":svcEnv==="Staging"?"rgba(245,158,11,.25)":svcEnv==="Development"?"rgba(99,102,241,.25)":"rgba(16,185,129,.25)"}`,
-                    }}>{svcEnv}</span>
-                    <span style={{padding:"3px 10px",borderRadius:99,fontSize:11.5,fontWeight:600,background:"rgba(245,158,11,.08)",border:"1px solid rgba(245,158,11,.2)",color:"#f59e0b"}}>
-                      {schedMode==="once"?"Run Once":schedLabel(schedule)}
-                    </span>
-                  </div>
-                  {svcDesc&&<div style={{fontSize:12,color:T.textSub,marginTop:8,fontStyle:"italic"}}>"{svcDesc}"</div>}
+          {/* ── STEP 3: Filters ── */}
+          {step===3&&(
+            <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:20}}>
+
+              {/* Discovery summary at top */}
+              {discovery&&(
+                <div style={{padding:"14px 20px",background:"rgba(16,185,129,.05)",border:"1px solid rgba(16,185,129,.18)",borderRadius:12,display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+                  <span style={{fontSize:12,fontWeight:600,color:"#10b981",flexShrink:0}}>Discovered:</span>
+                  {Object.entries(discovery).map(([k,v])=>(
+                    <span key={k} style={{fontSize:12,color:T.textSub}}><b style={{color:T.text}}>{v.toLocaleString()}</b> {k}</span>
+                  ))}
                 </div>
-                <div style={{padding:"7px 18px",borderRadius:99,background:"rgba(16,185,129,.1)",border:"1px solid rgba(16,185,129,.28)",fontSize:13,fontWeight:700,color:"#10b981",flexShrink:0}}>Ready to Launch</div>
-              </div>
+              )}
 
-              {/* 3-column summary grid */}
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:11,marginBottom:22}}>
-                {[
-                  {l:"Connection Name", v:svcName,              icon:Ic.catalog(11)},
-                  {l:"Connector",       v:connMeta?.name,        icon:Ic.plug(11)},
-                  {l:"Source",          v:category,             icon:Ic.domain(11)},
-                  {l:"Environment",     v:svcEnv,               icon:Ic.domain(11)},
-                  {l:"Owner",           v:svcOwner,             icon:Ic.teams(11)},
-                  {l:"Schedule",        v:schedMode==="once"?"Run Once":schedLabel(schedule), icon:Ic.refresh(11), mono:schedMode!=="once"},
-                  {l:"Active Apps",     v:[enableLineage&&"Lineage",enableProfiling&&"Profiling",enableUsage&&"Usage"].filter(Boolean).join(", ")||"Metadata only", icon:Ic.compliance?Ic.compliance(11):null},
-                  ...(inclSchemas.length+exclSchemas.length+inclTables.length+exclTables.length>0
-                    ? [{l:"Filters",v:`${inclSchemas.length} incl schema · ${exclSchemas.length} excl schema · ${inclTables.length} incl table · ${exclTables.length} excl table`,icon:null,mono:true}]
-                    : [{l:"Filters",v:"None — ingest everything",icon:null}]
-                  ),
-                  {l:"Preflight",       v:preflightState==="success"?"All checks passed ✓":"Skipped", icon:null, green:preflightState==="success"},
-                ].map(({l,v,icon,mono,green,red})=>(
-                  <div key={l} style={{padding:"12px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:11}}>
-                    <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:6,color:T.textMuted}}>{icon}<span style={{fontSize:10,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em"}}>{l}</span></div>
-                    <div style={{fontSize:12.5,fontWeight:600,color:green?"#10b981":red?"#f87171":T.text,fontFamily:mono?"'Geist Mono',monospace":"inherit",wordBreak:"break-word",lineHeight:1.4}}>{v}</div>
+              {/* Filter mode toggle */}
+              <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{width:3,height:16,borderRadius:2,background:"#14b8a6",flexShrink:0}}/>
+                    <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Ingestion Filters</span>
                   </div>
-                ))}
+                  <div style={{display:"flex",gap:6}}>
+                    {["selection","regex"].map(m=>(
+                      <button key={m} onClick={()=>setFilterMode(m)} style={{padding:"5px 14px",borderRadius:7,fontSize:11.5,fontWeight:filterMode===m?600:400,cursor:"pointer",transition:"all .12s",border:`1.5px solid ${filterMode===m?T.accent:T.border}`,background:filterMode===m?`${T.accent}10`:"transparent",color:filterMode===m?T.accent:T.textSub,textTransform:"capitalize"}}>
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p style={{margin:"0 0 18px",fontSize:12.5,color:T.textMuted,lineHeight:1.6}}>Narrow ingestion scope. Leave blank to ingest everything discovered.</p>
+
+                {filterMode==="selection"?(
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+                    {[
+                      {label:"Include Schemas",tags:inclSchemas,onAdd:t=>setInclSchemas(p=>[...p,t]),onRemove:t=>setInclSchemas(p=>p.filter(x=>x!==t)),ph:"public, analytics…",color:"#10b981"},
+                      {label:"Exclude Schemas",tags:exclSchemas,onAdd:t=>setExclSchemas(p=>[...p,t]),onRemove:t=>setExclSchemas(p=>p.filter(x=>x!==t)),ph:"pg_catalog, sys…",color:"#f87171"},
+                      {label:"Include Tables", tags:inclTables, onAdd:t=>setInclTables(p=>[...p,t]), onRemove:t=>setInclTables(p=>p.filter(x=>x!==t)), ph:"orders, users…",color:"#10b981"},
+                      {label:"Exclude Tables", tags:exclTables, onAdd:t=>setExclTables(p=>[...p,t]), onRemove:t=>setExclTables(p=>p.filter(x=>x!==t)), ph:"tmp_*, _bak…",color:"#f87171"},
+                    ].map(({label,tags,onAdd,onRemove,ph,color})=>(
+                      <div key={label}>
+                        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:600,color:T.textSub,marginBottom:7}}>
+                          <span style={{width:8,height:8,borderRadius:2,background:color,display:"block",flexShrink:0}}/>
+                          {label}
+                        </label>
+                        <TagInput tags={tags} onAdd={onAdd} onRemove={onRemove} placeholder={ph} color={color}/>
+                      </div>
+                    ))}
+                  </div>
+                ):(
+                  <div style={{display:"flex",flexDirection:"column",gap:13}}>
+                    {[
+                      {label:"Schema Include Pattern",ph:"^(?!pg_).*",hint:"Regex applied to schema names to include"},
+                      {label:"Schema Exclude Pattern",ph:"^(pg_catalog|information_schema)$",hint:"Regex applied to schema names to exclude"},
+                      {label:"Table Include Pattern", ph:"^(orders|users|products)$",hint:"Regex applied to table names to include"},
+                      {label:"Table Exclude Pattern", ph:"^(tmp_|_bak|test_)",hint:"Regex applied to table names to exclude"},
+                    ].map(({label,ph,hint})=>(
+                      <div key={label}>
+                        <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:4}}>{label}</label>
+                        <input placeholder={ph} style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box"}}
+                          onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
+                        <div style={{fontSize:10.5,color:T.textMuted,marginTop:3}}>{hint}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {/* What happens after launch */}
-              <div style={{padding:"18px 20px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14}}>
-                <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:14}}>What happens after launch</div>
-                {[
-                  {n:1,t:"Ingestion runs immediately",   d:"Solix starts pulling schema, table and column metadata from your source."},
-                  {n:2,t:"Catalog populates",            d:"Assets appear in the Data Catalog within minutes — tables, views, columns."},
-                  {n:3,t:"Pipelines activate",           d:"Lineage, profiling and usage pipelines activate based on your app selections."},
-                  {n:4,t:schedMode==="once"?"Connection ready for manual runs":"Schedule kicks in", d:schedMode==="once"?"Trigger new ingestion runs manually from the connection detail page.":`Next automatic run: ${schedLabel(schedule)}.`},
-                ].map(({n,t,d})=>(
-                  <div key={n} style={{display:"flex",gap:14,padding:"9px 0",borderBottom:n<4?`1px solid ${T.border}`:"none"}}>
-                    <div style={{width:22,height:22,borderRadius:"50%",background:"rgba(238,36,36,.1)",border:"1px solid rgba(238,36,36,.22)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#ee2424",flexShrink:0,marginTop:1}}>{n}</div>
-                    <div>
-                      <div style={{fontSize:13,fontWeight:600,color:T.text}}>{t}</div>
-                      <div style={{fontSize:12,color:T.textMuted,marginTop:2,lineHeight:1.5}}>{d}</div>
+              {/* Ingestion Apps */}
+              <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                  <div style={{width:3,height:16,borderRadius:2,background:"#8b5cf6",flexShrink:0}}/>
+                  <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Ingestion Apps</span>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:9}}>
+                  {[
+                    {key:"metadata", label:"Metadata Ingestion", desc:"Tables, columns, schema & relationships. Always enabled.", value:true, disabled:true},
+                    {key:"lineage",  label:"Lineage",            desc:"Data flow between tables and transformations.", value:enableLineage, setter:setEnableLineage},
+                    {key:"profiling",label:"Data Profiling",     desc:"Column statistics: null %, distinct count, distributions.", value:enableProfiling, setter:setEnableProfiling},
+                    {key:"usage",    label:"Usage Analytics",    desc:"Query logs to surface popular and unused assets.", value:enableUsage, setter:setEnableUsage},
+                  ].map(app=>(
+                    <div key={app.key} style={{display:"flex",alignItems:"center",gap:14,padding:"11px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
+                      <Toggle on={app.value} onChange={app.disabled?undefined:()=>app.setter(v=>!v)} disabled={app.disabled}/>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:12.5,fontWeight:600,color:app.disabled?T.textMuted:T.text}}>{app.label}{app.disabled&&<span style={{fontSize:10,fontWeight:500,color:T.textMuted,marginLeft:8,padding:"1px 6px",background:T.bgHover,borderRadius:4}}>always on</span>}</div>
+                        <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{app.desc}</div>
+                      </div>
+                      <div style={{width:7,height:7,borderRadius:"50%",background:app.value?"#10b981":T.border,flexShrink:0,transition:"background .2s"}}/>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
+
+              {/* Launch summary */}
+              <div style={{background:"linear-gradient(135deg,rgba(238,36,36,.06),rgba(99,102,241,.05))",border:"1px solid rgba(238,36,36,.15)",borderRadius:14,padding:"20px 22px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:14}}>
+                  {getLogo(connector,40)}
+                  <div>
+                    <div style={{fontSize:16,fontWeight:700,color:T.text}}>{svcName}</div>
+                    <div style={{fontSize:12,color:T.textMuted,marginTop:2}}>{connMeta?.name} · {category} · {svcEnv}</div>
+                  </div>
+                  <div style={{marginLeft:"auto",padding:"6px 16px",borderRadius:99,background:"rgba(16,185,129,.1)",border:"1px solid rgba(16,185,129,.25)",fontSize:12,fontWeight:700,color:"#10b981"}}>Ready to Launch</div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:9}}>
+                  {[
+                    {l:"Owner",    v:svcOwner},
+                    {l:"Schedule", v:schedMode==="once"?"Run Once":schedLabel(schedule), mono:true},
+                    {l:"Object Types", v:objTypes.length>0?objTypes.slice(0,3).join(", ")+(objTypes.length>3?` +${objTypes.length-3}`:""):"All"},
+                  ].map(({l,v,mono})=>(
+                    <div key={l} style={{padding:"10px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
+                      <div style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",color:T.textMuted,marginBottom:4}}>{l}</div>
+                      <div style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:mono?"'Geist Mono',monospace":"inherit"}}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
             </div>
           )}
 
@@ -10229,29 +10219,25 @@ const AddServiceWizard = ({onClose, onDone}) => {
             <div style={{display:"flex",gap:5,alignItems:"center"}}>
               {STEPS.map((_,i)=><div key={i} style={{width:i===step?22:7,height:7,borderRadius:4,background:i===step?"#ee2424":i<step?"rgba(238,36,36,.4)":T.border,transition:"all .25s"}}/>)}
             </div>
-            <button onClick={handleNext} disabled={!canNext()||(step===2&&authState==="running")} style={{
+            <button onClick={handleNext} disabled={!canNext()||(step===2&&testState==="running")} style={{
               display:"flex",alignItems:"center",gap:8,padding:"10px 24px",borderRadius:10,border:"none",
-              background:(!canNext()||(step===2&&authState==="running"))?"rgba(238,36,36,.2)":"#ee2424",
-              color:(!canNext()||(step===2&&authState==="running"))?"rgba(255,255,255,.35)":"#fff",
+              background:(!canNext()||(step===2&&testState==="running"))?"rgba(238,36,36,.2)":"#ee2424",
+              color:(!canNext()||(step===2&&testState==="running"))?"rgba(255,255,255,.35)":"#fff",
               fontSize:13,fontWeight:700,
-              cursor:(!canNext()||(step===2&&authState==="running"))?"default":"pointer",
+              cursor:(!canNext()||(step===2&&testState==="running"))?"default":"pointer",
               transition:"all .15s",
-              boxShadow:canNext()&&authState!=="running"?"0 4px 14px rgba(238,36,36,.38)":"none",
+              boxShadow:canNext()&&testState!=="running"?"0 4px 14px rgba(238,36,36,.38)":"none",
             }}
-              onMouseEnter={e=>{if(canNext()&&authState!=="running"){e.currentTarget.style.opacity=".88";e.currentTarget.style.transform="translateY(-1px)";}}}
+              onMouseEnter={e=>{if(canNext()&&testState!=="running"){e.currentTarget.style.opacity=".88";e.currentTarget.style.transform="translateY(-1px)";}}}
               onMouseLeave={e=>{e.currentTarget.style.opacity="1";e.currentTarget.style.transform="none";}}>
-              {step===2&&authState==="running"&&<svg width="13" height="13" viewBox="0 0 12 12" fill="none" style={{animation:"spin 1s linear infinite"}}><circle cx="6" cy="6" r="4.5" stroke="rgba(255,255,255,.3)" strokeWidth="1.5"/><path d="M6 1.5A4.5 4.5 0 0110.5 6" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+              {step===2&&testState==="running"&&<svg width="13" height="13" viewBox="0 0 12 12" fill="none" style={{animation:"spin 1s linear infinite"}}><circle cx="6" cy="6" r="4.5" stroke="rgba(255,255,255,.3)" strokeWidth="1.5"/><path d="M6 1.5A4.5 4.5 0 0110.5 6" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>}
               {step===0
-                ? "Next: Pick Connector →"
+                ? "Select Connector →"
                 : step===1
-                ? "Next: Authenticate →"
+                ? "Configure Connection →"
                 : step===2
-                ? (authState==="running"?"Authenticating…":authState==="success"?"Next: Set Identity →":"Authenticate to Continue")
-                : step===3
-                ? "Next: Advanced Config →"
-                : step===4
-                ? "Review & Launch →"
-                : "🚀 Launch"}
+                ? (testState==="running"?"Testing…":testState==="success"?"Set Filters & Launch →":"Test Connection First")
+                : "🚀 Launch Connection"}
             </button>
           </div>
         </div>
@@ -13904,14 +13890,22 @@ const TagManagementView = ({onToast}) => {
   const navigate = useNav();
 
   // ── Left panel state ──
-  const [search,       setSearch]       = useState('');
-  const [catFilters,   setCatFilters]   = useState([]);   // multi-select
-  const [filterOpen,   setFilterOpen]   = useState(false);
-  const [selTagId,     setSelTagId]     = useState(null);
-  const [newPanelOpen, setNewPanelOpen] = useState(false);
-  const [newDraft,     setNewDraft]     = useState({ name:'', category:'', description:'', propagationMode:'none', governanceRequired:false, owner:'', managedBy:'', color:'#6366f1', sourceAliases:[] });
-  const [newAlias,     setNewAlias]     = useState('');
-  const [newCatInput,  setNewCatInput]  = useState('');
+  const [search,           setSearch]           = useState('');
+  const [catFilters,       setCatFilters]       = useState([]);
+  const [filterOpen,       setFilterOpen]       = useState(false);
+  const [selTagId,         setSelTagId]         = useState(null);
+  const [newPanelOpen,     setNewPanelOpen]     = useState(false);
+  const [newCatPanelOpen,  setNewCatPanelOpen]  = useState(false);
+  const [plusMenuOpen,     setPlusMenuOpen]     = useState(false);
+  const [newDraft,         setNewDraft]         = useState({ name:'', category:'', description:'', propagationMode:'none', governanceRequired:false, owner:'', managedBy:'', color:'#6366f1', sourceAliases:[] });
+  const [newAlias,         setNewAlias]         = useState('');
+  const [newCatInput,      setNewCatInput]      = useState('');
+  const [newCatDraft,      setNewCatDraft]      = useState({ name:'', description:'', color:'#6366f1' });
+  const [customCategories, setCustomCategories] = useState([]);
+  const [dotMenuOpen,      setDotMenuOpen]      = useState(null); // tagId or 'cat:name'
+  const [deleteConfirm,    setDeleteConfirm]    = useState(null); // {type:'tag'|'category', id, name}
+  const plusMenuRef = useRef(null);
+  const dotMenuRef  = useRef(null);
 
   // ── Right panel state ──
   const [detailTab,    setDetailTab]    = useState('overview');
@@ -13923,15 +13917,39 @@ const TagManagementView = ({onToast}) => {
 
   const filterRef = useRef(null);
 
-  // Close filter dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(()=>{
-    const handler=(e)=>{ if(filterRef.current&&!filterRef.current.contains(e.target)) setFilterOpen(false); };
+    const handler=(e)=>{
+      if(filterRef.current&&!filterRef.current.contains(e.target)) setFilterOpen(false);
+      if(plusMenuRef.current&&!plusMenuRef.current.contains(e.target)) setPlusMenuOpen(false);
+      if(dotMenuRef.current&&!dotMenuRef.current.contains(e.target)) setDotMenuOpen(null);
+    };
     document.addEventListener('mousedown',handler);
     return ()=>document.removeEventListener('mousedown',handler);
   },[]);
 
-  // Dynamic categories derived from tag data
-  const allCategories = [...new Set(tagDefs.map(td=>td.category).filter(Boolean))].sort();
+  // Dynamic categories derived from tag data + custom ones
+  const allCategories = [...new Set([...tagDefs.map(td=>td.category).filter(Boolean),...customCategories])].sort();
+
+  const addNewCategory = () => {
+    if(!newCatDraft.name.trim()) return;
+    setCustomCategories(p=>[...new Set([...p,newCatDraft.name.trim()])]);
+    setNewCatPanelOpen(false);
+    setNewCatDraft({name:'',description:'',color:'#6366f1'});
+    onToast('Category created','success');
+  };
+
+  const deleteTag = (tagId) => {
+    setDeleteConfirm(null);
+    setSelTagId(null);
+    onToast('Tag deleted','success');
+  };
+
+  const deleteCategory = (catName) => {
+    setCustomCategories(p=>p.filter(c=>c!==catName));
+    setDeleteConfirm(null);
+    onToast('Category deleted','success');
+  };
   const getCatStyle = (cat) => {
     const MAP = { sensitivity:{color:T.rose,bg:T.roseDim}, regulatory:{color:T.amber,bg:T.amberDim}, business:{color:T.blue,bg:T.blueDim} };
     return MAP[cat] || {color:T.textSub, bg:T.bgElevated};
@@ -13984,9 +14002,28 @@ const TagManagementView = ({onToast}) => {
   return (
     <div className="fadeUp" style={{height:'100%',display:'flex',flexDirection:'column'}}>
       <Topbar breadcrumb={[{label:'Tag Management'}]} actions={
-        <button onClick={()=>{setNewPanelOpen(true);setSelTagId(null);}} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 14px',borderRadius:7,background:T.accent,border:'none',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>
-          {Ic.plus(11)} New Tag
-        </button>
+        <div ref={plusMenuRef} style={{position:'relative'}}>
+          <button onClick={()=>setPlusMenuOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 14px',borderRadius:7,background:T.accent,border:'none',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>
+            {Ic.plus(11)} New
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{marginLeft:2}}><path d="M2 4l3 3 3-3" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+          {plusMenuOpen&&(
+            <div style={{position:'absolute',top:'calc(100% + 6px)',right:0,width:180,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.18)',zIndex:200,overflow:'hidden'}}>
+              <button onClick={()=>{setNewCatPanelOpen(true);setNewPanelOpen(false);setSelTagId(null);setPlusMenuOpen(false);}}
+                style={{width:'100%',padding:'11px 14px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',display:'flex',alignItems:'center',gap:10,color:T.text,fontSize:12.5,fontWeight:500,borderBottom:`1px solid ${T.border}`}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                <span style={{width:22,height:22,borderRadius:6,background:'rgba(99,102,241,.12)',display:'flex',alignItems:'center',justifyContent:'center',color:'#6366f1',flexShrink:0}}>{Ic.catalog(11)}</span>
+                New Category
+              </button>
+              <button onClick={()=>{setNewPanelOpen(true);setNewCatPanelOpen(false);setSelTagId(null);setPlusMenuOpen(false);}}
+                style={{width:'100%',padding:'11px 14px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',display:'flex',alignItems:'center',gap:10,color:T.text,fontSize:12.5,fontWeight:500}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                <span style={{width:22,height:22,borderRadius:6,background:`${T.accent}14`,display:'flex',alignItems:'center',justifyContent:'center',color:T.accent,flexShrink:0}}>{Ic.tag(11)}</span>
+                New Tag
+              </button>
+            </div>
+          )}
+        </div>
       }/>
 
       <div style={{flex:1,display:'flex',overflow:'hidden'}}>
@@ -14056,7 +14093,7 @@ const TagManagementView = ({onToast}) => {
           )}
 
           {/* Tag list grouped by category */}
-          <div style={{flex:1,overflowY:'auto'}}>
+          <div style={{flex:1,overflowY:'auto',position:'relative'}}>
             {filteredTags.length===0 ? (
               <div style={{padding:'32px 16px',textAlign:'center'}}>
                 <div style={{fontSize:24,marginBottom:8,opacity:.3}}>{Ic.tag(24)}</div>
@@ -14069,34 +14106,112 @@ const TagManagementView = ({onToast}) => {
             ) : (<>
               {groupedTags.map(({cat,tags})=>(
                 <div key={cat}>
-                  <div style={{padding:'8px 14px 4px',fontSize:10,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.08em',position:'sticky',top:0,background:T.bgSurface,zIndex:1,borderBottom:`1px solid ${T.border}44`}}>{cat}</div>
+                  {/* Category header with 3-dot */}
+                  <div style={{padding:'8px 14px 4px',fontSize:10,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.08em',position:'sticky',top:0,background:T.bgSurface,zIndex:2,borderBottom:`1px solid ${T.border}44`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                    <span>{cat}</span>
+                    <div ref={dotMenuOpen===`cat:${cat}`?dotMenuRef:undefined} style={{position:'relative'}}>
+                      <button onClick={e=>{e.stopPropagation();setDotMenuOpen(o=>o===`cat:${cat}`?null:`cat:${cat}`);}}
+                        style={{width:20,height:20,borderRadius:4,background:'transparent',border:'none',color:T.textMuted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',opacity:0.6,fontSize:14,lineHeight:1,fontWeight:700}}
+                        onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;e.currentTarget.style.opacity='1';}} onMouseLeave={e=>{e.currentTarget.style.background='transparent';e.currentTarget.style.opacity='0.6';}}>
+                        ···
+                      </button>
+                      {dotMenuOpen===`cat:${cat}`&&(
+                        <div style={{position:'absolute',top:'100%',right:0,width:150,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',zIndex:300,overflow:'hidden'}}>
+                          <button onClick={e=>{e.stopPropagation();setNewCatPanelOpen(true);setNewCatDraft({name:cat,description:'',color:'#6366f1'});setDotMenuOpen(null);}}
+                            style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.text,display:'flex',alignItems:'center',gap:8,borderBottom:`1px solid ${T.border}`}}
+                            onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                            <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            Edit Category
+                          </button>
+                          <button onClick={e=>{e.stopPropagation();setDeleteConfirm({type:'category',id:cat,name:cat});setDotMenuOpen(null);}}
+                            style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.rose,display:'flex',alignItems:'center',gap:8}}
+                            onMouseEnter={e=>e.currentTarget.style.background=T.roseDim} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                            <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 5l.5 5M8 5l-.5 5M3 3l.5 7h5L9 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            Delete Category
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                   {tags.map(td=>{
                     const isSel=selTagId===td.id; const cnt=assetCount(td.id);
                     return (
-                      <button key={td.id} onClick={()=>{setSelTagId(td.id);setDetailTab('overview');setEditing(false);setEditDraft(null);}}
-                        style={{width:'100%',display:'flex',alignItems:'center',gap:9,padding:'8px 14px',background:isSel?T.accentDim:'transparent',border:'none',borderLeft:`2.5px solid ${isSel?T.accent:'transparent'}`,cursor:'pointer',transition:'background .1s',textAlign:'left'}}
-                        onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background='transparent';}}>
-                        <span style={{width:8,height:8,borderRadius:'50%',background:td.color,flexShrink:0,display:'block',boxShadow:isSel?`0 0 0 2px ${td.color}44`:'none'}}/>
-                        <span style={{flex:1,fontSize:12.5,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
-                        <span title={`${cnt} asset${cnt!==1?'s':''}`} style={{fontSize:10,color:T.textMuted,flexShrink:0,fontFamily:"'Geist Mono',monospace"}}>{cnt}</span>
-                      </button>
+                      <div key={td.id} style={{position:'relative',display:'flex',alignItems:'center'}}
+                        onMouseEnter={e=>e.currentTarget.querySelector('.tag-dot-btn').style.opacity='1'}
+                        onMouseLeave={e=>e.currentTarget.querySelector('.tag-dot-btn').style.opacity='0'}>
+                        <button onClick={()=>{setSelTagId(td.id);setDetailTab('overview');setEditing(false);setEditDraft(null);setNewPanelOpen(false);setNewCatPanelOpen(false);}}
+                          style={{flex:1,display:'flex',alignItems:'center',gap:9,padding:'7px 8px 7px 14px',background:isSel?T.accentDim:'transparent',border:'none',borderLeft:`2.5px solid ${isSel?T.accent:'transparent'}`,cursor:'pointer',transition:'background .1s',textAlign:'left',minWidth:0}}
+                          onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background='transparent';}}>
+                          <span style={{width:8,height:8,borderRadius:'50%',background:td.color,flexShrink:0,display:'block',boxShadow:isSel?`0 0 0 2px ${td.color}44`:'none'}}/>
+                          <span style={{flex:1,fontSize:12.5,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
+                          <span style={{fontSize:10,color:T.textMuted,flexShrink:0,fontFamily:"'Geist Mono',monospace",marginRight:2}}>{cnt}</span>
+                        </button>
+                        <div ref={dotMenuOpen===td.id?dotMenuRef:undefined} style={{position:'relative',flexShrink:0,paddingRight:6}}>
+                          <button className="tag-dot-btn" onClick={e=>{e.stopPropagation();setDotMenuOpen(o=>o===td.id?null:td.id);}}
+                            style={{width:20,height:20,borderRadius:4,background:'transparent',border:'none',color:T.textMuted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,lineHeight:1,opacity:0,transition:'opacity .12s'}}>
+                            ···
+                          </button>
+                          {dotMenuOpen===td.id&&(
+                            <div style={{position:'absolute',top:'100%',right:0,width:140,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',zIndex:300,overflow:'hidden'}}>
+                              <button onClick={e=>{e.stopPropagation();setSelTagId(td.id);startEdit();setDotMenuOpen(null);}}
+                                style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.text,display:'flex',alignItems:'center',gap:8,borderBottom:`1px solid ${T.border}`}}
+                                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                Edit Tag
+                              </button>
+                              <button onClick={e=>{e.stopPropagation();setDeleteConfirm({type:'tag',id:td.id,name:td.name});setDotMenuOpen(null);}}
+                                style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.rose,display:'flex',alignItems:'center',gap:8}}
+                                onMouseEnter={e=>e.currentTarget.style.background=T.roseDim} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 5l.5 5M8 5l-.5 5M3 3l.5 7h5L9 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                Delete Tag
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
               ))}
               {uncategorized.length>0&&(
                 <div>
-                  <div style={{padding:'8px 14px 4px',fontSize:10,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.08em',position:'sticky',top:0,background:T.bgSurface,zIndex:1,borderBottom:`1px solid ${T.border}44`}}>Uncategorized</div>
+                  <div style={{padding:'8px 14px 4px',fontSize:10,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.08em',position:'sticky',top:0,background:T.bgSurface,zIndex:2,borderBottom:`1px solid ${T.border}44`}}>Uncategorized</div>
                   {uncategorized.map(td=>{
                     const isSel=selTagId===td.id; const cnt=assetCount(td.id);
                     return (
-                      <button key={td.id} onClick={()=>{setSelTagId(td.id);setDetailTab('overview');setEditing(false);setEditDraft(null);}}
-                        style={{width:'100%',display:'flex',alignItems:'center',gap:9,padding:'8px 14px',background:isSel?T.accentDim:'transparent',border:'none',borderLeft:`2.5px solid ${isSel?T.accent:'transparent'}`,cursor:'pointer',transition:'background .1s',textAlign:'left'}}
-                        onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background='transparent';}}>
-                        <span style={{width:8,height:8,borderRadius:'50%',background:td.color,flexShrink:0,display:'block'}}/>
-                        <span style={{flex:1,fontSize:12.5,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
-                        <span style={{fontSize:10,color:T.textMuted,flexShrink:0,fontFamily:"'Geist Mono',monospace"}}>{cnt}</span>
-                      </button>
+                      <div key={td.id} style={{position:'relative',display:'flex',alignItems:'center'}}
+                        onMouseEnter={e=>e.currentTarget.querySelector('.tag-dot-btn').style.opacity='1'}
+                        onMouseLeave={e=>e.currentTarget.querySelector('.tag-dot-btn').style.opacity='0'}>
+                        <button onClick={()=>{setSelTagId(td.id);setDetailTab('overview');setEditing(false);setEditDraft(null);setNewPanelOpen(false);setNewCatPanelOpen(false);}}
+                          style={{flex:1,display:'flex',alignItems:'center',gap:9,padding:'7px 8px 7px 14px',background:isSel?T.accentDim:'transparent',border:'none',borderLeft:`2.5px solid ${isSel?T.accent:'transparent'}`,cursor:'pointer',transition:'background .1s',textAlign:'left',minWidth:0}}
+                          onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background='transparent';}}>
+                          <span style={{width:8,height:8,borderRadius:'50%',background:td.color,flexShrink:0,display:'block'}}/>
+                          <span style={{flex:1,fontSize:12.5,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
+                          <span style={{fontSize:10,color:T.textMuted,flexShrink:0,fontFamily:"'Geist Mono',monospace",marginRight:2}}>{cnt}</span>
+                        </button>
+                        <div ref={dotMenuOpen===td.id?dotMenuRef:undefined} style={{position:'relative',flexShrink:0,paddingRight:6}}>
+                          <button className="tag-dot-btn" onClick={e=>{e.stopPropagation();setDotMenuOpen(o=>o===td.id?null:td.id);}}
+                            style={{width:20,height:20,borderRadius:4,background:'transparent',border:'none',color:T.textMuted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,lineHeight:1,opacity:0,transition:'opacity .12s'}}>
+                            ···
+                          </button>
+                          {dotMenuOpen===td.id&&(
+                            <div style={{position:'absolute',top:'100%',right:0,width:140,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',zIndex:300,overflow:'hidden'}}>
+                              <button onClick={e=>{e.stopPropagation();setSelTagId(td.id);startEdit();setDotMenuOpen(null);}}
+                                style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.text,display:'flex',alignItems:'center',gap:8,borderBottom:`1px solid ${T.border}`}}
+                                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                Edit Tag
+                              </button>
+                              <button onClick={e=>{e.stopPropagation();setDeleteConfirm({type:'tag',id:td.id,name:td.name});setDotMenuOpen(null);}}
+                                style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.rose,display:'flex',alignItems:'center',gap:8}}
+                                onMouseEnter={e=>e.currentTarget.style.background=T.roseDim} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 5l.5 5M8 5l-.5 5M3 3l.5 7h5L9 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                Delete Tag
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
@@ -14107,11 +14222,58 @@ const TagManagementView = ({onToast}) => {
 
         {/* ── RIGHT: Tag detail or empty state ── */}
         <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',background:T.bg}}>
-          {!selTag&&!newPanelOpen&&(
+          {!selTag&&!newPanelOpen&&!newCatPanelOpen&&(
             <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,color:T.textMuted}}>
               <div style={{opacity:.15}}>{Ic.tag(48)}</div>
               <div style={{fontSize:14,fontWeight:600,color:T.textSub}}>Select a tag to view details</div>
               <div style={{fontSize:12,color:T.textMuted}}>Choose a tag from the list ←</div>
+            </div>
+          )}
+
+          {/* ── New Category panel ── */}
+          {newCatPanelOpen&&(
+            <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+              <div style={{padding:'14px 24px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0,background:T.bgSurface}}>
+                <div>
+                  <div style={{fontSize:15,fontWeight:700,color:T.text}}>New Category</div>
+                  <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>Categories group tags for navigation and filtering</div>
+                </div>
+                <button onClick={()=>setNewCatPanelOpen(false)} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',fontSize:18,lineHeight:1}}>×</button>
+              </div>
+              <div style={{flex:1,overflowY:'auto',padding:'24px'}}>
+                <div style={{maxWidth:480,display:'flex',flexDirection:'column',gap:18}}>
+                  <div>
+                    <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Category Name <span style={{color:T.rose}}>*</span></label>
+                    <Input2 placeholder="e.g. Compliance, Finance, PII" value={newCatDraft.name} onChange={e=>setNewCatDraft(d=>({...d,name:e.target.value}))}/>
+                  </div>
+                  <div>
+                    <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Description <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
+                    <textarea value={newCatDraft.description} onChange={e=>setNewCatDraft(d=>({...d,description:e.target.value}))} rows={3}
+                      placeholder="What kinds of tags belong in this category?"
+                      style={{width:'100%',padding:'9px 12px',background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:'none',resize:'none',fontFamily:'inherit',lineHeight:1.6,boxSizing:'border-box'}}
+                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                  </div>
+                  <div>
+                    <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Color</label>
+                    <div style={{display:'flex',gap:7}}>
+                      {['#ee2424','#d97706','#16a34a','#2563eb','#7c3aed','#6366f1','#0891b2','#6b7280'].map(c=>(
+                        <button key={c} onClick={()=>setNewCatDraft(d=>({...d,color:c}))} style={{width:26,height:26,borderRadius:'50%',background:c,border:newCatDraft.color===c?`3px solid ${T.text}`:'3px solid transparent',cursor:'pointer',padding:0,flexShrink:0,transition:'border .12s'}}/>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{padding:'14px 16px',background:T.bgElevated,borderRadius:10,border:`1px solid ${T.border}`}}>
+                    <div style={{fontSize:11,color:T.textMuted,marginBottom:6}}>Preview</div>
+                    <span style={{display:'inline-flex',alignItems:'center',gap:6,padding:'4px 12px',borderRadius:99,background:`${newCatDraft.color}15`,border:`1px solid ${newCatDraft.color}40`,fontSize:12,fontWeight:600,color:newCatDraft.color,textTransform:'capitalize'}}>
+                      <span style={{width:7,height:7,borderRadius:'50%',background:newCatDraft.color,display:'block'}}/>
+                      {newCatDraft.name||'Category Name'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div style={{padding:'14px 24px',borderTop:`1px solid ${T.border}`,display:'flex',gap:8,justifyContent:'flex-end',background:T.bgSurface,flexShrink:0}}>
+                <button onClick={()=>setNewCatPanelOpen(false)} style={{padding:'8px 18px',borderRadius:8,background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:'pointer',fontWeight:500}}>Cancel</button>
+                <button onClick={addNewCategory} disabled={!newCatDraft.name.trim()} style={{padding:'8px 20px',borderRadius:8,background:newCatDraft.name.trim()?T.accent:'rgba(100,100,120,.3)',border:'none',color:'#fff',fontSize:12.5,fontWeight:700,cursor:newCatDraft.name.trim()?'pointer':'default'}}>Create Category</button>
+              </div>
             </div>
           )}
 
@@ -14537,6 +14699,31 @@ const TagManagementView = ({onToast}) => {
           })()}
         </div>
       </div>
+
+      {/* ── Delete Confirmation Modal ── */}
+      {deleteConfirm&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:500,backdropFilter:'blur(4px)'}}>
+          <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,width:400,boxShadow:'0 24px 60px rgba(0,0,0,.4)'}}>
+            <div style={{padding:'20px 24px 16px',borderBottom:`1px solid ${T.border}`}}>
+              <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:4}}>Delete {deleteConfirm.type==='tag'?'Tag':'Category'}</div>
+              <div style={{fontSize:12.5,color:T.textMuted,lineHeight:1.6}}>
+                {deleteConfirm.type==='tag'
+                  ? <>Are you sure you want to delete <b style={{color:T.text}}>"{deleteConfirm.name}"</b>? This will remove all its assignments from assets.</>
+                  : <>Are you sure you want to delete the <b style={{color:T.text}}>"{deleteConfirm.name}"</b> category? Tags in this category will become uncategorized.</>
+                }
+              </div>
+            </div>
+            <div style={{padding:'16px 24px',display:'flex',gap:8,justifyContent:'flex-end',background:T.bgElevated,borderRadius:'0 0 14px 14px'}}>
+              <button onClick={()=>setDeleteConfirm(null)} style={{padding:'8px 18px',borderRadius:8,background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:'pointer',fontWeight:500}}>Cancel</button>
+              <button onClick={()=>{deleteConfirm.type==='tag'?deleteTag(deleteConfirm.id):deleteCategory(deleteConfirm.id);}}
+                style={{padding:'8px 20px',borderRadius:8,background:T.rose,border:'none',color:'#fff',fontSize:12.5,fontWeight:700,cursor:'pointer',boxShadow:`0 4px 12px ${T.rose}44`}}>
+                Delete {deleteConfirm.type==='tag'?'Tag':'Category'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
