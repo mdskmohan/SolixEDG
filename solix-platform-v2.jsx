@@ -4695,201 +4695,160 @@ const QualityView = () => {
         </div>
       )}
 
-      {/* ════════════════ ADD TEST CASE MODAL (OM-style) ════════════════ */}
+      {/* ════════════════ ADD TEST CASE RIGHT SIDE NAV ════════════════ */}
       {newTCModal&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.62)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1100,backdropFilter:"blur(5px)"}}>
-          <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:16,width:860,maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,.45)"}}>
+        <div style={{position:"fixed",top:0,right:0,bottom:0,zIndex:1100,display:"flex"}}>
+          {/* dim backdrop */}
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",backdropFilter:"blur(2px)"}} onClick={()=>setNewTCModal(false)}/>
+          {/* panel */}
+          <div className="slideInRight" style={{position:"relative",width:480,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)",marginLeft:"auto"}}>
             {/* Header */}
-            <div style={{padding:"18px 24px 14px",borderBottom:`1px solid ${T.border}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div style={{padding:"18px 20px 14px",borderBottom:`1px solid ${T.border}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
               <div>
                 <div style={{fontSize:15,fontWeight:700,color:T.text}}>Add Test Case</div>
-                <div style={{fontSize:12,color:T.textMuted,marginTop:2}}>Configure a quality check to run against a table or column</div>
+                <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Configure a quality check to run against a table or column</div>
               </div>
               <button onClick={()=>setNewTCModal(false)} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
             </div>
 
-            <div style={{display:"flex",flex:1,overflow:"hidden"}}>
-              {/* LEFT: form */}
-              <div style={{flex:1,overflowY:"auto",padding:"20px 24px",display:"flex",flexDirection:"column",gap:16}}>
+            {/* Scrollable form */}
+            <div style={{flex:1,overflowY:"auto",padding:"18px 20px",display:"flex",flexDirection:"column",gap:14}}>
 
-                {/* Level selector */}
-                <div>
-                  <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Test Level</div>
-                  <div style={{display:"flex",gap:6}}>
-                    {[{k:"table",l:"Table Level",d:"Checks that apply to the whole table (row count, custom SQL…)"},{k:"column",l:"Column Level",d:"Checks on a specific column (nulls, range, regex…)"}].map(({k,l,d})=>(
-                      <button key={k} onClick={()=>{setTcLevel(k);setTcSelType(null);setTcSelCol("");}} style={{flex:1,padding:"10px 12px",borderRadius:10,border:`1.5px solid ${tcLevel===k?T.accent:T.border}`,background:tcLevel===k?`${T.accent}08`:T.bgElevated,cursor:"pointer",textAlign:"left",transition:"all .12s"}}>
-                        <div style={{fontSize:12,fontWeight:700,color:tcLevel===k?T.accent:T.text,marginBottom:3}}>{l}</div>
-                        <div style={{fontSize:10.5,color:T.textMuted,lineHeight:1.4}}>{d}</div>
-                      </button>
-                    ))}
-                  </div>
+              {/* Name */}
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Name <span style={{color:T.textMuted,fontWeight:400}}>(auto-generated if blank)</span></label>
+                <input value={tcName} onChange={e=>setTcName(e.target.value)}
+                  placeholder={tcSelTable&&(tcSelType||tcCustomSQL)?`${tcSelTable}${tcSelCol?"."+tcSelCol:""}${tcSelType?" — "+tcSelType.name:tcCustomSQL?" — custom_sql":""}`:"e.g. orders_row_count_check"}
+                  style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"}}
+                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Description <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
+                <textarea value={tcDesc} onChange={e=>setTcDesc(e.target.value)} rows={2}
+                  placeholder="What does this test validate and why is it important?"
+                  style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",resize:"none",fontFamily:"inherit",lineHeight:1.6,boxSizing:"border-box"}}
+                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+              </div>
+
+              {/* Level selector */}
+              <div>
+                <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Test Level</div>
+                <div style={{display:"flex",gap:6}}>
+                  {[{k:"table",l:"Table Level"},{k:"column",l:"Column Level"}].map(({k,l})=>(
+                    <button key={k} onClick={()=>{setTcLevel(k);setTcSelType(null);setTcSelCol("");setTcCustomSQL(false);setTcSQLQuery("");}} style={{flex:1,padding:"9px 12px",borderRadius:9,border:`1.5px solid ${tcLevel===k?T.accent:T.border}`,background:tcLevel===k?`${T.accent}08`:T.bgElevated,cursor:"pointer",textAlign:"center",transition:"all .12s"}}>
+                      <div style={{fontSize:12,fontWeight:700,color:tcLevel===k?T.accent:T.text}}>{l}</div>
+                    </button>
+                  ))}
                 </div>
+              </div>
 
-                {/* Table */}
+              {/* Table */}
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Target Table <span style={{color:T.rose}}>*</span></label>
+                <select value={tcSelTable} onChange={e=>{setTcSelTable(e.target.value);setTcSelCol("");setTcSelType(null);setTcCustomSQL(false);setTcSQLQuery("");}}
+                  style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${tcSelTable?T.accent:T.border}`,borderRadius:9,color:tcSelTable?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
+                  <option value="">Select a table…</option>
+                  {KNOWN_TABLES.map(t=><option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+
+              {/* Column (if column level) */}
+              {tcLevel==="column"&&tcSelTable&&(
                 <div>
-                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Target Table <span style={{color:T.rose}}>*</span></label>
-                  <select value={tcSelTable} onChange={e=>{setTcSelTable(e.target.value);setTcSelCol("");setTcSelType(null);}}
-                    style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${tcSelTable?T.accent:T.border}`,borderRadius:9,color:tcSelTable?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer"}}>
-                    <option value="">Select a table…</option>
-                    {KNOWN_TABLES.map(t=><option key={t} value={t}>{t}</option>)}
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Column <span style={{color:T.rose}}>*</span></label>
+                  <select value={tcSelCol} onChange={e=>{setTcSelCol(e.target.value);setTcSelType(null);}}
+                    style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${tcSelCol?T.accent:T.border}`,borderRadius:9,color:tcSelCol?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
+                    <option value="">Select a column…</option>
+                    {(KNOWN_COLS[tcSelTable]||[]).map(c=><option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
+              )}
 
-                {/* Column (if column level) */}
-                {tcLevel==="column"&&tcSelTable&&(
-                  <div>
-                    <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Column <span style={{color:T.rose}}>*</span></label>
-                    <select value={tcSelCol} onChange={e=>{setTcSelCol(e.target.value);setTcSelType(null);}}
-                      style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${tcSelCol?T.accent:T.border}`,borderRadius:9,color:tcSelCol?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer"}}>
-                      <option value="">Select a column…</option>
-                      {(KNOWN_COLS[tcSelTable]||[]).map(c=><option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                )}
+              {/* Test Type dropdown */}
+              {tcSelTable&&(tcLevel!=="column"||tcSelCol)&&(
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Test Type <span style={{color:T.rose}}>*</span></label>
+                  <select
+                    value={tcCustomSQL?"__custom__":tcSelType?.id||""}
+                    onChange={e=>{
+                      if(e.target.value==="__custom__"){setTcCustomSQL(true);setTcSelType(null);}
+                      else if(e.target.value===""){setTcCustomSQL(false);setTcSelType(null);}
+                      else{const def=definitions.find(d=>d.id===e.target.value);setTcSelType(def||null);setTcCustomSQL(false);}
+                    }}
+                    style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${(tcSelType||tcCustomSQL)?T.accent:T.border}`,borderRadius:9,color:(tcSelType||tcCustomSQL)?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
+                    <option value="">Select a test type…</option>
+                    <option value="__custom__">✦ Custom SQL Query</option>
+                    {definitions.filter(d=>tcLevel==="column"?d.entityType==="COLUMN":d.entityType==="TABLE").map(def=>(
+                      <option key={def.id} value={def.id}>{def.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
-                {/* Test Type */}
-                {tcSelTable&&(tcLevel!=="column"||tcSelCol)&&(
-                  <div>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                      <div style={{fontSize:11,fontWeight:600,color:T.textSub}}>Test Type <span style={{color:T.rose}}>*</span></div>
-                      <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:11.5,color:tcCustomSQL?T.accent:T.textMuted,fontWeight:tcCustomSQL?600:400}}>
-                        <input type="checkbox" checked={tcCustomSQL} onChange={e=>{setTcCustomSQL(e.target.checked);setTcSelType(null);}} style={{accentColor:T.accent,cursor:"pointer"}}/>
-                        Custom SQL Query
-                      </label>
+              {/* Custom SQL textarea */}
+              {tcCustomSQL&&(
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>SQL Query <span style={{color:T.rose}}>*</span></label>
+                  <textarea value={tcSQLQuery} onChange={e=>setTcSQLQuery(e.target.value)} rows={4}
+                    placeholder={"SELECT COUNT(*) FROM {{table}} WHERE amount < 0"}
+                    style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${tcSQLQuery?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box",lineHeight:1.6}}
+                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=tcSQLQuery?T.accent:T.border}/>
+                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>Use <code style={{fontFamily:"'Geist Mono',monospace",background:T.bgElevated,padding:"1px 5px",borderRadius:4}}>{`{{table}}`}</code> to reference the selected table. Result &gt; 0 = fail.</div>
+                </div>
+              )}
+
+              {/* Parameters */}
+              {!tcCustomSQL&&tcSelType&&tcSelType.params.length>0&&(
+                <div>
+                  <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Parameters</div>
+                  {tcSelType.params.map(param=>(
+                    <div key={param} style={{marginBottom:10}}>
+                      <label style={{display:"block",fontSize:11,fontWeight:500,color:T.textSub,marginBottom:5,textTransform:"capitalize"}}>{param.replace(/([A-Z])/g," $1").trim()}</label>
+                      <input value={tcParams[param]||""} onChange={e=>setTcParams(p=>({...p,[param]:e.target.value}))}
+                        placeholder={`e.g. ${param.includes("min")||param.includes("Min")?"0":param.includes("max")||param.includes("Max")?"1000":param.includes("regex")?"^[A-Z].*":param.includes("Values")||param.includes("Set")?"value1, value2":"..."}`}
+                        style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${tcParams[param]?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:param.includes("regex")||param.includes("sql")?"'Geist Mono',monospace":"inherit"}}
+                        onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=tcParams[param]?T.accent:T.border}/>
                     </div>
-                    {tcCustomSQL?(
-                      <div>
-                        <textarea value={tcSQLQuery} onChange={e=>setTcSQLQuery(e.target.value)} rows={4}
-                          placeholder={"SELECT COUNT(*) FROM {{table}} WHERE amount < 0"}
-                          style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${tcSQLQuery?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box",lineHeight:1.6}}
-                          onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=tcSQLQuery?T.accent:T.border}/>
-                        <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>Use <code style={{fontFamily:"'Geist Mono',monospace",background:T.bgElevated,padding:"1px 5px",borderRadius:4}}>{`{{table}}`}</code> to reference the selected table.</div>
-                      </div>
-                    ):(
-                      <div style={{display:"flex",flexDirection:"column",gap:5,maxHeight:200,overflowY:"auto",padding:"2px 0"}}>
-                        {definitions.filter(d=>tcLevel==="column"?d.entityType==="COLUMN":d.entityType==="TABLE").map(def=>{
-                          const isSel=tcSelType?.id===def.id;
-                          return (
-                            <div key={def.id} onClick={()=>setTcSelType(def)} style={{padding:"9px 12px",borderRadius:9,border:`1.5px solid ${isSel?T.accent:T.border}`,background:isSel?`${T.accent}08`:T.bgElevated,cursor:"pointer",display:"flex",alignItems:"center",gap:10,transition:"all .12s"}}
-                              onMouseEnter={e=>{if(!isSel)e.currentTarget.style.borderColor=T.borderLight;}} onMouseLeave={e=>{if(!isSel)e.currentTarget.style.borderColor=T.border;}}>
-                              <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontSize:12,fontWeight:isSel?700:500,color:isSel?T.accent:T.text,marginBottom:2}}>{def.name}</div>
-                                <span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:`${dimColor(def.dim)}12`,color:dimColor(def.dim),fontWeight:600}}>{def.dim}</span>
-                              </div>
-                              {isSel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{flexShrink:0,color:T.accent}}><path d="M2.5 7l4 4 5-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Parameters */}
-                {!tcCustomSQL&&tcSelType&&tcSelType.params.length>0&&(
-                  <div>
-                    <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Parameters</div>
-                    {tcSelType.params.map(param=>(
-                      <div key={param} style={{marginBottom:10}}>
-                        <label style={{display:"block",fontSize:11,fontWeight:500,color:T.textSub,marginBottom:5,textTransform:"capitalize"}}>{param.replace(/([A-Z])/g," $1").trim()}</label>
-                        <input value={tcParams[param]||""} onChange={e=>setTcParams(p=>({...p,[param]:e.target.value}))}
-                          placeholder={`e.g. ${param.includes("min")||param.includes("Min")?"0":param.includes("max")||param.includes("Max")?"1000":param.includes("regex")?"^[A-Z].*":param.includes("Values")||param.includes("Set")?"value1, value2":"..."}`}
-                          style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${tcParams[param]?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:param.includes("regex")||param.includes("sql")?"'Geist Mono',monospace":"inherit"}}
-                          onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=tcParams[param]?T.accent:T.border}/>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Name */}
-                <div>
-                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Test Case Name <span style={{color:T.textMuted,fontWeight:400}}>(auto-generated if blank)</span></label>
-                  <input value={tcName} onChange={e=>setTcName(e.target.value)}
-                    placeholder={tcSelTable&&(tcSelType||tcCustomSQL)?`${tcSelTable}${tcSelCol?"."+tcSelCol:""}${tcSelType?" — "+tcSelType.name:tcCustomSQL?" — custom_sql":""}`:"Name will be auto-generated"}
-                    style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"}}
-                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                  ))}
                 </div>
+              )}
 
-                {/* Description */}
-                <div>
-                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Description <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
-                  <textarea value={tcDesc} onChange={e=>setTcDesc(e.target.value)} rows={2}
-                    placeholder="What does this test validate and why is it important?"
-                    style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",resize:"none",fontFamily:"inherit",lineHeight:1.6,boxSizing:"border-box"}}
-                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+              {/* Tags */}
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Tags</label>
+                <div style={{border:`1.5px solid ${T.border}`,borderRadius:9,padding:"6px 10px",background:T.bgElevated,display:"flex",flexWrap:"wrap",gap:5,alignItems:"center",minHeight:38,cursor:"text"}}
+                  onClick={e=>e.currentTarget.querySelector("input")?.focus()}>
+                  {tcTags.map(t=>(
+                    <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:99,background:`${T.accent}14`,border:`1px solid ${T.accent}30`,fontSize:11,color:T.accent,fontWeight:500}}>
+                      {t}<button onClick={e=>{e.stopPropagation();setTcTags(p=>p.filter(x=>x!==t));}} style={{background:"none",border:"none",cursor:"pointer",color:T.accent,fontSize:13,padding:"0 0 0 2px",lineHeight:1,opacity:.65}}>×</button>
+                    </span>
+                  ))}
+                  <input placeholder={tcTags.length===0?"Add tags…":"+ tag"} onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&e.currentTarget.value.trim()){e.preventDefault();const v=e.currentTarget.value.trim();if(!tcTags.includes(v))setTcTags(p=>[...p,v]);e.currentTarget.value="";}if(e.key==="Backspace"&&!e.currentTarget.value&&tcTags.length)setTcTags(p=>p.slice(0,-1));}}
+                    style={{flex:"1 1 80px",minWidth:50,border:"none",outline:"none",background:"transparent",fontSize:11.5,color:T.text}}/>
                 </div>
-
-                {/* Tags */}
-                <div>
-                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Tags</label>
-                  <div style={{border:`1.5px solid ${T.border}`,borderRadius:9,padding:"6px 10px",background:T.bgElevated,display:"flex",flexWrap:"wrap",gap:5,alignItems:"center",minHeight:38,cursor:"text"}}
-                    onClick={e=>e.currentTarget.querySelector("input")?.focus()}>
-                    {tcTags.map(t=>(
-                      <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:99,background:`${T.accent}14`,border:`1px solid ${T.accent}30`,fontSize:11,color:T.accent,fontWeight:500}}>
-                        {t}<button onClick={e=>{e.stopPropagation();setTcTags(p=>p.filter(x=>x!==t));}} style={{background:"none",border:"none",cursor:"pointer",color:T.accent,fontSize:13,padding:"0 0 0 2px",lineHeight:1,opacity:.65}}>×</button>
-                      </span>
-                    ))}
-                    <input placeholder={tcTags.length===0?"Add tags…":"+ tag"} onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&e.currentTarget.value.trim()){e.preventDefault();const v=e.currentTarget.value.trim();if(!tcTags.includes(v))setTcTags(p=>[...p,v]);e.currentTarget.value="";}if(e.key==="Backspace"&&!e.currentTarget.value&&tcTags.length)setTcTags(p=>p.slice(0,-1));}}
-                      style={{flex:"1 1 80px",minWidth:50,border:"none",outline:"none",background:"transparent",fontSize:11.5,color:T.text}}/>
-                  </div>
-                </div>
-
-                {/* Glossary Terms */}
-                <div>
-                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Glossary Terms</label>
-                  <div style={{border:`1.5px solid ${T.border}`,borderRadius:9,padding:"6px 10px",background:T.bgElevated,display:"flex",flexWrap:"wrap",gap:5,alignItems:"center",minHeight:38,cursor:"text"}}
-                    onClick={e=>e.currentTarget.querySelector("input")?.focus()}>
-                    {tcGlossary.map(t=>(
-                      <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:99,background:`${T.violet}14`,border:`1px solid ${T.violet}30`,fontSize:11,color:T.violet,fontWeight:500}}>
-                        {t}<button onClick={e=>{e.stopPropagation();setTcGlossary(p=>p.filter(x=>x!==t));}} style={{background:"none",border:"none",cursor:"pointer",color:T.violet,fontSize:13,padding:"0 0 0 2px",lineHeight:1,opacity:.65}}>×</button>
-                      </span>
-                    ))}
-                    <input placeholder={tcGlossary.length===0?"Link glossary terms…":"+ term"} onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&e.currentTarget.value.trim()){e.preventDefault();const v=e.currentTarget.value.trim();if(!tcGlossary.includes(v))setTcGlossary(p=>[...p,v]);e.currentTarget.value="";}if(e.key==="Backspace"&&!e.currentTarget.value&&tcGlossary.length)setTcGlossary(p=>p.slice(0,-1));}}
-                      style={{flex:"1 1 80px",minWidth:50,border:"none",outline:"none",background:"transparent",fontSize:11.5,color:T.text}}/>
-                  </div>
-                </div>
-
               </div>
 
-              {/* RIGHT: help panel */}
-              <div style={{width:260,borderLeft:`1px solid ${T.border}`,background:T.bgElevated,padding:"20px 18px",overflowY:"auto",flexShrink:0}}>
-                {tcCustomSQL?(
-                  <div>
-                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:10,textTransform:"uppercase"}}>Custom SQL</div>
-                    <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:8}}>Write your own check</div>
-                    <div style={{fontSize:12,color:T.textSub,lineHeight:1.7,marginBottom:14}}>Use any SQL expression. The query should return a single numeric value — zero means the test passes.</div>
-                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:6,textTransform:"uppercase"}}>Example</div>
-                    <code style={{fontSize:11,color:T.violet,fontFamily:"'Geist Mono',monospace",background:`${T.violet}10`,padding:"8px 10px",borderRadius:6,display:"block",lineHeight:1.7}}>
-                      SELECT COUNT(*){"\n"}FROM orders{"\n"}WHERE total &lt; 0
-                    </code>
-                    <div style={{fontSize:11,color:T.textMuted,marginTop:10,lineHeight:1.6}}>Result &gt; 0 = test fails. Result = 0 = test passes.</div>
-                  </div>
-                ):tcSelType?(
-                  <>
-                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:10,textTransform:"uppercase"}}>Selected Test Type</div>
-                    <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:6}}>{tcSelType.name}</div>
-                    <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10}}>
-                      <span style={{fontSize:10,padding:"2px 8px",borderRadius:5,background:`${dimColor(tcSelType.dim)}12`,color:dimColor(tcSelType.dim),fontWeight:600}}>{tcSelType.dim}</span>
-                      <span style={{fontSize:10,padding:"2px 8px",borderRadius:5,background:tcSelType.entityType==="TABLE"?T.accentDim:T.violetDim,color:tcSelType.entityType==="TABLE"?T.accent:T.violet,fontWeight:600}}>{tcSelType.entityType}</span>
-                    </div>
-                    <div style={{fontSize:12,color:T.textSub,lineHeight:1.7,marginBottom:14}}>{tcSelType.desc}</div>
-                    {tcSelType.params.length>0&&(<>
-                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:6,textTransform:"uppercase"}}>Parameters</div>
-                      {tcSelType.params.map(p=><div key={p} style={{fontSize:11,padding:"3px 0",color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{p}</div>)}
-                    </>)}
-                  </>
-                ):(
-                  <div style={{textAlign:"center",padding:"28px 8px"}}>
-                    <div style={{fontSize:28,marginBottom:10,opacity:.15}}>⚗️</div>
-                    <div style={{fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>Select a Test Type</div>
-                    <div style={{fontSize:11,color:T.textMuted,lineHeight:1.6}}>Pick a table then a test type to see its description and parameters here. Or enable Custom SQL to write your own check.</div>
-                  </div>
-                )}
+              {/* Glossary Terms */}
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Glossary Terms</label>
+                <div style={{border:`1.5px solid ${T.border}`,borderRadius:9,padding:"6px 10px",background:T.bgElevated,display:"flex",flexWrap:"wrap",gap:5,alignItems:"center",minHeight:38,cursor:"text"}}
+                  onClick={e=>e.currentTarget.querySelector("input")?.focus()}>
+                  {tcGlossary.map(t=>(
+                    <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:99,background:`${T.violet}14`,border:`1px solid ${T.violet}30`,fontSize:11,color:T.violet,fontWeight:500}}>
+                      {t}<button onClick={e=>{e.stopPropagation();setTcGlossary(p=>p.filter(x=>x!==t));}} style={{background:"none",border:"none",cursor:"pointer",color:T.violet,fontSize:13,padding:"0 0 0 2px",lineHeight:1,opacity:.65}}>×</button>
+                    </span>
+                  ))}
+                  <input placeholder={tcGlossary.length===0?"Link glossary terms…":"+ term"} onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&e.currentTarget.value.trim()){e.preventDefault();const v=e.currentTarget.value.trim();if(!tcGlossary.includes(v))setTcGlossary(p=>[...p,v]);e.currentTarget.value="";}if(e.key==="Backspace"&&!e.currentTarget.value&&tcGlossary.length)setTcGlossary(p=>p.slice(0,-1));}}
+                    style={{flex:"1 1 80px",minWidth:50,border:"none",outline:"none",background:"transparent",fontSize:11.5,color:T.text}}/>
+                </div>
               </div>
+
             </div>
 
             {/* Footer */}
-            <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgElevated,borderRadius:"0 0 16px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgElevated,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
               <button onClick={()=>setNewTCModal(false)} style={{padding:"8px 18px",borderRadius:9,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer",fontWeight:500}}>Cancel</button>
               <button onClick={handleAddTC} disabled={(!tcSelType&&!tcCustomSQL)||!tcSelTable||(tcLevel==="column"&&!tcSelCol)||(tcCustomSQL&&!tcSQLQuery.trim())}
                 style={{padding:"9px 22px",borderRadius:9,background:(tcSelType||tcCustomSQL)&&tcSelTable&&(tcLevel!=="column"||tcSelCol)&&(!tcCustomSQL||tcSQLQuery.trim())?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:(tcSelType||tcCustomSQL)&&tcSelTable?"pointer":"default"}}>
@@ -14001,37 +13960,42 @@ const TagManagementView = ({onToast}) => {
 
   return (
     <div className="fadeUp" style={{height:'100%',display:'flex',flexDirection:'column'}}>
-      <Topbar breadcrumb={[{label:'Tag Management'}]} actions={
-        <div ref={plusMenuRef} style={{position:'relative'}}>
-          <button onClick={()=>setPlusMenuOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 14px',borderRadius:7,background:T.accent,border:'none',color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer'}}>
-            {Ic.plus(11)} New
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{marginLeft:2}}><path d="M2 4l3 3 3-3" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-          {plusMenuOpen&&(
-            <div style={{position:'absolute',top:'calc(100% + 6px)',right:0,width:180,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.18)',zIndex:200,overflow:'hidden'}}>
-              <button onClick={()=>{setNewCatPanelOpen(true);setNewPanelOpen(false);setSelTagId(null);setPlusMenuOpen(false);}}
-                style={{width:'100%',padding:'11px 14px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',display:'flex',alignItems:'center',gap:10,color:T.text,fontSize:12.5,fontWeight:500,borderBottom:`1px solid ${T.border}`}}
-                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                <span style={{width:22,height:22,borderRadius:6,background:'rgba(99,102,241,.12)',display:'flex',alignItems:'center',justifyContent:'center',color:'#6366f1',flexShrink:0}}>{Ic.catalog(11)}</span>
-                New Category
-              </button>
-              <button onClick={()=>{setNewPanelOpen(true);setNewCatPanelOpen(false);setSelTagId(null);setPlusMenuOpen(false);}}
-                style={{width:'100%',padding:'11px 14px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',display:'flex',alignItems:'center',gap:10,color:T.text,fontSize:12.5,fontWeight:500}}
-                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                <span style={{width:22,height:22,borderRadius:6,background:`${T.accent}14`,display:'flex',alignItems:'center',justifyContent:'center',color:T.accent,flexShrink:0}}>{Ic.tag(11)}</span>
-                New Tag
-              </button>
-            </div>
-          )}
-        </div>
-      }/>
+      <Topbar breadcrumb={[{label:'Tag Management'}]}/>
 
       <div style={{flex:1,display:'flex',overflow:'hidden'}}>
 
         {/* ── LEFT: Tag list ── */}
         <div style={{width:240,flexShrink:0,borderRight:`1px solid ${T.border}`,background:T.bgSurface,display:'flex',flexDirection:'column'}}>
-          {/* Search + Filter row */}
-          <div style={{padding:'10px 12px',borderBottom:`1px solid ${T.border}`,flexShrink:0,display:'flex',gap:6,alignItems:'center'}}>
+          {/* Panel header — TAG MANAGEMENT label + plus button */}
+          <div style={{padding:'12px 14px 10px',borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+              <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.08em'}}>Tags</span>
+              <div ref={plusMenuRef} style={{position:'relative'}}>
+                <button onClick={()=>setPlusMenuOpen(o=>!o)} title="New category or tag"
+                  style={{width:22,height:22,borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .12s'}}
+                  onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                  onMouseLeave={e=>{e.currentTarget.style.background=T.bgElevated;e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
+                  {Ic.plus(10)}
+                </button>
+                {plusMenuOpen&&(
+                  <div style={{position:'absolute',top:'calc(100% + 4px)',right:0,width:170,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.18)',zIndex:300,overflow:'hidden'}}>
+                    <button onClick={()=>{setNewCatPanelOpen(true);setNewPanelOpen(false);setSelTagId(null);setPlusMenuOpen(false);}}
+                      style={{width:'100%',padding:'10px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',display:'flex',alignItems:'center',gap:9,color:T.text,fontSize:12,fontWeight:500,borderBottom:`1px solid ${T.border}`}}
+                      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                      <span style={{width:20,height:20,borderRadius:5,background:'rgba(99,102,241,.12)',display:'flex',alignItems:'center',justifyContent:'center',color:'#6366f1',flexShrink:0}}>{Ic.catalog(10)}</span>
+                      New Category
+                    </button>
+                    <button onClick={()=>{setNewPanelOpen(true);setNewCatPanelOpen(false);setSelTagId(null);setPlusMenuOpen(false);}}
+                      style={{width:'100%',padding:'10px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',display:'flex',alignItems:'center',gap:9,color:T.text,fontSize:12,fontWeight:500}}
+                      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                      <span style={{width:20,height:20,borderRadius:5,background:`${T.accent}14`,display:'flex',alignItems:'center',justifyContent:'center',color:T.accent,flexShrink:0}}>{Ic.tag(10)}</span>
+                      New Tag
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          <div style={{display:'flex',gap:6,alignItems:'center'}}>
             <div style={{flex:1}}><Input2 placeholder="Search tags…" value={search} onChange={e=>setSearch(e.target.value)} icon={Ic.search(11)}/></div>
             {/* Filter button */}
             <div ref={filterRef} style={{position:'relative',flexShrink:0}}>
@@ -14075,6 +14039,7 @@ const TagManagementView = ({onToast}) => {
                 </div>
               )}
             </div>
+          </div>
           </div>
 
           {/* Active filter strip */}
