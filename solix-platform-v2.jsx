@@ -108,14 +108,10 @@ input,textarea,select{font-family:inherit;font-size:inherit;transition:backgroun
 const ASSETS = [
   {id:1, name:"orders",              type:"Table",     domain:"Commerce",  owner:"maya.chen",  owners:["maya.chen"],               steward:"dev.patel",  stewards:["dev.patel","sarah.kim"],  cert:"Approved",   quality:94, usage:"High", updated:"2h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",   db:"snowflake_prod / COMMERCE / orders",       tier:1, rows:"48.2M",  size:"12.4 GB", tags:["PII","revenue"],          description:"Core transactional orders table. Source of truth for all order data.",     slaFreshness:"2h"},
   {id:2, name:"customers",           type:"Table",     domain:"Commerce",  owner:"dev.patel",  owners:["dev.patel","maya.chen"],    steward:"dev.patel",  stewards:["dev.patel"],              cert:"Approved",   quality:91, usage:"High", updated:"1d ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",   db:"snowflake_prod / COMMERCE / customers",    tier:1, rows:"3.1M",   size:"2.8 GB",  tags:["PII"],                    description:"Master customer dimension table from Salesforce CRM.",                     slaFreshness:"6h"},
-  {id:3, name:"revenue_dashboard",   type:"Dashboard", domain:"Finance",   owner:"sarah.kim",  owners:["sarah.kim"],               steward:"sarah.kim",  stewards:["sarah.kim","james.oh"],   cert:"In Review",   quality:87, usage:"Med",  updated:"3d ago",  service:"looker",     connectionLabel:"Looker",          db:"looker_cloud / FINANCE",                    tier:2, rows:"—",      size:"—",       tags:["finance"],                description:"Executive revenue dashboard used in weekly reporting.",                      slaFreshness:"24h"},
   {id:4, name:"product_events",      type:"Table",     domain:"Product",   owner:"alex.wu",    owners:["alex.wu"],                 steward:"alex.wu",    stewards:["alex.wu"],                cert:"Draft", quality:72, usage:"Med",  updated:"5d ago",  service:"postgres",   connectionLabel:"PostgreSQL Prod",  db:"postgresql_prod / PRODUCT / events",        tier:3, rows:"210M",   size:"38 GB",   tags:["events"],                 description:"Raw product analytics events from web and mobile.",                         slaFreshness:"1h"},
-  {id:5, name:"ml_churn_model",      type:"ML Model",  domain:"ML",        owner:"priya.nair", owners:["priya.nair"],              steward:"priya.nair", stewards:["priya.nair","alex.wu"],   cert:"Approved",   quality:88, usage:"Low",  updated:"1w ago",  service:"mlflow",     connectionLabel:"MLflow",          db:"mlflow_prod / MODELS",                     tier:2, rows:"—",      size:"420 MB",  tags:["model"],                  description:"Gradient-boosted churn prediction model v3.2.",                             slaFreshness:"72h"},
   {id:6, name:"etl_orders_pipeline", type:"Pipeline",  domain:"Commerce",  owner:"james.oh",   owners:["james.oh"],                steward:"james.oh",   stewards:["james.oh"],               cert:"Approved",   quality:96, usage:"High", updated:"30m ago", service:"airflow",    connectionLabel:"Airflow",         db:"airflow_prod / PIPELINES",                 tier:1, rows:"—",      size:"—",       tags:["etl"],                    description:"Fivetran-powered orders ETL. Runs hourly.",                                 slaFreshness:"2h"},
   {id:7, name:"user_sessions",       type:"Table",     domain:"Product",   owner:"alex.wu",    owners:["alex.wu"],                 steward:"alex.wu",    stewards:["alex.wu"],                cert:"Deprecated",  quality:45, usage:"Low",  updated:"2w ago",  service:"postgres",   connectionLabel:"PostgreSQL Prod",  db:"postgresql_prod / PRODUCT / sessions", tier:3, rows:"890M",   size:"142 GB",  tags:["PII","events"],           description:"Legacy session table. Use product_events instead.",                         slaFreshness:"4h"},
-  {id:8, name:"finance_summary",     type:"Dashboard", domain:"Finance",   owner:"sarah.kim",  owners:["sarah.kim","lisa.ray"],    steward:"sarah.kim",  stewards:["sarah.kim","lisa.ray"],   cert:"Approved",   quality:92, usage:"High", updated:"4h ago",  service:"tableau",    connectionLabel:"Tableau Cloud",   db:"tableau_cloud / FINANCE",                   tier:1, rows:"—",      size:"—",       tags:["finance","sensitive"],    description:"Finance summary report for leadership.",                                    slaFreshness:"24h"},
   {id:9, name:"dim_products",        type:"Table",     domain:"Commerce",  owner:"james.oh",   owners:["james.oh"],                steward:"maya.chen",  stewards:["maya.chen","dev.patel"],  cert:"Approved",   quality:98, usage:"High", updated:"1h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",   db:"snowflake_prod / COMMERCE / dim_products", tier:1, rows:"82K",    size:"45 MB",   tags:["dimension"],              description:"Product dimension with SKU, categories, pricing.",                          slaFreshness:"24h"},
-  {id:10,name:"marketing_attribution",type:"Dashboard",domain:"Marketing", owner:"lisa.ray",   owners:["lisa.ray"],                steward:"lisa.ray",   stewards:["lisa.ray"],               cert:"Draft", quality:79, usage:"Med",  updated:"6d ago",  service:"looker",     connectionLabel:"Looker",          db:"looker_cloud / MARKETING",                  tier:3, rows:"—",      size:"—",       tags:["marketing"],              description:"Multi-touch attribution reporting.",                                        slaFreshness:"24h"},
 ];
 
 // ── Hierarchy assets (Database → Schema → Table/View, Bucket → Folder → Object, etc.) ──
@@ -8101,16 +8097,25 @@ const CatalogView = ({onAsset})=>{
   const [selTags,          setSelTags]          = useState(new Set());
   const [selGlossaryTerms, setSelGlossaryTerms] = useState(new Set());
   const [openGroup,  setOpenGroup]  = useState({conntype:true,connection:false,domain:true,type:true,cert:false,tier:false,owner:false,tags:false,glossary:false});
+  const PAGE_SIZE = 25;
+  const [page, setPage] = useState(1);
+  useEffect(()=>{ setPage(1); },[q,selConnTypes,selTypes,selDomains,selCerts,selTiers,selConns,selOwners,selTags,selGlossaryTerms]);
   const DRILLABLE_TYPES = new Set(["Database","Catalog","Schema","Bucket","Container","Folder"]);
+  const CONN_TYPE_ASSET_TYPES = {
+    snowflake:  ["Database","Schema","Table","View"],
+    databricks: ["Catalog","Schema","Table","View"],
+    oracle:     ["Database","Schema","Table","View"],
+    postgres:   ["Database","Schema","Table","View"],
+    mysql:      ["Database","Table","View"],
+    s3:         ["Bucket","Folder","Object"],
+    azureblob:  ["Container","Blob"],
+    airflow:    ["Pipeline"],
+  };
 
   const toggle = (setter, val) => setter(prev => { const next = new Set(prev); next.has(val)?next.delete(val):next.add(val); return next; });
   const sorts = [{v:"relevance",l:"Relevance"},{v:"quality",l:"Quality ↓"},{v:"name",l:"Name A–Z"},{v:"updated",l:"Recently Updated"},{v:"usage",l:"Popularity"}];
 
   const filtered = ASSETS.filter(a => {
-    // Default: hide child assets (those with a parentId) unless a search/filter is active
-    if(!q && selTypes.size===0 && selConnTypes.size===0 && selDomains.size===0 && selCerts.size===0 && selTiers.size===0 && selConns.size===0 && selOwners.size===0 && selTags.size===0 && selGlossaryTerms.size===0) {
-      if(a.parentId!=null) return false;
-    }
     const mq  = !q || a.name.toLowerCase().includes(q.toLowerCase()) || (a.domain||"").toLowerCase().includes(q.toLowerCase()) || (a.tags||[]).some(t=>t.toLowerCase().includes(q.toLowerCase())) || (a.description||"").toLowerCase().includes(q.toLowerCase()) || (a.db||"").toLowerCase().includes(q.toLowerCase()) || (SCHEMA[a.name]||[]).some(c=>c.name.toLowerCase().includes(q.toLowerCase()));
     const mct = selConnTypes.size===0 || selConnTypes.has(a.service);
     const mt  = selTypes.size===0   || selTypes.has(a.type);
@@ -8128,6 +8133,8 @@ const CatalogView = ({onAsset})=>{
     if(sortBy==="usage")   return (b.usage==="High"?2:b.usage==="Med"?1:0)-(a.usage==="High"?2:a.usage==="Med"?1:0);
     return 0;
   });
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const pagedRows  = filtered.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE);
 
   const totalActive = selConnTypes.size+selTypes.size+selDomains.size+selCerts.size+selTiers.size+selConns.size+selOwners.size+selTags.size+selGlossaryTerms.size;
   const clearAll = () => { setSelConnTypes(new Set()); setSelTypes(new Set()); setSelDomains(new Set()); setSelCerts(new Set()); setSelTiers(new Set()); setSelConns(new Set()); setSelOwners(new Set()); setSelTags(new Set()); setSelGlossaryTerms(new Set()); };
@@ -8147,10 +8154,12 @@ const CatalogView = ({onAsset})=>{
 
   const CERT_COLORS = {"Approved":"#16a34a","In Review":"#d97706","Draft":"#6b7280","Rejected":"#e11d48","Deprecated":"#7c3aed"};
   const TIER_META   = {"1":{color:"#ee2424",label:"Critical"},"2":{color:"#d97706",label:"Important"},"3":{color:"#4b4b60",label:"Exploratory"}};
-  const CONN_TYPE_LABELS = {snowflake:"Snowflake",databricks:"Databricks",oracle:"Oracle",postgres:"PostgreSQL",mysql:"MySQL",s3:"Amazon S3",azureblob:"Azure Blob",looker:"Looker",tableau:"Tableau",airflow:"Airflow",mlflow:"MLflow"};
+  const CONN_TYPE_LABELS = {snowflake:"Snowflake",databricks:"Databricks",oracle:"Oracle",postgres:"PostgreSQL",mysql:"MySQL",s3:"Amazon S3",azureblob:"Azure Blob",airflow:"Airflow"};
   const allConnTypes = [...new Set(ASSETS.map(a=>a.service))];
   const visibleConns = selConnTypes.size===0 ? [...new Set(ASSETS.map(a=>a.connectionLabel))] : [...new Set(ASSETS.filter(a=>selConnTypes.has(a.service)).map(a=>a.connectionLabel))];
-  const ALL_ASSET_TYPES = [...new Set(ASSETS.map(a=>a.type))];
+  const ALL_ASSET_TYPES = selConnTypes.size===0
+    ? [...new Set(ASSETS.map(a=>a.type))]
+    : [...new Set([...selConnTypes].flatMap(ct=>CONN_TYPE_ASSET_TYPES[ct]||[]))].filter(t=>ASSETS.some(a=>a.type===t));
 
   const FacetGroup = ({id,label,icon,items,sel,onToggle,renderItem,headerNote}) => {
     const open = openGroup[id];
@@ -8331,10 +8340,10 @@ const CatalogView = ({onAsset})=>{
           )}
           <div style={{flex:1,overflowY:"auto",padding:"18px 20px"}}>
             {filtered.length===0&&<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:200,gap:8}}><div style={{color:T.textMuted,opacity:.25}}>{Ic.catalog(36)}</div><div style={{fontSize:13,fontWeight:600,color:T.textSub}}>No assets match your filters</div><button onClick={clearAll} style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer"}}>Clear all filters</button></div>}
-            {view==="table"&&filtered.length>0&&<DataTable cols={cols} rows={filtered} onRowClick={r=>onAsset(r)}/>}
+            {view==="table"&&filtered.length>0&&<DataTable cols={cols} rows={pagedRows} onRowClick={r=>onAsset(r)}/>}
             {view==="card"&&filtered.length>0&&(
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                {filtered.map(a=>{
+                {pagedRows.map(a=>{
                   // Find glossary terms linked to this asset
                   const linkedTerms = GLOSSARY_TERMS.filter(t=>(t.linkedAssets||[]).some(la=>la.name===a.name)&&t.status!=="Deprecated");
                   const conflictTerms = linkedTerms.filter(t=>t.conflictFlag);
@@ -8379,6 +8388,43 @@ const CatalogView = ({onAsset})=>{
                     </div>
                   );
                 })}
+              </div>
+            )}
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 0 4px",borderTop:`1px solid ${T.border}`,marginTop:8}}>
+                <span style={{fontSize:12,color:T.textMuted}}>
+                  Showing {(page-1)*PAGE_SIZE+1}–{Math.min(page*PAGE_SIZE,filtered.length)} of {filtered.length} assets
+                </span>
+                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                  <button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}
+                    style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:T.bgElevated,color:page===1?T.textMuted:T.text,cursor:page===1?"default":"pointer",fontSize:12,transition:"all .1s"}}
+                    onMouseEnter={e=>{if(page>1){e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}}
+                    onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=page===1?T.textMuted:T.text;}}>
+                    ← Prev
+                  </button>
+                  {Array.from({length:Math.min(7,totalPages)},(_,i)=>{
+                    let pg; const half=3;
+                    if(totalPages<=7) pg=i+1;
+                    else if(page<=half+1) pg=i+1;
+                    else if(page>=totalPages-half) pg=totalPages-6+i;
+                    else pg=page-half+i;
+                    return (
+                      <button key={pg} onClick={()=>setPage(pg)}
+                        style={{width:30,height:30,borderRadius:6,border:`1px solid ${pg===page?T.accent:T.border}`,background:pg===page?T.accentDim:T.bgElevated,color:pg===page?T.accent:T.text,cursor:"pointer",fontSize:12,fontWeight:pg===page?700:400,transition:"all .1s"}}
+                        onMouseEnter={e=>{if(pg!==page){e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}}
+                        onMouseLeave={e=>{if(pg!==page){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.text;}}}>
+                        {pg}
+                      </button>
+                    );
+                  })}
+                  <button onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages}
+                    style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:T.bgElevated,color:page===totalPages?T.textMuted:T.text,cursor:page===totalPages?"default":"pointer",fontSize:12,transition:"all .1s"}}
+                    onMouseEnter={e=>{if(page<totalPages){e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}}
+                    onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=page===totalPages?T.textMuted:T.text;}}>
+                    Next →
+                  </button>
+                </div>
               </div>
             )}
           </div>
