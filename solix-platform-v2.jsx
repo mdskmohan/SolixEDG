@@ -6254,20 +6254,12 @@ const AssetOverview = ({asset,data,setData,onToast})=>{
     </Card2>
   </div>
 );}
-const AssetSchema = ({asset,onToast})=>{
+const AssetSchema = ({asset,selCol,onColClick,onToast})=>{
   const cols=SCHEMA[asset.name]||SCHEMA.orders||[];
   const [schSearch,setSchSearch]=useState("");
-  const [selCol,setSelCol]=useState(null);
   const filtered=cols.filter(c=>!schSearch||c.name.toLowerCase().includes(schSearch.toLowerCase())||c.desc?.toLowerCase().includes(schSearch.toLowerCase())||c.type?.toLowerCase().includes(schSearch.toLowerCase()));
-  const prof=selCol?(COL_PROFILES[selCol.name]||null):null;
-  const StatBar=({pct,color="#ee2424"})=>(
-    <div style={{width:"100%",height:3,background:T.bgHover,borderRadius:2,overflow:"hidden",marginTop:3}}>
-      <div style={{width:`${Math.min(100,pct||0)}%`,height:"100%",background:color,borderRadius:2}}/>
-    </div>
-  );
-  return <div className="fadeIn" style={{display:"flex",gap:14,alignItems:"flex-start"}}>
-    {/* Column table */}
-    <Card2 style={{overflow:"hidden",padding:0,flex:1,minWidth:0}}>
+  return <div className="fadeIn">
+    <Card2 style={{overflow:"hidden",padding:0}}>
       <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
         <div style={{position:"relative",flex:1,minWidth:160}}>
           <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
@@ -6277,99 +6269,28 @@ const AssetSchema = ({asset,onToast})=>{
           {schSearch&&<button onClick={()=>setSchSearch("")} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:15,lineHeight:1}}>×</button>}
         </div>
         <span style={{fontSize:12,color:T.textMuted,whiteSpace:"nowrap"}}>{filtered.length} / {cols.length} columns · {cols.filter(c=>c.pii).length} PII · {cols.filter(c=>c.pk).length} PK</span>
+        {selCol&&<span style={{fontSize:11,color:T.accent,background:T.accentDim,padding:"2px 8px",borderRadius:99,border:`1px solid ${T.accent}33`}}>Viewing: {selCol.name}</span>}
       </div>
       <table style={{width:"100%",borderCollapse:"collapse"}}>
-        <thead><tr>{["Column","Type","Nullable","PII","Quality Rule"].map(h=><th key={h} style={{padding:"8px 14px",fontSize:11,fontWeight:600,color:T.textMuted,textAlign:"left",borderBottom:`1px solid ${T.border}`,textTransform:"uppercase",letterSpacing:"0.05em",whiteSpace:"nowrap",background:T.bgElevated}}>{h}</th>)}</tr></thead>
+        <thead><tr>{["Column","Type","Nullable","PII","Description","Quality Rule"].map(h=><th key={h} style={{padding:"8px 14px",fontSize:11,fontWeight:600,color:T.textMuted,textAlign:"left",borderBottom:`1px solid ${T.border}`,textTransform:"uppercase",letterSpacing:"0.05em",whiteSpace:"nowrap",background:T.bgElevated}}>{h}</th>)}</tr></thead>
         <tbody>
           {filtered.map((c,i)=>{
             const isSel=selCol?.name===c.name;
             return (
-              <tr key={i} onClick={()=>setSelCol(isSel?null:c)} className="row-hover" style={{borderBottom:i<filtered.length-1?`1px solid ${T.border}`:"none",background:isSel?T.accentDim:"transparent",cursor:"pointer",transition:"background .1s"}}>
+              <tr key={i} onClick={()=>onColClick(c)} className="row-hover" style={{borderBottom:i<filtered.length-1?`1px solid ${T.border}`:"none",background:isSel?T.accentDim:"transparent",cursor:"pointer",transition:"background .1s"}}>
                 <td style={{padding:"10px 14px"}}><div style={{display:"flex",alignItems:"center",gap:6}}>{c.pk&&<span style={{fontSize:9,color:T.amber,border:`1px solid ${T.amberDim}`,padding:"1px 5px",borderRadius:4,fontFamily:"'Geist Mono',monospace",fontWeight:700}}>PK</span>}<span style={{fontSize:13,fontFamily:"'Geist Mono',monospace",color:isSel?T.accent:T.text,fontWeight:500}}>{c.name}</span></div></td>
                 <td style={{padding:"10px 14px"}}><Badge color={T.blue} bg={T.blueDim}>{c.type}</Badge></td>
                 <td style={{padding:"10px 14px"}}><span style={{fontSize:11,color:c.nullable?T.textMuted:T.textSub}}>{c.nullable?"YES":"NOT NULL"}</span></td>
                 <td style={{padding:"10px 14px"}}>{c.pii&&<Badge color={T.rose} bg={T.roseDim} border="rgba(253,164,175,0.25)">PII</Badge>}</td>
+                <td style={{padding:"10px 14px",fontSize:12,color:T.textSub,maxWidth:200}}>{c.desc}</td>
                 <td style={{padding:"10px 14px",fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{c.quality||"—"}</td>
               </tr>
             );
           })}
-          {filtered.length===0&&<tr><td colSpan={5} style={{padding:"32px",textAlign:"center",color:T.textMuted,fontSize:13}}>No columns match "{schSearch}"</td></tr>}
+          {filtered.length===0&&<tr><td colSpan={6} style={{padding:"32px",textAlign:"center",color:T.textMuted,fontSize:13}}>No columns match "{schSearch}"</td></tr>}
         </tbody>
       </table>
     </Card2>
-
-    {/* Column profile sidenav */}
-    {selCol&&(
-      <div style={{width:272,flexShrink:0,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",display:"flex",flexDirection:"column",position:"sticky",top:0}}>
-        <div style={{padding:"11px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <div style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
-            {selCol.pk&&<span style={{fontSize:9,color:T.amber,border:`1px solid ${T.amberDim}`,padding:"1px 5px",borderRadius:4,fontFamily:"'Geist Mono',monospace",fontWeight:700,flexShrink:0}}>PK</span>}
-            {selCol.pii&&<Badge color={T.rose} bg={T.roseDim} border="rgba(253,164,175,0.25)">PII</Badge>}
-            <span style={{fontSize:13,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{selCol.name}</span>
-          </div>
-          <button onClick={()=>setSelCol(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:16,lineHeight:1,flexShrink:0,display:"flex",alignItems:"center"}}>×</button>
-        </div>
-        <div style={{overflowY:"auto",padding:14}}>
-          <div style={{display:"flex",gap:5,marginBottom:14,flexWrap:"wrap"}}>
-            <Badge color={T.blue} bg={T.blueDim}>{selCol.type}</Badge>
-            <span style={{fontSize:11,color:selCol.nullable?T.textMuted:T.green,background:T.bgElevated,padding:"2px 7px",borderRadius:4,border:`1px solid ${T.border}`}}>{selCol.nullable?"Nullable":"NOT NULL"}</span>
-          </div>
-          {selCol.desc&&(
-            <div style={{marginBottom:14}}>
-              <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:5}}>Description</div>
-              <p style={{fontSize:12,color:T.textSub,lineHeight:1.55,margin:0}}>{selCol.desc}</p>
-            </div>
-          )}
-          {prof?(
-            <div style={{marginBottom:14}}>
-              <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Column Profile</div>
-              <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                <div>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11}}>
-                    <span style={{color:T.textSub}}>Null %</span>
-                    <span style={{fontFamily:"'Geist Mono',monospace",color:prof.nullPct>5?"#f87171":"#4ade80",fontWeight:600}}>{prof.nullPct}%</span>
-                  </div>
-                  <StatBar pct={prof.nullPct} color={prof.nullPct>5?"#f87171":"#4ade80"}/>
-                </div>
-                <div>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11}}>
-                    <span style={{color:T.textSub}}>Distinct %</span>
-                    <span style={{fontFamily:"'Geist Mono',monospace",color:T.blue,fontWeight:600}}>{prof.distinctPct}%</span>
-                  </div>
-                  <StatBar pct={prof.distinctPct} color={T.blue}/>
-                </div>
-                {(prof.min||prof.max||prof.avg)&&(
-                  <div style={{background:T.bgElevated,borderRadius:6,padding:"8px 10px",display:"flex",flexDirection:"column",gap:5}}>
-                    {prof.min&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11}}><span style={{color:T.textMuted}}>Min</span><span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{prof.min}</span></div>}
-                    {prof.max&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11}}><span style={{color:T.textMuted}}>Max</span><span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{prof.max}</span></div>}
-                    {prof.avg&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11}}><span style={{color:T.textMuted}}>Avg</span><span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{prof.avg}</span></div>}
-                  </div>
-                )}
-                {prof.topValues&&(
-                  <div>
-                    <div style={{fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>Top Values</div>
-                    {prof.topValues.map((v,i)=>(
-                      <div key={i} style={{display:"flex",alignItems:"center",gap:7,marginBottom:4}}>
-                        <div style={{width:10,height:10,borderRadius:2,background:T.accent,opacity:1-i*0.22,flexShrink:0}}/>
-                        <span style={{fontSize:11,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          ):(
-            <div style={{padding:"14px 0",textAlign:"center",color:T.textMuted,fontSize:11}}>No profile data available</div>
-          )}
-          {selCol.quality&&(
-            <div>
-              <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:5}}>Quality Rule</div>
-              <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textSub,background:T.bgElevated,padding:"4px 8px",borderRadius:4,border:`1px solid ${T.border}`,display:"inline-block",lineHeight:1.4}}>{selCol.quality}</span>
-            </div>
-          )}
-        </div>
-      </div>
-    )}
   </div>;
 }
 const AssetLineageFull = ({asset})=>{
@@ -7091,6 +7012,180 @@ const AssetCommentsTab = ({onToast})=>{
 // ─────────────────────────────────────────────
 // ASSET DETAIL
 // ─────────────────────────────────────────────
+// ── Container asset detail (Database / Catalog / Schema / Bucket / Container / Folder) ──
+const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => {
+  const [tab, setTab] = useState("overview");
+  const [desc, setDesc] = useState(asset.description||"");
+  const [editDesc, setEditDesc] = useState(false);
+  const children = ASSETS.filter(a=>a.parentId===asset.id);
+  const FILE_FORMAT_COLORS = {CSV:"#16a34a",Parquet:"#0891b2",JSON:"#d97706",ORC:"#7c3aed"};
+
+  const CHILD_COLS = [
+    {key:"name", label:"Name", render:(v,r)=>(
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <ServiceIcon service={r.service} size={16}/>
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:5}}>
+            <span style={{fontSize:12.5,fontWeight:500,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{v}</span>
+            {r.fileFormat&&<span style={{fontSize:9,fontWeight:700,padding:"1px 4px",borderRadius:3,background:`${FILE_FORMAT_COLORS[r.fileFormat]||T.textMuted}18`,color:FILE_FORMAT_COLORS[r.fileFormat]||T.textMuted,border:`1px solid ${FILE_FORMAT_COLORS[r.fileFormat]||T.textMuted}33`}}>{r.fileFormat}</span>}
+          </div>
+          {r.db&&<div style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{r.db}</div>}
+        </div>
+      </div>
+    )},
+    {key:"type",    label:"Type",    render:v=><TypeBadge type={v}/>},
+    {key:"domain",  label:"Domain",  render:v=><span style={{fontSize:11.5,color:T.textSub}}>{v}</span>},
+    {key:"owner",   label:"Owner",   render:v=><span style={{fontSize:11.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{v}</span>},
+    {key:"cert",    label:"Cert",    render:(v,r)=>["Object","Blob","Folder"].includes(r.type)?<span style={{color:T.textMuted}}>—</span>:<CertBadge cert={v}/>},
+    {key:"quality", label:"Quality", render:(v,r)=>["Object","Blob","Bucket","Container","Folder"].includes(r.type)?<span style={{color:T.textMuted}}>—</span>:<QScore score={v}/>},
+    {key:"size",    label:"Size",    render:(v,r)=>v&&v!=="—"?<span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{v}</span>:r.rows&&r.rows!=="—"?<span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{r.rows} rows</span>:<span style={{color:T.textMuted}}>—</span>},
+    {key:"updated", label:"Updated", render:v=><span style={{fontSize:11,color:T.textMuted}}>{v}</span>},
+  ];
+
+  // breadcrumb: stack path + current
+  const stackCrumbs = assetStack.slice(0,-1);
+
+  const containerIcon = {
+    Database:"⬡", Catalog:"⬡", Schema:"⬢", Bucket:"▭", Container:"▭", Folder:"▤"
+  }[asset.type]||"⬡";
+
+  const MetaLabel = ({children})=>(
+    <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:7}}>{children}</div>
+  );
+  const MetaRow = ({l,v})=>(
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,fontSize:12}}>
+      <span style={{color:T.textMuted}}>{l}</span><span style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{v||"—"}</span>
+    </div>
+  );
+
+  return (
+    <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+      <Topbar breadcrumb={[
+        {label:"Data Catalog", onClick:()=>{ onBack(); stackCrumbs.forEach(()=>onBack()); /* pop all */ }},
+        ...stackCrumbs.map((a,i)=>({label:a.name, onClick:()=>{ const popCount=assetStack.length-1-i; for(let j=0;j<popCount;j++) onBack(); }})),
+        {label:asset.name}
+      ]}/>
+
+      {/* Header */}
+      <div style={{background:T.bgSurface,borderBottom:`1px solid ${T.border}`,flexShrink:0,padding:"16px 28px 0"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+          <TypeBadge type={asset.type}/>
+          <span style={{fontSize:11.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{asset.db}</span>
+        </div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:20,color:T.textMuted,lineHeight:1}}>{containerIcon}</span>
+            <h2 style={{fontSize:20,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,letterSpacing:"-0.04em",margin:0}}>{asset.name}</h2>
+            {asset.childCount&&<span style={{fontSize:11,color:T.textMuted,background:T.bgElevated,padding:"2px 8px",borderRadius:99,border:`1px solid ${T.border}`}}>{children.length||asset.childCount} children</span>}
+          </div>
+          <ServiceIcon service={asset.service} size={28}/>
+        </div>
+        <div style={{display:"flex",marginBottom:-1}}>
+          {[{k:"overview",l:"Overview"},{k:"contents",l:`Contents (${children.length})`}].map(t=>(
+            <button key={t.k} onClick={()=>setTab(t.k)}
+              style={{padding:"9px 16px",background:"transparent",border:"none",borderBottom:`2px solid ${tab===t.k?T.accent:"transparent"}`,color:tab===t.k?T.text:T.textMuted,fontSize:13,fontWeight:tab===t.k?600:400,cursor:"pointer",transition:"all .12s"}}>
+              {t.l}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Body */}
+      <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+        {/* Main */}
+        <div style={{flex:1,overflowY:"auto",padding:24,minWidth:0}}>
+          {tab==="overview"&&(
+            <div style={{display:"flex",flexDirection:"column",gap:16}}>
+              <Card2>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                  <span style={{fontSize:13,fontWeight:600,color:T.text}}>Description</span>
+                  <button onClick={()=>{ if(editDesc)onToast("Description saved","success"); setEditDesc(e=>!e); }}
+                    style={{fontSize:11.5,color:editDesc?T.accent:T.textMuted,background:"none",border:"none",cursor:"pointer"}}>
+                    {editDesc?"Save":"Edit"}
+                  </button>
+                </div>
+                {editDesc
+                  ? <textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={3}
+                      style={{width:"100%",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:7,color:T.text,fontSize:13,padding:"8px 10px",resize:"vertical",outline:"none",boxSizing:"border-box",fontFamily:"inherit",lineHeight:1.5}}/>
+                  : <p style={{fontSize:13,color:desc?T.textSub:T.textMuted,lineHeight:1.6,margin:0,fontStyle:desc?"normal":"italic"}}>{desc||"No description. Click Edit to add one."}</p>
+                }
+              </Card2>
+              <Card2>
+                <MetaLabel>Details</MetaLabel>
+                <MetaRow l="Size" v={asset.size}/>
+                <MetaRow l="Domain" v={asset.domain}/>
+                <MetaRow l="Updated" v={asset.updated}/>
+                {asset.slaFreshness&&<MetaRow l="Freshness SLA" v={asset.slaFreshness}/>}
+                {asset.childCount&&<MetaRow l="Direct Children" v={String(children.length||asset.childCount)}/>}
+              </Card2>
+              {(asset.tags||[]).filter(t=>t).length>0&&(
+                <Card2>
+                  <MetaLabel>Tags</MetaLabel>
+                  <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                    {asset.tags.map(t=><span key={t} style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:t==="PII"?T.roseDim:T.bgHover,color:t==="PII"?T.rose:T.textMuted,border:`1px solid ${t==="PII"?"rgba(253,164,175,.25)":T.border}`}}>{t}</span>)}
+                  </div>
+                </Card2>
+              )}
+            </div>
+          )}
+          {tab==="contents"&&(
+            <div>
+              {children.length===0
+                ? <div style={{textAlign:"center",padding:"40px 0",color:T.textMuted,fontSize:13}}>No child assets found</div>
+                : <Card2 style={{padding:0,overflow:"hidden"}}>
+                    <DataTable cols={CHILD_COLS} rows={children} onRowClick={r=>onAsset(r)}/>
+                  </Card2>
+              }
+            </div>
+          )}
+        </div>
+
+        {/* Right sidebar */}
+        <div style={{width:240,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto",padding:"16px"}}>
+          <MetaLabel>Connection</MetaLabel>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
+            <ServiceIcon service={asset.service} size={20}/>
+            <span style={{fontSize:12,color:T.textSub}}>{asset.connectionLabel}</span>
+          </div>
+          <MetaLabel>Owner</MetaLabel>
+          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:16}}>
+            <div style={{width:22,height:22,borderRadius:6,background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:T.accent}}>
+              {(asset.owner||"?").split(".").map(s=>s[0]?.toUpperCase()||"").join("")}
+            </div>
+            <span style={{fontSize:12,color:T.textSub}}>{asset.owner}</span>
+          </div>
+          {(asset.stewards||[]).length>0&&<>
+            <MetaLabel>Steward</MetaLabel>
+            <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:16}}>
+              {asset.stewards.map(s=>(
+                <div key={s} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                  <div style={{width:16,height:16,borderRadius:4,background:"rgba(217,119,6,.12)",border:"1px solid rgba(217,119,6,.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:6.5,fontWeight:700,color:"#d97706"}}>
+                    {s.split(".").map(x=>x[0]?.toUpperCase()||"").join("")}
+                  </div>
+                  <span style={{fontSize:11,color:T.textSub}}>{s}</span>
+                </div>
+              ))}
+            </div>
+          </>}
+          {(asset.path||[]).length>0&&<>
+            <MetaLabel>Path</MetaLabel>
+            <div style={{marginBottom:16}}>
+              {asset.path.map((seg,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:4,marginBottom:2}}>
+                  {i>0&&<svg width="8" height="8" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted}}><path d="M3.5 2l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>}
+                  <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{seg}</span>
+                </div>
+              ))}
+            </div>
+          </>}
+          <MetaLabel>Certification</MetaLabel>
+          <CertBadge cert={asset.cert}/>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ── Lightweight detail page for file assets (Object / Blob) ──
 const FileAssetDetail = ({asset, onBack, onToast}) => {
   const [desc,setDesc] = useState(asset.description||"");
@@ -7177,13 +7272,16 @@ const FileAssetDetail = ({asset, onBack, onToast}) => {
   );
 };
 
-const AssetDetail = ({asset, onBack, onToast}) => {
+const CONTAINER_TYPES = new Set(["Database","Catalog","Schema","Bucket","Container","Folder"]);
+const AssetDetail = ({asset, assetStack=[], onBack, onAsset, onToast}) => {
+  if(CONTAINER_TYPES.has(asset.type)) return <ContainerAssetDetail asset={asset} assetStack={assetStack} onBack={onBack} onAsset={onAsset} onToast={onToast}/>;
   if(asset.type==="Object"||asset.type==="Blob") return <FileAssetDetail asset={asset} onBack={onBack} onToast={onToast}/>;
-  return <AssetDetailFull asset={asset} onBack={onBack} onToast={onToast}/>;
+  return <AssetDetailFull asset={asset} assetStack={assetStack} onBack={onBack} onToast={onToast}/>;
 };
 
-const AssetDetailFull = ({asset, onBack, onToast}) => {
+const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
   const [tab,        setTab]       = useState("overview");
+  const [selCol,     setSelCol]    = useState(null);
   const [data,         setData]        = useState({...asset,owners:asset.owners||[asset.owner],stewards:asset.stewards||(asset.steward?[asset.steward]:[]),tags:[...(asset.tags||[])]});
   const [certOpen,     setCertOpen]    = useState(false);
   const [domainOpen,   setDomainOpen]  = useState(false);
@@ -7294,7 +7392,7 @@ const AssetDetailFull = ({asset, onBack, onToast}) => {
       {/* Main content */}
       <div style={{flex:1,overflowY:"auto",padding:24,minWidth:0}}>
         {tab==="overview"  && <AssetOverview asset={asset} data={data} setData={setData} onToast={onToast}/>}
-        {tab==="schema"    && <AssetSchema asset={asset} onToast={onToast}/>}
+        {tab==="schema"    && <AssetSchema asset={asset} selCol={selCol} onColClick={c=>{ setSelCol(selCol?.name===c?.name?null:c); }} onToast={onToast}/>}
         {tab==="lineage"   && <AssetLineageFull asset={asset}/>}
         {tab==="quality"   && <AssetQualityTab asset={data}/>}
 {tab==="policies"  && <AssetPoliciesTab/>}
@@ -7304,8 +7402,89 @@ const AssetDetailFull = ({asset, onBack, onToast}) => {
         {tab==="comments"  && <AssetCommentsTab onToast={onToast}/>}
       </div>
 
+      {/* ── Column profile panel (replaces metadata sidebar when a column is selected) ── */}
+      {selCol&&(()=>{
+        const prof=COL_PROFILES[selCol.name]||null;
+        const StatBar=({pct,color})=>(
+          <div style={{width:"100%",height:3,background:T.bgHover,borderRadius:2,overflow:"hidden",marginTop:3}}>
+            <div style={{width:`${Math.min(100,pct||0)}%`,height:"100%",background:color,borderRadius:2}}/>
+          </div>
+        );
+        return (
+          <div style={{width:300,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto",display:"flex",flexDirection:"column"}}>
+            <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+                {selCol.pk&&<span style={{fontSize:9,color:T.amber,border:`1px solid ${T.amberDim}`,padding:"1px 5px",borderRadius:4,fontFamily:"'Geist Mono',monospace",fontWeight:700,flexShrink:0}}>PK</span>}
+                {selCol.pii&&<Badge color={T.rose} bg={T.roseDim} border="rgba(253,164,175,0.25)">PII</Badge>}
+                <span style={{fontSize:14,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{selCol.name}</span>
+              </div>
+              <button onClick={()=>setSelCol(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:18,lineHeight:1,flexShrink:0,display:"flex",alignItems:"center",padding:"0 0 0 8px"}}>×</button>
+            </div>
+            <div style={{overflowY:"auto",padding:16,flex:1}}>
+              <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+                <Badge color={T.blue} bg={T.blueDim}>{selCol.type}</Badge>
+                <span style={{fontSize:11,color:selCol.nullable?T.textMuted:T.green,background:T.bgElevated,padding:"2px 7px",borderRadius:4,border:`1px solid ${T.border}`}}>{selCol.nullable?"Nullable":"NOT NULL"}</span>
+              </div>
+              {selCol.desc&&(
+                <div style={{marginBottom:16}}>
+                  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:5}}>Description</div>
+                  <p style={{fontSize:12.5,color:T.textSub,lineHeight:1.6,margin:0}}>{selCol.desc}</p>
+                </div>
+              )}
+              {prof?(
+                <div style={{marginBottom:16}}>
+                  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:12}}>Column Profile</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                    <div>
+                      <div style={{display:"flex",justifyContent:"space-between",fontSize:12}}>
+                        <span style={{color:T.textSub}}>Null %</span>
+                        <span style={{fontFamily:"'Geist Mono',monospace",color:prof.nullPct>5?"#f87171":"#4ade80",fontWeight:600}}>{prof.nullPct}%</span>
+                      </div>
+                      <StatBar pct={prof.nullPct} color={prof.nullPct>5?"#f87171":"#4ade80"}/>
+                    </div>
+                    <div>
+                      <div style={{display:"flex",justifyContent:"space-between",fontSize:12}}>
+                        <span style={{color:T.textSub}}>Distinct %</span>
+                        <span style={{fontFamily:"'Geist Mono',monospace",color:T.blue,fontWeight:600}}>{prof.distinctPct}%</span>
+                      </div>
+                      <StatBar pct={prof.distinctPct} color={T.blue}/>
+                    </div>
+                    {(prof.min||prof.max||prof.avg)&&(
+                      <div style={{background:T.bgElevated,borderRadius:7,padding:"10px 12px",display:"flex",flexDirection:"column",gap:6}}>
+                        {prof.min&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12}}><span style={{color:T.textMuted}}>Min</span><span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{prof.min}</span></div>}
+                        {prof.max&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12}}><span style={{color:T.textMuted}}>Max</span><span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{prof.max}</span></div>}
+                        {prof.avg&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12}}><span style={{color:T.textMuted}}>Avg</span><span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{prof.avg}</span></div>}
+                      </div>
+                    )}
+                    {prof.topValues&&(
+                      <div>
+                        <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Top Values</div>
+                        {prof.topValues.map((v,i)=>(
+                          <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
+                            <div style={{width:11,height:11,borderRadius:2,background:T.accent,opacity:1-i*0.22,flexShrink:0}}/>
+                            <span style={{fontSize:12,color:T.textSub}}>{v}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ):(
+                <div style={{padding:"16px 0",textAlign:"center",color:T.textMuted,fontSize:12}}>No profile data available</div>
+              )}
+              {selCol.quality&&(
+                <div>
+                  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Quality Rule</div>
+                  <span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.textSub,background:T.bgElevated,padding:"5px 10px",borderRadius:5,border:`1px solid ${T.border}`,display:"inline-block",lineHeight:1.4}}>{selCol.quality}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── Right metadata sidebar ── */}
-      <div style={{width:260,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto"}}>
+      {!selCol&&<div style={{width:260,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto"}}>
 
         {/* DETAILS */}
         <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
@@ -7542,7 +7721,8 @@ const AssetDetailFull = ({asset, onBack, onToast}) => {
           ))}
         </div>
 
-      </div>
+      </div>}
+
     </div>
 
     {/* Certification Modal */}
@@ -7594,27 +7774,16 @@ const CatalogView = ({onAsset})=>{
   const [selTags,          setSelTags]          = useState(new Set());
   const [selGlossaryTerms, setSelGlossaryTerms] = useState(new Set());
   const [openGroup,  setOpenGroup]  = useState({conntype:true,connection:false,domain:true,type:true,cert:false,tier:false,owner:false,tags:false,glossary:false});
-  // Drill-down navigation: array of {id, name, type} representing current path
-  const [drillPath, setDrillPath] = useState([]);
-  const drillParentId = drillPath.length>0 ? drillPath[drillPath.length-1].id : null;
   const DRILLABLE_TYPES = new Set(["Database","Catalog","Schema","Bucket","Container","Folder"]);
-  const handleDrillDown = (asset) => {
-    if(!DRILLABLE_TYPES.has(asset.type)) { onAsset(asset); return; }
-    setDrillPath(prev=>[...prev,{id:asset.id,name:asset.name,type:asset.type}]);
-    setQ(""); setSelTypes(new Set()); setSelDomains(new Set()); setSelCerts(new Set()); setSelTiers(new Set()); setSelConns(new Set()); setSelOwners(new Set());
-  };
-  const handleDrillUp = (idx) => setDrillPath(prev=>prev.slice(0,idx));
 
   const toggle = (setter, val) => setter(prev => { const next = new Set(prev); next.has(val)?next.delete(val):next.add(val); return next; });
   const sorts = [{v:"relevance",l:"Relevance"},{v:"quality",l:"Quality ↓"},{v:"name",l:"Name A–Z"},{v:"updated",l:"Recently Updated"},{v:"usage",l:"Popularity"}];
 
   const filtered = ASSETS.filter(a => {
-    // Drill-down: only show direct children of current drill node
-    if(drillParentId!==null) { if(a.parentId!==drillParentId) return false; }
-    else { if(!q && selTypes.size===0 && selConnTypes.size===0 && selDomains.size===0 && selCerts.size===0 && selTiers.size===0 && selConns.size===0 && selOwners.size===0 && selTags.size===0 && selGlossaryTerms.size===0) {
-      // Default top-level: show only root assets (no parent) + all non-hierarchy assets
-      if(a.parentId!=null && !q) return false;
-    }}
+    // Default: hide child assets (those with a parentId) unless a search/filter is active
+    if(!q && selTypes.size===0 && selConnTypes.size===0 && selDomains.size===0 && selCerts.size===0 && selTiers.size===0 && selConns.size===0 && selOwners.size===0 && selTags.size===0 && selGlossaryTerms.size===0) {
+      if(a.parentId!=null) return false;
+    }
     const mq  = !q || a.name.toLowerCase().includes(q.toLowerCase()) || (a.domain||"").toLowerCase().includes(q.toLowerCase()) || (a.tags||[]).some(t=>t.toLowerCase().includes(q.toLowerCase())) || (a.description||"").toLowerCase().includes(q.toLowerCase()) || (a.db||"").toLowerCase().includes(q.toLowerCase()) || (SCHEMA[a.name]||[]).some(c=>c.name.toLowerCase().includes(q.toLowerCase()));
     const mct = selConnTypes.size===0 || selConnTypes.has(a.service);
     const mt  = selTypes.size===0   || selTypes.has(a.type);
@@ -7833,25 +8002,9 @@ const CatalogView = ({onAsset})=>{
               <button onClick={clearAll} style={{fontSize:10.5,color:T.textMuted,background:"none",border:"none",cursor:"pointer",marginLeft:2}} onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>Clear all</button>
             </div>
           )}
-          {/* Drill-down breadcrumb */}
-          {drillPath.length>0&&(
-            <div style={{padding:"7px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:4,background:T.bgElevated,flexShrink:0}}>
-              <button onClick={()=>setDrillPath([])} style={{fontSize:11.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:"2px 4px",borderRadius:4}} onMouseEnter={e=>e.currentTarget.style.background=T.accentDim} onMouseLeave={e=>e.currentTarget.style.background="none"}>All Assets</button>
-              {drillPath.map((seg,idx)=>(
-                <React.Fragment key={seg.id}>
-                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,flexShrink:0}}><path d="M3.5 2l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  {idx<drillPath.length-1
-                    ? <button onClick={()=>handleDrillUp(idx+1)} style={{fontSize:11.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:"2px 4px",borderRadius:4}} onMouseEnter={e=>e.currentTarget.style.background=T.accentDim} onMouseLeave={e=>e.currentTarget.style.background="none"}>{seg.name}</button>
-                    : <span style={{fontSize:11.5,fontWeight:600,color:T.text,padding:"2px 4px"}}>{seg.name}</span>
-                  }
-                </React.Fragment>
-              ))}
-              <span style={{fontSize:10.5,color:T.textMuted,marginLeft:4}}>({filtered.length} {filtered.length===1?"asset":"assets"})</span>
-            </div>
-          )}
           <div style={{flex:1,overflowY:"auto",padding:"18px 20px"}}>
-            {filtered.length===0&&<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:200,gap:8}}><div style={{color:T.textMuted,opacity:.25}}>{Ic.catalog(36)}</div><div style={{fontSize:13,fontWeight:600,color:T.textSub}}>No assets match your filters</div><button onClick={()=>{clearAll();setDrillPath([]);}} style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer"}}>Clear all filters</button></div>}
-            {view==="table"&&filtered.length>0&&<DataTable cols={cols} rows={filtered} onRowClick={r=>handleDrillDown(r)}/>}
+            {filtered.length===0&&<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:200,gap:8}}><div style={{color:T.textMuted,opacity:.25}}>{Ic.catalog(36)}</div><div style={{fontSize:13,fontWeight:600,color:T.textSub}}>No assets match your filters</div><button onClick={clearAll} style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer"}}>Clear all filters</button></div>}
+            {view==="table"&&filtered.length>0&&<DataTable cols={cols} rows={filtered} onRowClick={r=>onAsset(r)}/>}
             {view==="card"&&filtered.length>0&&(
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {filtered.map(a=>{
@@ -7862,7 +8015,7 @@ const CatalogView = ({onAsset})=>{
                     <div key={a.id} style={{background:T.bgSurface,border:`1px solid ${conflictTerms.length>0?"rgba(217,119,6,.35)":T.border}`,borderRadius:10,cursor:"pointer",transition:"all .15s",overflow:"hidden"}}
                       onMouseEnter={e=>{e.currentTarget.style.borderColor=conflictTerms.length>0?"rgba(217,119,6,.5)":T.accent+"55";e.currentTarget.style.background=T.bgHover;}}
                       onMouseLeave={e=>{e.currentTarget.style.borderColor=conflictTerms.length>0?"rgba(217,119,6,.35)":T.border;e.currentTarget.style.background=T.bgSurface;}}>
-                      <div onClick={()=>handleDrillDown(a)} style={{display:"flex",alignItems:"center",gap:16,padding:"14px 16px"}}>
+                      <div onClick={()=>onAsset(a)} style={{display:"flex",alignItems:"center",gap:16,padding:"14px 16px"}}>
                         <ServiceIcon service={a.service} size={32}/>
                         <div style={{flex:"0 0 280px",minWidth:0}}>
                           <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}><span style={{fontSize:13.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</span></div>
@@ -16644,7 +16797,7 @@ export default function App(){
   const [loggedIn, setLoggedIn] = useState(false);
   const [role,     setRole]     = useState("analyst");
   const [nav,      setNav]      = useState("home");
-  const [asset,    setAsset]    = useState(null);
+  const [assetStack, setAssetStack] = useState([]);
   const [toast,    setToast]    = useState(null);
   const [isDark,   setIsDark]   = useState(false);
   const [themeKey, setThemeKey] = useState(0);
@@ -16654,14 +16807,16 @@ export default function App(){
   const allowedNav = roleCfg.nav || [];
 
   const handleLogin  = (r) => { setRole(r); setNav("home"); setLoggedIn(true); };
-  const handleLogout = () => { setLoggedIn(false); setNav("home"); setAsset(null); };
+  const handleLogout = () => { setLoggedIn(false); setNav("home"); setAssetStack([]); };
   const handleRole   = (r) => { setRole(r); setNav("home"); setAsset(null); };
   const handleNav    = (id) => {
     // Guard: redirect disallowed pages to home
     if(!allowedNav.includes(id) && id!=="profile") { setNav("home"); return; }
-    setNav(id); setAsset(null);
+    setNav(id); setAssetStack([]);
   };
-  const handleAsset  = (a) => { setAsset(a); setNav("catalog"); };
+  const handleAsset     = (a) => { setAssetStack([a]); setNav("catalog"); };
+  const handleAssetPush = (a) => setAssetStack(s=>[...s,a]);
+  const handleAssetBack = ()  => setAssetStack(s=>s.slice(0,-1));
   const showToast    = (msg,type="success") => setToast({msg,type,key:Date.now()});
 
   const toggleTheme  = (target) => {
@@ -16673,7 +16828,8 @@ export default function App(){
   };
 
   const renderPage = () => {
-    if(nav==="catalog"&&asset) return <AssetDetail asset={asset} onBack={()=>setAsset(null)} onToast={showToast}/>;
+    const currentAsset = assetStack.length>0 ? assetStack[assetStack.length-1] : null;
+    if(nav==="catalog"&&currentAsset) return <AssetDetail asset={currentAsset} assetStack={assetStack} onBack={handleAssetBack} onAsset={handleAssetPush} onToast={showToast}/>;
     switch(nav){
       case "home":          return <HomeView onNav={handleNav} onToast={showToast} role={role} roleCfg={roleCfg}/>;
       case "search":        return <SearchView onAsset={handleAsset}/>;
