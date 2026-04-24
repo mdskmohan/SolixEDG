@@ -7149,7 +7149,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
           </div>
         </div>
         <div style={{display:"flex",marginBottom:-1}}>
-          {[{k:"overview",l:"Overview"},{k:"contents",l:`Contents (${children.length})`}].map(t=>(
+          {[{k:"overview",l:"Overview"},{k:"assets",l:`Assets (${children.length})`}].map(t=>(
             <button key={t.k} onClick={()=>setTab(t.k)}
               style={{padding:"9px 16px",background:"transparent",border:"none",borderBottom:`2px solid ${tab===t.k?T.accent:"transparent"}`,color:tab===t.k?T.text:T.textMuted,fontSize:13,fontWeight:tab===t.k?600:400,cursor:"pointer",transition:"all .12s",whiteSpace:"nowrap"}}>
               {t.l}
@@ -7190,7 +7190,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
               {children.length>0&&(
                 <Card2>
                   <div style={{padding:"14px 16px"}}>
-                    <SH title="Contents Summary"/>
+                    <SH title="Asset Summary"/>
                     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(120px,1fr))",gap:10,marginBottom:16}}>
                       <div style={{background:T.bgElevated,borderRadius:8,padding:"12px 14px",border:`1px solid ${T.border}`}}>
                         <div style={{fontSize:22,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{children.length}</div>
@@ -7210,7 +7210,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
                     {Object.keys(childTypeCounts).length>0&&(
                       <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                         {Object.entries(childTypeCounts).map(([type,count])=>(
-                          <button key={type} onClick={()=>setTab("contents")}
+                          <button key={type} onClick={()=>setTab("assets")}
                             style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,cursor:"pointer",transition:"all .1s"}}
                             onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.background=T.accentDim;}}
                             onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.bgElevated;}}>
@@ -7246,7 +7246,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
             </div>
           )}
 
-          {tab==="contents"&&(
+          {tab==="assets"&&(
             <div style={{display:"flex",flexDirection:"column",gap:12}}>
               <div style={{position:"relative",maxWidth:400}}>
                 <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
@@ -7479,7 +7479,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
             {[
               {l:"Request Access", fn:()=>onToast("Access request sent","success")},
               {l:"Copy Link",      fn:()=>onToast("Link copied","success")},
-              {l:"Browse Contents",fn:()=>setTab("contents")},
+              {l:"Browse Assets",fn:()=>setTab("assets")},
             ].map((a,i,arr)=>(
               <button key={i} onClick={a.fn}
                 style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",background:"none",border:"none",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",color:T.textSub,fontSize:12.5,cursor:"pointer",transition:"color .1s"}}
@@ -7667,7 +7667,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
     {key:"lineage",label:"Lineage"},{key:"quality",label:"Quality"},
     {key:"policies",label:"Policies"},{key:"access",label:"Access"},
     {key:"usage",label:"Usage"},{key:"activity",label:"Activity"},
-    {key:"comments",label:`Comments (${(COMMENTS_BY_ASSET[asset.name]||[]).length})`},
+    {key:"comments",label:`Discussions (${(COMMENTS_BY_ASSET[asset.name]||[]).length})`},
   ];
 
   const handleCertify=()=>{
