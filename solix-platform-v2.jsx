@@ -118,6 +118,60 @@ const ASSETS = [
   {id:10,name:"marketing_attribution",type:"Dashboard",domain:"Marketing", owner:"lisa.ray",   owners:["lisa.ray"],                steward:"lisa.ray",   stewards:["lisa.ray"],               cert:"Draft", quality:79, usage:"Med",  updated:"6d ago",  service:"looker",     connectionLabel:"Looker",          db:"looker_cloud / MARKETING",                  tier:3, rows:"—",      size:"—",       tags:["marketing"],              description:"Multi-touch attribution reporting.",                                        slaFreshness:"24h"},
 ];
 
+// ── Hierarchy assets (Database → Schema → Table/View, Bucket → Folder → Object, etc.) ──
+const HIERARCHY_ASSETS = [
+  // ── Snowflake: Database → Schema → Table/View ──
+  {id:100,name:"SNOWFLAKE_PROD",    type:"Database",  domain:"Platform", owner:"james.oh",   owners:["james.oh"],              steward:"maya.chen",  stewards:["maya.chen"],              cert:"Approved",  quality:94,usage:"High",updated:"1h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",     db:"SNOWFLAKE_PROD",                              tier:1,rows:"—",    size:"15.2 GB",tags:[],          description:"Primary Snowflake data warehouse. Contains Commerce, Finance and Analytics schemas.",slaFreshness:"1h",  path:[],                          parentId:null,assetLevel:"database",childCount:3},
+  {id:101,name:"COMMERCE",          type:"Schema",    domain:"Commerce", owner:"maya.chen",  owners:["maya.chen"],             steward:"maya.chen",  stewards:["maya.chen"],              cert:"Approved",  quality:93,usage:"High",updated:"2h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",     db:"SNOWFLAKE_PROD / COMMERCE",                   tier:1,rows:"—",    size:"13.4 GB",tags:[],          description:"Commerce domain schema. Orders, customers, and product dimensions.",               slaFreshness:"2h",  path:["SNOWFLAKE_PROD"],          parentId:100,assetLevel:"schema",  childCount:4},
+  {id:102,name:"FINANCE",           type:"Schema",    domain:"Finance",  owner:"sarah.kim",  owners:["sarah.kim"],             steward:"sarah.kim",  stewards:["sarah.kim"],              cert:"Approved",  quality:91,usage:"Med", updated:"4h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",     db:"SNOWFLAKE_PROD / FINANCE",                    tier:1,rows:"—",    size:"1.8 GB", tags:[],          description:"Finance schema. GL accounts, transactions, and reporting views.",                  slaFreshness:"4h",  path:["SNOWFLAKE_PROD"],          parentId:100,assetLevel:"schema",  childCount:2},
+  {id:103,name:"ANALYTICS",         type:"Schema",    domain:"Product",  owner:"alex.wu",    owners:["alex.wu"],               steward:"alex.wu",    stewards:["alex.wu"],                cert:"In Review", quality:78,usage:"Med", updated:"1d ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",     db:"SNOWFLAKE_PROD / ANALYTICS",                  tier:2,rows:"—",    size:"0.9 GB", tags:[],          description:"Analytics layer with aggregated metrics and reporting views.",                     slaFreshness:"12h", path:["SNOWFLAKE_PROD"],          parentId:100,assetLevel:"schema",  childCount:1},
+  {id:104,name:"vw_order_summary",  type:"View",      domain:"Commerce", owner:"maya.chen",  owners:["maya.chen"],             steward:"maya.chen",  stewards:["maya.chen"],              cert:"Approved",  quality:93,usage:"High",updated:"2h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",     db:"SNOWFLAKE_PROD / COMMERCE / vw_order_summary",tier:1,rows:"48.2M",size:"—",      tags:["revenue"], description:"Aggregated order summary joining orders, customers and products.",                 slaFreshness:"2h",  path:["SNOWFLAKE_PROD","COMMERCE"],parentId:101,assetLevel:"view"},
+  {id:105,name:"transactions",      type:"Table",     domain:"Finance",  owner:"sarah.kim",  owners:["sarah.kim"],             steward:"sarah.kim",  stewards:["sarah.kim"],              cert:"Approved",  quality:95,usage:"High",updated:"1h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",     db:"SNOWFLAKE_PROD / FINANCE / transactions",     tier:1,rows:"12.7M", size:"4.2 GB",tags:["finance"],  description:"Financial transactions ledger. Source of truth for all monetary movements.",       slaFreshness:"1h",  path:["SNOWFLAKE_PROD","FINANCE"], parentId:102,assetLevel:"table"},
+  // ── Databricks Unity Catalog: Catalog → Schema → Table/View ──
+  {id:110,name:"unity_catalog",     type:"Catalog",   domain:"Platform", owner:"james.oh",   owners:["james.oh"],              steward:"james.oh",   stewards:["james.oh"],               cert:"Approved",  quality:89,usage:"High",updated:"30m ago", service:"databricks", connectionLabel:"Databricks Unity",  db:"unity_catalog",                               tier:1,rows:"—",    size:"8.6 GB", tags:[],          description:"Databricks Unity Catalog. Unified governance for all Databricks workspaces.",     slaFreshness:"30m", path:[],                          parentId:null,assetLevel:"catalog", childCount:2},
+  {id:111,name:"analytics",         type:"Schema",    domain:"Product",  owner:"alex.wu",    owners:["alex.wu"],               steward:"alex.wu",    stewards:["alex.wu"],                cert:"Approved",  quality:85,usage:"High",updated:"1h ago",  service:"databricks", connectionLabel:"Databricks Unity",  db:"unity_catalog / analytics",                   tier:2,rows:"—",    size:"5.2 GB", tags:[],          description:"Analytics schema with Delta tables for user events and aggregations.",             slaFreshness:"1h",  path:["unity_catalog"],           parentId:110,assetLevel:"schema",  childCount:3},
+  {id:112,name:"ml_features",       type:"Schema",    domain:"ML",       owner:"priya.nair", owners:["priya.nair"],            steward:"priya.nair", stewards:["priya.nair"],             cert:"Approved",  quality:88,usage:"Med", updated:"3h ago",  service:"databricks", connectionLabel:"Databricks Unity",  db:"unity_catalog / ml_features",                 tier:2,rows:"—",    size:"3.4 GB", tags:[],          description:"Feature store schema for ML model training and serving.",                          slaFreshness:"3h",  path:["unity_catalog"],           parentId:110,assetLevel:"schema",  childCount:2},
+  {id:113,name:"user_events",       type:"Table",     domain:"Product",  owner:"alex.wu",    owners:["alex.wu"],               steward:"alex.wu",    stewards:["alex.wu"],                cert:"Approved",  quality:87,usage:"High",updated:"1h ago",  service:"databricks", connectionLabel:"Databricks Unity",  db:"unity_catalog / analytics / user_events",     tier:2,rows:"890M",  size:"4.1 GB", tags:["events"],   description:"Delta table of raw user events from web and mobile apps.",                         slaFreshness:"15m", path:["unity_catalog","analytics"],parentId:111,assetLevel:"table"},
+  {id:114,name:"feature_store",     type:"Table",     domain:"ML",       owner:"priya.nair", owners:["priya.nair"],            steward:"priya.nair", stewards:["priya.nair"],             cert:"Approved",  quality:91,usage:"Med", updated:"3h ago",  service:"databricks", connectionLabel:"Databricks Unity",  db:"unity_catalog / ml_features / feature_store", tier:2,rows:"3.2M",  size:"2.8 GB", tags:["model"],    description:"Precomputed ML features for churn, LTV and recommendation models.",               slaFreshness:"3h",  path:["unity_catalog","ml_features"],parentId:112,assetLevel:"table"},
+  {id:115,name:"vw_daily_active",   type:"View",      domain:"Product",  owner:"alex.wu",    owners:["alex.wu"],               steward:"alex.wu",    stewards:["alex.wu"],                cert:"In Review", quality:82,usage:"High",updated:"2h ago",  service:"databricks", connectionLabel:"Databricks Unity",  db:"unity_catalog / analytics / vw_daily_active", tier:2,rows:"365",   size:"—",      tags:["events"],   description:"Daily active users view aggregated from user_events.",                             slaFreshness:"1h",  path:["unity_catalog","analytics"],parentId:111,assetLevel:"view"},
+  // ── Oracle: Database → Schema → Table/View ──
+  {id:120,name:"ORACLE_ERP",        type:"Database",  domain:"Platform", owner:"james.oh",   owners:["james.oh"],              steward:"james.oh",   stewards:["james.oh"],               cert:"Approved",  quality:88,usage:"Med", updated:"6h ago",  service:"oracle",     connectionLabel:"Oracle ERP",        db:"ORACLE_ERP",                                  tier:1,rows:"—",    size:"22.1 GB",tags:[],          description:"Oracle ERP database. HR, Finance and supply chain schemas.",                      slaFreshness:"6h",  path:[],                          parentId:null,assetLevel:"database",childCount:2},
+  {id:121,name:"HR",                type:"Schema",    domain:"Platform", owner:"james.oh",   owners:["james.oh"],              steward:"james.oh",   stewards:["james.oh"],               cert:"Approved",  quality:90,usage:"Med", updated:"6h ago",  service:"oracle",     connectionLabel:"Oracle ERP",        db:"ORACLE_ERP / HR",                             tier:1,rows:"—",    size:"1.2 GB", tags:["PII"],      description:"Human Resources schema. Employees, departments, payroll and benefits.",            slaFreshness:"6h",  path:["ORACLE_ERP"],              parentId:120,assetLevel:"schema",  childCount:3},
+  {id:122,name:"FINANCE",           type:"Schema",    domain:"Finance",  owner:"sarah.kim",  owners:["sarah.kim"],             steward:"sarah.kim",  stewards:["sarah.kim"],              cert:"Approved",  quality:92,usage:"Med", updated:"12h ago", service:"oracle",     connectionLabel:"Oracle ERP",        db:"ORACLE_ERP / FINANCE",                        tier:1,rows:"—",    size:"4.8 GB", tags:["finance"],  description:"Finance schema. General ledger, accounts payable and receivable.",                 slaFreshness:"6h",  path:["ORACLE_ERP"],              parentId:120,assetLevel:"schema",  childCount:2},
+  {id:123,name:"employees",         type:"Table",     domain:"Platform", owner:"james.oh",   owners:["james.oh"],             steward:"james.oh",   stewards:["james.oh"],               cert:"Approved",  quality:95,usage:"Med", updated:"6h ago",  service:"oracle",     connectionLabel:"Oracle ERP",        db:"ORACLE_ERP / HR / employees",                 tier:1,rows:"12.4K", size:"48 MB",  tags:["PII"],      description:"Employee master table. All active and terminated employees.",                      slaFreshness:"24h", path:["ORACLE_ERP","HR"],          parentId:121,assetLevel:"table"},
+  {id:124,name:"departments",       type:"Table",     domain:"Platform", owner:"james.oh",   owners:["james.oh"],             steward:"james.oh",   stewards:["james.oh"],               cert:"Approved",  quality:98,usage:"Low", updated:"1w ago",  service:"oracle",     connectionLabel:"Oracle ERP",        db:"ORACLE_ERP / HR / departments",               tier:2,rows:"847",   size:"1.2 MB", tags:[],           description:"Department hierarchy and cost center mapping.",                                    slaFreshness:"7d",  path:["ORACLE_ERP","HR"],          parentId:121,assetLevel:"table"},
+  {id:125,name:"gl_accounts",       type:"Table",     domain:"Finance",  owner:"sarah.kim",  owners:["sarah.kim"],            steward:"sarah.kim",  stewards:["sarah.kim"],              cert:"Approved",  quality:96,usage:"Med", updated:"1d ago",  service:"oracle",     connectionLabel:"Oracle ERP",        db:"ORACLE_ERP / FINANCE / gl_accounts",          tier:1,rows:"48.2K", size:"220 MB", tags:["finance"],  description:"General ledger chart of accounts. ISO 19022 compliant.",                           slaFreshness:"24h", path:["ORACLE_ERP","FINANCE"],     parentId:122,assetLevel:"table"},
+  {id:126,name:"vw_headcount",      type:"View",      domain:"Platform", owner:"james.oh",   owners:["james.oh"],             steward:"james.oh",   stewards:["james.oh"],               cert:"Approved",  quality:88,usage:"Low", updated:"1d ago",  service:"oracle",     connectionLabel:"Oracle ERP",        db:"ORACLE_ERP / HR / vw_headcount",              tier:2,rows:"—",    size:"—",      tags:[],           description:"Active headcount view grouped by department and level.",                           slaFreshness:"24h", path:["ORACLE_ERP","HR"],          parentId:121,assetLevel:"view"},
+  // ── PostgreSQL: Database → Schema → Table/View ──
+  {id:130,name:"postgresql_prod",   type:"Database",  domain:"Platform", owner:"james.oh",   owners:["james.oh"],              steward:"alex.wu",    stewards:["alex.wu"],                cert:"Approved",  quality:82,usage:"High",updated:"30m ago", service:"postgres",   connectionLabel:"PostgreSQL Prod",   db:"postgresql_prod",                             tier:2,rows:"—",    size:"182 GB", tags:[],          description:"PostgreSQL production database. Product analytics and auth schemas.",              slaFreshness:"30m", path:[],                          parentId:null,assetLevel:"database",childCount:2},
+  {id:131,name:"product",           type:"Schema",    domain:"Product",  owner:"alex.wu",    owners:["alex.wu"],               steward:"alex.wu",    stewards:["alex.wu"],                cert:"Approved",  quality:75,usage:"High",updated:"1h ago",  service:"postgres",   connectionLabel:"PostgreSQL Prod",   db:"postgresql_prod / product",                   tier:2,rows:"—",    size:"180 GB", tags:["events"],   description:"Product analytics schema. Raw events and session data.",                           slaFreshness:"1h",  path:["postgresql_prod"],         parentId:130,assetLevel:"schema",  childCount:2},
+  {id:132,name:"auth",              type:"Schema",    domain:"Platform", owner:"james.oh",   owners:["james.oh"],              steward:"james.oh",   stewards:["james.oh"],               cert:"Approved",  quality:94,usage:"Med", updated:"2h ago",  service:"postgres",   connectionLabel:"PostgreSQL Prod",   db:"postgresql_prod / auth",                      tier:1,rows:"—",    size:"1.8 GB", tags:["PII"],      description:"Authentication schema. Users, sessions and API tokens.",                           slaFreshness:"2h",  path:["postgresql_prod"],         parentId:130,assetLevel:"schema",  childCount:2},
+  {id:133,name:"users",             type:"Table",     domain:"Platform", owner:"james.oh",   owners:["james.oh"],             steward:"james.oh",   stewards:["james.oh"],               cert:"Approved",  quality:94,usage:"High",updated:"2h ago",  service:"postgres",   connectionLabel:"PostgreSQL Prod",   db:"postgresql_prod / auth / users",              tier:1,rows:"2.8M",  size:"1.4 GB", tags:["PII"],      description:"Registered user accounts. Source of truth for identity.",                         slaFreshness:"2h",  path:["postgresql_prod","auth"],  parentId:132,assetLevel:"table"},
+  {id:134,name:"vw_active_users",   type:"View",      domain:"Platform", owner:"james.oh",   owners:["james.oh"],             steward:"james.oh",   stewards:["james.oh"],               cert:"In Review", quality:88,usage:"Med", updated:"1h ago",  service:"postgres",   connectionLabel:"PostgreSQL Prod",   db:"postgresql_prod / auth / vw_active_users",    tier:2,rows:"—",    size:"—",      tags:[],           description:"Active users in the last 30 days with session metrics.",                          slaFreshness:"1h",  path:["postgresql_prod","auth"],  parentId:132,assetLevel:"view"},
+  // ── MySQL: Database → Table/View (no schema layer) ──
+  {id:140,name:"mysql_appdb",       type:"Database",  domain:"Platform", owner:"james.oh",   owners:["james.oh"],              steward:"james.oh",   stewards:["james.oh"],               cert:"Approved",  quality:79,usage:"Med", updated:"4h ago",  service:"mysql",      connectionLabel:"MySQL App DB",      db:"mysql_appdb",                                 tier:3,rows:"—",    size:"6.4 GB", tags:[],          description:"MySQL application database. No schema layer — tables are direct children.",       slaFreshness:"4h",  path:[],                          parentId:null,assetLevel:"database",childCount:4},
+  {id:141,name:"app_orders",        type:"Table",     domain:"Commerce", owner:"james.oh",   owners:["james.oh"],             steward:"maya.chen",  stewards:["maya.chen"],              cert:"Draft",     quality:71,usage:"Med", updated:"4h ago",  service:"mysql",      connectionLabel:"MySQL App DB",      db:"mysql_appdb / app_orders",                    tier:3,rows:"4.2M",  size:"2.1 GB", tags:[],           description:"Application-layer orders table. Synced nightly to Snowflake.",                    slaFreshness:"4h",  path:["mysql_appdb"],             parentId:140,assetLevel:"table"},
+  {id:142,name:"app_users",         type:"Table",     domain:"Platform", owner:"james.oh",   owners:["james.oh"],             steward:"james.oh",   stewards:["james.oh"],               cert:"Approved",  quality:82,usage:"High",updated:"1h ago",  service:"mysql",      connectionLabel:"MySQL App DB",      db:"mysql_appdb / app_users",                     tier:2,rows:"1.9M",  size:"890 MB", tags:["PII"],      description:"Application user accounts. Login, profile and preferences.",                      slaFreshness:"1h",  path:["mysql_appdb"],             parentId:140,assetLevel:"table"},
+  {id:143,name:"app_products",      type:"Table",     domain:"Commerce", owner:"james.oh",   owners:["james.oh"],             steward:"maya.chen",  stewards:["maya.chen"],              cert:"Approved",  quality:88,usage:"Med", updated:"6h ago",  service:"mysql",      connectionLabel:"MySQL App DB",      db:"mysql_appdb / app_products",                  tier:2,rows:"82K",   size:"45 MB",  tags:[],           description:"Product catalog. SKUs, prices and inventory levels.",                             slaFreshness:"6h",  path:["mysql_appdb"],             parentId:140,assetLevel:"table"},
+  {id:144,name:"vw_recent_orders",  type:"View",      domain:"Commerce", owner:"james.oh",   owners:["james.oh"],             steward:"maya.chen",  stewards:["maya.chen"],              cert:"Draft",     quality:68,usage:"Low", updated:"4h ago",  service:"mysql",      connectionLabel:"MySQL App DB",      db:"mysql_appdb / vw_recent_orders",              tier:3,rows:"—",    size:"—",      tags:[],           description:"Orders placed in the last 7 days with customer and product details.",             slaFreshness:"4h",  path:["mysql_appdb"],             parentId:140,assetLevel:"view"},
+  // ── S3: Bucket → Folder → Object ──
+  {id:150,name:"jnj-data-lake-prod",type:"Bucket",    domain:"Platform", owner:"james.oh",   owners:["james.oh"],              steward:"james.oh",   stewards:["james.oh"],               cert:"Approved",  quality:0, usage:"High",updated:"15m ago", service:"s3",         connectionLabel:"AWS S3 Data Lake",  db:"jnj-data-lake-prod",                          tier:1,rows:"—",    size:"4.2 TB", tags:[],          description:"Primary S3 data lake. Region: us-east-1. Versioning enabled.",                    slaFreshness:"1h",  path:[],                          parentId:null,assetLevel:"bucket",  childCount:3},
+  {id:151,name:"raw",               type:"Folder",    domain:"Platform", owner:"james.oh",   owners:["james.oh"],              steward:"james.oh",   stewards:["james.oh"],               cert:"Approved",  quality:0, usage:"High",updated:"15m ago", service:"s3",         connectionLabel:"AWS S3 Data Lake",  db:"jnj-data-lake-prod / raw",                    tier:1,rows:"—",    size:"1.8 TB", tags:[],          description:"Raw ingestion zone. Unprocessed files as-received from source systems.",          slaFreshness:"1h",  path:["jnj-data-lake-prod"],      parentId:150,assetLevel:"folder", childCount:12},
+  {id:152,name:"processed",         type:"Folder",    domain:"Platform", owner:"james.oh",   owners:["james.oh"],              steward:"james.oh",   stewards:["james.oh"],               cert:"Approved",  quality:0, usage:"High",updated:"1h ago",  service:"s3",         connectionLabel:"AWS S3 Data Lake",  db:"jnj-data-lake-prod / processed",              tier:1,rows:"—",    size:"2.1 TB", tags:[],          description:"Processed zone. Validated, partitioned Parquet files.",                           slaFreshness:"1h",  path:["jnj-data-lake-prod"],      parentId:150,assetLevel:"folder", childCount:8},
+  {id:153,name:"archive",           type:"Folder",    domain:"Platform", owner:"james.oh",   owners:["james.oh"],              steward:"james.oh",   stewards:["james.oh"],               cert:"Approved",  quality:0, usage:"Low", updated:"1w ago",  service:"s3",         connectionLabel:"AWS S3 Data Lake",  db:"jnj-data-lake-prod / archive",                tier:3,rows:"—",    size:"0.3 TB", tags:[],          description:"Archive zone. Compressed files older than 90 days.",                              slaFreshness:"7d",  path:["jnj-data-lake-prod"],      parentId:150,assetLevel:"folder", childCount:4},
+  {id:154,name:"orders_2026_04.csv",type:"Object",    domain:"Commerce", owner:"james.oh",   owners:["james.oh"],             steward:"maya.chen",  stewards:["maya.chen"],              cert:"Approved",  quality:0, usage:"High",updated:"15m ago", service:"s3",         connectionLabel:"AWS S3 Data Lake",  db:"jnj-data-lake-prod / raw / orders_2026_04.csv",tier:1,rows:"—",  size:"2.4 GB", tags:["revenue"],  description:"Daily orders export from Snowflake. CSV format, pipe-delimited.",                 slaFreshness:"1h",  path:["jnj-data-lake-prod","raw"],parentId:151,assetLevel:"object",  fileFormat:"CSV",  lastModified:"2026-04-24T08:12:00Z",storageClass:"STANDARD"},
+  {id:155,name:"customers_delta",   type:"Object",    domain:"Commerce", owner:"james.oh",   owners:["james.oh"],             steward:"maya.chen",  stewards:["maya.chen"],              cert:"Approved",  quality:0, usage:"Med", updated:"1h ago",  service:"s3",         connectionLabel:"AWS S3 Data Lake",  db:"jnj-data-lake-prod / processed / customers_delta",tier:1,rows:"—",size:"1.1 GB", tags:["PII"],      description:"Customer dimension as Delta-compatible Parquet. Partitioned by region.",          slaFreshness:"1h",  path:["jnj-data-lake-prod","processed"],parentId:152,assetLevel:"object",fileFormat:"Parquet",lastModified:"2026-04-24T07:30:00Z",storageClass:"STANDARD"},
+  {id:156,name:"events_2026_q1.parquet",type:"Object",domain:"Product",  owner:"james.oh",   owners:["james.oh"],             steward:"alex.wu",    stewards:["alex.wu"],                cert:"Approved",  quality:0, usage:"Med", updated:"3d ago",  service:"s3",         connectionLabel:"AWS S3 Data Lake",  db:"jnj-data-lake-prod / processed / events_2026_q1.parquet",tier:2,rows:"—",size:"4.8 GB",tags:["events"],  description:"Q1 2026 product events archive. Parquet format, Snappy compressed.",              slaFreshness:"7d",  path:["jnj-data-lake-prod","processed"],parentId:152,assetLevel:"object",fileFormat:"Parquet",lastModified:"2026-04-01T00:00:00Z",storageClass:"STANDARD_IA"},
+  // ── Azure Blob: Container → Blob ──
+  {id:160,name:"analytics-exports", type:"Container", domain:"Finance",  owner:"sarah.kim",  owners:["sarah.kim"],             steward:"sarah.kim",  stewards:["sarah.kim"],              cert:"Approved",  quality:0, usage:"Med", updated:"2h ago",  service:"azureblob",  connectionLabel:"Azure Blob Storage",db:"analytics-exports",                           tier:2,rows:"—",    size:"48.2 GB",tags:[],          description:"Analytics export container. Finance and marketing report outputs.",                slaFreshness:"4h",  path:[],                          parentId:null,assetLevel:"container",childCount:18},
+  {id:161,name:"raw-ingestion",     type:"Container", domain:"Platform", owner:"james.oh",   owners:["james.oh"],              steward:"james.oh",   stewards:["james.oh"],               cert:"Approved",  quality:0, usage:"High",updated:"30m ago", service:"azureblob",  connectionLabel:"Azure Blob Storage",db:"raw-ingestion",                               tier:1,rows:"—",    size:"210 GB", tags:[],          description:"Raw ingestion container for Azure-native data sources.",                          slaFreshness:"1h",  path:[],                          parentId:null,assetLevel:"container",childCount:42},
+  {id:162,name:"revenue_report_apr.csv",type:"Blob",  domain:"Finance",  owner:"sarah.kim",  owners:["sarah.kim"],            steward:"sarah.kim",  stewards:["sarah.kim"],              cert:"Approved",  quality:0, usage:"Med", updated:"2h ago",  service:"azureblob",  connectionLabel:"Azure Blob Storage",db:"analytics-exports / revenue_report_apr.csv",  tier:2,rows:"—",    size:"42 MB",  tags:["finance","Board reporting"],description:"April 2026 revenue report. CSV export from Tableau.",                             slaFreshness:"24h", path:["analytics-exports"],       parentId:160,assetLevel:"blob",   fileFormat:"CSV",  lastModified:"2026-04-24T06:00:00Z",accessTier:"Hot"},
+  {id:163,name:"product_events_raw.json",type:"Blob", domain:"Product",  owner:"james.oh",   owners:["james.oh"],             steward:"alex.wu",    stewards:["alex.wu"],                cert:"Draft",     quality:0, usage:"High",updated:"30m ago", service:"azureblob",  connectionLabel:"Azure Blob Storage",db:"raw-ingestion / product_events_raw.json",     tier:2,rows:"—",    size:"1.8 GB", tags:["events"],   description:"Streaming product events landing blob. JSON lines format.",                       slaFreshness:"15m", path:["raw-ingestion"],           parentId:161,assetLevel:"blob",   fileFormat:"JSON", lastModified:"2026-04-24T09:45:00Z",accessTier:"Hot"},
+  {id:164,name:"finance_summary_q1.parquet",type:"Blob",domain:"Finance",owner:"sarah.kim",  owners:["sarah.kim"],            steward:"sarah.kim",  stewards:["sarah.kim"],              cert:"Approved",  quality:0, usage:"Low", updated:"3w ago",  service:"azureblob",  connectionLabel:"Azure Blob Storage",db:"analytics-exports / finance_summary_q1.parquet",tier:1,rows:"—",  size:"180 MB", tags:["finance"],  description:"Q1 2026 finance summary in Parquet. Input to executive dashboards.",              slaFreshness:"7d",  path:["analytics-exports"],       parentId:160,assetLevel:"blob",   fileFormat:"Parquet",lastModified:"2026-04-01T00:00:00Z",accessTier:"Cool"},
+];
+// Merge into main ASSETS array so all existing filters work
+ASSETS.push(...HIERARCHY_ASSETS);
+
 // ─────────────────────────────────────────────
 // TAG MANAGEMENT MOCK DATA
 // ─────────────────────────────────────────────
@@ -302,6 +356,76 @@ const SCHEMA = {
     {name:"created_at",type:"TIMESTAMP",desc:"Order creation time",pii:false,nullable:false,quality:"< 2h lag",pk:false},
     {name:"updated_at",type:"TIMESTAMP",desc:"Last modification",pii:false,nullable:false,quality:"Freshness",pk:false},
   ],
+};
+
+// Extended schema for new tables
+Object.assign(SCHEMA,{
+  transactions:[
+    {name:"txn_id",      type:"BIGINT",        desc:"Unique transaction identifier",    pii:false,nullable:false,quality:"NOT NULL",pk:true},
+    {name:"account_id",  type:"BIGINT",        desc:"Reference to GL account",          pii:false,nullable:false,quality:"FK valid", pk:false},
+    {name:"amount",      type:"DECIMAL(15,2)", desc:"Transaction amount in USD",        pii:false,nullable:false,quality:"> 0",      pk:false},
+    {name:"direction",   type:"ENUM",          desc:"DEBIT or CREDIT",                  pii:false,nullable:false,quality:"Value in set",pk:false},
+    {name:"currency",    type:"CHAR(3)",        desc:"ISO 4217 currency code",           pii:false,nullable:false,quality:"Valid ISO", pk:false},
+    {name:"txn_date",    type:"DATE",          desc:"Date of transaction",              pii:false,nullable:false,quality:"Not future",pk:false},
+    {name:"reference",   type:"VARCHAR(100)",  desc:"External reference number",        pii:false,nullable:true, quality:"—",         pk:false},
+    {name:"created_at",  type:"TIMESTAMP",     desc:"Record creation time",             pii:false,nullable:false,quality:"< 2h lag",  pk:false},
+  ],
+  employees:[
+    {name:"emp_id",      type:"NUMBER(10)",    desc:"Employee unique identifier",       pii:false,nullable:false,quality:"NOT NULL",pk:true},
+    {name:"first_name",  type:"VARCHAR2(50)",  desc:"Legal first name",                 pii:true, nullable:false,quality:"NOT NULL",pk:false},
+    {name:"last_name",   type:"VARCHAR2(50)",  desc:"Legal last name",                  pii:true, nullable:false,quality:"NOT NULL",pk:false},
+    {name:"email",       type:"VARCHAR2(100)", desc:"Corporate email address",          pii:true, nullable:false,quality:"Format valid",pk:false},
+    {name:"dept_id",     type:"NUMBER(6)",     desc:"Department foreign key",           pii:false,nullable:false,quality:"FK valid", pk:false},
+    {name:"hire_date",   type:"DATE",          desc:"Date of employment start",         pii:false,nullable:false,quality:"NOT NULL",pk:false},
+    {name:"salary",      type:"NUMBER(12,2)",  desc:"Annual base salary",               pii:true, nullable:true, quality:"range > 0",pk:false},
+    {name:"status",      type:"VARCHAR2(20)",  desc:"ACTIVE / TERMINATED / ON_LEAVE",  pii:false,nullable:false,quality:"Value in set",pk:false},
+  ],
+  users:[
+    {name:"user_id",     type:"BIGSERIAL",     desc:"Auto-increment user identifier",   pii:false,nullable:false,quality:"NOT NULL",pk:true},
+    {name:"email",       type:"VARCHAR(255)",  desc:"User login email",                 pii:true, nullable:false,quality:"Unique, format",pk:false},
+    {name:"username",    type:"VARCHAR(50)",   desc:"Public display username",          pii:true, nullable:false,quality:"Unique",     pk:false},
+    {name:"password_hash",type:"CHAR(60)",     desc:"bcrypt password hash",             pii:true, nullable:false,quality:"NOT NULL",   pk:false},
+    {name:"created_at",  type:"TIMESTAMPTZ",   desc:"Account creation timestamp",       pii:false,nullable:false,quality:"NOT NULL",   pk:false},
+    {name:"last_login",  type:"TIMESTAMPTZ",   desc:"Most recent login time",           pii:false,nullable:true, quality:"—",          pk:false},
+    {name:"is_active",   type:"BOOLEAN",       desc:"Account active flag",              pii:false,nullable:false,quality:"NOT NULL",   pk:false},
+  ],
+  user_events:[
+    {name:"event_id",    type:"STRING",        desc:"UUID event identifier",            pii:false,nullable:false,quality:"NOT NULL",pk:true},
+    {name:"user_id",     type:"BIGINT",        desc:"User who triggered the event",     pii:true, nullable:true, quality:"FK or null",pk:false},
+    {name:"event_type",  type:"STRING",        desc:"Event category (click, view, etc)",pii:false,nullable:false,quality:"NOT NULL",pk:false},
+    {name:"page_url",    type:"STRING",        desc:"URL where event occurred",         pii:false,nullable:true, quality:"Valid URL",  pk:false},
+    {name:"session_id",  type:"STRING",        desc:"Browser session identifier",       pii:false,nullable:false,quality:"NOT NULL",  pk:false},
+    {name:"properties",  type:"MAP<STRING,STRING>",desc:"Event-specific key-value data",pii:false,nullable:true, quality:"—",         pk:false},
+    {name:"event_ts",    type:"TIMESTAMP",     desc:"Event occurrence time (UTC)",      pii:false,nullable:false,quality:"NOT NULL",  pk:false},
+    {name:"_ingested_at",type:"TIMESTAMP",     desc:"Delta table ingestion watermark",  pii:false,nullable:false,quality:"Monotonic", pk:false},
+  ],
+  app_users:[
+    {name:"id",          type:"INT UNSIGNED",  desc:"Auto-increment primary key",       pii:false,nullable:false,quality:"NOT NULL",pk:true},
+    {name:"email",       type:"VARCHAR(255)",  desc:"User email for login",             pii:true, nullable:false,quality:"Unique",    pk:false},
+    {name:"full_name",   type:"VARCHAR(100)",  desc:"Display name",                     pii:true, nullable:true, quality:"—",         pk:false},
+    {name:"created_at",  type:"DATETIME",      desc:"Account creation time",            pii:false,nullable:false,quality:"NOT NULL",  pk:false},
+    {name:"plan",        type:"ENUM",          desc:"free / starter / pro / enterprise",pii:false,nullable:false,quality:"Value in set",pk:false},
+  ],
+});
+
+// Column-level profile stats (used in column sidenav)
+const COL_PROFILES = {
+  order_id:      {nullPct:0,    distinctPct:100,  min:"1",        max:"48,200,000", avg:null,        topValues:null, dataType:"numeric"},
+  customer_id:   {nullPct:0,    distinctPct:8.2,  min:"1,001",    max:"3,100,000",  avg:null,        topValues:null, dataType:"numeric"},
+  email:         {nullPct:2.3,  distinctPct:95.1, min:null,       max:null,         avg:null,        topValues:null, dataType:"string"},
+  amount:        {nullPct:0,    distinctPct:45.2, min:"$0.99",    max:"$9,999.99",  avg:"$127.43",   topValues:null, dataType:"numeric"},
+  status:        {nullPct:0,    distinctPct:0.001,min:null,       max:null,         avg:null,        topValues:["completed (62%)","pending (18%)","cancelled (12%)","refunded (8%)"], dataType:"categorical"},
+  shipping_address:{nullPct:4.1,distinctPct:91.2, min:null,       max:null,         avg:null,        topValues:null, dataType:"json"},
+  created_at:    {nullPct:0,    distinctPct:88.4, min:"2021-01-01",max:"2026-04-24",avg:null,        topValues:null, dataType:"datetime"},
+  updated_at:    {nullPct:0,    distinctPct:89.1, min:"2021-01-01",max:"2026-04-24",avg:null,        topValues:null, dataType:"datetime"},
+  emp_id:        {nullPct:0,    distinctPct:100,  min:"1000",     max:"99999",      avg:null,        topValues:null, dataType:"numeric"},
+  first_name:    {nullPct:0,    distinctPct:31.2, min:null,       max:null,         avg:null,        topValues:["James (3.1%)","Maria (2.8%)","John (2.6%)"], dataType:"string"},
+  last_name:     {nullPct:0,    distinctPct:42.8, min:null,       max:null,         avg:null,        topValues:null, dataType:"string"},
+  salary:        {nullPct:1.2,  distinctPct:68.4, min:"$42,000",  max:"$420,000",   avg:"$124,800",  topValues:null, dataType:"numeric"},
+  event_type:    {nullPct:0,    distinctPct:0.002,min:null,       max:null,         avg:null,        topValues:["page_view (41%)","click (29%)","add_to_cart (11%)","purchase (6%)"], dataType:"categorical"},
+  txn_id:        {nullPct:0,    distinctPct:100,  min:"1",        max:"12,700,000", avg:null,        topValues:null, dataType:"numeric"},
+  txn_amount:    {nullPct:0,    distinctPct:72.1, min:"$0.01",    max:"$2,400,000", avg:"$18,420",   topValues:null, dataType:"numeric"},
+  user_id:       {nullPct:0,    distinctPct:100,  min:"1",        max:"2,800,000",  avg:null,        topValues:null, dataType:"numeric"},
 };
 
 const QUALITY_RULES = [
@@ -2279,14 +2403,19 @@ const Ic = {
 // SERVICE LOGOS + ICONS
 // ─────────────────────────────────────────────
 const SERVICE_LOGOS = {
-  snowflake: <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#29b5e8"/><path d="M16 6v20M6 16h20M9.2 9.2l13.6 13.6M22.8 9.2L9.2 22.8" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>,
-  postgres:  <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#336791"/><text x="16" y="21" textAnchor="middle" fill="white" fontSize="9" fontWeight="700" fontFamily="monospace">PG</text></svg>,
-  looker:    <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#4285f4"/><circle cx="14" cy="14" r="5" fill="none" stroke="white" strokeWidth="2"/><path d="M18 18l4 4" stroke="white" strokeWidth="2.5" strokeLinecap="round"/></svg>,
-  tableau:   <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#1f77b4"/><path d="M16 8v16M8 16h16M11 11v10M21 11v10M8 13h16M8 19h16" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>,
-  airflow:   <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#017cee"/><circle cx="10" cy="16" r="2.5" fill="white"/><circle cx="22" cy="10" r="2.5" fill="white"/><circle cx="22" cy="22" r="2.5" fill="white"/><path d="M12.5 15L19.5 11M12.5 17L19.5 21" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>,
-  mlflow:    <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#0194e2"/><path d="M8 24l8-16 8 16" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/><path d="M11 18h10" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>,
-  dbt:       <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#ff6f44"/><path d="M16 8l4 4-4 4-4-4 4-4z" fill="white" opacity=".3"/><path d="M16 12v8M12 16h8" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>,
-  bigquery:  <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#4285f4"/><circle cx="14" cy="14" r="5" fill="none" stroke="white" strokeWidth="1.5" opacity=".5"/><circle cx="14" cy="14" r="2.5" fill="white"/><path d="M18 18l4 4" stroke="white" strokeWidth="2.5" strokeLinecap="round"/></svg>,
+  snowflake:  <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#29b5e8"/><path d="M16 6v20M6 16h20M9.2 9.2l13.6 13.6M22.8 9.2L9.2 22.8" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>,
+  postgres:   <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#336791"/><text x="16" y="21" textAnchor="middle" fill="white" fontSize="9" fontWeight="700" fontFamily="monospace">PG</text></svg>,
+  databricks: <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#FF3621"/><path d="M7 20l9 5 9-5v-4l-9 5-9-5v4z" fill="white" opacity=".9"/><path d="M7 16l9 5 9-5-9-5-9 5z" fill="white"/></svg>,
+  oracle:     <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#C74634"/><rect x="7" y="13" width="18" height="6" rx="3" fill="white"/></svg>,
+  mysql:      <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#4479A1"/><text x="16" y="21" textAnchor="middle" fill="white" fontSize="8" fontWeight="700" fontFamily="monospace">MySQL</text></svg>,
+  s3:         <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#569A31"/><path d="M16 8l8 4v8l-8 4-8-4v-8l8-4z" fill="white" opacity=".9"/><path d="M8 12l8 4 8-4" stroke="#569A31" strokeWidth="1.2"/><path d="M16 16v8" stroke="#569A31" strokeWidth="1.2"/></svg>,
+  azureblob:  <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#0078D4"/><path d="M8 22c0-4 3-7 8-7s8 3 8 7H8z" fill="white" opacity=".9"/><circle cx="16" cy="12" r="4" fill="white" opacity=".7"/></svg>,
+  looker:     <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#4285f4"/><circle cx="14" cy="14" r="5" fill="none" stroke="white" strokeWidth="2"/><path d="M18 18l4 4" stroke="white" strokeWidth="2.5" strokeLinecap="round"/></svg>,
+  tableau:    <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#1f77b4"/><path d="M16 8v16M8 16h16M11 11v10M21 11v10M8 13h16M8 19h16" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>,
+  airflow:    <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#017cee"/><circle cx="10" cy="16" r="2.5" fill="white"/><circle cx="22" cy="10" r="2.5" fill="white"/><circle cx="22" cy="22" r="2.5" fill="white"/><path d="M12.5 15L19.5 11M12.5 17L19.5 21" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>,
+  mlflow:     <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#0194e2"/><path d="M8 24l8-16 8 16" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/><path d="M11 18h10" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>,
+  dbt:        <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#ff6f44"/><path d="M16 8l4 4-4 4-4-4 4-4z" fill="white" opacity=".3"/><path d="M16 12v8M12 16h8" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>,
+  bigquery:   <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#4285f4"/><circle cx="14" cy="14" r="5" fill="none" stroke="white" strokeWidth="1.5" opacity=".5"/><circle cx="14" cy="14" r="2.5" fill="white"/><path d="M18 18l4 4" stroke="white" strokeWidth="2.5" strokeLinecap="round"/></svg>,
 };
 
 const ServiceIcon = ({service, size=18}) => {
@@ -2317,10 +2446,24 @@ const SDot = ({status})=>{
   return <span style={{display:"inline-block",width:6,height:6,borderRadius:"50%",background:c,flexShrink:0}}/>;
 };
 
+const TYPE_META = {
+  Table:      {c:"#38bdf8", bg:"rgba(56,189,248,.1)",   icon:"▦"},
+  View:       {c:"#818cf8", bg:"rgba(129,140,248,.1)",  icon:"◫"},
+  Dashboard:  {c:"#a78bfa", bg:"rgba(167,139,250,.1)",  icon:"▣"},
+  Pipeline:   {c:"#34d399", bg:"rgba(52,211,153,.1)",   icon:"⇒"},
+  "ML Model": {c:"#fb923c", bg:"rgba(251,146,60,.1)",   icon:"◈"},
+  Database:   {c:"#facc15", bg:"rgba(250,204,21,.1)",   icon:"⬡"},
+  Catalog:    {c:"#facc15", bg:"rgba(250,204,21,.1)",   icon:"⬡"},
+  Schema:     {c:"#4ade80", bg:"rgba(74,222,128,.1)",   icon:"⬢"},
+  Bucket:     {c:"#569A31", bg:"rgba(86,154,49,.12)",   icon:"▭"},
+  Container:  {c:"#0078D4", bg:"rgba(0,120,212,.12)",   icon:"▭"},
+  Folder:     {c:"#d97706", bg:"rgba(217,119,6,.1)",    icon:"▤"},
+  Object:     {c:"#6b7280", bg:"rgba(107,114,128,.1)",  icon:"▪"},
+  Blob:       {c:"#6b7280", bg:"rgba(107,114,128,.1)",  icon:"▪"},
+};
 const TypeBadge = ({type})=>{
-  const map = {Table:{c:"#38bdf8",bg:"rgba(56,189,248,.1)"},Dashboard:{c:"#a78bfa",bg:"rgba(167,139,250,.1)"},Pipeline:{c:"#34d399",bg:"rgba(52,211,153,.1)"},"ML Model":{c:"#fb923c",bg:"rgba(251,146,60,.1)"}};
-  const s = map[type]||{c:T.textMuted,bg:T.bgHover};
-  return <span style={{fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:4,background:s.bg,color:s.c,border:`1px solid ${s.c}22`}}>{type}</span>;
+  const s = TYPE_META[type]||{c:T.textMuted,bg:T.bgHover,icon:"▪"};
+  return <span style={{fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:4,background:s.bg,color:s.c,border:`1px solid ${s.c}22`,display:"inline-flex",alignItems:"center",gap:4}}><span style={{fontSize:9}}>{s.icon}</span>{type}</span>;
 };
 
 const CertBadge = ({cert})=>{
@@ -6113,11 +6256,18 @@ const AssetOverview = ({asset,data,setData,onToast})=>{
 );}
 const AssetSchema = ({asset,onToast})=>{
   const cols=SCHEMA[asset.name]||SCHEMA.orders||[];
-  const [editing,setEditing]=useState(null);
   const [schSearch,setSchSearch]=useState("");
+  const [selCol,setSelCol]=useState(null);
   const filtered=cols.filter(c=>!schSearch||c.name.toLowerCase().includes(schSearch.toLowerCase())||c.desc?.toLowerCase().includes(schSearch.toLowerCase())||c.type?.toLowerCase().includes(schSearch.toLowerCase()));
-  return <div className="fadeIn">
-    <Card2 style={{overflow:"hidden",padding:0}}>
+  const prof=selCol?(COL_PROFILES[selCol.name]||null):null;
+  const StatBar=({pct,color="#ee2424"})=>(
+    <div style={{width:"100%",height:3,background:T.bgHover,borderRadius:2,overflow:"hidden",marginTop:3}}>
+      <div style={{width:`${Math.min(100,pct||0)}%`,height:"100%",background:color,borderRadius:2}}/>
+    </div>
+  );
+  return <div className="fadeIn" style={{display:"flex",gap:14,alignItems:"flex-start"}}>
+    {/* Column table */}
+    <Card2 style={{overflow:"hidden",padding:0,flex:1,minWidth:0}}>
       <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
         <div style={{position:"relative",flex:1,minWidth:160}}>
           <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
@@ -6127,26 +6277,99 @@ const AssetSchema = ({asset,onToast})=>{
           {schSearch&&<button onClick={()=>setSchSearch("")} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:15,lineHeight:1}}>×</button>}
         </div>
         <span style={{fontSize:12,color:T.textMuted,whiteSpace:"nowrap"}}>{filtered.length} / {cols.length} columns · {cols.filter(c=>c.pii).length} PII · {cols.filter(c=>c.pk).length} PK</span>
-        <Btn small icon={Ic.plus(11)} onClick={()=>onToast("Add column dialog would open","success")}>Add Column</Btn>
       </div>
       <table style={{width:"100%",borderCollapse:"collapse"}}>
-        <thead><tr>{["Column","Type","Nullable","Description","PII","Quality Rule","Actions"].map(h=><th key={h} style={{padding:"8px 14px",fontSize:11,fontWeight:600,color:T.textMuted,textAlign:"left",borderBottom:`1px solid ${T.border}`,textTransform:"uppercase",letterSpacing:"0.05em",whiteSpace:"nowrap",background:T.bgElevated}}>{h}</th>)}</tr></thead>
+        <thead><tr>{["Column","Type","Nullable","PII","Quality Rule"].map(h=><th key={h} style={{padding:"8px 14px",fontSize:11,fontWeight:600,color:T.textMuted,textAlign:"left",borderBottom:`1px solid ${T.border}`,textTransform:"uppercase",letterSpacing:"0.05em",whiteSpace:"nowrap",background:T.bgElevated}}>{h}</th>)}</tr></thead>
         <tbody>
-          {filtered.map((c,i)=>(
-            <tr key={i} className="row-hover" style={{borderBottom:i<filtered.length-1?`1px solid ${T.border}`:"none"}}>
-              <td style={{padding:"10px 14px"}}><div style={{display:"flex",alignItems:"center",gap:6}}>{c.pk&&<span style={{fontSize:9,color:T.amber,border:`1px solid ${T.amberDim}`,padding:"1px 5px",borderRadius:4,fontFamily:"'Geist Mono',monospace",fontWeight:700}}>PK</span>}<span style={{fontSize:13,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:500}}>{c.name}</span></div></td>
-              <td style={{padding:"10px 14px"}}><Badge color={T.blue} bg={T.blueDim}>{c.type}</Badge></td>
-              <td style={{padding:"10px 14px"}}><span style={{fontSize:11,color:c.nullable?T.textMuted:T.textSub}}>{c.nullable?"YES":"NOT NULL"}</span></td>
-              <td style={{padding:"10px 14px",fontSize:12,color:T.textSub,maxWidth:220}}>{editing===i?<Input2 value={c.desc} onChange={()=>{}} style={{fontSize:12}}/>:c.desc}</td>
-              <td style={{padding:"10px 14px"}}>{c.pii&&<Badge color={T.rose} bg={T.roseDim} border="rgba(253,164,175,0.25)">PII</Badge>}</td>
-              <td style={{padding:"10px 14px",fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{c.quality}</td>
-              <td style={{padding:"10px 14px"}}><div style={{display:"flex",gap:6}}><button onClick={()=>setEditing(editing===i?null:i)} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer"}}>{Ic.edit(12)}</button><button onClick={()=>onToast("Column deleted","error")} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer"}}>{Ic.trash(12)}</button></div></td>
-            </tr>
-          ))}
-          {filtered.length===0&&<tr><td colSpan={7} style={{padding:"32px",textAlign:"center",color:T.textMuted,fontSize:13}}>No columns match "{schSearch}"</td></tr>}
+          {filtered.map((c,i)=>{
+            const isSel=selCol?.name===c.name;
+            return (
+              <tr key={i} onClick={()=>setSelCol(isSel?null:c)} className="row-hover" style={{borderBottom:i<filtered.length-1?`1px solid ${T.border}`:"none",background:isSel?T.accentDim:"transparent",cursor:"pointer",transition:"background .1s"}}>
+                <td style={{padding:"10px 14px"}}><div style={{display:"flex",alignItems:"center",gap:6}}>{c.pk&&<span style={{fontSize:9,color:T.amber,border:`1px solid ${T.amberDim}`,padding:"1px 5px",borderRadius:4,fontFamily:"'Geist Mono',monospace",fontWeight:700}}>PK</span>}<span style={{fontSize:13,fontFamily:"'Geist Mono',monospace",color:isSel?T.accent:T.text,fontWeight:500}}>{c.name}</span></div></td>
+                <td style={{padding:"10px 14px"}}><Badge color={T.blue} bg={T.blueDim}>{c.type}</Badge></td>
+                <td style={{padding:"10px 14px"}}><span style={{fontSize:11,color:c.nullable?T.textMuted:T.textSub}}>{c.nullable?"YES":"NOT NULL"}</span></td>
+                <td style={{padding:"10px 14px"}}>{c.pii&&<Badge color={T.rose} bg={T.roseDim} border="rgba(253,164,175,0.25)">PII</Badge>}</td>
+                <td style={{padding:"10px 14px",fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{c.quality||"—"}</td>
+              </tr>
+            );
+          })}
+          {filtered.length===0&&<tr><td colSpan={5} style={{padding:"32px",textAlign:"center",color:T.textMuted,fontSize:13}}>No columns match "{schSearch}"</td></tr>}
         </tbody>
       </table>
     </Card2>
+
+    {/* Column profile sidenav */}
+    {selCol&&(
+      <div style={{width:272,flexShrink:0,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",display:"flex",flexDirection:"column",position:"sticky",top:0}}>
+        <div style={{padding:"11px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
+            {selCol.pk&&<span style={{fontSize:9,color:T.amber,border:`1px solid ${T.amberDim}`,padding:"1px 5px",borderRadius:4,fontFamily:"'Geist Mono',monospace",fontWeight:700,flexShrink:0}}>PK</span>}
+            {selCol.pii&&<Badge color={T.rose} bg={T.roseDim} border="rgba(253,164,175,0.25)">PII</Badge>}
+            <span style={{fontSize:13,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{selCol.name}</span>
+          </div>
+          <button onClick={()=>setSelCol(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:16,lineHeight:1,flexShrink:0,display:"flex",alignItems:"center"}}>×</button>
+        </div>
+        <div style={{overflowY:"auto",padding:14}}>
+          <div style={{display:"flex",gap:5,marginBottom:14,flexWrap:"wrap"}}>
+            <Badge color={T.blue} bg={T.blueDim}>{selCol.type}</Badge>
+            <span style={{fontSize:11,color:selCol.nullable?T.textMuted:T.green,background:T.bgElevated,padding:"2px 7px",borderRadius:4,border:`1px solid ${T.border}`}}>{selCol.nullable?"Nullable":"NOT NULL"}</span>
+          </div>
+          {selCol.desc&&(
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:5}}>Description</div>
+              <p style={{fontSize:12,color:T.textSub,lineHeight:1.55,margin:0}}>{selCol.desc}</p>
+            </div>
+          )}
+          {prof?(
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Column Profile</div>
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                <div>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11}}>
+                    <span style={{color:T.textSub}}>Null %</span>
+                    <span style={{fontFamily:"'Geist Mono',monospace",color:prof.nullPct>5?"#f87171":"#4ade80",fontWeight:600}}>{prof.nullPct}%</span>
+                  </div>
+                  <StatBar pct={prof.nullPct} color={prof.nullPct>5?"#f87171":"#4ade80"}/>
+                </div>
+                <div>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11}}>
+                    <span style={{color:T.textSub}}>Distinct %</span>
+                    <span style={{fontFamily:"'Geist Mono',monospace",color:T.blue,fontWeight:600}}>{prof.distinctPct}%</span>
+                  </div>
+                  <StatBar pct={prof.distinctPct} color={T.blue}/>
+                </div>
+                {(prof.min||prof.max||prof.avg)&&(
+                  <div style={{background:T.bgElevated,borderRadius:6,padding:"8px 10px",display:"flex",flexDirection:"column",gap:5}}>
+                    {prof.min&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11}}><span style={{color:T.textMuted}}>Min</span><span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{prof.min}</span></div>}
+                    {prof.max&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11}}><span style={{color:T.textMuted}}>Max</span><span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{prof.max}</span></div>}
+                    {prof.avg&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11}}><span style={{color:T.textMuted}}>Avg</span><span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{prof.avg}</span></div>}
+                  </div>
+                )}
+                {prof.topValues&&(
+                  <div>
+                    <div style={{fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:6,textTransform:"uppercase",letterSpacing:"0.06em"}}>Top Values</div>
+                    {prof.topValues.map((v,i)=>(
+                      <div key={i} style={{display:"flex",alignItems:"center",gap:7,marginBottom:4}}>
+                        <div style={{width:10,height:10,borderRadius:2,background:T.accent,opacity:1-i*0.22,flexShrink:0}}/>
+                        <span style={{fontSize:11,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ):(
+            <div style={{padding:"14px 0",textAlign:"center",color:T.textMuted,fontSize:11}}>No profile data available</div>
+          )}
+          {selCol.quality&&(
+            <div>
+              <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:5}}>Quality Rule</div>
+              <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textSub,background:T.bgElevated,padding:"4px 8px",borderRadius:4,border:`1px solid ${T.border}`,display:"inline-block",lineHeight:1.4}}>{selCol.quality}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
   </div>;
 }
 const AssetLineageFull = ({asset})=>{
@@ -6868,7 +7091,98 @@ const AssetCommentsTab = ({onToast})=>{
 // ─────────────────────────────────────────────
 // ASSET DETAIL
 // ─────────────────────────────────────────────
+// ── Lightweight detail page for file assets (Object / Blob) ──
+const FileAssetDetail = ({asset, onBack, onToast}) => {
+  const [desc,setDesc] = useState(asset.description||"");
+  const [editing,setEditing] = useState(false);
+  const FILE_FORMAT_COLORS = {CSV:"#16a34a",Parquet:"#0891b2",JSON:"#d97706",ORC:"#7c3aed"};
+  const fc = FILE_FORMAT_COLORS[asset.fileFormat]||"#6b7280";
+  const MetaRow = ({label,value})=>(
+    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",padding:"9px 0",borderBottom:`1px solid ${T.border}`,fontSize:12,gap:16}}>
+      <span style={{color:T.textMuted,flexShrink:0,minWidth:100}}>{label}</span>
+      <span style={{color:T.text,textAlign:"right",fontFamily:["Size","Last Modified","Storage Class","Access Tier","Format"].includes(label)?"'Geist Mono',monospace":"inherit"}}>{value||"—"}</span>
+    </div>
+  );
+  return (
+    <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+      <Topbar breadcrumb={[{label:"Data Catalog",onClick:onBack},{label:asset.name}]}/>
+      <div style={{background:T.bgSurface,borderBottom:`1px solid ${T.border}`,flexShrink:0,padding:"16px 28px 16px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+          <TypeBadge type={asset.type}/>
+          {asset.fileFormat&&<span style={{fontSize:10,fontWeight:700,padding:"2px 6px",borderRadius:4,background:`${fc}18`,color:fc,border:`1px solid ${fc}33`}}>{asset.fileFormat}</span>}
+          <span style={{fontSize:11.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{(asset.path||[]).join(" / ")}</span>
+        </div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+          <h2 style={{fontSize:20,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,letterSpacing:"-0.04em",margin:0}}>{asset.name}</h2>
+          <ServiceIcon service={asset.service} size={28}/>
+        </div>
+      </div>
+      <div style={{flex:1,overflow:"auto",padding:"24px 28px",display:"flex",gap:24,alignItems:"flex-start"}}>
+        {/* Main content */}
+        <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:16}}>
+          <Card2>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+              <h3 style={{fontSize:13,fontWeight:600,color:T.text,margin:0}}>Description</h3>
+              <button onClick={()=>{ if(editing)onToast("Description saved","success"); setEditing(e=>!e); }}
+                style={{fontSize:11.5,color:editing?T.accent:T.textMuted,background:"none",border:"none",cursor:"pointer",padding:"2px 6px"}}>
+                {editing?"Save":"Edit"}
+              </button>
+            </div>
+            {editing
+              ? <textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={3}
+                  style={{width:"100%",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:7,color:T.text,fontSize:13,padding:"8px 10px",resize:"vertical",outline:"none",boxSizing:"border-box",fontFamily:"inherit",lineHeight:1.5}}/>
+              : <p style={{fontSize:13,color:desc?T.textSub:T.textMuted,lineHeight:1.6,margin:0,fontStyle:desc?"normal":"italic"}}>{desc||"No description. Click Edit to add one."}</p>
+            }
+          </Card2>
+          <Card2>
+            <h3 style={{fontSize:13,fontWeight:600,color:T.text,margin:"0 0 4px"}}>File Metadata</h3>
+            <MetaRow label="Format" value={asset.fileFormat}/>
+            <MetaRow label="Size" value={asset.size}/>
+            <MetaRow label="Last Modified" value={asset.lastModified}/>
+            {asset.storageClass&&<MetaRow label="Storage Class" value={asset.storageClass}/>}
+            {asset.accessTier&&<MetaRow label="Access Tier" value={asset.accessTier}/>}
+            <MetaRow label="Domain" value={asset.domain}/>
+            <MetaRow label="Owner" value={asset.owner}/>
+          </Card2>
+          {(asset.tags||[]).length>0&&(
+            <Card2>
+              <h3 style={{fontSize:13,fontWeight:600,color:T.text,margin:"0 0 10px"}}>Tags</h3>
+              <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                {asset.tags.map(t=><span key={t} style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:t==="PII"?T.roseDim:T.bgHover,color:t==="PII"?T.rose:T.textMuted,border:`1px solid ${t==="PII"?"rgba(253,164,175,.25)":T.border}`}}>{t}</span>)}
+              </div>
+            </Card2>
+          )}
+        </div>
+        {/* Right sidebar */}
+        <div style={{width:220,flexShrink:0,display:"flex",flexDirection:"column",gap:12}}>
+          <Card2 style={{padding:"14px"}}>
+            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Connection</div>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <ServiceIcon service={asset.service} size={20}/>
+              <span style={{fontSize:12,color:T.textSub}}>{asset.connectionLabel}</span>
+            </div>
+          </Card2>
+          <Card2 style={{padding:"14px"}}>
+            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Path</div>
+            {(asset.path||[]).map((seg,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:4,marginBottom:2}}>
+                {i>0&&<svg width="8" height="8" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,flexShrink:0}}><path d="M3.5 2l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>}
+                <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textSub,paddingLeft:i>0?0:0}}>{seg}</span>
+              </div>
+            ))}
+          </Card2>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const AssetDetail = ({asset, onBack, onToast}) => {
+  if(asset.type==="Object"||asset.type==="Blob") return <FileAssetDetail asset={asset} onBack={onBack} onToast={onToast}/>;
+  return <AssetDetailFull asset={asset} onBack={onBack} onToast={onToast}/>;
+};
+
+const AssetDetailFull = ({asset, onBack, onToast}) => {
   const [tab,        setTab]       = useState("overview");
   const [data,         setData]        = useState({...asset,owners:asset.owners||[asset.owner],stewards:asset.stewards||(asset.steward?[asset.steward]:[]),tags:[...(asset.tags||[])]});
   const [certOpen,     setCertOpen]    = useState(false);
@@ -7279,13 +7593,29 @@ const CatalogView = ({onAsset})=>{
   const [selOwners,  setSelOwners]  = useState(new Set());
   const [selTags,          setSelTags]          = useState(new Set());
   const [selGlossaryTerms, setSelGlossaryTerms] = useState(new Set());
-  const [openGroup,  setOpenGroup]  = useState({conntype:true,connection:false,domain:true,type:false,cert:false,tier:false,owner:false,tags:false,glossary:false});
+  const [openGroup,  setOpenGroup]  = useState({conntype:true,connection:false,domain:true,type:true,cert:false,tier:false,owner:false,tags:false,glossary:false});
+  // Drill-down navigation: array of {id, name, type} representing current path
+  const [drillPath, setDrillPath] = useState([]);
+  const drillParentId = drillPath.length>0 ? drillPath[drillPath.length-1].id : null;
+  const DRILLABLE_TYPES = new Set(["Database","Catalog","Schema","Bucket","Container","Folder"]);
+  const handleDrillDown = (asset) => {
+    if(!DRILLABLE_TYPES.has(asset.type)) { onAsset(asset); return; }
+    setDrillPath(prev=>[...prev,{id:asset.id,name:asset.name,type:asset.type}]);
+    setQ(""); setSelTypes(new Set()); setSelDomains(new Set()); setSelCerts(new Set()); setSelTiers(new Set()); setSelConns(new Set()); setSelOwners(new Set());
+  };
+  const handleDrillUp = (idx) => setDrillPath(prev=>prev.slice(0,idx));
 
   const toggle = (setter, val) => setter(prev => { const next = new Set(prev); next.has(val)?next.delete(val):next.add(val); return next; });
   const sorts = [{v:"relevance",l:"Relevance"},{v:"quality",l:"Quality ↓"},{v:"name",l:"Name A–Z"},{v:"updated",l:"Recently Updated"},{v:"usage",l:"Popularity"}];
 
   const filtered = ASSETS.filter(a => {
-    const mq  = !q || a.name.toLowerCase().includes(q.toLowerCase()) || a.domain.toLowerCase().includes(q.toLowerCase()) || a.tags.some(t=>t.toLowerCase().includes(q.toLowerCase())) || a.description.toLowerCase().includes(q.toLowerCase());
+    // Drill-down: only show direct children of current drill node
+    if(drillParentId!==null) { if(a.parentId!==drillParentId) return false; }
+    else { if(!q && selTypes.size===0 && selConnTypes.size===0 && selDomains.size===0 && selCerts.size===0 && selTiers.size===0 && selConns.size===0 && selOwners.size===0 && selTags.size===0 && selGlossaryTerms.size===0) {
+      // Default top-level: show only root assets (no parent) + all non-hierarchy assets
+      if(a.parentId!=null && !q) return false;
+    }}
+    const mq  = !q || a.name.toLowerCase().includes(q.toLowerCase()) || (a.domain||"").toLowerCase().includes(q.toLowerCase()) || (a.tags||[]).some(t=>t.toLowerCase().includes(q.toLowerCase())) || (a.description||"").toLowerCase().includes(q.toLowerCase()) || (a.db||"").toLowerCase().includes(q.toLowerCase()) || (SCHEMA[a.name]||[]).some(c=>c.name.toLowerCase().includes(q.toLowerCase()));
     const mct = selConnTypes.size===0 || selConnTypes.has(a.service);
     const mt  = selTypes.size===0   || selTypes.has(a.type);
     const md  = selDomains.size===0 || selDomains.has(a.domain);
@@ -7321,9 +7651,10 @@ const CatalogView = ({onAsset})=>{
 
   const CERT_COLORS = {"Approved":"#16a34a","In Review":"#d97706","Draft":"#6b7280","Rejected":"#e11d48","Deprecated":"#7c3aed"};
   const TIER_META   = {"1":{color:"#ee2424",label:"Critical"},"2":{color:"#d97706",label:"Important"},"3":{color:"#4b4b60",label:"Exploratory"}};
-  const CONN_TYPE_LABELS = {snowflake:"Snowflake",postgres:"PostgreSQL",looker:"Looker",tableau:"Tableau",airflow:"Airflow",mlflow:"MLflow"};
+  const CONN_TYPE_LABELS = {snowflake:"Snowflake",databricks:"Databricks",oracle:"Oracle",postgres:"PostgreSQL",mysql:"MySQL",s3:"Amazon S3",azureblob:"Azure Blob",looker:"Looker",tableau:"Tableau",airflow:"Airflow",mlflow:"MLflow"};
   const allConnTypes = [...new Set(ASSETS.map(a=>a.service))];
   const visibleConns = selConnTypes.size===0 ? [...new Set(ASSETS.map(a=>a.connectionLabel))] : [...new Set(ASSETS.filter(a=>selConnTypes.has(a.service)).map(a=>a.connectionLabel))];
+  const ALL_ASSET_TYPES = [...new Set(ASSETS.map(a=>a.type))];
 
   const FacetGroup = ({id,label,icon,items,sel,onToggle,renderItem,headerNote}) => {
     const open = openGroup[id];
@@ -7373,20 +7704,29 @@ const CatalogView = ({onAsset})=>{
     ...[...selGlossaryTerms].map(v=>({label:GLOSSARY_TERMS.find(t=>t.id===v)?.term||v,clear:()=>toggle(setSelGlossaryTerms,v)})),
   ];
 
+  const FILE_FORMAT_COLORS = {CSV:"#16a34a",Parquet:"#0891b2",JSON:"#d97706",ORC:"#7c3aed"};
   const cols=[
     {key:"name",label:"Asset Name",render:(v,r)=>(
       <div style={{display:"flex",alignItems:"center",gap:10}}>
         <ServiceIcon service={r.service} size={18}/>
-        <div><div style={{fontSize:13,fontWeight:500,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{v}</div><div style={{fontSize:10,color:T.textMuted,marginTop:1}}>{r.db}</div></div>
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <span style={{fontSize:13,fontWeight:500,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{v}</span>
+            {DRILLABLE_TYPES.has(r.type)&&<svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,flexShrink:0}}><path d="M3.5 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+            {r.fileFormat&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:3,background:`${FILE_FORMAT_COLORS[r.fileFormat]||T.textMuted}18`,color:FILE_FORMAT_COLORS[r.fileFormat]||T.textMuted,border:`1px solid ${FILE_FORMAT_COLORS[r.fileFormat]||T.textMuted}33`}}>{r.fileFormat}</span>}
+          </div>
+          {r.path&&r.path.length>0&&<div style={{fontSize:10,color:T.textMuted,marginTop:2,fontFamily:"'Geist Mono',monospace"}}>{r.path.join(" / ")}</div>}
+          {(!r.path||r.path.length===0)&&r.db&&<div style={{fontSize:10,color:T.textMuted,marginTop:1}}>{r.db}</div>}
+        </div>
       </div>
     )},
     {key:"type",label:"Type",render:v=><TypeBadge type={v}/>},
-    {key:"tier",label:"Tier",render:v=><TierBadge tier={v}/>},
+    {key:"tier",label:"Tier",render:(v,r)=>r.assetLevel&&["bucket","container","folder","object","blob"].includes(r.assetLevel)?<span style={{fontSize:11,color:T.textMuted}}>—</span>:<TierBadge tier={v}/>},
     {key:"domain",label:"Domain",render:v=><span style={{fontSize:12,color:T.textSub}}>{v}</span>},
     {key:"owner",label:"Owner",render:v=><span style={{fontSize:12,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{v}</span>},
-    {key:"cert",label:"Certification",render:v=><CertBadge cert={v}/>},
-    {key:"quality",label:"Quality",render:v=><QScore score={v}/>},
-    {key:"usage",label:"Usage",render:v=><Badge color={v==="High"?T.accent:v==="Med"?T.amber:T.textMuted}>{v}</Badge>},
+    {key:"cert",label:"Certification",render:(v,r)=>["Object","Blob","Folder"].includes(r.type)?<span style={{fontSize:11,color:T.textMuted}}>—</span>:<CertBadge cert={v}/>},
+    {key:"quality",label:"Quality",render:(v,r)=>["Object","Blob","Bucket","Container","Folder"].includes(r.type)?<span style={{fontSize:11,color:T.textMuted}}>—</span>:<QScore score={v}/>},
+    {key:"size",label:"Size",render:(v,r)=>r.size&&r.size!=="—"?<span style={{fontSize:11,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{r.size}</span>:<span style={{fontSize:11,color:T.textMuted}}>{r.rows&&r.rows!=="—"?r.rows+" rows":"—"}</span>},
     {key:"updated",label:"Updated",render:v=><span style={{fontSize:11,color:T.textMuted}}>{v}</span>},
   ];
 
@@ -7414,8 +7754,9 @@ const CatalogView = ({onAsset})=>{
               items={[...new Set(ASSETS.map(a=>a.domain))].map(v=>({val:v,label:v}))}
               sel={selDomains} onToggle={(v,c)=>c?setSelDomains(new Set()):toggle(setSelDomains,v)}/>
             <FacetGroup id="type" label="Asset Type" icon={Ic.catalog(11)}
-              items={["Table","Dashboard","Pipeline","ML Model"].map(v=>({val:v,label:v}))}
-              sel={selTypes} onToggle={(v,c)=>c?setSelTypes(new Set()):toggle(setSelTypes,v)}/>
+              items={ALL_ASSET_TYPES.sort().map(v=>({val:v,label:v}))}
+              sel={selTypes} onToggle={(v,c)=>c?setSelTypes(new Set()):toggle(setSelTypes,v)}
+              renderItem={item=><div style={{display:"flex",alignItems:"center",gap:5}}><TypeBadge type={item.val}/></div>}/>
             <FacetGroup id="cert" label="Certification" icon={Ic.cert(11)}
               items={["Approved","In Review","Draft","Rejected","Deprecated"].map(v=>({val:v,label:v}))}
               sel={selCerts} onToggle={(v,c)=>c?setSelCerts(new Set()):toggle(setSelCerts,v)}
@@ -7492,9 +7833,25 @@ const CatalogView = ({onAsset})=>{
               <button onClick={clearAll} style={{fontSize:10.5,color:T.textMuted,background:"none",border:"none",cursor:"pointer",marginLeft:2}} onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>Clear all</button>
             </div>
           )}
+          {/* Drill-down breadcrumb */}
+          {drillPath.length>0&&(
+            <div style={{padding:"7px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:4,background:T.bgElevated,flexShrink:0}}>
+              <button onClick={()=>setDrillPath([])} style={{fontSize:11.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:"2px 4px",borderRadius:4}} onMouseEnter={e=>e.currentTarget.style.background=T.accentDim} onMouseLeave={e=>e.currentTarget.style.background="none"}>All Assets</button>
+              {drillPath.map((seg,idx)=>(
+                <React.Fragment key={seg.id}>
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,flexShrink:0}}><path d="M3.5 2l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  {idx<drillPath.length-1
+                    ? <button onClick={()=>handleDrillUp(idx+1)} style={{fontSize:11.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:"2px 4px",borderRadius:4}} onMouseEnter={e=>e.currentTarget.style.background=T.accentDim} onMouseLeave={e=>e.currentTarget.style.background="none"}>{seg.name}</button>
+                    : <span style={{fontSize:11.5,fontWeight:600,color:T.text,padding:"2px 4px"}}>{seg.name}</span>
+                  }
+                </React.Fragment>
+              ))}
+              <span style={{fontSize:10.5,color:T.textMuted,marginLeft:4}}>({filtered.length} {filtered.length===1?"asset":"assets"})</span>
+            </div>
+          )}
           <div style={{flex:1,overflowY:"auto",padding:"18px 20px"}}>
-            {filtered.length===0&&<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:200,gap:8}}><div style={{color:T.textMuted,opacity:.25}}>{Ic.catalog(36)}</div><div style={{fontSize:13,fontWeight:600,color:T.textSub}}>No assets match your filters</div><button onClick={clearAll} style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer"}}>Clear all filters</button></div>}
-            {view==="table"&&filtered.length>0&&<DataTable cols={cols} rows={filtered} onRowClick={r=>onAsset(r)}/>}
+            {filtered.length===0&&<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:200,gap:8}}><div style={{color:T.textMuted,opacity:.25}}>{Ic.catalog(36)}</div><div style={{fontSize:13,fontWeight:600,color:T.textSub}}>No assets match your filters</div><button onClick={()=>{clearAll();setDrillPath([]);}} style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer"}}>Clear all filters</button></div>}
+            {view==="table"&&filtered.length>0&&<DataTable cols={cols} rows={filtered} onRowClick={r=>handleDrillDown(r)}/>}
             {view==="card"&&filtered.length>0&&(
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {filtered.map(a=>{
@@ -7505,7 +7862,7 @@ const CatalogView = ({onAsset})=>{
                     <div key={a.id} style={{background:T.bgSurface,border:`1px solid ${conflictTerms.length>0?"rgba(217,119,6,.35)":T.border}`,borderRadius:10,cursor:"pointer",transition:"all .15s",overflow:"hidden"}}
                       onMouseEnter={e=>{e.currentTarget.style.borderColor=conflictTerms.length>0?"rgba(217,119,6,.5)":T.accent+"55";e.currentTarget.style.background=T.bgHover;}}
                       onMouseLeave={e=>{e.currentTarget.style.borderColor=conflictTerms.length>0?"rgba(217,119,6,.35)":T.border;e.currentTarget.style.background=T.bgSurface;}}>
-                      <div onClick={()=>onAsset(a)} style={{display:"flex",alignItems:"center",gap:16,padding:"14px 16px"}}>
+                      <div onClick={()=>handleDrillDown(a)} style={{display:"flex",alignItems:"center",gap:16,padding:"14px 16px"}}>
                         <ServiceIcon service={a.service} size={32}/>
                         <div style={{flex:"0 0 280px",minWidth:0}}>
                           <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}><span style={{fontSize:13.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</span></div>
