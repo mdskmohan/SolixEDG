@@ -2440,7 +2440,7 @@ const TierBadge = ({tier}) => {
   if(!tier) return null;
   const colors = {1:{bg:"rgba(238,36,36,.1)",color:"#ee2424",border:"rgba(238,36,36,.3)"},2:{bg:"rgba(217,119,6,.1)",color:"#d97706",border:"rgba(217,119,6,.3)"},3:{bg:"rgba(75,75,96,.1)",color:"#4b4b60",border:"rgba(75,75,96,.3)"}};
   const c = colors[tier]||colors[3];
-  return <span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:4,background:c.bg,color:c.color,border:`1px solid ${c.border}`,letterSpacing:"0.03em"}}>T{tier}</span>;
+  return <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:c.bg,color:c.color,border:`1px solid ${c.border}`,display:"inline-flex",alignItems:"center",whiteSpace:"nowrap"}}>T{tier}</span>;
 };
 
 // ─────────────────────────────────────────────
@@ -2472,7 +2472,7 @@ const TYPE_META = {
 };
 const TypeBadge = ({type})=>{
   const s = TYPE_META[type]||{c:T.textMuted,bg:T.bgHover,icon:"▪"};
-  return <span style={{fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:4,background:s.bg,color:s.c,border:`1px solid ${s.c}22`,display:"inline-flex",alignItems:"center",gap:4}}><span style={{fontSize:9}}>{s.icon}</span>{type}</span>;
+  return <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:s.bg,color:s.c,border:`1px solid ${s.c}33`,display:"inline-flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}><span style={{fontSize:9.5}}>{s.icon}</span>{type}</span>;
 };
 
 const CertBadge = ({cert})=>{
@@ -2484,7 +2484,7 @@ const CertBadge = ({cert})=>{
     Deprecated:  {c:"#7c3aed", bg:"rgba(124,58,237,.1)"},
   };
   const s = map[cert]||{c:T.textMuted,bg:T.bgHover};
-  return <span style={{fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:4,background:s.bg,color:s.c}}>{cert||"Not Certified"}</span>;
+  return <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:s.bg,color:s.c,border:`1px solid ${s.c}33`,display:"inline-flex",alignItems:"center",whiteSpace:"nowrap"}}>{cert||"Not Certified"}</span>;
 };
 
 const QScore = ({score})=>{
