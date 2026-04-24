@@ -6307,14 +6307,10 @@ const AssetQualityTab = ({asset})=>{
             <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
             Run All
           </button>
-          <button onClick={()=>{setAddTestOpen(true);setAqTcName("");setAqTcDesc("");setAqTcLevel("table");setAqTcSelCol("");setAqTcSelType(null);setAqTcCustomSQL(false);setAqTcSQLQuery("");setAqTcParams({});setAqTcTags([]);setAqTcGlossary([]);}}
-            style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-            + Add Test Case
-          </button>
         </div>
       </div>
-      {/* Full Add Test Case wizard panel — fixed right-side overlay */}
-      {addTestOpen&&createPortal(
+      {/* Add Test Case panel removed — test cases are managed in the DQ section */}
+      {false&&createPortal(
         <div style={{position:"fixed",inset:0,zIndex:800,display:"flex",justifyContent:"flex-end"}} onClick={()=>setAddTestOpen(false)}>
           <div onClick={e=>e.stopPropagation()} className="slideIn" style={{width:480,height:"100%",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,boxShadow:"-8px 0 32px rgba(0,0,0,.28)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
             {/* Header */}
@@ -6518,12 +6514,6 @@ const AssetQualityTab = ({asset})=>{
                           style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent,cursor:"pointer",transition:"opacity .1s"}}
                           onMouseEnter={e=>e.currentTarget.style.opacity=".7"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
                           <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
-                        </button>
-                        <button title="Delete test" onClick={()=>deleteTest(t.id)}
-                          style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:"transparent",border:`1px solid transparent`,color:T.textMuted,cursor:"pointer",transition:"all .1s"}}
-                          onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.borderColor=T.rose+"44";e.currentTarget.style.color=T.rose;}}
-                          onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor="transparent";e.currentTarget.style.color=T.textMuted;}}>
-                          <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 3v7h4V3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                         </button>
                       </div>
                     </td>
@@ -12249,46 +12239,53 @@ const AccessSection = ({onToast}) => {
     {label:"Has certification",      value:"matchAnyCertification()"},
     {label:"Custom expression",      value:"__custom__"},
   ];
-  const ROLE_COLORS_AC = {Admin:"#ee2424","Data Steward":"#d97706","Data Analyst":"#0284c7","Data Engineer":"#7c3aed",Viewer:"#4b4b60"};
+  const ROLE_COLORS_AC = {Admin:"#ee2424","Connection Admin":"#0891b2","Steward":"#d97706"};
   const ROLE_PALETTE   = ["#ee2424","#d97706","#0284c7","#7c3aed","#16a34a","#0891b2","#db2777","#4b4b60"];
 
   // ── Data ──
   const [policies, setPolicies] = useState([
-    {id:"pol1",name:"OrganizationPolicy",   desc:"Everyone can view. Owners can do everything. Anyone can claim an unowned asset.", enabled:true, system:true,
+    {id:"pol1",name:"PlatformAdminPolicy", desc:"Full access to all platform resources and operations.", enabled:true, system:true,
       rules:[
-        {id:"rl1",name:"Owner-Rule",    effect:"allow",resources:["All"],operations:["All"],      condition:"isOwner()",  desc:"Owners have full access to their assets."},
-        {id:"rl2",name:"NoOwner-Rule",  effect:"allow",resources:["All"],operations:["EditOwners"],condition:"noOwner()", desc:"Anyone can claim an unowned asset."},
-        {id:"rl3",name:"ViewAll-Rule",  effect:"allow",resources:["All"],operations:["ViewAll"],  condition:"",           desc:"All authenticated users can discover data."},
+        {id:"rl1", name:"Connection-Management",  effect:"allow", resources:["connection"],                          operations:["ViewBasic","Create","Edit","Delete","TestConnection","EditStatus"],                                                             condition:"", desc:"Manage all data source connections."},
+        {id:"rl2", name:"Tag-Management",         effect:"allow", resources:["tagCategory","tag"],                   operations:["ViewBasic","Create","Edit","Delete","EditStatus"],                                                                              condition:"", desc:"Full control over tag categories and tags."},
+        {id:"rl3", name:"User-Team-Role-Mgmt",    effect:"allow", resources:["user","team","role"],                  operations:["ViewBasic","Create","Edit","Delete","EditRole","EditUsers","EditTeam"],                                                         condition:"", desc:"Manage users, teams, and role assignments."},
+        {id:"rl4", name:"Domain-Management",      effect:"allow", resources:["domain"],                              operations:["ViewBasic","Create","Edit","Delete"],                                                                                           condition:"", desc:"Create and manage data domains."},
+        {id:"rl5", name:"Glossary-Management",    effect:"allow", resources:["glossary","glossaryCategory","glossaryTerm"], operations:["ViewBasic","Create","Edit","Delete","EditStatus"],                                                                  condition:"", desc:"Full control over glossaries, categories, and terms."},
+        {id:"rl6", name:"Data-Quality-Mgmt",      effect:"allow", resources:["testDefinition","testCase"],           operations:["ViewBasic","ViewTests","Create","Edit","Delete","TriggerIngestion","AcknowledgeIncident","AssignIncident","ResolveIncident"],   condition:"", desc:"Manage test definitions, test cases, and DQ incidents."},
+        {id:"rl7", name:"Policy-Management",      effect:"allow", resources:["policy"],                              operations:["ViewBasic","Create","Edit","Delete","Apply","EditPolicy"],                                                                      condition:"", desc:"Create, manage, and apply governance policies."},
+        {id:"rl8", name:"Certification-Mgmt",     effect:"allow", resources:["certification"],                       operations:["ViewBasic","EditStatus","Delete"],                                                                                              condition:"", desc:"Manage asset certification lifecycle."},
+        {id:"rl9", name:"Access-Request-Mgmt",    effect:"allow", resources:["accessRequest"],                       operations:["ViewBasic","Approve","Revoke","Delete"],                                                                                        condition:"", desc:"Approve, revoke, and manage all access requests."},
+        {id:"rl10",name:"Workflow-Management",    effect:"allow", resources:["workflow"],                             operations:["ViewBasic","Create","Edit","Delete","EditStatus","TriggerIngestion"],                                                           condition:"", desc:"Create and manage automation workflows."},
+        {id:"rl11",name:"Settings-Management",    effect:"allow", resources:["settings"],                             operations:["ViewBasic","Edit"],                                                                                                             condition:"", desc:"Edit platform settings and configuration."},
+        {id:"rl12",name:"Catalog-Full-Access",    effect:"allow", resources:["catalog"],                              operations:["ViewBasic","ViewTests","TriggerIngestion","Create","Edit","Delete","EditDescription","EditOwner","EditSteward","EditTags","EditStatus"], condition:"", desc:"Full access to all catalog assets across all domains."},
       ]},
-    {id:"pol2",name:"DataConsumerPolicy",   desc:"Standard read access with light metadata editing rights.", enabled:true, system:true,
+    {id:"pol2",name:"ConnectionAdminPolicy", desc:"Manage connections and workflows. Read-only access to catalog and tags.", enabled:true, system:true,
       rules:[
-        {id:"rl4",name:"Consumer-Edit-Rule",effect:"allow",resources:["All"],operations:["ViewAll","EditDescription","EditTags","EditGlossaryTerms","EditTier","EditCertification"],condition:"",desc:"Consumers can view everything and make light edits."},
+        {id:"rl13",name:"Connection-Management",  effect:"allow", resources:["connection"],          operations:["ViewBasic","Create","Edit","Delete","TestConnection","EditStatus"],         condition:"", desc:"Full control over data source connections."},
+        {id:"rl14",name:"Workflow-Management",    effect:"allow", resources:["workflow"],             operations:["ViewBasic","Create","Edit","Delete","EditStatus","TriggerIngestion"],       condition:"", desc:"Create and manage automation workflows."},
+        {id:"rl15",name:"Catalog-Read",           effect:"allow", resources:["catalog"],              operations:["ViewBasic"],                                                               condition:"", desc:"Read-only access to catalog assets."},
+        {id:"rl16",name:"Tag-Read",               effect:"allow", resources:["tagCategory","tag"],    operations:["ViewBasic"],                                                               condition:"", desc:"Read-only access to tags and tag categories."},
       ]},
-    {id:"pol3",name:"DataStewardPolicy",    desc:"Full metadata governance — certify, enrich, and manage lineage.", enabled:true, system:true,
+    {id:"pol3",name:"DataStewardPolicy", desc:"Domain-scoped governance — certify assets, manage glossary, handle DQ incidents and access requests.", enabled:true, system:true,
       rules:[
-        {id:"rl5",name:"Steward-Edit-Rule", effect:"allow",resources:["All"],operations:["ViewAll","EditAll"],condition:"",desc:"Stewards have full metadata write access."},
-      ]},
-    {id:"pol4",name:"TeamOnlyPolicy",       desc:"Deny access to anyone outside the team this policy is attached to.", enabled:true, system:true,
-      rules:[
-        {id:"rl6",name:"TeamOnly-Deny-Rule",effect:"deny", resources:["All"],operations:["All"],  condition:"!matchTeam()",desc:"Blocks all access for users outside the team."},
-      ]},
-    {id:"pol5",name:"DomainOnlyAccessPolicy",desc:"Restrict users to assets within their own domain.", enabled:true, system:false,
-      rules:[
-        {id:"rl7",name:"Domain-Deny-Rule",  effect:"deny", resources:["All"],operations:["All"],  condition:"!hasDomain()",desc:"Deny access to assets outside user's domain."},
-        {id:"rl8",name:"Domain-Allow-Rule", effect:"allow",resources:["All"],operations:["All"],  condition:"hasDomain()", desc:"Allow access to assets within user's domain."},
-      ]},
-    {id:"pol6",name:"PlatformAdminPolicy",  desc:"Full access to all platform admin resources.", enabled:true, system:false,
-      rules:[
-        {id:"rl9",name:"Admin-All-Rule",    effect:"allow",resources:["All"],operations:["All"],  condition:"",           desc:"Unrestricted access to all resources and operations."},
+        {id:"rl17",name:"Catalog-Governance",     effect:"allow", resources:["catalog"],              operations:["ViewBasic","ViewTests","TriggerIngestion","EditDescription","EditOwner","EditTags","EditStatus"], condition:"hasDomain()", desc:"Govern catalog assets within assigned domain."},
+        {id:"rl18",name:"Tag-Apply",              effect:"allow", resources:["tag"],                   operations:["ViewBasic","EditTags"],                                                    condition:"", desc:"View and apply tags to assets."},
+        {id:"rl19",name:"Tag-Browse",             effect:"allow", resources:["tagCategory"],           operations:["ViewBasic"],                                                               condition:"", desc:"Browse tag categories."},
+        {id:"rl20",name:"Glossary-Management",    effect:"allow", resources:["glossaryCategory","glossaryTerm"], operations:["ViewBasic","Create","Edit","EditStatus"],                       condition:"", desc:"Create and manage glossary categories and terms."},
+        {id:"rl21",name:"Glossary-Browse",        effect:"allow", resources:["glossary"],              operations:["ViewBasic"],                                                               condition:"", desc:"Browse top-level glossaries."},
+        {id:"rl22",name:"Certification-Mgmt",     effect:"allow", resources:["certification"],         operations:["ViewBasic","EditStatus"],                                                  condition:"", desc:"Approve, defer, or deprecate asset certifications."},
+        {id:"rl23",name:"TestDef-Browse",         effect:"allow", resources:["testDefinition"],        operations:["ViewBasic"],                                                               condition:"", desc:"Read-only access to test definitions."},
+        {id:"rl24",name:"TestCase-Management",    effect:"allow", resources:["testCase"],              operations:["ViewBasic","Create","Edit","Delete","TriggerIngestion","AcknowledgeIncident","AssignIncident","ResolveIncident"], condition:"", desc:"Manage test cases and resolve DQ incidents."},
+        {id:"rl25",name:"Access-Request-Mgmt",    effect:"allow", resources:["accessRequest"],         operations:["ViewBasic","Approve","Revoke"],                                            condition:"", desc:"Approve or revoke access requests in assigned domain."},
+        {id:"rl26",name:"Policy-Browse",          effect:"allow", resources:["policy"],                operations:["ViewBasic"],                                                               condition:"", desc:"Read-only access to governance policies."},
+        {id:"rl27",name:"Stewardship-Inbox",      effect:"allow", resources:["stewardshipInbox"],      operations:["ViewBasic","Resolve"],                                                     condition:"", desc:"View and resolve stewardship inbox tasks."},
       ]},
   ]);
 
   const [roles, setRoles] = useState([
-    {id:"r1",name:"Admin",        color:"#ee2424",users:1,desc:"Full platform access.",                                  policyIds:["pol6"],                    system:true},
-    {id:"r2",name:"Data Steward", color:"#d97706",users:2,desc:"Govern assets, certify data, manage glossary.",          policyIds:["pol3"],                    system:true},
-    {id:"r3",name:"Data Analyst", color:"#0284c7",users:2,desc:"Browse catalog, explore lineage, view quality.",         policyIds:["pol2"],                    system:true},
-    {id:"r4",name:"Data Engineer",color:"#7c3aed",users:2,desc:"Pipeline and ingestion focus.",                          policyIds:["pol2","pol5"],             system:true},
-    {id:"r5",name:"Viewer",       color:"#4b4b60",users:1,desc:"Read-only. Approved domains only.",                      policyIds:["pol2","pol4"],             system:false},
+    {id:"r1",name:"Admin",            color:"#ee2424",users:1,desc:"Full platform access across all resources and operations.",        policyIds:["pol1"],system:true},
+    {id:"r2",name:"Connection Admin", color:"#0891b2",users:1,desc:"Manage connections and workflows. Read-only on catalog and tags.", policyIds:["pol2"],system:true},
+    {id:"r3",name:"Steward",          color:"#d97706",users:2,desc:"Domain-scoped governance — certify, enrich, manage glossary and DQ.", policyIds:["pol3"],system:true},
   ]);
 
   // ── UI State ──
