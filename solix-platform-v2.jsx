@@ -613,11 +613,24 @@ const CONTRACTS = [
   {id:4,name:"finance-agg-v1",provider:"finance_summary",consumer:"exec_reporting",status:"Active",version:"1.0.0",sla:"99.9%",schema:"finance_v1",owners:["sarah.kim"],updated:"1w ago",description:"Aggregated finance metrics for executive reporting layer."},
 ];
 
-const COMMENTS = [
-  {id:1,user:"dev.patel",avatar:"DP",text:"The email column has inconsistent casing — should be lowercased at ingestion.",time:"3h ago",resolved:false},
-  {id:2,user:"maya.chen",avatar:"MC",text:"Agreed. Also, we should add a validation rule here. @james.oh can you add this to quality suite?",time:"2h ago",resolved:false},
-  {id:3,user:"james.oh",avatar:"JO",text:"Done — added LOWER(email) check to quality rules. Will deploy tonight.",time:"1h ago",resolved:true},
-];
+const COMMENTS_BY_ASSET = {
+  orders:[
+    {id:1,user:"dev.patel",avatar:"DP",text:"The email column has inconsistent casing — should be lowercased at ingestion.",time:"3h ago",resolved:false},
+    {id:2,user:"maya.chen",avatar:"MC",text:"Agreed. Also, we should add a validation rule here. @james.oh can you add this to quality suite?",time:"2h ago",resolved:false},
+    {id:3,user:"james.oh",avatar:"JO",text:"Done — added LOWER(email) check to quality rules. Will deploy tonight.",time:"1h ago",resolved:true},
+  ],
+  customers:[
+    {id:1,user:"maya.chen",avatar:"MC",text:"Phone number field is nullable but our SLA says it must be populated for B2B accounts. Need a quality rule.",time:"1d ago",resolved:false},
+    {id:2,user:"dev.patel",avatar:"DP",text:"Added NOT NULL check scoped to account_type = 'B2B'. Will go live in next deploy.",time:"20h ago",resolved:true},
+  ],
+  transactions:[
+    {id:1,user:"sarah.kim",avatar:"SK",text:"Reference column is inconsistently populated for CREDIT entries. ~12% null rate. Flagging for finance review.",time:"2d ago",resolved:false},
+  ],
+  employees:[
+    {id:1,user:"james.oh",avatar:"JO",text:"Salary field must be masked for non-HR viewers. Confirm this table has column-level security enabled.",time:"1w ago",resolved:false},
+    {id:2,user:"priya.nair",avatar:"PN",text:"Confirmed — CLS policy active via Oracle VPD. Only HR schema owners can see raw salary values.",time:"5d ago",resolved:true},
+  ],
+};
 
 const STEWARDSHIP_TASKS = [
   {id:1, type:"conflict_resolution", label:"Conflict: MRR vs Gross Margin",
@@ -6965,12 +6978,13 @@ const AssetActivityTab = ()=>(
   </Card2>
 );
 
-const AssetCommentsTab = ({onToast})=>{
-  const [comments,setComments]=useState(COMMENTS);
+const AssetCommentsTab = ({asset,onToast})=>{
+  const seed = COMMENTS_BY_ASSET[asset?.name]||[];
+  const [comments,setComments]=useState(seed);
   const [newComment,setNewComment]=useState("");
   const submit=()=>{
     if(!newComment.trim())return;
-    setComments([...comments,{id:comments.length+1,user:"maya.chen",avatar:"MC",text:newComment,time:"Just now",resolved:false}]);
+    setComments([...comments,{id:Date.now(),user:"maya.chen",avatar:"MC",text:newComment,time:"Just now",resolved:false}]);
     setNewComment("");
     onToast("Comment posted","success");
   };
@@ -7653,7 +7667,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
     {key:"lineage",label:"Lineage"},{key:"quality",label:"Quality"},
     {key:"policies",label:"Policies"},{key:"access",label:"Access"},
     {key:"usage",label:"Usage"},{key:"activity",label:"Activity"},
-    {key:"comments",label:`Comments (${COMMENTS.length})`},
+    {key:"comments",label:`Comments (${(COMMENTS_BY_ASSET[asset.name]||[]).length})`},
   ];
 
   const handleCertify=()=>{
@@ -7722,7 +7736,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
         {tab==="access"    && <AssetAccessTab onToast={onToast}/>}
         {tab==="usage"     && <AssetUsageTab/>}
         {tab==="activity"  && <AssetActivityTab/>}
-        {tab==="comments"  && <AssetCommentsTab onToast={onToast}/>}
+        {tab==="comments"  && <AssetCommentsTab asset={asset} onToast={onToast}/>}
       </div>
 
       {/* ── Column profile panel (replaces metadata sidebar when a column is selected) ── */}
