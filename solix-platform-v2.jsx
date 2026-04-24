@@ -7014,11 +7014,66 @@ const AssetCommentsTab = ({onToast})=>{
 // ─────────────────────────────────────────────
 // ── Container asset detail (Database / Catalog / Schema / Bucket / Container / Folder) ──
 const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => {
-  const [tab, setTab] = useState("overview");
-  const [desc, setDesc] = useState(asset.description||"");
-  const [editDesc, setEditDesc] = useState(false);
-  const children = ASSETS.filter(a=>a.parentId===asset.id);
+  const [tab,          setTab]         = useState("overview");
+  const [data,         setData]        = useState({...asset, owners:asset.owners||[asset.owner], stewards:asset.stewards||(asset.steward?[asset.steward]:[]), tags:[...(asset.tags||[])]});
+  const [certOpen,     setCertOpen]    = useState(false);
+  const [domainOpen,   setDomainOpen]  = useState(false);
+  const [ownerOpen,    setOwnerOpen]   = useState(false);
+  const [ownerSearch,  setOwnerSearch] = useState("");
+  const [stewardOpen,  setStewardOpen] = useState(false);
+  const [stewardSearch,setStewardSearch]=useState("");
+  const [tagInput,     setTagInput]    = useState("");
+  const [certModal,    setCertModal]   = useState(false);
+  const [certNote,     setCertNote]    = useState("");
+  const [editDesc,     setEditDesc]    = useState(false);
+  const [descVal,      setDescVal]     = useState(asset.description||"");
+  const [editNotes,    setEditNotes]   = useState(false);
+  const [notesVal,     setNotesVal]    = useState(`The ${asset.name} ${asset.type.toLowerCase()} is part of the ${asset.domain||"Platform"} domain.\n\nManaged by ${asset.owner||"the data team"} and refreshed on a ${asset.slaFreshness||"regular"} schedule.`);
+  const [contSearch,   setContSearch]  = useState("");
+
+  const children  = ASSETS.filter(a=>a.parentId===asset.id);
+  const stackCrumbs = assetStack.slice(0,-1);
+
+  const DOMAINS_LIST = ["Commerce","Finance","Product","Marketing","ML","Engineering"];
+  const USERS_LIST   = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
+  const ava = name => (name||"?").split(".").map(s=>s[0]?.toUpperCase()||"").join("");
+
+  const CMETA = {
+    "Draft":      {color:"#6b7280",bg:"rgba(107,114,128,.1)", border:"rgba(107,114,128,.25)",icon:"◐"},
+    "In Review":  {color:"#d97706",bg:"rgba(217,119,6,.12)",  border:"rgba(217,119,6,.3)",   icon:"⏳"},
+    "Approved":   {color:"#16a34a",bg:"rgba(22,163,74,.12)",  border:"rgba(22,163,74,.3)",   icon:"✓"},
+    "Rejected":   {color:"#e11d48",bg:"rgba(225,29,72,.12)",  border:"rgba(225,29,72,.3)",   icon:"✕"},
+    "Deprecated": {color:"#7c3aed",bg:"rgba(124,58,237,.1)",  border:"rgba(124,58,237,.25)", icon:"—"},
+  };
+  const cm = CMETA[data.cert]||CMETA["Draft"];
+  const owners   = Array.isArray(data.owners)  ? data.owners   : (data.owner   ? [data.owner]   : []);
+  const stewards = Array.isArray(data.stewards) ? data.stewards : (data.steward ? [data.steward] : []);
+
+  useEffect(()=>{
+    if(!certOpen&&!domainOpen&&!ownerOpen&&!stewardOpen) return;
+    const close=()=>{setCertOpen(false);setDomainOpen(false);setOwnerOpen(false);setOwnerSearch("");setStewardOpen(false);setStewardSearch("");};
+    document.addEventListener("mousedown",close);
+    return ()=>document.removeEventListener("mousedown",close);
+  },[certOpen,domainOpen,ownerOpen,stewardOpen]);
+
+  const handleCertify = () => { setData(d=>({...d,cert:"Approved"})); setCertModal(false); onToast(`${asset.name} certified successfully`,"success"); };
+
+  const MetaLabel = ({children})=>(
+    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>{children}</div>
+  );
+
   const FILE_FORMAT_COLORS = {CSV:"#16a34a",Parquet:"#0891b2",JSON:"#d97706",ORC:"#7c3aed"};
+  const TAG_C = {
+    PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},
+    revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},
+    finance:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},
+    KPI:{bg:"rgba(22,163,74,.08)",color:"#16a34a",border:"rgba(22,163,74,.2)"},
+    sensitive:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"},
+    events:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},
+    model:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},
+    etl:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},
+  };
+  const tc = tag => TAG_C[tag]||{bg:T.bgElevated,color:T.textSub,border:T.border};
 
   const CHILD_COLS = [
     {key:"name", label:"Name", render:(v,r)=>(
@@ -7042,146 +7097,418 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
     {key:"updated", label:"Updated", render:v=><span style={{fontSize:11,color:T.textMuted}}>{v}</span>},
   ];
 
-  // breadcrumb: stack path + current
-  const stackCrumbs = assetStack.slice(0,-1);
-
-  const containerIcon = {
-    Database:"⬡", Catalog:"⬡", Schema:"⬢", Bucket:"▭", Container:"▭", Folder:"▤"
-  }[asset.type]||"⬡";
-
-  const MetaLabel = ({children})=>(
-    <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:7}}>{children}</div>
+  const filteredChildren = children.filter(c=>
+    !contSearch || c.name.toLowerCase().includes(contSearch.toLowerCase()) || (c.type||"").toLowerCase().includes(contSearch.toLowerCase())
   );
-  const MetaRow = ({l,v})=>(
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,fontSize:12}}>
-      <span style={{color:T.textMuted}}>{l}</span><span style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{v||"—"}</span>
-    </div>
-  );
+
+  // child quality stats
+  const scoredChildren = children.filter(c=>typeof c.quality==="number");
+  const avgQuality = scoredChildren.length ? Math.round(scoredChildren.reduce((s,c)=>s+c.quality,0)/scoredChildren.length) : null;
+  const childTypeCounts = children.reduce((acc,c)=>{ acc[c.type]=(acc[c.type]||0)+1; return acc; },{});
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
       <Topbar breadcrumb={[
-        {label:"Data Catalog", onClick:()=>{ onBack(); stackCrumbs.forEach(()=>onBack()); /* pop all */ }},
+        {label:"Data Catalog", onClick:()=>{ onBack(); stackCrumbs.forEach(()=>onBack()); }},
         ...stackCrumbs.map((a,i)=>({label:a.name, onClick:()=>{ const popCount=assetStack.length-1-i; for(let j=0;j<popCount;j++) onBack(); }})),
         {label:asset.name}
       ]}/>
 
-      {/* Header */}
+      {/* ── Asset header ── */}
       <div style={{background:T.bgSurface,borderBottom:`1px solid ${T.border}`,flexShrink:0,padding:"16px 28px 0"}}>
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
           <TypeBadge type={asset.type}/>
-          <span style={{fontSize:11.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{asset.db}</span>
+          <span style={{fontSize:11.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{asset.db||asset.connectionLabel}</span>
         </div>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <span style={{fontSize:20,color:T.textMuted,lineHeight:1}}>{containerIcon}</span>
-            <h2 style={{fontSize:20,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,letterSpacing:"-0.04em",margin:0}}>{asset.name}</h2>
-            {asset.childCount&&<span style={{fontSize:11,color:T.textMuted,background:T.bgElevated,padding:"2px 8px",borderRadius:99,border:`1px solid ${T.border}`}}>{children.length||asset.childCount} children</span>}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:14}}>
+          <h2 style={{fontSize:22,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,letterSpacing:"-0.04em",margin:0}}>{data.name}</h2>
+          <div style={{display:"flex",gap:7,alignItems:"center",flexShrink:0}}>
+            {data.cert!=="Approved"&&(
+              <button onClick={()=>setCertModal(true)}
+                style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 14px",borderRadius:8,background:"#16a34a12",border:"1px solid rgba(22,163,74,.3)",color:"#16a34a",fontSize:12.5,fontWeight:600,cursor:"pointer",transition:"opacity .1s"}}
+                onMouseEnter={e=>e.currentTarget.style.opacity=".8"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+                {Ic.cert(12)} Certify
+              </button>
+            )}
+            <button onClick={()=>onToast("Edit panel coming soon","success")}
+              style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,fontWeight:500,cursor:"pointer",transition:"all .1s"}}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+              {Ic.edit(11)} Edit
+            </button>
           </div>
-          <ServiceIcon service={asset.service} size={28}/>
         </div>
         <div style={{display:"flex",marginBottom:-1}}>
           {[{k:"overview",l:"Overview"},{k:"contents",l:`Contents (${children.length})`}].map(t=>(
             <button key={t.k} onClick={()=>setTab(t.k)}
-              style={{padding:"9px 16px",background:"transparent",border:"none",borderBottom:`2px solid ${tab===t.k?T.accent:"transparent"}`,color:tab===t.k?T.text:T.textMuted,fontSize:13,fontWeight:tab===t.k?600:400,cursor:"pointer",transition:"all .12s"}}>
+              style={{padding:"9px 16px",background:"transparent",border:"none",borderBottom:`2px solid ${tab===t.k?T.accent:"transparent"}`,color:tab===t.k?T.text:T.textMuted,fontSize:13,fontWeight:tab===t.k?600:400,cursor:"pointer",transition:"all .12s",whiteSpace:"nowrap"}}>
               {t.l}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Body */}
+      {/* ── Body ── */}
       <div style={{flex:1,display:"flex",overflow:"hidden"}}>
-        {/* Main */}
+
+        {/* Main content */}
         <div style={{flex:1,overflowY:"auto",padding:24,minWidth:0}}>
+
           {tab==="overview"&&(
-            <div style={{display:"flex",flexDirection:"column",gap:16}}>
+            <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:900}}>
+
+              {/* Description */}
               <Card2>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                  <span style={{fontSize:13,fontWeight:600,color:T.text}}>Description</span>
-                  <button onClick={()=>{ if(editDesc)onToast("Description saved","success"); setEditDesc(e=>!e); }}
-                    style={{fontSize:11.5,color:editDesc?T.accent:T.textMuted,background:"none",border:"none",cursor:"pointer"}}>
-                    {editDesc?"Save":"Edit"}
-                  </button>
+                <div style={{padding:"14px 16px"}}>
+                  <SH title="Description" action={
+                    editDesc
+                      ? <div style={{display:"flex",gap:6}}>
+                          <Btn small ghost onClick={()=>{setData(d=>({...d,description:descVal}));setEditDesc(false);onToast("Description saved","success");}}>Save</Btn>
+                          <Btn small ghost onClick={()=>{setDescVal(data.description||asset.description||"");setEditDesc(false);}}>Cancel</Btn>
+                        </div>
+                      : <Btn small ghost icon={Ic.edit(11)} onClick={()=>setEditDesc(true)}>Edit</Btn>
+                  }/>
+                  {editDesc
+                    ? <textarea value={descVal} onChange={e=>setDescVal(e.target.value)} rows={3}
+                        style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",resize:"vertical",lineHeight:1.7,fontFamily:"inherit",boxSizing:"border-box"}}/>
+                    : <p style={{fontSize:13,color:descVal?T.textSub:T.textMuted,lineHeight:1.8,margin:0,fontStyle:descVal?"normal":"italic"}}>{descVal||"No description. Click Edit to add one."}</p>
+                  }
                 </div>
-                {editDesc
-                  ? <textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={3}
-                      style={{width:"100%",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:7,color:T.text,fontSize:13,padding:"8px 10px",resize:"vertical",outline:"none",boxSizing:"border-box",fontFamily:"inherit",lineHeight:1.5}}/>
-                  : <p style={{fontSize:13,color:desc?T.textSub:T.textMuted,lineHeight:1.6,margin:0,fontStyle:desc?"normal":"italic"}}>{desc||"No description. Click Edit to add one."}</p>
-                }
               </Card2>
-              <Card2>
-                <MetaLabel>Details</MetaLabel>
-                <MetaRow l="Size" v={asset.size}/>
-                <MetaRow l="Domain" v={asset.domain}/>
-                <MetaRow l="Updated" v={asset.updated}/>
-                {asset.slaFreshness&&<MetaRow l="Freshness SLA" v={asset.slaFreshness}/>}
-                {asset.childCount&&<MetaRow l="Direct Children" v={String(children.length||asset.childCount)}/>}
-              </Card2>
-              {(asset.tags||[]).filter(t=>t).length>0&&(
+
+              {/* Contents summary */}
+              {children.length>0&&(
                 <Card2>
-                  <MetaLabel>Tags</MetaLabel>
-                  <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                    {asset.tags.map(t=><span key={t} style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:t==="PII"?T.roseDim:T.bgHover,color:t==="PII"?T.rose:T.textMuted,border:`1px solid ${t==="PII"?"rgba(253,164,175,.25)":T.border}`}}>{t}</span>)}
+                  <div style={{padding:"14px 16px"}}>
+                    <SH title="Contents Summary"/>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(120px,1fr))",gap:10,marginBottom:16}}>
+                      <div style={{background:T.bgElevated,borderRadius:8,padding:"12px 14px",border:`1px solid ${T.border}`}}>
+                        <div style={{fontSize:22,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{children.length}</div>
+                        <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>Direct children</div>
+                      </div>
+                      {avgQuality!==null&&(
+                        <div style={{background:T.bgElevated,borderRadius:8,padding:"12px 14px",border:`1px solid ${T.border}`}}>
+                          <div style={{fontSize:22,fontWeight:700,color:avgQuality>=80?T.green:avgQuality>=60?"#d97706":T.rose,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{avgQuality}</div>
+                          <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>Avg quality</div>
+                        </div>
+                      )}
+                      <div style={{background:T.bgElevated,borderRadius:8,padding:"12px 14px",border:`1px solid ${T.border}`}}>
+                        <div style={{fontSize:22,fontWeight:700,color:T.green,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{children.filter(c=>c.cert==="Approved").length}</div>
+                        <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>Certified</div>
+                      </div>
+                    </div>
+                    {Object.keys(childTypeCounts).length>0&&(
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {Object.entries(childTypeCounts).map(([type,count])=>(
+                          <button key={type} onClick={()=>setTab("contents")}
+                            style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,cursor:"pointer",transition:"all .1s"}}
+                            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.background=T.accentDim;}}
+                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.bgElevated;}}>
+                            <TypeBadge type={type}/>
+                            <span style={{fontSize:12,color:T.textSub,fontWeight:500}}>{count}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </Card2>
               )}
+
+              {/* Notes */}
+              <Card2>
+                <div style={{padding:"14px 16px"}}>
+                  <SH title="Notes" action={
+                    editNotes
+                      ? <div style={{display:"flex",gap:6}}>
+                          <Btn small ghost onClick={()=>{setEditNotes(false);onToast("Notes saved","success");}}>Save</Btn>
+                          <Btn small ghost onClick={()=>setEditNotes(false)}>Cancel</Btn>
+                        </div>
+                      : <Btn small ghost icon={Ic.edit(11)} onClick={()=>setEditNotes(true)}>Edit</Btn>
+                  }/>
+                  {editNotes
+                    ? <textarea value={notesVal} onChange={e=>setNotesVal(e.target.value)} rows={5}
+                        style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",resize:"vertical",lineHeight:1.75,fontFamily:"'Geist Mono',monospace",boxSizing:"border-box"}}/>
+                    : <div style={{fontSize:13,color:T.textSub,lineHeight:1.9,whiteSpace:"pre-wrap"}}>{notesVal}</div>
+                  }
+                </div>
+              </Card2>
+
             </div>
           )}
+
           {tab==="contents"&&(
-            <div>
-              {children.length===0
-                ? <div style={{textAlign:"center",padding:"40px 0",color:T.textMuted,fontSize:13}}>No child assets found</div>
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              <div style={{position:"relative",maxWidth:400}}>
+                <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                <input value={contSearch} onChange={e=>setContSearch(e.target.value)} placeholder={`Search ${children.length} assets…`}
+                  style={{width:"100%",padding:"7px 10px 7px 28px",background:T.bgElevated,border:`1.5px solid ${contSearch?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",transition:"border-color .15s"}}
+                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=contSearch?T.accent:T.border}/>
+                {contSearch&&<button onClick={()=>setContSearch("")} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:16,lineHeight:1}}>×</button>}
+              </div>
+              {filteredChildren.length===0
+                ? <div style={{textAlign:"center",padding:"40px 0",color:T.textMuted,fontSize:13}}>{contSearch?"No assets match your search":"No child assets found"}</div>
                 : <Card2 style={{padding:0,overflow:"hidden"}}>
-                    <DataTable cols={CHILD_COLS} rows={children} onRowClick={r=>onAsset(r)}/>
+                    <DataTable cols={CHILD_COLS} rows={filteredChildren} onRowClick={r=>onAsset(r)}/>
                   </Card2>
               }
             </div>
           )}
         </div>
 
-        {/* Right sidebar */}
-        <div style={{width:240,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto",padding:"16px"}}>
-          <MetaLabel>Connection</MetaLabel>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
-            <ServiceIcon service={asset.service} size={20}/>
-            <span style={{fontSize:12,color:T.textSub}}>{asset.connectionLabel}</span>
+        {/* ── Right metadata sidebar ── */}
+        <div style={{width:260,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto"}}>
+
+          {/* DETAILS */}
+          <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
+            <MetaLabel>Details</MetaLabel>
+            {[
+              {l:"Connection", v:<div style={{display:"flex",alignItems:"center",gap:6}}><ServiceIcon service={asset.service} size={14}/><span style={{fontSize:12,color:T.textSub}}>{asset.connectionLabel}</span></div>},
+              {l:"Size",       v:<span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text}}>{data.size||"—"}</span>},
+              {l:"Children",   v:<span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text}}>{children.length}</span>},
+              {l:"Freshness",  v:<span style={{fontSize:12,color:T.textSub}}>{data.slaFreshness||"—"}</span>},
+              {l:"Updated",    v:<span style={{fontSize:12,color:T.textMuted}}>{data.updated||"—"}</span>},
+            ].map(m=>(
+              <div key={m.l} style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,fontSize:12}}>
+                <span style={{color:T.textMuted}}>{m.l}</span>{m.v}
+              </div>
+            ))}
           </div>
-          <MetaLabel>Owner</MetaLabel>
-          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:16}}>
-            <div style={{width:22,height:22,borderRadius:6,background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:T.accent}}>
-              {(asset.owner||"?").split(".").map(s=>s[0]?.toUpperCase()||"").join("")}
+
+          {/* CERTIFICATE */}
+          <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
+            <MetaLabel>Certificate</MetaLabel>
+            <button onMouseDown={e=>{e.stopPropagation();setCertOpen(p=>!p);setDomainOpen(false);setOwnerOpen(false);}}
+              style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 11px",borderRadius:8,background:cm.bg,border:`1px solid ${cm.border}`,cursor:"pointer",transition:"opacity .1s"}}
+              onMouseEnter={e=>e.currentTarget.style.opacity=".85"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+              <span style={{display:"flex",alignItems:"center",gap:7,fontSize:13,fontWeight:700,color:cm.color}}>
+                <span style={{fontSize:15}}>{cm.icon}</span>{data.cert||"Draft"}
+              </span>
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:cm.color,flexShrink:0}}><path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+            </button>
+            {certOpen&&(
+              <div onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",top:"calc(100% - 4px)",left:16,right:16,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",overflow:"hidden"}}>
+                {Object.entries(CMETA).map(([c,m])=>(
+                  <button key={c} onMouseDown={e=>{e.stopPropagation();setData(d=>({...d,cert:c}));setCertOpen(false);onToast(`Certification set to ${c}`,"success");}}
+                    style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"9px 14px",background:data.cert===c?m.bg:"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}}
+                    onMouseEnter={e=>{if(data.cert!==c)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(data.cert!==c)e.currentTarget.style.background="transparent";}}>
+                    <span style={{fontSize:15}}>{m.icon}</span>
+                    <span style={{flex:1,fontSize:12.5,fontWeight:600,color:m.color}}>{c}</span>
+                    {data.cert===c&&<span style={{fontSize:12,color:m.color}}>✓</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* DOMAIN */}
+          <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
+            <MetaLabel>Domain</MetaLabel>
+            <button onMouseDown={e=>{e.stopPropagation();setDomainOpen(p=>!p);setCertOpen(false);setOwnerOpen(false);}}
+              style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 11px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}33`,cursor:"pointer",fontSize:13,fontWeight:600,color:T.accent,transition:"opacity .1s"}}
+              onMouseEnter={e=>e.currentTarget.style.opacity=".8"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+              {data.domain||"—"}
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:T.accent}}><path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+            </button>
+            {domainOpen&&(
+              <div onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",top:"calc(100% - 4px)",left:16,right:16,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",overflow:"hidden"}}>
+                {DOMAINS_LIST.map(d=>(
+                  <button key={d} onMouseDown={e=>{e.stopPropagation();setData(dd=>({...dd,domain:d}));setDomainOpen(false);onToast(`Domain set to ${d}`,"success");}}
+                    style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 14px",background:data.domain===d?T.accentDim:"transparent",border:"none",cursor:"pointer",fontSize:12.5,color:data.domain===d?T.accent:T.textSub,fontWeight:data.domain===d?600:400,transition:"background .1s"}}
+                    onMouseEnter={e=>{if(data.domain!==d)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(data.domain!==d)e.currentTarget.style.background="transparent";}}>
+                    {d}{data.domain===d&&<span style={{color:T.accent,fontSize:12}}>✓</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* OWNERS */}
+          <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
+            <MetaLabel>Owners</MetaLabel>
+            <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
+              {owners.map((o,i)=>(
+                <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,transition:"border-color .1s"}}
+                  onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderLight} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                  <div style={{width:20,height:20,borderRadius:"50%",background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(o)}</div>
+                  <span style={{fontSize:12,color:T.text,fontWeight:500}}>{o}</span>
+                  <button onClick={()=>{const no=owners.filter((_,j)=>j!==i);setData(d=>({...d,owners:no,owner:no[0]||""}));}}
+                    style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex",lineHeight:1}}
+                    onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
+                    <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                  </button>
+                </div>
+              ))}
             </div>
-            <span style={{fontSize:12,color:T.textSub}}>{asset.owner}</span>
+            <button onMouseDown={e=>{e.stopPropagation();setOwnerOpen(p=>{if(!p)setOwnerSearch("");return !p;});setCertOpen(false);setDomainOpen(false);}}
+              style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"4px 10px",borderRadius:6,border:`1px dashed ${ownerOpen?T.accent:T.border}`,background:"none",color:ownerOpen?T.accent:T.textMuted,cursor:"pointer",transition:"all .12s"}}
+              onMouseEnter={e=>{if(!ownerOpen){e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}}
+              onMouseLeave={e=>{if(!ownerOpen){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}}>
+              <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg> Add owner
+            </button>
+            {ownerOpen&&(
+              <div onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",left:16,right:16,top:"calc(100% - 4px)",zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",overflow:"hidden"}}>
+                <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}>
+                  <input autoFocus value={ownerSearch} onChange={e=>setOwnerSearch(e.target.value)} placeholder="Search users…"
+                    style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none"}}
+                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                </div>
+                <div style={{maxHeight:170,overflowY:"auto"}}>
+                  {USERS_LIST.filter(u=>!ownerSearch||u.toLowerCase().includes(ownerSearch.toLowerCase())).map(u=>{
+                    const sel=owners.includes(u);
+                    return <button key={u} onMouseDown={e=>{e.stopPropagation();
+                      if(sel){const no=owners.filter(x=>x!==u);setData(d=>({...d,owners:no,owner:no[0]||""}));}
+                      else setData(d=>({...d,owners:[...owners,u],owner:owners[0]||u}));}}
+                      style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 12px",background:sel?T.bgElevated:"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}}
+                      onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
+                      <div style={{width:22,height:22,borderRadius:6,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(u)}</div>
+                      <span style={{flex:1,fontSize:12,color:T.text}}>{u}</span>
+                      {sel&&<span style={{fontSize:12,color:T.accent,fontWeight:700}}>✓</span>}
+                    </button>;
+                  })}
+                </div>
+              </div>
+            )}
           </div>
-          {(asset.stewards||[]).length>0&&<>
-            <MetaLabel>Steward</MetaLabel>
-            <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:16}}>
-              {asset.stewards.map(s=>(
-                <div key={s} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}>
-                  <div style={{width:16,height:16,borderRadius:4,background:"rgba(217,119,6,.12)",border:"1px solid rgba(217,119,6,.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:6.5,fontWeight:700,color:"#d97706"}}>
-                    {s.split(".").map(x=>x[0]?.toUpperCase()||"").join("")}
+
+          {/* STEWARDS */}
+          {(()=>{
+            return (
+            <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
+              <MetaLabel>Stewards</MetaLabel>
+              <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:stewards.length?8:0}}>
+                {stewards.map((s,i)=>(
+                  <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,transition:"border-color .1s"}}
+                    onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderLight} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                    <div style={{width:20,height:20,borderRadius:"50%",background:"rgba(217,119,6,.12)",border:"1px solid rgba(217,119,6,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(s)}</div>
+                    <span style={{fontSize:12,color:T.text,fontWeight:500}}>{s}</span>
+                    <button onClick={()=>{const ns=stewards.filter((_,j)=>j!==i);setData(d=>({...d,stewards:ns,steward:ns[0]||""}));}}
+                      style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex",lineHeight:1}}
+                      onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
+                      <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                    </button>
                   </div>
-                  <span style={{fontSize:11,color:T.textSub}}>{s}</span>
+                ))}
+              </div>
+              <button onMouseDown={e=>{e.stopPropagation();setStewardOpen(p=>!p);setCertOpen(false);setDomainOpen(false);setOwnerOpen(false);}}
+                style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,color:stewardOpen?"#d97706":T.textMuted,background:"none",border:`1px dashed ${stewardOpen?"#d97706":T.border}`,borderRadius:6,padding:"4px 10px",cursor:"pointer",transition:"all .12s"}}
+                onMouseEnter={e=>{if(!stewardOpen){e.currentTarget.style.borderColor="#d97706";e.currentTarget.style.color="#d97706";}}}
+                onMouseLeave={e=>{if(!stewardOpen){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}}>
+                <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg> Add steward
+              </button>
+              {stewardOpen&&(
+                <div onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",left:16,right:16,top:"calc(100% - 4px)",zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",overflow:"hidden"}}>
+                  <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}>
+                    <input autoFocus placeholder="Search users…" value={stewardSearch} onChange={e=>setStewardSearch(e.target.value)}
+                      style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                      onFocus={e=>e.target.style.borderColor="#d97706"} onBlur={e=>e.target.style.borderColor=T.border}/>
+                  </div>
+                  <div style={{maxHeight:170,overflowY:"auto"}}>
+                    {USERS_LIST.filter(u=>!stewardSearch||u.toLowerCase().includes(stewardSearch.toLowerCase())).map(u=>{
+                      const sel=stewards.includes(u);
+                      return <button key={u} onMouseDown={e=>{e.stopPropagation();
+                        if(sel){const ns=stewards.filter(x=>x!==u);setData(d=>({...d,stewards:ns,steward:ns[0]||""}));}
+                        else setData(d=>({...d,stewards:[...stewards,u],steward:stewards[0]||u}));}}
+                        style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 12px",background:sel?"rgba(217,119,6,.08)":"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}}
+                        onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
+                        <div style={{width:22,height:22,borderRadius:"50%",background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(u)}</div>
+                        <span style={{flex:1,fontSize:12,color:T.text}}>{u}</span>
+                        {sel&&<span style={{fontSize:12,color:"#d97706",fontWeight:700}}>✓</span>}
+                      </button>;
+                    })}
+                  </div>
                 </div>
-              ))}
+              )}
             </div>
-          </>}
-          {(asset.path||[]).length>0&&<>
-            <MetaLabel>Path</MetaLabel>
-            <div style={{marginBottom:16}}>
-              {asset.path.map((seg,i)=>(
-                <div key={i} style={{display:"flex",alignItems:"center",gap:4,marginBottom:2}}>
-                  {i>0&&<svg width="8" height="8" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted}}><path d="M3.5 2l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>}
-                  <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{seg}</span>
+            );
+          })()}
+
+          {/* TAGS */}
+          {(()=>{
+            return (
+            <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
+              <MetaLabel>Tags</MetaLabel>
+              <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
+                {(data.tags||[]).map(t=>{const c=tc(t);return(
+                  <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"3px 10px",borderRadius:6,background:c.bg,color:c.color,border:`1px solid ${c.border}`,fontWeight:500}}>
+                    {t}
+                    <button onClick={()=>setData(d=>({...d,tags:d.tags.filter(x=>x!==t)}))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,display:"flex",opacity:.6,lineHeight:1}}
+                      onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>
+                      <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                    </button>
+                  </span>
+                );})}
+              </div>
+              <button onMouseDown={e=>{e.stopPropagation();setTagInput(p=>p==="_open_"?"":"_open_");setCertOpen(false);setDomainOpen(false);setOwnerOpen(false);}}
+                style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"4px 10px",borderRadius:6,border:`1px dashed ${tagInput==="_open_"?T.accent:T.border}`,background:"none",color:tagInput==="_open_"?T.accent:T.textMuted,cursor:"pointer",transition:"all .12s"}}
+                onMouseEnter={e=>{if(tagInput!=="open_"){e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}}
+                onMouseLeave={e=>{if(tagInput!=="open_"){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}}>
+                <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg> Add tag
+              </button>
+              {tagInput==="_open_"&&(
+                <div onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",left:16,top:"calc(100% + 4px)",zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",padding:"10px 12px",minWidth:220}}>
+                  <div style={{fontSize:11,color:T.textMuted,marginBottom:8,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>Suggested</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                    {["PII","revenue","finance","KPI","events","sensitive","dimension","model","etl","marketing"].filter(s=>!(data.tags||[]).includes(s)).map(s=>(
+                      <button key={s} onMouseDown={e=>{e.stopPropagation();setData(d=>({...d,tags:[...(d.tags||[]),s]}));setTagInput("");}}
+                        style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",transition:"all .1s"}}
+                        onMouseEnter={e=>{e.currentTarget.style.background=T.accentDim;e.currentTarget.style.color=T.accent;e.currentTarget.style.borderColor=T.accent+"55";}}
+                        onMouseLeave={e=>{e.currentTarget.style.background=T.bgElevated;e.currentTarget.style.color=T.textSub;e.currentTarget.style.borderColor=T.border;}}>
+                        {s}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              ))}
+              )}
             </div>
-          </>}
-          <MetaLabel>Certification</MetaLabel>
-          <CertBadge cert={asset.cert}/>
+            );
+          })()}
+
+          {/* ACTIONS */}
+          <div style={{padding:"16px"}}>
+            <MetaLabel>Actions</MetaLabel>
+            {[
+              {l:"Request Access", fn:()=>onToast("Access request sent","success")},
+              {l:"Copy Link",      fn:()=>onToast("Link copied","success")},
+              {l:"Browse Contents",fn:()=>setTab("contents")},
+            ].map((a,i,arr)=>(
+              <button key={i} onClick={a.fn}
+                style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",background:"none",border:"none",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",color:T.textSub,fontSize:12.5,cursor:"pointer",transition:"color .1s"}}
+                onMouseEnter={e=>e.currentTarget.style.color=T.accent} onMouseLeave={e=>e.currentTarget.style.color=T.textSub}>
+                {a.l}
+                <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+              </button>
+            ))}
+          </div>
+
         </div>
       </div>
+
+      {/* Certification Modal */}
+      <Modal open={certModal} onClose={()=>setCertModal(false)} title={`Certify "${asset.name}"`}>
+        <p style={{fontSize:13,color:T.textSub,marginBottom:16}}>Certifying marks this asset as trusted and production-ready. This action is logged and visible to all users.</p>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          {[
+            {label:"Description documented", done:!!(descVal)},
+            {label:"Owner assigned",          done:owners.length>0},
+            {label:"Steward assigned",        done:stewards.length>0},
+            {label:"Domain set",              done:!!(data.domain)},
+          ].map((c,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:c.done?T.accentDim:T.bgElevated,border:`1px solid ${c.done?"rgba(238,36,36,0.2)":T.border}`,borderRadius:8}}>
+              <span style={{color:c.done?T.accent:T.textMuted}}>{c.done?Ic.check(14):Ic.x(14)}</span>
+              <span style={{fontSize:13,color:c.done?T.text:T.textSub}}>{c.label}</span>
+              {!c.done&&<span style={{fontSize:11,color:T.amber,marginLeft:"auto"}}>Required</span>}
+            </div>
+          ))}
+        </div>
+        <div style={{marginTop:16}}>
+          <div style={{fontSize:12,color:T.textSub,marginBottom:6}}>Certification notes</div>
+          <Input2 multiline rows={3} placeholder="Add notes for the certification record…" value={certNote} onChange={e=>setCertNote(e.target.value)}/>
+        </div>
+        <div style={{display:"flex",gap:8,marginTop:20,justifyContent:"flex-end"}}>
+          <Btn onClick={()=>setCertModal(false)}>Cancel</Btn>
+          <Btn variant="primary" icon={Ic.cert(13)} onClick={handleCertify}>Certify Asset</Btn>
+        </div>
+      </Modal>
     </div>
   );
 };
