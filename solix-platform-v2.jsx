@@ -4861,14 +4861,13 @@ const QualityView = () => {
               {/* DQ Dimension */}
               <div>
                 <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>DQ Dimension</div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                  {["","Accuracy","Completeness","Consistency","Timeliness","Validity"].map(d=>(
-                    <button key={d||"all"} onClick={()=>{setTcDim(d);setTcSelType(null);}}
-                      style={{padding:"5px 12px",borderRadius:6,border:`1.5px solid ${tcDim===d?T.accent:T.border}`,background:tcDim===d?`${T.accent}12`:T.bgElevated,color:tcDim===d?T.accent:T.textSub,fontSize:11.5,fontWeight:tcDim===d?700:400,cursor:"pointer",transition:"all .12s"}}>
-                      {d||"All"}
-                    </button>
+                <select value={tcDim} onChange={e=>{setTcDim(e.target.value);setTcSelType(null);}}
+                  style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${tcDim?T.accent:T.border}`,borderRadius:9,color:tcDim?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
+                  <option value="">All dimensions</option>
+                  {["Accuracy","Completeness","Consistency","Timeliness","Validity"].map(d=>(
+                    <option key={d} value={d}>{d}</option>
                   ))}
-                </div>
+                </select>
               </div>
 
               {/* Test Definition — always visible with toggle */}
@@ -6534,14 +6533,13 @@ const AssetQualityTab = ({asset})=>{
                 {/* DQ Dimension */}
                 <div>
                   <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>DQ Dimension</div>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                    {["","Accuracy","Completeness","Consistency","Timeliness","Validity"].map(d=>(
-                      <button key={d||"all"} onClick={()=>{setAqTcDim(d);setAqTcSelType(null);}}
-                        style={{padding:"5px 12px",borderRadius:6,border:`1.5px solid ${aqTcDim===d?T.accent:T.border}`,background:aqTcDim===d?`${T.accent}12`:T.bgElevated,color:aqTcDim===d?T.accent:T.textSub,fontSize:11.5,fontWeight:aqTcDim===d?700:400,cursor:"pointer",transition:"all .12s"}}>
-                        {d||"All"}
-                      </button>
+                  <select value={aqTcDim} onChange={e=>{setAqTcDim(e.target.value);setAqTcSelType(null);}}
+                    style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${aqTcDim?T.accent:T.border}`,borderRadius:9,color:aqTcDim?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
+                    <option value="">All dimensions</option>
+                    {["Accuracy","Completeness","Consistency","Timeliness","Validity"].map(d=>(
+                      <option key={d} value={d}>{d}</option>
                     ))}
-                  </div>
+                  </select>
                 </div>
 
                 {/* Test Definition — Preset / Custom SQL toggle */}
@@ -7771,10 +7769,13 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
         {tab==="comments"  && <AssetCommentsTab asset={asset} onToast={onToast}/>}
       </div>
 
-      {/* ── Column detail panel (tabbed: Overview | Profile | Quality) ── */}
+      {/* ── Column detail panel (tabbed: Overview | Quality) ── */}
       {selCol&&(()=>{
         const prof=COL_PROFILES[selCol.name]||null;
         const colTests=DQ_TEST_CASES.filter(tc=>tc.col&&selCol.name&&tc.col.toLowerCase()===selCol.name.toLowerCase());
+        const tcSuccess=colTests.filter(t=>t.status==="Success").length;
+        const tcFailed=colTests.filter(t=>t.status==="Failed").length;
+        const tcAborted=colTests.filter(t=>t.status==="Aborted").length;
         const SC={Success:T.green,Failed:T.rose,Aborted:T.amber};
         const SI={Success:"✓",Failed:"✕",Aborted:"⚠"};
         const StatBar=({pct,color})=>(
@@ -7787,22 +7788,14 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
           const s=dc[dim]||{c:T.textMuted,bg:T.bgHover};
           return <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:3,background:s.bg,color:s.c,border:`1px solid ${s.c}33`}}>{dim}</span>;
         };
-        const colTabs=[{k:"overview",l:"Overview"},{k:"profile",l:"Profile"},{k:"quality",l:`Quality (${colTests.length})`}];
+        const colTabs=[{k:"overview",l:"Overview"},{k:"quality",l:`Quality (${colTests.length})`}];
         return (
           <div style={{width:320,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-            {/* ── Header ── */}
+            {/* ── Header: just column name + close ── */}
             <div style={{padding:"12px 14px 0",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:8}}>
-                <div style={{minWidth:0,flex:1}}>
-                  <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:5,flexWrap:"wrap"}}>
-                    {selCol.pk&&<span style={{fontSize:9,color:T.amber,border:`1px solid ${T.amber}44`,padding:"1px 5px",borderRadius:3,fontFamily:"'Geist Mono',monospace",fontWeight:700}}>PK</span>}
-                    {selCol.pii&&<span style={{fontSize:9,color:T.rose,border:`1px solid ${T.rose}44`,padding:"1px 5px",borderRadius:3,fontWeight:700}}>PII</span>}
-                    <Badge color={T.blue} bg={T.blueDim}>{selCol.type}</Badge>
-                    <span style={{fontSize:10,color:selCol.nullable?T.textMuted:T.green,background:T.bgElevated,padding:"1px 6px",borderRadius:3,border:`1px solid ${T.border}`,fontWeight:600}}>{selCol.nullable?"NULLABLE":"NOT NULL"}</span>
-                  </div>
-                  <div style={{fontSize:14,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,wordBreak:"break-all"}}>{selCol.name}</div>
-                </div>
-                <button onClick={()=>{setSelCol(null);setColPanelTab("overview");}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:20,lineHeight:1,flexShrink:0,padding:"0 0 0 8px",marginTop:2}}>×</button>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                <span style={{fontSize:14,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{selCol.name}</span>
+                <button onClick={()=>{setSelCol(null);setColPanelTab("overview");}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:20,lineHeight:1,flexShrink:0,padding:"0 0 0 8px"}}>×</button>
               </div>
               <div style={{display:"flex",gap:0}}>
                 {colTabs.map(t=>(
@@ -7817,15 +7810,19 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
             {/* ── Tab content ── */}
             <div style={{overflowY:"auto",flex:1}}>
 
-              {/* Overview */}
+              {/* ── Overview: metadata + profile stats + quality constraint ── */}
               {colPanelTab==="overview"&&(
                 <div style={{padding:14,display:"flex",flexDirection:"column",gap:14}}>
+
+                  {/* Description */}
                   <div>
                     <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Description</div>
                     {selCol.desc
                       ? <p style={{fontSize:12.5,color:T.textSub,lineHeight:1.65,margin:0,padding:"10px 12px",background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`}}>{selCol.desc}</p>
                       : <p style={{fontSize:12,color:T.textMuted,fontStyle:"italic",margin:0}}>No description provided.</p>}
                   </div>
+
+                  {/* Column metadata */}
                   <div style={{background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden"}}>
                     {[
                       {l:"Data Type",   v:<span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.blue,fontWeight:600}}>{selCol.type}</span>},
@@ -7838,6 +7835,8 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
                       </div>
                     ))}
                   </div>
+
+                  {/* Quality constraint */}
                   {selCol.quality&&(
                     <div>
                       <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Quality Constraint</div>
@@ -7847,67 +7846,51 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
                       </div>
                     </div>
                   )}
-                  {colTests.length>0&&(
-                    <div>
-                      <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Test Summary</div>
-                      <div style={{display:"flex",gap:8}}>
-                        {["Success","Failed","Aborted"].map(s=>{
-                          const cnt=colTests.filter(t=>t.status===s).length;
-                          return <div key={s} style={{flex:1,textAlign:"center",padding:"8px 0",background:T.bgElevated,borderRadius:7,border:`1px solid ${SC[s]}33`}}>
-                            <div style={{fontSize:16,fontWeight:700,color:SC[s]}}>{cnt}</div>
-                            <div style={{fontSize:10,color:T.textMuted}}>{s}</div>
-                          </div>;
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
 
-              {/* Profile */}
-              {colPanelTab==="profile"&&(
-                <div style={{padding:14,display:"flex",flexDirection:"column",gap:14}}>
-                  {prof?(
-                    <>
-                      <div style={{background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`,padding:"12px 14px"}}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-                          <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Completeness</span>
-                          <span style={{fontSize:20,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:prof.nullPct>5?"#f87171":"#4ade80"}}>{(100-prof.nullPct).toFixed(1)}%</span>
+                  {/* Profile stats (inline, no separate tab) */}
+                  {prof&&(
+                    <div>
+                      <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Profile Stats <span style={{fontSize:9,fontWeight:400,color:T.textMuted,textTransform:"none",letterSpacing:0}}>· last run 2h ago</span></div>
+                      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                        {/* Completeness */}
+                        <div style={{background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,padding:"9px 12px"}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                            <span style={{fontSize:11.5,color:T.textSub}}>Completeness</span>
+                            <span style={{fontSize:13,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:prof.nullPct>5?"#f87171":"#4ade80"}}>{(100-prof.nullPct).toFixed(1)}%</span>
+                          </div>
+                          <StatBar pct={100-prof.nullPct} color={prof.nullPct>5?"#f87171":"#4ade80"}/>
+                          <div style={{fontSize:10,color:T.textMuted,marginTop:3}}>{prof.nullPct}% null values</div>
                         </div>
-                        <StatBar pct={100-prof.nullPct} color={prof.nullPct>5?"#f87171":"#4ade80"}/>
-                        <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>{prof.nullPct}% null values detected</div>
-                      </div>
-                      <div style={{background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`,padding:"12px 14px"}}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-                          <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Uniqueness</span>
-                          <span style={{fontSize:20,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.blue}}>{prof.distinctPct}%</span>
+                        {/* Uniqueness */}
+                        <div style={{background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,padding:"9px 12px"}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                            <span style={{fontSize:11.5,color:T.textSub}}>Uniqueness</span>
+                            <span style={{fontSize:13,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.blue}}>{prof.distinctPct}%</span>
+                          </div>
+                          <StatBar pct={prof.distinctPct} color={T.blue}/>
+                          <div style={{fontSize:10,color:T.textMuted,marginTop:3}}>Distinct values</div>
                         </div>
-                        <StatBar pct={prof.distinctPct} color={T.blue}/>
-                        <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>Distinct values ratio</div>
-                      </div>
-                      {(prof.min||prof.max||prof.avg)&&(
-                        <div>
-                          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Value Range</div>
-                          <div style={{background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden"}}>
-                            {[prof.min&&{l:"Minimum",v:prof.min},prof.max&&{l:"Maximum",v:prof.max},prof.avg&&{l:"Average",v:prof.avg}].filter(Boolean).map((r,i,arr)=>(
-                              <div key={r.l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
-                                <span style={{fontSize:11.5,color:T.textMuted}}>{r.l}</span>
-                                <span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,fontWeight:600,color:T.text}}>{r.v}</span>
+                        {/* Value range */}
+                        {(prof.min||prof.max||prof.avg)&&(
+                          <div style={{background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,overflow:"hidden"}}>
+                            {[prof.min&&{l:"Min",v:prof.min},prof.max&&{l:"Max",v:prof.max},prof.avg&&{l:"Avg",v:prof.avg}].filter(Boolean).map((r,i,arr)=>(
+                              <div key={r.l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 12px",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
+                                <span style={{fontSize:11,color:T.textMuted}}>{r.l}</span>
+                                <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,fontWeight:600,color:T.text}}>{r.v}</span>
                               </div>
                             ))}
                           </div>
-                        </div>
-                      )}
-                      {prof.topValues&&(
-                        <div>
-                          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Value Distribution</div>
-                          <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                        )}
+                        {/* Top values */}
+                        {prof.topValues&&(
+                          <div>
+                            <div style={{fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:6}}>Value Distribution</div>
                             {prof.topValues.map((v,i)=>{
-                              const pct=parseFloat(v.match(/\((\d+)%\)/)?.[1])||Math.max(5,(4-i)*18);
-                              const colors=["#e879f9","#a78bfa","#38bdf8","#4ade80"];
+                              const pct=parseFloat(v.match(/\((\d+)%\)/)?.[1])||Math.max(5,(4-i)*20);
+                              const colors=["#818cf8","#38bdf8","#4ade80","#fb923c"];
                               return (
-                                <div key={i}>
-                                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11.5,marginBottom:3}}>
+                                <div key={i} style={{marginBottom:5}}>
+                                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:2}}>
                                     <span style={{color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{v.replace(/\s*\(\d+%\)/,"")}</span>
                                     <span style={{color:T.textMuted,fontWeight:600}}>{v.match(/\(\d+%\)/)?.[0]||`${pct}%`}</span>
                                   </div>
@@ -7916,72 +7899,84 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
                               );
                             })}
                           </div>
-                        </div>
-                      )}
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`}}>
-                        <span style={{fontSize:10.5,color:T.textMuted}}>Data category: <b style={{color:T.textSub,textTransform:"capitalize"}}>{prof.dataType}</b></span>
-                        <span style={{fontSize:10,color:T.textMuted}}>Profiled 2h ago</span>
+                        )}
                       </div>
-                    </>
-                  ):(
-                    <div style={{textAlign:"center",padding:"40px 16px",color:T.textMuted}}>
-                      <div style={{fontSize:28,marginBottom:10}}>📊</div>
-                      <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:4}}>No profile data</div>
-                      <div style={{fontSize:12}}>Run profiling to see column statistics.</div>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Quality */}
+              {/* ── Quality tab: full table-like experience ── */}
               {colPanelTab==="quality"&&(
-                <div style={{padding:14,display:"flex",flexDirection:"column",gap:10}}>
-                  {colTests.length===0?(
-                    <div style={{textAlign:"center",padding:"40px 16px"}}>
-                      <div style={{fontSize:28,marginBottom:10}}>🧪</div>
-                      <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:4}}>No tests yet</div>
-                      <div style={{fontSize:12,color:T.textMuted,marginBottom:14}}>Add a test case to start monitoring this column's data quality.</div>
-                      <button style={{padding:"7px 16px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>+ Add Test Case</button>
-                    </div>
-                  ):(
-                    <>
-                      <div style={{display:"flex",gap:8,padding:"10px 12px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>
-                        {["Success","Failed","Aborted"].map(s=>(
-                          <div key={s} style={{flex:1,textAlign:"center"}}>
-                            <div style={{fontSize:18,fontWeight:700,color:SC[s]}}>{colTests.filter(t=>t.status===s).length}</div>
-                            <div style={{fontSize:10,color:T.textMuted}}>{s}</div>
-                          </div>
-                        ))}
-                      </div>
-                      {colTests.map((tc)=>(
-                        <div key={tc.id} style={{background:T.bgElevated,borderRadius:8,border:`1.5px solid ${SC[tc.status]}33`,padding:"10px 12px"}}>
-                          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:6}}>
-                            <span style={{fontSize:12,fontWeight:600,color:T.text,lineHeight:1.4,flex:1}}>{tc.name}</span>
-                            <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10.5,fontWeight:700,color:SC[tc.status],background:`${SC[tc.status]}18`,padding:"2px 7px",borderRadius:4,border:`1px solid ${SC[tc.status]}33`,flexShrink:0}}>
-                              {SI[tc.status]} {tc.status}
-                            </span>
-                          </div>
-                          <div style={{display:"flex",gap:5,marginBottom:8,flexWrap:"wrap"}}>
-                            <DimChip dim={tc.dim}/>
-                            <span style={{fontSize:10,color:T.textMuted,background:T.bgSurface,padding:"1px 6px",borderRadius:3,border:`1px solid ${T.border}`}}>{tc.defName}</span>
-                          </div>
-                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:8}}>
-                            <div><div style={{fontSize:9.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Last Value</div><div style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{tc.lastVal}</div></div>
-                            <div><div style={{fontSize:9.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Expected</div><div style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{tc.expected}</div></div>
-                            <div><div style={{fontSize:9.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Last Run</div><div style={{fontSize:11,color:T.textMuted}}>{tc.lastRun}</div></div>
-                          </div>
-                          {tc.history&&tc.history.length>0&&(
-                            <div style={{display:"flex",gap:2,alignItems:"flex-end",height:18,marginTop:8}}>
-                              {tc.history.slice(-15).map((v,idx)=>(
-                                <div key={idx} style={{flex:1,borderRadius:"2px 2px 0 0",background:v===1?T.green:v===0?"#f87171":"#fbbf24",height:v===1?"100%":"55%",minHeight:2,opacity:.8}}/>
-                              ))}
-                            </div>
-                          )}
-                          {tc.failedReason&&<div style={{marginTop:7,fontSize:11,color:T.rose,background:"rgba(248,113,113,.08)",padding:"5px 9px",borderRadius:5,border:"1px solid rgba(248,113,113,.2)",lineHeight:1.5}}>{tc.failedReason}</div>}
+                <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
+                  {/* Score strip */}
+                  {colTests.length>0&&(
+                    <div style={{display:"flex",gap:0,borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                      {[{l:"Passing",v:tcSuccess,c:T.green},{l:"Failing",v:tcFailed,c:T.rose},{l:"Aborted",v:tcAborted,c:T.amber}].map((s,i)=>(
+                        <div key={s.l} style={{flex:1,padding:"10px 0",textAlign:"center",borderRight:i<2?`1px solid ${T.border}`:"none"}}>
+                          <div style={{fontSize:18,fontWeight:700,color:s.c}}>{s.v}</div>
+                          <div style={{fontSize:10,color:T.textMuted}}>{s.l}</div>
                         </div>
                       ))}
-                    </>
+                    </div>
                   )}
+                  {/* Action bar */}
+                  <div style={{padding:"8px 12px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+                    <span style={{fontSize:11,color:T.textMuted,flex:1}}>Tests on <code style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{selCol.name}</code></span>
+                    {colTests.length>0&&(
+                      <button style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11,fontWeight:500,cursor:"pointer"}}>
+                        <svg width="8" height="8" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>Run All
+                      </button>
+                    )}
+                    <button onClick={()=>{setAddTestOpen(true);setAqTcName("");setAqTcDesc("");setAqTcLevel("column");setAqTcSelCol(selCol.name);setAqTcSelType(null);setAqTcCustomSQL(false);setAqTcSQLQuery("");setAqTcParams({});setAqTcTags([]);setAqTcGlossary([]);setAqTcDim("");}}
+                      style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                      + Add Test
+                    </button>
+                  </div>
+                  {/* Test list */}
+                  <div style={{overflowY:"auto",flex:1,padding:10,display:"flex",flexDirection:"column",gap:8}}>
+                    {colTests.length===0?(
+                      <div style={{textAlign:"center",padding:"36px 16px"}}>
+                        <div style={{fontSize:26,marginBottom:8}}>🧪</div>
+                        <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:4}}>No tests yet</div>
+                        <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>Click <b style={{color:T.accent}}>+ Add Test</b> to define a quality check for this column.</div>
+                      </div>
+                    ):colTests.map((tc)=>(
+                      <div key={tc.id} style={{background:T.bgElevated,borderRadius:8,border:`1.5px solid ${SC[tc.status]}2a`,padding:"10px 12px"}}>
+                        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:6,marginBottom:5}}>
+                          <span style={{fontSize:12,fontWeight:600,color:T.text,lineHeight:1.4,flex:1}}>{tc.name}</span>
+                          <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,fontWeight:700,color:SC[tc.status],background:`${SC[tc.status]}18`,padding:"2px 6px",borderRadius:4,border:`1px solid ${SC[tc.status]}33`,flexShrink:0}}>
+                            {SI[tc.status]} {tc.status}
+                          </span>
+                        </div>
+                        <div style={{display:"flex",gap:5,marginBottom:8,flexWrap:"wrap"}}>
+                          <DimChip dim={tc.dim}/>
+                          <span style={{fontSize:10,color:T.textMuted,background:T.bgSurface,padding:"1px 6px",borderRadius:3,border:`1px solid ${T.border}`}}>{tc.defName}</span>
+                        </div>
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:tc.history?6:0}}>
+                          <div>
+                            <div style={{fontSize:9,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Last Value</div>
+                            <div style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{tc.lastVal}</div>
+                          </div>
+                          <div>
+                            <div style={{fontSize:9,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Expected</div>
+                            <div style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tc.expected}</div>
+                          </div>
+                        </div>
+                        {tc.history&&tc.history.length>0&&(
+                          <div style={{display:"flex",gap:1.5,alignItems:"flex-end",height:16,marginTop:4}}>
+                            {tc.history.slice(-15).map((v,idx)=>(
+                              <div key={idx} style={{flex:1,borderRadius:"2px 2px 0 0",background:v===1?T.green:v===0?"#f87171":"#fbbf24",height:v===1?"100%":"55%",minHeight:2,opacity:.8}}/>
+                            ))}
+                          </div>
+                        )}
+                        <div style={{display:"flex",justifyContent:"flex-end",marginTop:4}}>
+                          <span style={{fontSize:10,color:T.textMuted}}>Last run: {tc.lastRun}</span>
+                        </div>
+                        {tc.failedReason&&<div style={{marginTop:6,fontSize:10.5,color:T.rose,background:"rgba(248,113,113,.08)",padding:"5px 9px",borderRadius:5,border:"1px solid rgba(248,113,113,.2)",lineHeight:1.5}}>{tc.failedReason}</div>}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
