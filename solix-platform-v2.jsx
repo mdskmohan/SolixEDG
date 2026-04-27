@@ -6290,11 +6290,11 @@ const AssetSchema = ({asset,selCol,onColClick,onToast})=>{
             onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=schSearch?T.accent:T.border}/>
           {schSearch&&<button onClick={()=>setSchSearch("")} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:15,lineHeight:1}}>×</button>}
         </div>
-        <span style={{fontSize:12,color:T.textMuted,whiteSpace:"nowrap"}}>{filtered.length} / {cols.length} columns · {cols.filter(c=>c.pii).length} PII · {cols.filter(c=>c.pk).length} PK</span>
+        <span style={{fontSize:12,color:T.textMuted,whiteSpace:"nowrap"}}>{filtered.length} / {cols.length} columns · {cols.filter(c=>c.pk).length} PK</span>
         {selCol&&<span style={{fontSize:11,color:T.accent,background:T.accentDim,padding:"2px 8px",borderRadius:99,border:`1px solid ${T.accent}33`}}>Viewing: {selCol.name}</span>}
       </div>
       <table style={{width:"100%",borderCollapse:"collapse"}}>
-        <thead><tr>{["Column","Type","Nullable","PII","Description","Quality Rule"].map(h=><th key={h} style={{padding:"8px 14px",fontSize:11,fontWeight:600,color:T.textMuted,textAlign:"left",borderBottom:`1px solid ${T.border}`,textTransform:"uppercase",letterSpacing:"0.05em",whiteSpace:"nowrap",background:T.bgElevated}}>{h}</th>)}</tr></thead>
+        <thead><tr>{["Column","Type","Nullable","Description"].map(h=><th key={h} style={{padding:"8px 14px",fontSize:11,fontWeight:600,color:T.textMuted,textAlign:"left",borderBottom:`1px solid ${T.border}`,textTransform:"uppercase",letterSpacing:"0.05em",whiteSpace:"nowrap",background:T.bgElevated}}>{h}</th>)}</tr></thead>
         <tbody>
           {filtered.map((c,i)=>{
             const isSel=selCol?.name===c.name;
@@ -6303,13 +6303,11 @@ const AssetSchema = ({asset,selCol,onColClick,onToast})=>{
                 <td style={{padding:"10px 14px"}}><div style={{display:"flex",alignItems:"center",gap:6}}>{c.pk&&<span style={{fontSize:9,color:T.amber,border:`1px solid ${T.amberDim}`,padding:"1px 5px",borderRadius:4,fontFamily:"'Geist Mono',monospace",fontWeight:700}}>PK</span>}<span style={{fontSize:13,fontFamily:"'Geist Mono',monospace",color:isSel?T.accent:T.text,fontWeight:500}}>{c.name}</span></div></td>
                 <td style={{padding:"10px 14px"}}><Badge color={T.blue} bg={T.blueDim}>{c.type}</Badge></td>
                 <td style={{padding:"10px 14px"}}><span style={{fontSize:11,color:c.nullable?T.textMuted:T.textSub}}>{c.nullable?"YES":"NOT NULL"}</span></td>
-                <td style={{padding:"10px 14px"}}>{c.pii&&<Badge color={T.rose} bg={T.roseDim} border="rgba(253,164,175,0.25)">PII</Badge>}</td>
-                <td style={{padding:"10px 14px",fontSize:12,color:T.textSub,maxWidth:200}}>{c.desc}</td>
-                <td style={{padding:"10px 14px",fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{c.quality||"—"}</td>
+                <td style={{padding:"10px 14px",fontSize:12,color:T.textSub,maxWidth:260}}>{c.desc}</td>
               </tr>
             );
           })}
-          {filtered.length===0&&<tr><td colSpan={6} style={{padding:"32px",textAlign:"center",color:T.textMuted,fontSize:13}}>No columns match "{schSearch}"</td></tr>}
+          {filtered.length===0&&<tr><td colSpan={4} style={{padding:"32px",textAlign:"center",color:T.textMuted,fontSize:13}}>No columns match "{schSearch}"</td></tr>}
         </tbody>
       </table>
     </Card2>
@@ -6378,6 +6376,8 @@ const AssetQualityTab = ({asset})=>{
   const [runningIds,setRunningIds]=useState(new Set());
   const [selectedIds,setSelectedIds]=useState(new Set());
   const [addTestOpen,setAddTestOpen]=useState(false);
+  const [selectTestOpen,setSelectTestOpen]=useState(false);
+  const [selectTestIds,setSelectTestIds]=useState(new Set());
   // Full DQ wizard state
   const [aqTcName,      setAqTcName]      = useState("");
   const [aqTcDesc,      setAqTcDesc]      = useState("");
@@ -6474,9 +6474,9 @@ const AssetQualityTab = ({asset})=>{
             <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
             Run All
           </button>
-          <button onClick={()=>{setAddTestOpen(true);setAqTcName("");setAqTcDesc("");setAqTcLevel("table");setAqTcSelCol("");setAqTcSelType(null);setAqTcCustomSQL(false);setAqTcSQLQuery("");setAqTcParams({});setAqTcTags([]);setAqTcGlossary([]);setAqTcDim("");}}
+          <button onClick={()=>setSelectTestOpen(true)}
             style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:7,background:T.accent,border:`1px solid ${T.accent}`,color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-            + Add Test Case
+            Select Test
           </button>
         </div>
       </div>
@@ -6650,8 +6650,73 @@ const AssetQualityTab = ({asset})=>{
         </div>,
         document.body
       )}
+      {selectTestOpen&&createPortal(
+        <div style={{position:"fixed",inset:0,zIndex:900,background:"rgba(0,0,0,.45)"}} onClick={()=>{setSelectTestOpen(false);setSelectTestIds(new Set());}}>
+          <div onClick={e=>e.stopPropagation()} className="slideIn" style={{position:"absolute",right:0,top:0,width:440,height:"100%",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,boxShadow:"-8px 0 32px rgba(0,0,0,.28)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+            {/* Header */}
+            <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,background:T.bgElevated}}>
+              <div>
+                <div style={{fontSize:14,fontWeight:700,color:T.text}}>Select Test Cases</div>
+                <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>Table: <span style={{color:T.textSub,fontWeight:500,fontFamily:"'Geist Mono',monospace"}}>{asset.name}</span></div>
+              </div>
+              <button onClick={()=>{setSelectTestOpen(false);setSelectTestIds(new Set());}} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+            </div>
+            {/* List */}
+            <div style={{flex:1,overflowY:"auto",padding:16,display:"flex",flexDirection:"column",gap:8}}>
+              {(()=>{
+                const allForTable=DQ_TEST_CASES.filter(t=>t.table.endsWith("."+asset.name)||t.table===asset.name);
+                const existIds=new Set(localCases.map(t=>t.id));
+                const available=allForTable.filter(t=>!existIds.has(t.id));
+                if(available.length===0) return (
+                  <div style={{textAlign:"center",padding:"40px 20px"}}>
+                    <div style={{fontSize:28,marginBottom:10}}>🔍</div>
+                    <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:6}}>No test cases found</div>
+                    <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>No test cases found for this table.<br/>Create them in the DQ section first.</div>
+                  </div>
+                );
+                const dimC={Completeness:"#3b82f6",Accuracy:"#8b5cf6",Validity:"#10b981",Volume:"#f59e0b",Uniqueness:"#ec4899",Consistency:"#06b6d4",Integrity:"#f97316"};
+                const SC2={Success:"#16a34a",Failed:"#e11d48",Aborted:"#d97706"};
+                return available.map(t=>{
+                  const isSel=selectTestIds.has(t.id);
+                  return (
+                    <div key={t.id} onClick={()=>setSelectTestIds(p=>{const n=new Set(p);isSel?n.delete(t.id):n.add(t.id);return n;})}
+                      style={{background:isSel?T.accentDim:T.bgElevated,border:`1.5px solid ${isSel?T.accent:T.border}`,borderRadius:9,padding:"10px 12px",cursor:"pointer",transition:"all .15s"}}>
+                      <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+                        <input type="checkbox" checked={isSel} onChange={()=>{}} style={{marginTop:2,accentColor:T.accent,cursor:"pointer"}}/>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:4}}>{t.name}</div>
+                          <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                            <span style={{fontSize:10,fontWeight:700,color:SC2[t.status]||T.textMuted,background:`${SC2[t.status]||T.bgSurface}18`,padding:"1px 6px",borderRadius:4,border:`1px solid ${SC2[t.status]||T.border}33`}}>{t.status}</span>
+                            <span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:`${dimC[t.dim]||T.textMuted}12`,color:dimC[t.dim]||T.textMuted,fontWeight:600,border:`1px solid ${dimC[t.dim]||T.textMuted}22`}}>{t.dim}</span>
+                            {t.col&&<span style={{fontSize:10,color:T.textMuted,background:T.bgSurface,padding:"1px 6px",borderRadius:4,border:`1px solid ${T.border}`,fontFamily:"'Geist Mono',monospace"}}>{t.col}</span>}
+                          </div>
+                          <div style={{fontSize:10,color:T.textMuted,marginTop:4}}>Last run: {t.lastRun}</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+            {/* Footer */}
+            <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,flexShrink:0,background:T.bgSurface}}>
+              <button disabled={selectTestIds.size===0}
+                onClick={()=>{
+                  const toAdd=DQ_TEST_CASES.filter(t=>selectTestIds.has(t.id));
+                  setLocalCases(p=>{const existIds=new Set(p.map(x=>x.id));return [...p,...toAdd.filter(t=>!existIds.has(t.id))];});
+                  setSelectTestOpen(false);setSelectTestIds(new Set());
+                }}
+                style={{flex:1,padding:"9px",borderRadius:9,background:selectTestIds.size>0?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:13,fontWeight:700,cursor:selectTestIds.size>0?"pointer":"default",transition:"background .15s"}}>
+                Add Selected ({selectTestIds.size})
+              </button>
+              <button onClick={()=>{setSelectTestOpen(false);setSelectTestIds(new Set());}} style={{padding:"9px 18px",borderRadius:9,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer"}}>Cancel</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
       {localCases.length===0
-        ? <div style={{padding:"40px",textAlign:"center",color:T.textMuted,fontSize:13}}>No test cases linked to this asset yet.</div>
+        ? <div style={{padding:"40px",textAlign:"center",color:T.textMuted,fontSize:13}}>No test cases found for this table. Click <b>Select Test</b> to add test cases.</div>
         : <table style={{width:"100%",borderCollapse:"collapse"}}>
             <thead>
               <tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
@@ -7659,6 +7724,11 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
   const [tagInput,     setTagInput]    = useState("");
   const [certModal,  setCertModal] = useState(false);
   const [certNote,   setCertNote]  = useState("");
+  const [colTagsMap,       setColTagsMap]       = useState({});
+  const [colTagInput,      setColTagInput]       = useState("");
+  const [colSelectTestOpen,setColSelectTestOpen] = useState(false);
+  const [colSelectTestIds, setColSelectTestIds]  = useState(new Set());
+  const [colTestsMap,      setColTestsMap]       = useState({});
 
   const DOMAINS_LIST = ["Commerce","Finance","Product","Marketing","ML","Engineering"];
   const USERS_LIST   = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
@@ -7772,7 +7842,8 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
       {/* ── Column detail panel (tabbed: Overview | Quality) ── */}
       {selCol&&(()=>{
         const prof=COL_PROFILES[selCol.name]||null;
-        const colTests=DQ_TEST_CASES.filter(tc=>tc.col&&selCol.name&&tc.col.toLowerCase()===selCol.name.toLowerCase());
+        const colTests=colTestsMap[selCol.name]!==undefined?colTestsMap[selCol.name]:DQ_TEST_CASES.filter(tc=>tc.col&&selCol.name&&tc.col.toLowerCase()===selCol.name.toLowerCase());
+        const setColTests=(updater)=>setColTestsMap(p=>{const cur=p[selCol.name]!==undefined?p[selCol.name]:DQ_TEST_CASES.filter(tc=>tc.col&&selCol.name&&tc.col.toLowerCase()===selCol.name.toLowerCase());const next=typeof updater==="function"?updater(cur):updater;return{...p,[selCol.name]:next};});
         const tcSuccess=colTests.filter(t=>t.status==="Success").length;
         const tcFailed=colTests.filter(t=>t.status==="Failed").length;
         const tcAborted=colTests.filter(t=>t.status==="Aborted").length;
@@ -7822,87 +7893,74 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
                       : <p style={{fontSize:12,color:T.textMuted,fontStyle:"italic",margin:0}}>No description provided.</p>}
                   </div>
 
-                  {/* Column metadata */}
-                  <div style={{background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden"}}>
-                    {[
-                      {l:"Data Type",   v:<span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.blue,fontWeight:600}}>{selCol.type}</span>},
-                      {l:"Nullable",    v:<span style={{fontSize:11,color:selCol.nullable?T.amber:T.green,fontWeight:600}}>{selCol.nullable?"Yes":"No"}</span>},
-                      {l:"Primary Key", v:<span style={{fontSize:11,color:selCol.pk?T.amber:T.textMuted,fontWeight:600}}>{selCol.pk?"Yes":"No"}</span>},
-                      {l:"PII",         v:<span style={{fontSize:11,color:selCol.pii?T.rose:T.textMuted,fontWeight:600}}>{selCol.pii?"Sensitive":"No"}</span>},
-                    ].map((r,i)=>(
-                      <div key={r.l} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",borderBottom:i<3?`1px solid ${T.border}`:"none"}}>
-                        <span style={{fontSize:11.5,color:T.textMuted}}>{r.l}</span>{r.v}
-                      </div>
-                    ))}
+                  {/* Details */}
+                  <div>
+                    <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Details</div>
+                    <div style={{background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden"}}>
+                      {[
+                        {l:"Data Type",   v:<span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.blue,fontWeight:600}}>{selCol.type}</span>},
+                        {l:"Nullable",    v:<span style={{fontSize:11,color:selCol.nullable?T.amber:T.green,fontWeight:600}}>{selCol.nullable?"Yes":"No"}</span>},
+                        {l:"Primary Key", v:<span style={{fontSize:11,color:selCol.pk?T.amber:T.textMuted,fontWeight:600}}>{selCol.pk?"Yes":"No"}</span>},
+                      ].map((r,i)=>(
+                        <div key={r.l} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",borderBottom:i<2?`1px solid ${T.border}`:"none"}}>
+                          <span style={{fontSize:11.5,color:T.textMuted}}>{r.l}</span>{r.v}
+                        </div>
+                      ))}
+                    </div>
                   </div>
 
-                  {/* Quality constraint */}
-                  {selCol.quality&&(
-                    <div>
-                      <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Quality Constraint</div>
-                      <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`}}>
-                        <span style={{width:6,height:6,borderRadius:"50%",background:T.green,flexShrink:0,display:"inline-block"}}/>
-                        <code style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textSub,lineHeight:1.4}}>{selCol.quality}</code>
+                  {/* Tags — same UI as asset right panel */}
+                  {(()=>{
+                    const COL_TAG_C={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},finance:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},KPI:{bg:"rgba(22,163,74,.08)",color:"#16a34a",border:"rgba(22,163,74,.2)"},sensitive:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"},events:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},model:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},etl:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"}};
+                    const ctc=tag=>COL_TAG_C[tag]||{bg:T.bgElevated,color:T.textSub,border:T.border};
+                    const colTags=colTagsMap[selCol.name]||[];
+                    return (
+                      <div style={{position:"relative"}}>
+                        <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Tags</div>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:colTags.length?8:0}}>
+                          {colTags.map(t=>{const c=ctc(t);return(
+                            <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"3px 10px",borderRadius:6,background:c.bg,color:c.color,border:`1px solid ${c.border}`,fontWeight:500}}>
+                              {t}
+                              <button onClick={()=>setColTagsMap(m=>({...m,[selCol.name]:(m[selCol.name]||[]).filter(x=>x!==t)}))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,display:"flex",opacity:.6,lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>
+                                <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                              </button>
+                            </span>
+                          );})}
+                        </div>
+                        <button onMouseDown={e=>{e.stopPropagation();setColTagInput(p=>p==="_open_"?"":"_open_");}}
+                          style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"4px 10px",borderRadius:6,border:`1px dashed ${colTagInput==="_open_"?T.accent:T.border}`,background:"none",color:colTagInput==="_open_"?T.accent:T.textMuted,cursor:"pointer",transition:"all .12s"}}
+                          onMouseEnter={e=>{if(colTagInput!=="open_"){e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}}
+                          onMouseLeave={e=>{if(colTagInput!=="open_"){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}}>
+                          <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg> Add tag
+                        </button>
+                        {colTagInput==="_open_"&&(
+                          <div onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",left:0,top:"calc(100% + 6px)",zIndex:400,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.22)",padding:"10px 12px",minWidth:210}}>
+                            <div style={{fontSize:11,color:T.textMuted,marginBottom:8,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>Suggested</div>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                              {["PII","sensitive","financial","identifier","dimension","measure","KPI","events","etl"].filter(s=>!colTags.includes(s)).map(s=>(
+                                <button key={s} onMouseDown={e=>{e.stopPropagation();setColTagsMap(m=>({...m,[selCol.name]:[...(m[selCol.name]||[]),s]}));setColTagInput("");}}
+                                  style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",transition:"all .1s"}}
+                                  onMouseEnter={e=>{e.currentTarget.style.background=T.accentDim;e.currentTarget.style.color=T.accent;e.currentTarget.style.borderColor=T.accent+"55";}}
+                                  onMouseLeave={e=>{e.currentTarget.style.background=T.bgElevated;e.currentTarget.style.color=T.textSub;e.currentTarget.style.borderColor=T.border;}}>
+                                  {s}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
-                  {/* Profile stats (inline, no separate tab) */}
-                  {prof&&(
-                    <div>
-                      <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Profile Stats <span style={{fontSize:9,fontWeight:400,color:T.textMuted,textTransform:"none",letterSpacing:0}}>· last run 2h ago</span></div>
-                      <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                        {/* Completeness */}
-                        <div style={{background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,padding:"9px 12px"}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
-                            <span style={{fontSize:11.5,color:T.textSub}}>Completeness</span>
-                            <span style={{fontSize:13,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:prof.nullPct>5?"#f87171":"#4ade80"}}>{(100-prof.nullPct).toFixed(1)}%</span>
-                          </div>
-                          <StatBar pct={100-prof.nullPct} color={prof.nullPct>5?"#f87171":"#4ade80"}/>
-                          <div style={{fontSize:10,color:T.textMuted,marginTop:3}}>{prof.nullPct}% null values</div>
-                        </div>
-                        {/* Uniqueness */}
-                        <div style={{background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,padding:"9px 12px"}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
-                            <span style={{fontSize:11.5,color:T.textSub}}>Uniqueness</span>
-                            <span style={{fontSize:13,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.blue}}>{prof.distinctPct}%</span>
-                          </div>
-                          <StatBar pct={prof.distinctPct} color={T.blue}/>
-                          <div style={{fontSize:10,color:T.textMuted,marginTop:3}}>Distinct values</div>
-                        </div>
-                        {/* Value range */}
-                        {(prof.min||prof.max||prof.avg)&&(
-                          <div style={{background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,overflow:"hidden"}}>
-                            {[prof.min&&{l:"Min",v:prof.min},prof.max&&{l:"Max",v:prof.max},prof.avg&&{l:"Avg",v:prof.avg}].filter(Boolean).map((r,i,arr)=>(
-                              <div key={r.l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 12px",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
-                                <span style={{fontSize:11,color:T.textMuted}}>{r.l}</span>
-                                <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,fontWeight:600,color:T.text}}>{r.v}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {/* Top values */}
-                        {prof.topValues&&(
-                          <div>
-                            <div style={{fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:6}}>Value Distribution</div>
-                            {prof.topValues.map((v,i)=>{
-                              const pct=parseFloat(v.match(/\((\d+)%\)/)?.[1])||Math.max(5,(4-i)*20);
-                              const colors=["#818cf8","#38bdf8","#4ade80","#fb923c"];
-                              return (
-                                <div key={i} style={{marginBottom:5}}>
-                                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:2}}>
-                                    <span style={{color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{v.replace(/\s*\(\d+%\)/,"")}</span>
-                                    <span style={{color:T.textMuted,fontWeight:600}}>{v.match(/\(\d+%\)/)?.[0]||`${pct}%`}</span>
-                                  </div>
-                                  <StatBar pct={pct} color={colors[i%4]}/>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
+                  {/* Domain — inherited from parent table */}
+                  <div>
+                    <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Domain</div>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 12px",background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`}}>
+                      <span style={{fontSize:12,fontWeight:600,color:T.accent}}>{asset.domain||data.domain||"—"}</span>
+                      <span style={{fontSize:10,color:T.textMuted,fontStyle:"italic"}}>Inherited</span>
                     </div>
-                  )}
+                  </div>
+
                 </div>
               )}
 
@@ -7928,9 +7986,9 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
                         <svg width="8" height="8" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>Run All
                       </button>
                     )}
-                    <button onClick={()=>{setAddTestOpen(true);setAqTcName("");setAqTcDesc("");setAqTcLevel("column");setAqTcSelCol(selCol.name);setAqTcSelType(null);setAqTcCustomSQL(false);setAqTcSQLQuery("");setAqTcParams({});setAqTcTags([]);setAqTcGlossary([]);setAqTcDim("");}}
+                    <button onClick={()=>setColSelectTestOpen(true)}
                       style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer"}}>
-                      + Add Test
+                      Select Test
                     </button>
                   </div>
                   {/* Test list */}
@@ -7939,7 +7997,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
                       <div style={{textAlign:"center",padding:"36px 16px"}}>
                         <div style={{fontSize:26,marginBottom:8}}>🧪</div>
                         <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:4}}>No tests yet</div>
-                        <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>Click <b style={{color:T.accent}}>+ Add Test</b> to define a quality check for this column.</div>
+                        <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>Click <b style={{color:T.accent}}>Select Test</b> to add test cases for this column.</div>
                       </div>
                     ):colTests.map((tc)=>(
                       <div key={tc.id} style={{background:T.bgElevated,borderRadius:8,border:`1.5px solid ${SC[tc.status]}2a`,padding:"10px 12px"}}>
@@ -7983,6 +8041,75 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
           </div>
         );
       })()}
+
+      {/* ── Column Select Test picker ── */}
+      {colSelectTestOpen&&selCol&&createPortal(
+        <div style={{position:"fixed",inset:0,zIndex:900,background:"rgba(0,0,0,.45)"}} onClick={()=>{setColSelectTestOpen(false);setColSelectTestIds(new Set());}}>
+          <div onClick={e=>e.stopPropagation()} className="slideIn" style={{position:"absolute",right:0,top:0,width:440,height:"100%",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,boxShadow:"-8px 0 32px rgba(0,0,0,.28)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+            {/* Header */}
+            <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,background:T.bgElevated}}>
+              <div>
+                <div style={{fontSize:14,fontWeight:700,color:T.text}}>Select Test Cases</div>
+                <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>Column: <span style={{color:T.textSub,fontWeight:500,fontFamily:"'Geist Mono',monospace"}}>{selCol.name}</span></div>
+              </div>
+              <button onClick={()=>{setColSelectTestOpen(false);setColSelectTestIds(new Set());}} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+            </div>
+            {/* List */}
+            <div style={{flex:1,overflowY:"auto",padding:16,display:"flex",flexDirection:"column",gap:8}}>
+              {(()=>{
+                const filtered=DQ_TEST_CASES.filter(t=>t.col&&selCol.name&&t.col.toLowerCase()===selCol.name.toLowerCase());
+                if(filtered.length===0) return (
+                  <div style={{textAlign:"center",padding:"40px 20px"}}>
+                    <div style={{fontSize:28,marginBottom:10}}>🔍</div>
+                    <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:6}}>No test cases found</div>
+                    <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>No test cases found for this column.<br/>Create them in the DQ section first.</div>
+                  </div>
+                );
+                return filtered.map(t=>{
+                  const isSel=colSelectTestIds.has(t.id);
+                  const SC2={Success:"#16a34a",Failed:"#e11d48",Aborted:"#d97706"};
+                  const dimC={Completeness:"#3b82f6",Accuracy:"#8b5cf6",Validity:"#10b981",Volume:"#f59e0b",Uniqueness:"#ec4899",Consistency:"#06b6d4",Integrity:"#f97316"};
+                  return (
+                    <div key={t.id} onClick={()=>setColSelectTestIds(p=>{const n=new Set(p);isSel?n.delete(t.id):n.add(t.id);return n;})}
+                      style={{background:isSel?T.accentDim:T.bgElevated,border:`1.5px solid ${isSel?T.accent:T.border}`,borderRadius:9,padding:"10px 12px",cursor:"pointer",transition:"all .15s"}}>
+                      <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+                        <input type="checkbox" checked={isSel} onChange={()=>{}} style={{marginTop:2,accentColor:T.accent,cursor:"pointer"}}/>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:4}}>{t.name}</div>
+                          <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                            <span style={{fontSize:10,fontWeight:700,color:SC2[t.status]||T.textMuted,background:`${SC2[t.status]||T.bgSurface}18`,padding:"1px 6px",borderRadius:4,border:`1px solid ${SC2[t.status]||T.border}33`}}>{t.status}</span>
+                            <span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:`${dimC[t.dim]||T.textMuted}12`,color:dimC[t.dim]||T.textMuted,fontWeight:600,border:`1px solid ${dimC[t.dim]||T.textMuted}22`}}>{t.dim}</span>
+                            <span style={{fontSize:10,color:T.textMuted,background:T.bgSurface,padding:"1px 6px",borderRadius:4,border:`1px solid ${T.border}`}}>{t.defName}</span>
+                          </div>
+                          <div style={{fontSize:10,color:T.textMuted,marginTop:4}}>Last run: {t.lastRun}</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+            {/* Footer */}
+            <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,flexShrink:0,background:T.bgSurface}}>
+              <button disabled={colSelectTestIds.size===0}
+                onClick={()=>{
+                  const toAdd=DQ_TEST_CASES.filter(t=>colSelectTestIds.has(t.id));
+                  setColTestsMap(p=>{
+                    const cur=p[selCol.name]!==undefined?p[selCol.name]:DQ_TEST_CASES.filter(tc=>tc.col&&selCol.name&&tc.col.toLowerCase()===selCol.name.toLowerCase());
+                    const existIds=new Set(cur.map(x=>x.id));
+                    return {...p,[selCol.name]:[...cur,...toAdd.filter(t=>!existIds.has(t.id))]};
+                  });
+                  setColSelectTestOpen(false);setColSelectTestIds(new Set());
+                }}
+                style={{flex:1,padding:"9px",borderRadius:9,background:colSelectTestIds.size>0?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:13,fontWeight:700,cursor:colSelectTestIds.size>0?"pointer":"default",transition:"background .15s"}}>
+                Add Selected ({colSelectTestIds.size})
+              </button>
+              <button onClick={()=>{setColSelectTestOpen(false);setColSelectTestIds(new Set());}} style={{padding:"9px 18px",borderRadius:9,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer"}}>Cancel</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* ── Right metadata sidebar ── */}
       {!selCol&&<div style={{width:260,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto"}}>
