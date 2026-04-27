@@ -13427,7 +13427,7 @@ const AccessSection = ({onToast}) => {
     {label:"Has certification",      value:"matchAnyCertification()"},
     {label:"Custom expression",      value:"__custom__"},
   ];
-  const ROLE_COLORS_AC = {Admin:"#ee2424","Connection Admin":"#0891b2","Steward":"#d97706"};
+  const ROLE_COLORS_AC = {Admin:"#ee2424","Connection Admin":"#0891b2","Steward":"#d97706","Viewer":"#7c3aed"};
   const ROLE_PALETTE   = ["#ee2424","#d97706","#0284c7","#7c3aed","#16a34a","#0891b2","#db2777","#4b4b60"];
 
   // ── Data ──
@@ -13445,18 +13445,18 @@ const AccessSection = ({onToast}) => {
         {id:"rl9", name:"Access-Request-Mgmt",    effect:"allow", resources:["accessRequest"],                       operations:["ViewBasic","Approve","Revoke","Delete"],                                                                                        condition:"", desc:"Approve, revoke, and manage all access requests."},
         {id:"rl10",name:"Workflow-Management",    effect:"allow", resources:["workflow"],                             operations:["ViewBasic","Create","Edit","Delete","EditStatus","TriggerIngestion"],                                                           condition:"", desc:"Create and manage automation workflows."},
         {id:"rl11",name:"Settings-Management",    effect:"allow", resources:["settings"],                             operations:["ViewBasic","Edit"],                                                                                                             condition:"", desc:"Edit platform settings and configuration."},
-        {id:"rl12",name:"Catalog-Full-Access",    effect:"allow", resources:["catalog"],                              operations:["ViewBasic","ViewTests","TriggerIngestion","Create","Edit","Delete","EditDescription","EditOwner","EditSteward","EditTags","EditStatus"], condition:"", desc:"Full access to all catalog assets across all domains."},
+        {id:"rl12",name:"Asset-Full-Access",       effect:"allow", resources:["database","databaseSchema","table","container"], operations:["ViewBasic","ViewTests","TriggerIngestion","Create","Edit","Delete","EditDescription","EditOwner","EditSteward","EditTags","EditStatus"], condition:"", desc:"Full access to all data assets — databases, schemas, tables, and object storage containers."},
       ]},
     {id:"pol2",name:"ConnectionAdminPolicy", desc:"Manage connections and workflows. Read-only access to catalog and tags.", enabled:true, system:true,
       rules:[
         {id:"rl13",name:"Connection-Management",  effect:"allow", resources:["connection"],          operations:["ViewBasic","Create","Edit","Delete","TestConnection","EditStatus"],         condition:"", desc:"Full control over data source connections."},
         {id:"rl14",name:"Workflow-Management",    effect:"allow", resources:["workflow"],             operations:["ViewBasic","Create","Edit","Delete","EditStatus","TriggerIngestion"],       condition:"", desc:"Create and manage automation workflows."},
-        {id:"rl15",name:"Catalog-Read",           effect:"allow", resources:["catalog"],              operations:["ViewBasic"],                                                               condition:"", desc:"Read-only access to catalog assets."},
+        {id:"rl15",name:"Asset-Read",              effect:"allow", resources:["database","databaseSchema","table","container"], operations:["ViewBasic"],                condition:"", desc:"Read-only access to all data assets."},
         {id:"rl16",name:"Tag-Read",               effect:"allow", resources:["tagCategory","tag"],    operations:["ViewBasic"],                                                               condition:"", desc:"Read-only access to tags and tag categories."},
       ]},
     {id:"pol3",name:"DataStewardPolicy", desc:"Domain-scoped governance — certify assets, manage glossary, handle DQ incidents and access requests.", enabled:true, system:true,
       rules:[
-        {id:"rl17",name:"Catalog-Governance",     effect:"allow", resources:["catalog"],              operations:["ViewBasic","ViewTests","TriggerIngestion","EditDescription","EditOwner","EditTags","EditStatus"], condition:"hasDomain()", desc:"Govern catalog assets within assigned domain."},
+        {id:"rl17",name:"Asset-Governance",       effect:"allow", resources:["database","databaseSchema","table","container"], operations:["ViewBasic","ViewTests","TriggerIngestion","EditDescription","EditOwner","EditTags","EditStatus"], condition:"hasDomain()", desc:"Govern data assets within assigned domain only."},
         {id:"rl18",name:"Tag-Apply",              effect:"allow", resources:["tag"],                   operations:["ViewBasic","EditTags"],                                                    condition:"", desc:"View and apply tags to assets."},
         {id:"rl19",name:"Tag-Browse",             effect:"allow", resources:["tagCategory"],           operations:["ViewBasic"],                                                               condition:"", desc:"Browse tag categories."},
         {id:"rl20",name:"Glossary-Management",    effect:"allow", resources:["glossaryCategory","glossaryTerm"], operations:["ViewBasic","Create","Edit","EditStatus"],                       condition:"", desc:"Create and manage glossary categories and terms."},
@@ -13468,12 +13468,21 @@ const AccessSection = ({onToast}) => {
         {id:"rl26",name:"Policy-Browse",          effect:"allow", resources:["policy"],                operations:["ViewBasic"],                                                               condition:"", desc:"Read-only access to governance policies."},
         {id:"rl27",name:"Stewardship-Inbox",      effect:"allow", resources:["stewardshipInbox"],      operations:["ViewBasic","Resolve"],                                                     condition:"", desc:"View and resolve stewardship inbox tasks."},
       ]},
+    {id:"pol4",name:"ViewerPolicy", desc:"Read-only access to all data assets, tags, glossary, certifications, and DQ results.", enabled:true, system:true,
+      rules:[
+        {id:"rl28",name:"Asset-Browse",           effect:"allow", resources:["database","databaseSchema","table","container"], operations:["ViewBasic"],       condition:"", desc:"Read-only access to all data assets."},
+        {id:"rl29",name:"Tag-Browse",             effect:"allow", resources:["tagCategory","tag"],                             operations:["ViewBasic"],       condition:"", desc:"Read-only access to tags and tag categories."},
+        {id:"rl30",name:"Glossary-Browse",        effect:"allow", resources:["glossary","glossaryCategory","glossaryTerm"],    operations:["ViewBasic"],       condition:"", desc:"Read-only access to all glossary content."},
+        {id:"rl31",name:"Certification-View",     effect:"allow", resources:["certification"],                                 operations:["ViewBasic"],       condition:"", desc:"View asset certification status."},
+        {id:"rl32",name:"DQ-Browse",              effect:"allow", resources:["testDefinition","testCase"],                     operations:["ViewBasic"],       condition:"", desc:"View DQ test definitions and results."},
+      ]},
   ]);
 
   const [roles, setRoles] = useState([
     {id:"r1",name:"Admin",            color:"#ee2424",users:1,desc:"Full platform access across all resources and operations.",        policyIds:["pol1"],system:true},
-    {id:"r2",name:"Connection Admin", color:"#0891b2",users:1,desc:"Manage connections and workflows. Read-only on catalog and tags.", policyIds:["pol2"],system:true},
+    {id:"r2",name:"Connection Admin", color:"#0891b2",users:1,desc:"Manage connections and workflows. Read-only on data assets and tags.", policyIds:["pol2"],system:true},
     {id:"r3",name:"Steward",          color:"#d97706",users:2,desc:"Domain-scoped governance — certify, enrich, manage glossary and DQ.", policyIds:["pol3"],system:true},
+    {id:"r4",name:"Viewer",           color:"#7c3aed",users:0,desc:"Read-only access to data assets, tags, glossary, certifications, and DQ results. No write operations.", policyIds:["pol4"],system:true},
   ]);
 
   // ── UI State ──
