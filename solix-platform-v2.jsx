@@ -13722,7 +13722,7 @@ const AccessSection = ({onToast}) => {
   const [newPolDesc,      setNewPolDesc]      = useState("");
   const [newPolRules,     setNewPolRules]     = useState([]);
   // Rule form
-  const [rf, setRf] = useState({name:"",desc:"",effect:"allow",resources:[],operations:[],condition:"",condParam:"",editId:null});
+  const [rf, setRf] = useState({name:"",desc:"",effect:"allow",menu:"",resources:[],operations:[],condition:"",condParam:"",editId:null});
 
   const [acSearch,   setAcSearch]   = useState("");
   const [acRolePage, setAcRolePage] = useState(1);
@@ -13793,13 +13793,13 @@ const AccessSection = ({onToast}) => {
     setRuleModal({policyId});
     if(rule) {
       const {condition,condParam} = parseCondition(rule.condition);
-      setRf({name:rule.name,desc:rule.desc,effect:rule.effect,resources:[...rule.resources],operations:[...rule.operations],condition,condParam,editId:rule.id});
+      setRf({name:rule.name,desc:rule.desc,effect:rule.effect,menu:rule.menu||"",resources:[...rule.resources],operations:[...rule.operations],condition,condParam,editId:rule.id});
     } else {
-      setRf({name:"",desc:"",effect:"allow",resources:[],operations:[],condition:"",condParam:"",editId:null});
+      setRf({name:"",desc:"",effect:"allow",menu:"",resources:[],operations:[],condition:"",condParam:"",editId:null});
     }
   };
   const handleSaveRule = () => {
-    if(!rf.name.trim()||!rf.resources.length||!rf.operations.length) return;
+    if(!rf.name.trim()||!rf.menu||!rf.resources.length||!rf.operations.length) return;
     let cond = "";
     if(rf.condition==="__custom__") {
       cond = rf.condParam||"";
@@ -13812,7 +13812,7 @@ const AccessSection = ({onToast}) => {
         cond = rf.condition;
       }
     }
-    const rule = {id:rf.editId||`rl${Date.now()}`,name:rf.name,desc:rf.desc,effect:rf.effect,resources:rf.resources,operations:rf.operations,condition:cond};
+    const rule = {id:rf.editId||`rl${Date.now()}`,name:rf.name,desc:rf.desc,effect:rf.effect,menu:rf.menu,resources:rf.resources,operations:rf.operations,condition:cond};
     if(ruleModal.policyId==="__new__") {
       setNewPolRules(prev=>rf.editId ? prev.map(r=>r.id===rf.editId?rule:r) : [...prev,rule]);
     } else {
@@ -14457,9 +14457,22 @@ const AccessSection = ({onToast}) => {
             </div>
 
             <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:20}}>
+              {/* Menu picker — required */}
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7,letterSpacing:.2}}>
+                  Menu <span style={{color:T.rose,fontWeight:700}}>*</span>
+                </label>
+                <select value={rf.menu} onChange={e=>setRf(f=>({...f,menu:e.target.value,resources:[]}))}
+                  style={{width:"100%",padding:"10px 13px",background:T.bgElevated,border:`1.5px solid ${!rf.menu?"rgba(225,29,72,.4)":T.border}`,borderRadius:9,
+                    color:rf.menu?T.text:T.textMuted,fontSize:13,outline:"none",boxSizing:"border-box",cursor:"pointer",transition:"border-color .15s"}}
+                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=rf.menu?T.border:"rgba(225,29,72,.4)"}>
+                  <option value="">Select a menu…</option>
+                  {MENUS.map(m=><option key={m.value} value={m.value}>{m.label}</option>)}
+                </select>
+              </div>
               <RuleMultiSelect
                 label="Resources" required
-                flat={RESOURCES}
+                flat={rf.menu?(MENUS.find(m=>m.value===rf.menu)?.resources||RESOURCES):RESOURCES}
                 selected={rf.resources}
                 onChange={v=>setRf(f=>({...f,resources:v}))}
                 placeholder="Select resources…"
