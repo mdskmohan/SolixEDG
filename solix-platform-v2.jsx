@@ -12851,11 +12851,6 @@ const TeamsSection = ({onToast}) => {
   const [editTeamName,      setEditTeamName]      = useState("");
   const [editTeamDesc,      setEditTeamDesc]      = useState("");
 
-  const pagedMembers   = filteredMembers.slice((memberPage-1)*MEMBER_PS, memberPage*MEMBER_PS);
-  const totalMemberPages = Math.max(1,Math.ceil(filteredMembers.length/MEMBER_PS));
-  const filteredTeams    = teams.filter(t=>!teamSearch||t.name.toLowerCase().includes(teamSearch.toLowerCase())||t.desc.toLowerCase().includes(teamSearch.toLowerCase()));
-  const pagedTeams       = filteredTeams.slice((teamPage-1)*TEAM_PS, teamPage*TEAM_PS);
-  const totalTeamPages   = Math.max(1,Math.ceil(filteredTeams.length/TEAM_PS));
   const teamNames = teams.map(t => t.name);
 
   const filteredMembers = members.filter(m => {
@@ -13462,17 +13457,6 @@ const AccessSection = ({onToast}) => {
     {label:"Settings",       value:"settings",      resources:["settings","workflow"]},
   ];
 
-  const MENUS = [
-    {label:"Connections",    value:"connections",   resources:["connection","databaseService","messagingService","dashboardService","pipeline","ingestionPipeline"]},
-    {label:"Asset Catalog",  value:"catalog",       resources:["database","databaseSchema","table","container","dashboard","topic","mlmodel","searchIndex","query","storedProcedure"]},
-    {label:"Stewardship",    value:"stewardship",   resources:["stewardshipInbox","accessRequest","certification","domain","dataProduct","dataContract"]},
-    {label:"Data Quality",   value:"quality",       resources:["testCase","testSuite","testDefinition","kpi","metric"]},
-    {label:"Glossary",       value:"glossary",      resources:["glossary","glossaryTerm","tag","classification"]},
-    {label:"Users & Teams",  value:"usersTeams",    resources:["user","team"]},
-    {label:"Access Control", value:"access",        resources:["role","policy"]},
-    {label:"Settings",       value:"settings",      resources:["settings","workflow"]},
-  ];
-
   const ROLE_COLORS_AC = {Admin:"#ee2424","Connection Admin":"#0891b2","Steward":"#d97706","Viewer":"#7c3aed"};
   const ROLE_PALETTE   = ["#ee2424","#d97706","#0284c7","#7c3aed","#16a34a","#0891b2","#db2777","#4b4b60"];
 
@@ -13547,17 +13531,6 @@ const AccessSection = ({onToast}) => {
   const [newPolRules,     setNewPolRules]     = useState([]);
   // Rule form
   const [rf, setRf] = useState({name:"",desc:"",effect:"allow",menu:"",resources:[],operations:[],condition:"",condParam:"",editId:null});
-
-  const [acSearch,   setAcSearch]   = useState("");
-  const [acRolePage, setAcRolePage] = useState(1);
-  const [acPolPage,  setAcPolPage]  = useState(1);
-  const AC_PS = 5;
-  const acRoleList = roles.filter(r=>!acSearch||r.name.toLowerCase().includes(acSearch.toLowerCase())||r.desc.toLowerCase().includes(acSearch.toLowerCase()));
-  const acPolList  = policies.filter(p=>!acSearch||p.name.toLowerCase().includes(acSearch.toLowerCase())||p.desc.toLowerCase().includes(acSearch.toLowerCase()));
-  const pagedRoles    = acRoleList.slice((acRolePage-1)*AC_PS, acRolePage*AC_PS);
-  const pagedPolicies = acPolList.slice((acPolPage-1)*AC_PS, acPolPage*AC_PS);
-  const totalRolePages = Math.max(1,Math.ceil(acRoleList.length/AC_PS));
-  const totalPolPages  = Math.max(1,Math.ceil(acPolList.length/AC_PS));
 
   const [acSearch,   setAcSearch]   = useState("");
   const [acRolePage, setAcRolePage] = useState(1);
