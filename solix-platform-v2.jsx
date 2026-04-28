@@ -13699,6 +13699,7 @@ const AccessSection = ({onToast}) => {
 
     {/* ════ ROLES TAB ════ */}
     {activeTab==="roles"&&(
+      <>
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
         {acRoleList.length===0&&<div style={{textAlign:"center",padding:"32px 0",fontSize:12,color:T.textMuted}}>No roles match your search</div>}
         {pagedRoles.map(role=>{
@@ -13768,10 +13769,12 @@ const AccessSection = ({onToast}) => {
           <button onClick={()=>setAcRolePage(p=>Math.min(totalRolePages,p+1))} disabled={acRolePage===totalRolePages} style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:acRolePage===totalRolePages?T.textMuted:T.text,fontSize:11,cursor:acRolePage===totalRolePages?"default":"pointer"}}>Next →</button>
         </div>
       </div>}
+      </>
     )}
 
     {/* ════ POLICIES TAB ════ */}
     {activeTab==="policies"&&(
+      <>
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
         {acPolList.length===0&&<div style={{textAlign:"center",padding:"32px 0",fontSize:12,color:T.textMuted}}>No policies match your search</div>}
         {pagedPolicies.map(policy=>(
@@ -13843,6 +13846,7 @@ const AccessSection = ({onToast}) => {
           <button onClick={()=>setAcPolPage(p=>Math.min(totalPolPages,p+1))} disabled={acPolPage===totalPolPages} style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:acPolPage===totalPolPages?T.textMuted:T.text,fontSize:11,cursor:acPolPage===totalPolPages?"default":"pointer"}}>Next →</button>
         </div>
       </div>}
+      </>
     )}
 
     {/* ════ MODALS ════ */}
