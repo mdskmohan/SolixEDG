@@ -2910,15 +2910,15 @@ const UserMenu = () => {
             </button>
           </div>}
           {tab==="roles"&&<div style={{padding:"8px 0"}}>
-            <div style={{padding:"4px 14px 8px",fontSize:11,color:T.textMuted}}>Click a role to switch the demo view</div>
+            <div style={{padding:"4px 14px 8px",fontSize:11,color:T.textMuted}}>Switch role — same user, different permissions</div>
             {Object.entries(ROLES_CONFIG).map(([key,c])=>(
               <button key={key} onClick={()=>{onSwitch(key);setOpen(false);setTab("menu");}} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"8px 14px",background:role===key?c.badge:"transparent",border:"none",cursor:"pointer",borderLeft:`2.5px solid ${role===key?c.color:"transparent"}`,transition:"all .12s"}}
                 onMouseEnter={e=>{if(role!==key)e.currentTarget.style.background=T.bgHover;}}
                 onMouseLeave={e=>{if(role!==key)e.currentTarget.style.background="transparent";}}>
-                <div style={{width:28,height:28,borderRadius:7,background:c.badge,border:`1px solid ${c.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:c.color,flexShrink:0}}>{c.avatar}</div>
+                <div style={{width:28,height:28,borderRadius:7,background:c.badge,border:`1px solid ${c.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:c.color,flexShrink:0}}>{cfg.avatar}</div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:12,fontWeight:600,color:T.text}}>{c.label}</div>
-                  <div style={{fontSize:10,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.email}</div>
+                  <div style={{fontSize:10,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cfg.email}</div>
                 </div>
                 {role===key&&<span style={{color:T.accent,flexShrink:0}}>{Ic.check(11)}</span>}
               </button>
