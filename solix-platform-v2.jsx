@@ -8402,7 +8402,7 @@ const CatalogView = ({onAsset})=>{
   const [selTags,          setSelTags]          = useState(new Set());
   const [selGlossaryTerms, setSelGlossaryTerms] = useState(new Set());
   const [openGroup,  setOpenGroup]  = useState({conntype:true,connection:false,domain:true,type:true,cert:false,tier:false,owner:false,tags:false,glossary:false});
-  const PAGE_SIZE = 25;
+  const PAGE_SIZE = 5;
   const [page, setPage] = useState(1);
   useEffect(()=>{ setPage(1); },[q,selConnTypes,selTypes,selDomains,selCerts,selTiers,selConns,selOwners,selTags,selGlossaryTerms]);
   const DRILLABLE_TYPES = new Set(["Database","Catalog","Schema","Bucket","Container","Folder"]);
@@ -14988,6 +14988,7 @@ const SettingsView = ({onToast})=>{
   const [svcSel,    setSvcSel]    = useState(null);
   const [appSel,    setAppSel]    = useState(null);
   const [filterSvc, setFilterSvc] = useState("all");
+  const [svcSearch, setSvcSearch] = useState("");
   const [tick,      setTick]      = useState(0);
   const [addSvcOpen,setAddSvcOpen]= useState(false);
   const timerRef = useRef(null);
@@ -15366,9 +15367,18 @@ const SettingsView = ({onToast})=>{
                 ))}
               </div>
 
+              {/* search */}
+              <div style={{position:"relative",marginBottom:12}}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.5"/><path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                <input value={svcSearch} onChange={e=>setSvcSearch(e.target.value)} placeholder="Search connections…"
+                  style={{width:"100%",padding:"8px 12px 8px 32px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",transition:"border .15s"}}
+                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+              </div>
+
               {/* service list */}
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {SERVICES
+                  .filter(s=>(!svcSearch||s.displayName.toLowerCase().includes(svcSearch.toLowerCase())||s.category.toLowerCase().includes(svcSearch.toLowerCase())))
                   .filter(s=>filterSvc==="all"||(filterSvc==="connected"&&s.status==="connected")||(filterSvc==="running"&&s.status==="running")||(filterSvc==="attention"&&(s.health==="degraded"||s.health==="disconnected")))
                   .map(svc=>{
                   const hc=HEALTH_COLOR[svc.health]||T.textMuted;
@@ -15566,7 +15576,7 @@ const SettingsView = ({onToast})=>{
             </>}
 
             {section==="sso"&&<>
-              <SettSH icon={Ic.sso(16)} title="LDAP" desc="Connect your LDAP server to enable single sign-on, auto-provision users, sync teams, and assign roles."/>
+              <SettSH icon={Ic.sso(16)} title="SSO" desc="Connect your LDAP server to enable single sign-on, auto-provision users, sync teams, and assign roles."/>
 
               {/* LDAP card */}
               <div style={{display:"flex",alignItems:"center",gap:16,padding:"18px 20px",background:T.bgSurface,border:`1.5px solid ${ldapSaved?T.accent:T.border}`,borderRadius:12,transition:"border-color .2s"}}>
