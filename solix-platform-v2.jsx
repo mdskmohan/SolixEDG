@@ -10469,7 +10469,6 @@ const LoginScreen = ({onLogin}) => {
   const [error,    setError]    = useState("");
   const [showPw,   setShowPw]   = useState(false);
   const [selectedRole, setSelectedRole] = useState("");
-  const [selectedRole, setSelectedRole] = useState("");
 
   // Demo accounts mapped to roles
   const DEMO_ACCOUNTS = {
