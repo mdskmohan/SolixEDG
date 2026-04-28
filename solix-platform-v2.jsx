@@ -10468,6 +10468,8 @@ const LoginScreen = ({onLogin}) => {
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState("");
   const [showPw,   setShowPw]   = useState(false);
+  const [selectedRole, setSelectedRole] = useState("");
+  const [selectedRole, setSelectedRole] = useState("");
 
   // Demo accounts mapped to roles
   const DEMO_ACCOUNTS = {
@@ -10478,6 +10480,11 @@ const LoginScreen = ({onLogin}) => {
     "sarah.kim@jnj.com":    {role:"viewer",   pw:"viewer123"},
   };
 
+  const handleEmailBlur = () => {
+    const acc = DEMO_ACCOUNTS[email.toLowerCase().trim()];
+    if(acc && !selectedRole) setSelectedRole(acc.role);
+  };
+
   const handleSubmit = () => {
     setError("");
     if(!email.trim()) { setError("Email is required"); return; }
@@ -10486,7 +10493,7 @@ const LoginScreen = ({onLogin}) => {
     setTimeout(()=>{
       const account = DEMO_ACCOUNTS[email.toLowerCase().trim()];
       if(account && account.pw === password) {
-        onLogin(account.role);
+        onLogin(selectedRole || account.role);
       } else if(DEMO_ACCOUNTS[email.toLowerCase().trim()]) {
         setError("Incorrect password. Try the demo password shown below.");
         setLoading(false);
@@ -10580,8 +10587,22 @@ const LoginScreen = ({onLogin}) => {
               placeholder="you@jnj.com"
               style={{width:"100%",padding:"10px 13px",background:T.bgSurface,border:`1.5px solid ${error&&!email?T.rose:T.border}`,borderRadius:9,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box",transition:"border-color .15s"}}
               onFocus={e=>e.target.style.borderColor=T.accent}
-              onBlur={e=>e.target.style.borderColor=error&&!email?T.rose:T.border}
+              onBlur={e=>{handleEmailBlur();e.target.style.borderColor=error&&!email?T.rose:T.border;}}
             />
+          </div>
+
+          {/* Role */}
+          <div style={{marginBottom:16}}>
+            <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>Role</label>
+            <select value={selectedRole} onChange={e=>setSelectedRole(e.target.value)}
+              style={{width:"100%",padding:"10px 13px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,
+                color:selectedRole?T.text:T.textMuted,fontSize:13,outline:"none",boxSizing:"border-box",cursor:"pointer",transition:"border-color .15s"}}
+              onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}>
+              <option value="">Select your role…</option>
+              {Object.entries(ROLES_CONFIG).map(([k,cfg])=>(
+                <option key={k} value={k}>{cfg.label}</option>
+              ))}
+            </select>
           </div>
 
           {/* Password */}
@@ -10635,41 +10656,11 @@ const LoginScreen = ({onLogin}) => {
             }
           </button>
 
-          {/* Divider */}
-          <div style={{display:"flex",alignItems:"center",gap:12,margin:"28px 0 20px"}}>
-            <div style={{flex:1,height:1,background:T.border}}/>
-            <span style={{fontSize:11,color:T.textMuted,fontWeight:500}}>DEMO ACCOUNTS</span>
-            <div style={{flex:1,height:1,background:T.border}}/>
-          </div>
-
-          {/* Role quick-login cards */}
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            <div style={{fontSize:11,color:T.textMuted,marginBottom:4}}>
-              Click any role to auto-fill credentials and see how the UI adapts:
+          {/* Demo hint */}
+          <div style={{marginTop:20,padding:"10px 13px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>
+            <div style={{fontSize:11,color:T.textMuted,lineHeight:1.6}}>
+              <strong style={{color:T.textSub}}>Demo credentials —</strong> enter a demo email (e.g. <span style={{fontFamily:"'Geist Mono',monospace"}}>alex.rivera@jnj.com</span>), the role auto-fills. Password: <span style={{fontFamily:"'Geist Mono',monospace"}}>role + 123</span> (e.g. <span style={{fontFamily:"'Geist Mono',monospace"}}>admin123</span>).
             </div>
-            {Object.entries(ROLES_CONFIG).map(([roleKey, cfg])=>(
-              <button key={roleKey} onClick={()=>quickLogin(roleKey)} style={{
-                display:"flex",alignItems:"center",gap:12,padding:"10px 13px",
-                background:email===cfg.email?cfg.badge:T.bgSurface,
-                border:`1.5px solid ${email===cfg.email?cfg.color+"55":T.border}`,
-                borderRadius:9,cursor:"pointer",textAlign:"left",transition:"all .15s",width:"100%",
-              }}
-                onMouseEnter={e=>{if(email!==cfg.email){e.currentTarget.style.background=T.bgHover;e.currentTarget.style.borderColor=T.borderLight;}}}
-                onMouseLeave={e=>{if(email!==cfg.email){e.currentTarget.style.background=T.bgSurface;e.currentTarget.style.borderColor=T.border;}}}
-              >
-                <div style={{width:32,height:32,borderRadius:8,background:cfg.badge,border:`1px solid ${cfg.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:cfg.color,flexShrink:0}}>
-                  {cfg.avatar}
-                </div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{display:"flex",alignItems:"center",gap:7}}>
-                    <span style={{fontSize:12,fontWeight:600,color:T.text}}>{cfg.label}</span>
-                    <span style={{fontSize:10,color:cfg.color,background:cfg.badge,padding:"1px 6px",borderRadius:4,fontWeight:600}}>{cfg.label}</span>
-                  </div>
-                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cfg.email}</div>
-                </div>
-                {email===cfg.email && <span style={{color:T.accent,display:"flex",flexShrink:0}}>{Ic.check(12)}</span>}
-              </button>
-            ))}
           </div>
         </div>
       </div>
@@ -12843,7 +12834,13 @@ const TeamsSection = ({onToast}) => {
   const [inviteRoles,   setInviteRoles]   = useState([]);
   const [inviteTeams,   setInviteTeams]   = useState([]);
 
+  const [memberPage,     setMemberPage]     = useState(1);
+  const MEMBER_PS = 10;
+
   // ── Teams tab state ──
+  const [teamSearch,      setTeamSearch]      = useState("");
+  const [teamPage,        setTeamPage]        = useState(1);
+  const TEAM_PS = 6;
   const [teamDetail,        setTeamDetail]        = useState(null);
   const [createTeamModal,   setCreateTeamModal]   = useState(false);
   const [newTeamName,       setNewTeamName]       = useState("");
@@ -12855,6 +12852,11 @@ const TeamsSection = ({onToast}) => {
   const [editTeamName,      setEditTeamName]      = useState("");
   const [editTeamDesc,      setEditTeamDesc]      = useState("");
 
+  const pagedMembers   = filteredMembers.slice((memberPage-1)*MEMBER_PS, memberPage*MEMBER_PS);
+  const totalMemberPages = Math.max(1,Math.ceil(filteredMembers.length/MEMBER_PS));
+  const filteredTeams    = teams.filter(t=>!teamSearch||t.name.toLowerCase().includes(teamSearch.toLowerCase())||t.desc.toLowerCase().includes(teamSearch.toLowerCase()));
+  const pagedTeams       = filteredTeams.slice((teamPage-1)*TEAM_PS, teamPage*TEAM_PS);
+  const totalTeamPages   = Math.max(1,Math.ceil(filteredTeams.length/TEAM_PS));
   const teamNames = teams.map(t => t.name);
 
   const filteredMembers = members.filter(m => {
@@ -12862,6 +12864,12 @@ const TeamsSection = ({onToast}) => {
     const matchTeam   = selectedTeam === "all" || (m.teams||[]).includes(selectedTeam);
     return matchSearch && matchTeam;
   });
+
+  const pagedMembers     = filteredMembers.slice((memberPage-1)*MEMBER_PS, memberPage*MEMBER_PS);
+  const totalMemberPages = Math.max(1,Math.ceil(filteredMembers.length/MEMBER_PS));
+  const filteredTeams    = teams.filter(t=>!teamSearch||t.name.toLowerCase().includes(teamSearch.toLowerCase())||t.desc.toLowerCase().includes(teamSearch.toLowerCase()));
+  const pagedTeams       = filteredTeams.slice((teamPage-1)*TEAM_PS, teamPage*TEAM_PS);
+  const totalTeamPages   = Math.max(1,Math.ceil(filteredTeams.length/TEAM_PS));
 
   const teamCounts = teams.reduce((acc,t) => ({...acc,[t.name]:members.filter(m=>(m.teams||[]).includes(t.name)).length}), {});
 
@@ -12996,7 +13004,7 @@ const TeamsSection = ({onToast}) => {
       </div>
       {/* Search */}
       <div style={{marginBottom:14}}>
-        <Input2 placeholder="Search by name or email…" value={memberSearch} onChange={e=>setMemberSearch(e.target.value)} icon={Ic.search(12)} style={{width:"100%"}}/>
+        <Input2 placeholder="Search by name or email…" value={memberSearch} onChange={e=>{setMemberSearch(e.target.value);setMemberPage(1);}} icon={Ic.search(12)} style={{width:"100%"}}/>
       </div>
       {/* Members table */}
       <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
@@ -13006,8 +13014,8 @@ const TeamsSection = ({onToast}) => {
           ))}
         </div>
         {filteredMembers.length===0&&<div style={{padding:"32px 0",textAlign:"center",color:T.textMuted,fontSize:12}}>No members match your search</div>}
-        {filteredMembers.map((m,i)=>(
-          <div key={m.id} style={{display:"grid",gridTemplateColumns:"1.8fr 2fr 2fr 0.8fr 0.7fr 60px",padding:"11px 14px",borderBottom:i<filteredMembers.length-1?`1px solid ${T.border}`:"none",alignItems:"center",transition:"background .1s"}}
+        {pagedMembers.map((m,i)=>(
+          <div key={m.id} style={{display:"grid",gridTemplateColumns:"1.8fr 2fr 2fr 0.8fr 0.7fr 60px",padding:"11px 14px",borderBottom:i<pagedMembers.length-1?`1px solid ${T.border}`:"none",alignItems:"center",transition:"background .1s"}}
             onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
             onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
             {/* Member */}
@@ -13056,19 +13064,29 @@ const TeamsSection = ({onToast}) => {
           </div>
         ))}
       </div>
+      {totalMemberPages>1&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10}}>
+        <span style={{fontSize:11,color:T.textMuted}}>{filteredMembers.length} member{filteredMembers.length!==1?"s":""} · page {memberPage}/{totalMemberPages}</span>
+        <div style={{display:"flex",gap:4}}>
+          <button onClick={()=>setMemberPage(p=>Math.max(1,p-1))} disabled={memberPage===1} style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:memberPage===1?T.textMuted:T.text,fontSize:11,cursor:memberPage===1?"default":"pointer"}}>← Prev</button>
+          <button onClick={()=>setMemberPage(p=>Math.min(totalMemberPages,p+1))} disabled={memberPage===totalMemberPages} style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:memberPage===totalMemberPages?T.textMuted:T.text,fontSize:11,cursor:memberPage===totalMemberPages?"default":"pointer"}}>Next →</button>
+        </div>
+      </div>}
     </>}
 
     {/* ════════ TEAMS TAB ════════ */}
     {activeTab==="teams"&&<>
-      {teams.length===0&&(
+      <div style={{marginBottom:14}}>
+        <Input2 placeholder="Search teams…" value={teamSearch} onChange={e=>{setTeamSearch(e.target.value);setTeamPage(1);}} icon={Ic.search(12)} style={{width:"100%"}}/>
+      </div>
+      {filteredTeams.length===0&&(
         <div style={{textAlign:"center",padding:"60px 20px",color:T.textMuted}}>
-          <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:6}}>No teams yet</div>
-          <div style={{fontSize:12,marginBottom:16}}>Create a team to group users by function and assign them permissions.</div>
-          <AddBtn label="Create your first team" onClick={()=>setCreateTeamModal(true)}/>
+          <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:6}}>{teamSearch?"No teams match your search":"No teams yet"}</div>
+          {!teamSearch&&<><div style={{fontSize:12,marginBottom:16}}>Create a team to group users by function and assign them permissions.</div>
+          <AddBtn label="Create your first team" onClick={()=>setCreateTeamModal(true)}/></>}
         </div>
       )}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:14}}>
-        {teams.map(team=>{
+        {pagedTeams.map(team=>{
           const tMembers = members.filter(m=>(m.teams||[]).includes(team.name));
           const visibleAvatars = tMembers.slice(0,4);
           const overflow = tMembers.length-4;
@@ -13119,6 +13137,13 @@ const TeamsSection = ({onToast}) => {
           );
         })}
       </div>
+      {totalTeamPages>1&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10}}>
+        <span style={{fontSize:11,color:T.textMuted}}>{filteredTeams.length} team{filteredTeams.length!==1?"s":""} · page {teamPage}/{totalTeamPages}</span>
+        <div style={{display:"flex",gap:4}}>
+          <button onClick={()=>setTeamPage(p=>Math.max(1,p-1))} disabled={teamPage===1} style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:teamPage===1?T.textMuted:T.text,fontSize:11,cursor:teamPage===1?"default":"pointer"}}>← Prev</button>
+          <button onClick={()=>setTeamPage(p=>Math.min(totalTeamPages,p+1))} disabled={teamPage===totalTeamPages} style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:teamPage===totalTeamPages?T.textMuted:T.text,fontSize:11,cursor:teamPage===totalTeamPages?"default":"pointer"}}>Next →</button>
+        </div>
+      </div>}
     </>}
 
     {/* ════════ MODALS ════════ */}
@@ -13427,6 +13452,28 @@ const AccessSection = ({onToast}) => {
     {label:"Has certification",      value:"matchAnyCertification()"},
     {label:"Custom expression",      value:"__custom__"},
   ];
+  const MENUS = [
+    {label:"Connections",    value:"connections",   resources:["connection","databaseService","messagingService","dashboardService","pipeline","ingestionPipeline"]},
+    {label:"Asset Catalog",  value:"catalog",       resources:["database","databaseSchema","table","container","dashboard","topic","mlmodel","searchIndex","query","storedProcedure"]},
+    {label:"Stewardship",    value:"stewardship",   resources:["stewardshipInbox","accessRequest","certification","domain","dataProduct","dataContract"]},
+    {label:"Data Quality",   value:"quality",       resources:["testCase","testSuite","testDefinition","kpi","metric"]},
+    {label:"Glossary",       value:"glossary",      resources:["glossary","glossaryTerm","tag","classification"]},
+    {label:"Users & Teams",  value:"usersTeams",    resources:["user","team"]},
+    {label:"Access Control", value:"access",        resources:["role","policy"]},
+    {label:"Settings",       value:"settings",      resources:["settings","workflow"]},
+  ];
+
+  const MENUS = [
+    {label:"Connections",    value:"connections",   resources:["connection","databaseService","messagingService","dashboardService","pipeline","ingestionPipeline"]},
+    {label:"Asset Catalog",  value:"catalog",       resources:["database","databaseSchema","table","container","dashboard","topic","mlmodel","searchIndex","query","storedProcedure"]},
+    {label:"Stewardship",    value:"stewardship",   resources:["stewardshipInbox","accessRequest","certification","domain","dataProduct","dataContract"]},
+    {label:"Data Quality",   value:"quality",       resources:["testCase","testSuite","testDefinition","kpi","metric"]},
+    {label:"Glossary",       value:"glossary",      resources:["glossary","glossaryTerm","tag","classification"]},
+    {label:"Users & Teams",  value:"usersTeams",    resources:["user","team"]},
+    {label:"Access Control", value:"access",        resources:["role","policy"]},
+    {label:"Settings",       value:"settings",      resources:["settings","workflow"]},
+  ];
+
   const ROLE_COLORS_AC = {Admin:"#ee2424","Connection Admin":"#0891b2","Steward":"#d97706","Viewer":"#7c3aed"};
   const ROLE_PALETTE   = ["#ee2424","#d97706","#0284c7","#7c3aed","#16a34a","#0891b2","#db2777","#4b4b60"];
 
@@ -13500,7 +13547,29 @@ const AccessSection = ({onToast}) => {
   const [newPolDesc,      setNewPolDesc]      = useState("");
   const [newPolRules,     setNewPolRules]     = useState([]);
   // Rule form
-  const [rf, setRf] = useState({name:"",desc:"",effect:"allow",resources:[],operations:[],condition:"",condParam:"",editId:null});
+  const [rf, setRf] = useState({name:"",desc:"",effect:"allow",menu:"",resources:[],operations:[],condition:"",condParam:"",editId:null});
+
+  const [acSearch,   setAcSearch]   = useState("");
+  const [acRolePage, setAcRolePage] = useState(1);
+  const [acPolPage,  setAcPolPage]  = useState(1);
+  const AC_PS = 5;
+  const acRoleList = roles.filter(r=>!acSearch||r.name.toLowerCase().includes(acSearch.toLowerCase())||r.desc.toLowerCase().includes(acSearch.toLowerCase()));
+  const acPolList  = policies.filter(p=>!acSearch||p.name.toLowerCase().includes(acSearch.toLowerCase())||p.desc.toLowerCase().includes(acSearch.toLowerCase()));
+  const pagedRoles    = acRoleList.slice((acRolePage-1)*AC_PS, acRolePage*AC_PS);
+  const pagedPolicies = acPolList.slice((acPolPage-1)*AC_PS, acPolPage*AC_PS);
+  const totalRolePages = Math.max(1,Math.ceil(acRoleList.length/AC_PS));
+  const totalPolPages  = Math.max(1,Math.ceil(acPolList.length/AC_PS));
+
+  const [acSearch,   setAcSearch]   = useState("");
+  const [acRolePage, setAcRolePage] = useState(1);
+  const [acPolPage,  setAcPolPage]  = useState(1);
+  const AC_PS = 5;
+  const acRoleList = roles.filter(r=>!acSearch||r.name.toLowerCase().includes(acSearch.toLowerCase())||r.desc.toLowerCase().includes(acSearch.toLowerCase()));
+  const acPolList  = policies.filter(p=>!acSearch||p.name.toLowerCase().includes(acSearch.toLowerCase())||p.desc.toLowerCase().includes(acSearch.toLowerCase()));
+  const pagedRoles    = acRoleList.slice((acRolePage-1)*AC_PS, acRolePage*AC_PS);
+  const pagedPolicies = acPolList.slice((acPolPage-1)*AC_PS, acPolPage*AC_PS);
+  const totalRolePages = Math.max(1,Math.ceil(acRoleList.length/AC_PS));
+  const totalPolPages  = Math.max(1,Math.ceil(acPolList.length/AC_PS));
 
   const currentRole   = roles.find(r=>r.id===roleDetail);
   const currentPolicy = policies.find(p=>p.id===policyDetail);
@@ -13560,9 +13629,9 @@ const AccessSection = ({onToast}) => {
     setRuleModal({policyId});
     if(rule) {
       const {condition,condParam} = parseCondition(rule.condition);
-      setRf({name:rule.name,desc:rule.desc,effect:rule.effect,resources:[...rule.resources],operations:[...rule.operations],condition,condParam,editId:rule.id});
+      setRf({name:rule.name,desc:rule.desc,effect:rule.effect,menu:rule.menu||"",resources:[...rule.resources],operations:[...rule.operations],condition,condParam,editId:rule.id});
     } else {
-      setRf({name:"",desc:"",effect:"allow",resources:[],operations:[],condition:"",condParam:"",editId:null});
+      setRf({name:"",desc:"",effect:"allow",menu:"",resources:[],operations:[],condition:"",condParam:"",editId:null});
     }
   };
   const handleSaveRule = () => {
@@ -13579,7 +13648,7 @@ const AccessSection = ({onToast}) => {
         cond = rf.condition;
       }
     }
-    const rule = {id:rf.editId||`rl${Date.now()}`,name:rf.name,desc:rf.desc,effect:rf.effect,resources:rf.resources,operations:rf.operations,condition:cond};
+    const rule = {id:rf.editId||`rl${Date.now()}`,name:rf.name,desc:rf.desc,effect:rf.effect,menu:rf.menu,resources:rf.resources,operations:rf.operations,condition:cond};
     if(ruleModal.policyId==="__new__") {
       setNewPolRules(prev=>rf.editId ? prev.map(r=>r.id===rf.editId?rule:r) : [...prev,rule]);
     } else {
@@ -13648,10 +13717,19 @@ const AccessSection = ({onToast}) => {
       }
     </div>
 
+    {/* AC search */}
+    <div style={{marginBottom:14}}>
+      <input value={acSearch} onChange={e=>{setAcSearch(e.target.value);setAcRolePage(1);setAcPolPage(1);}}
+        placeholder="Search roles or policies…"
+        style={{width:"100%",padding:"9px 13px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",transition:"border-color .15s"}}
+        onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+    </div>
+
     {/* ════ ROLES TAB ════ */}
     {activeTab==="roles"&&(
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
-        {roles.map(role=>{
+        {acRoleList.length===0&&<div style={{textAlign:"center",padding:"32px 0",fontSize:12,color:T.textMuted}}>No roles match your search</div>}
+        {pagedRoles.map(role=>{
           const rPolicies = policies.filter(p=>role.policyIds.includes(p.id));
           return (
             <div key={role.id}
@@ -13711,12 +13789,20 @@ const AccessSection = ({onToast}) => {
           );
         })}
       </div>
+      {totalRolePages>1&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10,paddingTop:10,borderTop:`1px solid ${T.border}`}}>
+        <span style={{fontSize:11,color:T.textMuted}}>{acRoleList.length} role{acRoleList.length!==1?"s":""} · page {acRolePage}/{totalRolePages}</span>
+        <div style={{display:"flex",gap:4}}>
+          <button onClick={()=>setAcRolePage(p=>Math.max(1,p-1))} disabled={acRolePage===1} style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:acRolePage===1?T.textMuted:T.text,fontSize:11,cursor:acRolePage===1?"default":"pointer"}}>← Prev</button>
+          <button onClick={()=>setAcRolePage(p=>Math.min(totalRolePages,p+1))} disabled={acRolePage===totalRolePages} style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:acRolePage===totalRolePages?T.textMuted:T.text,fontSize:11,cursor:acRolePage===totalRolePages?"default":"pointer"}}>Next →</button>
+        </div>
+      </div>}
     )}
 
     {/* ════ POLICIES TAB ════ */}
     {activeTab==="policies"&&(
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
-        {policies.map(policy=>(
+        {acPolList.length===0&&<div style={{textAlign:"center",padding:"32px 0",fontSize:12,color:T.textMuted}}>No policies match your search</div>}
+        {pagedPolicies.map(policy=>(
           <div key={policy.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
             {/* Policy header */}
             <div style={{display:"flex",alignItems:"center",gap:14,padding:"14px 18px"}}>
@@ -13778,7 +13864,13 @@ const AccessSection = ({onToast}) => {
             )}
           </div>
         ))}
-      </div>
+      {totalPolPages>1&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10,paddingTop:10,borderTop:`1px solid ${T.border}`}}>
+        <span style={{fontSize:11,color:T.textMuted}}>{acPolList.length} polic{acPolList.length!==1?"ies":"y"} · page {acPolPage}/{totalPolPages}</span>
+        <div style={{display:"flex",gap:4}}>
+          <button onClick={()=>setAcPolPage(p=>Math.max(1,p-1))} disabled={acPolPage===1} style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:acPolPage===1?T.textMuted:T.text,fontSize:11,cursor:acPolPage===1?"default":"pointer"}}>← Prev</button>
+          <button onClick={()=>setAcPolPage(p=>Math.min(totalPolPages,p+1))} disabled={acPolPage===totalPolPages} style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:acPolPage===totalPolPages?T.textMuted:T.text,fontSize:11,cursor:acPolPage===totalPolPages?"default":"pointer"}}>Next →</button>
+        </div>
+      </div>}
     )}
 
     {/* ════ MODALS ════ */}
@@ -14196,9 +14288,22 @@ const AccessSection = ({onToast}) => {
             </div>
 
             <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:20}}>
+              {/* Menu picker */}
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7,letterSpacing:.2}}>
+                  Menu <span style={{color:T.textMuted,fontWeight:400}}>(optional — filters resources)</span>
+                </label>
+                <select value={rf.menu} onChange={e=>setRf(f=>({...f,menu:e.target.value,resources:[]}))}
+                  style={{width:"100%",padding:"10px 13px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,
+                    color:rf.menu?T.text:T.textMuted,fontSize:13,outline:"none",boxSizing:"border-box",cursor:"pointer",transition:"border-color .15s"}}
+                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}>
+                  <option value="">All resources (no filter)</option>
+                  {MENUS.map(m=><option key={m.value} value={m.value}>{m.label}</option>)}
+                </select>
+              </div>
               <RuleMultiSelect
                 label="Resources" required
-                flat={RESOURCES}
+                flat={rf.menu?(MENUS.find(m=>m.value===rf.menu)?.resources||RESOURCES):RESOURCES}
                 selected={rf.resources}
                 onChange={v=>setRf(f=>({...f,resources:v}))}
                 placeholder="Select resources…"
@@ -15484,7 +15589,7 @@ const SettingsView = ({onToast})=>{
             </>}
 
             {section==="sso"&&<>
-              <SettSH icon={Ic.sso(16)} title="SSO / LDAP" desc="Connect your Active Directory or LDAP server to enable single sign-on, auto-provision users, sync teams, and assign roles."/>
+              <SettSH icon={Ic.sso(16)} title="LDAP" desc="Connect your LDAP server to enable single sign-on, auto-provision users, sync teams, and assign roles."/>
 
               {/* LDAP card */}
               <div style={{display:"flex",alignItems:"center",gap:16,padding:"18px 20px",background:T.bgSurface,border:`1.5px solid ${ldapSaved?T.accent:T.border}`,borderRadius:12,transition:"border-color .2s"}}>
@@ -15492,11 +15597,11 @@ const SettingsView = ({onToast})=>{
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M8 21h8M12 17v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="10" r="2" stroke="currentColor" strokeWidth="1.3"/><path d="M13 9h4M13 11h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
                 </div>
                 <div style={{flex:1}}>
-                  <div style={{fontSize:14,fontWeight:700,color:T.text}}>LDAP / Active Directory</div>
+                  <div style={{fontSize:14,fontWeight:700,color:T.text}}>LDAP</div>
                   <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>
                     {ldapSaved
                       ? `Connected · ${ldapForm.url||"ldap://configured"} · users auto-provisioned on login`
-                      : "Directory-based authentication — connect once to auto-create users, sync teams, and assign roles"}
+                      : "LDAP-based authentication — connect once to auto-create users, sync teams, and assign roles"}
                   </div>
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
@@ -15529,7 +15634,7 @@ const SettingsView = ({onToast})=>{
                           </div>
                           <div>
                             <div style={{fontSize:14,fontWeight:700,color:T.text}}>LDAP Configuration</div>
-                            <div style={{fontSize:11,color:T.textMuted}}>Active Directory / OpenLDAP</div>
+                            <div style={{fontSize:11,color:T.textMuted}}>LDAP Server</div>
                           </div>
                         </div>
                         <button onClick={()=>setLdapPanelOpen(false)} style={{width:28,height:28,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
