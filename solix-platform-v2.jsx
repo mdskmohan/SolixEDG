@@ -7617,87 +7617,279 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
   );
 };
 
-// ── Lightweight detail page for file assets (Object / Blob) ──
+// ── Detail page for file assets (Object / Blob) ──
 const FileAssetDetail = ({asset, onBack, onToast}) => {
-  const [desc,setDesc] = useState(asset.description||"");
-  const [editing,setEditing] = useState(false);
-  const FILE_FORMAT_COLORS = {CSV:"#16a34a",Parquet:"#0891b2",JSON:"#d97706",ORC:"#7c3aed"};
+  const [desc,      setDesc]      = useState(asset.description||"");
+  const [editing,   setEditing]   = useState(false);
+  const [tab,       setTab]       = useState("overview");
+  const FILE_FORMAT_COLORS = {CSV:"#16a34a",Parquet:"#0891b2",JSON:"#d97706",JSON_LINES:"#d97706",ORC:"#7c3aed",Avro:"#0891b2",Delta:"#ff3621"};
   const fc = FILE_FORMAT_COLORS[asset.fileFormat]||"#6b7280";
-  const MetaRow = ({label,value})=>(
-    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",padding:"9px 0",borderBottom:`1px solid ${T.border}`,fontSize:12,gap:16}}>
-      <span style={{color:T.textMuted,flexShrink:0,minWidth:100}}>{label}</span>
-      <span style={{color:T.text,textAlign:"right",fontFamily:["Size","Last Modified","Storage Class","Access Tier","Format"].includes(label)?"'Geist Mono',monospace":"inherit"}}>{value||"—"}</span>
+
+  const SLabel = ({children})=>(
+    <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:7}}>{children}</div>
+  );
+  const MetaRow = ({label,value,mono})=>(
+    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",padding:"8px 0",borderBottom:`1px solid ${T.border}`,fontSize:12,gap:16}}>
+      <span style={{color:T.textMuted,flexShrink:0}}>{label}</span>
+      <span style={{color:T.text,textAlign:"right",fontFamily:mono?"'Geist Mono',monospace":"inherit",fontSize:mono?11.5:12}}>{value||"—"}</span>
     </div>
   );
+  const Avatar = ({name,size=22})=>{
+    const initials = (name||"").split(".").map(s=>s[0]?.toUpperCase()||"").join("").slice(0,2);
+    return <div style={{width:size,height:size,borderRadius:Math.floor(size/3),background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*0.32,fontWeight:700,color:T.accent,flexShrink:0}}>{initials}</div>;
+  };
+
+  const TABS = [{id:"overview",label:"Overview"},{id:"properties",label:"Properties"},{id:"lineage",label:"Lineage"}];
+
+  const formatDate = (iso) => {
+    if(!iso) return "—";
+    try { return new Date(iso).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric",hour:"2-digit",minute:"2-digit"}); }
+    catch{ return iso; }
+  };
+
+  const usageColor = {High:T.accent,Med:T.amber,Low:T.textMuted}[asset.usage]||T.textMuted;
+
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
       <Topbar breadcrumb={[{label:"Data Catalog",onClick:onBack},{label:asset.name}]}/>
-      <div style={{background:T.bgSurface,borderBottom:`1px solid ${T.border}`,flexShrink:0,padding:"16px 28px 16px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-          <TypeBadge type={asset.type}/>
-          {asset.fileFormat&&<span style={{fontSize:10,fontWeight:700,padding:"2px 6px",borderRadius:4,background:`${fc}18`,color:fc,border:`1px solid ${fc}33`}}>{asset.fileFormat}</span>}
-          <span style={{fontSize:11.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{(asset.path||[]).join(" / ")}</span>
+
+      {/* ── Hero header ── */}
+      <div style={{background:T.bgSurface,borderBottom:`1px solid ${T.border}`,flexShrink:0,padding:"20px 28px 0"}}>
+        <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:16}}>
+          {/* Service icon */}
+          <div style={{width:52,height:52,borderRadius:13,background:`${fc}12`,border:`1.5px solid ${fc}30`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:2}}>
+            <ServiceIcon service={asset.service} size={30}/>
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:6,flexWrap:"wrap"}}>
+              <TypeBadge type={asset.type}/>
+              {asset.fileFormat&&<span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:4,background:`${fc}18`,color:fc,border:`1px solid ${fc}33`}}>{asset.fileFormat}</span>}
+              <CertBadge cert={asset.cert}/>
+              <TierBadge tier={asset.tier}/>
+              <span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:4,background:T.bgElevated,color:usageColor,border:`1px solid ${T.border}`}}>Usage: {asset.usage}</span>
+              {asset.slaFreshness&&<span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:4,background:"rgba(99,102,241,.08)",color:T.accent,border:`1px solid ${T.accent}22`}}>SLA {asset.slaFreshness}</span>}
+            </div>
+            <h2 style={{fontSize:18,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,letterSpacing:"-0.03em",margin:"0 0 6px",lineHeight:1.2}}>{asset.name}</h2>
+            {/* Path breadcrumb */}
+            <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
+              <span style={{fontSize:11,color:T.textMuted}}>{asset.connectionLabel}</span>
+              {(asset.path||[]).map((seg,i)=>(
+                <React.Fragment key={i}>
+                  <svg width="8" height="8" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,flexShrink:0,opacity:.5}}><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                  <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{seg}</span>
+                </React.Fragment>
+              ))}
+              <svg width="8" height="8" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,flexShrink:0,opacity:.5}}><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600}}>{asset.name}</span>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:6,flexShrink:0,marginTop:4}}>
+            <Btn ghost small onClick={()=>onToast("Copied link","success")}>Copy Link</Btn>
+            <Btn variant="primary" small onClick={()=>onToast("Editing…","info")}>Edit</Btn>
+          </div>
         </div>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
-          <h2 style={{fontSize:20,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,letterSpacing:"-0.04em",margin:0}}>{asset.name}</h2>
-          <ServiceIcon service={asset.service} size={28}/>
+
+        {/* Tab bar */}
+        <div style={{display:"flex",gap:0,borderTop:`1px solid ${T.border}`,marginLeft:-28,marginRight:-28,paddingLeft:28}}>
+          {TABS.map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:"10px 16px",background:"transparent",border:"none",marginBottom:-1,borderBottom:`2px solid ${tab===t.id?T.accent:"transparent"}`,color:tab===t.id?T.text:T.textSub,fontSize:12.5,fontWeight:tab===t.id?600:400,cursor:"pointer",transition:"all .12s",whiteSpace:"nowrap"}}>
+              {t.label}
+            </button>
+          ))}
         </div>
       </div>
-      <div style={{flex:1,overflow:"auto",padding:"24px 28px",display:"flex",gap:24,alignItems:"flex-start"}}>
-        {/* Main content */}
-        <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:16}}>
-          <Card2>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-              <h3 style={{fontSize:13,fontWeight:600,color:T.text,margin:0}}>Description</h3>
-              <button onClick={()=>{ if(editing)onToast("Description saved","success"); setEditing(e=>!e); }}
-                style={{fontSize:11.5,color:editing?T.accent:T.textMuted,background:"none",border:"none",cursor:"pointer",padding:"2px 6px"}}>
-                {editing?"Save":"Edit"}
-              </button>
-            </div>
-            {editing
-              ? <textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={3}
-                  style={{width:"100%",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:7,color:T.text,fontSize:13,padding:"8px 10px",resize:"vertical",outline:"none",boxSizing:"border-box",fontFamily:"inherit",lineHeight:1.5}}/>
-              : <p style={{fontSize:13,color:desc?T.textSub:T.textMuted,lineHeight:1.6,margin:0,fontStyle:desc?"normal":"italic"}}>{desc||"No description. Click Edit to add one."}</p>
-            }
-          </Card2>
-          <Card2>
-            <h3 style={{fontSize:13,fontWeight:600,color:T.text,margin:"0 0 4px"}}>File Metadata</h3>
-            <MetaRow label="Format" value={asset.fileFormat}/>
-            <MetaRow label="Size" value={asset.size}/>
-            <MetaRow label="Last Modified" value={asset.lastModified}/>
-            {asset.storageClass&&<MetaRow label="Storage Class" value={asset.storageClass}/>}
-            {asset.accessTier&&<MetaRow label="Access Tier" value={asset.accessTier}/>}
-            <MetaRow label="Domain" value={asset.domain}/>
-            <MetaRow label="Owner" value={asset.owner}/>
-          </Card2>
-          {(asset.tags||[]).length>0&&(
-            <Card2>
-              <h3 style={{fontSize:13,fontWeight:600,color:T.text,margin:"0 0 10px"}}>Tags</h3>
-              <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                {asset.tags.map(t=><span key={t} style={{fontSize:11,padding:"2px 8px",borderRadius:99,background:t==="PII"?T.roseDim:T.bgHover,color:t==="PII"?T.rose:T.textMuted,border:`1px solid ${t==="PII"?"rgba(253,164,175,.25)":T.border}`}}>{t}</span>)}
+
+      {/* ── Body ── */}
+      <div style={{flex:1,overflow:"auto",padding:"24px 28px",display:"flex",gap:22,alignItems:"flex-start"}}>
+
+        {/* ── OVERVIEW TAB ── */}
+        {tab==="overview"&&<>
+          <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:14}}>
+
+            {/* Description */}
+            <Card2 style={{padding:"16px 18px"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                <span style={{fontSize:13,fontWeight:600,color:T.text}}>Description</span>
+                <button onClick={()=>{ if(editing)onToast("Description saved","success"); setEditing(e=>!e); }}
+                  style={{fontSize:11.5,color:editing?T.accent:T.textMuted,background:"none",border:`1px solid ${editing?T.accent:T.border}`,borderRadius:6,cursor:"pointer",padding:"3px 10px",transition:"all .15s"}}>
+                  {editing?"Save":"Edit"}
+                </button>
+              </div>
+              {editing
+                ? <textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={4}
+                    style={{width:"100%",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:7,color:T.text,fontSize:13,padding:"9px 11px",resize:"vertical",outline:"none",boxSizing:"border-box",fontFamily:"inherit",lineHeight:1.6}}/>
+                : <p style={{fontSize:13,color:desc?T.textSub:T.textMuted,lineHeight:1.7,margin:0,fontStyle:desc?"normal":"italic"}}>{desc||"No description yet — click Edit to add one."}</p>
+              }
+            </Card2>
+
+            {/* Tags */}
+            <Card2 style={{padding:"16px 18px"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                <span style={{fontSize:13,fontWeight:600,color:T.text}}>Tags</span>
+                <button onClick={()=>onToast("Tag editor coming soon","info")} style={{fontSize:11,color:T.textMuted,background:"none",border:`1px solid ${T.border}`,borderRadius:6,cursor:"pointer",padding:"2px 8px",display:"flex",alignItems:"center",gap:4}}>
+                  <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg> Add
+                </button>
+              </div>
+              {(asset.tags||[]).length===0
+                ? <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags applied</span>
+                : <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {asset.tags.map(t=>(
+                      <span key={t} style={{fontSize:11.5,padding:"3px 10px",borderRadius:99,background:t==="PII"?T.roseDim:T.bgHover,color:t==="PII"?T.rose:T.textSub,border:`1px solid ${t==="PII"?"rgba(253,164,175,.25)":T.border}`,fontWeight:t==="PII"?700:400}}>
+                        {t==="PII"&&"🔒 "}{t}
+                      </span>
+                    ))}
+                  </div>
+              }
+            </Card2>
+
+            {/* Ownership */}
+            <Card2 style={{padding:"16px 18px"}}>
+              <span style={{fontSize:13,fontWeight:600,color:T.text,display:"block",marginBottom:12}}>Ownership</span>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+                <div>
+                  <SLabel>Owners</SLabel>
+                  <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                    {(asset.owners||[asset.owner]).map(o=>(
+                      <div key={o} style={{display:"flex",alignItems:"center",gap:8}}>
+                        <Avatar name={o}/>
+                        <span style={{fontSize:12,color:T.textSub}}>{o}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <SLabel>Stewards</SLabel>
+                  <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                    {(asset.stewards||[asset.steward]).filter(Boolean).map(s=>(
+                      <div key={s} style={{display:"flex",alignItems:"center",gap:8}}>
+                        <Avatar name={s}/>
+                        <span style={{fontSize:12,color:T.textSub}}>{s}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </Card2>
-          )}
-        </div>
-        {/* Right sidebar */}
-        <div style={{width:220,flexShrink:0,display:"flex",flexDirection:"column",gap:12}}>
-          <Card2 style={{padding:"14px"}}>
-            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Connection</div>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <ServiceIcon service={asset.service} size={20}/>
-              <span style={{fontSize:12,color:T.textSub}}>{asset.connectionLabel}</span>
-            </div>
-          </Card2>
-          <Card2 style={{padding:"14px"}}>
-            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Path</div>
-            {(asset.path||[]).map((seg,i)=>(
-              <div key={i} style={{display:"flex",alignItems:"center",gap:4,marginBottom:2}}>
-                {i>0&&<svg width="8" height="8" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,flexShrink:0}}><path d="M3.5 2l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>}
-                <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textSub,paddingLeft:i>0?0:0}}>{seg}</span>
+          </div>
+
+          {/* Sidebar */}
+          <div style={{width:234,flexShrink:0,display:"flex",flexDirection:"column",gap:12}}>
+            <Card2 style={{padding:"14px 16px"}}>
+              <SLabel>Connection</SLabel>
+              <div style={{display:"flex",alignItems:"center",gap:9}}>
+                <ServiceIcon service={asset.service} size={22}/>
+                <span style={{fontSize:12,color:T.textSub,lineHeight:1.3}}>{asset.connectionLabel}</span>
               </div>
-            ))}
-          </Card2>
-        </div>
+            </Card2>
+            <Card2 style={{padding:"14px 16px"}}>
+              <SLabel>File Info</SLabel>
+              {asset.fileFormat&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
+                <span style={{fontSize:12,color:T.textMuted}}>Format</span>
+                <span style={{fontSize:11.5,fontWeight:700,padding:"1px 7px",borderRadius:4,background:`${fc}15`,color:fc,border:`1px solid ${fc}30`,fontFamily:"'Geist Mono',monospace"}}>{asset.fileFormat}</span>
+              </div>}
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
+                <span style={{fontSize:12,color:T.textMuted}}>Size</span>
+                <span style={{fontSize:12,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{asset.size||"—"}</span>
+              </div>
+              {asset.storageClass&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
+                <span style={{fontSize:12,color:T.textMuted}}>Storage Class</span>
+                <span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{asset.storageClass}</span>
+              </div>}
+              {asset.accessTier&&<div style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
+                <span style={{fontSize:12,color:T.textMuted}}>Access Tier</span>
+                <span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{asset.accessTier}</span>
+              </div>}
+              <div style={{display:"flex",justifyContent:"space-between"}}>
+                <span style={{fontSize:12,color:T.textMuted}}>Modified</span>
+                <span style={{fontSize:11,color:T.textSub}}>{asset.updated}</span>
+              </div>
+            </Card2>
+            <Card2 style={{padding:"14px 16px"}}>
+              <SLabel>Classification</SLabel>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                <span style={{fontSize:12,color:T.textMuted}}>Domain</span>
+                <span style={{fontSize:11.5,fontWeight:600,color:T.text}}>{asset.domain}</span>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                <span style={{fontSize:12,color:T.textMuted}}>Cert</span>
+                <CertBadge cert={asset.cert}/>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:12,color:T.textMuted}}>Tier</span>
+                <TierBadge tier={asset.tier}/>
+              </div>
+            </Card2>
+          </div>
+        </>}
+
+        {/* ── PROPERTIES TAB ── */}
+        {tab==="properties"&&(
+          <div style={{flex:1,maxWidth:700}}>
+            <Card2 style={{padding:"18px 20px"}}>
+              <h3 style={{fontSize:13,fontWeight:600,color:T.text,margin:"0 0 4px"}}>File Properties</h3>
+              <MetaRow label="File Name"      value={asset.name}        mono/>
+              <MetaRow label="Format"         value={asset.fileFormat}  mono/>
+              <MetaRow label="Size"           value={asset.size}        mono/>
+              <MetaRow label="Last Modified"  value={formatDate(asset.lastModified)} mono/>
+              {asset.storageClass&&<MetaRow label="Storage Class" value={asset.storageClass} mono/>}
+              {asset.accessTier&&<MetaRow label="Access Tier"     value={asset.accessTier}   mono/>}
+              <MetaRow label="Domain"         value={asset.domain}/>
+              <MetaRow label="Owner"          value={asset.owner}/>
+              <MetaRow label="Steward"        value={asset.steward}/>
+              <MetaRow label="Certification"  value={asset.cert}/>
+              <MetaRow label="Tier"           value={asset.tier ? `Tier ${asset.tier}` : null}/>
+              <MetaRow label="Usage"          value={asset.usage}/>
+              <MetaRow label="SLA Freshness"  value={asset.slaFreshness}/>
+              <MetaRow label="Connection"     value={asset.connectionLabel}/>
+              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",padding:"8px 0",fontSize:12,gap:16}}>
+                <span style={{color:T.textMuted,flexShrink:0}}>Full Path</span>
+                <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11,color:T.text,textAlign:"right",wordBreak:"break-all"}}>{asset.db}</span>
+              </div>
+            </Card2>
+          </div>
+        )}
+
+        {/* ── LINEAGE TAB ── */}
+        {tab==="lineage"&&(
+          <div style={{flex:1}}>
+            <Card2 style={{padding:"18px 20px"}}>
+              <h3 style={{fontSize:13,fontWeight:600,color:T.text,margin:"0 0 16px"}}>Storage Path</h3>
+              <div style={{display:"flex",alignItems:"center",gap:0,flexWrap:"wrap",padding:"16px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>
+                {/* Connection node */}
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+                  <div style={{width:44,height:44,borderRadius:11,background:`${fc}12`,border:`1.5px solid ${fc}30`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    <ServiceIcon service={asset.service} size={24}/>
+                  </div>
+                  <span style={{fontSize:10,color:T.textMuted,textAlign:"center",maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{asset.connectionLabel}</span>
+                </div>
+                {/* Path segments */}
+                {(asset.path||[]).map((seg,i)=>(
+                  <React.Fragment key={i}>
+                    <div style={{width:32,height:1,background:T.border,flexShrink:0,margin:"0 4px",marginBottom:20}}/>
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+                      <div style={{width:44,height:44,borderRadius:11,background:T.bgSurface,border:`1.5px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted}}>
+                        <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M3 6a1 1 0 011-1h4l2 2h6a1 1 0 011 1v7a1 1 0 01-1 1H4a1 1 0 01-1-1V6z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/></svg>
+                      </div>
+                      <span style={{fontSize:10,color:T.textMuted,textAlign:"center",maxWidth:80,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontFamily:"'Geist Mono',monospace"}}>{seg}</span>
+                    </div>
+                  </React.Fragment>
+                ))}
+                {/* File node (current) */}
+                <div style={{width:32,height:1,background:T.accent,flexShrink:0,margin:"0 4px",marginBottom:20,opacity:.6}}/>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+                  <div style={{width:44,height:44,borderRadius:11,background:`${fc}15`,border:`2px solid ${fc}55`,display:"flex",alignItems:"center",justifyContent:"center",color:fc,boxShadow:`0 0 0 3px ${fc}10`}}>
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M5 3h7l4 4v10a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/><path d="M12 3v4h4" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/></svg>
+                  </div>
+                  <span style={{fontSize:10,color:T.text,fontWeight:700,textAlign:"center",maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontFamily:"'Geist Mono',monospace"}}>{asset.name}</span>
+                </div>
+              </div>
+              <div style={{marginTop:16,padding:"12px 16px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>
+                <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Full Path</div>
+                <div style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.textSub,wordBreak:"break-all",lineHeight:1.6}}>{asset.db}</div>
+              </div>
+            </Card2>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -13530,7 +13722,7 @@ const AccessSection = ({onToast}) => {
   const [newPolDesc,      setNewPolDesc]      = useState("");
   const [newPolRules,     setNewPolRules]     = useState([]);
   // Rule form
-  const [rf, setRf] = useState({name:"",desc:"",effect:"allow",menu:"",resources:[],operations:[],condition:"",condParam:"",editId:null});
+  const [rf, setRf] = useState({name:"",desc:"",effect:"allow",resources:[],operations:[],condition:"",condParam:"",editId:null});
 
   const [acSearch,   setAcSearch]   = useState("");
   const [acRolePage, setAcRolePage] = useState(1);
@@ -13601,9 +13793,9 @@ const AccessSection = ({onToast}) => {
     setRuleModal({policyId});
     if(rule) {
       const {condition,condParam} = parseCondition(rule.condition);
-      setRf({name:rule.name,desc:rule.desc,effect:rule.effect,menu:rule.menu||"",resources:[...rule.resources],operations:[...rule.operations],condition,condParam,editId:rule.id});
+      setRf({name:rule.name,desc:rule.desc,effect:rule.effect,resources:[...rule.resources],operations:[...rule.operations],condition,condParam,editId:rule.id});
     } else {
-      setRf({name:"",desc:"",effect:"allow",menu:"",resources:[],operations:[],condition:"",condParam:"",editId:null});
+      setRf({name:"",desc:"",effect:"allow",resources:[],operations:[],condition:"",condParam:"",editId:null});
     }
   };
   const handleSaveRule = () => {
@@ -13620,7 +13812,7 @@ const AccessSection = ({onToast}) => {
         cond = rf.condition;
       }
     }
-    const rule = {id:rf.editId||`rl${Date.now()}`,name:rf.name,desc:rf.desc,effect:rf.effect,menu:rf.menu,resources:rf.resources,operations:rf.operations,condition:cond};
+    const rule = {id:rf.editId||`rl${Date.now()}`,name:rf.name,desc:rf.desc,effect:rf.effect,resources:rf.resources,operations:rf.operations,condition:cond};
     if(ruleModal.policyId==="__new__") {
       setNewPolRules(prev=>rf.editId ? prev.map(r=>r.id===rf.editId?rule:r) : [...prev,rule]);
     } else {
@@ -14265,22 +14457,9 @@ const AccessSection = ({onToast}) => {
             </div>
 
             <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:20}}>
-              {/* Menu picker */}
-              <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7,letterSpacing:.2}}>
-                  Menu <span style={{color:T.textMuted,fontWeight:400}}>(optional — filters resources)</span>
-                </label>
-                <select value={rf.menu} onChange={e=>setRf(f=>({...f,menu:e.target.value,resources:[]}))}
-                  style={{width:"100%",padding:"10px 13px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,
-                    color:rf.menu?T.text:T.textMuted,fontSize:13,outline:"none",boxSizing:"border-box",cursor:"pointer",transition:"border-color .15s"}}
-                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}>
-                  <option value="">All resources (no filter)</option>
-                  {MENUS.map(m=><option key={m.value} value={m.value}>{m.label}</option>)}
-                </select>
-              </div>
               <RuleMultiSelect
                 label="Resources" required
-                flat={rf.menu?(MENUS.find(m=>m.value===rf.menu)?.resources||RESOURCES):RESOURCES}
+                flat={RESOURCES}
                 selected={rf.resources}
                 onChange={v=>setRf(f=>({...f,resources:v}))}
                 placeholder="Select resources…"
