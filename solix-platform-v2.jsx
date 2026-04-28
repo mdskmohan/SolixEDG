@@ -8402,7 +8402,7 @@ const CatalogView = ({onAsset})=>{
   const [selTags,          setSelTags]          = useState(new Set());
   const [selGlossaryTerms, setSelGlossaryTerms] = useState(new Set());
   const [openGroup,  setOpenGroup]  = useState({conntype:true,connection:false,domain:true,type:true,cert:false,tier:false,owner:false,tags:false,glossary:false});
-  const PAGE_SIZE = 5;
+  const PAGE_SIZE = 25;
   const [page, setPage] = useState(1);
   useEffect(()=>{ setPage(1); },[q,selConnTypes,selTypes,selDomains,selCerts,selTiers,selConns,selOwners,selTags,selGlossaryTerms]);
   const DRILLABLE_TYPES = new Set(["Database","Catalog","Schema","Bucket","Container","Folder"]);
