@@ -13839,6 +13839,7 @@ const AccessSection = ({onToast}) => {
             )}
           </div>
         ))}
+      </div>
       {totalPolPages>1&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10,paddingTop:10,borderTop:`1px solid ${T.border}`}}>
         <span style={{fontSize:11,color:T.textMuted}}>{acPolList.length} polic{acPolList.length!==1?"ies":"y"} · page {acPolPage}/{totalPolPages}</span>
         <div style={{display:"flex",gap:4}}>
