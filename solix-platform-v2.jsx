@@ -6745,7 +6745,7 @@ const AssetQualityTab = ({asset,onToast})=>{
       )}
       {localCases.length===0
         ? <div style={{padding:"40px",textAlign:"center",color:T.textMuted,fontSize:13}}>No test cases found for this table. Click <b>Select Test</b> to add test cases.</div>
-        : <table style={{width:"100%",borderCollapse:"collapse"}}>
+        : <><table style={{width:"100%",borderCollapse:"collapse"}}>
             <thead>
               <tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
                 <th style={{padding:"8px 8px 8px 14px",width:28}}>
@@ -6800,7 +6800,7 @@ const AssetQualityTab = ({asset,onToast})=>{
           {totalPages>1&&(
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",borderTop:`1px solid ${T.border}`,background:T.bgElevated}}>
               <span style={{fontSize:11.5,color:T.textMuted}}>
-                Showing {page*PAGE_SIZE+1}–{Math.min((page+1)*PAGE_SIZE,localCases.length)} of {localCases.length}
+                Showing {page*PAGE_SIZE+1}{"–"}{Math.min((page+1)*PAGE_SIZE,localCases.length)} of {localCases.length}
               </span>
               <div style={{display:"flex",gap:4,alignItems:"center"}}>
                 <button disabled={page===0} onClick={()=>setPage(p=>p-1)}
@@ -6820,7 +6820,7 @@ const AssetQualityTab = ({asset,onToast})=>{
               </div>
             </div>
           )}
-      }
+      </>}
     </Card2>
   </div>;
 }
