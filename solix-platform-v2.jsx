@@ -10878,7 +10878,6 @@ const LoginScreen = ({onLogin}) => {
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState("");
   const [showPw,   setShowPw]   = useState(false);
-  const [selectedRole, setSelectedRole] = useState("");
 
   // Demo accounts mapped to roles
   const DEMO_ACCOUNTS = {
@@ -10889,11 +10888,6 @@ const LoginScreen = ({onLogin}) => {
     "sarah.kim@jnj.com":    {role:"viewer",   pw:"viewer123"},
   };
 
-  const handleEmailBlur = () => {
-    const acc = DEMO_ACCOUNTS[email.toLowerCase().trim()];
-    if(acc && !selectedRole) setSelectedRole(acc.role);
-  };
-
   const handleSubmit = () => {
     setError("");
     if(!email.trim()) { setError("Email is required"); return; }
@@ -10902,7 +10896,7 @@ const LoginScreen = ({onLogin}) => {
     setTimeout(()=>{
       const account = DEMO_ACCOUNTS[email.toLowerCase().trim()];
       if(account && account.pw === password) {
-        onLogin(selectedRole || account.role);
+        onLogin(account.role);
       } else if(DEMO_ACCOUNTS[email.toLowerCase().trim()]) {
         setError("Incorrect password. Try the demo password shown below.");
         setLoading(false);
@@ -10996,22 +10990,8 @@ const LoginScreen = ({onLogin}) => {
               placeholder="you@jnj.com"
               style={{width:"100%",padding:"10px 13px",background:T.bgSurface,border:`1.5px solid ${error&&!email?T.rose:T.border}`,borderRadius:9,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box",transition:"border-color .15s"}}
               onFocus={e=>e.target.style.borderColor=T.accent}
-              onBlur={e=>{handleEmailBlur();e.target.style.borderColor=error&&!email?T.rose:T.border;}}
+              onBlur={e=>e.target.style.borderColor=error&&!email?T.rose:T.border}
             />
-          </div>
-
-          {/* Role */}
-          <div style={{marginBottom:16}}>
-            <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>Role</label>
-            <select value={selectedRole} onChange={e=>setSelectedRole(e.target.value)}
-              style={{width:"100%",padding:"10px 13px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,
-                color:selectedRole?T.text:T.textMuted,fontSize:13,outline:"none",boxSizing:"border-box",cursor:"pointer",transition:"border-color .15s"}}
-              onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}>
-              <option value="">Select your role…</option>
-              {Object.entries(ROLES_CONFIG).map(([k,cfg])=>(
-                <option key={k} value={k}>{cfg.label}</option>
-              ))}
-            </select>
           </div>
 
           {/* Password */}
@@ -11068,7 +11048,7 @@ const LoginScreen = ({onLogin}) => {
           {/* Demo hint */}
           <div style={{marginTop:20,padding:"10px 13px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>
             <div style={{fontSize:11,color:T.textMuted,lineHeight:1.6}}>
-              <strong style={{color:T.textSub}}>Demo credentials —</strong> enter a demo email (e.g. <span style={{fontFamily:"'Geist Mono',monospace"}}>alex.rivera@jnj.com</span>), the role auto-fills. Password: <span style={{fontFamily:"'Geist Mono',monospace"}}>role + 123</span> (e.g. <span style={{fontFamily:"'Geist Mono',monospace"}}>admin123</span>).
+              <strong style={{color:T.textSub}}>Demo accounts —</strong> use any demo email (e.g. <span style={{fontFamily:"'Geist Mono',monospace"}}>alex.rivera@jnj.com</span>) with its password (e.g. <span style={{fontFamily:"'Geist Mono',monospace"}}>admin123</span>). Your role is determined by your account.
             </div>
           </div>
         </div>
@@ -13209,6 +13189,97 @@ const MultiChipPicker = ({values=[], options=[], colorMap={}, onChange, placehol
   );
 };
 
+// RoleChipPicker — like MultiChipPicker but with ★ default + click-to-popover
+const RoleChipPicker = ({values=[], defaultRole, colorMap={}, options=[], onRolesChange, onDefaultChange, placeholder="No roles"}) => {
+  const [openChip, setOpenChip] = React.useState(null); // which chip has popover open
+  const [addOpen,  setAddOpen]  = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(()=>{
+    const h=e=>{if(ref.current&&!ref.current.contains(e.target)){setOpenChip(null);setAddOpen(false);}};
+    document.addEventListener("mousedown",h);
+    return ()=>document.removeEventListener("mousedown",h);
+  },[]);
+  const available = options.filter(o=>!values.includes(o));
+  const isDefault = (v) => v===defaultRole;
+  return (
+    <div ref={ref} style={{position:"relative",display:"flex",flexWrap:"wrap",gap:4,alignItems:"center"}}>
+      {values.length===0&&<span style={{fontSize:11,color:T.textMuted,fontStyle:"italic"}}>{placeholder}</span>}
+      {values.map(v=>{
+        const color = colorMap[v]||T.accent;
+        const def   = isDefault(v);
+        return (
+          <div key={v} style={{position:"relative"}}>
+            <button onClick={e=>{e.stopPropagation();setOpenChip(openChip===v?null:v);setAddOpen(false);}}
+              style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:99,
+                background:`${color}18`,border:`1.5px solid ${def?color:color+"55"}`,
+                fontSize:10.5,fontWeight:700,color,whiteSpace:"nowrap",cursor:"pointer",transition:"all .12s"}}>
+              {def&&<span style={{fontSize:10,lineHeight:1}}>★</span>}
+              {v}
+              <span style={{fontSize:9,opacity:.6,marginLeft:1}}>▾</span>
+            </button>
+            {openChip===v&&(
+              <>
+                <div style={{position:"fixed",inset:0,zIndex:399}} onClick={()=>setOpenChip(null)}/>
+                <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,minWidth:168,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 8px 24px rgba(0,0,0,.25)",zIndex:400,overflow:"hidden",padding:"4px 0"}}>
+                  <button onClick={()=>{if(!def){onDefaultChange(v);}setOpenChip(null);}}
+                    style={{width:"100%",padding:"7px 12px",background:"transparent",border:"none",textAlign:"left",cursor:def?"default":"pointer",
+                      fontSize:11.5,color:def?T.textMuted:T.text,display:"flex",alignItems:"center",gap:7,opacity:def?.5:1}}
+                    onMouseEnter={e=>{if(!def)e.currentTarget.style.background=T.bgHover;}}
+                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <span style={{fontSize:12}}>★</span>
+                    {def?"Already default":"Set as Default"}
+                  </button>
+                  <div style={{height:1,background:T.border,margin:"2px 0"}}/>
+                  <button onClick={()=>{
+                    if(values.length<=1){setOpenChip(null);return;}
+                    const newVals=values.filter(x=>x!==v);
+                    // if removing default, reassign to first remaining
+                    if(def) onDefaultChange(newVals[0]);
+                    onRolesChange(newVals);
+                    setOpenChip(null);
+                  }}
+                    style={{width:"100%",padding:"7px 12px",background:"transparent",border:"none",textAlign:"left",
+                      cursor:values.length<=1?"not-allowed":"pointer",
+                      fontSize:11.5,color:values.length<=1?T.textMuted:T.rose,display:"flex",alignItems:"center",gap:7,opacity:values.length<=1?.4:1}}
+                    onMouseEnter={e=>{if(values.length>1)e.currentTarget.style.background=T.roseDim;}}
+                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <span>🗑</span> {values.length<=1?"Can't remove last role":"Remove Role"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })}
+      {available.length>0&&(
+        <button onClick={e=>{e.stopPropagation();setAddOpen(o=>!o);setOpenChip(null);}}
+          style={{width:18,height:18,borderRadius:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,lineHeight:1,flexShrink:0,transition:"all .1s"}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>+</button>
+      )}
+      {addOpen&&(
+        <>
+          <div style={{position:"fixed",inset:0,zIndex:399}} onClick={()=>setAddOpen(false)}/>
+          <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,minWidth:170,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 8px 24px rgba(0,0,0,.2)",zIndex:400,overflow:"hidden",padding:"4px 0"}}>
+            {available.map(o=>{
+              const color=colorMap[o]||T.accent;
+              return (
+                <button key={o} onClick={()=>{onRolesChange([...values,o]);setAddOpen(false);}}
+                  style={{width:"100%",padding:"7px 12px",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",fontSize:12,color:T.text,display:"flex",alignItems:"center",gap:8}}
+                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <span style={{width:8,height:8,borderRadius:"50%",background:color,flexShrink:0,display:"block"}}/>
+                  {o}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
 const TeamsSection = ({onToast}) => {
 
   const ROLE_LIST    = ["Admin","Data Steward","Data Analyst","Data Engineer","Viewer"];
@@ -13218,14 +13289,14 @@ const TeamsSection = ({onToast}) => {
   // ── Shared state ──
   const [activeTab,   setActiveTab]   = useState("teams");
   const [members,     setMembers]     = useState([
-    {id:"u1",name:"Maya Chen",    email:"maya.chen@jnj.com",    roles:["Data Steward","Data Analyst"],  teams:["Governance","Analytics"],       status:"Active",  joined:"Jan 2023",avatar:"MC",color:"#d97706"},
-    {id:"u2",name:"Dev Patel",    email:"dev.patel@jnj.com",    roles:["Data Analyst"],                 teams:["Analytics"],                    status:"Active",  joined:"Mar 2023",avatar:"DP",color:"#0284c7"},
-    {id:"u3",name:"Sarah Kim",    email:"sarah.kim@jnj.com",    roles:["Viewer"],                       teams:["Finance"],                      status:"Active",  joined:"Feb 2022",avatar:"SK",color:"#4b4b60"},
-    {id:"u4",name:"Alex Rivera",  email:"alex.rivera@jnj.com",  roles:["Admin"],                        teams:["Platform","Governance"],         status:"Active",  joined:"Jun 2022",avatar:"AR",color:"#ee2424"},
-    {id:"u5",name:"James Oh",     email:"james.oh@jnj.com",     roles:["Data Engineer","Data Analyst"], teams:["Data Engineering","Analytics"],  status:"Active",  joined:"Nov 2022",avatar:"JO",color:"#7c3aed"},
-    {id:"u6",name:"Priya Nair",   email:"priya.nair@jnj.com",   roles:["Data Engineer"],                teams:["Data Engineering"],              status:"Active",  joined:"Sep 2023",avatar:"PN",color:"#7c3aed"},
-    {id:"u7",name:"Lisa Ray",     email:"lisa.ray@jnj.com",     roles:["Data Analyst","Data Steward"],  teams:["Analytics","Finance"],           status:"Active",  joined:"Jan 2024",avatar:"LR",color:"#0284c7"},
-    {id:"u8",name:"Tom Vance",    email:"tom.vance@jnj.com",    roles:["Data Steward"],                 teams:["Governance"],                   status:"Inactive",joined:"Mar 2022",avatar:"TV",color:"#d97706"},
+    {id:"u1",name:"Maya Chen",    email:"maya.chen@jnj.com",    roles:["Data Steward","Data Analyst"],  defaultRole:"Data Steward",  teams:["Governance","Analytics"],       status:"Active",  joined:"Jan 2023",avatar:"MC",color:"#d97706"},
+    {id:"u2",name:"Dev Patel",    email:"dev.patel@jnj.com",    roles:["Data Analyst"],                 defaultRole:"Data Analyst",  teams:["Analytics"],                    status:"Active",  joined:"Mar 2023",avatar:"DP",color:"#0284c7"},
+    {id:"u3",name:"Sarah Kim",    email:"sarah.kim@jnj.com",    roles:["Viewer"],                       defaultRole:"Viewer",        teams:["Finance"],                      status:"Active",  joined:"Feb 2022",avatar:"SK",color:"#4b4b60"},
+    {id:"u4",name:"Alex Rivera",  email:"alex.rivera@jnj.com",  roles:["Admin"],                        defaultRole:"Admin",         teams:["Platform","Governance"],         status:"Active",  joined:"Jun 2022",avatar:"AR",color:"#ee2424"},
+    {id:"u5",name:"James Oh",     email:"james.oh@jnj.com",     roles:["Data Engineer","Data Analyst"], defaultRole:"Data Engineer", teams:["Data Engineering","Analytics"],  status:"Active",  joined:"Nov 2022",avatar:"JO",color:"#7c3aed"},
+    {id:"u6",name:"Priya Nair",   email:"priya.nair@jnj.com",   roles:["Data Engineer"],                defaultRole:"Data Engineer", teams:["Data Engineering"],              status:"Active",  joined:"Sep 2023",avatar:"PN",color:"#7c3aed"},
+    {id:"u7",name:"Lisa Ray",     email:"lisa.ray@jnj.com",     roles:["Data Analyst","Data Steward"],  defaultRole:"Data Analyst",  teams:["Analytics","Finance"],           status:"Active",  joined:"Jan 2024",avatar:"LR",color:"#0284c7"},
+    {id:"u8",name:"Tom Vance",    email:"tom.vance@jnj.com",    roles:["Data Steward"],                 defaultRole:"Data Steward",  teams:["Governance"],                   status:"Inactive",joined:"Mar 2022",avatar:"TV",color:"#d97706"},
   ]);
   const [teams, setTeams] = useState([
     {id:"t1",name:"Data Engineering",desc:"Manages pipelines, ingestion, and data infrastructure.",  color:"#7c3aed",created:"Nov 2022"},
@@ -13238,10 +13309,12 @@ const TeamsSection = ({onToast}) => {
   // ── Users tab state ──
   const [memberSearch,  setMemberSearch]  = useState("");
   const [selectedTeam,  setSelectedTeam]  = useState("all");
-  const [memberModal,   setMemberModal]   = useState(false);
-  const [inviteEmail,   setInviteEmail]   = useState("");
-  const [inviteRoles,   setInviteRoles]   = useState([]);
-  const [inviteTeams,   setInviteTeams]   = useState([]);
+  const [memberModal,        setMemberModal]        = useState(false);
+  const [inviteEmail,        setInviteEmail]        = useState("");
+  const [inviteDefaultRole,  setInviteDefaultRole]  = useState("Viewer");
+  const [inviteTeam,         setInviteTeam]         = useState("");
+  const [invitePassword,     setInvitePassword]     = useState("");
+  const [inviteRePassword,   setInviteRePassword]   = useState("");
 
   const [memberPage,     setMemberPage]     = useState(1);
   const MEMBER_PS = 10;
@@ -13280,24 +13353,33 @@ const TeamsSection = ({onToast}) => {
   // ── Handlers ──
   const handleInvite = () => {
     if(!inviteEmail.trim()) return;
+    if(invitePassword && invitePassword!==inviteRePassword){ onToast("Passwords do not match","error"); return; }
     const name = inviteEmail.split("@")[0].replace(/[._]/g," ").replace(/\b\w/g,c=>c.toUpperCase());
     const avatar = name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
-    const primaryRole = inviteRoles[0]||"Viewer";
     setMembers(prev=>[...prev,{
       id:`u${Date.now()}`,name,email:inviteEmail,
-      roles:inviteRoles.length?inviteRoles:["Viewer"],
-      teams:inviteTeams,
-      status:"Pending",joined:"Just now",
-      avatar,color:ROLE_COLORS[primaryRole]||T.accent,
+      roles:[inviteDefaultRole],
+      defaultRole:inviteDefaultRole,
+      teams:inviteTeam?[inviteTeam]:[],
+      status:"Active",joined:"Just now",
+      avatar,color:ROLE_COLORS[inviteDefaultRole]||T.accent,
     }]);
-    setMemberModal(false); setInviteEmail(""); setInviteRoles([]); setInviteTeams([]);
-    onToast(`Invite sent to ${inviteEmail}`,"success");
+    setMemberModal(false); setInviteEmail(""); setInviteDefaultRole("Viewer"); setInviteTeam(""); setInvitePassword(""); setInviteRePassword("");
+    onToast(`User added: ${name}`,"success");
   };
 
   const handleRolesChange = (userId, newRoles) => {
-    const primary = newRoles[0]||"Viewer";
-    setMembers(prev=>prev.map(m=>m.id===userId?{...m,roles:newRoles,color:ROLE_COLORS[primary]||T.accent}:m));
+    setMembers(prev=>prev.map(m=>{
+      if(m.id!==userId) return m;
+      const existingDefault = m.defaultRole;
+      const newDefault = newRoles.includes(existingDefault)?existingDefault:(newRoles[0]||"Viewer");
+      return {...m,roles:newRoles,defaultRole:newDefault,color:ROLE_COLORS[newDefault]||T.accent};
+    }));
     onToast("Roles updated","success");
+  };
+  const handleDefaultRoleChange = (userId, newDefault) => {
+    setMembers(prev=>prev.map(m=>m.id===userId?{...m,defaultRole:newDefault,color:ROLE_COLORS[newDefault]||T.accent}:m));
+    onToast("Default role updated","success");
   };
 
   const handleDeactivate = (userId) => {
@@ -13386,7 +13468,7 @@ const TeamsSection = ({onToast}) => {
           </button>
         ))}
       </div>
-      {activeTab==="users"&&<AddBtn label="Invite User" onClick={()=>{setInviteRoles([]);setInviteTeams([]);setMemberModal(true);}}/>}
+      {activeTab==="users"&&<AddBtn label="Add User" onClick={()=>{setInviteDefaultRole("Viewer");setInviteTeam("");setInvitePassword("");setInviteRePassword("");setMemberModal(true);}}/>}
       {activeTab==="teams"&&<AddBtn label="Create Team" onClick={()=>setCreateTeamModal(true)}/>}
     </div>
 
@@ -13430,9 +13512,9 @@ const TeamsSection = ({onToast}) => {
                 <div style={{fontSize:10.5,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.email}</div>
               </div>
             </div>
-            {/* Roles — multi-chip */}
+            {/* Roles — star default chip picker */}
             <div style={{paddingRight:8}}>
-              <MultiChipPicker values={m.roles||[]} options={ROLE_LIST} colorMap={ROLE_COLORS} onChange={v=>handleRolesChange(m.id,v)} placeholder="No roles"/>
+              <RoleChipPicker values={m.roles||[]} defaultRole={m.defaultRole||(m.roles||[])[0]||"Viewer"} options={ROLE_LIST} colorMap={ROLE_COLORS} onRolesChange={v=>handleRolesChange(m.id,v)} onDefaultChange={v=>handleDefaultRoleChange(m.id,v)} placeholder="No roles"/>
             </div>
             {/* Teams — multi-chip */}
             <div style={{paddingRight:8}}>
@@ -13552,70 +13634,61 @@ const TeamsSection = ({onToast}) => {
 
     {/* ════════ MODALS ════════ */}
 
-    {/* Invite User */}
+    {/* Add User */}
     {memberModal&&(
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:800,backdropFilter:"blur(4px)"}}>
         <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,width:440,padding:24,boxShadow:"0 24px 60px rgba(0,0,0,.3)"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
-            <div style={{fontSize:15,fontWeight:700,color:T.text}}>Invite User</div>
+            <div style={{fontSize:15,fontWeight:700,color:T.text}}>Add User</div>
             <button onClick={()=>setMemberModal(false)} style={{width:26,height:26,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(10)}</button>
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
+            {/* Work Email */}
             <div>
-              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Work email <span style={{color:T.rose}}>*</span></label>
+              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Work Email <span style={{color:T.rose}}>*</span></label>
               <input value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} placeholder="colleague@jnj.com" type="email"
                 style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box"}}
-                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}
-                onKeyDown={e=>e.key==="Enter"&&handleInvite()}/>
+                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
             </div>
-            {/* Roles — chip toggle picker */}
+            {/* Default Role */}
             <div>
-              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Roles <span style={{color:T.textMuted,fontWeight:400}}>(select one or more)</span></label>
-              <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
-                {ROLE_LIST.map(r=>{
-                  const sel = inviteRoles.includes(r);
-                  const color = ROLE_COLORS[r]||T.accent;
-                  return (
-                    <button key={r} onClick={()=>setInviteRoles(p=>sel?p.filter(x=>x!==r):[...p,r])}
-                      style={{padding:"5px 13px",borderRadius:99,fontSize:11.5,fontWeight:sel?700:500,cursor:"pointer",transition:"all .12s",
-                        border:`1.5px solid ${sel?color:T.border}`,
-                        background:sel?`${color}15`:"transparent",
-                        color:sel?color:T.textSub,
-                        display:"flex",alignItems:"center",gap:5}}>
-                      {sel&&<svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                      {r}
-                    </button>
-                  );
-                })}
-              </div>
+              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Default Role <span style={{color:T.rose}}>*</span></label>
+              <select value={inviteDefaultRole} onChange={e=>setInviteDefaultRole(e.target.value)}
+                style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box",cursor:"pointer"}}
+                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}>
+                {ROLE_LIST.map(r=><option key={r} value={r}>{r}</option>)}
+              </select>
+              <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>This becomes the user's primary role. Additional roles can be added after creation.</div>
             </div>
-            {/* Teams — chip toggle picker */}
+            {/* Team */}
             <div>
-              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Teams <span style={{color:T.textMuted,fontWeight:400}}>(optional, select one or more)</span></label>
-              <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
-                {teamNames.map(t=>{
-                  const sel = inviteTeams.includes(t);
-                  const teamColor = teams.find(x=>x.name===t)?.color||T.accent;
-                  return (
-                    <button key={t} onClick={()=>setInviteTeams(p=>sel?p.filter(x=>x!==t):[...p,t])}
-                      style={{padding:"5px 13px",borderRadius:99,fontSize:11.5,fontWeight:sel?700:500,cursor:"pointer",transition:"all .12s",
-                        border:`1.5px solid ${sel?teamColor:T.border}`,
-                        background:sel?`${teamColor}15`:"transparent",
-                        color:sel?teamColor:T.textSub,
-                        display:"flex",alignItems:"center",gap:5}}>
-                      {sel&&<svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                      {t}
-                    </button>
-                  );
-                })}
-              </div>
+              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Team <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
+              <select value={inviteTeam} onChange={e=>setInviteTeam(e.target.value)}
+                style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:inviteTeam?T.text:T.textMuted,fontSize:13,outline:"none",boxSizing:"border-box",cursor:"pointer"}}
+                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}>
+                <option value="">No team</option>
+                {teamNames.map(t=><option key={t} value={t}>{t}</option>)}
+              </select>
             </div>
-            <div style={{padding:"10px 12px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`,fontSize:11,color:T.textMuted,lineHeight:1.55}}>
-              An email will be sent with a link to join. Until they accept, their status shows as <b style={{color:T.amber}}>Pending</b>. Users with multiple roles receive the combined permissions of all assigned roles.
+            {/* Password */}
+            <div>
+              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Password</label>
+              <input value={invitePassword} onChange={e=>setInvitePassword(e.target.value)} placeholder="••••••••" type="password"
+                style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box"}}
+                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
             </div>
-            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+            {/* Re-enter Password */}
+            <div>
+              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Re-enter Password</label>
+              <input value={inviteRePassword} onChange={e=>setInviteRePassword(e.target.value)} placeholder="••••••••" type="password"
+                style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${inviteRePassword&&inviteRePassword!==invitePassword?T.rose:T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box"}}
+                onFocus={e=>e.target.style.borderColor=inviteRePassword&&inviteRePassword!==invitePassword?T.rose:T.accent} onBlur={e=>e.target.style.borderColor=inviteRePassword&&inviteRePassword!==invitePassword?T.rose:T.border}/>
+              {inviteRePassword&&inviteRePassword!==invitePassword&&<div style={{fontSize:10.5,color:T.rose,marginTop:4}}>Passwords do not match</div>}
+            </div>
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:4}}>
               <button onClick={()=>setMemberModal(false)} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
-              <button onClick={handleInvite} disabled={!inviteEmail.trim()} style={{padding:"8px 18px",borderRadius:8,background:inviteEmail.trim()?T.accent:"rgba(238,36,36,.3)",border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:inviteEmail.trim()?"pointer":"default"}}>Send Invite</button>
+              <button onClick={handleInvite} disabled={!inviteEmail.trim()||!!(inviteRePassword&&inviteRePassword!==invitePassword)}
+                style={{padding:"8px 18px",borderRadius:8,background:inviteEmail.trim()?T.accent:"rgba(238,36,36,.3)",border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:inviteEmail.trim()?"pointer":"default"}}>Save</button>
             </div>
           </div>
         </div>
