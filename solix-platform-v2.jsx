@@ -7957,8 +7957,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
 
   const tabs=[
     {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},
-    {key:"quality",label:"Quality"},{key:"tags",label:"Tags"},
-    {key:"usage",label:"Usage"},
+    {key:"quality",label:"Quality"},{key:"usage",label:"Usage"},
   ];
 
   const handleCertify=()=>{
@@ -8022,7 +8021,6 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
         {tab==="overview"  && <AssetOverview asset={asset} data={data} setData={setData} onToast={onToast}/>}
         {tab==="schema"    && <AssetSchema asset={asset} selCol={selCol} onColClick={c=>{ setSelCol(selCol?.name===c?.name?null:c); }} onToast={onToast}/>}
         {tab==="quality"   && <AssetQualityTab asset={data}/>}
-        {tab==="tags"      && <AssetTagsTab asset={data} onToast={onToast}/>}
         {tab==="usage"     && <AssetUsageTab/>}
       </div>
 
