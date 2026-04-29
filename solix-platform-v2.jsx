@@ -13551,10 +13551,13 @@ const TeamsSection = ({onToast}) => {
         ))}
       </div>
       {totalMemberPages>1&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10}}>
-        <span style={{fontSize:11,color:T.textMuted}}>{filteredMembers.length} member{filteredMembers.length!==1?"s":""} · page {memberPage}/{totalMemberPages}</span>
-        <div style={{display:"flex",gap:4}}>
-          <button onClick={()=>setMemberPage(p=>Math.max(1,p-1))} disabled={memberPage===1} style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:memberPage===1?T.textMuted:T.text,fontSize:11,cursor:memberPage===1?"default":"pointer"}}>← Prev</button>
-          <button onClick={()=>setMemberPage(p=>Math.min(totalMemberPages,p+1))} disabled={memberPage===totalMemberPages} style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:memberPage===totalMemberPages?T.textMuted:T.text,fontSize:11,cursor:memberPage===totalMemberPages?"default":"pointer"}}>Next →</button>
+        <span style={{fontSize:11,color:T.textMuted}}>Showing {(memberPage-1)*MEMBER_PS+1}–{Math.min(memberPage*MEMBER_PS,filteredMembers.length)} of {filteredMembers.length} member{filteredMembers.length!==1?"s":""}</span>
+        <div style={{display:"flex",gap:4,alignItems:"center"}}>
+          <button onClick={()=>setMemberPage(p=>Math.max(1,p-1))} disabled={memberPage===1} style={{padding:"3px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:memberPage===1?T.textMuted:T.text,fontSize:11.5,fontWeight:500,cursor:memberPage===1?"not-allowed":"pointer",opacity:memberPage===1?0.4:1}}>← Prev</button>
+          {Array.from({length:totalMemberPages},(_,i)=>(
+            <button key={i} onClick={()=>setMemberPage(i+1)} style={{width:26,height:26,borderRadius:6,fontSize:11.5,fontWeight:memberPage===i+1?700:400,cursor:"pointer",background:memberPage===i+1?T.accent:T.bgElevated,border:`1px solid ${memberPage===i+1?T.accent:T.border}`,color:memberPage===i+1?"#fff":T.textSub}}>{i+1}</button>
+          ))}
+          <button onClick={()=>setMemberPage(p=>Math.min(totalMemberPages,p+1))} disabled={memberPage===totalMemberPages} style={{padding:"3px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:memberPage===totalMemberPages?T.textMuted:T.text,fontSize:11.5,fontWeight:500,cursor:memberPage===totalMemberPages?"not-allowed":"pointer",opacity:memberPage===totalMemberPages?0.4:1}}>Next →</button>
         </div>
       </div>}
     </>}
