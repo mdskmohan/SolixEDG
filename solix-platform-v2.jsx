@@ -16552,7 +16552,7 @@ const TagManagementView = ({onToast}) => {
     <div className="fadeUp" style={{height:'100%',display:'flex',flexDirection:'column'}}>
       <Topbar breadcrumb={[{label:'Tag Management'}]}/>
 
-      <div style={{flex:1,display:'flex',overflow:'hidden'}}>
+      <div style={{flex:1,display:'flex',overflow:'hidden',position:'relative'}}>
 
         {/* ── LEFT: Tag list ── */}
         <div style={{width:240,flexShrink:0,borderRight:`1px solid ${T.border}`,background:T.bgSurface,display:'flex',flexDirection:'column'}}>
@@ -16800,7 +16800,7 @@ const TagManagementView = ({onToast}) => {
 
         {/* ── RIGHT: Tag detail or empty state ── */}
         <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',background:T.bg}}>
-          {!selTag&&!selCatId&&!newPanelOpen&&!newCatPanelOpen&&(
+          {!selTag&&!selCatId&&(
             <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:8,color:T.textMuted}}>
               <div style={{opacity:.15}}>{Ic.tag(48)}</div>
               <div style={{fontSize:14,fontWeight:600,color:T.textSub}}>Select a category or tag</div>
@@ -16809,7 +16809,7 @@ const TagManagementView = ({onToast}) => {
           )}
 
           {/* ── Category detail panel ── */}
-          {selCatId&&!selTag&&!newPanelOpen&&!newCatPanelOpen&&(()=>{
+          {selCatId&&!selTag&&(()=>{
             const catTags = tagDefs.filter(td=>td.category===selCatId);
             const cc = getCatStyle(selCatId);
             return (
@@ -16863,264 +16863,10 @@ const TagManagementView = ({onToast}) => {
             );
           })()}
 
-          {/* ── New Category panel ── */}
-          {newCatPanelOpen&&(
-            <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-              <div style={{padding:'14px 24px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0,background:T.bgSurface}}>
-                <div>
-                  <div style={{fontSize:15,fontWeight:700,color:T.text}}>New Category</div>
-                  <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>Categories group tags for navigation and filtering</div>
-                </div>
-                <button onClick={()=>setNewCatPanelOpen(false)} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',fontSize:18,lineHeight:1}}>×</button>
-              </div>
-              <div style={{flex:1,overflowY:'auto',padding:'24px'}}>
-                <div style={{maxWidth:480,display:'flex',flexDirection:'column',gap:18}}>
-                  <div>
-                    <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Category Name <span style={{color:T.rose}}>*</span></label>
-                    <Input2 placeholder="e.g. Compliance, Finance, PII" value={newCatDraft.name} onChange={e=>setNewCatDraft(d=>({...d,name:e.target.value}))}/>
-                  </div>
-                  <div>
-                    <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Description <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
-                    <textarea value={newCatDraft.description} onChange={e=>setNewCatDraft(d=>({...d,description:e.target.value}))} rows={3}
-                      placeholder="What kinds of tags belong in this category?"
-                      style={{width:'100%',padding:'9px 12px',background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:'none',resize:'none',fontFamily:'inherit',lineHeight:1.6,boxSizing:'border-box'}}
-                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                  </div>
-                  <div>
-                    <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Color</label>
-                    <div style={{display:'flex',gap:7}}>
-                      {['#ee2424','#d97706','#16a34a','#2563eb','#7c3aed','#6366f1','#0891b2','#6b7280'].map(c=>(
-                        <button key={c} onClick={()=>setNewCatDraft(d=>({...d,color:c}))} style={{width:26,height:26,borderRadius:'50%',background:c,border:newCatDraft.color===c?`3px solid ${T.text}`:'3px solid transparent',cursor:'pointer',padding:0,flexShrink:0,transition:'border .12s'}}/>
-                      ))}
-                    </div>
-                  </div>
-                  <div style={{padding:'14px 16px',background:T.bgElevated,borderRadius:10,border:`1px solid ${T.border}`}}>
-                    <div style={{fontSize:11,color:T.textMuted,marginBottom:6}}>Preview</div>
-                    <span style={{display:'inline-flex',alignItems:'center',gap:6,padding:'4px 12px',borderRadius:99,background:`${newCatDraft.color}15`,border:`1px solid ${newCatDraft.color}40`,fontSize:12,fontWeight:600,color:newCatDraft.color,textTransform:'capitalize'}}>
-                      <span style={{width:7,height:7,borderRadius:'50%',background:newCatDraft.color,display:'block'}}/>
-                      {newCatDraft.name||'Category Name'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div style={{padding:'14px 24px',borderTop:`1px solid ${T.border}`,display:'flex',gap:8,justifyContent:'flex-end',background:T.bgSurface,flexShrink:0}}>
-                <button onClick={()=>setNewCatPanelOpen(false)} style={{padding:'8px 18px',borderRadius:8,background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:'pointer',fontWeight:500}}>Cancel</button>
-                <button onClick={addNewCategory} disabled={!newCatDraft.name.trim()} style={{padding:'8px 20px',borderRadius:8,background:newCatDraft.name.trim()?T.accent:'rgba(100,100,120,.3)',border:'none',color:'#fff',fontSize:12.5,fontWeight:700,cursor:newCatDraft.name.trim()?'pointer':'default'}}>Create Category</button>
-              </div>
-            </div>
-          )}
 
-          {/* ── New Tag panel ── */}
-          {newPanelOpen&&(
-            <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-              <div style={{padding:'14px 24px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0,background:T.bgSurface}}>
-                <span style={{fontSize:15,fontWeight:700,color:T.text}}>New Tag</span>
-                <button onClick={()=>setNewPanelOpen(false)} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',fontSize:18,lineHeight:1}}>×</button>
-              </div>
-              <div style={{flex:1,overflowY:'auto',padding:'24px'}}>
-                <div style={{maxWidth:520,display:'flex',flexDirection:'column',gap:18}}>
-
-                  {/* Name + Color */}
-                  <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:14,alignItems:'end'}}>
-                    <div>
-                      <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Tag Name <span style={{color:T.rose}}>*</span></label>
-                      <Input2 placeholder="e.g. Internal Use Only" value={newDraft.name} onChange={e=>setNewDraft(d=>({...d,name:e.target.value}))}/>
-                    </div>
-                    <div style={{paddingBottom:2}}>
-                      <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Color</div>
-                      <div style={{display:'flex',gap:5}}>
-                        {['#ee2424','#d97706','#16a34a','#2563eb','#7c3aed','#6366f1','#0891b2','#6b7280'].map(c=>(
-                          <button key={c} onClick={()=>setNewDraft(d=>({...d,color:c}))} style={{width:20,height:20,borderRadius:'50%',background:c,border:newDraft.color===c?`3px solid ${T.text}`:'3px solid transparent',cursor:'pointer',padding:0,flexShrink:0}}/>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Category — searchable select + create new */}
-                  {(()=>{
-                    const activeCategory = newDraft.category || newCatInput.trim();
-                    const filteredCats = allCategories.filter(c=>!newCatInput||c.toLowerCase().includes(newCatInput.toLowerCase()));
-                    return (
-                      <div ref={catRef} style={{position:'relative'}}>
-                        <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:4}}>Category <span style={{fontSize:10,fontWeight:400,color:T.textMuted}}>— optional</span></label>
-                        <div onClick={()=>setCatOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:T.bgElevated,border:`1px solid ${catOpen?T.accent:T.border}`,borderRadius:8,cursor:'pointer',transition:'border .12s',minHeight:38}}>
-                          {activeCategory
-                            ? <><span style={{flex:1,fontSize:12.5,color:T.text,fontWeight:500,textTransform:'capitalize'}}>{activeCategory}</span>
-                                <button onMouseDown={e=>{e.stopPropagation();setNewDraft(d=>({...d,category:''}));setNewCatInput('');}} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',padding:'0 2px',fontSize:14,lineHeight:1}}>×</button></>
-                            : <span style={{flex:1,fontSize:12,color:T.textMuted,fontStyle:'italic'}}>Select or create category…</span>
-                          }
-                          <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:T.textMuted,transform:catOpen?'rotate(180deg)':'none',transition:'transform .15s'}}><path d="M1.5 3.5l3.5 3.5 3.5-3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        </div>
-                        {catOpen&&(
-                          <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,right:0,zIndex:400,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',overflow:'hidden'}}>
-                            <div style={{padding:'7px 9px',borderBottom:`1px solid ${T.border}`}}>
-                              <input autoFocus value={newCatInput} onChange={e=>{setNewCatInput(e.target.value);setNewDraft(d=>({...d,category:''}));}} placeholder="Search or type new category…"
-                                style={{width:'100%',padding:'5px 8px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:5,color:T.text,fontSize:11.5,outline:'none',boxSizing:'border-box'}}/>
-                            </div>
-                            <div style={{maxHeight:180,overflowY:'auto'}}>
-                              {filteredCats.map(cat=>{
-                                const cc=getCatStyle(cat);
-                                return (
-                                  <button key={cat} onMouseDown={()=>{setNewDraft(d=>({...d,category:cat}));setNewCatInput('');setCatOpen(false);}}
-                                    style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:newDraft.category===cat?T.accentDim:'transparent',border:'none',cursor:'pointer',textAlign:'left'}}
-                                    onMouseEnter={e=>{if(newDraft.category!==cat)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(newDraft.category!==cat)e.currentTarget.style.background='transparent';}}>
-                                    <span style={{width:8,height:8,borderRadius:2,background:cc.color||T.accent,display:'block',flexShrink:0}}/>
-                                    <span style={{flex:1,fontSize:12.5,color:T.text,textTransform:'capitalize'}}>{cat}</span>
-                                    {newDraft.category===cat&&<span style={{fontSize:11,color:T.accent}}>✓</span>}
-                                  </button>
-                                );
-                              })}
-                              {newCatInput.trim()&&!allCategories.map(c=>c.toLowerCase()).includes(newCatInput.trim().toLowerCase())&&(
-                                <button onMouseDown={()=>{setNewCatInput(newCatInput.trim());setNewDraft(d=>({...d,category:''}));setCatOpen(false);}}
-                                  style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'transparent',border:'none',cursor:'pointer',textAlign:'left',borderTop:filteredCats.length>0?`1px solid ${T.border}`:'none'}}
-                                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                                  <span style={{width:8,height:8,borderRadius:2,background:T.accent,display:'block',flexShrink:0}}/>
-                                  <span style={{flex:1,fontSize:12.5,color:T.accent}}>Create "<strong>{newCatInput.trim()}</strong>"</span>
-                                  <span style={{fontSize:10,padding:'1px 6px',borderRadius:4,background:T.accentDim,color:T.accent,fontWeight:600}}>new</span>
-                                </button>
-                              )}
-                              {filteredCats.length===0&&!newCatInput.trim()&&<div style={{padding:'16px 12px',fontSize:12,color:T.textMuted,textAlign:'center',fontStyle:'italic'}}>No categories yet — type to create one</div>}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-
-                  {/* Description */}
-                  <div>
-                    <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Description</label>
-                    <textarea value={newDraft.description} onChange={e=>setNewDraft(d=>({...d,description:e.target.value}))} rows={3}
-                      style={{width:'100%',padding:'8px 10px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:'none',resize:'vertical',boxSizing:'border-box',fontFamily:'inherit'}}
-                      placeholder="Describe when this tag should be applied…"/>
-                  </div>
-
-                  {/* Ownership */}
-                  <div>
-                    <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Ownership</label>
-                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                      {/* Owner chips */}
-                      <div style={{position:'relative'}}>
-                        <div style={{fontSize:10.5,color:T.textMuted,marginBottom:5,textTransform:'uppercase',letterSpacing:'0.05em',fontWeight:600}}>Owner</div>
-                        <div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:4}}>
-                          {newOwners.map((o,i)=>(
-                            <div key={i} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 8px 3px 5px',borderRadius:99,background:T.accentDim,border:`1px solid ${T.accent}33`,fontSize:11.5,color:T.text}}>
-                              <div style={{width:18,height:18,borderRadius:'50%',background:T.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,color:'#fff',flexShrink:0}}>{tava(o)}</div>
-                              <span style={{fontWeight:500}}>{o}</span>
-                              <button onMouseDown={e=>{e.stopPropagation();setNewOwners(p=>p.filter((_,j)=>j!==i));}} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',padding:0,fontSize:13,lineHeight:1,display:'flex',alignItems:'center'}}>{Ic.x(8)}</button>
-                            </div>
-                          ))}
-                          <button onMouseDown={e=>{e.stopPropagation();setNewOwnerInput(p=>!p);setNewOwnerSearch('');}}
-                            style={{display:'inline-flex',alignItems:'center',gap:4,padding:'3px 9px',borderRadius:99,fontSize:11,color:T.textMuted,background:'transparent',border:`1.5px dashed ${T.border}`,cursor:'pointer',transition:'all .12s'}}
-                            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
-                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
-                            {Ic.plus(9)} Add owner
-                          </button>
-                        </div>
-                        {newOwnerInput&&(
-                          <div onMouseDown={e=>e.stopPropagation()} style={{position:'absolute',top:'100%',left:0,right:0,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',overflow:'hidden'}}>
-                            <div style={{padding:'6px 8px',borderBottom:`1px solid ${T.border}`}}>
-                              <input autoFocus value={newOwnerSearch} onChange={e=>setNewOwnerSearch(e.target.value)} placeholder="Search users…"
-                                style={{width:'100%',padding:'5px 8px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:5,color:T.text,fontSize:11,outline:'none',boxSizing:'border-box'}}/>
-                            </div>
-                            <div style={{maxHeight:150,overflowY:'auto'}}>
-                              {TAG_USERS.filter(u=>!newOwnerSearch||u.includes(newOwnerSearch.toLowerCase())).map(u=>(
-                                <button key={u} onMouseDown={e=>{e.stopPropagation();setNewOwners(p=>p.includes(u)?p.filter(x=>x!==u):[...p,u]);}}
-                                  style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:newOwners.includes(u)?T.accentDim:'transparent',border:'none',cursor:'pointer',textAlign:'left'}}
-                                  onMouseEnter={e=>{if(!newOwners.includes(u))e.currentTarget.style.background=T.bgHover;}}
-                                  onMouseLeave={e=>{if(!newOwners.includes(u))e.currentTarget.style.background='transparent';}}>
-                                  <div style={{width:20,height:20,borderRadius:'50%',background:T.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,color:'#fff',flexShrink:0}}>{tava(u)}</div>
-                                  <span style={{fontSize:11.5,color:T.text,flex:1}}>{u}</span>
-                                  {newOwners.includes(u)&&<span style={{fontSize:10,color:T.accent}}>✓</span>}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      {/* Steward chips */}
-                      <div style={{position:'relative'}}>
-                        <div style={{fontSize:10.5,color:T.textMuted,marginBottom:5,textTransform:'uppercase',letterSpacing:'0.05em',fontWeight:600}}>Steward</div>
-                        <div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:4}}>
-                          {newStewards.map((o,i)=>(
-                            <div key={i} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 8px 3px 5px',borderRadius:99,background:T.accentDim,border:`1px solid ${T.accent}33`,fontSize:11.5,color:T.text}}>
-                              <div style={{width:18,height:18,borderRadius:'50%',background:T.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,color:'#fff',flexShrink:0}}>{tava(o)}</div>
-                              <span style={{fontWeight:500}}>{o}</span>
-                              <button onMouseDown={e=>{e.stopPropagation();setNewStewards(p=>p.filter((_,j)=>j!==i));}} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',padding:0,fontSize:13,lineHeight:1,display:'flex',alignItems:'center'}}>{Ic.x(8)}</button>
-                            </div>
-                          ))}
-                          <button onMouseDown={e=>{e.stopPropagation();setNewStewardInput(p=>!p);setNewStewardSearch('');}}
-                            style={{display:'inline-flex',alignItems:'center',gap:4,padding:'3px 9px',borderRadius:99,fontSize:11,color:T.textMuted,background:'transparent',border:`1.5px dashed ${T.border}`,cursor:'pointer',transition:'all .12s'}}
-                            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
-                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
-                            {Ic.plus(9)} Add steward
-                          </button>
-                        </div>
-                        {newStewardInput&&(
-                          <div onMouseDown={e=>e.stopPropagation()} style={{position:'absolute',top:'100%',left:0,right:0,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',overflow:'hidden'}}>
-                            <div style={{padding:'6px 8px',borderBottom:`1px solid ${T.border}`}}>
-                              <input autoFocus value={newStewardSearch} onChange={e=>setNewStewardSearch(e.target.value)} placeholder="Search users…"
-                                style={{width:'100%',padding:'5px 8px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:5,color:T.text,fontSize:11,outline:'none',boxSizing:'border-box'}}/>
-                            </div>
-                            <div style={{maxHeight:150,overflowY:'auto'}}>
-                              {TAG_USERS.filter(u=>!newStewardSearch||u.includes(newStewardSearch.toLowerCase())).map(u=>(
-                                <button key={u} onMouseDown={e=>{e.stopPropagation();setNewStewards(p=>p.includes(u)?p.filter(x=>x!==u):[...p,u]);}}
-                                  style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:newStewards.includes(u)?T.accentDim:'transparent',border:'none',cursor:'pointer',textAlign:'left'}}
-                                  onMouseEnter={e=>{if(!newStewards.includes(u))e.currentTarget.style.background=T.bgHover;}}
-                                  onMouseLeave={e=>{if(!newStewards.includes(u))e.currentTarget.style.background='transparent';}}>
-                                  <div style={{width:20,height:20,borderRadius:'50%',background:T.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,color:'#fff',flexShrink:0}}>{tava(u)}</div>
-                                  <span style={{fontSize:11.5,color:T.text,flex:1}}>{u}</span>
-                                  {newStewards.includes(u)&&<span style={{fontSize:10,color:T.accent}}>✓</span>}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Propagation */}
-                  <div>
-                    <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Propagation <span style={{fontSize:10,fontWeight:400,color:T.textMuted}}>— how this tag spreads to related assets</span></label>
-                    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                      {Object.entries(PROP_LABELS).map(([v,l])=>(
-                        <button key={v} onClick={()=>setNewDraft(d=>({...d,propagationMode:v}))}
-                          style={{padding:'5px 12px',borderRadius:6,fontSize:11.5,border:`1.5px solid ${newDraft.propagationMode===v?T.accent:T.border}`,background:newDraft.propagationMode===v?T.accentDim:'transparent',color:newDraft.propagationMode===v?T.accent:T.textMuted,cursor:'pointer',fontWeight:newDraft.propagationMode===v?600:400,transition:'all .12s'}}>
-                          {l}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Connector aliases */}
-                  <div>
-                    <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:4}}>Connector Aliases <span style={{fontSize:10,fontWeight:400,color:T.textMuted}}>— optional, how this tag is named in source systems</span></label>
-                    <div style={{display:'flex',gap:6,marginBottom:6}}>
-                      <Input2 placeholder="Add alias…" value={newAlias} onChange={e=>setNewAlias(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&newAlias.trim()){setNewDraft(d=>({...d,sourceAliases:[...d.sourceAliases,newAlias.trim()]}));setNewAlias('');}}}/>
-                      <button onClick={()=>{if(newAlias.trim()){setNewDraft(d=>({...d,sourceAliases:[...d.sourceAliases,newAlias.trim()]}));setNewAlias('');}}} style={{padding:'0 12px',borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:'pointer',flexShrink:0}}>Add</button>
-                    </div>
-                    {newDraft.sourceAliases.length>0&&<div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
-                      {newDraft.sourceAliases.map((a,i)=>(
-                        <span key={i} style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,padding:'2px 8px',borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>
-                          {a}<button onClick={()=>setNewDraft(d=>({...d,sourceAliases:d.sourceAliases.filter((_,j)=>j!==i)}))} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',padding:0,fontSize:12,lineHeight:1}}>×</button>
-                        </span>
-                      ))}
-                    </div>}
-                  </div>
-
-                  {/* Actions */}
-                  <div style={{display:'flex',gap:8,paddingTop:6,borderTop:`1px solid ${T.border}`}}>
-                    <button onClick={addNewTag} disabled={!newDraft.name.trim()} style={{padding:'8px 20px',borderRadius:8,background:newDraft.name.trim()?T.accent:'rgba(100,100,120,.3)',border:'none',color:'#fff',fontSize:12.5,fontWeight:700,cursor:newDraft.name.trim()?'pointer':'default'}}>Create Tag</button>
-                    <button onClick={()=>setNewPanelOpen(false)} style={{padding:'8px 16px',borderRadius:8,background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:'pointer'}}>Cancel</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* ── Tag detail panel ── */}
-          {selTag&&!newPanelOpen&&(()=>{
+          {selTag&&(()=>{
             const cc  = getCatStyle(selTag.category);
             const draft = editing ? editDraft : selTag;
             const affectedAssets = ASSETS.filter(a=>Object.values(assignments).flat().some(asn=>asn.tagId===selTag.id&&asn.status!=='rejected'&&(asn.assetId===a.id||asn.assetName===a.name)));
@@ -17568,6 +17314,239 @@ const TagManagementView = ({onToast}) => {
             );
           })()}
         </div>
+
+        {/* ── Slide-in backdrop ── */}
+        {(newPanelOpen||newCatPanelOpen)&&(
+          <div onClick={()=>{setNewPanelOpen(false);setNewCatPanelOpen(false);}}
+            style={{position:'absolute',inset:0,background:'rgba(0,0,0,.18)',zIndex:200}}/>
+        )}
+
+        {/* ── New Category slide-in drawer ── */}
+        {newCatPanelOpen&&(
+          <div style={{position:'absolute',right:0,top:0,bottom:0,width:420,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:201,display:'flex',flexDirection:'column',boxShadow:'-8px 0 32px rgba(0,0,0,.18)'}}>
+            <div style={{padding:'16px 20px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+              <div>
+                <div style={{fontSize:14,fontWeight:700,color:T.text}}>New Category</div>
+                <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>Categories group tags for navigation and filtering</div>
+              </div>
+              <button onClick={()=>setNewCatPanelOpen(false)} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 4px'}}>×</button>
+            </div>
+            <div style={{flex:1,overflowY:'auto',padding:'20px'}}>
+              <div style={{display:'flex',flexDirection:'column',gap:16}}>
+                <div>
+                  <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Category Name <span style={{color:T.rose}}>*</span></label>
+                  <Input2 placeholder="e.g. Compliance, Finance, PII" value={newCatDraft.name} onChange={e=>setNewCatDraft(d=>({...d,name:e.target.value}))}/>
+                </div>
+                <div>
+                  <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Description <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
+                  <textarea value={newCatDraft.description} onChange={e=>setNewCatDraft(d=>({...d,description:e.target.value}))} rows={3}
+                    placeholder="What kinds of tags belong in this category?"
+                    style={{width:'100%',padding:'9px 12px',background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:'none',resize:'none',fontFamily:'inherit',lineHeight:1.6,boxSizing:'border-box'}}
+                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                </div>
+                <div>
+                  <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Color</label>
+                  <div style={{display:'flex',gap:7}}>
+                    {['#ee2424','#d97706','#16a34a','#2563eb','#7c3aed','#6366f1','#0891b2','#6b7280'].map(c=>(
+                      <button key={c} onClick={()=>setNewCatDraft(d=>({...d,color:c}))} style={{width:26,height:26,borderRadius:'50%',background:c,border:newCatDraft.color===c?`3px solid ${T.text}`:'3px solid transparent',cursor:'pointer',padding:0,flexShrink:0,transition:'border .12s'}}/>
+                    ))}
+                  </div>
+                </div>
+                <div style={{padding:'14px 16px',background:T.bgElevated,borderRadius:10,border:`1px solid ${T.border}`}}>
+                  <div style={{fontSize:11,color:T.textMuted,marginBottom:6}}>Preview</div>
+                  <span style={{display:'inline-flex',alignItems:'center',gap:6,padding:'4px 12px',borderRadius:99,background:`${newCatDraft.color}15`,border:`1px solid ${newCatDraft.color}40`,fontSize:12,fontWeight:600,color:newCatDraft.color,textTransform:'capitalize'}}>
+                    <span style={{width:7,height:7,borderRadius:'50%',background:newCatDraft.color,display:'block'}}/>
+                    {newCatDraft.name||'Category Name'}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div style={{padding:'14px 20px',borderTop:`1px solid ${T.border}`,display:'flex',gap:8,justifyContent:'flex-end',background:T.bgSurface,flexShrink:0}}>
+              <button onClick={()=>setNewCatPanelOpen(false)} style={{padding:'8px 18px',borderRadius:8,background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:'pointer',fontWeight:500}}>Cancel</button>
+              <button onClick={addNewCategory} disabled={!newCatDraft.name.trim()} style={{padding:'8px 20px',borderRadius:8,background:newCatDraft.name.trim()?T.accent:'rgba(100,100,120,.3)',border:'none',color:'#fff',fontSize:12.5,fontWeight:700,cursor:newCatDraft.name.trim()?'pointer':'default'}}>Create Category</button>
+            </div>
+          </div>
+        )}
+
+        {/* ── New Tag slide-in drawer ── */}
+        {newPanelOpen&&(
+          <div style={{position:'absolute',right:0,top:0,bottom:0,width:420,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:201,display:'flex',flexDirection:'column',boxShadow:'-8px 0 32px rgba(0,0,0,.18)'}}>
+            <div style={{padding:'16px 20px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+              <span style={{fontSize:14,fontWeight:700,color:T.text}}>New Tag</span>
+              <button onClick={()=>setNewPanelOpen(false)} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 4px'}}>×</button>
+            </div>
+            <div style={{flex:1,overflowY:'auto',padding:'20px'}}>
+              <div style={{display:'flex',flexDirection:'column',gap:16}}>
+
+                {/* Name + Color */}
+                <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:14,alignItems:'end'}}>
+                  <div>
+                    <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Tag Name <span style={{color:T.rose}}>*</span></label>
+                    <Input2 placeholder="e.g. Internal Use Only" value={newDraft.name} onChange={e=>setNewDraft(d=>({...d,name:e.target.value}))}/>
+                  </div>
+                  <div style={{paddingBottom:2}}>
+                    <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Color</div>
+                    <div style={{display:'flex',gap:5}}>
+                      {['#ee2424','#d97706','#16a34a','#2563eb','#7c3aed','#6366f1','#0891b2','#6b7280'].map(c=>(
+                        <button key={c} onClick={()=>setNewDraft(d=>({...d,color:c}))} style={{width:20,height:20,borderRadius:'50%',background:c,border:newDraft.color===c?`3px solid ${T.text}`:'3px solid transparent',cursor:'pointer',padding:0,flexShrink:0}}/>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Category */}
+                {(()=>{
+                  const activeCategory = newDraft.category || newCatInput.trim();
+                  const filteredCats = allCategories.filter(c=>!newCatInput||c.toLowerCase().includes(newCatInput.toLowerCase()));
+                  return (
+                    <div ref={catRef} style={{position:'relative'}}>
+                      <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:4}}>Category <span style={{fontSize:10,fontWeight:400,color:T.textMuted}}>— optional</span></label>
+                      <div onClick={()=>setCatOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:T.bgElevated,border:`1px solid ${catOpen?T.accent:T.border}`,borderRadius:8,cursor:'pointer',transition:'border .12s',minHeight:38}}>
+                        {activeCategory
+                          ? <><span style={{flex:1,fontSize:12.5,color:T.text,fontWeight:500,textTransform:'capitalize'}}>{activeCategory}</span>
+                              <button onMouseDown={e=>{e.stopPropagation();setNewDraft(d=>({...d,category:''}));setNewCatInput('');}} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',padding:'0 2px',fontSize:14,lineHeight:1}}>×</button></>
+                          : <span style={{flex:1,fontSize:12,color:T.textMuted,fontStyle:'italic'}}>Select or create category…</span>
+                        }
+                        <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:T.textMuted,transform:catOpen?'rotate(180deg)':'none',transition:'transform .15s'}}><path d="M1.5 3.5l3.5 3.5 3.5-3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </div>
+                      {catOpen&&(
+                        <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,right:0,zIndex:400,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',overflow:'hidden'}}>
+                          <div style={{padding:'7px 9px',borderBottom:`1px solid ${T.border}`}}>
+                            <input autoFocus value={newCatInput} onChange={e=>{setNewCatInput(e.target.value);setNewDraft(d=>({...d,category:''}));}} placeholder="Search or type new category…"
+                              style={{width:'100%',padding:'5px 8px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:5,color:T.text,fontSize:11.5,outline:'none',boxSizing:'border-box'}}/>
+                          </div>
+                          <div style={{maxHeight:180,overflowY:'auto'}}>
+                            {filteredCats.map(cat=>{
+                              const cc=getCatStyle(cat);
+                              return (
+                                <button key={cat} onMouseDown={()=>{setNewDraft(d=>({...d,category:cat}));setNewCatInput('');setCatOpen(false);}}
+                                  style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:newDraft.category===cat?T.accentDim:'transparent',border:'none',cursor:'pointer',textAlign:'left'}}
+                                  onMouseEnter={e=>{if(newDraft.category!==cat)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(newDraft.category!==cat)e.currentTarget.style.background='transparent';}}>
+                                  <span style={{width:8,height:8,borderRadius:2,background:cc.color||T.accent,display:'block',flexShrink:0}}/>
+                                  <span style={{flex:1,fontSize:12.5,color:T.text,textTransform:'capitalize'}}>{cat}</span>
+                                  {newDraft.category===cat&&<span style={{fontSize:11,color:T.accent}}>✓</span>}
+                                </button>
+                              );
+                            })}
+                            {newCatInput.trim()&&!allCategories.map(c=>c.toLowerCase()).includes(newCatInput.trim().toLowerCase())&&(
+                              <button onMouseDown={()=>{setNewCatInput(newCatInput.trim());setNewDraft(d=>({...d,category:''}));setCatOpen(false);}}
+                                style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'transparent',border:'none',cursor:'pointer',textAlign:'left',borderTop:filteredCats.length>0?`1px solid ${T.border}`:'none'}}
+                                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                <span style={{width:8,height:8,borderRadius:2,background:T.accent,display:'block',flexShrink:0}}/>
+                                <span style={{flex:1,fontSize:12.5,color:T.accent}}>Create "<strong>{newCatInput.trim()}</strong>"</span>
+                                <span style={{fontSize:10,padding:'1px 6px',borderRadius:4,background:T.accentDim,color:T.accent,fontWeight:600}}>new</span>
+                              </button>
+                            )}
+                            {filteredCats.length===0&&!newCatInput.trim()&&<div style={{padding:'16px 12px',fontSize:12,color:T.textMuted,textAlign:'center',fontStyle:'italic'}}>No categories yet — type to create one</div>}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Description */}
+                <div>
+                  <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Description <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
+                  <textarea value={newDraft.description} onChange={e=>setNewDraft(d=>({...d,description:e.target.value}))} rows={3}
+                    style={{width:'100%',padding:'8px 10px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:'none',resize:'vertical',boxSizing:'border-box',fontFamily:'inherit'}}
+                    placeholder="Describe when this tag should be applied…"/>
+                </div>
+
+                {/* Ownership */}
+                <div>
+                  <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Ownership</label>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                    {/* Owner chips */}
+                    <div style={{position:'relative'}}>
+                      <div style={{fontSize:10.5,color:T.textMuted,marginBottom:5,textTransform:'uppercase',letterSpacing:'0.05em',fontWeight:600}}>Owner</div>
+                      <div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:4}}>
+                        {newOwners.map((o,i)=>(
+                          <div key={i} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 8px 3px 5px',borderRadius:99,background:T.accentDim,border:`1px solid ${T.accent}33`,fontSize:11.5,color:T.text}}>
+                            <div style={{width:18,height:18,borderRadius:'50%',background:T.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,color:'#fff',flexShrink:0}}>{tava(o)}</div>
+                            <span style={{fontWeight:500}}>{o}</span>
+                            <button onMouseDown={e=>{e.stopPropagation();setNewOwners(p=>p.filter((_,j)=>j!==i));}} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',padding:0,fontSize:13,lineHeight:1,display:'flex',alignItems:'center'}}>{Ic.x(8)}</button>
+                          </div>
+                        ))}
+                        <button onMouseDown={e=>{e.stopPropagation();setNewOwnerInput(p=>!p);setNewOwnerSearch('');}}
+                          style={{display:'inline-flex',alignItems:'center',gap:4,padding:'3px 9px',borderRadius:99,fontSize:11,color:T.textMuted,background:'transparent',border:`1.5px dashed ${T.border}`,cursor:'pointer',transition:'all .12s'}}
+                          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
+                          {Ic.plus(9)} Add owner
+                        </button>
+                      </div>
+                      {newOwnerInput&&(
+                        <div onMouseDown={e=>e.stopPropagation()} style={{position:'absolute',top:'100%',left:0,right:0,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',overflow:'hidden'}}>
+                          <div style={{padding:'6px 8px',borderBottom:`1px solid ${T.border}`}}>
+                            <input autoFocus value={newOwnerSearch} onChange={e=>setNewOwnerSearch(e.target.value)} placeholder="Search users…"
+                              style={{width:'100%',padding:'5px 8px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:5,color:T.text,fontSize:11,outline:'none',boxSizing:'border-box'}}/>
+                          </div>
+                          <div style={{maxHeight:150,overflowY:'auto'}}>
+                            {TAG_USERS.filter(u=>!newOwnerSearch||u.includes(newOwnerSearch.toLowerCase())).map(u=>(
+                              <button key={u} onMouseDown={e=>{e.stopPropagation();setNewOwners(p=>p.includes(u)?p.filter(x=>x!==u):[...p,u]);}}
+                                style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:newOwners.includes(u)?T.accentDim:'transparent',border:'none',cursor:'pointer',textAlign:'left'}}
+                                onMouseEnter={e=>{if(!newOwners.includes(u))e.currentTarget.style.background=T.bgHover;}}
+                                onMouseLeave={e=>{if(!newOwners.includes(u))e.currentTarget.style.background='transparent';}}>
+                                <div style={{width:20,height:20,borderRadius:'50%',background:T.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,color:'#fff',flexShrink:0}}>{tava(u)}</div>
+                                <span style={{fontSize:11.5,color:T.text,flex:1}}>{u}</span>
+                                {newOwners.includes(u)&&<span style={{fontSize:10,color:T.accent}}>✓</span>}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {/* Steward chips */}
+                    <div style={{position:'relative'}}>
+                      <div style={{fontSize:10.5,color:T.textMuted,marginBottom:5,textTransform:'uppercase',letterSpacing:'0.05em',fontWeight:600}}>Steward</div>
+                      <div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:4}}>
+                        {newStewards.map((o,i)=>(
+                          <div key={i} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 8px 3px 5px',borderRadius:99,background:T.accentDim,border:`1px solid ${T.accent}33`,fontSize:11.5,color:T.text}}>
+                            <div style={{width:18,height:18,borderRadius:'50%',background:T.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,color:'#fff',flexShrink:0}}>{tava(o)}</div>
+                            <span style={{fontWeight:500}}>{o}</span>
+                            <button onMouseDown={e=>{e.stopPropagation();setNewStewards(p=>p.filter((_,j)=>j!==i));}} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',padding:0,fontSize:13,lineHeight:1,display:'flex',alignItems:'center'}}>{Ic.x(8)}</button>
+                          </div>
+                        ))}
+                        <button onMouseDown={e=>{e.stopPropagation();setNewStewardInput(p=>!p);setNewStewardSearch('');}}
+                          style={{display:'inline-flex',alignItems:'center',gap:4,padding:'3px 9px',borderRadius:99,fontSize:11,color:T.textMuted,background:'transparent',border:`1.5px dashed ${T.border}`,cursor:'pointer',transition:'all .12s'}}
+                          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
+                          {Ic.plus(9)} Add steward
+                        </button>
+                      </div>
+                      {newStewardInput&&(
+                        <div onMouseDown={e=>e.stopPropagation()} style={{position:'absolute',top:'100%',left:0,right:0,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',overflow:'hidden'}}>
+                          <div style={{padding:'6px 8px',borderBottom:`1px solid ${T.border}`}}>
+                            <input autoFocus value={newStewardSearch} onChange={e=>setNewStewardSearch(e.target.value)} placeholder="Search users…"
+                              style={{width:'100%',padding:'5px 8px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:5,color:T.text,fontSize:11,outline:'none',boxSizing:'border-box'}}/>
+                          </div>
+                          <div style={{maxHeight:150,overflowY:'auto'}}>
+                            {TAG_USERS.filter(u=>!newStewardSearch||u.includes(newStewardSearch.toLowerCase())).map(u=>(
+                              <button key={u} onMouseDown={e=>{e.stopPropagation();setNewStewards(p=>p.includes(u)?p.filter(x=>x!==u):[...p,u]);}}
+                                style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:newStewards.includes(u)?T.accentDim:'transparent',border:'none',cursor:'pointer',textAlign:'left'}}
+                                onMouseEnter={e=>{if(!newStewards.includes(u))e.currentTarget.style.background=T.bgHover;}}
+                                onMouseLeave={e=>{if(!newStewards.includes(u))e.currentTarget.style.background='transparent';}}>
+                                <div style={{width:20,height:20,borderRadius:'50%',background:T.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,color:'#fff',flexShrink:0}}>{tava(u)}</div>
+                                <span style={{fontSize:11.5,color:T.text,flex:1}}>{u}</span>
+                                {newStewards.includes(u)&&<span style={{fontSize:10,color:T.accent}}>✓</span>}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+            <div style={{padding:'14px 20px',borderTop:`1px solid ${T.border}`,display:'flex',gap:8,justifyContent:'flex-end',background:T.bgSurface,flexShrink:0}}>
+              <button onClick={()=>setNewPanelOpen(false)} style={{padding:'8px 18px',borderRadius:8,background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:'pointer',fontWeight:500}}>Cancel</button>
+              <button onClick={addNewTag} disabled={!newDraft.name.trim()} style={{padding:'8px 20px',borderRadius:8,background:newDraft.name.trim()?T.accent:'rgba(100,100,120,.3)',border:'none',color:'#fff',fontSize:12.5,fontWeight:700,cursor:newDraft.name.trim()?'pointer':'default'}}>Create Tag</button>
+            </div>
+          </div>
+        )}
+
       </div>
 
       {/* ── Delete Confirmation Modal ── */}
