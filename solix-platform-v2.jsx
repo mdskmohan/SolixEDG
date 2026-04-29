@@ -3758,6 +3758,15 @@ const QualityView = () => {
   const dimColor = (dim) => ({Completeness:"#3b82f6",Accuracy:"#8b5cf6",Validity:"#10b981",Volume:"#f59e0b",Uniqueness:"#ec4899",Consistency:"#06b6d4",Integrity:"#f97316"}[dim]||T.textMuted);
   const DQ_DIMS = ["Completeness","Accuracy","Validity","Volume","Uniqueness","Consistency","Integrity"];
 
+  // ── deep-link from asset profile incident badge ───────────────
+  useEffect(()=>{
+    if(window.__dqPendingInc){
+      setTab("incidents");
+      setExpandedInc(window.__dqPendingInc);
+      window.__dqPendingInc=null;
+    }
+  },[]);
+
   // ── handlers ─────────────────────────────────────────────────
   const showT = (msg,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),3200);};
 
@@ -6452,7 +6461,7 @@ const AssetLineageFull = ({asset})=>{
   </div>;
 };
 
-const AssetQualityTab = ({asset,onToast})=>{
+const AssetQualityTab = ({asset,onToast,onNav})=>{
   const [runningIds,setRunningIds]=useState(new Set());
   const [selectedIds,setSelectedIds]=useState(new Set());
   const [page,setPage]=useState(0);
@@ -6837,7 +6846,7 @@ const AssetQualityTab = ({asset,onToast})=>{
                     onChange={e=>setSelectedIds(e.target.checked?new Set(localCases.map(t=>t.id)):new Set())}
                     style={{cursor:"pointer",accentColor:T.accent}}/>
                 </th>
-                {["Status","Name","Column","Dimension","Last Run","Actions"].map((h,i)=>(
+                {["Status","Name","Column","Dimension","Last Run","Incident","Actions"].map((h,i)=>(
                   <th key={i} style={{padding:"8px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textAlign:"left",textTransform:"uppercase",letterSpacing:".05em",whiteSpace:"nowrap"}}>{h}</th>
                 ))}
               </tr>
@@ -6867,6 +6876,16 @@ const AssetQualityTab = ({asset,onToast})=>{
                       <span style={{fontSize:11,padding:"2px 8px",borderRadius:5,background:`${dimColor(t.dim)}12`,color:dimColor(t.dim),fontWeight:600,border:`1px solid ${dimColor(t.dim)}22`}}>{t.dim}</span>
                     </td>
                     <td style={{padding:"10px 14px",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{isRunning?"Running…":t.lastRun}</td>
+                    <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
+                      {t.incidentId
+                        ?<button onClick={e=>{e.stopPropagation();window.__dqPendingInc=t.incidentId;onNav&&onNav("quality");}}
+                            style={{fontSize:11,padding:"3px 9px",borderRadius:6,background:T.roseDim,border:`1px solid ${T.rose}30`,color:T.rose,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}
+                            onMouseEnter={e=>e.currentTarget.style.opacity=".75"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+                            🔴 View
+                          </button>
+                        :<span style={{color:T.textMuted,fontSize:12}}>—</span>
+                      }
+                    </td>
                     <td style={{padding:"8px 14px"}} onClick={e=>e.stopPropagation()}>
                       <div style={{display:"flex",gap:4}}>
                         <button title={isRunning?"Running…":"Run now"} disabled={isRunning} onClick={e=>{e.stopPropagation();!isRunning&&runTest(t.id);}}
@@ -8151,13 +8170,13 @@ const FileAssetDetail = ({asset, onBack, onToast}) => {
 };
 
 const CONTAINER_TYPES = new Set(["Database","Catalog","Schema","Bucket","Container","Folder"]);
-const AssetDetail = ({asset, assetStack=[], onBack, onAsset, onToast}) => {
+const AssetDetail = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}) => {
   if(CONTAINER_TYPES.has(asset.type)) return <ContainerAssetDetail asset={asset} assetStack={assetStack} onBack={onBack} onAsset={onAsset} onToast={onToast}/>;
   if(asset.type==="Object"||asset.type==="Blob") return <FileAssetDetail asset={asset} onBack={onBack} onToast={onToast}/>;
-  return <AssetDetailFull asset={asset} assetStack={assetStack} onBack={onBack} onToast={onToast}/>;
+  return <AssetDetailFull asset={asset} assetStack={assetStack} onBack={onBack} onToast={onToast} onNav={onNav}/>;
 };
 
-const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
+const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
   const [tab,        setTab]       = useState("overview");
   const [selCol,     setSelCol]    = useState(null);
   const [colPanelTab,setColPanelTab]=useState("overview");
@@ -8274,7 +8293,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
       <div style={{flex:1,overflowY:"auto",padding:24,minWidth:0}}>
         {tab==="overview"  && <AssetOverview asset={asset} data={data} setData={setData} onToast={onToast}/>}
         {tab==="schema"    && <AssetSchema asset={asset} selCol={selCol} onColClick={c=>{ setSelCol(selCol?.name===c?.name?null:c); }} onToast={onToast}/>}
-        {tab==="quality"   && <AssetQualityTab asset={data} onToast={onToast}/>}
+        {tab==="quality"   && <AssetQualityTab asset={data} onToast={onToast} onNav={onNav}/>}
         {tab==="usage"     && <AssetUsageTab/>}
       </div>
 
@@ -17980,7 +17999,7 @@ export default function App(){
 
   const renderPage = () => {
     const currentAsset = assetStack.length>0 ? assetStack[assetStack.length-1] : null;
-    if(nav==="catalog"&&currentAsset) return <AssetDetail asset={currentAsset} assetStack={assetStack} onBack={handleAssetBack} onAsset={handleAssetPush} onToast={showToast}/>;
+    if(nav==="catalog"&&currentAsset) return <AssetDetail asset={currentAsset} assetStack={assetStack} onBack={handleAssetBack} onAsset={handleAssetPush} onToast={showToast} onNav={handleNav}/>;
     switch(nav){
       case "home":          return <HomeView onNav={handleNav} onToast={showToast} role={role} roleCfg={roleCfg}/>;
       case "search":        return <SearchView onAsset={handleAsset}/>;
