@@ -7183,10 +7183,11 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
     {key:"name", label:"Name", render:(v,r)=>(
       <div style={{display:"flex",alignItems:"center",gap:8}}>
         <ServiceIcon service={r.service} size={16}/>
-        <div>
+        <div style={{flex:1,minWidth:0}}>
           <div style={{display:"flex",alignItems:"center",gap:5}}>
             <span style={{fontSize:12.5,fontWeight:500,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{v}</span>
             {r.fileFormat&&<span style={{fontSize:9,fontWeight:700,padding:"1px 4px",borderRadius:3,background:`${FILE_FORMAT_COLORS[r.fileFormat]||T.textMuted}18`,color:FILE_FORMAT_COLORS[r.fileFormat]||T.textMuted,border:`1px solid ${FILE_FORMAT_COLORS[r.fileFormat]||T.textMuted}33`}}>{r.fileFormat}</span>}
+            {CONTAINER_TYPES.has(r.type)&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}33`,letterSpacing:"0.03em"}}>Browse →</span>}
           </div>
           {r.db&&<div style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{r.db}</div>}
         </div>
@@ -7956,10 +7957,8 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
 
   const tabs=[
     {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},
-    {key:"lineage",label:"Lineage"},{key:"quality",label:"Quality"},
-    {key:"policies",label:"Policies"},{key:"access",label:"Access"},
-    {key:"usage",label:"Usage"},{key:"activity",label:"Activity"},
-    {key:"comments",label:`Discussions (${(COMMENTS_BY_ASSET[asset.name]||[]).length})`},
+    {key:"quality",label:"Quality"},{key:"tags",label:"Tags"},
+    {key:"usage",label:"Usage"},
   ];
 
   const handleCertify=()=>{
@@ -8022,13 +8021,9 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
       <div style={{flex:1,overflowY:"auto",padding:24,minWidth:0}}>
         {tab==="overview"  && <AssetOverview asset={asset} data={data} setData={setData} onToast={onToast}/>}
         {tab==="schema"    && <AssetSchema asset={asset} selCol={selCol} onColClick={c=>{ setSelCol(selCol?.name===c?.name?null:c); }} onToast={onToast}/>}
-        {tab==="lineage"   && <AssetLineageFull asset={asset}/>}
         {tab==="quality"   && <AssetQualityTab asset={data}/>}
-{tab==="policies"  && <AssetPoliciesTab/>}
-        {tab==="access"    && <AssetAccessTab onToast={onToast}/>}
+        {tab==="tags"      && <AssetTagsTab asset={data} onToast={onToast}/>}
         {tab==="usage"     && <AssetUsageTab/>}
-        {tab==="activity"  && <AssetActivityTab/>}
-        {tab==="comments"  && <AssetCommentsTab asset={asset} onToast={onToast}/>}
       </div>
 
       {/* ── Column detail panel (tabbed: Overview | Quality) ── */}
@@ -8321,54 +8316,6 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
               {m.v}
             </div>
           ))}
-        </div>
-
-        {/* CERTIFICATE */}
-        <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
-          <MetaLabel>Certificate</MetaLabel>
-          <button onMouseDown={e=>{e.stopPropagation();setCertOpen(p=>!p);setDomainOpen(false);setOwnerOpen(false);}}
-            style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 11px",borderRadius:8,background:cm.bg,border:`1px solid ${cm.border}`,cursor:"pointer",transition:"opacity .1s"}}
-            onMouseEnter={e=>e.currentTarget.style.opacity=".85"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
-            <span style={{display:"flex",alignItems:"center",gap:7,fontSize:13,fontWeight:700,color:cm.color}}>
-              <span style={{fontSize:15}}>{cm.icon}</span>{data.cert}
-            </span>
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:cm.color,flexShrink:0}}><path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-          </button>
-          {certOpen&&(
-            <div onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",top:"calc(100% - 4px)",left:16,right:16,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",overflow:"hidden"}}>
-              {Object.entries(CMETA).map(([c,m])=>(
-                <button key={c} onMouseDown={e=>{e.stopPropagation();setData(d=>({...d,cert:c}));setCertOpen(false);onToast(`Certification set to ${c}`,"success");}}
-                  style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"9px 14px",background:data.cert===c?m.bg:"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}}
-                  onMouseEnter={e=>{if(data.cert!==c)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(data.cert!==c)e.currentTarget.style.background="transparent";}}>
-                  <span style={{fontSize:15}}>{m.icon}</span>
-                  <span style={{flex:1,fontSize:12.5,fontWeight:600,color:m.color}}>{c}</span>
-                  {data.cert===c&&<span style={{fontSize:12,color:m.color}}>✓</span>}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* DOMAIN */}
-        <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
-          <MetaLabel>Domain</MetaLabel>
-          <button onMouseDown={e=>{e.stopPropagation();setDomainOpen(p=>!p);setCertOpen(false);setOwnerOpen(false);}}
-            style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 11px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}33`,cursor:"pointer",fontSize:13,fontWeight:600,color:T.accent,transition:"opacity .1s"}}
-            onMouseEnter={e=>e.currentTarget.style.opacity=".8"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
-            {data.domain}
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:T.accent}}><path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-          </button>
-          {domainOpen&&(
-            <div onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",top:"calc(100% - 4px)",left:16,right:16,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",overflow:"hidden"}}>
-              {DOMAINS_LIST.map(d=>(
-                <button key={d} onMouseDown={e=>{e.stopPropagation();setData(dd=>({...dd,domain:d}));setDomainOpen(false);onToast(`Domain set to ${d}`,"success");}}
-                  style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 14px",background:data.domain===d?T.accentDim:"transparent",border:"none",cursor:"pointer",fontSize:12.5,color:data.domain===d?T.accent:T.textSub,fontWeight:data.domain===d?600:400,transition:"background .1s"}}
-                  onMouseEnter={e=>{if(data.domain!==d)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(data.domain!==d)e.currentTarget.style.background="transparent";}}>
-                  {d}{data.domain===d&&<span style={{color:T.accent,fontSize:12}}>✓</span>}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
 
         {/* OWNERS */}
