@@ -17378,20 +17378,10 @@ const TagManagementView = ({onToast}) => {
             <div style={{flex:1,overflowY:'auto',padding:'20px'}}>
               <div style={{display:'flex',flexDirection:'column',gap:16}}>
 
-                {/* Name + Color */}
-                <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:14,alignItems:'end'}}>
-                  <div>
-                    <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Tag Name <span style={{color:T.rose}}>*</span></label>
-                    <Input2 placeholder="e.g. Internal Use Only" value={newDraft.name} onChange={e=>setNewDraft(d=>({...d,name:e.target.value}))}/>
-                  </div>
-                  <div style={{paddingBottom:2}}>
-                    <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Color</div>
-                    <div style={{display:'flex',gap:5}}>
-                      {['#ee2424','#d97706','#16a34a','#2563eb','#7c3aed','#6366f1','#0891b2','#6b7280'].map(c=>(
-                        <button key={c} onClick={()=>setNewDraft(d=>({...d,color:c}))} style={{width:20,height:20,borderRadius:'50%',background:c,border:newDraft.color===c?`3px solid ${T.text}`:'3px solid transparent',cursor:'pointer',padding:0,flexShrink:0}}/>
-                      ))}
-                    </div>
-                  </div>
+                {/* Tag Name */}
+                <div>
+                  <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Tag Name <span style={{color:T.rose}}>*</span></label>
+                  <Input2 placeholder="e.g. Internal Use Only" value={newDraft.name} onChange={e=>setNewDraft(d=>({...d,name:e.target.value}))}/>
                 </div>
 
                 {/* Category */}
@@ -17535,6 +17525,18 @@ const TagManagementView = ({onToast}) => {
                         </div>
                       )}
                     </div>
+                  </div>
+                </div>
+
+                {/* Color — last field */}
+                <div>
+                  <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Color</label>
+                  <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    {['#ee2424','#d97706','#16a34a','#2563eb','#7c3aed','#6366f1','#0891b2','#6b7280'].map(c=>(
+                      <button key={c} onClick={()=>setNewDraft(d=>({...d,color:c}))}
+                        style={{width:26,height:26,borderRadius:'50%',background:c,border:newDraft.color===c?`3px solid ${T.text}`:'3px solid transparent',cursor:'pointer',padding:0,flexShrink:0,transition:'border .12s'}}/>
+                    ))}
+                    <span style={{marginLeft:4,width:26,height:26,borderRadius:'50%',background:newDraft.color,border:`2px solid ${T.border}`,display:'inline-block',flexShrink:0}}/>
                   </div>
                 </div>
 
