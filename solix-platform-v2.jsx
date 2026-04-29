@@ -3628,6 +3628,12 @@ const DQStatusDot = ({status,size=10})=>{
   );
 };
 
+const TC_STATUS_CFG = {
+  Success:{color:"#16a34a",bg:"#16a34a12",label:"Success"},
+  Failed: {color:T.rose,   bg:T.roseDim,  label:"Failed"},
+  Aborted:{color:T.amber,  bg:T.amberDim, label:"Aborted"},
+};
+
 const QualityView = () => {
   const [tab, setTab] = useState("testcases");
 
@@ -3648,6 +3654,9 @@ const QualityView = () => {
   const [tcDetailEditing, setTcDetailEditing] = useState(false);
   const [tcDetailDraft,   setTcDetailDraft]   = useState(null);
   const [tcAdvOpen,     setTcAdvOpen]     = useState(false);
+  const [tcPage,        setTcPage]        = useState(0);
+  const [runningIds,    setRunningIds]    = useState(new Set());
+  const TC_PAGE_SIZE = 10;
 
   // test suites tab
   const [suitesSubTab,  setSuitesSubTab]  = useState("table");
@@ -3724,6 +3733,9 @@ const QualityView = () => {
     return true;
   });
   const tcFiltersActive = tcTableFilter!=="all"||tcTypeFilter!=="all"||tcStatusFilter!=="all"||tcSearch;
+  const tcTotalPages = Math.ceil(filteredTC.length/TC_PAGE_SIZE);
+  const safeTcPage = Math.min(tcPage, Math.max(0, tcTotalPages-1));
+  const pagedTC = filteredTC.slice(safeTcPage*TC_PAGE_SIZE, (safeTcPage+1)*TC_PAGE_SIZE);
 
   const filteredDefs = definitions.filter(d=>{
     if(defEntityType!=="all"&&d.entityType!==defEntityType) return false;
@@ -3747,6 +3759,17 @@ const QualityView = () => {
 
   // ── handlers ─────────────────────────────────────────────────
   const showT = (msg,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),3200);};
+
+  const runTC = (id,onDone)=>{
+    setRunningIds(p=>new Set([...p,id]));
+    setTimeout(()=>{
+      setRunningIds(p=>{const n=new Set(p);n.delete(id);return n;});
+      setTestCases(prev=>prev.map(t=>t.id===id?{...t,lastRun:"just now",status:t.status==="Aborted"?"Success":t.status}:t));
+      setTcDetail(prev=>prev?.id===id?{...prev,lastRun:"just now",status:prev.status==="Aborted"?"Success":prev.status}:prev);
+      onDone&&onDone();
+      showT("Test run complete — result updated");
+    },1400+Math.floor(Math.random()*800));
+  };
 
   const runSuite = (suiteId,e)=>{
     e&&e.stopPropagation();
@@ -3805,12 +3828,6 @@ const QualityView = () => {
     Assigned:    {color:T.accent,  bg:T.accentDim, label:"Assigned"},
     Resolved:    {color:"#16a34a", bg:"#16a34a12",  label:"Resolved"},
   };
-  const TC_STATUS_CFG = {
-    Success:{color:"#16a34a",bg:"#16a34a12",label:"Success"},
-    Failed: {color:T.rose,   bg:T.roseDim,  label:"Failed"},
-    Aborted:{color:T.amber,  bg:T.amberDim, label:"Aborted"},
-  };
-
   const TABS = [
     {key:"testcases",  label:"Test Cases"},
     {key:"incidents",  label:newIncCount>0?`Incident Manager (${newIncCount} new)`:openIncCount>0?`Incident Manager (${openIncCount} open)`:"Incident Manager"},
@@ -3986,20 +4003,21 @@ const QualityView = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredTC.map((t,i)=>(
+                {pagedTC.map((t,i)=>{
+                  const isRunning=runningIds.has(t.id);
+                  return (
                   <tr
                     key={t.id}
                     onClick={()=>setTcDetail(t)}
-                    style={{borderBottom:i<filteredTC.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"background .1s"}}
-                    onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
-                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+                    style={{borderBottom:i<pagedTC.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"background .1s",background:isRunning?T.amberDim:"transparent"}}
+                    onMouseEnter={e=>{if(!isRunning)e.currentTarget.style.background=T.bgHover;}}
+                    onMouseLeave={e=>{if(!isRunning)e.currentTarget.style.background="transparent";}}
                   >
                     <td style={{padding:"10px 14px",width:40}}>
-                      <DQStatusDot status={t.status}/>
+                      <DQStatusDot status={isRunning?"Aborted":t.status}/>
                     </td>
                     <td style={{padding:"10px 14px"}}>
                       <div style={{fontSize:13,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:240}}>{t.name}</div>
-                      {t.failedReason&&<div style={{fontSize:11,color:t.status==="Failed"?T.rose:T.amber,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:240,marginTop:2}} title={t.failedReason}>{t.failedReason}</div>}
                     </td>
                     <td style={{padding:"10px 14px"}}>
                       <span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.accent,whiteSpace:"nowrap"}}>{t.table}</span>
@@ -4010,7 +4028,7 @@ const QualityView = () => {
                         : <span style={{color:T.textMuted,fontSize:12}}>—</span>
                       }
                     </td>
-                    <td style={{padding:"10px 14px",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{t.lastRun}</td>
+                    <td style={{padding:"10px 14px",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{isRunning?"Running…":t.lastRun}</td>
                     <td style={{padding:"10px 14px"}}>
                       {t.incidentId
                         ? <button
@@ -4023,10 +4041,10 @@ const QualityView = () => {
                     <td style={{padding:"8px 14px"}} onClick={e=>e.stopPropagation()}>
                       <div style={{display:"flex",alignItems:"center",gap:4}}>
                         {/* Run */}
-                        <button title="Run now"
-                          onClick={e=>{e.stopPropagation();showT(`Test "${t.name}" queued`,"success");}}
-                          style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent,cursor:"pointer",flexShrink:0,transition:"opacity .1s"}}
-                          onMouseEnter={e=>e.currentTarget.style.opacity=".75"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+                        <button title={isRunning?"Running…":"Run now"} disabled={isRunning}
+                          onClick={e=>{e.stopPropagation();runTC(t.id);}}
+                          style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent,cursor:isRunning?"not-allowed":"pointer",opacity:isRunning?0.4:1,flexShrink:0,transition:"opacity .1s"}}
+                          onMouseEnter={e=>{if(!isRunning)e.currentTarget.style.opacity=".75";}} onMouseLeave={e=>{if(!isRunning)e.currentTarget.style.opacity="1";}}>
                           <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
                         </button>
                         {/* Edit */}
@@ -4046,9 +4064,27 @@ const QualityView = () => {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
+            {tcTotalPages>1&&(
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",borderTop:`1px solid ${T.border}`,background:T.bgElevated}}>
+                <span style={{fontSize:11.5,color:T.textMuted}}>Showing {safeTcPage*TC_PAGE_SIZE+1}{"–"}{Math.min((safeTcPage+1)*TC_PAGE_SIZE,filteredTC.length)} of {filteredTC.length}</span>
+                <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                  <button disabled={safeTcPage===0} onClick={()=>setTcPage(p=>p-1)}
+                    style={{padding:"3px 10px",borderRadius:6,fontSize:11.5,fontWeight:500,cursor:safeTcPage===0?"not-allowed":"pointer",opacity:safeTcPage===0?0.4:1,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub}}>← Prev</button>
+                  {Array.from({length:tcTotalPages},(_,i)=>(
+                    <button key={i} onClick={()=>setTcPage(i)}
+                      style={{width:26,height:26,borderRadius:6,fontSize:11.5,fontWeight:safeTcPage===i?700:400,cursor:"pointer",background:safeTcPage===i?T.accent:T.bgSurface,border:`1px solid ${safeTcPage===i?T.accent:T.border}`,color:safeTcPage===i?"#fff":T.textSub}}>
+                      {i+1}
+                    </button>
+                  ))}
+                  <button disabled={safeTcPage===tcTotalPages-1} onClick={()=>setTcPage(p=>p+1)}
+                    style={{padding:"3px 10px",borderRadius:6,fontSize:11.5,fontWeight:500,cursor:safeTcPage===tcTotalPages-1?"not-allowed":"pointer",opacity:safeTcPage===tcTotalPages-1?0.4:1,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub}}>Next →</button>
+                </div>
+              </div>
+            )}
             {filteredTC.length===0&&(
               <div style={{textAlign:"center",padding:"48px 0"}}>
                 <div style={{fontSize:32,marginBottom:10,opacity:.15}}>◎</div>
@@ -4771,10 +4807,11 @@ const QualityView = () => {
                   Cancel
                 </button>
               </> : <>
-                <button onClick={()=>{showT("Test queued for immediate execution");}}
-                  style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 16px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
+                <button onClick={()=>{runTC(tcDetail.id);}}
+                  disabled={runningIds.has(tcDetail.id)}
+                  style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 16px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent,fontSize:12,fontWeight:600,cursor:runningIds.has(tcDetail.id)?"not-allowed":"pointer",opacity:runningIds.has(tcDetail.id)?0.5:1,whiteSpace:"nowrap"}}>
                   <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
-                  Run Now
+                  {runningIds.has(tcDetail.id)?"Running…":"Run Now"}
                 </button>
                 <button onClick={()=>{setTcDetailEditing(true);setTcDetailDraft({name:tcDetail.name,params:{...(tcDetail.params||{})}});}}
                   style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 16px",borderRadius:8,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:500,cursor:"pointer",whiteSpace:"nowrap"}}>
@@ -6384,6 +6421,9 @@ const AssetQualityTab = ({asset,onToast})=>{
   const [page,setPage]=useState(0);
   const PAGE_SIZE=10;
   const [runAllProgress,setRunAllProgress]=useState(null);
+  const [tcDetail,setTcDetail]=useState(null);
+  const [tcDetailEditing,setTcDetailEditing]=useState(false);
+  const [tcDetailDraft,setTcDetailDraft]=useState(null);
   const [addTestOpen,setAddTestOpen]=useState(false);
   const [selectTestOpen,setSelectTestOpen]=useState(false);
   const [selectTestIds,setSelectTestIds]=useState(new Set());
@@ -6420,6 +6460,7 @@ const AssetQualityTab = ({asset,onToast})=>{
     setTimeout(()=>{
       setRunningIds(p=>{const n=new Set(p);n.delete(id);return n;});
       setLocalCases(p=>p.map(t=>t.id===id?{...t,lastRun:"just now",status:t.status==="Aborted"?"Success":t.status}:t));
+      setTcDetail(prev=>prev?.id===id?{...prev,lastRun:"just now",status:prev.status==="Aborted"?"Success":prev.status}:prev);
       onDone&&onDone();
     },1400+Math.floor(Math.random()*800));
   };
@@ -6770,9 +6811,10 @@ const AssetQualityTab = ({asset,onToast})=>{
                 const isRunning=runningIds.has(t.id);
                 const isSel=selectedIds.has(t.id);
                 return (
-                  <tr key={t.id} style={{borderBottom:i<pagedCases.length-1?`1px solid ${T.border}`:"none",transition:"background .1s",background:isSel?T.accentDim:"transparent"}}
-                    onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
-                    <td style={{padding:"10px 8px 10px 14px",width:28}}>
+                  <tr key={t.id} style={{borderBottom:i<pagedCases.length-1?`1px solid ${T.border}`:"none",transition:"background .1s",background:isSel?T.accentDim:"transparent",cursor:"pointer"}}
+                    onClick={e=>{if(e.target.type!=="checkbox")setTcDetail(t);}}
+                    onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background=isSel?T.accentDim:"transparent";}}>
+                    <td style={{padding:"10px 8px 10px 14px",width:28}} onClick={e=>e.stopPropagation()}>
                       <input type="checkbox" checked={isSel} onChange={e=>setSelectedIds(p=>{const n=new Set(p);e.target.checked?n.add(t.id):n.delete(t.id);return n;})} style={{cursor:"pointer",accentColor:T.accent}}/>
                     </td>
                     <td style={{padding:"10px 14px",width:32}}>
@@ -6780,7 +6822,6 @@ const AssetQualityTab = ({asset,onToast})=>{
                     </td>
                     <td style={{padding:"10px 14px"}}>
                       <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{t.name}</div>
-                      {t.failedReason&&<div style={{fontSize:11,color:cfg.color,marginTop:2}}>{t.failedReason}</div>}
                     </td>
                     <td style={{padding:"10px 14px"}}>
                       {t.col?<span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{t.col}</span>:<span style={{color:T.textMuted,fontSize:12}}>—</span>}
@@ -6791,7 +6832,7 @@ const AssetQualityTab = ({asset,onToast})=>{
                     <td style={{padding:"10px 14px",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{isRunning?"Running…":t.lastRun}</td>
                     <td style={{padding:"8px 14px"}} onClick={e=>e.stopPropagation()}>
                       <div style={{display:"flex",gap:4}}>
-                        <button title={isRunning?"Running…":"Run now"} disabled={isRunning} onClick={()=>!isRunning&&runTest(t.id)}
+                        <button title={isRunning?"Running…":"Run now"} disabled={isRunning} onClick={e=>{e.stopPropagation();!isRunning&&runTest(t.id);}}
                           style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent,cursor:isRunning?"not-allowed":"pointer",opacity:isRunning?0.4:1,transition:"opacity .1s"}}
                           onMouseEnter={e=>{if(!isRunning)e.currentTarget.style.opacity=".7";}} onMouseLeave={e=>{if(!isRunning)e.currentTarget.style.opacity="1";}}>
                           <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
@@ -6828,6 +6869,125 @@ const AssetQualityTab = ({asset,onToast})=>{
           )}
       </>}
     </Card2>
+
+    {/* ── Test Case Detail Panel ── */}
+    {tcDetail&&createPortal(
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:900,backdropFilter:"blur(3px)"}} onClick={()=>{setTcDetail(null);setTcDetailEditing(false);setTcDetailDraft(null);}}>
+        <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:0,right:0,bottom:0,width:500,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
+          {/* Header */}
+          <div style={{padding:"20px 24px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+              <div style={{flex:1}}>
+                {tcDetailEditing
+                  ? <input value={tcDetailDraft?.name||""} onChange={e=>setTcDetailDraft(d=>({...d,name:e.target.value}))}
+                      style={{fontSize:15,fontWeight:700,color:T.text,background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:7,padding:"4px 8px",outline:"none",width:"100%",boxSizing:"border-box",marginBottom:7}}/>
+                  : <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:7}}>{tcDetail.name}</div>
+                }
+                <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                  <DQStatusBadge status={tcDetail.status} size="lg"/>
+                  <span style={{fontSize:11.5,padding:"2px 8px",borderRadius:5,background:`${dimColor(tcDetail.dim)}12`,color:dimColor(tcDetail.dim),fontWeight:600,border:`1px solid ${dimColor(tcDetail.dim)}22`}}>{tcDetail.dim}</span>
+                  <span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{tcDetail.table}{tcDetail.col?`.${tcDetail.col}`:""}</span>
+                </div>
+              </div>
+              <button onClick={()=>{setTcDetail(null);setTcDetailEditing(false);setTcDetailDraft(null);}} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.x(11)}</button>
+            </div>
+          </div>
+          {/* Body */}
+          <div style={{flex:1,overflowY:"auto",padding:"20px 24px",display:"flex",flexDirection:"column",gap:20}}>
+            {/* Latest result banner */}
+            {(()=>{
+              const sc=TC_STATUS_CFG[tcDetail.status]||TC_STATUS_CFG.Success;
+              return (
+                <div style={{padding:"14px 16px",background:sc.bg,border:`1.5px solid ${sc.color}28`,borderRadius:10}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <DQStatusDot status={tcDetail.status}/>
+                    <span style={{fontSize:11,fontWeight:700,color:sc.color}}>{sc.label}</span>
+                    <span style={{fontSize:11,color:T.textMuted,marginLeft:"auto"}}>{tcDetail.lastRun}</span>
+                  </div>
+                  {tcDetail.failedReason&&(
+                    <div style={{marginTop:8,fontSize:12.5,color:sc.color,lineHeight:1.6,padding:"8px 12px",background:`${sc.color}10`,borderRadius:7,border:`1px solid ${sc.color}22`}}>{tcDetail.failedReason}</div>
+                  )}
+                </div>
+              );
+            })()}
+            {/* Result History */}
+            <div>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:10,textTransform:"uppercase"}}>Result History — Last 15 Runs</div>
+              <div style={{display:"flex",gap:3,alignItems:"flex-end",height:40,marginBottom:4}}>
+                {(tcDetail.history||[]).map((v,i)=>{
+                  const col=v===0?T.rose:v<1?T.amber:"#16a34a";
+                  return <div key={i} title={v===0?"Fail":v<1?"Warning":"Pass"} style={{flex:1,borderRadius:"3px 3px 0 0",background:col,height:`${Math.max(v===0?1:v,0.12)*100}%`,minHeight:5,opacity:i<10?0.55:0.85,cursor:"default",transition:"opacity .15s"}}
+                    onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=i<10?"0.55":"0.85"}/>;
+                })}
+              </div>
+              <div style={{height:1,background:T.border,marginBottom:4}}/>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:T.textMuted}}>
+                <span>15 runs ago</span><span>Latest</span>
+              </div>
+            </div>
+            {/* Test Definition */}
+            <div>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:8,textTransform:"uppercase"}}>Test Definition</div>
+              <div style={{padding:"13px 16px",background:T.bgElevated,borderRadius:10,border:`1px solid ${T.border}`}}>
+                <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:3}}>{tcDetail.defName}</div>
+                <code style={{fontSize:11,color:T.violet,fontFamily:"'Geist Mono',monospace"}}>{DQ_TEST_DEFINITIONS.find(d=>d.id===tcDetail.defId)?.fn||""}</code>
+              </div>
+            </div>
+            {/* Parameters */}
+            {Object.keys(tcDetail.params||{}).length>0&&(
+              <div>
+                <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:8,textTransform:"uppercase"}}>Parameters</div>
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {Object.entries(tcDetailEditing?tcDetailDraft?.params||tcDetail.params:tcDetail.params).map(([k,v])=>(
+                    <div key={k} style={{display:"flex",gap:12,padding:"9px 13px",background:T.bgElevated,borderRadius:8,border:`1px solid ${tcDetailEditing?T.accent:T.border}`,alignItems:"center"}}>
+                      <span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,minWidth:130,flexShrink:0}}>{k}</span>
+                      {tcDetailEditing
+                        ? <input value={Array.isArray(v)?v.join(", "):String(v)}
+                            onChange={e=>setTcDetailDraft(d=>({...d,params:{...(d.params||tcDetail.params),[k]:e.target.value}}))}
+                            style={{flex:1,padding:"3px 8px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:5,color:T.text,fontSize:12,fontFamily:"'Geist Mono',monospace",outline:"none"}}
+                            onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                        : <span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.violet,flex:1}}>{Array.isArray(v)?v.join(", "):String(v)}</span>
+                      }
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          {/* Footer */}
+          <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgElevated,display:"flex",alignItems:"center",gap:8}}>
+            {tcDetailEditing ? <>
+              <button onClick={()=>{
+                setLocalCases(prev=>prev.map(t=>t.id===tcDetail.id?{...t,...tcDetailDraft}:t));
+                setTcDetail(prev=>({...prev,...tcDetailDraft}));
+                setTcDetailEditing(false);setTcDetailDraft(null);
+                onToast&&onToast("Test case updated","success");
+              }} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 18px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Save Changes</button>
+              <button onClick={()=>{setTcDetailEditing(false);setTcDetailDraft(null);}}
+                style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+            </> : <>
+              <button disabled={runningIds.has(tcDetail.id)} onClick={()=>runTest(tcDetail.id)}
+                style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 16px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent,fontSize:12,fontWeight:600,cursor:runningIds.has(tcDetail.id)?"not-allowed":"pointer",opacity:runningIds.has(tcDetail.id)?0.5:1,whiteSpace:"nowrap"}}>
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
+                {runningIds.has(tcDetail.id)?"Running…":"Run Now"}
+              </button>
+              <button onClick={()=>{setTcDetailEditing(true);setTcDetailDraft({name:tcDetail.name,params:{...(tcDetail.params||{})}});}}
+                style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 16px",borderRadius:8,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:500,cursor:"pointer",whiteSpace:"nowrap"}}>
+                <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M8.5 1.5l2 2-7 7H1.5v-2l7-7z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
+                Edit
+              </button>
+            </>}
+            <button onClick={()=>{setLocalCases(prev=>prev.filter(t=>t.id!==tcDetail.id));setTcDetail(null);onToast&&onToast("Test case removed","error");}}
+              style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.rose,fontSize:12,cursor:"pointer",marginLeft:"auto",whiteSpace:"nowrap"}}
+              onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.borderColor=T.rose+"44";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor=T.border;}}>
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 3v7h4V3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Remove
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    )}
   </div>;
 }
 const AssetTagsTab = ({assetId, onToast}) => {
