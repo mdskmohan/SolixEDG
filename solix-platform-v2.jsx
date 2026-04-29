@@ -6372,9 +6372,12 @@ const AssetLineageFull = ({asset})=>{
   </div>;
 };
 
-const AssetQualityTab = ({asset})=>{
+const AssetQualityTab = ({asset,onToast})=>{
   const [runningIds,setRunningIds]=useState(new Set());
   const [selectedIds,setSelectedIds]=useState(new Set());
+  const [page,setPage]=useState(0);
+  const PAGE_SIZE=10;
+  const [runAllProgress,setRunAllProgress]=useState(null);
   const [addTestOpen,setAddTestOpen]=useState(false);
   const [selectTestOpen,setSelectTestOpen]=useState(false);
   const [selectTestIds,setSelectTestIds]=useState(new Set());
@@ -6403,10 +6406,16 @@ const AssetQualityTab = ({asset})=>{
   const trend=[91,94,93,96,94,92,95,97,94,96,94,asset.quality];
   const dimColor=(dim)=>({Completeness:"#3b82f6",Accuracy:"#8b5cf6",Validity:"#10b981",Volume:"#f59e0b",Uniqueness:"#ec4899",Consistency:"#06b6d4",Integrity:"#f97316"}[dim]||T.textMuted);
   const TC_CFG={Success:{color:"#16a34a",bg:"#16a34a12"},Failed:{color:"#e11d48",bg:"rgba(225,29,72,.1)"},Aborted:{color:"#d97706",bg:"rgba(217,119,6,.1)"}};
+  const totalPages=Math.ceil(localCases.length/PAGE_SIZE);
+  const pagedCases=localCases.slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE);
 
-  const runTest=(id)=>{
+  const runTest=(id,onDone)=>{
     setRunningIds(p=>new Set([...p,id]));
-    setTimeout(()=>setRunningIds(p=>{const n=new Set(p);n.delete(id);return n;}),1800);
+    setTimeout(()=>{
+      setRunningIds(p=>{const n=new Set(p);n.delete(id);return n;});
+      setLocalCases(p=>p.map(t=>t.id===id?{...t,lastRun:"just now",status:t.status==="Aborted"?"Success":t.status}:t));
+      onDone&&onDone();
+    },1400+Math.floor(Math.random()*800));
   };
   const deleteTest=(id)=>setLocalCases(p=>p.filter(t=>t.id!==id));
 
@@ -6468,11 +6477,30 @@ const AssetQualityTab = ({asset})=>{
               Run Selected ({selectedIds.size})
             </button>
           )}
-          <button onClick={()=>{localCases.forEach(t=>runTest(t.id));}}
-            style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,fontWeight:500,cursor:"pointer"}}
-            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
-            <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
-            Run All
+          <button
+            disabled={!!runAllProgress}
+            onClick={()=>{
+              if(runAllProgress)return;
+              const ids=localCases.map(t=>t.id);
+              const willPass=localCases.filter(t=>t.status!=="Failed").length;
+              const willFail=localCases.filter(t=>t.status==="Failed").length;
+              let done=0;
+              setRunAllProgress({done:0,total:ids.length});
+              ids.forEach(id=>runTest(id,()=>{
+                done++;
+                setRunAllProgress(prev=>({...prev,done}));
+                if(done===ids.length){
+                  setTimeout(()=>setRunAllProgress(null),800);
+                  onToast&&onToast(`Run complete — ${willPass} passed · ${willFail} failed`,"success");
+                }
+              }));
+            }}
+            style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:runAllProgress?T.accent:T.textSub,fontSize:11.5,fontWeight:500,cursor:runAllProgress?"not-allowed":"pointer",opacity:runAllProgress?0.75:1,transition:"all .15s"}}
+            onMouseEnter={e=>{if(!runAllProgress){e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}} onMouseLeave={e=>{if(!runAllProgress){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}}>
+            {runAllProgress
+              ?<><svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{animation:"spin 1s linear infinite"}}><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2.5" strokeDasharray="20 40"/></svg>Running {runAllProgress.done}/{runAllProgress.total}…</>
+              :<><svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>Run All</>
+            }
           </button>
           <button onClick={()=>setSelectTestOpen(true)}
             style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:7,background:T.accent,border:`1px solid ${T.accent}`,color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
@@ -6731,12 +6759,12 @@ const AssetQualityTab = ({asset})=>{
               </tr>
             </thead>
             <tbody>
-              {localCases.map((t,i)=>{
+              {pagedCases.map((t,i)=>{
                 const cfg=TC_CFG[t.status]||TC_CFG.Success;
                 const isRunning=runningIds.has(t.id);
                 const isSel=selectedIds.has(t.id);
                 return (
-                  <tr key={t.id} style={{borderBottom:i<localCases.length-1?`1px solid ${T.border}`:"none",transition:"background .1s",background:isSel?T.accentDim:"transparent"}}
+                  <tr key={t.id} style={{borderBottom:i<pagedCases.length-1?`1px solid ${T.border}`:"none",transition:"background .1s",background:isSel?T.accentDim:"transparent"}}
                     onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
                     <td style={{padding:"10px 8px 10px 14px",width:28}}>
                       <input type="checkbox" checked={isSel} onChange={e=>setSelectedIds(p=>{const n=new Set(p);e.target.checked?n.add(t.id):n.delete(t.id);return n;})} style={{cursor:"pointer",accentColor:T.accent}}/>
@@ -6757,9 +6785,9 @@ const AssetQualityTab = ({asset})=>{
                     <td style={{padding:"10px 14px",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{isRunning?"Running…":t.lastRun}</td>
                     <td style={{padding:"8px 14px"}} onClick={e=>e.stopPropagation()}>
                       <div style={{display:"flex",gap:4}}>
-                        <button title="Run now" onClick={()=>runTest(t.id)}
-                          style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent,cursor:"pointer",transition:"opacity .1s"}}
-                          onMouseEnter={e=>e.currentTarget.style.opacity=".7"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+                        <button title={isRunning?"Running…":"Run now"} disabled={isRunning} onClick={()=>!isRunning&&runTest(t.id)}
+                          style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent,cursor:isRunning?"not-allowed":"pointer",opacity:isRunning?0.4:1,transition:"opacity .1s"}}
+                          onMouseEnter={e=>{if(!isRunning)e.currentTarget.style.opacity=".7";}} onMouseLeave={e=>{if(!isRunning)e.currentTarget.style.opacity="1";}}>
                           <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
                         </button>
                       </div>
@@ -6769,6 +6797,29 @@ const AssetQualityTab = ({asset})=>{
               })}
             </tbody>
           </table>
+          {totalPages>1&&(
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",borderTop:`1px solid ${T.border}`,background:T.bgElevated}}>
+              <span style={{fontSize:11.5,color:T.textMuted}}>
+                Showing {page*PAGE_SIZE+1}–{Math.min((page+1)*PAGE_SIZE,localCases.length)} of {localCases.length}
+              </span>
+              <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                <button disabled={page===0} onClick={()=>setPage(p=>p-1)}
+                  style={{padding:"3px 10px",borderRadius:6,fontSize:11.5,fontWeight:500,cursor:page===0?"not-allowed":"pointer",opacity:page===0?0.4:1,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub}}>
+                  ← Prev
+                </button>
+                {Array.from({length:totalPages},(_,i)=>(
+                  <button key={i} onClick={()=>setPage(i)}
+                    style={{width:26,height:26,borderRadius:6,fontSize:11.5,fontWeight:page===i?700:400,cursor:"pointer",background:page===i?T.accent:T.bgSurface,border:`1px solid ${page===i?T.accent:T.border}`,color:page===i?"#fff":T.textSub}}>
+                    {i+1}
+                  </button>
+                ))}
+                <button disabled={page===totalPages-1} onClick={()=>setPage(p=>p+1)}
+                  style={{padding:"3px 10px",borderRadius:6,fontSize:11.5,fontWeight:500,cursor:page===totalPages-1?"not-allowed":"pointer",opacity:page===totalPages-1?0.4:1,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub}}>
+                  Next →
+                </button>
+              </div>
+            </div>
+          )}
       }
     </Card2>
   </div>;
@@ -8020,7 +8071,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast}) => {
       <div style={{flex:1,overflowY:"auto",padding:24,minWidth:0}}>
         {tab==="overview"  && <AssetOverview asset={asset} data={data} setData={setData} onToast={onToast}/>}
         {tab==="schema"    && <AssetSchema asset={asset} selCol={selCol} onColClick={c=>{ setSelCol(selCol?.name===c?.name?null:c); }} onToast={onToast}/>}
-        {tab==="quality"   && <AssetQualityTab asset={data}/>}
+        {tab==="quality"   && <AssetQualityTab asset={data} onToast={onToast}/>}
         {tab==="usage"     && <AssetUsageTab/>}
       </div>
 
