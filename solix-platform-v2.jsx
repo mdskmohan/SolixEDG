@@ -3656,6 +3656,7 @@ const QualityView = () => {
   const [tcAdvOpen,     setTcAdvOpen]     = useState(false);
   const [tcPage,        setTcPage]        = useState(0);
   const [runningIds,    setRunningIds]    = useState(new Set());
+  const [runAllProgress,setRunAllProgress]= useState(null);
   const TC_PAGE_SIZE = 10;
 
   // test suites tab
@@ -3760,14 +3761,14 @@ const QualityView = () => {
   // ── handlers ─────────────────────────────────────────────────
   const showT = (msg,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),3200);};
 
-  const runTC = (id,onDone)=>{
+  const runTC = (id,onDone,silent=false)=>{
     setRunningIds(p=>new Set([...p,id]));
     setTimeout(()=>{
       setRunningIds(p=>{const n=new Set(p);n.delete(id);return n;});
       setTestCases(prev=>prev.map(t=>t.id===id?{...t,lastRun:"just now",status:t.status==="Aborted"?"Success":t.status}:t));
       setTcDetail(prev=>prev?.id===id?{...prev,lastRun:"just now",status:prev.status==="Aborted"?"Success":prev.status}:prev);
       onDone&&onDone();
-      showT("Test run complete — result updated");
+      if(!silent) showT("Test run complete — result updated");
     },1400+Math.floor(Math.random()*800));
   };
 
@@ -3926,6 +3927,42 @@ const QualityView = () => {
               label="Data Assets with Tests"
               sub={`${coveredTables.length} of ${totalKnownTables} tables covered`}
             />
+          </div>
+
+          {/* ── Test Cases summary bar + Run All ── */}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 16px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,marginBottom:14}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <span style={{fontSize:13,fontWeight:700,color:T.text}}>Test Cases ({testCases.length})</span>
+              <span style={{fontSize:12,color:"#16a34a",fontWeight:600}}>{tcSuccess} passing</span>
+              {tcFailed>0&&<span style={{fontSize:12,color:T.rose,fontWeight:600}}>{tcFailed} failing</span>}
+              {tcAborted>0&&<span style={{fontSize:12,color:T.amber,fontWeight:600}}>{tcAborted} aborted</span>}
+            </div>
+            <button
+              disabled={!!runAllProgress}
+              onClick={()=>{
+                if(runAllProgress) return;
+                const ids=testCases.map(t=>t.id);
+                const willPass=testCases.filter(t=>t.status!=="Failed").length;
+                const willFail=testCases.filter(t=>t.status==="Failed").length;
+                let done=0;
+                setRunAllProgress({done:0,total:ids.length});
+                ids.forEach(id=>runTC(id,()=>{
+                  done++;
+                  setRunAllProgress(prev=>({...prev,done}));
+                  if(done===ids.length){
+                    setTimeout(()=>setRunAllProgress(null),800);
+                    showT(`Run complete — ${willPass} passed · ${willFail} failed`,"success");
+                  }
+                },true));
+              }}
+              style={{display:"inline-flex",alignItems:"center",gap:5,padding:"6px 14px",borderRadius:7,background:T.bgSurface,border:`1px solid ${runAllProgress?T.accent:T.border}`,color:runAllProgress?T.accent:T.textSub,fontSize:12,fontWeight:500,cursor:runAllProgress?"not-allowed":"pointer",opacity:runAllProgress?0.75:1,transition:"all .15s"}}
+              onMouseEnter={e=>{if(!runAllProgress){e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}}
+              onMouseLeave={e=>{if(!runAllProgress){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}}>
+              {runAllProgress
+                ?<><svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{animation:"spin 1s linear infinite"}}><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2.5" strokeDasharray="20 40"/></svg>Running {runAllProgress.done}/{runAllProgress.total}…</>
+                :<><svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>Run All</>
+              }
+            </button>
           </div>
 
           {/* ── Filter bar ── */}
@@ -6817,8 +6854,8 @@ const AssetQualityTab = ({asset,onToast})=>{
                     <td style={{padding:"10px 8px 10px 14px",width:28}} onClick={e=>e.stopPropagation()}>
                       <input type="checkbox" checked={isSel} onChange={e=>setSelectedIds(p=>{const n=new Set(p);e.target.checked?n.add(t.id):n.delete(t.id);return n;})} style={{cursor:"pointer",accentColor:T.accent}}/>
                     </td>
-                    <td style={{padding:"10px 14px",width:32}}>
-                      <div style={{width:8,height:8,borderRadius:"50%",background:isRunning?T.amber:cfg.color,animation:isRunning?"pulse2 1s infinite":""}}/>
+                    <td style={{padding:"10px 14px",width:44}}>
+                      <DQStatusDot status={isRunning?"Aborted":t.status}/>
                     </td>
                     <td style={{padding:"10px 14px"}}>
                       <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{t.name}</div>
