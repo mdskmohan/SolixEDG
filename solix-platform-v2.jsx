@@ -16146,16 +16146,16 @@ const SettingsView = ({onToast})=>{
                                 onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
                             </div>
                             <div>
-                              <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Auth Level <span style={{color:"#ee2424"}}>*</span></label>
+                              <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Login Access</label>
                               <div style={{display:"flex",gap:8,paddingTop:4}}>
-                                {["group","user"].map(v=>(
-                                  <label key={v} style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:12.5,fontWeight:ldapForm.authLevel===v?600:400,color:ldapForm.authLevel===v?T.text:T.textSub}}>
+                                {[{v:"group",label:"Group members only"},{v:"user",label:"All directory users"}].map(({v,label})=>(
+                                  <label key={v} style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:11.5,fontWeight:ldapForm.authLevel===v?600:400,color:ldapForm.authLevel===v?T.text:T.textSub}}>
                                     <input type="radio" checked={ldapForm.authLevel===v} onChange={()=>setLdapForm(p=>({...p,authLevel:v}))} style={{accentColor:T.accent}}/>
-                                    {v.charAt(0).toUpperCase()+v.slice(1)}
+                                    {label}
                                   </label>
                                 ))}
                               </div>
-                              <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>{ldapForm.authLevel==="group"?"User must belong to a mapped group":"Any valid LDAP user can log in"}</div>
+                              <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>{ldapForm.authLevel==="group"?"Only users in a mapped LDAP group can log into EDG":"Any user in the directory can log in; teams & roles still apply"}</div>
                             </div>
                           </div>
                           {/* Row 2: SSL + URL */}
@@ -16284,7 +16284,7 @@ const SettingsView = ({onToast})=>{
                             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:ldapMapping.autoSyncTeams?14:0}}>
                               <div>
                                 <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>Auto-Sync Teams</div>
-                                <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>LDAP Groups automatically become EDG Teams</div>
+                                <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>LDAP groups become EDG teams; each group's members are automatically added as team members</div>
                               </div>
                               <Toggle on={ldapMapping.autoSyncTeams} onChange={()=>setLdapMapping(p=>({...p,autoSyncTeams:!p.autoSyncTeams}))}/>
                             </div>
@@ -16293,7 +16293,7 @@ const SettingsView = ({onToast})=>{
                                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 12px",background:T.bgSurface,borderRadius:8,border:`1px solid ${T.border}`,marginBottom:10}}>
                                   <div>
                                     <div style={{fontSize:12,fontWeight:600,color:T.text}}>Sync All Groups</div>
-                                    <div style={{fontSize:11,color:T.textMuted}}>Every LDAP group becomes a team</div>
+                                    <div style={{fontSize:11,color:T.textMuted}}>Every LDAP group becomes an EDG team with its members</div>
                                   </div>
                                   <Toggle on={ldapMapping.syncAllGroups} onChange={()=>setLdapMapping(p=>({...p,syncAllGroups:!p.syncAllGroups,selectedGroups:[]}))}/>
                                 </div>
@@ -16330,7 +16330,7 @@ const SettingsView = ({onToast})=>{
                             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:ldapMapping.autoAssignRoles?14:0}}>
                               <div>
                                 <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>Auto-Assign Roles</div>
-                                <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>Map LDAP groups → EDG roles. Users in multiple groups get all matched roles.</div>
+                                <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>Map LDAP groups → EDG roles. Each user is assigned the role of whichever group they belong to — roles are per user, not per team.</div>
                               </div>
                               <Toggle on={ldapMapping.autoAssignRoles} onChange={()=>setLdapMapping(p=>({...p,autoAssignRoles:!p.autoAssignRoles}))}/>
                             </div>
