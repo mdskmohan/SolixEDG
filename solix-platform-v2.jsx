@@ -91,6 +91,7 @@ input,textarea,select{font-family:inherit;font-size:inherit;transition:backgroun
 @keyframes slideIn{from{opacity:0;transform:translateX(-8px);}to{opacity:1;}}
 @keyframes pulse2{0%,100%{opacity:1;}50%{opacity:.4;}}
 @keyframes spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+@keyframes wfbar{0%,100%{opacity:1;}50%{opacity:.6;}}
 .fadeUp{animation:fadeUp .2s ease both;}
 .fadeIn{animation:fadeIn .15s ease both;}
 .scaleIn{animation:scaleIn .18s ease both;}
@@ -15130,20 +15131,28 @@ const WorkflowView = ({onToast}) => {
     setTimeout(()=>setRunning(r=>{const n={...r};delete n[id];return n;}),3000);
   };
 
-  const StageBar = ({stages, current}) => (
-    <div style={{display:"flex",gap:2,marginTop:8}}>
-      {stages.map((s,i)=>{
-        const done = current===null ? true : i < current;
-        const active = i===current;
-        return (
-          <div key={s} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
-            <div style={{height:3,width:"100%",background:active?T.blue:done?T.accent:T.bgHover,borderRadius:2,transition:"background .3s"}}/>
-            <span style={{fontSize:9,color:active?T.blue:done?T.accent:T.textMuted,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}}>{s}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
+  const WorkflowProgressBar = ({stages, current, status, isLive}) => {
+    const totalStages = stages.length;
+    const pct = isLive ? 12
+      : current !== null ? Math.min(95, Math.round((current / (totalStages - 1)) * 100))
+      : (status === "success" || status === "warning") ? 100
+      : 0;
+    const isRunning = isLive || current !== null;
+    const barColor  = isRunning ? "#60a5fa" : status === "failed" ? T.red : status === "warning" ? T.amber : T.green;
+    const bgGrad    = isRunning ? "linear-gradient(90deg,#38bdf8,#818cf8)" : barColor;
+    const label     = isRunning ? "Running…" : status === "success" ? "Completed" : status === "failed" ? "Failed" : status === "warning" ? "Completed with warnings" : "Idle";
+    return (
+      <div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+          <span style={{fontSize:12,fontWeight:600,color:barColor}}>{label}</span>
+          <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{pct}%</span>
+        </div>
+        <div style={{height:7,background:T.bgHover,borderRadius:4,overflow:"hidden"}}>
+          <div style={{height:"100%",width:`${pct}%`,background:bgGrad,borderRadius:4,transition:"width .8s ease",animation:isRunning?"wfbar 1.6s ease-in-out infinite":"none"}}/>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
@@ -15251,10 +15260,14 @@ const WorkflowView = ({onToast}) => {
                 </div>
               </div>
 
-              {/* Stage pipeline */}
-              <div style={{marginTop:14,padding:"10px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
-                <div style={{fontSize:10.5,color:T.textMuted,marginBottom:6,textTransform:"uppercase",letterSpacing:"0.07em"}}>Pipeline Stages</div>
-                <StageBar stages={wf.stages} current={wf.currentStage}/>
+              {/* Progress bar */}
+              <div style={{marginTop:14,padding:"12px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+                <WorkflowProgressBar
+                  stages={wf.stages}
+                  current={running[wf.id] ? 0 : wf.currentStage}
+                  status={running[wf.id] ? "running" : wf.status}
+                  isLive={!!running[wf.id]}
+                />
               </div>
             </div>
 
