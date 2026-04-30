@@ -15497,7 +15497,6 @@ const SettingsView = ({onToast})=>{
   const [ldapGroups,      setLdapGroups]      = useState([]);
   const [ldapSearchRows,  setLdapSearchRows]  = useState([{context:"",attribute:"sAMAccountName"}]);
   const [ldapForm,        setLdapForm]        = useState({configName:"",authLevel:"group",sslEnabled:false,url:"",principal:"",credentials:""});
-  const [ldapDesc,        setLdapDesc]        = useState("");
   const [ldapMapping,     setLdapMapping]     = useState({
     onBoardUsers:true, firstNameAttr:"givenName", lastNameAttr:"sn", emailAttr:"mail",
     autoSyncTeams:true, syncAllGroups:true, selectedGroups:[],
@@ -16214,13 +16213,6 @@ const SettingsView = ({onToast})=>{
                               <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
                               Add Row
                             </button>
-                          </div>
-                          {/* Description */}
-                          <div>
-                            <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Description <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
-                            <textarea value={ldapDesc} onChange={e=>setLdapDesc(e.target.value)} placeholder="Notes about this LDAP configuration…" rows={3}
-                              style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box",lineHeight:1.5}}
-                              onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
                           </div>
                           {/* Test result banner */}
                           {ldapTestState==="success"&&(
