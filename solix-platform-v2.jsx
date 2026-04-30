@@ -12140,31 +12140,10 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
                 <span style={{fontSize:13,fontWeight:600,color:T.text}}>Ingestion running</span>
                 <span style={{fontSize:11,color:T.textMuted,marginLeft:"auto"}}>{progress}%</span>
               </div>
-              {/* stage progress bar */}
-              <div style={{marginBottom:10}}>
-                {/* current stage label */}
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:7}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <span style={{width:6,height:6,borderRadius:"50%",background:"#60a5fa",display:"inline-block",animation:"pulse2 1s infinite",flexShrink:0}}/>
-                    <span style={{fontSize:11,fontWeight:600,color:"#60a5fa",fontFamily:"'Geist Mono',monospace"}}>
-                      {svc.stages[Math.min(stageIdx,svc.stages.length-1)]||"Finalizing"}
-                    </span>
-                  </div>
-                  <span style={{fontSize:10,color:T.textMuted}}>{stageIdx+1} / {svc.stages.length} stages</span>
-                </div>
-                {/* progress bar */}
-                <div style={{height:8,background:T.bgHover,borderRadius:4,overflow:"hidden",marginBottom:8}}>
-                  <div style={{height:"100%",width:`${progress}%`,background:"linear-gradient(90deg,#38bdf8,#60a5fa)",borderRadius:4,transition:"width .8s ease",position:"relative"}}>
-                    <div style={{position:"absolute",right:0,top:0,bottom:0,width:20,background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.18))",borderRadius:4}}/>
-                  </div>
-                </div>
-                {/* stage labels row */}
-                <div style={{display:"flex",justifyContent:"space-between"}}>
-                  {svc.stages.map((s,i)=>(
-                    <span key={s} style={{fontSize:9,color:i<stageIdx?T.accent:i===stageIdx?"#60a5fa":T.textMuted,fontWeight:i===stageIdx?700:i<stageIdx?500:400,transition:"color .3s"}}>
-                      {i<stageIdx?"✓ ":""}{s}
-                    </span>
-                  ))}
+              {/* progress bar */}
+              <div style={{height:8,background:T.bgHover,borderRadius:4,overflow:"hidden",marginBottom:10}}>
+                <div style={{height:"100%",width:`${progress}%`,background:"linear-gradient(90deg,#38bdf8,#60a5fa)",borderRadius:4,transition:"width .8s ease",position:"relative"}}>
+                  <div style={{position:"absolute",right:0,top:0,bottom:0,width:20,background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.18))",borderRadius:4}}/>
                 </div>
               </div>
               {/* live log tail */}
