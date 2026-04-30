@@ -67,7 +67,7 @@ const ThemeCtx = createContext({isDark:false,toggleTheme:()=>{}});
 const useTheme = () => useContext(ThemeCtx);
 const NavCtx = createContext(()=>{});
 const useNav = () => useContext(NavCtx);
-const RoleCtx = createContext({role:"analyst",roleCfg:null,onSwitch:()=>{},onLogout:()=>{}});
+const RoleCtx = createContext({role:"analyst",roleCfg:null,onSwitch:()=>{},onLogout:()=>{},defaultRole:"analyst",onSetDefault:()=>{}});
 const useRole = () => useContext(RoleCtx);
 const TagContext = createContext(null);
 const useTagCtx = () => useContext(TagContext);
@@ -2852,7 +2852,7 @@ const ProfilePanel = ({onClose, onNav}) => null;
 // ─────────────────────────────────────────────
 const UserMenu = () => {
   const onNav = useNav();
-  const {role, roleCfg, onSwitch, onLogout} = useRole();
+  const {role, roleCfg, onSwitch, onLogout, defaultRole, onSetDefault} = useRole();
   const cfg = roleCfg || {label:"User",name:"User",avatar:"U",color:T.accent,badge:T.accentDim,email:""};
   const [open, setOpen] = useState(false);
   const [tab,  setTab]  = useState("menu");
@@ -2926,7 +2926,16 @@ const UserMenu = () => {
                   <div style={{fontSize:12,fontWeight:600,color:T.text}}>{c.label}</div>
                   <div style={{fontSize:10,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cfg.email}</div>
                 </div>
-                {role===key&&<span style={{color:T.accent,flexShrink:0}}>{Ic.check(11)}</span>}
+                <div style={{display:"flex",alignItems:"center",gap:5,flexShrink:0}}>
+                  <button title={defaultRole===key?"Default role":"Set as default role"}
+                    onClick={e=>{e.stopPropagation();onSetDefault(key);}}
+                    style={{width:18,height:18,borderRadius:4,background:"transparent",border:"none",cursor:"pointer",fontSize:13,lineHeight:1,padding:0,display:"flex",alignItems:"center",justifyContent:"center",color:defaultRole===key?T.amber:T.textMuted,opacity:defaultRole===key?1:0.3,transition:"all .12s"}}
+                    onMouseEnter={e=>{e.currentTarget.style.opacity="1";e.currentTarget.style.color=T.amber;}}
+                    onMouseLeave={e=>{e.currentTarget.style.opacity=defaultRole===key?"1":"0.3";e.currentTarget.style.color=defaultRole===key?T.amber:T.textMuted;}}>
+                    ★
+                  </button>
+                  {role===key&&<span style={{color:T.accent,flexShrink:0}}>{Ic.check(11)}</span>}
+                </div>
               </button>
             ))}
           </div>}
@@ -18042,6 +18051,7 @@ const StewardInboxView = ({onToast}) => {
 export default function App(){
   const [loggedIn, setLoggedIn] = useState(false);
   const [role,     setRole]     = useState("analyst");
+  const [defaultRole, setDefaultRole] = useState("analyst");
   const [nav,      setNav]      = useState("home");
   const [assetStack, setAssetStack] = useState([]);
   const [toast,    setToast]    = useState(null);
@@ -18052,7 +18062,7 @@ export default function App(){
   const roleCfg    = ROLES_CONFIG[role] || ROLES_CONFIG.analyst;
   const allowedNav = roleCfg.nav || [];
 
-  const handleLogin  = (r) => { setRole(r); setNav("home"); setLoggedIn(true); };
+  const handleLogin  = (r) => { setRole(r); setDefaultRole(r); setNav("home"); setLoggedIn(true); };
   const handleLogout = () => { setLoggedIn(false); setNav("home"); setAssetStack([]); };
   const handleRole   = (r) => { setRole(r); setNav("home"); setAsset(null); };
   const handleNav    = (id) => {
@@ -18112,7 +18122,7 @@ export default function App(){
 
   return (
     <TagProvider>
-    <RoleCtx.Provider value={{role, roleCfg, onSwitch:handleRole, onLogout:handleLogout}}>
+    <RoleCtx.Provider value={{role, roleCfg, onSwitch:handleRole, onLogout:handleLogout, defaultRole, onSetDefault:setDefaultRole}}>
     <NavCtx.Provider value={handleNav}>
     <ThemeCtx.Provider value={{isDark,toggleTheme}}>
       <style key={themeKey}>{makeG(T)}</style>
