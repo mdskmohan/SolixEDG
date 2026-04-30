@@ -15489,7 +15489,7 @@ const SettingsView = ({onToast})=>{
   const timerRef = useRef(null);
 
   // ── LDAP SSO state ──
-  const MOCK_LDAP_GROUPS = ["LDAP_ADMINS","LDAP_DATA_STEWARDS","LDAP_DATA_ANALYSTS","LDAP_DATA_ENGINEERS","LDAP_VIEWERS","LDAP_GOVERNANCE","LDAP_FINANCE","LDAP_MARKETING","LDAP_PLATFORM","LDAP_ANALYTICS"];
+  const MOCK_LDAP_GROUPS = ["LDAP_ADMINS","LDAP_CONNECTION_ADMINS","LDAP_STEWARDS","LDAP_VIEWERS","LDAP_GOVERNANCE","LDAP_FINANCE","LDAP_MARKETING","LDAP_PLATFORM","LDAP_ANALYTICS","LDAP_ENTERPRISE"];
   const [ldapPanelOpen,   setLdapPanelOpen]   = useState(false);
   const [ldapTab,         setLdapTab]         = useState("connection");
   const [ldapSaved,       setLdapSaved]       = useState(false);
@@ -15502,7 +15502,7 @@ const SettingsView = ({onToast})=>{
     onBoardUsers:true, firstNameAttr:"givenName", lastNameAttr:"sn", emailAttr:"mail",
     autoSyncTeams:true, syncAllGroups:true, selectedGroups:[],
     autoAssignRoles:true,
-    roleGroups:{Admin:[],DataSteward:[],DataAnalyst:[],DataEngineer:[],Viewer:[]},
+    roleGroups:{Admin:[],ConnectionAdmin:[],Steward:[],Viewer:[]},
   });
   const [ldapRoleGroupOpen, setLdapRoleGroupOpen] = useState({});
 
@@ -16337,11 +16337,10 @@ const SettingsView = ({onToast})=>{
                             {ldapMapping.autoAssignRoles&&(
                               <div style={{display:"flex",flexDirection:"column",gap:0,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>
                                 {[
-                                  {role:"Admin",       key:"Admin",        color:"#ee2424"},
-                                  {role:"Data Steward",key:"DataSteward",  color:"#d97706"},
-                                  {role:"Data Analyst",key:"DataAnalyst",  color:"#0284c7"},
-                                  {role:"Data Engineer",key:"DataEngineer",color:"#7c3aed"},
-                                  {role:"Viewer",      key:"Viewer",       color:"#4b4b60"},
+                                  {role:"Admin",            key:"Admin",           color:"#ee2424"},
+                                  {role:"Connection Admin", key:"ConnectionAdmin",  color:"#0284c7"},
+                                  {role:"Steward",          key:"Steward",         color:"#d97706"},
+                                  {role:"Viewer",           key:"Viewer",          color:"#4b4b60"},
                                 ].map((r,ri,arr)=>{
                                   const assigned = ldapMapping.roleGroups[r.key]||[];
                                   const available = ldapTestState==="success" ? MOCK_LDAP_GROUPS.filter(g=>!Object.entries(ldapMapping.roleGroups).some(([k,v])=>k!==r.key&&v.includes(g))) : [];
