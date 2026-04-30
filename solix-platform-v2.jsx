@@ -13483,20 +13483,6 @@ const TeamsSection = ({onToast}) => {
 
     {/* ════════ USERS TAB ════════ */}
     {activeTab==="users"&&<>
-      {/* Team filter pills */}
-      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
-        {[["all","All",members.length],...teams.map(t=>[t.name,t.name,teamCounts[t.name]||0])].map(([k,l,count])=>(
-          <button key={k} onClick={()=>setSelectedTeam(k)} style={{
-            display:"flex",alignItems:"center",gap:5,padding:"4px 12px",borderRadius:99,fontSize:11.5,fontWeight:500,cursor:"pointer",transition:"all .12s",
-            border:`1px solid ${selectedTeam===k?T.accent:T.border}`,
-            background:selectedTeam===k?T.accentDim:"transparent",
-            color:selectedTeam===k?T.accent:T.textSub,
-          }}>
-            {l}
-            <span style={{fontSize:10,background:selectedTeam===k?T.accent:T.bgHover,color:selectedTeam===k?"#fff":T.textMuted,padding:"0 5px",borderRadius:99,minWidth:16,textAlign:"center"}}>{count}</span>
-          </button>
-        ))}
-      </div>
       {/* Search */}
       <div style={{marginBottom:14}}>
         <Input2 placeholder="Search by name or email…" value={memberSearch} onChange={e=>{setMemberSearch(e.target.value);setMemberPage(1);}} icon={Ic.search(12)} style={{width:"100%"}}/>
@@ -14027,9 +14013,10 @@ const AccessSection = ({onToast}) => {
   // Rule form
   const [rf, setRf] = useState({name:"",desc:"",effect:"allow",menu:"",resources:[],operations:[],condition:"",condParam:"",editId:null});
 
-  const [acSearch,   setAcSearch]   = useState("");
-  const [acRolePage, setAcRolePage] = useState(1);
-  const [acPolPage,  setAcPolPage]  = useState(1);
+  const [acSearch,         setAcSearch]         = useState("");
+  const [acRolePage,       setAcRolePage]       = useState(1);
+  const [acPolPage,        setAcPolPage]        = useState(1);
+  const [rolePolicySearch, setRolePolicySearch] = useState("");
   const AC_PS = 5;
   const acRoleList = roles.filter(r=>!acSearch||r.name.toLowerCase().includes(acSearch.toLowerCase())||r.desc.toLowerCase().includes(acSearch.toLowerCase()));
   const acPolList  = policies.filter(p=>!acSearch||p.name.toLowerCase().includes(acSearch.toLowerCase())||p.desc.toLowerCase().includes(acSearch.toLowerCase()));
@@ -14187,7 +14174,7 @@ const AccessSection = ({onToast}) => {
     {/* AC search */}
     <div style={{marginBottom:14}}>
       <input value={acSearch} onChange={e=>{setAcSearch(e.target.value);setAcRolePage(1);setAcPolPage(1);}}
-        placeholder="Search roles or policies…"
+        placeholder={activeTab==="roles"?"Search roles…":"Search policies…"}
         style={{width:"100%",padding:"9px 13px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",transition:"border-color .15s"}}
         onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
     </div>
@@ -14203,7 +14190,7 @@ const AccessSection = ({onToast}) => {
             <div key={role.id}
               style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",
                 borderLeft:`3px solid ${role.color}`,transition:"box-shadow .15s,border-color .15s",cursor:"pointer"}}
-              onClick={()=>{setRoleDetail(role.id);setAddPolToRole(false);}}
+              onClick={()=>{setRoleDetail(role.id);setAddPolToRole(false);setRolePolicySearch("");}}
               onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 2px 12px rgba(0,0,0,.08)";e.currentTarget.style.borderColor=T.borderLight;}}
               onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.borderColor=T.border;}}>
               <div style={{display:"flex",alignItems:"center",gap:14,padding:"14px 18px"}}>
@@ -14521,7 +14508,7 @@ const AccessSection = ({onToast}) => {
           </div>
           {/* Attached policies */}
           <div style={{padding:"16px 22px",flex:1,overflowY:"auto"}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
               <SectionLabel>Attached Policies</SectionLabel>
               <button onClick={()=>setAddPolToRole(o=>!o)} style={{
                 display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:6,
@@ -14531,6 +14518,13 @@ const AccessSection = ({onToast}) => {
                 <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
                 Attach Policy
               </button>
+            </div>
+            {/* Policy search */}
+            <div style={{marginBottom:12}}>
+              <input value={rolePolicySearch} onChange={e=>setRolePolicySearch(e.target.value)}
+                placeholder="Search policies…"
+                style={{width:"100%",padding:"7px 11px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",transition:"border-color .15s"}}
+                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
             </div>
             {/* Attach picker */}
             {addPolToRole&&(
@@ -14551,9 +14545,12 @@ const AccessSection = ({onToast}) => {
                 }
               </div>
             )}
+            {rolePolicies.filter(p=>!rolePolicySearch||p.name.toLowerCase().includes(rolePolicySearch.toLowerCase())||p.desc.toLowerCase().includes(rolePolicySearch.toLowerCase())).length===0&&rolePolicies.length>0
+              ? <div style={{padding:"24px 0",textAlign:"center",color:T.textMuted,fontSize:12}}>No policies match your search</div>
+              : null}
             {rolePolicies.length===0
               ? <div style={{padding:"36px 0",textAlign:"center",color:T.textMuted,fontSize:12,fontStyle:"italic"}}>No policies attached yet. Use "Attach Policy" to define what this role can do.</div>
-              : rolePolicies.map((p,pi)=>(
+              : rolePolicies.filter(p=>!rolePolicySearch||p.name.toLowerCase().includes(rolePolicySearch.toLowerCase())||p.desc.toLowerCase().includes(rolePolicySearch.toLowerCase())).map((p,pi)=>(
                 <div key={p.id} style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",marginBottom:10}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",background:T.bgElevated}}>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
