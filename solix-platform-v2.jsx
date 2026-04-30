@@ -12140,27 +12140,32 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
                 <span style={{fontSize:13,fontWeight:600,color:T.text}}>Ingestion running</span>
                 <span style={{fontSize:11,color:T.textMuted,marginLeft:"auto"}}>{progress}%</span>
               </div>
-              {/* stage pipeline */}
-              <div style={{display:"flex",gap:0,marginBottom:10,alignItems:"center"}}>
-                {svc.stages.map((stage,i)=>{
-                  const done=i<stageIdx, active=i===stageIdx;
-                  const c=done?T.accent:active?"#60a5fa":T.border;
-                  return <React.Fragment key={stage}>
-                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,flex:1}}>
-                      <div style={{width:22,height:22,borderRadius:"50%",background:done?T.accent:active?"#60a5fa":T.bgHover,border:`2px solid ${c}`,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .3s"}}>
-                        {done?<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        :active?<span style={{width:6,height:6,borderRadius:"50%",background:"#fff",display:"inline-block",animation:"pulse2 1s infinite"}}/>
-                        :<span style={{width:5,height:5,borderRadius:"50%",background:T.border,display:"inline-block"}}/>}
-                      </div>
-                      <span style={{fontSize:9,color:active?T.text:done?T.accent:T.textMuted,fontWeight:active||done?600:400,whiteSpace:"nowrap"}}>{stage}</span>
-                    </div>
-                    {i<svc.stages.length-1&&<div style={{height:2,flex:0.5,background:done?T.accent:T.border,borderRadius:1,marginBottom:16,transition:"background .3s"}}/>}
-                  </React.Fragment>;
-                })}
-              </div>
-              {/* progress bar */}
-              <div style={{height:5,background:T.bgHover,borderRadius:3,overflow:"hidden"}}>
-                <div style={{height:"100%",width:`${progress}%`,background:"linear-gradient(90deg,#38bdf8,#60a5fa)",borderRadius:3,transition:"width .8s ease"}}/>
+              {/* stage progress bar */}
+              <div style={{marginBottom:10}}>
+                {/* current stage label */}
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:7}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{width:6,height:6,borderRadius:"50%",background:"#60a5fa",display:"inline-block",animation:"pulse2 1s infinite",flexShrink:0}}/>
+                    <span style={{fontSize:11,fontWeight:600,color:"#60a5fa",fontFamily:"'Geist Mono',monospace"}}>
+                      {svc.stages[Math.min(stageIdx,svc.stages.length-1)]||"Finalizing"}
+                    </span>
+                  </div>
+                  <span style={{fontSize:10,color:T.textMuted}}>{stageIdx+1} / {svc.stages.length} stages</span>
+                </div>
+                {/* progress bar */}
+                <div style={{height:8,background:T.bgHover,borderRadius:4,overflow:"hidden",marginBottom:8}}>
+                  <div style={{height:"100%",width:`${progress}%`,background:"linear-gradient(90deg,#38bdf8,#60a5fa)",borderRadius:4,transition:"width .8s ease",position:"relative"}}>
+                    <div style={{position:"absolute",right:0,top:0,bottom:0,width:20,background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.18))",borderRadius:4}}/>
+                  </div>
+                </div>
+                {/* stage labels row */}
+                <div style={{display:"flex",justifyContent:"space-between"}}>
+                  {svc.stages.map((s,i)=>(
+                    <span key={s} style={{fontSize:9,color:i<stageIdx?T.accent:i===stageIdx?"#60a5fa":T.textMuted,fontWeight:i===stageIdx?700:i<stageIdx?500:400,transition:"color .3s"}}>
+                      {i<stageIdx?"✓ ":""}{s}
+                    </span>
+                  ))}
+                </div>
               </div>
               {/* live log tail */}
               <div style={{marginTop:12,background:T.bg,borderRadius:7,padding:"8px 10px",border:`1px solid ${T.border}`,fontFamily:"'Geist Mono',monospace",fontSize:10,color:T.textMuted,lineHeight:1.7}}>
@@ -15490,10 +15495,12 @@ const TagPoliciesSection = ({onToast}) => {
 const SettingsView = ({onToast})=>{
   const {isDark, toggleTheme:onThemeToggle} = useTheme();
   const [section,   setSection]   = useState("connections");
-  const [svcSel,    setSvcSel]    = useState(null);
-  const [appSel,    setAppSel]    = useState(null);
-  const [filterSvc, setFilterSvc] = useState("all");
-  const [svcSearch, setSvcSearch] = useState("");
+  const [svcSel,        setSvcSel]        = useState(null);
+  const [appSel,        setAppSel]        = useState(null);
+  const [filterSvc,     setFilterSvc]     = useState("all");
+  const [svcSearch,     setSvcSearch]     = useState("");
+  const [deletedSvcs,   setDeletedSvcs]   = useState([]);
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // svc id awaiting delete confirm
   const [tick,      setTick]      = useState(0);
   const [addSvcOpen,setAddSvcOpen]= useState(false);
   const timerRef = useRef(null);
@@ -15847,10 +15854,10 @@ const SettingsView = ({onToast})=>{
               {/* health summary bar */}
               <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:18}}>
                 {[
-                  {l:"Total",    v:SERVICES.length,                                  c:T.text},
-                  {l:"Healthy",  v:SERVICES.filter(s=>s.health==="healthy").length,  c:T.accent},
-                  {l:"Running",  v:SERVICES.filter(s=>s.status==="running").length,  c:"#60a5fa"},
-                  {l:"Attention",v:SERVICES.filter(s=>s.health==="degraded"||s.health==="disconnected").length, c:T.rose},
+                  {l:"Total",    v:SERVICES.filter(s=>!deletedSvcs.includes(s.id)).length,                                                                   c:T.text},
+                  {l:"Healthy",  v:SERVICES.filter(s=>!deletedSvcs.includes(s.id)&&s.health==="healthy").length,                                              c:T.accent},
+                  {l:"Running",  v:SERVICES.filter(s=>!deletedSvcs.includes(s.id)&&s.status==="running").length,                                              c:"#60a5fa"},
+                  {l:"Attention",v:SERVICES.filter(s=>!deletedSvcs.includes(s.id)&&(s.health==="degraded"||s.health==="disconnected")).length,                c:T.rose},
                 ].map(m=>(
                   <div key={m.l} style={{padding:"10px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,textAlign:"center",cursor:"pointer",transition:"border-color .12s"}}
                     onClick={()=>setFilterSvc(m.l==="Total"?"all":m.l==="Healthy"?"connected":m.l==="Running"?"running":"attention")}
@@ -15882,6 +15889,7 @@ const SettingsView = ({onToast})=>{
               {/* service list */}
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {SERVICES
+                  .filter(s=>!deletedSvcs.includes(s.id))
                   .filter(s=>(!svcSearch||s.displayName.toLowerCase().includes(svcSearch.toLowerCase())||s.category.toLowerCase().includes(svcSearch.toLowerCase())))
                   .filter(s=>filterSvc==="all"||(filterSvc==="connected"&&s.status==="connected")||(filterSvc==="running"&&s.status==="running")||(filterSvc==="attention"&&(s.health==="degraded"||s.health==="disconnected")))
                   .map(svc=>{
@@ -15925,7 +15933,7 @@ const SettingsView = ({onToast})=>{
                       </div>
 
                       {/* action buttons */}
-                      <div style={{display:"flex",gap:5,flexShrink:0}} onClick={e=>e.stopPropagation()}>
+                      <div style={{display:"flex",gap:5,flexShrink:0,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
                         {svc.status==="disconnected"
                           ?<button onClick={()=>onToast(`Reconnecting ${svc.displayName}…`,"success")} style={{padding:"5px 10px",borderRadius:7,background:T.rose,border:"none",color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer"}}>Reconnect</button>
                           :<><button onClick={()=>onToast(`${svc.displayName} triggered`,"success")} title="Run now" style={{width:28,height:28,borderRadius:7,border:`1px solid ${T.border}`,background:T.bgHover,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.textSub,transition:"all .12s"}}
@@ -15935,6 +15943,15 @@ const SettingsView = ({onToast})=>{
                             </button>
                           </>
                         }
+                        {/* delete button */}
+                        <button onClick={()=>setDeleteConfirm(svc.id)} title="Delete connection"
+                          style={{width:28,height:28,borderRadius:7,border:`1px solid ${T.border}`,background:T.bgHover,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted,transition:"all .12s"}}
+                          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.rose+"88";e.currentTarget.style.color=T.rose;e.currentTarget.style.background=T.roseDim;}}
+                          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background=T.bgHover;}}>
+                          <svg width="11" height="12" viewBox="0 0 12 13" fill="none">
+                            <path d="M1 3h10M4 3V2a1 1 0 011-1h2a1 1 0 011 1v1M5 6v4M7 6v4M2 3l.8 8a1 1 0 001 .9h4.4a1 1 0 001-.9L10 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </button>
                       </div>
                     </div>
                   );
@@ -16578,6 +16595,43 @@ const SettingsView = ({onToast})=>{
         </div>
       </div>
     </div>
+
+    {/* ── delete connection confirm modal ── */}
+    {deleteConfirm&&(()=>{
+      const target = SERVICES.find(s=>s.id===deleteConfirm);
+      return (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center"}}
+          onClick={()=>setDeleteConfirm(null)}>
+          <div style={{background:T.bgSurface,borderRadius:14,padding:"28px 28px 24px",width:380,border:`1px solid ${T.border}`,boxShadow:"0 20px 60px rgba(0,0,0,0.35)"}}
+            onClick={e=>e.stopPropagation()}>
+            {/* icon */}
+            <div style={{width:44,height:44,borderRadius:12,background:T.roseDim,border:`1px solid ${T.rose}44`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:16,color:T.rose}}>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M3 5h14M7 5V4a1 1 0 011-1h4a1 1 0 011 1v1M8 9v5M12 9v5M4 5l1.2 11a1.5 1.5 0 001.5 1.3h6.6a1.5 1.5 0 001.5-1.3L16 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:6}}>Delete connection?</div>
+            <div style={{fontSize:13,color:T.textSub,lineHeight:1.6,marginBottom:22}}>
+              <b style={{color:T.text}}>{target?.displayName}</b> will be permanently removed along with its schedule, configuration, and all run history. This cannot be undone.
+            </div>
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <Btn small ghost onClick={()=>setDeleteConfirm(null)}>Cancel</Btn>
+              <button
+                onClick={()=>{
+                  setDeletedSvcs(p=>[...p,deleteConfirm]);
+                  if(svcSel===deleteConfirm) setSvcSel(null);
+                  setDeleteConfirm(null);
+                  onToast(`${target?.displayName} connection deleted`,"success");
+                }}
+                style={{padding:"7px 16px",borderRadius:8,background:T.rose,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                Delete Connection
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    })()}
+
   );
 };
 
