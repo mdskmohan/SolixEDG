@@ -15803,6 +15803,7 @@ const SettingsView = ({onToast})=>{
   // derived
   const selSvc = svcSel ? SERVICES.find(s=>s.id===svcSel) : null;
   const selApp = appSel ? APPLICATIONS.find(a=>a.id===appSel) : null;
+  const deleteTarget = deleteConfirm ? SERVICES.find(s=>s.id===deleteConfirm) : null;
 
   // simulated live progress for running services
 
@@ -16594,17 +16595,13 @@ const SettingsView = ({onToast})=>{
           {section==="connections"&&selSvc&&<ServicePanel svc={selSvc} tick={tick} onToast={onToast} setSvcSel={setSvcSel}/>}
         </div>
       </div>
-    </div>
 
-    {/* ── delete connection confirm modal ── */}
-    {deleteConfirm&&(()=>{
-      const target = SERVICES.find(s=>s.id===deleteConfirm);
-      return (
+      {/* ── delete connection confirm modal ── */}
+      {deleteConfirm&&deleteTarget&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center"}}
           onClick={()=>setDeleteConfirm(null)}>
           <div style={{background:T.bgSurface,borderRadius:14,padding:"28px 28px 24px",width:380,border:`1px solid ${T.border}`,boxShadow:"0 20px 60px rgba(0,0,0,0.35)"}}
             onClick={e=>e.stopPropagation()}>
-            {/* icon */}
             <div style={{width:44,height:44,borderRadius:12,background:T.roseDim,border:`1px solid ${T.rose}44`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:16,color:T.rose}}>
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                 <path d="M3 5h14M7 5V4a1 1 0 011-1h4a1 1 0 011 1v1M8 9v5M12 9v5M4 5l1.2 11a1.5 1.5 0 001.5 1.3h6.6a1.5 1.5 0 001.5-1.3L16 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -16612,7 +16609,7 @@ const SettingsView = ({onToast})=>{
             </div>
             <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:6}}>Delete connection?</div>
             <div style={{fontSize:13,color:T.textSub,lineHeight:1.6,marginBottom:22}}>
-              <b style={{color:T.text}}>{target?.displayName}</b> will be permanently removed along with its schedule, configuration, and all run history. This cannot be undone.
+              <b style={{color:T.text}}>{deleteTarget.displayName}</b> will be permanently removed along with its schedule, configuration, and all run history. This cannot be undone.
             </div>
             <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
               <Btn small ghost onClick={()=>setDeleteConfirm(null)}>Cancel</Btn>
@@ -16621,7 +16618,7 @@ const SettingsView = ({onToast})=>{
                   setDeletedSvcs(p=>[...p,deleteConfirm]);
                   if(svcSel===deleteConfirm) setSvcSel(null);
                   setDeleteConfirm(null);
-                  onToast(`${target?.displayName} connection deleted`,"success");
+                  onToast(`${deleteTarget.displayName} connection deleted`,"success");
                 }}
                 style={{padding:"7px 16px",borderRadius:8,background:T.rose,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>
                 Delete Connection
@@ -16629,9 +16626,8 @@ const SettingsView = ({onToast})=>{
             </div>
           </div>
         </div>
-      );
-    })()}
-
+      )}
+    </div>
   );
 };
 
