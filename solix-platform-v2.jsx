@@ -13972,7 +13972,7 @@ const AccessSection = ({onToast}) => {
       ]},
     {id:"pol3",name:"DataStewardPolicy", desc:"Domain-scoped governance — certify assets, manage glossary, handle DQ incidents and access requests.", enabled:true, system:false,
       rules:[
-        {id:"rl17",name:"Asset-Governance",       effect:"allow", resources:["database","databaseSchema","table","container"], operations:["ViewBasic","ViewTests","TriggerIngestion","EditDescription","EditOwner","EditTags","EditStatus"], condition:"hasDomain()", desc:"Govern data assets within assigned domain only."},
+        {id:"rl17",name:"Asset-Governance",       effect:"allow", resources:["database","databaseSchema","table","container"], operations:["ViewBasic","ViewTests","TriggerIngestion","EditDescription","EditOwner","EditTags","EditStatus"], condition:"", desc:"Govern data assets within assigned domain only."},
         {id:"rl18",name:"Tag-Apply",              effect:"allow", resources:["tag"],                   operations:["ViewBasic","EditTags"],                                                    condition:"", desc:"View and apply tags to assets."},
         {id:"rl19",name:"Tag-Browse",             effect:"allow", resources:["tagCategory"],           operations:["ViewBasic"],                                                               condition:"", desc:"Browse tag categories."},
         {id:"rl20",name:"Glossary-Management",    effect:"allow", resources:["glossaryCategory","glossaryTerm"], operations:["ViewBasic","Create","Edit","EditStatus"],                       condition:"", desc:"Create and manage glossary categories and terms."},
@@ -14311,9 +14311,6 @@ const AccessSection = ({onToast}) => {
                         {rule.resources.join(", ")} → {rule.operations.slice(0,3).join(", ")}{rule.operations.length>3?` +${rule.operations.length-3} more`:""}
                       </div>
                     </div>
-                    {rule.condition&&(
-                      <span style={{fontSize:10.5,color:T.violet,padding:"2px 7px",borderRadius:4,background:`${T.violet}10`,border:`1px solid ${T.violet}20`,fontFamily:"'Geist Mono',monospace",flexShrink:0,whiteSpace:"nowrap"}}>{rule.condition}</span>
-                    )}
                   </div>
                 ))}
               </div>
@@ -14448,7 +14445,6 @@ const AccessSection = ({onToast}) => {
                         <div style={{fontSize:12.5,fontWeight:600,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{rule.name}</div>
                         <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>
                           {rule.resources.join(", ")} · {rule.operations.join(", ")}
-                          {rule.condition&&<span> · <span style={{fontFamily:"'Geist Mono',monospace",color:T.violet}}>{rule.condition}</span></span>}
                         </div>
                       </div>
                       <div style={{display:"flex",gap:4,flexShrink:0}}>
@@ -14566,7 +14562,6 @@ const AccessSection = ({onToast}) => {
                           {rule.resources.join(", ")} → {rule.operations.slice(0,3).join(", ")}{rule.operations.length>3?` +${rule.operations.length-3}`:""}
                         </div>
                       </div>
-                      {rule.condition&&<span style={{fontSize:10,color:T.violet,fontFamily:"'Geist Mono',monospace",flexShrink:0}}>{rule.condition}</span>}
                     </div>
                   ))}
                 </div>
@@ -14658,12 +14653,6 @@ const AccessSection = ({onToast}) => {
                         {rule.operations.slice(0,8).map(o=><TagChip key={o} label={o}/>)}
                         {rule.operations.length>8&&<TagChip label={`+${rule.operations.length-8} more`}/>}
                       </div>
-                      {rule.condition&&<>
-                        <span style={{fontSize:10.5,fontWeight:600,color:T.textMuted,paddingTop:6}}>Condition</span>
-                        <div style={{marginTop:4}}>
-                          <span style={{fontSize:11,color:T.violet,padding:"3px 9px",borderRadius:5,background:`${T.violet}10`,border:`1px solid ${T.violet}22`,fontFamily:"'Geist Mono',monospace"}}>{rule.condition}</span>
-                        </div>
-                      </>}
                     </div>
                   </div>
                 </div>
@@ -14782,26 +14771,6 @@ const AccessSection = ({onToast}) => {
               />
             </div>
 
-            {/* Condition section */}
-            <div style={{marginBottom:6}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
-                <div style={{flex:1,height:1,background:T.borderLight}}/>
-                <span style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:.8,textTransform:"uppercase",flexShrink:0}}>Condition</span>
-                <div style={{flex:1,height:1,background:T.borderLight}}/>
-              </div>
-            </div>
-
-            <div style={{marginBottom:20}}>
-              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7,letterSpacing:.2}}>
-                When to apply <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span>
-              </label>
-              <ConditionPicker
-                value={rf.condition}
-                condParam={rf.condParam||""}
-                onConditionChange={v=>setRf(f=>({...f,condition:v,condParam:""}))}
-                onParamChange={v=>setRf(f=>({...f,condParam:v}))}
-              />
-            </div>
 
             {/* Notes section */}
             <div style={{marginBottom:6}}>
