@@ -443,7 +443,7 @@ const DQ_TEST_DEFINITIONS = [
   {id:"td4",  name:"Table Column Count To Equal",            entityType:"TABLE",  dim:"Validity",     testPlatforms:["OpenMetadata"],           enabled:true,  params:["columnCount"],                      fn:"tableColumnCountToEqual",           desc:"This test defines the test TableColumnCountToEqual. Test the number of columns equal to a value."},
   {id:"td5",  name:"Table Column Name To Exist",             entityType:"TABLE",  dim:"Validity",     testPlatforms:["OpenMetadata"],           enabled:true,  params:["columnName"],                       fn:"tableColumnNameToExist",            desc:"This test defines the test TableColumnNameToExist. Test the table columns exists in the table."},
   {id:"td6",  name:"Table Column Names To Match Set",        entityType:"TABLE",  dim:"Validity",     testPlatforms:["OpenMetadata"],           enabled:true,  params:["columnNames","ordered"],            fn:"tableColumnToMatchSet",             desc:"This schema defines the test TableColumnToMatchSet. Test the table columns match a set of values."},
-  {id:"td7",  name:"Custom SQL Query",                       entityType:"TABLE",  dim:"Consistency",  testPlatforms:["OpenMetadata"],           enabled:true,  params:["sqlExpression","strategy"],        fn:"tableCustomSQLQuery",               desc:"Test if a custom SQL returns 0 row or COUNT(<x>) == 0."},
+  {id:"td7",  name:"Custom SQL Query",                       entityType:"TABLE",  dim:"Consistency",  testPlatforms:["OpenMetadata"],           enabled:true,  params:["sqlExpression","strategy","operator","threshold","partitionExpression"], fn:"tableCustomSQLQuery", desc:"Test using custom SQL that should return 0 rows or COUNT(*) == 0 for the test to pass. Write SQL to return rows that represent data problems. Supports ROWS/COUNT strategy, comparison operator, threshold, and partition expression for row-level analysis."},
   {id:"td8",  name:"Compare 2 tables for differences",       entityType:"TABLE",  dim:"Consistency",  testPlatforms:["OpenMetadata"],           enabled:true,  params:["table2","keyColumns"],             fn:"tableDiff",                         desc:"Test if 2 tables have less that diff rows."},
   {id:"td9",  name:"Table Row Inserted Count To Be Between", entityType:"TABLE",  dim:"Timeliness",   testPlatforms:["OpenMetadata"],           enabled:true,  params:["minCount","maxCount","rangeType","rangeInterval"], fn:"tableRowInsertedCountToBeBetween", desc:"This schema defines the test tableRowInsertedCountToBeBetween. Test the number of rows inserted in the last N hours/days."},
   {id:"td10", name:"Column Value Lengths To Be Between",     entityType:"COLUMN", dim:"Validity",     testPlatforms:["OpenMetadata"],           enabled:true,  params:["minLength","maxLength"],           fn:"columnValueLengthsToBeBetween",    desc:"This schema defines the test ColumnValueLengthsToBeBetween. Test the value lengths in a column are between min and max."},
@@ -3698,8 +3698,12 @@ const QualityView = () => {
   const [tcDesc,       setTcDesc]      = useState("");
   const [tcTags,       setTcTags]      = useState([]);
   const [tcGlossary,   setTcGlossary]  = useState([]);
-  const [tcCustomSQL,  setTcCustomSQL] = useState(false);
-  const [tcSQLQuery,   setTcSQLQuery]  = useState("");
+  const [tcCustomSQL,        setTcCustomSQL]        = useState(false);
+  const [tcSQLQuery,         setTcSQLQuery]         = useState("");
+  const [tcSQLStrategy,      setTcSQLStrategy]      = useState("");
+  const [tcSQLOperator,      setTcSQLOperator]      = useState("");
+  const [tcSQLThreshold,     setTcSQLThreshold]     = useState("");
+  const [tcSQLPartitionExpr, setTcSQLPartitionExpr] = useState("");
   const [tcParams,     setTcParams]    = useState({});
   const [tcDim,        setTcDim]       = useState("");
 
@@ -4983,14 +4987,60 @@ const QualityView = () => {
                     ))}
                   </select>
                 )}
-                {/* Custom SQL textarea */}
+                {/* Custom SQL fields */}
                 {tcCustomSQL&&(
-                  <div>
-                    <textarea value={tcSQLQuery} onChange={e=>setTcSQLQuery(e.target.value)} rows={4}
-                      placeholder={"SELECT COUNT(*) FROM {{table}} WHERE amount < 0"}
-                      style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${tcSQLQuery?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box",lineHeight:1.6}}
-                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=tcSQLQuery?T.accent:T.border}/>
-                    <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>Use <code style={{fontFamily:"'Geist Mono',monospace",background:T.bgElevated,padding:"1px 5px",borderRadius:4}}>{`{{table}}`}</code> to reference the selected table. Result &gt; 0 = fail.</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                    {/* SQL Expression */}
+                    <div>
+                      <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>SQL Expression <span style={{color:T.rose}}>*</span></label>
+                      <textarea value={tcSQLQuery} onChange={e=>setTcSQLQuery(e.target.value)} rows={4}
+                        placeholder={"SELECT * FROM {{table}} WHERE amount < 0"}
+                        style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${tcSQLQuery?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box",lineHeight:1.6}}
+                        onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=tcSQLQuery?T.accent:T.border}/>
+                      <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>Write SQL that returns rows representing problems. Test passes when 0 rows are returned.</div>
+                    </div>
+                    {/* Strategy */}
+                    <div>
+                      <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Strategy <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
+                      <select value={tcSQLStrategy} onChange={e=>setTcSQLStrategy(e.target.value)}
+                        style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${tcSQLStrategy?T.accent:T.border}`,borderRadius:9,color:tcSQLStrategy?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer"}}>
+                        <option value="">Select strategy…</option>
+                        <option value="ROWS">ROWS — count returned rows</option>
+                        <option value="COUNT">COUNT — use COUNT() in query</option>
+                      </select>
+                    </div>
+                    {/* Operator + Threshold */}
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                      <div>
+                        <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Operator <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
+                        <select value={tcSQLOperator} onChange={e=>setTcSQLOperator(e.target.value)}
+                          style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${tcSQLOperator?T.accent:T.border}`,borderRadius:9,color:tcSQLOperator?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer"}}>
+                          <option value="">Select…</option>
+                          <option value="==">== equals</option>
+                          <option value=">">&gt; greater than</option>
+                          <option value=">=">&gt;= greater or equal</option>
+                          <option value="<">&lt; less than</option>
+                          <option value="<=">&lt;= less or equal</option>
+                          <option value="!=">!= not equal</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Threshold <span style={{color:T.textMuted,fontWeight:400}}>(default: 0)</span></label>
+                        <input type="number" value={tcSQLThreshold} onChange={e=>setTcSQLThreshold(e.target.value)}
+                          placeholder="0"
+                          style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${tcSQLThreshold!==""?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box"}}
+                          onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                      </div>
+                    </div>
+                    {/* Partition Expression */}
+                    <div>
+                      <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Partition Expression <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
+                      <input value={tcSQLPartitionExpr} onChange={e=>setTcSQLPartitionExpr(e.target.value)}
+                        placeholder="e.g. created_date"
+                        style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${tcSQLPartitionExpr?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"'Geist Mono',monospace"}}
+                        onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                      <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>SQL expression to group results for row-level analysis.</div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -6479,8 +6529,12 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
   const [aqTcLevel,     setAqTcLevel]     = useState("table");
   const [aqTcSelCol,    setAqTcSelCol]    = useState("");
   const [aqTcSelType,   setAqTcSelType]   = useState(null);
-  const [aqTcCustomSQL, setAqTcCustomSQL] = useState(false);
-  const [aqTcSQLQuery,  setAqTcSQLQuery]  = useState("");
+  const [aqTcCustomSQL,        setAqTcCustomSQL]        = useState(false);
+  const [aqTcSQLQuery,         setAqTcSQLQuery]         = useState("");
+  const [aqTcSQLStrategy,      setAqTcSQLStrategy]      = useState("");
+  const [aqTcSQLOperator,      setAqTcSQLOperator]      = useState("");
+  const [aqTcSQLThreshold,     setAqTcSQLThreshold]     = useState("");
+  const [aqTcSQLPartitionExpr, setAqTcSQLPartitionExpr] = useState("");
   const [aqTcParams,    setAqTcParams]    = useState({});
   const [aqTcTags,      setAqTcTags]      = useState([]);
   const [aqTcTagInput,  setAqTcTagInput]  = useState("");
@@ -6689,12 +6743,58 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
                     <div style={{marginTop:8,padding:"10px 14px",background:T.bgElevated,borderRadius:9,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textSub,lineHeight:1.6}}>{aqTcSelType.desc}</div>
                   )}
                   {aqTcCustomSQL&&(
-                    <div>
-                      <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>SQL Expression <span style={{color:T.rose}}>*</span></label>
-                      <textarea value={aqTcSQLQuery} onChange={e=>setAqTcSQLQuery(e.target.value)} rows={4}
-                        placeholder="SELECT COUNT(*) FROM table WHERE condition = 0"
-                        style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"'Geist Mono',monospace",lineHeight:1.6,boxSizing:"border-box"}}
-                        onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                      {/* SQL Expression */}
+                      <div>
+                        <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>SQL Expression <span style={{color:T.rose}}>*</span></label>
+                        <textarea value={aqTcSQLQuery} onChange={e=>setAqTcSQLQuery(e.target.value)} rows={4}
+                          placeholder="SELECT * FROM table WHERE amount < 0"
+                          style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${aqTcSQLQuery?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"'Geist Mono',monospace",lineHeight:1.6,boxSizing:"border-box"}}
+                          onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                        <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>Write SQL that returns rows representing problems. Test passes when 0 rows are returned.</div>
+                      </div>
+                      {/* Strategy */}
+                      <div>
+                        <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Strategy <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
+                        <select value={aqTcSQLStrategy} onChange={e=>setAqTcSQLStrategy(e.target.value)}
+                          style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${aqTcSQLStrategy?T.accent:T.border}`,borderRadius:9,color:aqTcSQLStrategy?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer"}}>
+                          <option value="">Select strategy…</option>
+                          <option value="ROWS">ROWS — count returned rows</option>
+                          <option value="COUNT">COUNT — use COUNT() in query</option>
+                        </select>
+                      </div>
+                      {/* Operator + Threshold */}
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                        <div>
+                          <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Operator <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
+                          <select value={aqTcSQLOperator} onChange={e=>setAqTcSQLOperator(e.target.value)}
+                            style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${aqTcSQLOperator?T.accent:T.border}`,borderRadius:9,color:aqTcSQLOperator?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer"}}>
+                            <option value="">Select…</option>
+                            <option value="==">== equals</option>
+                            <option value=">">&gt; greater than</option>
+                            <option value=">=">&gt;= greater or equal</option>
+                            <option value="<">&lt; less than</option>
+                            <option value="<=">&lt;= less or equal</option>
+                            <option value="!=">!= not equal</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Threshold <span style={{color:T.textMuted,fontWeight:400}}>(default: 0)</span></label>
+                          <input type="number" value={aqTcSQLThreshold} onChange={e=>setAqTcSQLThreshold(e.target.value)}
+                            placeholder="0"
+                            style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${aqTcSQLThreshold!==""?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box"}}
+                            onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                        </div>
+                      </div>
+                      {/* Partition Expression */}
+                      <div>
+                        <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Partition Expression <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
+                        <input value={aqTcSQLPartitionExpr} onChange={e=>setAqTcSQLPartitionExpr(e.target.value)}
+                          placeholder="e.g. created_date"
+                          style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${aqTcSQLPartitionExpr?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"'Geist Mono',monospace"}}
+                          onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                        <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>SQL expression to group results for row-level analysis.</div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -6756,7 +6856,7 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
             <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,flexShrink:0,background:T.bgSurface}}>
               <button onClick={()=>{
                 if(!aqTcName.trim()) return;
-                const def=aqTcSelType||{id:"custom",name:"Custom SQL",dim:"Integrity"};
+                const def=aqTcSelType||{id:"custom",name:"Custom SQL",dim:"Consistency"};
                 const newCase={id:`tc_new_${Date.now()}`,name:aqTcName.trim(),suiteId:"ts1",table:asset.name,col:aqTcLevel==="column"?aqTcSelCol||"column_name":null,defId:def.id,defName:def.name,dim:def.dim,status:"Success",lastVal:"—",expected:Object.entries(aqTcParams).map(([k,v])=>`${k}: ${v}`).join(", ")||"—",lastRun:"never",history:[],params:aqTcParams,failedReason:"",incidentId:null};
                 setLocalCases(p=>[...p,newCase]);
                 setAddTestOpen(false);
