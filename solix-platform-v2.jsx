@@ -426,26 +426,26 @@ const COL_PROFILES = {
 
 const QUALITY_RULES = [
   {id:1,table:"orders",rule:"Completeness: order_id NOT NULL",status:"passing",score:100,runs:1440,lastRun:"2m ago",dim:"Completeness"},
-  {id:2,table:"orders",rule:"Freshness: updated_at < 2h",status:"passing",score:98,runs:720,lastRun:"5m ago",dim:"Freshness"},
+  {id:2,table:"orders",rule:"Timeliness: updated_at < 2h",status:"passing",score:98,runs:720,lastRun:"5m ago",dim:"Timeliness"},
   {id:3,table:"customers",rule:"Uniqueness: email unique",status:"warning",score:87,runs:360,lastRun:"12m ago",dim:"Uniqueness"},
   {id:4,table:"product_events",rule:"Schema drift detection",status:"failing",score:0,runs:240,lastRun:"1h ago",dim:"Validity"},
   {id:5,table:"user_sessions",rule:"Completeness: session_id",status:"failing",score:41,runs:180,lastRun:"3h ago",dim:"Completeness"},
   {id:6,table:"orders",rule:"Accuracy: amount > 0",status:"passing",score:99,runs:1440,lastRun:"3m ago",dim:"Accuracy"},
-  {id:7,table:"dim_products",rule:"Referential integrity: category_id",status:"passing",score:100,runs:96,lastRun:"15m ago",dim:"Integrity"},
-  {id:8,table:"customers",rule:"Freshness: updated_at < 6h",status:"passing",score:95,runs:240,lastRun:"8m ago",dim:"Freshness"},
+  {id:7,table:"dim_products",rule:"Referential integrity: category_id",status:"passing",score:100,runs:96,lastRun:"15m ago",dim:"Consistency"},
+  {id:8,table:"customers",rule:"Timeliness: updated_at < 6h",status:"passing",score:95,runs:240,lastRun:"8m ago",dim:"Timeliness"},
 ];
 
 // entityType: "TABLE" | "COLUMN"  testPlatforms: array  dim: Data Quality Dimension  enabled: toggle state
 const DQ_TEST_DEFINITIONS = [
-  {id:"td1",  name:"Table Row Count To Be Between",          entityType:"TABLE",  dim:"Volume",       testPlatforms:["OpenMetadata"],           enabled:true,  params:["minValue","maxValue"],              fn:"tableRowCountToBeBetween",          desc:"This defines the test TableRowCountToBeBetween. Test the number of rows to be between two values."},
-  {id:"td2",  name:"Table Row Count To Equal",               entityType:"TABLE",  dim:"Volume",       testPlatforms:["OpenMetadata"],           enabled:true,  params:["value"],                            fn:"tableRowCountToEqual",              desc:"This schema defines the test TableRowCountToEqual. Test the number of rows equal to a value."},
-  {id:"td3",  name:"Table Column Count To Be Between",       entityType:"TABLE",  dim:"Schema",       testPlatforms:["OpenMetadata"],           enabled:true,  params:["minColCount","maxColCount"],        fn:"tableColumnCountToBeBetween",       desc:"This schema defines the test TableColumnCountToBeBetween. Test the number of columns to be between two values."},
-  {id:"td4",  name:"Table Column Count To Equal",            entityType:"TABLE",  dim:"Schema",       testPlatforms:["OpenMetadata"],           enabled:true,  params:["columnCount"],                      fn:"tableColumnCountToEqual",           desc:"This test defines the test TableColumnCountToEqual. Test the number of columns equal to a value."},
-  {id:"td5",  name:"Table Column Name To Exist",             entityType:"TABLE",  dim:"Schema",       testPlatforms:["OpenMetadata"],           enabled:true,  params:["columnName"],                       fn:"tableColumnNameToExist",            desc:"This test defines the test TableColumnNameToExist. Test the table columns exists in the table."},
-  {id:"td6",  name:"Table Column Names To Match Set",        entityType:"TABLE",  dim:"Schema",       testPlatforms:["OpenMetadata"],           enabled:true,  params:["columnNames","ordered"],            fn:"tableColumnToMatchSet",             desc:"This schema defines the test TableColumnToMatchSet. Test the table columns match a set of values."},
-  {id:"td7",  name:"Custom SQL Query",                       entityType:"TABLE",  dim:"Integrity",    testPlatforms:["OpenMetadata"],           enabled:true,  params:["sqlExpression","strategy"],        fn:"tableCustomSQLQuery",               desc:"Test if a custom SQL returns 0 row or COUNT(<x>) == 0."},
+  {id:"td1",  name:"Table Row Count To Be Between",          entityType:"TABLE",  dim:"Completeness", testPlatforms:["OpenMetadata"],           enabled:true,  params:["minValue","maxValue"],              fn:"tableRowCountToBeBetween",          desc:"This defines the test TableRowCountToBeBetween. Test the number of rows to be between two values."},
+  {id:"td2",  name:"Table Row Count To Equal",               entityType:"TABLE",  dim:"Completeness", testPlatforms:["OpenMetadata"],           enabled:true,  params:["value"],                            fn:"tableRowCountToEqual",              desc:"This schema defines the test TableRowCountToEqual. Test the number of rows equal to a value."},
+  {id:"td3",  name:"Table Column Count To Be Between",       entityType:"TABLE",  dim:"Validity",     testPlatforms:["OpenMetadata"],           enabled:true,  params:["minColCount","maxColCount"],        fn:"tableColumnCountToBeBetween",       desc:"This schema defines the test TableColumnCountToBeBetween. Test the number of columns to be between two values."},
+  {id:"td4",  name:"Table Column Count To Equal",            entityType:"TABLE",  dim:"Validity",     testPlatforms:["OpenMetadata"],           enabled:true,  params:["columnCount"],                      fn:"tableColumnCountToEqual",           desc:"This test defines the test TableColumnCountToEqual. Test the number of columns equal to a value."},
+  {id:"td5",  name:"Table Column Name To Exist",             entityType:"TABLE",  dim:"Validity",     testPlatforms:["OpenMetadata"],           enabled:true,  params:["columnName"],                       fn:"tableColumnNameToExist",            desc:"This test defines the test TableColumnNameToExist. Test the table columns exists in the table."},
+  {id:"td6",  name:"Table Column Names To Match Set",        entityType:"TABLE",  dim:"Validity",     testPlatforms:["OpenMetadata"],           enabled:true,  params:["columnNames","ordered"],            fn:"tableColumnToMatchSet",             desc:"This schema defines the test TableColumnToMatchSet. Test the table columns match a set of values."},
+  {id:"td7",  name:"Custom SQL Query",                       entityType:"TABLE",  dim:"Consistency",  testPlatforms:["OpenMetadata"],           enabled:true,  params:["sqlExpression","strategy"],        fn:"tableCustomSQLQuery",               desc:"Test if a custom SQL returns 0 row or COUNT(<x>) == 0."},
   {id:"td8",  name:"Compare 2 tables for differences",       entityType:"TABLE",  dim:"Consistency",  testPlatforms:["OpenMetadata"],           enabled:true,  params:["table2","keyColumns"],             fn:"tableDiff",                         desc:"Test if 2 tables have less that diff rows."},
-  {id:"td9",  name:"Table Row Inserted Count To Be Between", entityType:"TABLE",  dim:"Freshness",    testPlatforms:["OpenMetadata"],           enabled:true,  params:["minCount","maxCount","rangeType","rangeInterval"], fn:"tableRowInsertedCountToBeBetween", desc:"This schema defines the test tableRowInsertedCountToBeBetween. Test the number of rows inserted in the last N hours/days."},
+  {id:"td9",  name:"Table Row Inserted Count To Be Between", entityType:"TABLE",  dim:"Timeliness",   testPlatforms:["OpenMetadata"],           enabled:true,  params:["minCount","maxCount","rangeType","rangeInterval"], fn:"tableRowInsertedCountToBeBetween", desc:"This schema defines the test tableRowInsertedCountToBeBetween. Test the number of rows inserted in the last N hours/days."},
   {id:"td10", name:"Column Value Lengths To Be Between",     entityType:"COLUMN", dim:"Validity",     testPlatforms:["OpenMetadata"],           enabled:true,  params:["minLength","maxLength"],           fn:"columnValueLengthsToBeBetween",    desc:"This schema defines the test ColumnValueLengthsToBeBetween. Test the value lengths in a column are between min and max."},
   {id:"td11", name:"Column Value Max. To Be Between",        entityType:"COLUMN", dim:"Accuracy",     testPlatforms:["OpenMetadata","dbt"],     enabled:true,  params:["minValue","maxValue"],            fn:"columnValueMaxToBeBetween",         desc:"This schema defines the test ColumnValueMaxToBeBetween. Test the maximum value in a column is between min and max."},
   {id:"td12", name:"Column Value Mean To Be Between",        entityType:"COLUMN", dim:"Accuracy",     testPlatforms:["OpenMetadata"],           enabled:true,  params:["minValue","maxValue"],            fn:"columnValueMeanToBeBetween",        desc:"This schema defines the test ColumnValueMeanToBeBetween. Test the mean value of a column is between min and max."},
@@ -484,17 +484,17 @@ const DQ_TEST_CASES = [
   {id:"tc4", name:"orders.customer_id not null",        suiteId:"ts1",table:"commerce.orders",         col:"customer_id",  defId:"td21",defName:"Column Values To Be Not Null",       dim:"Completeness", status:"Success", lastVal:"0 nulls",    expected:"0 null values",                                       lastRun:"2h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{},                              failedReason:"",                                incidentId:null},
   {id:"tc5", name:"users.email regex match",            suiteId:"ts2",table:"platform.users",          col:"email",        defId:"td23",defName:"Column Values To Match Regex Pattern",dim:"Validity",     status:"Success", lastVal:"100% match", expected:"^[^@]+@[^@]+\\.[^@]+$",                              lastRun:"1h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{regex:"^[^@]+@[^@]+\\.[^@]+$"}, failedReason:"",                                incidentId:null},
   {id:"tc6", name:"users.user_id unique",               suiteId:"ts2",table:"platform.users",          col:"user_id",      defId:"td22",defName:"Column Values To Be Unique",         dim:"Uniqueness",   status:"Success", lastVal:"100% unique",expected:"all values distinct",                                 lastRun:"1h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{},                              failedReason:"",                                incidentId:null},
-  {id:"tc7", name:"product_events row count",           suiteId:"ts3",table:"analytics.product_events",col:null,           defId:"td1", defName:"Table Row Count To Be Between",      dim:"Volume",       status:"Failed",  lastVal:"1,243",     expected:"500,000 — 2,000,000",                                 lastRun:"3h ago",  history:[1,1,1,1,1,0,0,0,0,0,0,0,0,0,0], params:{minValue:500000,maxValue:2000000},failedReason:"Row count 1,243 is critically below minimum 500,000", incidentId:"inc2"},
+  {id:"tc7", name:"product_events row count",           suiteId:"ts3",table:"analytics.product_events",col:null,           defId:"td1", defName:"Table Row Count To Be Between",      dim:"Completeness", status:"Failed",  lastVal:"1,243",     expected:"500,000 — 2,000,000",                                 lastRun:"3h ago",  history:[1,1,1,1,1,0,0,0,0,0,0,0,0,0,0], params:{minValue:500000,maxValue:2000000},failedReason:"Row count 1,243 is critically below minimum 500,000", incidentId:"inc2"},
   {id:"tc8", name:"product_events.event_type not null", suiteId:"ts3",table:"analytics.product_events",col:"event_type",   defId:"td21",defName:"Column Values To Be Not Null",       dim:"Completeness", status:"Success", lastVal:"0 nulls",    expected:"0 null values",                                       lastRun:"3h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{},                              failedReason:"",                                incidentId:null},
   {id:"tc9", name:"fact_revenue.amount sum range",      suiteId:"ts4",table:"finance.fact_revenue",    col:"amount",       defId:"td25",defName:"Column Values Sum To Be Between",    dim:"Accuracy",     status:"Success", lastVal:"$18,429,304",expected:"$10M — $30M",                                        lastRun:"6h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{minValue:10000000,maxValue:30000000},failedReason:"",                              incidentId:null},
   {id:"tc10",name:"fact_revenue.amount not null",       suiteId:"ts4",table:"finance.fact_revenue",    col:"amount",       defId:"td21",defName:"Column Values To Be Not Null",       dim:"Completeness", status:"Success", lastVal:"0 nulls",    expected:"0 null values",                                       lastRun:"6h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{},                              failedReason:"",                                incidentId:null},
   {id:"tc11",name:"users.phone string length",          suiteId:"ts2",table:"platform.users",          col:"phone",        defId:"td10",defName:"Column Value Lengths To Be Between",  dim:"Validity",     status:"Success", lastVal:"10–14 chars",expected:"10 — 14 characters",                                  lastRun:"1h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{minLength:10,maxLength:14},     failedReason:"",                                incidentId:null},
   {id:"tc12",name:"orders.amount mean range",           suiteId:"ts1",table:"commerce.orders",         col:"total_amount", defId:"td12",defName:"Column Value Mean To Be Between",    dim:"Accuracy",     status:"Success", lastVal:"$127.43",    expected:"$50 — $500",                                          lastRun:"2h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{minValue:50,maxValue:500},      failedReason:"",                                incidentId:null},
-  {id:"tc13",name:"orders column count",                suiteId:"ts1",table:"commerce.orders",         col:null,           defId:"td3", defName:"Table Column Count To Be Between",      dim:"Schema",       status:"Success", lastVal:"12 cols",    expected:"10 — 15 columns",                                     lastRun:"4h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{minColCount:10,maxColCount:15}, failedReason:"",                                incidentId:null},
+  {id:"tc13",name:"orders column count",                suiteId:"ts1",table:"commerce.orders",         col:null,           defId:"td3", defName:"Table Column Count To Be Between",      dim:"Validity",     status:"Success", lastVal:"12 cols",    expected:"10 — 15 columns",                                     lastRun:"4h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{minColCount:10,maxColCount:15}, failedReason:"",                                incidentId:null},
   {id:"tc14",name:"orders.order_id unique",             suiteId:"ts1",table:"commerce.orders",         col:"order_id",     defId:"td22",defName:"Column Values To Be Unique",          dim:"Uniqueness",   status:"Success", lastVal:"100% unique",expected:"all values distinct",                                 lastRun:"2h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{},                              failedReason:"",                                incidentId:null},
   {id:"tc15",name:"orders.created_at not null",         suiteId:"ts1",table:"commerce.orders",         col:"created_at",   defId:"td21",defName:"Column Values To Be Not Null",        dim:"Completeness", status:"Success", lastVal:"0 nulls",    expected:"0 null values",                                       lastRun:"2h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{},                              failedReason:"",                                incidentId:null},
   {id:"tc16",name:"orders.discount_pct between 0–1",   suiteId:"ts1",table:"commerce.orders",         col:"discount_pct", defId:"td18",defName:"Column Values To Be Between",        dim:"Validity",     status:"Failed",  lastVal:"1.25",      expected:"0.0 — 1.0",                                           lastRun:"2h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,0,0,0,0], params:{minValue:0,maxValue:1},         failedReason:"Found discount_pct > 1.0 in 3 rows",              incidentId:null},
-  {id:"tc17",name:"orders freshness — row inserted",    suiteId:"ts1",table:"commerce.orders",         col:null,           defId:"td9", defName:"Table Row Inserted Count To Be Between",dim:"Freshness",    status:"Success", lastVal:"1,482 rows", expected:"500 — 5,000 rows/day",                               lastRun:"1h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{minCount:500,maxCount:5000,rangeType:"HOUR",rangeInterval:24},failedReason:"",  incidentId:null},
+  {id:"tc17",name:"orders timeliness — row inserted",   suiteId:"ts1",table:"commerce.orders",         col:null,           defId:"td9", defName:"Table Row Inserted Count To Be Between",dim:"Timeliness",   status:"Success", lastVal:"1,482 rows", expected:"500 — 5,000 rows/day",                               lastRun:"1h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{minCount:500,maxCount:5000,rangeType:"HOUR",rangeInterval:24},failedReason:"",  incidentId:null},
   {id:"tc18",name:"orders.shipping_address not null",   suiteId:"ts1",table:"commerce.orders",         col:"shipping_address",defId:"td21",defName:"Column Values To Be Not Null",    dim:"Completeness", status:"Aborted", lastVal:"—",         expected:"0 null values",                                       lastRun:"5h ago",  history:[1,1,1,1,0.5,0.5,1,1,1,1,1,1,1,1,1], params:{},                          failedReason:"",                                incidentId:null},
 ];
 
@@ -3755,8 +3755,8 @@ const QualityView = () => {
   const KNOWN_TABLES = [...new Set(DQ_TEST_CASES.map(t=>t.table)),"finance.dim_customer","platform.sessions"];
   const KNOWN_COLS = {"commerce.orders":["order_id","customer_id","total_amount","status","created_at"],"platform.users":["user_id","email","phone","name","created_at"],"analytics.product_events":["event_id","event_type","user_id","timestamp"],"finance.fact_revenue":["revenue_id","amount","date","product_id"],"finance.dim_customer":["customer_id","name","email","tier"],"platform.sessions":["session_id","user_id","started_at","duration_s"]};
   const TEAMS = ["dev.patel","maya.chen","arjun.sharma","sarah.kim","priya.nair","james.wilson"];
-  const dimColor = (dim) => ({Completeness:"#3b82f6",Accuracy:"#8b5cf6",Validity:"#10b981",Volume:"#f59e0b",Uniqueness:"#ec4899",Consistency:"#06b6d4",Integrity:"#f97316"}[dim]||T.textMuted);
-  const DQ_DIMS = ["Completeness","Accuracy","Validity","Volume","Uniqueness","Consistency","Integrity"];
+  const dimColor = (dim) => ({Accuracy:"#8b5cf6",Completeness:"#3b82f6",Consistency:"#06b6d4",Timeliness:"#f59e0b",Validity:"#10b981",Uniqueness:"#ec4899"}[dim]||T.textMuted);
+  const DQ_DIMS = ["Accuracy","Completeness","Consistency","Timeliness","Validity","Uniqueness"];
 
   // ── deep-link from asset profile incident badge ───────────────
   useEffect(()=>{
@@ -4953,7 +4953,7 @@ const QualityView = () => {
                 <select value={tcDim} onChange={e=>{setTcDim(e.target.value);setTcSelType(null);}}
                   style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${tcDim?T.accent:T.border}`,borderRadius:9,color:tcDim?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
                   <option value="">All dimensions</option>
-                  {["Accuracy","Completeness","Consistency","Timeliness","Validity"].map(d=>(
+                  {["Accuracy","Completeness","Consistency","Timeliness","Validity","Uniqueness"].map(d=>(
                     <option key={d} value={d}>{d}</option>
                   ))}
                 </select>
@@ -6496,7 +6496,7 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
   const tcFailed=localCases.filter(t=>t.status==="Failed").length;
   const tcAborted=localCases.filter(t=>t.status==="Aborted").length;
   const trend=[91,94,93,96,94,92,95,97,94,96,94,asset.quality];
-  const dimColor=(dim)=>({Completeness:"#3b82f6",Accuracy:"#8b5cf6",Validity:"#10b981",Volume:"#f59e0b",Uniqueness:"#ec4899",Consistency:"#06b6d4",Integrity:"#f97316"}[dim]||T.textMuted);
+  const dimColor=(dim)=>({Accuracy:"#8b5cf6",Completeness:"#3b82f6",Consistency:"#06b6d4",Timeliness:"#f59e0b",Validity:"#10b981",Uniqueness:"#ec4899"}[dim]||T.textMuted);
   const TC_CFG={Success:{color:"#16a34a",bg:"#16a34a12"},Failed:{color:"#e11d48",bg:"rgba(225,29,72,.1)"},Aborted:{color:"#d97706",bg:"rgba(217,119,6,.1)"}};
   const totalPages=Math.ceil(localCases.length/PAGE_SIZE);
   const pagedCases=localCases.slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE);
@@ -6657,7 +6657,7 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
                   <select value={aqTcDim} onChange={e=>{setAqTcDim(e.target.value);setAqTcSelType(null);}}
                     style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${aqTcDim?T.accent:T.border}`,borderRadius:9,color:aqTcDim?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
                     <option value="">All dimensions</option>
-                    {["Accuracy","Completeness","Consistency","Timeliness","Validity"].map(d=>(
+                    {["Accuracy","Completeness","Consistency","Timeliness","Validity","Uniqueness"].map(d=>(
                       <option key={d} value={d}>{d}</option>
                     ))}
                   </select>
@@ -6795,7 +6795,7 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
                     <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>No test cases found for this table.<br/>Create them in the DQ section first.</div>
                   </div>
                 );
-                const dimC={Completeness:"#3b82f6",Accuracy:"#8b5cf6",Validity:"#10b981",Volume:"#f59e0b",Uniqueness:"#ec4899",Consistency:"#06b6d4",Integrity:"#f97316"};
+                const dimC={Accuracy:"#8b5cf6",Completeness:"#3b82f6",Consistency:"#06b6d4",Timeliness:"#f59e0b",Validity:"#10b981",Uniqueness:"#ec4899"};
                 const SC2={Success:"#16a34a",Failed:"#e11d48",Aborted:"#d97706"};
                 return available.map(t=>{
                   const isSel=selectTestIds.has(t.id);
@@ -8313,7 +8313,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
           </div>
         );
         const DimChip=({dim})=>{
-          const dc={Accuracy:{c:"#38bdf8",bg:"rgba(56,189,248,.1)"},Completeness:{c:"#4ade80",bg:"rgba(74,222,128,.1)"},Validity:{c:"#818cf8",bg:"rgba(129,140,248,.1)"},Uniqueness:{c:"#fb923c",bg:"rgba(251,146,60,.1)"},Volume:{c:"#facc15",bg:"rgba(250,204,21,.1)"},Consistency:{c:"#34d399",bg:"rgba(52,211,153,.1)"},Freshness:{c:"#a78bfa",bg:"rgba(167,139,250,.1)"},Integrity:{c:"#f472b6",bg:"rgba(244,114,182,.1)"},Schema:{c:"#94a3b8",bg:"rgba(148,163,184,.1)"}};
+          const dc={Accuracy:{c:"#38bdf8",bg:"rgba(56,189,248,.1)"},Completeness:{c:"#4ade80",bg:"rgba(74,222,128,.1)"},Consistency:{c:"#34d399",bg:"rgba(52,211,153,.1)"},Timeliness:{c:"#facc15",bg:"rgba(250,204,21,.1)"},Validity:{c:"#818cf8",bg:"rgba(129,140,248,.1)"},Uniqueness:{c:"#fb923c",bg:"rgba(251,146,60,.1)"}};
           const s=dc[dim]||{c:T.textMuted,bg:T.bgHover};
           return <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:3,background:s.bg,color:s.c,border:`1px solid ${s.c}33`}}>{dim}</span>;
         };
@@ -8526,7 +8526,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
                 return filtered.map(t=>{
                   const isSel=colSelectTestIds.has(t.id);
                   const SC2={Success:"#16a34a",Failed:"#e11d48",Aborted:"#d97706"};
-                  const dimC={Completeness:"#3b82f6",Accuracy:"#8b5cf6",Validity:"#10b981",Volume:"#f59e0b",Uniqueness:"#ec4899",Consistency:"#06b6d4",Integrity:"#f97316"};
+                  const dimC={Accuracy:"#8b5cf6",Completeness:"#3b82f6",Consistency:"#06b6d4",Timeliness:"#f59e0b",Validity:"#10b981",Uniqueness:"#ec4899"};
                   return (
                     <div key={t.id} onClick={()=>setColSelectTestIds(p=>{const n=new Set(p);isSel?n.delete(t.id):n.add(t.id);return n;})}
                       style={{background:isSel?T.accentDim:T.bgElevated,border:`1.5px solid ${isSel?T.accent:T.border}`,borderRadius:9,padding:"10px 12px",cursor:"pointer",transition:"all .15s"}}>
