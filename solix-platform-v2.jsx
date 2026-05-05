@@ -9064,21 +9064,10 @@ const CatalogView = ({onAsset})=>{
               sel={selConns} onToggle={(v,c)=>c?setSelConns(new Set()):toggle(setSelConns,v)}
               renderItem={item=><div style={{display:"flex",alignItems:"center",gap:6}}><ServiceIcon service={item.svc} size={13}/><span style={{fontSize:11,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.label}</span></div>}
               headerNote={selConnTypes.size>0?`Filtered by ${selConnTypes.size} type${selConnTypes.size>1?"s":""}`:null}/>
-            <FacetGroup id="domain" label="Domain" icon={Ic.domain(11)}
-              items={[...new Set(ASSETS.map(a=>a.domain))].map(v=>({val:v,label:v}))}
-              sel={selDomains} onToggle={(v,c)=>c?setSelDomains(new Set()):toggle(setSelDomains,v)}/>
             <FacetGroup id="type" label="Asset Type" icon={Ic.catalog(11)}
               items={ALL_ASSET_TYPES.sort().map(v=>({val:v,label:v}))}
               sel={selTypes} onToggle={(v,c)=>c?setSelTypes(new Set()):toggle(setSelTypes,v)}
               renderItem={item=><div style={{display:"flex",alignItems:"center",gap:5}}><TypeBadge type={item.val}/></div>}/>
-            <FacetGroup id="cert" label="Certification" icon={Ic.cert(11)}
-              items={["Approved","In Review","Draft","Rejected","Deprecated"].map(v=>({val:v,label:v}))}
-              sel={selCerts} onToggle={(v,c)=>c?setSelCerts(new Set()):toggle(setSelCerts,v)}
-              renderItem={item=><span style={{color:CERT_COLORS[item.val]||T.textSub,fontSize:11.5}}>{item.label}</span>}/>
-            <FacetGroup id="tier" label="Tier" icon={Ic.shield(11)}
-              items={["1","2","3"].map(v=>({val:v,label:v,...TIER_META[v]}))}
-              sel={selTiers} onToggle={(v,c)=>c?setSelTiers(new Set()):toggle(setSelTiers,v)}
-              renderItem={item=><div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,background:`${item.color}18`,color:item.color,border:`1px solid ${item.color}33`}}>T{item.val}</span><span style={{fontSize:11,color:T.textSub}}>{item.label}</span></div>}/>
             <FacetGroup id="owner" label="Owner" icon={Ic.access(11)}
               items={[...new Set(ASSETS.map(a=>a.owner))].map(v=>({val:v,label:v}))}
               sel={selOwners} onToggle={(v,c)=>c?setSelOwners(new Set()):toggle(setSelOwners,v)}
