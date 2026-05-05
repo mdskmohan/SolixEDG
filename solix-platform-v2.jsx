@@ -7499,10 +7499,13 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
   const [ownerSearch,  setOwnerSearch] = useState("");
   const [stewardOpen,  setStewardOpen] = useState(false);
   const [stewardSearch,setStewardSearch]=useState("");
-  const [tagInput,     setTagInput]    = useState("");
-  const [certModal,    setCertModal]   = useState(false);
-  const [certNote,     setCertNote]    = useState("");
-  const [editDesc,     setEditDesc]    = useState(false);
+  const [tagInput,       setTagInput]       = useState("");
+  const [certModal,      setCertModal]      = useState(false);
+  const [certNote,       setCertNote]       = useState("");
+  const [showAllOwners,  setShowAllOwners]  = useState(false);
+  const [showAllStewards,setShowAllStewards]= useState(false);
+  const [showAllTags,    setShowAllTags]    = useState(false);
+  const [editDesc,       setEditDesc]       = useState(false);
   const [descVal,      setDescVal]     = useState(asset.description||"");
   const [editNotes,    setEditNotes]   = useState(false);
   const [notesVal,     setNotesVal]    = useState(`The ${asset.name} ${asset.type.toLowerCase()} is part of the ${asset.domain||"Platform"} domain.\n\nManaged by ${asset.owner||"the data team"} and refreshed on a ${asset.slaFreshness||"regular"} schedule.`);
@@ -7804,7 +7807,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
           <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
             <MetaLabel>Owners</MetaLabel>
             <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
-              {owners.map((o,i)=>(
+              {(showAllOwners?owners:owners.slice(0,3)).map((o,i)=>(
                 <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,transition:"border-color .1s"}}
                   onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderLight} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
                   <div style={{width:20,height:20,borderRadius:"50%",background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(o)}</div>
@@ -7816,6 +7819,8 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
                   </button>
                 </div>
               ))}
+              {owners.length>3&&!showAllOwners&&<span onClick={()=>setShowAllOwners(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{owners.length-3} more</span>}
+              {owners.length>3&&showAllOwners&&<span onClick={()=>setShowAllOwners(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
             </div>
             <button onMouseDown={e=>{e.stopPropagation();setOwnerOpen(p=>{if(!p)setOwnerSearch("");return !p;});setCertOpen(false);setDomainOpen(false);}}
               style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"4px 10px",borderRadius:6,border:`1px dashed ${ownerOpen?T.accent:T.border}`,background:"none",color:ownerOpen?T.accent:T.textMuted,cursor:"pointer",transition:"all .12s"}}
@@ -7854,7 +7859,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
             <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
               <MetaLabel>Stewards</MetaLabel>
               <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:stewards.length?8:0}}>
-                {stewards.map((s,i)=>(
+                {(showAllStewards?stewards:stewards.slice(0,3)).map((s,i)=>(
                   <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,transition:"border-color .1s"}}
                     onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderLight} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
                     <div style={{width:20,height:20,borderRadius:"50%",background:"rgba(217,119,6,.12)",border:"1px solid rgba(217,119,6,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(s)}</div>
@@ -7866,6 +7871,8 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
                     </button>
                   </div>
                 ))}
+                {stewards.length>3&&!showAllStewards&&<span onClick={()=>setShowAllStewards(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{stewards.length-3} more</span>}
+                {stewards.length>3&&showAllStewards&&<span onClick={()=>setShowAllStewards(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
               </div>
               <button onMouseDown={e=>{e.stopPropagation();setStewardOpen(p=>!p);setCertOpen(false);setDomainOpen(false);setOwnerOpen(false);}}
                 style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,color:stewardOpen?"#d97706":T.textMuted,background:"none",border:`1px dashed ${stewardOpen?"#d97706":T.border}`,borderRadius:6,padding:"4px 10px",cursor:"pointer",transition:"all .12s"}}
@@ -7906,7 +7913,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
             <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
               <MetaLabel>Tags</MetaLabel>
               <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
-                {(data.tags||[]).map(t=>{const c=tc(t);return(
+                {(showAllTags?data.tags||[]:(data.tags||[]).slice(0,3)).map(t=>{const c=tc(t);return(
                   <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"3px 10px",borderRadius:6,background:c.bg,color:c.color,border:`1px solid ${c.border}`,fontWeight:500}}>
                     {t}
                     <button onClick={()=>setData(d=>({...d,tags:d.tags.filter(x=>x!==t)}))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,display:"flex",opacity:.6,lineHeight:1}}
@@ -7915,6 +7922,8 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
                     </button>
                   </span>
                 );})}
+                {(data.tags||[]).length>3&&!showAllTags&&<span onClick={()=>setShowAllTags(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{(data.tags||[]).length-3} more</span>}
+                {(data.tags||[]).length>3&&showAllTags&&<span onClick={()=>setShowAllTags(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
               </div>
               <button onMouseDown={e=>{e.stopPropagation();setTagInput(p=>p==="_open_"?"":"_open_");setCertOpen(false);setDomainOpen(false);setOwnerOpen(false);}}
                 style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"4px 10px",borderRadius:6,border:`1px dashed ${tagInput==="_open_"?T.accent:T.border}`,background:"none",color:tagInput==="_open_"?T.accent:T.textMuted,cursor:"pointer",transition:"all .12s"}}
@@ -8295,6 +8304,9 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
   const [colSelectTestOpen,setColSelectTestOpen] = useState(false);
   const [colSelectTestIds, setColSelectTestIds]  = useState(new Set());
   const [colTestsMap,      setColTestsMap]       = useState({});
+  const [showAllOwners,  setShowAllOwners]  = useState(false);
+  const [showAllStewards,setShowAllStewards]= useState(false);
+  const [showAllTags,    setShowAllTags]    = useState(false);
 
   const DOMAINS_LIST = ["Commerce","Finance","Product","Marketing","ML","Engineering"];
   const USERS_LIST   = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
@@ -8691,7 +8703,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
         <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
           <MetaLabel>Owners</MetaLabel>
           <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
-            {owners.map((o,i)=>(
+            {(showAllOwners?owners:owners.slice(0,3)).map((o,i)=>(
               <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,transition:"border-color .1s"}}
                 onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderLight} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
                 <div style={{width:20,height:20,borderRadius:"50%",background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(o)}</div>
@@ -8703,6 +8715,8 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
                 </button>
               </div>
             ))}
+            {owners.length>3&&!showAllOwners&&<span onClick={()=>setShowAllOwners(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{owners.length-3} more</span>}
+            {owners.length>3&&showAllOwners&&<span onClick={()=>setShowAllOwners(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
           </div>
           <button onMouseDown={e=>{e.stopPropagation();setOwnerOpen(p=>{if(!p)setOwnerSearch("");return !p;});setCertOpen(false);setDomainOpen(false);}}
             style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"4px 10px",borderRadius:6,border:`1px dashed ${ownerOpen?T.accent:T.border}`,background:"none",color:ownerOpen?T.accent:T.textMuted,cursor:"pointer",transition:"all .12s"}}
@@ -8741,7 +8755,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
           <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
             <MetaLabel>Stewards</MetaLabel>
             <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:stewards.length?8:0}}>
-              {stewards.map((s,i)=>(
+              {(showAllStewards?stewards:stewards.slice(0,3)).map((s,i)=>(
                 <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,transition:"border-color .1s"}}
                   onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderLight} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
                   <div style={{width:20,height:20,borderRadius:"50%",background:"rgba(217,119,6,.12)",border:"1px solid rgba(217,119,6,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(s)}</div>
@@ -8753,6 +8767,8 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
                   </button>
                 </div>
               ))}
+              {stewards.length>3&&!showAllStewards&&<span onClick={()=>setShowAllStewards(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{stewards.length-3} more</span>}
+              {stewards.length>3&&showAllStewards&&<span onClick={()=>setShowAllStewards(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
             </div>
             <button onMouseDown={e=>{e.stopPropagation();setStewardOpen(p=>!p);setCertOpen(false);setDomainOpen(false);setOwnerOpen(false);}}
               style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,color:stewardOpen?"#d97706":T.textMuted,background:"none",border:`1px dashed ${stewardOpen?"#d97706":T.border}`,borderRadius:6,padding:"4px 10px",cursor:"pointer",transition:"all .12s"}}
@@ -8805,7 +8821,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
         <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
           <MetaLabel>Tags</MetaLabel>
           <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
-            {(data.tags||[]).map(t=>{const c=tc(t);return(
+            {(showAllTags?data.tags||[]:(data.tags||[]).slice(0,3)).map(t=>{const c=tc(t);return(
               <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"3px 10px",borderRadius:6,background:c.bg,color:c.color,border:`1px solid ${c.border}`,fontWeight:500}}>
                 {t}
                 <button onClick={()=>setData(d=>({...d,tags:d.tags.filter(x=>x!==t)}))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,display:"flex",opacity:.6,lineHeight:1}}
@@ -8814,6 +8830,8 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
                 </button>
               </span>
             );})}
+            {(data.tags||[]).length>3&&!showAllTags&&<span onClick={()=>setShowAllTags(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{(data.tags||[]).length-3} more</span>}
+            {(data.tags||[]).length>3&&showAllTags&&<span onClick={()=>setShowAllTags(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
           </div>
           <button onMouseDown={e=>{e.stopPropagation();setTagInput(p=>p==="_open_"?"":("_open_"));setCertOpen(false);setDomainOpen(false);setOwnerOpen(false);}}
             style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"4px 10px",borderRadius:6,border:`1px dashed ${tagInput==="_open_"?T.accent:T.border}`,background:"none",color:tagInput==="_open_"?T.accent:T.textMuted,cursor:"pointer",transition:"all .12s"}}
