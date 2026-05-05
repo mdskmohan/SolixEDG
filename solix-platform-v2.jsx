@@ -9052,7 +9052,7 @@ const CatalogView = ({onAsset})=>{
         <div style={{width:panelOpen?212:0,minWidth:panelOpen?212:0,flexShrink:0,overflow:"hidden",borderRight:`1px solid ${T.border}`,background:T.bgSurface,display:"flex",flexDirection:"column",transition:"width .2s ease,min-width .2s ease"}}>
           <div style={{padding:"11px 14px 9px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
             <div style={{display:"flex",alignItems:"center",gap:6}}>{Ic.filter(12)}<span style={{fontSize:11.5,fontWeight:700,color:T.text}}>Filters</span>{totalActive>0&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:99,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}33`}}>{totalActive}</span>}</div>
-            {totalActive>0&&<button onClick={clearAll} style={{fontSize:11,color:T.textMuted,background:"none",border:"none",cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>Clear all</button>}
+            <button onClick={clearAll} disabled={totalActive===0} style={{fontSize:11,color:totalActive>0?T.textMuted:"transparent",background:"none",border:"none",cursor:totalActive>0?"pointer":"default",transition:"color .15s"}} onMouseEnter={e=>{if(totalActive>0)e.currentTarget.style.color=T.rose;}} onMouseLeave={e=>{if(totalActive>0)e.currentTarget.style.color=T.textMuted;}}>Clear all</button>
           </div>
           <div style={{flex:1,overflowY:"auto"}}>
             <FacetGroup id="conntype" label="Connector Type" icon={Ic.plug(11)}
@@ -9156,15 +9156,14 @@ const CatalogView = ({onAsset})=>{
                         </div>
                         <div style={{display:"flex",alignItems:"center",gap:7,flex:1,flexWrap:"wrap",minWidth:0}}>
                           <TypeBadge type={a.type}/>
-                          {a.tags.map(t=><span key={t} style={{fontSize:10,padding:"1px 6px",borderRadius:99,background:t==="PII"?T.roseDim:T.bgHover,color:t==="PII"?T.rose:T.textMuted,border:`1px solid ${t==="PII"?"rgba(253,164,175,.25)":T.border}`}}>{t}</span>)}
                         </div>
                         <div style={{display:"flex",alignItems:"center",gap:16,flexShrink:0}}>
                           <div style={{textAlign:"center",width:40}}><div style={{fontSize:15,fontWeight:700,color:a.quality>=90?T.accent:a.quality>=70?T.amber:T.rose,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{a.quality}</div><div style={{fontSize:9,color:T.textMuted,marginTop:2}}>quality</div></div>
                           <div style={{display:"flex",alignItems:"center"}}>
                             {(a.owners||[a.owner]).slice(0,3).map((o,i)=>(
-                              <div key={i} title={o} style={{width:22,height:22,borderRadius:6,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:T.accent,marginLeft:i>0?-5:0,position:"relative",zIndex:3-i,border:`2px solid ${T.bgSurface}`,boxSizing:"border-box"}}>{o.split(".").map(s=>s[0].toUpperCase()).join("")}</div>
+                              <div key={i} title={o} style={{width:24,height:24,borderRadius:"50%",background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:T.accent,marginLeft:i>0?-7:0,position:"relative",zIndex:3-i,border:`2px solid ${T.bgSurface}`,boxSizing:"border-box",flexShrink:0}}>{o.split(".").map(s=>s[0].toUpperCase()).join("")}</div>
                             ))}
-                            {(a.owners||[a.owner]).length>3&&<div style={{width:22,height:22,borderRadius:6,background:T.bgElevated,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:T.textMuted,marginLeft:-5,border:`2px solid ${T.bgSurface}`,boxSizing:"border-box"}}>+{(a.owners||[a.owner]).length-3}</div>}
+                            {(a.owners||[a.owner]).length>3&&<div title={`+${(a.owners||[a.owner]).length-3} more`} style={{width:24,height:24,borderRadius:"50%",background:T.bgElevated,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:T.textMuted,marginLeft:-7,border:`2px solid ${T.bgSurface}`,boxSizing:"border-box",flexShrink:0}}>+{(a.owners||[a.owner]).length-3}</div>}
                           </div>
                           <span style={{fontSize:11,color:T.textMuted,whiteSpace:"nowrap",minWidth:50,textAlign:"right"}}>{a.updated}</span>
                           <span style={{color:T.textMuted,opacity:.4}}>{Ic.chevRight(12)}</span>
