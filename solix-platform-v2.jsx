@@ -16776,6 +16776,9 @@ const TagManagementView = ({onToast}) => {
   const [aliasInput,   setAliasInput]   = useState('');
   const [flashSaved,   setFlashSaved]   = useState(false);
   const [syncDirs,     setSyncDirs]     = useState({});   // {connId::tagId: 'forward'|'reverse'|'both'|'off'}
+  const [catDropOpen,  setCatDropOpen]  = useState(false); // category dropdown in tag detail sidebar
+  const [catDropSearch,setCatDropSearch]= useState('');    // search within that dropdown
+  const catDropRef = useRef(null);
 
   // ── Tag owner/steward state (BG-style avatar chips) ──
   const [tagOwners,       setTagOwners]       = useState([]);
@@ -16796,6 +16799,7 @@ const TagManagementView = ({onToast}) => {
       if(plusMenuRef.current&&!plusMenuRef.current.contains(e.target)) setPlusMenuOpen(false);
       if(dotMenuRef.current&&!dotMenuRef.current.contains(e.target)) setDotMenuOpen(null);
       if(catRef.current&&!catRef.current.contains(e.target)) setCatOpen(false);
+      if(catDropRef.current&&!catDropRef.current.contains(e.target)){setCatDropOpen(false);setCatDropSearch('');}
       setTagOwnerInput(false);
       setTagStewardInput(false);
     };
@@ -17354,18 +17358,136 @@ const TagManagementView = ({onToast}) => {
                     <div style={{width:256,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:'auto',padding:'20px 16px',display:'flex',flexDirection:'column',gap:0}}>
 
                       {/* Category */}
-                      <div style={{marginBottom:18}}>
-                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Category</div>
-                        {selTag.category
-                          ? <button onClick={()=>{setSelCatId(selTag.category);setSelTagId(null);setEditing(false);setEditDraft(null);}}
-                              style={{display:'inline-flex',alignItems:'center',gap:6,padding:'4px 10px',borderRadius:99,background:getCatStyle(selTag.category).bg,border:`1px solid ${getCatStyle(selTag.category).color}44`,cursor:'pointer',outline:'none'}}
-                              onMouseEnter={e=>e.currentTarget.style.opacity='0.75'} onMouseLeave={e=>e.currentTarget.style.opacity='1'}>
-                              <span style={{width:7,height:7,borderRadius:'50%',background:getCatStyle(selTag.category).color,display:'block'}}/>
-                              <span style={{fontSize:12,fontWeight:600,color:getCatStyle(selTag.category).color,textTransform:'capitalize'}}>{selTag.category}</span>
-                            </button>
-                          : <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>Uncategorized</span>
-                        }
-                      </div>
+                      {(()=>{
+                        const currentCat = editing ? (editDraft?.category||'') : (selTag.category||'');
+                        const catSearchLower = catDropSearch.toLowerCase().trim();
+                        const filteredCats = allCategories.filter(c=>!catSearchLower||c.toLowerCase().includes(catSearchLower));
+                        const showInlineCreate = catDropSearch.trim() && !allCategories.map(c=>c.toLowerCase()).includes(catDropSearch.trim().toLowerCase());
+
+                        const applyCategory = (cat) => {
+                          const trimmed = cat.trim();
+                          if(!trimmed) return;
+                          // Add to customCategories if new
+                          if(!allCategories.includes(trimmed)) setCustomCategories(p=>[...new Set([...p,trimmed])]);
+                          if(editing){
+                            setEditDraft(d=>({...d,category:trimmed}));
+                          } else {
+                            // Quick-assign without entering edit mode
+                            updateTagDef(selTag.id,{...selTag,category:trimmed});
+                            onToast('Category assigned','success');
+                          }
+                          setCatDropOpen(false);
+                          setCatDropSearch('');
+                        };
+
+                        const clearCategory = () => {
+                          if(editing) setEditDraft(d=>({...d,category:''}));
+                          else { updateTagDef(selTag.id,{...selTag,category:''}); onToast('Category removed','success'); }
+                        };
+
+                        return (
+                          <div style={{marginBottom:18,position:'relative'}} ref={catDropRef}>
+                            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Category</div>
+
+                            {/* Read mode — categorized: badge + edit pencil on hover */}
+                            {!editing && currentCat && (
+                              <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+                                <button onClick={()=>{setSelCatId(selTag.category);setSelTagId(null);setEditing(false);setEditDraft(null);}}
+                                  style={{display:'inline-flex',alignItems:'center',gap:6,padding:'4px 10px',borderRadius:99,background:getCatStyle(currentCat).bg,border:`1px solid ${getCatStyle(currentCat).color}44`,cursor:'pointer',outline:'none'}}
+                                  onMouseEnter={e=>e.currentTarget.style.opacity='0.75'} onMouseLeave={e=>e.currentTarget.style.opacity='1'}>
+                                  <span style={{width:7,height:7,borderRadius:'50%',background:getCatStyle(currentCat).color,display:'block'}}/>
+                                  <span style={{fontSize:12,fontWeight:600,color:getCatStyle(currentCat).color,textTransform:'capitalize'}}>{currentCat}</span>
+                                </button>
+                                <button title="Change category" onClick={()=>{setCatDropOpen(o=>!o);setCatDropSearch('');}}
+                                  style={{width:20,height:20,borderRadius:5,background:'transparent',border:`1px solid ${T.border}`,color:T.textMuted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .12s',flexShrink:0}}
+                                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
+                                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background='transparent';}}>
+                                  <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M8.5 1.5a1.414 1.414 0 012 2L3.5 10.5l-3 .5.5-3 7.5-6.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Read mode — uncategorized: text + assign button */}
+                            {!editing && !currentCat && (
+                              <div style={{display:'flex',alignItems:'center',gap:7,flexWrap:'wrap'}}>
+                                <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>Uncategorized</span>
+                                <button onClick={()=>{setCatDropOpen(o=>!o);setCatDropSearch('');}}
+                                  style={{display:'inline-flex',alignItems:'center',gap:4,fontSize:11,padding:'2px 8px',borderRadius:6,border:`1px dashed ${catDropOpen?T.accent:T.border}`,background:'none',color:catDropOpen?T.accent:T.textMuted,cursor:'pointer',transition:'all .12s'}}
+                                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                                  onMouseLeave={e=>{if(!catDropOpen){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}}>
+                                  <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                                  Assign
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Edit mode — dropdown trigger */}
+                            {editing && (
+                              <button onClick={()=>{setCatDropOpen(o=>!o);setCatDropSearch('');}}
+                                style={{display:'inline-flex',alignItems:'center',gap:6,padding:'5px 10px',borderRadius:7,border:`1.5px solid ${catDropOpen?T.accent:T.border}`,background:T.bgElevated,color:currentCat?T.text:T.textMuted,cursor:'pointer',fontSize:12,width:'100%',justifyContent:'space-between',transition:'all .12s',minWidth:0}}
+                                onMouseEnter={e=>{if(!catDropOpen)e.currentTarget.style.borderColor=T.accent;}}
+                                onMouseLeave={e=>{if(!catDropOpen)e.currentTarget.style.borderColor=T.border;}}>
+                                <span style={{display:'flex',alignItems:'center',gap:6,minWidth:0}}>
+                                  {currentCat
+                                    ? <><span style={{width:7,height:7,borderRadius:'50%',background:getCatStyle(currentCat).color,display:'block',flexShrink:0}}/><span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',textTransform:'capitalize',fontWeight:500}}>{currentCat}</span></>
+                                    : <span style={{fontStyle:'italic'}}>No category</span>
+                                  }
+                                </span>
+                                <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:T.textMuted,transform:catDropOpen?'rotate(180deg)':'none',transition:'transform .15s'}}><path d="M1.5 3.5l3.5 4 3.5-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                              </button>
+                            )}
+
+                            {/* Shared dropdown */}
+                            {catDropOpen&&(
+                              <div onMouseDown={e=>e.stopPropagation()} style={{position:'absolute',left:0,right:0,top:'calc(100% + 4px)',zIndex:400,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:'0 8px 28px rgba(0,0,0,.2)',overflow:'hidden'}}>
+                                <div style={{padding:'8px 10px',borderBottom:`1px solid ${T.border}`}}>
+                                  <input autoFocus value={catDropSearch} onChange={e=>setCatDropSearch(e.target.value)}
+                                    placeholder="Search or create category…"
+                                    style={{width:'100%',padding:'5px 9px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:'none',boxSizing:'border-box'}}
+                                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                                </div>
+                                <div style={{maxHeight:180,overflowY:'auto'}}>
+                                  {/* Clear / No category option */}
+                                  {currentCat&&(
+                                    <button onMouseDown={e=>{e.preventDefault();e.stopPropagation();clearCategory();setCatDropOpen(false);setCatDropSearch('');}}
+                                      style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'transparent',border:'none',cursor:'pointer',textAlign:'left',borderBottom:`1px solid ${T.border}`}}
+                                      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                      <span style={{fontSize:11,color:T.rose,fontWeight:500}}>✕ Remove category</span>
+                                    </button>
+                                  )}
+                                  {/* Existing categories */}
+                                  {filteredCats.length>0
+                                    ? filteredCats.map(cat=>{
+                                        const cs=getCatStyle(cat);
+                                        const isSel=(editing?editDraft?.category:selTag.category)===cat;
+                                        return (
+                                          <button key={cat} onMouseDown={e=>{e.preventDefault();e.stopPropagation();applyCategory(cat);}}
+                                            style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:isSel?T.accentDim:'transparent',border:'none',cursor:'pointer',textAlign:'left'}}
+                                            onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background=isSel?T.accentDim:'transparent';}}>
+                                            <span style={{width:8,height:8,borderRadius:'50%',background:cs.color,display:'block',flexShrink:0}}/>
+                                            <span style={{flex:1,fontSize:12,color:T.text,textTransform:'capitalize'}}>{cat}</span>
+                                            {isSel&&<span style={{fontSize:11,color:T.accent,fontWeight:700}}>✓</span>}
+                                          </button>
+                                        );
+                                      })
+                                    : !showInlineCreate&&<div style={{padding:'12px',fontSize:12,color:T.textMuted,textAlign:'center',fontStyle:'italic'}}>No categories found</div>
+                                  }
+                                  {/* Inline create */}
+                                  {showInlineCreate&&(
+                                    <button onMouseDown={e=>{e.preventDefault();e.stopPropagation();applyCategory(catDropSearch.trim());}}
+                                      style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'transparent',border:'none',cursor:'pointer',textAlign:'left',borderTop:filteredCats.length>0?`1px solid ${T.border}`:'none'}}
+                                      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                      <span style={{width:14,height:14,borderRadius:3,background:`${T.accent}18`,display:'flex',alignItems:'center',justifyContent:'center',color:T.accent,fontSize:9,fontWeight:700,flexShrink:0}}>+</span>
+                                      <span style={{fontSize:12,color:T.accent}}>Create <strong>"{catDropSearch.trim()}"</strong></span>
+                                      <span style={{marginLeft:'auto',fontSize:9,fontWeight:700,padding:'1px 5px',borderRadius:3,background:`${T.accent}18`,color:T.accent,textTransform:'uppercase',letterSpacing:'0.05em'}}>new</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       <div style={{height:1,background:T.border,marginBottom:18}}/>
 
