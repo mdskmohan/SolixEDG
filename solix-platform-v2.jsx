@@ -8677,8 +8677,6 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
           <MetaLabel>Details</MetaLabel>
           {[
             {l:"Quality",   v:<QScore score={data.quality}/>},
-            {l:"Row Count", v:<span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text}}>{data.rows}</span>},
-            {l:"Size",      v:<span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text}}>{data.size}</span>},
             {l:"Freshness", v:<span style={{fontSize:12,color:T.textSub}}>{data.slaFreshness}</span>},
             {l:"Updated",   v:<span style={{fontSize:12,color:T.textMuted}}>{data.updated}</span>},
           ].map(m=>(
@@ -9043,7 +9041,7 @@ const CatalogView = ({onAsset})=>{
     {key:"type",label:"Type",render:v=><TypeBadge type={v}/>},
     {key:"tier",label:"Tier",render:(v,r)=>r.assetLevel&&["bucket","container","folder","object","blob"].includes(r.assetLevel)?<span style={{fontSize:11,color:T.textMuted}}>—</span>:<TierBadge tier={v}/>},
     {key:"domain",label:"Domain",render:v=><span style={{fontSize:12,color:T.textSub}}>{v}</span>},
-    {key:"owner",label:"Owner",render:v=><span style={{fontSize:12,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{v}</span>},
+    {key:"owner",label:"Owner",render:(v,r)=>{const ol=r.owners||[v];return(<div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>{ol.slice(0,2).map((o,i)=>(<div key={i} title={o} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 7px 2px 4px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}><div style={{width:16,height:16,borderRadius:"50%",background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:T.accent,flexShrink:0}}>{o.split(".").map(s=>s[0].toUpperCase()).join("")}</div><span style={{fontSize:11,color:T.text,fontWeight:500,whiteSpace:"nowrap"}}>{o}</span></div>))}{ol.length>2&&<span style={{fontSize:11,color:T.textMuted,fontWeight:600}}>+{ol.length-2}</span>}</div>);}},
     {key:"cert",label:"Certification",render:(v,r)=>["Object","Blob","Folder"].includes(r.type)?<span style={{fontSize:11,color:T.textMuted}}>—</span>:<CertBadge cert={v}/>},
     {key:"quality",label:"Quality",render:(v,r)=>["Object","Blob","Bucket","Container","Folder"].includes(r.type)?<span style={{fontSize:11,color:T.textMuted}}>—</span>:<QScore score={v}/>},
     {key:"size",label:"Size",render:(v,r)=>r.size&&r.size!=="—"?<span style={{fontSize:11,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{r.size}</span>:<span style={{fontSize:11,color:T.textMuted}}>{r.rows&&r.rows!=="—"?r.rows+" rows":"—"}</span>},
@@ -9160,12 +9158,10 @@ const CatalogView = ({onAsset})=>{
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {pagedRows.map(a=>{
                   // Find glossary terms linked to this asset
-                  const linkedTerms = GLOSSARY_TERMS.filter(t=>(t.linkedAssets||[]).some(la=>la.name===a.name)&&t.status!=="Deprecated");
-                  const conflictTerms = linkedTerms.filter(t=>t.conflictFlag);
                   return (
-                    <div key={a.id} style={{background:T.bgSurface,border:`1px solid ${conflictTerms.length>0?"rgba(217,119,6,.35)":T.border}`,borderRadius:10,cursor:"pointer",transition:"all .15s",overflow:"hidden"}}
-                      onMouseEnter={e=>{e.currentTarget.style.borderColor=conflictTerms.length>0?"rgba(217,119,6,.5)":T.accent+"55";e.currentTarget.style.background=T.bgHover;}}
-                      onMouseLeave={e=>{e.currentTarget.style.borderColor=conflictTerms.length>0?"rgba(217,119,6,.35)":T.border;e.currentTarget.style.background=T.bgSurface;}}>
+                    <div key={a.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,cursor:"pointer",transition:"all .15s",overflow:"hidden"}}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent+"55";e.currentTarget.style.background=T.bgHover;}}
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.bgSurface;}}>
                       <div onClick={()=>onAsset(a)} style={{display:"flex",alignItems:"center",gap:16,padding:"14px 16px"}}>
                         <ServiceIcon service={a.service} size={32}/>
                         <div style={{flex:"0 0 280px",minWidth:0}}>
@@ -9174,32 +9170,21 @@ const CatalogView = ({onAsset})=>{
                           <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.45,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:1,WebkitBoxOrient:"vertical"}}>{a.description}</div>
                         </div>
                         <div style={{display:"flex",alignItems:"center",gap:7,flex:1,flexWrap:"wrap",minWidth:0}}>
-                          <TypeBadge type={a.type}/><TierBadge tier={a.tier}/><CertBadge cert={a.cert}/>
-                          <span style={{fontSize:10.5,color:T.textMuted,background:T.bgElevated,padding:"1px 7px",borderRadius:99,border:`1px solid ${T.border}`}}>{a.domain}</span>
+                          <TypeBadge type={a.type}/>
                           {a.tags.map(t=><span key={t} style={{fontSize:10,padding:"1px 6px",borderRadius:99,background:t==="PII"?T.roseDim:T.bgHover,color:t==="PII"?T.rose:T.textMuted,border:`1px solid ${t==="PII"?"rgba(253,164,175,.25)":T.border}`}}>{t}</span>)}
                         </div>
                         <div style={{display:"flex",alignItems:"center",gap:16,flexShrink:0}}>
                           <div style={{textAlign:"center",width:40}}><div style={{fontSize:15,fontWeight:700,color:a.quality>=90?T.accent:a.quality>=70?T.amber:T.rose,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{a.quality}</div><div style={{fontSize:9,color:T.textMuted,marginTop:2}}>quality</div></div>
-                          <div title={a.owner} style={{width:22,height:22,borderRadius:6,background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:T.accent}}>{a.owner.split(".").map(s=>s[0].toUpperCase()).join("")}</div>
+                          <div style={{display:"flex",alignItems:"center"}}>
+                            {(a.owners||[a.owner]).slice(0,3).map((o,i)=>(
+                              <div key={i} title={o} style={{width:22,height:22,borderRadius:6,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:T.accent,marginLeft:i>0?-5:0,position:"relative",zIndex:3-i,border:`2px solid ${T.bgSurface}`,boxSizing:"border-box"}}>{o.split(".").map(s=>s[0].toUpperCase()).join("")}</div>
+                            ))}
+                            {(a.owners||[a.owner]).length>3&&<div style={{width:22,height:22,borderRadius:6,background:T.bgElevated,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:T.textMuted,marginLeft:-5,border:`2px solid ${T.bgSurface}`,boxSizing:"border-box"}}>+{(a.owners||[a.owner]).length-3}</div>}
+                          </div>
                           <span style={{fontSize:11,color:T.textMuted,whiteSpace:"nowrap",minWidth:50,textAlign:"right"}}>{a.updated}</span>
                           <span style={{color:T.textMuted,opacity:.4}}>{Ic.chevRight(12)}</span>
                         </div>
                       </div>
-                      {/* Glossary term pills — contextual glossary */}
-                      {linkedTerms.length>0&&(
-                        <div style={{padding:"0 16px 10px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",borderTop:`1px solid ${T.border}`,paddingTop:8,marginTop:0}}>
-                          <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",flexShrink:0}}>Glossary:</span>
-                          {linkedTerms.map(t=>{
-                            const cm=CERT_META[t.cert]||CERT_META.Draft;
-                            return (
-                              <span key={t.id} title={t.definition||t.term} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,padding:"2px 8px",borderRadius:99,background:t.conflictFlag?"rgba(217,119,6,.1)":cm.bg,color:t.conflictFlag?"#d97706":cm.color,border:`1px solid ${t.conflictFlag?"rgba(217,119,6,.3)":cm.border}`,fontWeight:600,cursor:"default"}}>
-                                {t.conflictFlag&&<span>⚡</span>}{cm.icon} {t.term}{t.abbr&&t.abbr!=="—"&&<span style={{fontWeight:400,opacity:.7}}> ({t.abbr})</span>}
-                              </span>
-                            );
-                          })}
-                          {conflictTerms.length>0&&<span style={{fontSize:10.5,color:"#d97706",fontWeight:600}}>⚡ Conflict detected</span>}
-                        </div>
-                      )}
                     </div>
                   );
                 })}
