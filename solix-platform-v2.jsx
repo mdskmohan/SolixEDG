@@ -12217,27 +12217,11 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
                 <span style={{fontSize:13,fontWeight:600,color:T.text}}>Ingestion running</span>
                 <span style={{fontSize:11,color:T.textMuted,marginLeft:"auto"}}>{progress}%</span>
               </div>
-              {/* stage pipeline */}
-              <div style={{display:"flex",gap:0,marginBottom:10,alignItems:"center"}}>
-                {svc.stages.map((stage,i)=>{
-                  const done=i<stageIdx, active=i===stageIdx;
-                  const c=done?T.accent:active?"#60a5fa":T.border;
-                  return <React.Fragment key={stage}>
-                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,flex:1}}>
-                      <div style={{width:22,height:22,borderRadius:"50%",background:done?T.accent:active?"#60a5fa":T.bgHover,border:`2px solid ${c}`,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .3s"}}>
-                        {done?<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        :active?<span style={{width:6,height:6,borderRadius:"50%",background:"#fff",display:"inline-block",animation:"pulse2 1s infinite"}}/>
-                        :<span style={{width:5,height:5,borderRadius:"50%",background:T.border,display:"inline-block"}}/>}
-                      </div>
-                      <span style={{fontSize:9,color:active?T.text:done?T.accent:T.textMuted,fontWeight:active||done?600:400,whiteSpace:"nowrap"}}>{stage}</span>
-                    </div>
-                    {i<svc.stages.length-1&&<div style={{height:2,flex:0.5,background:done?T.accent:T.border,borderRadius:1,marginBottom:16,transition:"background .3s"}}/>}
-                  </React.Fragment>;
-                })}
-              </div>
               {/* progress bar */}
-              <div style={{height:5,background:T.bgHover,borderRadius:3,overflow:"hidden"}}>
-                <div style={{height:"100%",width:`${progress}%`,background:"linear-gradient(90deg,#38bdf8,#60a5fa)",borderRadius:3,transition:"width .8s ease"}}/>
+              <div style={{height:8,background:T.bgHover,borderRadius:4,overflow:"hidden",marginBottom:10}}>
+                <div style={{height:"100%",width:`${progress}%`,background:"linear-gradient(90deg,#38bdf8,#60a5fa)",borderRadius:4,transition:"width .8s ease",position:"relative"}}>
+                  <div style={{position:"absolute",right:0,top:0,bottom:0,width:20,background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.18))",borderRadius:4}}/>
+                </div>
               </div>
               {/* live log tail */}
               <div style={{marginTop:12,background:T.bg,borderRadius:7,padding:"8px 10px",border:`1px solid ${T.border}`,fontFamily:"'Geist Mono',monospace",fontSize:10,color:T.textMuted,lineHeight:1.7}}>
