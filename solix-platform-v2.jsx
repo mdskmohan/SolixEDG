@@ -298,6 +298,19 @@ const INBOX_DATA = [
     changedBy:"arjun.sharma",
     diff:{field:"Tags",before:"internal, financial",after:"internal, financial, PII"},
     readAt:"2026-05-04T10:00:00Z"},
+  {id:"inb9",type:"field_updated",severity:"low",section:"catalog",timeAgo:"4h ago",
+    title:"Display name changed on customer_profile",
+    asset:{name:"customer_profile",path:"commerce.customer_profile",type:"Table"},
+    body:"sarah.kim renamed the asset",
+    changedBy:"sarah.kim",
+    diff:{field:"Display Name",before:"customer_profile",after:"Customer Profile (Unified)"},
+    readAt:null},
+  {id:"inb10",type:"stewardship_request",severity:"medium",section:"catalog",timeAgo:"5h ago",
+    title:"sarah.kim requested Stewardship on dim_customer",
+    asset:{name:"dim_customer",path:"analytics.dim_customer",type:"Table"},
+    body:"\"I'm taking over analytics ownership for Q2 and need steward access\"",
+    requestedBy:"sarah.kim",requestedRole:"Steward",
+    readAt:null},
 ];
 
 const INITIAL_TAG_POLICIES = {
@@ -15200,12 +15213,14 @@ const WF_DATA = [
 const WF_CATS = ["All", "Ingestion", "Quality", "Lineage", "Governance", "Analytics"];
 
 const InboxView = ({onToast}) => {
-  const [items,       setItems]       = useState(INBOX_DATA);
-  const [filter,      setFilter]      = useState("all");
-  const [expandDiff,  setExpandDiff]  = useState(null);
-  const [assignOpen,  setAssignOpen]  = useState(null);
+  const [items,      setItems]      = useState(INBOX_DATA);
+  const [filter,     setFilter]     = useState("all");
+  const [viewMode,   setViewMode]   = useState("list"); // "list" | "kanban"
+  const [expandDiff, setExpandDiff] = useState(null);
+  const [assignOpen, setAssignOpen] = useState(null);
 
   const unread = items.filter(i=>!i.readAt);
+  const read   = items.filter(i=>!!i.readAt);
   const counts = {
     all:      unread.length,
     tasks:    unread.filter(i=>["field_updated","stewardship_request","needs_attention"].includes(i.type)).length,
@@ -15219,198 +15234,302 @@ const InboxView = ({onToast}) => {
     if(filter==="assigned") return i.type==="assigned";
     return true;
   });
-  const read = items.filter(i=>i.readAt);
 
-  const ack  = (id,msg)=>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); onToast(msg||"Acknowledged","success"); };
-  const dism = (id)    =>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); };
-  const markAll = ()   =>{ setItems(p=>p.map(i=>({...i,readAt:i.readAt||new Date().toISOString()}))); onToast("All caught up","success"); };
+  const ack     = (id,msg)=>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); onToast(msg||"Acknowledged","success"); };
+  const dism    = id      =>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); };
+  const markAll = ()      =>{ setItems(p=>p.map(i=>({...i,readAt:i.readAt||new Date().toISOString()}))); onToast("All caught up","success"); };
 
   const SEV = {
-    high:   {c:T.rose,   bg:`${T.rose}12`,   label:"HIGH"},
-    medium: {c:T.amber,  bg:`${T.amber}12`,  label:"MED"},
-    low:    {c:T.blue,   bg:`${T.blue}0d`,   label:"INFO"},
-    info:   {c:"#8b5cf6",bg:"rgba(139,92,246,.1)",label:"NEW"},
+    high:  {c:T.rose,    bg:`${T.rose}12`,              label:"HIGH"},
+    medium:{c:T.amber,   bg:`${T.amber}12`,             label:"MED"},
+    low:   {c:T.blue,    bg:`${T.blue}0d`,              label:"INFO"},
+    info:  {c:"#8b5cf6", bg:"rgba(139,92,246,.1)",      label:"NEW"},
   };
-  const TYPE_ICON = {
-    dq_alert:            ()=>Ic.quality(13),
-    field_updated:       ()=>Ic.edit(13),
-    assigned:            ()=>Ic.steward(13),
-    needs_attention:     ()=>Ic.alert(13),
-    stewardship_request: ()=>Ic.persona(13),
+  const TYPE_META = {
+    dq_alert:            {icon:()=>Ic.quality(12),  label:"DQ Alert",       shortLabel:"DQ Alert"},
+    field_updated:       {icon:()=>Ic.edit(12),     label:"Field Updated",  shortLabel:"Updated"},
+    assigned:            {icon:()=>Ic.steward(12),  label:"New Assignment", shortLabel:"Assigned"},
+    needs_attention:     {icon:()=>Ic.alert(12),    label:"Needs Steward",  shortLabel:"Action"},
+    stewardship_request: {icon:()=>Ic.persona(12),  label:"Access Request", shortLabel:"Request"},
   };
+
+  /* ── Inline action buttons (shared list + kanban) ── */
+  const ActionButtons = ({item, compact=false}) => {
+    const btn = (label,onClick,primary=false,danger=false)=>(
+      <button onClick={onClick} style={{padding:compact?"4px 11px":"5px 14px",borderRadius:6,background:primary?T.accent:danger?"transparent":"transparent",border:primary?"none":danger?`1px solid ${T.rose}44`:`1px solid ${T.border}`,color:primary?"#fff":danger?T.rose:T.textSub,fontSize:11,fontWeight:primary?600:500,cursor:"pointer",whiteSpace:"nowrap",transition:"opacity .1s"}}
+        onMouseEnter={e=>e.currentTarget.style.opacity="0.8"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+        {label}
+      </button>
+    );
+    if(item.type==="dq_alert")
+      return <>{btn("View DQ",()=>onToast("Opening Data Quality","success"),true)}{btn("Dismiss",()=>dism(item.id))}</>;
+    if(item.type==="field_updated")
+      return <>{btn("Acknowledge",()=>ack(item.id),true)}{btn("Open Asset",()=>onToast("Opening asset","success"))}</>;
+    if(item.type==="assigned")
+      return <>{btn("View Asset",()=>onToast("Opening asset","success"),true)}{btn("Later",()=>ack(item.id))}</>;
+    if(item.type==="stewardship_request")
+      return <>{btn("Accept",()=>ack(item.id,`${item.requestedBy} added as ${item.requestedRole}`),true)}{btn("Decline",()=>ack(item.id,"Request declined"),false,true)}</>;
+    if(item.type==="needs_attention")
+      return <>{btn("Assign Steward",()=>setAssignOpen(assignOpen===item.id?null:item.id),true)}{btn("Dismiss",()=>dism(item.id))}</>;
+    return null;
+  };
+
+  /* ── Assign picker (shared) ── */
+  const AssignPicker = ({item}) => assignOpen===item.id?(
+    <div style={{marginTop:10,background:T.bgElevated,borderRadius:7,padding:"10px 12px",border:`1px solid ${T.border}`}}>
+      <div style={{fontSize:11,color:T.textSub,marginBottom:8}}>Assign steward to <b style={{color:T.text}}>{item.asset.name}</b></div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        {["priya.nair","arjun.sharma","dev.patel","maya.chen"].map(u=>(
+          <button key={u} onClick={()=>{setAssignOpen(null);ack(item.id,`${u} assigned as Steward`);}}
+            style={{padding:"4px 11px",borderRadius:6,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",transition:"all .1s"}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+            {u}
+          </button>
+        ))}
+      </div>
+    </div>
+  ):null;
+
+  /* ── List tile ── */
+  const ListTile = ({item}) => {
+    const sev  = SEV[item.severity]||SEV.low;
+    const meta = TYPE_META[item.type]||TYPE_META.field_updated;
+    const diffOpen = expandDiff===item.id;
+    const initials = (item.changedBy||item.assignedBy||item.requestedBy||"?").split(".").map(s=>s[0]?.toUpperCase()||"").join("").slice(0,2);
+    return (
+      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${sev.c}`,borderRadius:10,overflow:"hidden",transition:"box-shadow .15s"}}
+        onMouseEnter={e=>e.currentTarget.style.boxShadow=`0 4px 16px rgba(0,0,0,.07)`}
+        onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
+
+        {/* ── Top bar ── */}
+        <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 16px 9px",borderBottom:`1px solid ${T.border}`,background:T.bgElevated}}>
+          <div style={{width:22,height:22,borderRadius:5,background:sev.bg,display:"flex",alignItems:"center",justifyContent:"center",color:sev.c,flexShrink:0}}>
+            {meta.icon()}
+          </div>
+          <span style={{fontSize:11,fontWeight:700,color:sev.c,letterSpacing:"0.03em"}}>{meta.label}</span>
+          <span style={{fontSize:10,color:T.textMuted,background:sev.bg,borderRadius:4,padding:"1px 6px",fontWeight:600,letterSpacing:"0.04em"}}>{sev.label}</span>
+          <div style={{flex:1}}/>
+          {(item.changedBy||item.assignedBy||item.requestedBy)&&(
+            <div style={{display:"flex",alignItems:"center",gap:5}}>
+              <div style={{width:20,height:20,borderRadius:"50%",background:T.accent+"22",border:`1px solid ${T.accent}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:T.accent}}>{initials}</div>
+              <span style={{fontSize:11,color:T.textMuted}}>{item.changedBy||item.assignedBy||item.requestedBy}</span>
+            </div>
+          )}
+          <span style={{fontSize:11,color:T.textMuted,marginLeft:4}}>{item.timeAgo}</span>
+        </div>
+
+        {/* ── Body ── */}
+        <div style={{padding:"12px 16px 0"}}>
+          {/* Title + asset row */}
+          <div style={{marginBottom:6}}>
+            <div style={{fontSize:13.5,fontWeight:700,color:T.text,marginBottom:5,lineHeight:1.35}}>{item.title}</div>
+            <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+              <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted,background:T.bgElevated,padding:"2px 8px",borderRadius:5,border:`1px solid ${T.border}`}}>{item.asset.path}</span>
+              <TypeBadge type={item.asset.type}/>
+            </div>
+          </div>
+
+          {/* Context body */}
+          {item.body&&<div style={{fontSize:12,color:T.textSub,marginBottom:10,marginTop:8,paddingLeft:1}}>{item.body}</div>}
+
+          {/* DQ failure bullets */}
+          {item.failures&&(
+            <div style={{marginBottom:10,display:"flex",flexDirection:"column",gap:5,background:`${T.rose}08`,borderRadius:7,padding:"8px 10px",border:`1px solid ${T.rose}18`}}>
+              {item.failures.map((f,fi)=>(
+                <div key={fi} style={{display:"flex",alignItems:"flex-start",gap:7,fontSize:11.5,color:T.textSub}}>
+                  <span style={{width:5,height:5,borderRadius:"50%",background:T.rose,flexShrink:0,marginTop:4}}/>
+                  {f}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Diff expand */}
+          {item.diff&&(
+            <div style={{marginBottom:10}}>
+              <button onClick={()=>setExpandDiff(diffOpen?null:item.id)}
+                style={{background:"none",border:"none",cursor:"pointer",color:T.accent,fontSize:11.5,fontWeight:500,padding:0,display:"flex",alignItems:"center",gap:4}}>
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{transform:diffOpen?"rotate(90deg)":"none",transition:"transform .15s"}}><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                {diffOpen?"Hide change":"Show change"}
+              </button>
+              {diffOpen&&(
+                <div style={{marginTop:8,background:T.bgElevated,borderRadius:7,padding:"10px 12px",border:`1px solid ${T.border}`}}>
+                  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:7}}>{item.diff.field}</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                    <div style={{fontSize:11.5,color:T.rose,background:`${T.rose}0d`,borderRadius:4,padding:"5px 9px",borderLeft:`2px solid ${T.rose}`}}>
+                      <span style={{fontSize:9.5,fontWeight:700,color:T.textMuted,marginRight:8,textTransform:"uppercase"}}>Before</span>{item.diff.before}
+                    </div>
+                    <div style={{fontSize:11.5,color:"#16a34a",background:"rgba(22,163,74,.08)",borderRadius:4,padding:"5px 9px",borderLeft:"2px solid #16a34a"}}>
+                      <span style={{fontSize:9.5,fontWeight:700,color:T.textMuted,marginRight:8,textTransform:"uppercase"}}>After</span>{item.diff.after}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <AssignPicker item={item}/>
+        </div>
+
+        {/* ── Action footer ── */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:8,padding:"10px 16px",borderTop:`1px solid ${T.border}`,marginTop:10,background:T.bgElevated}}>
+          <ActionButtons item={item}/>
+        </div>
+      </div>
+    );
+  };
+
+  /* ── Kanban card ── */
+  const KanbanCard = ({item,colColor}) => {
+    const sev  = SEV[item.severity]||SEV.low;
+    const meta = TYPE_META[item.type]||TYPE_META.field_updated;
+    return (
+      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderTop:`2px solid ${colColor}`,borderRadius:8,padding:"12px 13px",marginBottom:8,transition:"box-shadow .15s,transform .15s",cursor:"default"}}
+        onMouseEnter={e=>{e.currentTarget.style.boxShadow=`0 4px 14px rgba(0,0,0,.09)`;e.currentTarget.style.transform="translateY(-1px)";}}
+        onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.transform="none";}}>
+
+        {/* Type + time */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,gap:6}}>
+          <div style={{display:"flex",alignItems:"center",gap:5}}>
+            <div style={{width:18,height:18,borderRadius:4,background:sev.bg,display:"flex",alignItems:"center",justifyContent:"center",color:sev.c,flexShrink:0}}>
+              {meta.icon()}
+            </div>
+            <span style={{fontSize:10,fontWeight:700,color:sev.c,letterSpacing:"0.03em"}}>{meta.shortLabel}</span>
+          </div>
+          <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>{item.timeAgo}</span>
+        </div>
+
+        {/* Title */}
+        <div style={{fontSize:12,fontWeight:600,color:T.text,lineHeight:1.4,marginBottom:6,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{item.title}</div>
+
+        {/* Asset path */}
+        <div style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,marginBottom:10,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.asset.path}</div>
+
+        {/* DQ failures (compact) */}
+        {item.failures&&(
+          <div style={{marginBottom:8,display:"flex",flexDirection:"column",gap:3}}>
+            {item.failures.slice(0,2).map((f,fi)=>(
+              <div key={fi} style={{display:"flex",gap:5,fontSize:10.5,color:T.textSub}}>
+                <span style={{width:4,height:4,borderRadius:"50%",background:T.rose,flexShrink:0,marginTop:4}}/>
+                <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Assign picker */}
+        <AssignPicker item={item}/>
+
+        {/* Actions */}
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:2}}>
+          <ActionButtons item={item} compact/>
+        </div>
+      </div>
+    );
+  };
+
+  /* ── Kanban columns config ── */
+  const KANBAN_COLS = [
+    {id:"assigned",     label:"New Assignments", c:"#8b5cf6", types:["assigned"]},
+    {id:"review",       label:"Pending Review",  c:T.blue,    types:["field_updated"]},
+    {id:"action",       label:"Action Required", c:T.amber,   types:["needs_attention","stewardship_request"]},
+    {id:"alerts",       label:"Alerts",          c:T.rose,    types:["dq_alert"]},
+  ];
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
       <Topbar breadcrumb={[{label:"Inbox"}]} actions={
-        unread.length>0
-          ? <button onClick={markAll}
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          {/* View toggle */}
+          <div style={{display:"flex",gap:1,background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,padding:2}}>
+            {[["list",<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 4h10M2 7h10M2 10h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>],
+              ["kanban",<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="3.5" height="10" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="5.25" y="2" width="3.5" height="7" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="9.5" y="2" width="3.5" height="8.5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>]
+            ].map(([mode,icon])=>(
+              <button key={mode} onClick={()=>setViewMode(mode)}
+                style={{width:28,height:26,borderRadius:5,background:viewMode===mode?T.bgSurface:"transparent",border:viewMode===mode?`1px solid ${T.border}`:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:viewMode===mode?T.text:T.textMuted,boxShadow:viewMode===mode?"0 1px 3px rgba(0,0,0,.08)":"none",transition:"all .12s"}}>
+                {icon}
+              </button>
+            ))}
+          </div>
+          {unread.length>0&&(
+            <button onClick={markAll}
               style={{padding:"6px 14px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:500,cursor:"pointer",transition:"all .12s"}}
               onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
               Mark all read
             </button>
-          : null
+          )}
+        </div>
       }/>
 
       {/* Tab bar */}
-      <div style={{padding:"0 28px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:0,flexShrink:0,background:T.bgSurface}}>
+      <div style={{padding:"0 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:0,flexShrink:0,background:T.bgSurface}}>
         {[["all","All"],["tasks","Tasks"],["alerts","Alerts"],["assigned","Assigned"]].map(([k,l])=>(
           <button key={k} onClick={()=>setFilter(k)}
-            style={{padding:"12px 16px",background:"transparent",border:"none",borderBottom:`2px solid ${filter===k?T.accent:"transparent"}`,color:filter===k?T.text:T.textMuted,fontSize:12.5,fontWeight:filter===k?600:400,cursor:"pointer",display:"flex",alignItems:"center",gap:6,transition:"all .12s"}}>
+            style={{padding:"11px 16px",background:"transparent",border:"none",borderBottom:`2px solid ${filter===k?T.accent:"transparent"}`,color:filter===k?T.text:T.textMuted,fontSize:12.5,fontWeight:filter===k?600:400,cursor:"pointer",display:"flex",alignItems:"center",gap:6,transition:"all .12s"}}>
             {l}
             {counts[k]>0&&<span style={{fontSize:10,fontWeight:700,background:k==="alerts"?`${T.rose}20`:T.bgHover,color:k==="alerts"?T.rose:T.textMuted,borderRadius:10,padding:"1px 6px"}}>{counts[k]}</span>}
           </button>
         ))}
       </div>
 
-      {/* Content */}
-      <div style={{flex:1,overflowY:"auto",padding:"24px 28px"}}>
-        {shown.length===0 ? (
-          <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:280,gap:12}}>
-            <div style={{width:48,height:48,borderRadius:12,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted}}>
-              {Ic.inbox(22)}
+      {/* ── LIST VIEW ── */}
+      {viewMode==="list"&&(
+        <div style={{flex:1,overflowY:"auto",padding:"24px 28px"}}>
+          {shown.length===0 ? (
+            <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:280,gap:12}}>
+              <div style={{width:48,height:48,borderRadius:12,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted}}>{Ic.inbox(22)}</div>
+              <div style={{fontSize:14,fontWeight:600,color:T.textSub}}>You're all caught up</div>
+              <div style={{fontSize:12,color:T.textMuted}}>No pending tasks or alerts</div>
             </div>
-            <div style={{fontSize:14,fontWeight:600,color:T.textSub}}>You're all caught up</div>
-            <div style={{fontSize:12,color:T.textMuted}}>No pending tasks or alerts</div>
-          </div>
-        ) : (
-          <div style={{display:"flex",flexDirection:"column",gap:10,maxWidth:800}}>
-            {shown.map(item=>{
-              const sev    = SEV[item.severity]||SEV.low;
-              const iconFn = TYPE_ICON[item.type]||TYPE_ICON.field_updated;
-              const diffOpen = expandDiff===item.id;
-              return (
-                <div key={item.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${sev.c}`,borderRadius:10,padding:"14px 16px",transition:"box-shadow .15s"}}
-                  onMouseEnter={e=>e.currentTarget.style.boxShadow=`0 2px 12px ${sev.c}18`}
-                  onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
-
-                  {/* Header row */}
-                  <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:8}}>
-                    <div style={{width:28,height:28,borderRadius:7,background:sev.bg,display:"flex",alignItems:"center",justifyContent:"center",color:sev.c,flexShrink:0,marginTop:1}}>
-                      {iconFn()}
-                    </div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:4}}>{item.title}</div>
-                      <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
-                        <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{item.asset.path}</span>
-                        <span style={{color:T.textMuted,fontSize:10}}>·</span>
-                        <TypeBadge type={item.asset.type}/>
-                        <span style={{color:T.textMuted,fontSize:10}}>·</span>
-                        <span style={{fontSize:11,color:T.textMuted}}>{item.timeAgo}</span>
-                      </div>
-                    </div>
-                    <span style={{fontSize:9.5,fontWeight:700,color:sev.c,background:sev.bg,padding:"2px 8px",borderRadius:4,flexShrink:0,letterSpacing:"0.04em"}}>{sev.label}</span>
-                  </div>
-
-                  {/* Body */}
-                  <div style={{fontSize:12,color:T.textSub,marginLeft:38,marginBottom:item.failures||item.diff?8:12}}>{item.body}</div>
-
-                  {/* DQ failure list */}
-                  {item.failures&&(
-                    <div style={{marginLeft:38,marginBottom:10,display:"flex",flexDirection:"column",gap:5}}>
-                      {item.failures.map((f,fi)=>(
-                        <div key={fi} style={{display:"flex",alignItems:"center",gap:7,fontSize:11.5,color:T.textSub}}>
-                          <span style={{width:5,height:5,borderRadius:"50%",background:T.rose,flexShrink:0}}/>
-                          {f}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Diff expand */}
-                  {item.diff&&(
-                    <div style={{marginLeft:38,marginBottom:10}}>
-                      <button onClick={()=>setExpandDiff(diffOpen?null:item.id)}
-                        style={{background:"none",border:"none",cursor:"pointer",color:T.accent,fontSize:11.5,fontWeight:500,padding:0,display:"flex",alignItems:"center",gap:4}}>
-                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{transform:diffOpen?"rotate(90deg)":"rotate(0deg)",transition:"transform .15s"}}><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        {diffOpen?"Hide change":"Show change"}
-                      </button>
-                      {diffOpen&&(
-                        <div style={{marginTop:8,background:T.bgElevated,borderRadius:7,padding:"10px 12px",border:`1px solid ${T.border}`}}>
-                          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>{item.diff.field}</div>
-                          <div style={{display:"flex",flexDirection:"column",gap:5}}>
-                            <div style={{fontSize:11.5,color:T.rose,background:`${T.rose}0d`,borderRadius:4,padding:"5px 9px",borderLeft:`2px solid ${T.rose}`}}>
-                              <span style={{fontSize:10,fontWeight:700,color:T.textMuted,marginRight:8}}>BEFORE</span>{item.diff.before}
-                            </div>
-                            <div style={{fontSize:11.5,color:"#16a34a",background:"rgba(22,163,74,.08)",borderRadius:4,padding:"5px 9px",borderLeft:"2px solid #16a34a"}}>
-                              <span style={{fontSize:10,fontWeight:700,color:T.textMuted,marginRight:8}}>AFTER</span>{item.diff.after}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Assign steward picker */}
-                  {item.type==="needs_attention"&&assignOpen===item.id&&(
-                    <div style={{marginLeft:38,marginBottom:10,background:T.bgElevated,borderRadius:7,padding:"10px 12px",border:`1px solid ${T.border}`}}>
-                      <div style={{fontSize:11,color:T.textSub,marginBottom:8}}>Assign a steward to <b style={{color:T.text}}>{item.asset.name}</b></div>
-                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                        {["priya.nair","arjun.sharma","dev.patel","maya.chen"].map(u=>(
-                          <button key={u} onClick={()=>{setAssignOpen(null);ack(item.id,`${u} assigned as Steward`);}}
-                            style={{padding:"5px 12px",borderRadius:6,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",transition:"all .1s"}}
-                            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
-                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
-                            {u}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Action buttons */}
-                  <div style={{marginLeft:38,display:"flex",gap:8,alignItems:"center",marginTop:4}}>
-                    {item.type==="dq_alert"&&<>
-                      <button onClick={()=>onToast("Opening Data Quality","success")}
-                        style={{padding:"5px 14px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>View DQ</button>
-                      <button onClick={()=>dism(item.id)}
-                        style={{padding:"5px 12px",borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,fontSize:11.5,cursor:"pointer"}}>Dismiss</button>
-                    </>}
-                    {item.type==="field_updated"&&<>
-                      <button onClick={()=>ack(item.id)}
-                        style={{padding:"5px 14px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Acknowledge</button>
-                      <button onClick={()=>onToast("Opening asset","success")}
-                        style={{padding:"5px 12px",borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer"}}>Open Asset</button>
-                    </>}
-                    {item.type==="assigned"&&<>
-                      <button onClick={()=>onToast("Opening asset","success")}
-                        style={{padding:"5px 14px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>View Asset</button>
-                      <button onClick={()=>ack(item.id)}
-                        style={{padding:"5px 12px",borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,fontSize:11.5,cursor:"pointer"}}>Later</button>
-                    </>}
-                    {item.type==="stewardship_request"&&<>
-                      <button onClick={()=>ack(item.id,`${item.requestedBy} added as ${item.requestedRole}`)}
-                        style={{padding:"5px 14px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Accept</button>
-                      <button onClick={()=>ack(item.id,"Request declined")}
-                        style={{padding:"5px 12px",borderRadius:6,background:"transparent",border:`1px solid ${T.rose}44`,color:T.rose,fontSize:11.5,cursor:"pointer"}}>Decline</button>
-                    </>}
-                    {item.type==="needs_attention"&&<>
-                      <button onClick={()=>setAssignOpen(assignOpen===item.id?null:item.id)}
-                        style={{padding:"5px 14px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Assign Steward</button>
-                      <button onClick={()=>dism(item.id)}
-                        style={{padding:"5px 12px",borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,fontSize:11.5,cursor:"pointer"}}>Dismiss</button>
-                    </>}
-                  </div>
+          ) : (
+            <div style={{display:"flex",flexDirection:"column",gap:12,maxWidth:820}}>
+              {shown.map(item=><ListTile key={item.id} item={item}/>)}
+            </div>
+          )}
+          {read.length>0&&(
+            <div style={{maxWidth:820,marginTop:28}}>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.09em",marginBottom:10}}>Read</div>
+              {read.map(item=>(
+                <div key={item.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:5,opacity:0.5}}>
+                  <span style={{width:5,height:5,borderRadius:"50%",background:T.textMuted,flexShrink:0}}/>
+                  <span style={{fontSize:12,color:T.textSub,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</span>
+                  <span style={{fontSize:11,color:T.textMuted,flexShrink:0}}>{item.timeAgo}</span>
                 </div>
-              );
-            })}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
-        {/* Read history */}
-        {read.length>0&&(
-          <div style={{maxWidth:800,marginTop:28}}>
-            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.09em",marginBottom:10}}>Read</div>
-            {read.map(item=>(
-              <div key={item.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:5,opacity:0.5}}>
-                <span style={{width:5,height:5,borderRadius:"50%",background:T.textMuted,flexShrink:0}}/>
-                <span style={{fontSize:12,color:T.textSub,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</span>
-                <span style={{fontSize:11,color:T.textMuted,flexShrink:0}}>{item.timeAgo}</span>
+      {/* ── KANBAN VIEW ── */}
+      {viewMode==="kanban"&&(
+        <div style={{flex:1,overflowX:"auto",overflowY:"hidden",padding:"20px 24px",display:"flex",gap:14,alignItems:"flex-start"}}>
+          {KANBAN_COLS.map(col=>{
+            const colItems = unread.filter(i=>col.types.includes(i.type));
+            return (
+              <div key={col.id} style={{width:270,flexShrink:0,display:"flex",flexDirection:"column",height:"100%"}}>
+                {/* Column header */}
+                <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderTop:`3px solid ${col.c}`,borderRadius:"8px 8px 0 0",marginBottom:0,flexShrink:0}}>
+                  <span style={{fontSize:12,fontWeight:700,color:T.text,flex:1}}>{col.label}</span>
+                  <span style={{fontSize:10,fontWeight:700,background:colItems.length>0?`${col.c}18`:T.bgElevated,color:colItems.length>0?col.c:T.textMuted,borderRadius:10,padding:"1px 7px",border:`1px solid ${colItems.length>0?col.c+"33":T.border}`}}>{colItems.length}</span>
+                </div>
+                {/* Cards area */}
+                <div style={{flex:1,overflowY:"auto",background:T.bgElevated,border:`1px solid ${T.border}`,borderTop:"none",borderRadius:"0 0 8px 8px",padding:"10px 10px 4px"}}>
+                  {colItems.length===0 ? (
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:100,gap:6,opacity:0.5}}>
+                      <div style={{fontSize:11,color:T.textMuted}}>No items</div>
+                    </div>
+                  ) : (
+                    colItems.map(item=><KanbanCard key={item.id} item={item} colColor={col.c}/>)
+                  )}
+                </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };
