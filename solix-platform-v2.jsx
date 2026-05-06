@@ -248,6 +248,58 @@ const INITIAL_INBOX = [
   { id:'i5', type:'propagation_review',tagName:'PHI',                assetId:ASSETS[3].id, assetName:'clinical_trials_master',  domain:'Clinical', sourceSystem:null,         note:'PHI tag applied. Propagation (H+L) will affect 23 downstream assets including 3 BI dashboards and 2 external reports. Review before confirming.',                                   metadata:{ downstreamCount:23, hierarchyCount:14, lineageCount:9 },                    createdAt:'2026-04-19T15:30:00Z', resolvedAt:null, resolvedBy:null, resolution:null },
 ];
 
+const INBOX_DATA = [
+  {id:"inb1",type:"dq_alert",severity:"high",section:"quality",timeAgo:"3h ago",
+    title:"2 test cases failed on orders table",
+    asset:{name:"orders",path:"commerce.orders",type:"Table"},
+    body:"Null check on order_id · Row count below threshold",
+    failures:["Null check on order_id — 142 nulls found (0 expected)","Row count below threshold — 1,200 rows found (~48M expected)"],
+    readAt:null},
+  {id:"inb2",type:"field_updated",severity:"low",section:"catalog",timeAgo:"2h ago",
+    title:"Description updated on orders table",
+    asset:{name:"orders",path:"commerce.orders",type:"Table"},
+    body:"priya.nair updated the description",
+    changedBy:"priya.nair",
+    diff:{field:"Description",before:"Core orders table for the commerce domain.",after:"Transactional orders table containing all customer purchase records across channels including B2B orders from Q1 2026."},
+    readAt:null},
+  {id:"inb3",type:"assigned",severity:"info",section:"catalog",timeAgo:"just now",
+    title:"You've been assigned as Steward of dim_customer",
+    asset:{name:"dim_customer",path:"analytics.dim_customer",type:"Table"},
+    body:"Assigned by james.oh",
+    assignedBy:"james.oh",requestedRole:"Steward",
+    readAt:null},
+  {id:"inb4",type:"stewardship_request",severity:"medium",section:"catalog",timeAgo:"1d ago",
+    title:"dev.patel requested Stewardship on orders table",
+    asset:{name:"orders",path:"commerce.orders",type:"Table"},
+    body:"\"I manage this pipeline and need edit access to update metadata\"",
+    requestedBy:"dev.patel",requestedRole:"Steward",
+    readAt:null},
+  {id:"inb5",type:"needs_attention",severity:"medium",section:"catalog",timeAgo:"3d ago",
+    title:"product_events has no steward assigned",
+    asset:{name:"product_events",path:"analytics.product_events",type:"Table"},
+    body:"Created 3 days ago · Snowflake · analytics schema",
+    readAt:null},
+  {id:"inb6",type:"dq_alert",severity:"medium",section:"quality",timeAgo:"6h ago",
+    title:"Schema drift detected on dim_customer",
+    asset:{name:"dim_customer",path:"analytics.dim_customer",type:"Table"},
+    body:"1 column removed · 1 new nullable column added",
+    failures:["Column 'loyalty_tier' removed from schema","New nullable column 'referral_source' added without default"],
+    readAt:null},
+  {id:"inb7",type:"assigned",severity:"info",section:"glossary",timeAgo:"1d ago",
+    title:"You've been assigned as Owner of 'Churn Rate'",
+    asset:{name:"Churn Rate",path:"Business Glossary",type:"Glossary Term"},
+    body:"Assigned by maya.chen",
+    assignedBy:"maya.chen",requestedRole:"Owner",
+    readAt:null},
+  {id:"inb8",type:"field_updated",severity:"low",section:"catalog",timeAgo:"2d ago",
+    title:"Tags updated on transactions table",
+    asset:{name:"transactions",path:"finance.transactions",type:"Table"},
+    body:"arjun.sharma added PII tag",
+    changedBy:"arjun.sharma",
+    diff:{field:"Tags",before:"internal, financial",after:"internal, financial, PII"},
+    readAt:"2026-05-04T10:00:00Z"},
+];
+
 const INITIAL_TAG_POLICIES = {
   whoCanCreateCustom:'any', propagationThreshold:10, sensitivityAutoAssign:true,
   removalFromCertified:'approval', auditLogEnabled:true, notifyOnLargePropagate:true,
@@ -3186,7 +3238,7 @@ const GROUPS = [
   {section:"Workspace",items:[
     {key:"home",           icon:"home",          label:"Home"},
     {key:"search",         icon:"search",        label:"Search"},
-    {key:"stewardship",    icon:"steward",       label:"My Workspace",  badge:true},
+    {key:"stewardship",    icon:"inbox",         label:"Inbox",         badge:true},
   ]},
   {section:"Catalog",items:[
     {key:"catalog",        icon:"catalog",       label:"Data Catalog"},
@@ -3212,8 +3264,7 @@ const GROUPS = [
 
 const Sidebar = ({active, onNav, exp, setExp}) => {
   const {roleCfg} = useRole();
-  const tagCtx = useTagCtx();
-  const unresolvedCount = tagCtx?.unresolvedCount || 0;
+  const inboxBadgeCount = INBOX_DATA.filter(i=>!i.readAt).length;
   const allowedNav = roleCfg?.nav || ["home","search","catalog","lineage","quality","observability","contracts","policymanager","access","certifications","stewardship","glossary","domains","analytics","settings"];
   return (
     <div style={{position:"fixed",top:0,left:0,height:"100vh",width:exp?EXPANDED_W:COLLAPSED_W,background:T.bgSurface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:100,transition:"width .2s ease",overflow:"hidden"}}>
@@ -3245,8 +3296,8 @@ const Sidebar = ({active, onNav, exp, setExp}) => {
                     {Ic[item.icon]?Ic[item.icon](15):Ic.catalog(15)}
                   </span>
                   {exp&&<span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",textAlign:"left"}}>{item.label}</span>}
-                  {exp&&item.badge&&unresolvedCount>0&&<span style={{fontSize:9,fontWeight:700,background:T.amber,color:"#000",borderRadius:10,padding:"1px 5px",marginLeft:2,flexShrink:0}}>{unresolvedCount}</span>}
-                  {!exp&&item.badge&&unresolvedCount>0&&<span style={{position:"absolute",top:4,right:4,width:8,height:8,borderRadius:"50%",background:T.amber}}/>}
+                  {exp&&item.badge&&inboxBadgeCount>0&&<span style={{fontSize:9,fontWeight:700,background:T.rose,color:"#fff",borderRadius:10,padding:"1px 5px",marginLeft:2,flexShrink:0}}>{inboxBadgeCount}</span>}
+                  {!exp&&item.badge&&inboxBadgeCount>0&&<span style={{position:"absolute",top:4,right:4,width:7,height:7,borderRadius:"50%",background:T.rose}}/>}
                 </button>
               );
             })}
@@ -3315,19 +3366,26 @@ const HomeView = ({onNav, onToast}) => {
     tasks: (
       <Card2 style={{marginBottom:20}}><div style={{padding:16}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-          <div style={{fontSize:13,fontWeight:700,color:T.text}}>My Stewardship Tasks</div>
+          <div style={{display:"flex",alignItems:"center",gap:7}}>
+            <div style={{fontSize:13,fontWeight:700,color:T.text}}>My Inbox</div>
+            {INBOX_DATA.filter(i=>!i.readAt).length>0&&<span style={{fontSize:10,fontWeight:700,background:T.rose,color:"#fff",borderRadius:10,padding:"1px 6px"}}>{INBOX_DATA.filter(i=>!i.readAt).length}</span>}
+          </div>
           <button onClick={()=>nav("stewardship")} style={{fontSize:11.5,color:T.accent,background:"none",border:"none",cursor:"pointer"}}>View all →</button>
         </div>
-        {STEWARDSHIP_TASKS.slice(0,4).map((t,i)=>(
-          <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:i<3?`1px solid ${T.border}`:"none"}}>
-            <SDot status={t.status}/>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:12,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.type}</div>
-              <div style={{fontSize:10.5,color:T.textMuted}}>{t.asset} · due {t.due}</div>
+        {INBOX_DATA.filter(i=>!i.readAt).slice(0,4).map((item,i)=>{
+          const SC={high:T.rose,medium:T.amber,low:T.blue,info:"#8b5cf6"};
+          const c=SC[item.severity]||T.textMuted;
+          return (
+            <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:i<3?`1px solid ${T.border}`:"none"}}>
+              <span style={{width:7,height:7,borderRadius:"50%",background:c,flexShrink:0}}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
+                <div style={{fontSize:10.5,color:T.textMuted}}>{item.asset.path} · {item.timeAgo}</div>
+              </div>
+              <span style={{fontSize:10,color:c,background:`${c}18`,borderRadius:4,padding:"1px 6px",fontWeight:600,flexShrink:0}}>{item.severity==="high"?"HIGH":item.severity==="medium"?"MED":"INFO"}</span>
             </div>
-            <Badge color={t.priority==="Critical"?T.rose:t.priority==="High"?T.amber:T.textMuted}>{t.priority}</Badge>
-          </div>
-        ))}
+          );
+        })}
       </div></Card2>
     ),
     certQueue: (
@@ -15141,6 +15199,222 @@ const WF_DATA = [
 
 const WF_CATS = ["All", "Ingestion", "Quality", "Lineage", "Governance", "Analytics"];
 
+const InboxView = ({onToast}) => {
+  const [items,       setItems]       = useState(INBOX_DATA);
+  const [filter,      setFilter]      = useState("all");
+  const [expandDiff,  setExpandDiff]  = useState(null);
+  const [assignOpen,  setAssignOpen]  = useState(null);
+
+  const unread = items.filter(i=>!i.readAt);
+  const counts = {
+    all:      unread.length,
+    tasks:    unread.filter(i=>["field_updated","stewardship_request","needs_attention"].includes(i.type)).length,
+    alerts:   unread.filter(i=>i.type==="dq_alert").length,
+    assigned: unread.filter(i=>i.type==="assigned").length,
+  };
+  const shown = unread.filter(i=>{
+    if(filter==="all")      return true;
+    if(filter==="tasks")    return ["field_updated","stewardship_request","needs_attention"].includes(i.type);
+    if(filter==="alerts")   return i.type==="dq_alert";
+    if(filter==="assigned") return i.type==="assigned";
+    return true;
+  });
+  const read = items.filter(i=>i.readAt);
+
+  const ack  = (id,msg)=>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); onToast(msg||"Acknowledged","success"); };
+  const dism = (id)    =>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); };
+  const markAll = ()   =>{ setItems(p=>p.map(i=>({...i,readAt:i.readAt||new Date().toISOString()}))); onToast("All caught up","success"); };
+
+  const SEV = {
+    high:   {c:T.rose,   bg:`${T.rose}12`,   label:"HIGH"},
+    medium: {c:T.amber,  bg:`${T.amber}12`,  label:"MED"},
+    low:    {c:T.blue,   bg:`${T.blue}0d`,   label:"INFO"},
+    info:   {c:"#8b5cf6",bg:"rgba(139,92,246,.1)",label:"NEW"},
+  };
+  const TYPE_ICON = {
+    dq_alert:            ()=>Ic.quality(13),
+    field_updated:       ()=>Ic.edit(13),
+    assigned:            ()=>Ic.steward(13),
+    needs_attention:     ()=>Ic.alert(13),
+    stewardship_request: ()=>Ic.persona(13),
+  };
+
+  return (
+    <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+      <Topbar breadcrumb={[{label:"Inbox"}]} actions={
+        unread.length>0
+          ? <button onClick={markAll}
+              style={{padding:"6px 14px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:500,cursor:"pointer",transition:"all .12s"}}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+              Mark all read
+            </button>
+          : null
+      }/>
+
+      {/* Tab bar */}
+      <div style={{padding:"0 28px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:0,flexShrink:0,background:T.bgSurface}}>
+        {[["all","All"],["tasks","Tasks"],["alerts","Alerts"],["assigned","Assigned"]].map(([k,l])=>(
+          <button key={k} onClick={()=>setFilter(k)}
+            style={{padding:"12px 16px",background:"transparent",border:"none",borderBottom:`2px solid ${filter===k?T.accent:"transparent"}`,color:filter===k?T.text:T.textMuted,fontSize:12.5,fontWeight:filter===k?600:400,cursor:"pointer",display:"flex",alignItems:"center",gap:6,transition:"all .12s"}}>
+            {l}
+            {counts[k]>0&&<span style={{fontSize:10,fontWeight:700,background:k==="alerts"?`${T.rose}20`:T.bgHover,color:k==="alerts"?T.rose:T.textMuted,borderRadius:10,padding:"1px 6px"}}>{counts[k]}</span>}
+          </button>
+        ))}
+      </div>
+
+      {/* Content */}
+      <div style={{flex:1,overflowY:"auto",padding:"24px 28px"}}>
+        {shown.length===0 ? (
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:280,gap:12}}>
+            <div style={{width:48,height:48,borderRadius:12,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted}}>
+              {Ic.inbox(22)}
+            </div>
+            <div style={{fontSize:14,fontWeight:600,color:T.textSub}}>You're all caught up</div>
+            <div style={{fontSize:12,color:T.textMuted}}>No pending tasks or alerts</div>
+          </div>
+        ) : (
+          <div style={{display:"flex",flexDirection:"column",gap:10,maxWidth:800}}>
+            {shown.map(item=>{
+              const sev    = SEV[item.severity]||SEV.low;
+              const iconFn = TYPE_ICON[item.type]||TYPE_ICON.field_updated;
+              const diffOpen = expandDiff===item.id;
+              return (
+                <div key={item.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${sev.c}`,borderRadius:10,padding:"14px 16px",transition:"box-shadow .15s"}}
+                  onMouseEnter={e=>e.currentTarget.style.boxShadow=`0 2px 12px ${sev.c}18`}
+                  onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
+
+                  {/* Header row */}
+                  <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:8}}>
+                    <div style={{width:28,height:28,borderRadius:7,background:sev.bg,display:"flex",alignItems:"center",justifyContent:"center",color:sev.c,flexShrink:0,marginTop:1}}>
+                      {iconFn()}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:4}}>{item.title}</div>
+                      <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                        <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{item.asset.path}</span>
+                        <span style={{color:T.textMuted,fontSize:10}}>·</span>
+                        <TypeBadge type={item.asset.type}/>
+                        <span style={{color:T.textMuted,fontSize:10}}>·</span>
+                        <span style={{fontSize:11,color:T.textMuted}}>{item.timeAgo}</span>
+                      </div>
+                    </div>
+                    <span style={{fontSize:9.5,fontWeight:700,color:sev.c,background:sev.bg,padding:"2px 8px",borderRadius:4,flexShrink:0,letterSpacing:"0.04em"}}>{sev.label}</span>
+                  </div>
+
+                  {/* Body */}
+                  <div style={{fontSize:12,color:T.textSub,marginLeft:38,marginBottom:item.failures||item.diff?8:12}}>{item.body}</div>
+
+                  {/* DQ failure list */}
+                  {item.failures&&(
+                    <div style={{marginLeft:38,marginBottom:10,display:"flex",flexDirection:"column",gap:5}}>
+                      {item.failures.map((f,fi)=>(
+                        <div key={fi} style={{display:"flex",alignItems:"center",gap:7,fontSize:11.5,color:T.textSub}}>
+                          <span style={{width:5,height:5,borderRadius:"50%",background:T.rose,flexShrink:0}}/>
+                          {f}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Diff expand */}
+                  {item.diff&&(
+                    <div style={{marginLeft:38,marginBottom:10}}>
+                      <button onClick={()=>setExpandDiff(diffOpen?null:item.id)}
+                        style={{background:"none",border:"none",cursor:"pointer",color:T.accent,fontSize:11.5,fontWeight:500,padding:0,display:"flex",alignItems:"center",gap:4}}>
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{transform:diffOpen?"rotate(90deg)":"rotate(0deg)",transition:"transform .15s"}}><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        {diffOpen?"Hide change":"Show change"}
+                      </button>
+                      {diffOpen&&(
+                        <div style={{marginTop:8,background:T.bgElevated,borderRadius:7,padding:"10px 12px",border:`1px solid ${T.border}`}}>
+                          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>{item.diff.field}</div>
+                          <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                            <div style={{fontSize:11.5,color:T.rose,background:`${T.rose}0d`,borderRadius:4,padding:"5px 9px",borderLeft:`2px solid ${T.rose}`}}>
+                              <span style={{fontSize:10,fontWeight:700,color:T.textMuted,marginRight:8}}>BEFORE</span>{item.diff.before}
+                            </div>
+                            <div style={{fontSize:11.5,color:"#16a34a",background:"rgba(22,163,74,.08)",borderRadius:4,padding:"5px 9px",borderLeft:"2px solid #16a34a"}}>
+                              <span style={{fontSize:10,fontWeight:700,color:T.textMuted,marginRight:8}}>AFTER</span>{item.diff.after}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Assign steward picker */}
+                  {item.type==="needs_attention"&&assignOpen===item.id&&(
+                    <div style={{marginLeft:38,marginBottom:10,background:T.bgElevated,borderRadius:7,padding:"10px 12px",border:`1px solid ${T.border}`}}>
+                      <div style={{fontSize:11,color:T.textSub,marginBottom:8}}>Assign a steward to <b style={{color:T.text}}>{item.asset.name}</b></div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {["priya.nair","arjun.sharma","dev.patel","maya.chen"].map(u=>(
+                          <button key={u} onClick={()=>{setAssignOpen(null);ack(item.id,`${u} assigned as Steward`);}}
+                            style={{padding:"5px 12px",borderRadius:6,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",transition:"all .1s"}}
+                            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+                            {u}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action buttons */}
+                  <div style={{marginLeft:38,display:"flex",gap:8,alignItems:"center",marginTop:4}}>
+                    {item.type==="dq_alert"&&<>
+                      <button onClick={()=>onToast("Opening Data Quality","success")}
+                        style={{padding:"5px 14px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>View DQ</button>
+                      <button onClick={()=>dism(item.id)}
+                        style={{padding:"5px 12px",borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,fontSize:11.5,cursor:"pointer"}}>Dismiss</button>
+                    </>}
+                    {item.type==="field_updated"&&<>
+                      <button onClick={()=>ack(item.id)}
+                        style={{padding:"5px 14px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Acknowledge</button>
+                      <button onClick={()=>onToast("Opening asset","success")}
+                        style={{padding:"5px 12px",borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer"}}>Open Asset</button>
+                    </>}
+                    {item.type==="assigned"&&<>
+                      <button onClick={()=>onToast("Opening asset","success")}
+                        style={{padding:"5px 14px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>View Asset</button>
+                      <button onClick={()=>ack(item.id)}
+                        style={{padding:"5px 12px",borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,fontSize:11.5,cursor:"pointer"}}>Later</button>
+                    </>}
+                    {item.type==="stewardship_request"&&<>
+                      <button onClick={()=>ack(item.id,`${item.requestedBy} added as ${item.requestedRole}`)}
+                        style={{padding:"5px 14px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Accept</button>
+                      <button onClick={()=>ack(item.id,"Request declined")}
+                        style={{padding:"5px 12px",borderRadius:6,background:"transparent",border:`1px solid ${T.rose}44`,color:T.rose,fontSize:11.5,cursor:"pointer"}}>Decline</button>
+                    </>}
+                    {item.type==="needs_attention"&&<>
+                      <button onClick={()=>setAssignOpen(assignOpen===item.id?null:item.id)}
+                        style={{padding:"5px 14px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Assign Steward</button>
+                      <button onClick={()=>dism(item.id)}
+                        style={{padding:"5px 12px",borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,fontSize:11.5,cursor:"pointer"}}>Dismiss</button>
+                    </>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Read history */}
+        {read.length>0&&(
+          <div style={{maxWidth:800,marginTop:28}}>
+            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.09em",marginBottom:10}}>Read</div>
+            {read.map(item=>(
+              <div key={item.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:5,opacity:0.5}}>
+                <span style={{width:5,height:5,borderRadius:"50%",background:T.textMuted,flexShrink:0}}/>
+                <span style={{fontSize:12,color:T.textSub,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</span>
+                <span style={{fontSize:11,color:T.textMuted,flexShrink:0}}>{item.timeAgo}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const WorkflowView = ({onToast}) => {
   const [cat,      setCat]      = useState("All");
   const [selected, setSelected] = useState(null);
@@ -18248,9 +18522,9 @@ export default function App(){
       case "policymanager": return <PolicyManagerView onToast={showToast}/>;
       case "access":        return <AccessView onToast={showToast}/>;
       case "certifications":return <CertificationsView onToast={showToast}/>;
-      case "stewardship":   return <StewardshipView onToast={showToast}/>;
+      case "stewardship":   return <InboxView onToast={showToast}/>;
       case "tags":          return <TagManagementView onToast={showToast}/>;
-      case "steward-inbox": return <StewardshipView onToast={showToast} initialTab="inbox"/>;
+      case "steward-inbox": return <InboxView onToast={showToast}/>;
       case "glossary":      return <GlossaryView onToast={showToast}/>;
       case "domains":       return <DomainsView/>;
       case "observability": return <ObsView onToast={showToast}/>;
