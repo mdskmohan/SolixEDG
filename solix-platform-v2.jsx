@@ -15216,8 +15216,8 @@ const InboxView = ({onToast}) => {
   const [items,      setItems]      = useState(INBOX_DATA);
   const [filter,     setFilter]     = useState("all");
   const [viewMode,   setViewMode]   = useState("list"); // "list" | "kanban"
-  const [expandDiff, setExpandDiff] = useState(null);
-  const [assignOpen, setAssignOpen] = useState(null);
+  const [sel,        setSel]        = useState(null);   // selected item id
+  const [assignOpen, setAssignOpen] = useState(false);
 
   const unread = items.filter(i=>!i.readAt);
   const read   = items.filter(i=>!!i.readAt);
@@ -15235,269 +15235,322 @@ const InboxView = ({onToast}) => {
     return true;
   });
 
-  const ack     = (id,msg)=>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); onToast(msg||"Acknowledged","success"); };
-  const dism    = id      =>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); };
-  const markAll = ()      =>{ setItems(p=>p.map(i=>({...i,readAt:i.readAt||new Date().toISOString()}))); onToast("All caught up","success"); };
+  const selItem = items.find(i=>i.id===sel)||null;
+  const selIdx  = shown.findIndex(i=>i.id===sel);
+  const navPrev = ()=>{ if(selIdx>0) { setSel(shown[selIdx-1].id); setAssignOpen(false); }};
+  const navNext = ()=>{ if(selIdx<shown.length-1) { setSel(shown[selIdx+1].id); setAssignOpen(false); }};
+
+  const ack     = (id,msg)=>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); setSel(null); setAssignOpen(false); onToast(msg||"Acknowledged","success"); };
+  const dism    = id      =>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); setSel(null); setAssignOpen(false); };
+  const markAll = ()      =>{ setItems(p=>p.map(i=>({...i,readAt:i.readAt||new Date().toISOString()}))); setSel(null); setAssignOpen(false); onToast("All caught up","success"); };
 
   const SEV = {
-    high:  {c:T.rose,    bg:`${T.rose}12`,              label:"HIGH"},
-    medium:{c:T.amber,   bg:`${T.amber}12`,             label:"MED"},
-    low:   {c:T.blue,    bg:`${T.blue}0d`,              label:"INFO"},
-    info:  {c:"#8b5cf6", bg:"rgba(139,92,246,.1)",      label:"NEW"},
+    high:  {c:T.rose,    bg:`${T.rose}12`,         label:"HIGH"},
+    medium:{c:T.amber,   bg:`${T.amber}12`,         label:"MED"},
+    low:   {c:T.blue,    bg:`${T.blue}0d`,          label:"INFO"},
+    info:  {c:"#8b5cf6", bg:"rgba(139,92,246,.1)",  label:"NEW"},
   };
   const TYPE_META = {
-    dq_alert:            {icon:()=>Ic.quality(12),  label:"DQ Alert",       shortLabel:"DQ Alert"},
-    field_updated:       {icon:()=>Ic.edit(12),     label:"Field Updated",  shortLabel:"Updated"},
-    assigned:            {icon:()=>Ic.steward(12),  label:"New Assignment", shortLabel:"Assigned"},
-    needs_attention:     {icon:()=>Ic.alert(12),    label:"Needs Steward",  shortLabel:"Action"},
-    stewardship_request: {icon:()=>Ic.persona(12),  label:"Access Request", shortLabel:"Request"},
+    dq_alert:            {icon:sz=>Ic.quality(sz||12),  label:"DQ Alert",       shortLabel:"DQ Alert"},
+    field_updated:       {icon:sz=>Ic.edit(sz||12),     label:"Field Updated",  shortLabel:"Updated"},
+    assigned:            {icon:sz=>Ic.steward(sz||12),  label:"New Assignment", shortLabel:"Assigned"},
+    needs_attention:     {icon:sz=>Ic.alert(sz||12),    label:"Needs Steward",  shortLabel:"Action"},
+    stewardship_request: {icon:sz=>Ic.persona(sz||12),  label:"Access Request", shortLabel:"Request"},
   };
 
-  /* ── Inline action buttons (shared list + kanban) ── */
-  const ActionButtons = ({item, compact=false}) => {
+  /* ── Action row — only inside detail panel ── */
+  const ActionRow = ({item}) => {
     const btn = (label,onClick,primary=false,danger=false)=>(
-      <button onClick={onClick} style={{padding:compact?"4px 11px":"5px 14px",borderRadius:6,background:primary?T.accent:danger?"transparent":"transparent",border:primary?"none":danger?`1px solid ${T.rose}44`:`1px solid ${T.border}`,color:primary?"#fff":danger?T.rose:T.textSub,fontSize:11,fontWeight:primary?600:500,cursor:"pointer",whiteSpace:"nowrap",transition:"opacity .1s"}}
+      <button onClick={onClick} style={{padding:"7px 18px",borderRadius:7,background:primary?T.accent:"transparent",border:primary?"none":danger?`1px solid ${T.rose}55`:`1px solid ${T.border}`,color:primary?"#fff":danger?T.rose:T.textSub,fontSize:12,fontWeight:primary?600:500,cursor:"pointer",whiteSpace:"nowrap",transition:"opacity .1s"}}
         onMouseEnter={e=>e.currentTarget.style.opacity="0.8"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
         {label}
       </button>
     );
     if(item.type==="dq_alert")
-      return <>{btn("View DQ",()=>onToast("Opening Data Quality","success"),true)}{btn("Dismiss",()=>dism(item.id))}</>;
+      return <>{btn("View DQ Dashboard",()=>onToast("Opening Data Quality","success"),true)}{btn("Dismiss",()=>dism(item.id))}</>;
     if(item.type==="field_updated")
       return <>{btn("Acknowledge",()=>ack(item.id),true)}{btn("Open Asset",()=>onToast("Opening asset","success"))}</>;
     if(item.type==="assigned")
-      return <>{btn("View Asset",()=>onToast("Opening asset","success"),true)}{btn("Later",()=>ack(item.id))}</>;
+      return <>{btn("View Asset",()=>onToast("Opening asset","success"),true)}{btn("Acknowledge",()=>ack(item.id))}</>;
     if(item.type==="stewardship_request")
       return <>{btn("Accept",()=>ack(item.id,`${item.requestedBy} added as ${item.requestedRole}`),true)}{btn("Decline",()=>ack(item.id,"Request declined"),false,true)}</>;
     if(item.type==="needs_attention")
-      return <>{btn("Assign Steward",()=>setAssignOpen(assignOpen===item.id?null:item.id),true)}{btn("Dismiss",()=>dism(item.id))}</>;
+      return <>{btn("Assign Steward",()=>setAssignOpen(a=>!a),true)}{btn("Dismiss",()=>dism(item.id))}</>;
     return null;
   };
 
-  /* ── Assign picker (shared) ── */
-  const AssignPicker = ({item}) => assignOpen===item.id?(
-    <div style={{marginTop:10,background:T.bgElevated,borderRadius:7,padding:"10px 12px",border:`1px solid ${T.border}`}}>
-      <div style={{fontSize:11,color:T.textSub,marginBottom:8}}>Assign steward to <b style={{color:T.text}}>{item.asset.name}</b></div>
-      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-        {["priya.nair","arjun.sharma","dev.patel","maya.chen"].map(u=>(
-          <button key={u} onClick={()=>{setAssignOpen(null);ack(item.id,`${u} assigned as Steward`);}}
-            style={{padding:"4px 11px",borderRadius:6,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",transition:"all .1s"}}
-            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
-            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
-            {u}
-          </button>
-        ))}
-      </div>
-    </div>
-  ):null;
-
-  /* ── List tile ── */
-  const ListTile = ({item}) => {
-    const sev  = SEV[item.severity]||SEV.low;
-    const meta = TYPE_META[item.type]||TYPE_META.field_updated;
-    const diffOpen = expandDiff===item.id;
-    const initials = (item.changedBy||item.assignedBy||item.requestedBy||"?").split(".").map(s=>s[0]?.toUpperCase()||"").join("").slice(0,2);
+  /* ── Shared detail content (list + kanban) ── */
+  const DetailContent = ({item}) => {
+    if(!item) return null;
+    const sev    = SEV[item.severity]||SEV.low;
+    const meta   = TYPE_META[item.type]||TYPE_META.field_updated;
+    const person = item.changedBy||item.assignedBy||item.requestedBy||null;
+    const initials = person ? person.split(".").map(s=>s[0]?.toUpperCase()||"").join("").slice(0,2) : "?";
+    const personRole = item.type==="field_updated"?"Made a field update":item.type==="assigned"?"Assigned this to you":item.type==="stewardship_request"?"Requested steward access":item.type==="needs_attention"?"Flagged for attention":"Last activity";
     return (
-      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${sev.c}`,borderRadius:10,overflow:"hidden",transition:"box-shadow .15s"}}
-        onMouseEnter={e=>e.currentTarget.style.boxShadow=`0 4px 16px rgba(0,0,0,.07)`}
-        onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
-
-        {/* ── Top bar ── */}
-        <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 16px 9px",borderBottom:`1px solid ${T.border}`,background:T.bgElevated}}>
-          <div style={{width:22,height:22,borderRadius:5,background:sev.bg,display:"flex",alignItems:"center",justifyContent:"center",color:sev.c,flexShrink:0}}>
-            {meta.icon()}
+      <div style={{display:"flex",flexDirection:"column",height:"100%",overflow:"hidden"}}>
+        {/* Scrollable body */}
+        <div style={{flex:1,overflowY:"auto",padding:"22px 22px 16px"}}>
+          {/* Type header */}
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+            <div style={{width:36,height:36,borderRadius:9,background:sev.bg,border:`1px solid ${sev.c}22`,display:"flex",alignItems:"center",justifyContent:"center",color:sev.c,flexShrink:0}}>
+              {meta.icon(16)}
+            </div>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:sev.c,letterSpacing:"0.04em"}}>{meta.label}</div>
+              <div style={{fontSize:10,color:T.textMuted,marginTop:2}}>{sev.label} severity</div>
+            </div>
           </div>
-          <span style={{fontSize:11,fontWeight:700,color:sev.c,letterSpacing:"0.03em"}}>{meta.label}</span>
-          <span style={{fontSize:10,color:T.textMuted,background:sev.bg,borderRadius:4,padding:"1px 6px",fontWeight:600,letterSpacing:"0.04em"}}>{sev.label}</span>
-          <div style={{flex:1}}/>
-          {(item.changedBy||item.assignedBy||item.requestedBy)&&(
-            <div style={{display:"flex",alignItems:"center",gap:5}}>
-              <div style={{width:20,height:20,borderRadius:"50%",background:T.accent+"22",border:`1px solid ${T.accent}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:T.accent}}>{initials}</div>
-              <span style={{fontSize:11,color:T.textMuted}}>{item.changedBy||item.assignedBy||item.requestedBy}</span>
+
+          {/* Title */}
+          <div style={{fontSize:15,fontWeight:700,color:T.text,lineHeight:1.4,marginBottom:13}}>{item.title}</div>
+
+          {/* Asset + time row */}
+          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:16}}>
+            <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted,background:T.bgElevated,padding:"3px 9px",borderRadius:5,border:`1px solid ${T.border}`}}>{item.asset.path}</span>
+            <TypeBadge type={item.asset.type}/>
+            <span style={{fontSize:11,color:T.textMuted}}>{item.timeAgo}</span>
+          </div>
+
+          {/* Person row */}
+          {person&&(
+            <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 13px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:16}}>
+              <div style={{width:28,height:28,borderRadius:"50%",background:T.accent+"22",border:`1px solid ${T.accent}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:T.accent,flexShrink:0}}>{initials}</div>
+              <div>
+                <div style={{fontSize:12,fontWeight:600,color:T.text}}>{person}</div>
+                <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{personRole}</div>
+              </div>
             </div>
           )}
-          <span style={{fontSize:11,color:T.textMuted,marginLeft:4}}>{item.timeAgo}</span>
-        </div>
 
-        {/* ── Body ── */}
-        <div style={{padding:"12px 16px 0"}}>
-          {/* Title + asset row */}
-          <div style={{marginBottom:6}}>
-            <div style={{fontSize:13.5,fontWeight:700,color:T.text,marginBottom:5,lineHeight:1.35}}>{item.title}</div>
-            <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-              <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted,background:T.bgElevated,padding:"2px 8px",borderRadius:5,border:`1px solid ${T.border}`}}>{item.asset.path}</span>
-              <TypeBadge type={item.asset.type}/>
-            </div>
-          </div>
+          {/* Body text */}
+          {item.body&&<div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65,marginBottom:16}}>{item.body}</div>}
 
-          {/* Context body */}
-          {item.body&&<div style={{fontSize:12,color:T.textSub,marginBottom:10,marginTop:8,paddingLeft:1}}>{item.body}</div>}
-
-          {/* DQ failure bullets */}
+          {/* DQ failures */}
           {item.failures&&(
-            <div style={{marginBottom:10,display:"flex",flexDirection:"column",gap:5,background:`${T.rose}08`,borderRadius:7,padding:"8px 10px",border:`1px solid ${T.rose}18`}}>
+            <div style={{marginBottom:16,background:`${T.rose}08`,borderRadius:8,padding:"12px 14px",border:`1px solid ${T.rose}22`}}>
+              <div style={{fontSize:10,fontWeight:700,color:T.rose,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:9}}>Failed Checks</div>
               {item.failures.map((f,fi)=>(
-                <div key={fi} style={{display:"flex",alignItems:"flex-start",gap:7,fontSize:11.5,color:T.textSub}}>
-                  <span style={{width:5,height:5,borderRadius:"50%",background:T.rose,flexShrink:0,marginTop:4}}/>
+                <div key={fi} style={{display:"flex",alignItems:"flex-start",gap:8,fontSize:12,color:T.textSub,marginBottom:fi<item.failures.length-1?8:0}}>
+                  <span style={{width:5,height:5,borderRadius:"50%",background:T.rose,flexShrink:0,marginTop:5}}/>
                   {f}
                 </div>
               ))}
             </div>
           )}
 
-          {/* Diff expand */}
+          {/* Field diff */}
           {item.diff&&(
-            <div style={{marginBottom:10}}>
-              <button onClick={()=>setExpandDiff(diffOpen?null:item.id)}
-                style={{background:"none",border:"none",cursor:"pointer",color:T.accent,fontSize:11.5,fontWeight:500,padding:0,display:"flex",alignItems:"center",gap:4}}>
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{transform:diffOpen?"rotate(90deg)":"none",transition:"transform .15s"}}><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                {diffOpen?"Hide change":"Show change"}
-              </button>
-              {diffOpen&&(
-                <div style={{marginTop:8,background:T.bgElevated,borderRadius:7,padding:"10px 12px",border:`1px solid ${T.border}`}}>
-                  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:7}}>{item.diff.field}</div>
-                  <div style={{display:"flex",flexDirection:"column",gap:5}}>
-                    <div style={{fontSize:11.5,color:T.rose,background:`${T.rose}0d`,borderRadius:4,padding:"5px 9px",borderLeft:`2px solid ${T.rose}`}}>
-                      <span style={{fontSize:9.5,fontWeight:700,color:T.textMuted,marginRight:8,textTransform:"uppercase"}}>Before</span>{item.diff.before}
-                    </div>
-                    <div style={{fontSize:11.5,color:"#16a34a",background:"rgba(22,163,74,.08)",borderRadius:4,padding:"5px 9px",borderLeft:"2px solid #16a34a"}}>
-                      <span style={{fontSize:9.5,fontWeight:700,color:T.textMuted,marginRight:8,textTransform:"uppercase"}}>After</span>{item.diff.after}
-                    </div>
-                  </div>
+            <div style={{marginBottom:16,background:T.bgElevated,borderRadius:8,padding:"12px 14px",border:`1px solid ${T.border}`}}>
+              <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:9}}>{item.diff.field} changed</div>
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                <div style={{fontSize:12,color:T.rose,background:`${T.rose}0d`,borderRadius:5,padding:"7px 11px",borderLeft:`2px solid ${T.rose}`}}>
+                  <span style={{fontSize:9.5,fontWeight:700,color:T.textMuted,marginRight:8,textTransform:"uppercase"}}>Before</span>{item.diff.before}
                 </div>
-              )}
+                <div style={{fontSize:12,color:"#16a34a",background:"rgba(22,163,74,.08)",borderRadius:5,padding:"7px 11px",borderLeft:"2px solid #16a34a"}}>
+                  <span style={{fontSize:9.5,fontWeight:700,color:T.textMuted,marginRight:8,textTransform:"uppercase"}}>After</span>{item.diff.after}
+                </div>
+              </div>
             </div>
           )}
 
-          <AssignPicker item={item}/>
+          {/* Assign picker — needs_attention */}
+          {item.type==="needs_attention"&&assignOpen&&(
+            <div style={{marginBottom:16,background:T.bgElevated,borderRadius:8,padding:"12px 14px",border:`1px solid ${T.border}`}}>
+              <div style={{fontSize:11,color:T.textSub,marginBottom:10}}>Assign steward to <b style={{color:T.text}}>{item.asset.name}</b></div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {["priya.nair","arjun.sharma","dev.patel","maya.chen"].map(u=>(
+                  <button key={u} onClick={()=>{setAssignOpen(false);ack(item.id,`${u} assigned as Steward`);}}
+                    style={{padding:"5px 13px",borderRadius:6,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",transition:"all .1s"}}
+                    onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                    onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+                    {u}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* ── Action footer ── */}
-        <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:8,padding:"10px 16px",borderTop:`1px solid ${T.border}`,marginTop:10,background:T.bgElevated}}>
-          <ActionButtons item={item}/>
+        {/* Sticky action footer */}
+        <div style={{borderTop:`1px solid ${T.border}`,padding:"12px 22px",display:"flex",gap:8,flexWrap:"wrap",flexShrink:0,background:T.bgSurface}}>
+          <ActionRow item={item}/>
         </div>
       </div>
     );
   };
 
-  /* ── Kanban card ── */
-  const KanbanCard = ({item,colColor}) => {
+  /* ── Compact list tile (click to open detail, no inline actions) ── */
+  const Tile = ({item}) => {
     const sev  = SEV[item.severity]||SEV.low;
     const meta = TYPE_META[item.type]||TYPE_META.field_updated;
+    const isSel = sel===item.id;
     return (
-      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderTop:`2px solid ${colColor}`,borderRadius:8,padding:"12px 13px",marginBottom:8,transition:"box-shadow .15s,transform .15s",cursor:"default"}}
-        onMouseEnter={e=>{e.currentTarget.style.boxShadow=`0 4px 14px rgba(0,0,0,.09)`;e.currentTarget.style.transform="translateY(-1px)";}}
-        onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.transform="none";}}>
-
-        {/* Type + time */}
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,gap:6}}>
-          <div style={{display:"flex",alignItems:"center",gap:5}}>
-            <div style={{width:18,height:18,borderRadius:4,background:sev.bg,display:"flex",alignItems:"center",justifyContent:"center",color:sev.c,flexShrink:0}}>
-              {meta.icon()}
-            </div>
-            <span style={{fontSize:10,fontWeight:700,color:sev.c,letterSpacing:"0.03em"}}>{meta.shortLabel}</span>
+      <div onClick={()=>{ setSel(isSel?null:item.id); setAssignOpen(false); }}
+        style={{display:"flex",alignItems:"stretch",background:isSel?`${T.accent}08`:T.bgSurface,border:`1px solid ${isSel?T.accent+"44":T.border}`,borderLeft:`3px solid ${sev.c}`,borderRadius:8,cursor:"pointer",transition:"all .12s",overflow:"hidden",minHeight:64}}
+        onMouseEnter={e=>{ if(!isSel){e.currentTarget.style.background=T.bgElevated;}}}
+        onMouseLeave={e=>{ if(!isSel){e.currentTarget.style.background=T.bgSurface;}}}>
+        <div style={{flex:1,padding:"10px 14px",minWidth:0}}>
+          {/* Row 1: type + time */}
+          <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}>
+            <span style={{color:sev.c,display:"flex",alignItems:"center",flexShrink:0}}>{meta.icon()}</span>
+            <span style={{fontSize:10.5,fontWeight:600,color:sev.c}}>{meta.label}</span>
+            <div style={{flex:1}}/>
+            <span style={{fontSize:10.5,color:T.textMuted,flexShrink:0}}>{item.timeAgo}</span>
           </div>
-          <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>{item.timeAgo}</span>
-        </div>
-
-        {/* Title */}
-        <div style={{fontSize:12,fontWeight:600,color:T.text,lineHeight:1.4,marginBottom:6,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{item.title}</div>
-
-        {/* Asset path */}
-        <div style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,marginBottom:10,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.asset.path}</div>
-
-        {/* DQ failures (compact) */}
-        {item.failures&&(
-          <div style={{marginBottom:8,display:"flex",flexDirection:"column",gap:3}}>
-            {item.failures.slice(0,2).map((f,fi)=>(
-              <div key={fi} style={{display:"flex",gap:5,fontSize:10.5,color:T.textSub}}>
-                <span style={{width:4,height:4,borderRadius:"50%",background:T.rose,flexShrink:0,marginTop:4}}/>
-                <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f}</span>
-              </div>
-            ))}
+          {/* Row 2: title */}
+          <div style={{fontSize:12.5,fontWeight:600,color:T.text,lineHeight:1.35,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
+          {/* Row 3: asset path + type badge */}
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{item.asset.path}</span>
+            <TypeBadge type={item.asset.type}/>
           </div>
-        )}
-
-        {/* Assign picker */}
-        <AssignPicker item={item}/>
-
-        {/* Actions */}
-        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:2}}>
-          <ActionButtons item={item} compact/>
         </div>
+        {/* Selected indicator strip */}
+        {isSel&&<div style={{width:3,background:T.accent,flexShrink:0}}/>}
       </div>
     );
   };
 
-  /* ── Kanban columns config ── */
+  /* ── Compact kanban card (click to open detail, no inline actions) ── */
+  const KCard = ({item,colC}) => {
+    const sev  = SEV[item.severity]||SEV.low;
+    const meta = TYPE_META[item.type]||TYPE_META.field_updated;
+    const isSel = sel===item.id;
+    return (
+      <div onClick={()=>{ setSel(isSel?null:item.id); setAssignOpen(false); }}
+        style={{background:isSel?`${T.accent}0d`:T.bgSurface,border:`1px solid ${isSel?T.accent+"55":T.border}`,borderTop:`2px solid ${colC}`,borderRadius:8,padding:"11px 12px",marginBottom:7,cursor:"pointer",transition:"all .12s"}}
+        onMouseEnter={e=>{ if(!isSel){e.currentTarget.style.boxShadow=`0 3px 12px rgba(0,0,0,.09)`;e.currentTarget.style.transform="translateY(-1px)";}}}
+        onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.transform="none";}}>
+        {/* Type + time */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+          <div style={{display:"flex",alignItems:"center",gap:5}}>
+            <div style={{width:16,height:16,borderRadius:4,background:sev.bg,display:"flex",alignItems:"center",justifyContent:"center",color:sev.c,flexShrink:0}}>{meta.icon()}</div>
+            <span style={{fontSize:10,fontWeight:700,color:sev.c}}>{meta.shortLabel}</span>
+          </div>
+          <span style={{fontSize:10,color:T.textMuted}}>{item.timeAgo}</span>
+        </div>
+        {/* Title */}
+        <div style={{fontSize:12,fontWeight:600,color:T.text,lineHeight:1.4,marginBottom:5,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{item.title}</div>
+        {/* Asset path */}
+        <div style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.asset.path}</div>
+        {/* Failure count badge */}
+        {item.failures&&<div style={{marginTop:6,fontSize:10.5,color:T.rose,fontWeight:500}}>{item.failures.length} failed check{item.failures.length!==1?"s":""}</div>}
+      </div>
+    );
+  };
+
+  /* ── Kanban columns ── */
   const KANBAN_COLS = [
-    {id:"assigned",     label:"New Assignments", c:"#8b5cf6", types:["assigned"]},
-    {id:"review",       label:"Pending Review",  c:T.blue,    types:["field_updated"]},
-    {id:"action",       label:"Action Required", c:T.amber,   types:["needs_attention","stewardship_request"]},
-    {id:"alerts",       label:"Alerts",          c:T.rose,    types:["dq_alert"]},
+    {id:"assigned", label:"New Assignments", c:"#8b5cf6", types:["assigned"]},
+    {id:"review",   label:"Pending Review",  c:T.blue,    types:["field_updated"]},
+    {id:"action",   label:"Action Required", c:T.amber,   types:["needs_attention","stewardship_request"]},
+    {id:"alerts",   label:"Alerts",          c:T.rose,    types:["dq_alert"]},
   ];
+
+  /* ── Shared close/nav header for detail panel ── */
+  const DetailHeader = ({title}) => (
+    <div style={{display:"flex",alignItems:"center",padding:"10px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0,gap:6,background:T.bgSurface}}>
+      {title
+        ? <span style={{fontSize:11.5,fontWeight:600,color:T.text,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{title}</span>
+        : <span style={{fontSize:11,color:T.textMuted,flex:1}}>{selIdx>=0?`${selIdx+1} of ${shown.length}`:""}</span>
+      }
+      {!title&&<>
+        <button onClick={navPrev} disabled={selIdx<=0}
+          style={{width:26,height:26,borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:selIdx<=0?"default":"pointer",opacity:selIdx<=0?0.3:1,color:T.textSub,transition:"all .1s"}}
+          onMouseEnter={e=>{if(selIdx>0)e.currentTarget.style.borderColor=T.accent;}}
+          onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+          <svg width="8" height="10" viewBox="0 0 8 10" fill="none"><path d="M5 1.5L2.5 5 5 8.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+        <button onClick={navNext} disabled={selIdx>=shown.length-1}
+          style={{width:26,height:26,borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:selIdx>=shown.length-1?"default":"pointer",opacity:selIdx>=shown.length-1?0.3:1,color:T.textSub,transition:"all .1s"}}
+          onMouseEnter={e=>{if(selIdx<shown.length-1)e.currentTarget.style.borderColor=T.accent;}}
+          onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+          <svg width="8" height="10" viewBox="0 0 8 10" fill="none"><path d="M3 1.5L5.5 5 3 8.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+      </>}
+      <button onClick={()=>{setSel(null);setAssignOpen(false);}}
+        style={{width:26,height:26,borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:T.textMuted,marginLeft:title?0:2,transition:"all .1s",flexShrink:0}}
+        onMouseEnter={e=>{e.currentTarget.style.borderColor=T.rose;e.currentTarget.style.color=T.rose;}}
+        onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
+        <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M1.5 1.5l6 6M7.5 1.5l-6 6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+      </button>
+    </div>
+  );
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+      {/* Topbar — breadcrumb + view toggle only, no action buttons */}
       <Topbar breadcrumb={[{label:"Inbox"}]} actions={
-        <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          {/* View toggle */}
-          <div style={{display:"flex",gap:1,background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,padding:2}}>
-            {[["list",<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 4h10M2 7h10M2 10h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>],
-              ["kanban",<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="3.5" height="10" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="5.25" y="2" width="3.5" height="7" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="9.5" y="2" width="3.5" height="8.5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>]
-            ].map(([mode,icon])=>(
-              <button key={mode} onClick={()=>setViewMode(mode)}
-                style={{width:28,height:26,borderRadius:5,background:viewMode===mode?T.bgSurface:"transparent",border:viewMode===mode?`1px solid ${T.border}`:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:viewMode===mode?T.text:T.textMuted,boxShadow:viewMode===mode?"0 1px 3px rgba(0,0,0,.08)":"none",transition:"all .12s"}}>
-                {icon}
-              </button>
-            ))}
-          </div>
-          {unread.length>0&&(
-            <button onClick={markAll}
-              style={{padding:"6px 14px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:500,cursor:"pointer",transition:"all .12s"}}
-              onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
-              onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
-              Mark all read
+        <div style={{display:"flex",gap:1,background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,padding:2}}>
+          {[["list",<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 4h10M2 7h10M2 10h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>],
+            ["kanban",<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="3.5" height="10" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="5.25" y="2" width="3.5" height="7" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="9.5" y="2" width="3.5" height="8.5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>]
+          ].map(([mode,icon])=>(
+            <button key={mode} onClick={()=>{setViewMode(mode);setSel(null);setAssignOpen(false);}}
+              style={{width:28,height:26,borderRadius:5,background:viewMode===mode?T.bgSurface:"transparent",border:viewMode===mode?`1px solid ${T.border}`:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:viewMode===mode?T.text:T.textMuted,boxShadow:viewMode===mode?"0 1px 3px rgba(0,0,0,.08)":"none",transition:"all .12s"}}>
+              {icon}
             </button>
-          )}
+          ))}
         </div>
       }/>
 
-      {/* Tab bar */}
-      <div style={{padding:"0 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:0,flexShrink:0,background:T.bgSurface}}>
-        {[["all","All"],["tasks","Tasks"],["alerts","Alerts"],["assigned","Assigned"]].map(([k,l])=>(
-          <button key={k} onClick={()=>setFilter(k)}
-            style={{padding:"11px 16px",background:"transparent",border:"none",borderBottom:`2px solid ${filter===k?T.accent:"transparent"}`,color:filter===k?T.text:T.textMuted,fontSize:12.5,fontWeight:filter===k?600:400,cursor:"pointer",display:"flex",alignItems:"center",gap:6,transition:"all .12s"}}>
-            {l}
-            {counts[k]>0&&<span style={{fontSize:10,fontWeight:700,background:k==="alerts"?`${T.rose}20`:T.bgHover,color:k==="alerts"?T.rose:T.textMuted,borderRadius:10,padding:"1px 6px"}}>{counts[k]}</span>}
+      {/* Tab bar — "Mark all read" is a small text link on the right */}
+      <div style={{padding:"0 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",flexShrink:0,background:T.bgSurface}}>
+        <div style={{display:"flex",alignItems:"center"}}>
+          {[["all","All"],["tasks","Tasks"],["alerts","Alerts"],["assigned","Assigned"]].map(([k,l])=>(
+            <button key={k} onClick={()=>setFilter(k)}
+              style={{padding:"11px 16px",background:"transparent",border:"none",borderBottom:`2px solid ${filter===k?T.accent:"transparent"}`,color:filter===k?T.text:T.textMuted,fontSize:12.5,fontWeight:filter===k?600:400,cursor:"pointer",display:"flex",alignItems:"center",gap:6,transition:"all .12s"}}>
+              {l}
+              {counts[k]>0&&<span style={{fontSize:10,fontWeight:700,background:k==="alerts"?`${T.rose}20`:T.bgHover,color:k==="alerts"?T.rose:T.textMuted,borderRadius:10,padding:"1px 6px"}}>{counts[k]}</span>}
+            </button>
+          ))}
+        </div>
+        <div style={{flex:1}}/>
+        {unread.length>0&&(
+          <button onClick={markAll}
+            style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:11.5,textDecoration:"underline",textUnderlineOffset:2,padding:0,transition:"color .12s"}}
+            onMouseEnter={e=>e.currentTarget.style.color=T.text}
+            onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
+            Mark all read
           </button>
-        ))}
+        )}
       </div>
 
       {/* ── LIST VIEW ── */}
       {viewMode==="list"&&(
-        <div style={{flex:1,overflowY:"auto",padding:"24px 28px"}}>
-          {shown.length===0 ? (
-            <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:280,gap:12}}>
-              <div style={{width:48,height:48,borderRadius:12,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted}}>{Ic.inbox(22)}</div>
-              <div style={{fontSize:14,fontWeight:600,color:T.textSub}}>You're all caught up</div>
-              <div style={{fontSize:12,color:T.textMuted}}>No pending tasks or alerts</div>
-            </div>
-          ) : (
-            <div style={{display:"flex",flexDirection:"column",gap:12,maxWidth:820}}>
-              {shown.map(item=><ListTile key={item.id} item={item}/>)}
-            </div>
-          )}
-          {read.length>0&&(
-            <div style={{maxWidth:820,marginTop:28}}>
-              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.09em",marginBottom:10}}>Read</div>
-              {read.map(item=>(
-                <div key={item.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:5,opacity:0.5}}>
-                  <span style={{width:5,height:5,borderRadius:"50%",background:T.textMuted,flexShrink:0}}/>
-                  <span style={{fontSize:12,color:T.textSub,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</span>
-                  <span style={{fontSize:11,color:T.textMuted,flexShrink:0}}>{item.timeAgo}</span>
-                </div>
-              ))}
+        <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+          {/* Tile list */}
+          <div style={{width:sel?370:"100%",maxWidth:sel?370:860,flexShrink:0,overflowY:"auto",padding:sel?"14px 12px 20px":"22px 28px 20px",borderRight:sel?`1px solid ${T.border}`:"none",transition:"width .18s,max-width .18s"}}>
+            {shown.length===0?(
+              <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:220,gap:12}}>
+                <div style={{width:44,height:44,borderRadius:12,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted}}>{Ic.inbox(20)}</div>
+                <div style={{fontSize:13,fontWeight:600,color:T.textSub}}>You're all caught up</div>
+                <div style={{fontSize:12,color:T.textMuted}}>No pending tasks or alerts</div>
+              </div>
+            ):(
+              <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                {shown.map(item=><Tile key={item.id} item={item}/>)}
+              </div>
+            )}
+            {read.length>0&&(
+              <div style={{marginTop:22}}>
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.09em",marginBottom:8}}>Read</div>
+                {read.map(item=>(
+                  <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:7,marginBottom:4,opacity:0.45}}>
+                    <span style={{width:4,height:4,borderRadius:"50%",background:T.textMuted,flexShrink:0}}/>
+                    <span style={{fontSize:11.5,color:T.textSub,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</span>
+                    <span style={{fontSize:10.5,color:T.textMuted,flexShrink:0}}>{item.timeAgo}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Detail panel — slides in on tile click */}
+          {sel&&selItem&&(
+            <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bgSurface,minWidth:0}}>
+              <DetailHeader/>
+              <DetailContent item={selItem}/>
             </div>
           )}
         </div>
@@ -15505,29 +15558,38 @@ const InboxView = ({onToast}) => {
 
       {/* ── KANBAN VIEW ── */}
       {viewMode==="kanban"&&(
-        <div style={{flex:1,overflowX:"auto",overflowY:"hidden",padding:"20px 24px",display:"flex",gap:14,alignItems:"flex-start"}}>
-          {KANBAN_COLS.map(col=>{
-            const colItems = unread.filter(i=>col.types.includes(i.type));
-            return (
-              <div key={col.id} style={{width:270,flexShrink:0,display:"flex",flexDirection:"column",height:"100%"}}>
-                {/* Column header */}
-                <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderTop:`3px solid ${col.c}`,borderRadius:"8px 8px 0 0",marginBottom:0,flexShrink:0}}>
-                  <span style={{fontSize:12,fontWeight:700,color:T.text,flex:1}}>{col.label}</span>
-                  <span style={{fontSize:10,fontWeight:700,background:colItems.length>0?`${col.c}18`:T.bgElevated,color:colItems.length>0?col.c:T.textMuted,borderRadius:10,padding:"1px 7px",border:`1px solid ${colItems.length>0?col.c+"33":T.border}`}}>{colItems.length}</span>
+        <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+          {/* Board */}
+          <div style={{flex:1,overflowX:"auto",overflowY:"hidden",padding:"18px 20px",display:"flex",gap:12,alignItems:"flex-start"}}>
+            {KANBAN_COLS.map(col=>{
+              const colItems = unread.filter(i=>col.types.includes(i.type));
+              return (
+                <div key={col.id} style={{width:248,flexShrink:0,display:"flex",flexDirection:"column",height:"100%"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:7,padding:"9px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderTop:`3px solid ${col.c}`,borderRadius:"8px 8px 0 0",flexShrink:0}}>
+                    <span style={{fontSize:12,fontWeight:700,color:T.text,flex:1}}>{col.label}</span>
+                    <span style={{fontSize:10,fontWeight:700,background:colItems.length>0?`${col.c}18`:T.bgElevated,color:colItems.length>0?col.c:T.textMuted,borderRadius:10,padding:"1px 7px",border:`1px solid ${colItems.length>0?col.c+"33":T.border}`}}>{colItems.length}</span>
+                  </div>
+                  <div style={{flex:1,overflowY:"auto",background:T.bgElevated,border:`1px solid ${T.border}`,borderTop:"none",borderRadius:"0 0 8px 8px",padding:"9px 8px 4px"}}>
+                    {colItems.length===0?(
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:80,opacity:0.4}}>
+                        <span style={{fontSize:11,color:T.textMuted}}>No items</span>
+                      </div>
+                    ):(
+                      colItems.map(item=><KCard key={item.id} item={item} colC={col.c}/>)
+                    )}
+                  </div>
                 </div>
-                {/* Cards area */}
-                <div style={{flex:1,overflowY:"auto",background:T.bgElevated,border:`1px solid ${T.border}`,borderTop:"none",borderRadius:"0 0 8px 8px",padding:"10px 10px 4px"}}>
-                  {colItems.length===0 ? (
-                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:100,gap:6,opacity:0.5}}>
-                      <div style={{fontSize:11,color:T.textMuted}}>No items</div>
-                    </div>
-                  ) : (
-                    colItems.map(item=><KanbanCard key={item.id} item={item} colColor={col.c}/>)
-                  )}
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+
+          {/* Kanban detail panel — 380px, slides in from right */}
+          {sel&&selItem&&(
+            <div style={{width:380,flexShrink:0,display:"flex",flexDirection:"column",borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflow:"hidden"}}>
+              <DetailHeader title={selItem.title}/>
+              <DetailContent item={selItem}/>
+            </div>
+          )}
         </div>
       )}
     </div>
