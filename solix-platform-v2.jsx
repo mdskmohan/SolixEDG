@@ -15223,17 +15223,19 @@ const InboxView = ({onToast}) => {
   const read   = items.filter(i=>!!i.readAt);
   const counts = {
     all:      unread.length,
-    tasks:    unread.filter(i=>["field_updated","stewardship_request","needs_attention"].includes(i.type)).length,
-    alerts:   unread.filter(i=>i.type==="dq_alert").length,
-    assigned: unread.filter(i=>i.type==="assigned").length,
+    catalog:  unread.filter(i=>i.section==="catalog").length,
+    quality:  unread.filter(i=>i.section==="quality").length,
+    glossary: unread.filter(i=>i.section==="glossary").length,
+    tags:     unread.filter(i=>i.section==="tags").length,
     done:     read.length,
   };
   const shown = unread.filter(i=>{
     if(filter==="all")      return true;
-    if(filter==="tasks")    return ["field_updated","stewardship_request","needs_attention"].includes(i.type);
-    if(filter==="alerts")   return i.type==="dq_alert";
-    if(filter==="assigned") return i.type==="assigned";
-    if(filter==="done")     return false; // done tab handles its own list
+    if(filter==="catalog")  return i.section==="catalog";
+    if(filter==="quality")  return i.section==="quality";
+    if(filter==="glossary") return i.section==="glossary";
+    if(filter==="tags")     return i.section==="tags";
+    if(filter==="done")     return false;
     return true;
   });
   const isDoneFilter = filter==="done";
@@ -15496,22 +15498,28 @@ const InboxView = ({onToast}) => {
       {/* Topbar — breadcrumb only */}
       <Topbar breadcrumb={[{label:"Inbox"}]}/>
 
-      {/* Tab bar — filters left | view toggle + mark all read right */}
-      <div style={{padding:"0 20px 0 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",flexShrink:0,background:T.bgSurface}}>
-        <div style={{display:"flex",alignItems:"center"}}>
-          {[["all","All"],["tasks","Tasks"],["alerts","Alerts"],["assigned","Assigned"],["done","Done"]].map(([k,l])=>(
-            <button key={k} onClick={()=>{ setFilter(k); setSel(null); setAssignOpen(false); }}
-              style={{padding:"11px 16px",background:"transparent",border:"none",borderBottom:`2px solid ${filter===k?T.accent:"transparent"}`,color:filter===k?T.text:T.textMuted,fontSize:12.5,fontWeight:filter===k?600:400,cursor:"pointer",display:"flex",alignItems:"center",gap:6,transition:"all .12s"}}>
-              {l}
-              {counts[k]>0&&<span style={{fontSize:10,fontWeight:700,
-                background: k==="alerts"?`${T.rose}20` : k==="done"?"rgba(22,163,74,.1)":T.bgHover,
-                color:      k==="alerts"?T.rose        : k==="done"?"#16a34a"           :T.textMuted,
-                borderRadius:10,padding:"1px 6px"}}>{counts[k]}</span>}
-            </button>
-          ))}
-        </div>
+      {/* Bar: section filter tabs (list only) | view toggle + mark all read */}
+      <div style={{padding:"0 20px 0 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",flexShrink:0,background:T.bgSurface,minHeight:44}}>
+
+        {/* Section filter tabs — list view only */}
+        {viewMode==="list"&&(
+          <div style={{display:"flex",alignItems:"center"}}>
+            {[["all","All"],["catalog","Catalog"],["quality","Data Quality"],["glossary","Glossary"],["tags","Tags"],["done","Done"]].map(([k,l])=>(
+              <button key={k} onClick={()=>{ setFilter(k); setSel(null); setAssignOpen(false); }}
+                style={{padding:"11px 14px",background:"transparent",border:"none",borderBottom:`2px solid ${filter===k?T.accent:"transparent"}`,color:filter===k?T.text:T.textMuted,fontSize:12,fontWeight:filter===k?600:400,cursor:"pointer",display:"flex",alignItems:"center",gap:5,transition:"all .12s",whiteSpace:"nowrap"}}>
+                {l}
+                {counts[k]>0&&<span style={{fontSize:10,fontWeight:700,
+                  background: k==="done"?"rgba(22,163,74,.1)":T.bgHover,
+                  color:      k==="done"?"#16a34a":T.textMuted,
+                  borderRadius:10,padding:"1px 6px"}}>{counts[k]}</span>}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div style={{flex:1}}/>
-        {/* View toggle */}
+
+        {/* View toggle — always visible */}
         <div style={{display:"flex",gap:1,background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,padding:2,marginRight:16}}>
           {[["list",<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 4h10M2 7h10M2 10h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>],
             ["kanban",<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="3.5" height="10" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="5.25" y="2" width="3.5" height="7" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="9.5" y="2" width="3.5" height="8.5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>]
@@ -15522,8 +15530,9 @@ const InboxView = ({onToast}) => {
             </button>
           ))}
         </div>
-        {/* Mark all read */}
-        {unread.length>0&&(
+
+        {/* Mark all read — list view only (kanban has no "read" concept in columns) */}
+        {viewMode==="list"&&unread.length>0&&(
           <button onClick={markAll}
             style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:11.5,textDecoration:"underline",textUnderlineOffset:2,padding:0,transition:"color .12s"}}
             onMouseEnter={e=>e.currentTarget.style.color=T.text}
