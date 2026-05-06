@@ -15364,25 +15364,37 @@ const InboxView = ({onToast}) => {
   };
 
   /* ── Compact list tile (click to open detail, no inline actions) ── */
-  const Tile = ({item}) => {
+  const Tile = ({item, done=false}) => {
     const sev  = SEV[item.severity]||SEV.low;
     const meta = TYPE_META[item.type]||TYPE_META.field_updated;
     const isSel = sel===item.id;
+    /* done = read/completed — same shape, visually quieted */
+    const iconColor  = done ? T.textMuted : sev.c;
+    const labelColor = done ? T.textMuted : sev.c;
+    const titleColor = done ? T.textMuted : T.text;
+    const titleWeight= done ? 400 : 600;
+    const borderLeft = done ? `3px solid ${T.textMuted}33` : `3px solid ${sev.c}`;
     return (
       <div onClick={()=>{ setSel(isSel?null:item.id); setAssignOpen(false); }}
-        style={{display:"flex",alignItems:"stretch",background:isSel?`${T.accent}08`:T.bgSurface,border:`1px solid ${isSel?T.accent+"44":T.border}`,borderLeft:`3px solid ${sev.c}`,borderRadius:8,cursor:"pointer",transition:"all .12s",overflow:"hidden",minHeight:64}}
-        onMouseEnter={e=>{ if(!isSel){e.currentTarget.style.background=T.bgElevated;}}}
-        onMouseLeave={e=>{ if(!isSel){e.currentTarget.style.background=T.bgSurface;}}}>
+        style={{display:"flex",alignItems:"stretch",background:isSel?`${T.accent}08`:T.bgSurface,border:`1px solid ${isSel?T.accent+"44":T.border}`,borderLeft,borderRadius:8,cursor:"pointer",transition:"all .12s",overflow:"hidden",minHeight:64,opacity:done?0.58:1}}
+        onMouseEnter={e=>{ if(!isSel){e.currentTarget.style.background=T.bgElevated; e.currentTarget.style.opacity=done?"0.8":"1";}}}
+        onMouseLeave={e=>{ if(!isSel){e.currentTarget.style.background=T.bgSurface; e.currentTarget.style.opacity=done?"0.58":"1";}}}>
         <div style={{flex:1,padding:"10px 14px",minWidth:0}}>
-          {/* Row 1: type + time */}
+          {/* Row 1: type label + done chip + time */}
           <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}>
-            <span style={{color:sev.c,display:"flex",alignItems:"center",flexShrink:0}}>{meta.icon()}</span>
-            <span style={{fontSize:10.5,fontWeight:600,color:sev.c}}>{meta.label}</span>
+            <span style={{color:iconColor,display:"flex",alignItems:"center",flexShrink:0}}>{meta.icon()}</span>
+            <span style={{fontSize:10.5,fontWeight:600,color:labelColor}}>{meta.label}</span>
+            {done&&(
+              <span style={{display:"flex",alignItems:"center",gap:3,fontSize:9.5,fontWeight:600,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:4,padding:"1px 5px"}}>
+                <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M1.5 5.5L3.8 7.8L8.5 2.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                Done
+              </span>
+            )}
             <div style={{flex:1}}/>
             <span style={{fontSize:10.5,color:T.textMuted,flexShrink:0}}>{item.timeAgo}</span>
           </div>
           {/* Row 2: title */}
-          <div style={{fontSize:12.5,fontWeight:600,color:T.text,lineHeight:1.35,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
+          <div style={{fontSize:12.5,fontWeight:titleWeight,color:titleColor,lineHeight:1.35,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
           {/* Row 3: asset path + type badge */}
           <div style={{display:"flex",alignItems:"center",gap:6}}>
             <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{item.asset.path}</span>
@@ -15536,15 +15548,16 @@ const InboxView = ({onToast}) => {
                 </div>
               )}
               {read.length>0&&(
-                <div style={{marginTop:22,maxWidth:sel?9999:820}}>
-                  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.09em",marginBottom:8}}>Read</div>
-                  {read.map(item=>(
-                    <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:7,marginBottom:4,opacity:0.45}}>
-                      <span style={{width:4,height:4,borderRadius:"50%",background:T.textMuted,flexShrink:0}}/>
-                      <span style={{fontSize:11.5,color:T.textSub,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</span>
-                      <span style={{fontSize:10.5,color:T.textMuted,flexShrink:0}}>{item.timeAgo}</span>
-                    </div>
-                  ))}
+                <div style={{marginTop:20,maxWidth:sel?9999:820}}>
+                  {/* divider */}
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                    <div style={{flex:1,height:1,background:T.border}}/>
+                    <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.09em",whiteSpace:"nowrap"}}>Completed · {read.length}</span>
+                    <div style={{flex:1,height:1,background:T.border}}/>
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                    {read.map(item=><Tile key={item.id} item={item} done={true}/>)}
+                  </div>
                 </div>
               )}
             </div>
