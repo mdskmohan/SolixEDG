@@ -15282,32 +15282,15 @@ const InboxView = ({onToast}) => {
   /* ── Shared detail content (list + kanban) ── */
   const DetailContent = ({item}) => {
     if(!item) return null;
-    const sev    = SEV[item.severity]||SEV.low;
-    const meta   = TYPE_META[item.type]||TYPE_META.field_updated;
     const person = item.changedBy||item.assignedBy||item.requestedBy||null;
     const initials = person ? person.split(".").map(s=>s[0]?.toUpperCase()||"").join("").slice(0,2) : "?";
     const personRole = item.type==="field_updated"?"Made a field update":item.type==="assigned"?"Assigned this to you":item.type==="stewardship_request"?"Requested steward access":item.type==="needs_attention"?"Flagged for attention":"Last activity";
     return (
       <div style={{display:"flex",flexDirection:"column",height:"100%",overflow:"hidden"}}>
         {/* Scrollable body */}
-        <div style={{flex:1,overflowY:"auto",padding:"22px 22px 16px"}}>
-          {/* Type header */}
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-            <div style={{width:36,height:36,borderRadius:9,background:sev.bg,border:`1px solid ${sev.c}22`,display:"flex",alignItems:"center",justifyContent:"center",color:sev.c,flexShrink:0}}>
-              {meta.icon(16)}
-            </div>
-            <div>
-              <div style={{fontSize:11,fontWeight:700,color:sev.c,letterSpacing:"0.04em"}}>{meta.label}</div>
-              <div style={{fontSize:10,color:T.textMuted,marginTop:2}}>{sev.label} severity</div>
-            </div>
-          </div>
-
-          {/* Title */}
-          <div style={{fontSize:15,fontWeight:700,color:T.text,lineHeight:1.4,marginBottom:13}}>{item.title}</div>
-
-          {/* Asset + time row */}
-          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:16}}>
-            <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted,background:T.bgElevated,padding:"3px 9px",borderRadius:5,border:`1px solid ${T.border}`}}>{item.asset.path}</span>
+        <div style={{flex:1,overflowY:"auto",padding:"16px 18px"}}>
+          {/* Asset type + time row */}
+          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:14}}>
             <TypeBadge type={item.asset.type}/>
             <span style={{fontSize:11,color:T.textMuted}}>{item.timeAgo}</span>
           </div>
@@ -15448,54 +15431,58 @@ const InboxView = ({onToast}) => {
     {id:"alerts",   label:"Alerts",          c:T.rose,    types:["dq_alert"]},
   ];
 
-  /* ── Shared close/nav header for detail panel ── */
-  const DetailHeader = ({title}) => (
-    <div style={{display:"flex",alignItems:"center",padding:"10px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0,gap:6,background:T.bgSurface}}>
-      {title
-        ? <span style={{fontSize:11.5,fontWeight:600,color:T.text,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{title}</span>
-        : <span style={{fontSize:11,color:T.textMuted,flex:1}}>{selIdx>=0?`${selIdx+1} of ${shown.length}`:""}</span>
-      }
-      {!title&&<>
-        <button onClick={navPrev} disabled={selIdx<=0}
-          style={{width:26,height:26,borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:selIdx<=0?"default":"pointer",opacity:selIdx<=0?0.3:1,color:T.textSub,transition:"all .1s"}}
-          onMouseEnter={e=>{if(selIdx>0)e.currentTarget.style.borderColor=T.accent;}}
-          onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-          <svg width="8" height="10" viewBox="0 0 8 10" fill="none"><path d="M5 1.5L2.5 5 5 8.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </button>
-        <button onClick={navNext} disabled={selIdx>=shown.length-1}
-          style={{width:26,height:26,borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:selIdx>=shown.length-1?"default":"pointer",opacity:selIdx>=shown.length-1?0.3:1,color:T.textSub,transition:"all .1s"}}
-          onMouseEnter={e=>{if(selIdx<shown.length-1)e.currentTarget.style.borderColor=T.accent;}}
-          onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-          <svg width="8" height="10" viewBox="0 0 8 10" fill="none"><path d="M3 1.5L5.5 5 3 8.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </button>
-      </>}
-      <button onClick={()=>{setSel(null);setAssignOpen(false);}}
-        style={{width:26,height:26,borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:T.textMuted,marginLeft:title?0:2,transition:"all .1s",flexShrink:0}}
-        onMouseEnter={e=>{e.currentTarget.style.borderColor=T.rose;e.currentTarget.style.color=T.rose;}}
-        onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
-        <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M1.5 1.5l6 6M7.5 1.5l-6 6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-      </button>
-    </div>
-  );
+  /* ── Detail panel header — matches ServicePanel pattern ── */
+  const DetailHeader = () => {
+    if(!selItem) return null;
+    const sev  = SEV[selItem.severity]||SEV.low;
+    const meta = TYPE_META[selItem.type]||TYPE_META.field_updated;
+    return (
+      <div style={{padding:"16px 18px 14px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+          {/* Left: icon + title + subtitle */}
+          <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+            <div style={{width:36,height:36,borderRadius:9,background:sev.bg,border:`1px solid ${sev.c}22`,display:"flex",alignItems:"center",justifyContent:"center",color:sev.c,flexShrink:0}}>
+              {meta.icon(15)}
+            </div>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:700,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{selItem.title}</div>
+              <div style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{selItem.asset.path} · {meta.label}</div>
+            </div>
+          </div>
+          {/* Right: severity badge + prev/next + close */}
+          <div style={{display:"flex",gap:5,alignItems:"center",flexShrink:0}}>
+            <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:sev.bg,color:sev.c,border:`1px solid ${sev.c}30`,letterSpacing:"0.05em"}}>{sev.label}</span>
+            <button onClick={navPrev} disabled={selIdx<=0}
+              style={{width:26,height:26,borderRadius:6,background:T.bgHover,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:selIdx<=0?"default":"pointer",opacity:selIdx<=0?0.35:1,color:T.textSub,transition:"all .1s"}}
+              onMouseEnter={e=>{if(selIdx>0)e.currentTarget.style.borderColor=T.accent;}}
+              onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+              <svg width="7" height="10" viewBox="0 0 7 10" fill="none"><path d="M5 1.5L2 5l3 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            <button onClick={navNext} disabled={selIdx>=shown.length-1}
+              style={{width:26,height:26,borderRadius:6,background:T.bgHover,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:selIdx>=shown.length-1?"default":"pointer",opacity:selIdx>=shown.length-1?0.35:1,color:T.textSub,transition:"all .1s"}}
+              onMouseEnter={e=>{if(selIdx<shown.length-1)e.currentTarget.style.borderColor=T.accent;}}
+              onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+              <svg width="7" height="10" viewBox="0 0 7 10" fill="none"><path d="M2 1.5L5 5 2 8.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
+            <button onClick={()=>{setSel(null);setAssignOpen(false);}}
+              style={{width:26,height:26,borderRadius:6,background:T.bgHover,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:T.textMuted,transition:"all .1s"}}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor=T.rose+"66";e.currentTarget.style.color=T.rose;}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 2l8 8M10 2L2 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      {/* Topbar — breadcrumb + view toggle only, no action buttons */}
-      <Topbar breadcrumb={[{label:"Inbox"}]} actions={
-        <div style={{display:"flex",gap:1,background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,padding:2}}>
-          {[["list",<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 4h10M2 7h10M2 10h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>],
-            ["kanban",<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="3.5" height="10" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="5.25" y="2" width="3.5" height="7" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="9.5" y="2" width="3.5" height="8.5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>]
-          ].map(([mode,icon])=>(
-            <button key={mode} onClick={()=>{setViewMode(mode);setSel(null);setAssignOpen(false);}}
-              style={{width:28,height:26,borderRadius:5,background:viewMode===mode?T.bgSurface:"transparent",border:viewMode===mode?`1px solid ${T.border}`:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:viewMode===mode?T.text:T.textMuted,boxShadow:viewMode===mode?"0 1px 3px rgba(0,0,0,.08)":"none",transition:"all .12s"}}>
-              {icon}
-            </button>
-          ))}
-        </div>
-      }/>
+      {/* Topbar — breadcrumb only */}
+      <Topbar breadcrumb={[{label:"Inbox"}]}/>
 
-      {/* Tab bar — "Mark all read" is a small text link on the right */}
-      <div style={{padding:"0 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",flexShrink:0,background:T.bgSurface}}>
+      {/* Tab bar — filters left | view toggle + mark all read right */}
+      <div style={{padding:"0 20px 0 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",flexShrink:0,background:T.bgSurface}}>
         <div style={{display:"flex",alignItems:"center"}}>
           {[["all","All"],["tasks","Tasks"],["alerts","Alerts"],["assigned","Assigned"]].map(([k,l])=>(
             <button key={k} onClick={()=>setFilter(k)}
@@ -15506,6 +15493,18 @@ const InboxView = ({onToast}) => {
           ))}
         </div>
         <div style={{flex:1}}/>
+        {/* View toggle */}
+        <div style={{display:"flex",gap:1,background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,padding:2,marginRight:16}}>
+          {[["list",<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 4h10M2 7h10M2 10h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>],
+            ["kanban",<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="3.5" height="10" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="5.25" y="2" width="3.5" height="7" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="9.5" y="2" width="3.5" height="8.5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>]
+          ].map(([mode,icon])=>(
+            <button key={mode} onClick={()=>{setViewMode(mode);setSel(null);setAssignOpen(false);}}
+              style={{width:28,height:26,borderRadius:5,background:viewMode===mode?T.bgSurface:"transparent",border:viewMode===mode?`1px solid ${T.border}`:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:viewMode===mode?T.text:T.textMuted,boxShadow:viewMode===mode?"0 1px 3px rgba(0,0,0,.08)":"none",transition:"all .12s"}}>
+              {icon}
+            </button>
+          ))}
+        </div>
+        {/* Mark all read */}
         {unread.length>0&&(
           <button onClick={markAll}
             style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:11.5,textDecoration:"underline",textUnderlineOffset:2,padding:0,transition:"color .12s"}}
@@ -15516,82 +15515,77 @@ const InboxView = ({onToast}) => {
         )}
       </div>
 
-      {/* ── LIST VIEW ── */}
-      {viewMode==="list"&&(
-        <div style={{flex:1,display:"flex",overflow:"hidden"}}>
-          {/* Tile list */}
-          <div style={{width:sel?370:"100%",maxWidth:sel?370:860,flexShrink:0,overflowY:"auto",padding:sel?"14px 12px 20px":"22px 28px 20px",borderRight:sel?`1px solid ${T.border}`:"none",transition:"width .18s,max-width .18s"}}>
-            {shown.length===0?(
-              <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:220,gap:12}}>
-                <div style={{width:44,height:44,borderRadius:12,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted}}>{Ic.inbox(20)}</div>
-                <div style={{fontSize:13,fontWeight:600,color:T.textSub}}>You're all caught up</div>
-                <div style={{fontSize:12,color:T.textMuted}}>No pending tasks or alerts</div>
-              </div>
-            ):(
-              <div style={{display:"flex",flexDirection:"column",gap:5}}>
-                {shown.map(item=><Tile key={item.id} item={item}/>)}
-              </div>
-            )}
-            {read.length>0&&(
-              <div style={{marginTop:22}}>
-                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.09em",marginBottom:8}}>Read</div>
-                {read.map(item=>(
-                  <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:7,marginBottom:4,opacity:0.45}}>
-                    <span style={{width:4,height:4,borderRadius:"50%",background:T.textMuted,flexShrink:0}}/>
-                    <span style={{fontSize:11.5,color:T.textSub,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</span>
-                    <span style={{fontSize:10.5,color:T.textMuted,flexShrink:0}}>{item.timeAgo}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+      {/* ── Main content + unified detail panel ── */}
+      <div style={{flex:1,display:"flex",overflow:"hidden"}}>
 
-          {/* Detail panel — slides in on tile click */}
-          {sel&&selItem&&(
-            <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.bgSurface,minWidth:0}}>
-              <DetailHeader/>
-              <DetailContent item={selItem}/>
-            </div>
-          )}
-        </div>
-      )}
+        {/* Left: list or kanban (both fill flex:1) */}
+        <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
 
-      {/* ── KANBAN VIEW ── */}
-      {viewMode==="kanban"&&(
-        <div style={{flex:1,display:"flex",overflow:"hidden"}}>
-          {/* Board */}
-          <div style={{flex:1,overflowX:"auto",overflowY:"hidden",padding:"18px 20px",display:"flex",gap:12,alignItems:"flex-start"}}>
-            {KANBAN_COLS.map(col=>{
-              const colItems = unread.filter(i=>col.types.includes(i.type));
-              return (
-                <div key={col.id} style={{width:248,flexShrink:0,display:"flex",flexDirection:"column",height:"100%"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:7,padding:"9px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderTop:`3px solid ${col.c}`,borderRadius:"8px 8px 0 0",flexShrink:0}}>
-                    <span style={{fontSize:12,fontWeight:700,color:T.text,flex:1}}>{col.label}</span>
-                    <span style={{fontSize:10,fontWeight:700,background:colItems.length>0?`${col.c}18`:T.bgElevated,color:colItems.length>0?col.c:T.textMuted,borderRadius:10,padding:"1px 7px",border:`1px solid ${colItems.length>0?col.c+"33":T.border}`}}>{colItems.length}</span>
-                  </div>
-                  <div style={{flex:1,overflowY:"auto",background:T.bgElevated,border:`1px solid ${T.border}`,borderTop:"none",borderRadius:"0 0 8px 8px",padding:"9px 8px 4px"}}>
-                    {colItems.length===0?(
-                      <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:80,opacity:0.4}}>
-                        <span style={{fontSize:11,color:T.textMuted}}>No items</span>
-                      </div>
-                    ):(
-                      colItems.map(item=><KCard key={item.id} item={item} colC={col.c}/>)
-                    )}
-                  </div>
+          {/* ── LIST VIEW ── */}
+          {viewMode==="list"&&(
+            <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
+              {shown.length===0?(
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:220,gap:12}}>
+                  <div style={{width:44,height:44,borderRadius:12,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted}}>{Ic.inbox(20)}</div>
+                  <div style={{fontSize:13,fontWeight:600,color:T.textSub}}>You're all caught up</div>
+                  <div style={{fontSize:12,color:T.textMuted}}>No pending tasks or alerts</div>
                 </div>
-              );
-            })}
-          </div>
+              ):(
+                <div style={{display:"flex",flexDirection:"column",gap:5,maxWidth:sel?9999:820}}>
+                  {shown.map(item=><Tile key={item.id} item={item}/>)}
+                </div>
+              )}
+              {read.length>0&&(
+                <div style={{marginTop:22,maxWidth:sel?9999:820}}>
+                  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.09em",marginBottom:8}}>Read</div>
+                  {read.map(item=>(
+                    <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:7,marginBottom:4,opacity:0.45}}>
+                      <span style={{width:4,height:4,borderRadius:"50%",background:T.textMuted,flexShrink:0}}/>
+                      <span style={{fontSize:11.5,color:T.textSub,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</span>
+                      <span style={{fontSize:10.5,color:T.textMuted,flexShrink:0}}>{item.timeAgo}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
-          {/* Kanban detail panel — 380px, slides in from right */}
-          {sel&&selItem&&(
-            <div style={{width:380,flexShrink:0,display:"flex",flexDirection:"column",borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflow:"hidden"}}>
-              <DetailHeader title={selItem.title}/>
-              <DetailContent item={selItem}/>
+          {/* ── KANBAN VIEW ── */}
+          {viewMode==="kanban"&&(
+            <div style={{flex:1,overflowX:"auto",overflowY:"hidden",padding:"18px 20px",display:"flex",gap:12,alignItems:"flex-start"}}>
+              {KANBAN_COLS.map(col=>{
+                const colItems = unread.filter(i=>col.types.includes(i.type));
+                return (
+                  <div key={col.id} style={{width:248,flexShrink:0,display:"flex",flexDirection:"column",height:"100%"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:7,padding:"9px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderTop:`3px solid ${col.c}`,borderRadius:"8px 8px 0 0",flexShrink:0}}>
+                      <span style={{fontSize:12,fontWeight:700,color:T.text,flex:1}}>{col.label}</span>
+                      <span style={{fontSize:10,fontWeight:700,background:colItems.length>0?`${col.c}18`:T.bgElevated,color:colItems.length>0?col.c:T.textMuted,borderRadius:10,padding:"1px 7px",border:`1px solid ${colItems.length>0?col.c+"33":T.border}`}}>{colItems.length}</span>
+                    </div>
+                    <div style={{flex:1,overflowY:"auto",background:T.bgElevated,border:`1px solid ${T.border}`,borderTop:"none",borderRadius:"0 0 8px 8px",padding:"9px 8px 4px"}}>
+                      {colItems.length===0?(
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:80,opacity:0.4}}>
+                          <span style={{fontSize:11,color:T.textMuted}}>No items</span>
+                        </div>
+                      ):(
+                        colItems.map(item=><KCard key={item.id} item={item} colC={col.c}/>)
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
-      )}
+
+        {/* Right: unified detail panel — same width + same header for both list and kanban */}
+        {sel&&selItem&&(
+          <div className="slideIn" style={{width:440,flexShrink:0,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",background:T.bgSurface,overflow:"hidden",boxShadow:"-4px 0 16px rgba(0,0,0,.06)"}}>
+            <DetailHeader/>
+            <DetailContent item={selItem}/>
+          </div>
+        )}
+
+      </div>
     </div>
   );
 };
