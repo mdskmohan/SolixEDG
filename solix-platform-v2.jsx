@@ -15226,14 +15226,17 @@ const InboxView = ({onToast}) => {
     tasks:    unread.filter(i=>["field_updated","stewardship_request","needs_attention"].includes(i.type)).length,
     alerts:   unread.filter(i=>i.type==="dq_alert").length,
     assigned: unread.filter(i=>i.type==="assigned").length,
+    done:     read.length,
   };
   const shown = unread.filter(i=>{
     if(filter==="all")      return true;
     if(filter==="tasks")    return ["field_updated","stewardship_request","needs_attention"].includes(i.type);
     if(filter==="alerts")   return i.type==="dq_alert";
     if(filter==="assigned") return i.type==="assigned";
+    if(filter==="done")     return false; // done tab handles its own list
     return true;
   });
+  const isDoneFilter = filter==="done";
 
   const selItem = items.find(i=>i.id===sel)||null;
   const selIdx  = shown.findIndex(i=>i.id===sel);
@@ -15496,11 +15499,14 @@ const InboxView = ({onToast}) => {
       {/* Tab bar — filters left | view toggle + mark all read right */}
       <div style={{padding:"0 20px 0 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",flexShrink:0,background:T.bgSurface}}>
         <div style={{display:"flex",alignItems:"center"}}>
-          {[["all","All"],["tasks","Tasks"],["alerts","Alerts"],["assigned","Assigned"]].map(([k,l])=>(
-            <button key={k} onClick={()=>setFilter(k)}
+          {[["all","All"],["tasks","Tasks"],["alerts","Alerts"],["assigned","Assigned"],["done","Done"]].map(([k,l])=>(
+            <button key={k} onClick={()=>{ setFilter(k); setSel(null); setAssignOpen(false); }}
               style={{padding:"11px 16px",background:"transparent",border:"none",borderBottom:`2px solid ${filter===k?T.accent:"transparent"}`,color:filter===k?T.text:T.textMuted,fontSize:12.5,fontWeight:filter===k?600:400,cursor:"pointer",display:"flex",alignItems:"center",gap:6,transition:"all .12s"}}>
               {l}
-              {counts[k]>0&&<span style={{fontSize:10,fontWeight:700,background:k==="alerts"?`${T.rose}20`:T.bgHover,color:k==="alerts"?T.rose:T.textMuted,borderRadius:10,padding:"1px 6px"}}>{counts[k]}</span>}
+              {counts[k]>0&&<span style={{fontSize:10,fontWeight:700,
+                background: k==="alerts"?`${T.rose}20` : k==="done"?"rgba(22,163,74,.1)":T.bgHover,
+                color:      k==="alerts"?T.rose        : k==="done"?"#16a34a"           :T.textMuted,
+                borderRadius:10,padding:"1px 6px"}}>{counts[k]}</span>}
             </button>
           ))}
         </div>
@@ -15536,30 +15542,51 @@ const InboxView = ({onToast}) => {
           {/* ── LIST VIEW ── */}
           {viewMode==="list"&&(
             <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
-              {shown.length===0?(
-                <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:220,gap:12}}>
-                  <div style={{width:44,height:44,borderRadius:12,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted}}>{Ic.inbox(20)}</div>
-                  <div style={{fontSize:13,fontWeight:600,color:T.textSub}}>You're all caught up</div>
-                  <div style={{fontSize:12,color:T.textMuted}}>No pending tasks or alerts</div>
-                </div>
-              ):(
-                <div style={{display:"flex",flexDirection:"column",gap:5,maxWidth:sel?9999:820}}>
-                  {shown.map(item=><Tile key={item.id} item={item}/>)}
-                </div>
-              )}
-              {read.length>0&&(
-                <div style={{marginTop:20,maxWidth:sel?9999:820}}>
-                  {/* divider */}
-                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-                    <div style={{flex:1,height:1,background:T.border}}/>
-                    <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.09em",whiteSpace:"nowrap"}}>Completed · {read.length}</span>
-                    <div style={{flex:1,height:1,background:T.border}}/>
+
+              {/* ── Done filter view ── */}
+              {isDoneFilter&&(
+                read.length===0?(
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:220,gap:12}}>
+                    <div style={{width:44,height:44,borderRadius:12,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted}}>
+                      <svg width="20" height="20" viewBox="0 0 22 22" fill="none"><path d="M3 12L8 17L19 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </div>
+                    <div style={{fontSize:13,fontWeight:600,color:T.textSub}}>Nothing completed yet</div>
+                    <div style={{fontSize:12,color:T.textMuted}}>Completed tasks will appear here</div>
                   </div>
-                  <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                ):(
+                  <div style={{display:"flex",flexDirection:"column",gap:5,maxWidth:sel?9999:820}}>
                     {read.map(item=><Tile key={item.id} item={item} done={true}/>)}
                   </div>
-                </div>
+                )
               )}
+
+              {/* ── Active filters view (all / tasks / alerts / assigned) ── */}
+              {!isDoneFilter&&<>
+                {shown.length===0?(
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:220,gap:12}}>
+                    <div style={{width:44,height:44,borderRadius:12,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted}}>{Ic.inbox(20)}</div>
+                    <div style={{fontSize:13,fontWeight:600,color:T.textSub}}>You're all caught up</div>
+                    <div style={{fontSize:12,color:T.textMuted}}>No pending tasks or alerts</div>
+                  </div>
+                ):(
+                  <div style={{display:"flex",flexDirection:"column",gap:5,maxWidth:sel?9999:820}}>
+                    {shown.map(item=><Tile key={item.id} item={item}/>)}
+                  </div>
+                )}
+                {read.length>0&&(
+                  <div style={{marginTop:20,maxWidth:sel?9999:820}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                      <div style={{flex:1,height:1,background:T.border}}/>
+                      <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.09em",whiteSpace:"nowrap"}}>Completed · {read.length}</span>
+                      <div style={{flex:1,height:1,background:T.border}}/>
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                      {read.map(item=><Tile key={item.id} item={item} done={true}/>)}
+                    </div>
+                  </div>
+                )}
+              </>}
+
             </div>
           )}
 
