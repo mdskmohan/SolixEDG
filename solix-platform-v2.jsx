@@ -15216,29 +15216,40 @@ const InboxView = ({onToast}) => {
   const [items,      setItems]      = useState(INBOX_DATA);
   const [filter,     setFilter]     = useState("all");
   const [viewMode,   setViewMode]   = useState("list"); // "list" | "kanban"
-  const [sel,        setSel]        = useState(null);   // selected item id
-  const [assignOpen, setAssignOpen] = useState(false);
+  const [sel,          setSel]          = useState(null);
+  const [assignOpen,   setAssignOpen]   = useState(false);
+  const [filterOpen,   setFilterOpen]   = useState(false);
+  const [secFilters,   setSecFilters]   = useState(new Set()); // section multiselect
 
   const unread = items.filter(i=>!i.readAt);
   const read   = items.filter(i=>!!i.readAt);
   const counts = {
     all:      unread.length,
-    catalog:  unread.filter(i=>i.section==="catalog").length,
-    quality:  unread.filter(i=>i.section==="quality").length,
-    glossary: unread.filter(i=>i.section==="glossary").length,
-    tags:     unread.filter(i=>i.section==="tags").length,
+    tasks:    unread.filter(i=>["field_updated","stewardship_request","needs_attention"].includes(i.type)).length,
+    alerts:   unread.filter(i=>i.type==="dq_alert").length,
+    assigned: unread.filter(i=>i.type==="assigned").length,
     done:     read.length,
   };
+  const secFilterActive = secFilters.size > 0;
   const shown = unread.filter(i=>{
-    if(filter==="all")      return true;
-    if(filter==="catalog")  return i.section==="catalog";
-    if(filter==="quality")  return i.section==="quality";
-    if(filter==="glossary") return i.section==="glossary";
-    if(filter==="tags")     return i.section==="tags";
-    if(filter==="done")     return false;
+    // tab filter
+    if(filter==="tasks"   &&!["field_updated","stewardship_request","needs_attention"].includes(i.type)) return false;
+    if(filter==="alerts"  &&i.type!=="dq_alert")  return false;
+    if(filter==="assigned"&&i.type!=="assigned")   return false;
+    if(filter==="done")                            return false;
+    // section multiselect filter
+    if(secFilterActive && !secFilters.has(i.section)) return false;
     return true;
   });
   const isDoneFilter = filter==="done";
+  const SECTIONS = [
+    {k:"catalog",  l:"Catalog"},
+    {k:"quality",  l:"Data Quality"},
+    {k:"glossary", l:"Glossary"},
+    {k:"tags",     l:"Tags"},
+    {k:"connections", l:"Connections"},
+  ];
+  const toggleSec = s => setSecFilters(prev=>{ const n=new Set(prev); n.has(s)?n.delete(s):n.add(s); return n; });
 
   const selItem = items.find(i=>i.id===sel)||null;
   const selIdx  = shown.findIndex(i=>i.id===sel);
@@ -15498,20 +15509,21 @@ const InboxView = ({onToast}) => {
       {/* Topbar — breadcrumb only */}
       <Topbar breadcrumb={[{label:"Inbox"}]}/>
 
-      {/* Bar: section filter tabs (list only) | view toggle + mark all read */}
+      {/* Tab bar — tabs (list only) + filter icon + view toggle + mark all read */}
       <div style={{padding:"0 20px 0 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",flexShrink:0,background:T.bgSurface,minHeight:44}}>
 
-        {/* Section filter tabs — list view only */}
+        {/* Underline tabs — list view only */}
         {viewMode==="list"&&(
           <div style={{display:"flex",alignItems:"center"}}>
-            {[["all","All"],["catalog","Catalog"],["quality","Data Quality"],["glossary","Glossary"],["tags","Tags"],["done","Done"]].map(([k,l])=>(
-              <button key={k} onClick={()=>{ setFilter(k); setSel(null); setAssignOpen(false); }}
-                style={{padding:"11px 14px",background:"transparent",border:"none",borderBottom:`2px solid ${filter===k?T.accent:"transparent"}`,color:filter===k?T.text:T.textMuted,fontSize:12,fontWeight:filter===k?600:400,cursor:"pointer",display:"flex",alignItems:"center",gap:5,transition:"all .12s",whiteSpace:"nowrap"}}>
+            {[["all","All"],["tasks","Tasks"],["alerts","Alerts"],["assigned","Assigned"],["done","Done"]].map(([k,l])=>(
+              <button key={k} onClick={()=>{ setFilter(k); setSel(null); setAssignOpen(false); setFilterOpen(false); }}
+                style={{padding:"11px 14px",background:"transparent",border:"none",borderBottom:`2px solid ${filter===k?T.accent:"transparent"}`,color:filter===k?T.text:T.textMuted,fontSize:12.5,fontWeight:filter===k?600:400,cursor:"pointer",display:"flex",alignItems:"center",gap:5,transition:"all .12s",whiteSpace:"nowrap"}}>
                 {l}
-                {counts[k]>0&&<span style={{fontSize:10,fontWeight:700,
-                  background: k==="done"?"rgba(22,163,74,.1)":T.bgHover,
-                  color:      k==="done"?"#16a34a":T.textMuted,
-                  borderRadius:10,padding:"1px 6px"}}>{counts[k]}</span>}
+                {counts[k]>0&&<span style={{fontSize:10,fontWeight:700,borderRadius:10,padding:"1px 6px",
+                  background: k==="done"?"rgba(22,163,74,.1)":k==="alerts"?`${T.rose}18`:T.bgHover,
+                  color:      k==="done"?"#16a34a"           :k==="alerts"?T.rose        :T.textMuted}}>
+                  {counts[k]}
+                </span>}
               </button>
             ))}
           </div>
@@ -15519,19 +15531,55 @@ const InboxView = ({onToast}) => {
 
         <div style={{flex:1}}/>
 
-        {/* View toggle — always visible */}
-        <div style={{display:"flex",gap:1,background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,padding:2,marginRight:16}}>
+        {/* Filter icon — list view only */}
+        {viewMode==="list"&&(
+          <div style={{position:"relative",marginRight:10}}>
+            <button onClick={()=>setFilterOpen(o=>!o)}
+              style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,background:filterOpen||secFilterActive?T.accentDim:"transparent",border:`1px solid ${filterOpen||secFilterActive?T.accent:T.border}`,color:filterOpen||secFilterActive?T.accent:T.textSub,cursor:"pointer",fontSize:12,fontWeight:500,transition:"all .12s"}}>
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M1 3h12M3 7h8M5 11h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              Filter
+              {secFilterActive&&<span style={{fontSize:10,fontWeight:700,background:T.accent,color:"#fff",borderRadius:99,padding:"1px 6px",marginLeft:2}}>{secFilters.size}</span>}
+            </button>
+            {filterOpen&&(
+              <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.15)",minWidth:200,padding:"10px 0"}}
+                onClick={e=>e.stopPropagation()}>
+                <div style={{padding:"4px 14px 8px",fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Filter by Section</div>
+                {SECTIONS.map(({k,l})=>{
+                  const checked = secFilters.has(k);
+                  return (
+                    <label key={k} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 14px",cursor:"pointer",transition:"background .1s"}}
+                      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
+                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                      <div onClick={()=>toggleSec(k)} style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${checked?T.accent:T.border}`,background:checked?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .12s"}}>
+                        {checked&&<svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M1.5 5.5L3.8 7.8L8.5 2.5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      </div>
+                      <span onClick={()=>toggleSec(k)} style={{fontSize:12.5,color:T.text}}>{l}</span>
+                    </label>
+                  );
+                })}
+                {secFilterActive&&(
+                  <div style={{borderTop:`1px solid ${T.border}`,marginTop:6,padding:"8px 14px 2px"}}>
+                    <button onClick={()=>setSecFilters(new Set())} style={{background:"none",border:"none",cursor:"pointer",color:T.rose,fontSize:12,padding:0}}>Clear filters</button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* View toggle */}
+        <div style={{display:"flex",gap:1,background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,padding:2,marginRight:12}}>
           {[["list",<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 4h10M2 7h10M2 10h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>],
             ["kanban",<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="3.5" height="10" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="5.25" y="2" width="3.5" height="7" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="9.5" y="2" width="3.5" height="8.5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>]
           ].map(([mode,icon])=>(
-            <button key={mode} onClick={()=>{setViewMode(mode);setSel(null);setAssignOpen(false);}}
+            <button key={mode} onClick={()=>{setViewMode(mode);setSel(null);setAssignOpen(false);setFilterOpen(false);}}
               style={{width:28,height:26,borderRadius:5,background:viewMode===mode?T.bgSurface:"transparent",border:viewMode===mode?`1px solid ${T.border}`:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:viewMode===mode?T.text:T.textMuted,boxShadow:viewMode===mode?"0 1px 3px rgba(0,0,0,.08)":"none",transition:"all .12s"}}>
               {icon}
             </button>
           ))}
         </div>
 
-        {/* Mark all read — list view only (kanban has no "read" concept in columns) */}
+        {/* Mark all read */}
         {viewMode==="list"&&unread.length>0&&(
           <button onClick={markAll}
             style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:11.5,textDecoration:"underline",textUnderlineOffset:2,padding:0,transition:"color .12s"}}
@@ -15550,9 +15598,26 @@ const InboxView = ({onToast}) => {
 
           {/* ── LIST VIEW ── */}
           {viewMode==="list"&&(
-            <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
+            <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}} onClick={()=>filterOpen&&setFilterOpen(false)}>
 
-              {/* ── Done filter view ── */}
+              {/* Active section filter chips */}
+              {secFilterActive&&(
+                <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:14}}>
+                  <span style={{fontSize:11,color:T.textMuted}}>Filtered by:</span>
+                  {[...secFilters].map(s=>{
+                    const label = SECTIONS.find(x=>x.k===s)?.l||s;
+                    return (
+                      <span key={s} style={{display:"flex",alignItems:"center",gap:4,fontSize:11.5,fontWeight:500,padding:"3px 10px",borderRadius:99,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent}}>
+                        {label}
+                        <button onClick={()=>toggleSec(s)} style={{background:"none",border:"none",cursor:"pointer",color:T.accent,fontSize:14,lineHeight:1,padding:0,marginLeft:2}}>×</button>
+                      </span>
+                    );
+                  })}
+                  <button onClick={()=>setSecFilters(new Set())} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:11.5,textDecoration:"underline",padding:0}}>Clear all</button>
+                </div>
+              )}
+
+              {/* Done tab */}
               {isDoneFilter&&(
                 read.length===0?(
                   <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:220,gap:12}}>
@@ -15569,33 +15634,32 @@ const InboxView = ({onToast}) => {
                 )
               )}
 
-              {/* ── Active filters view (all / tasks / alerts / assigned) ── */}
-              {!isDoneFilter&&<>
-                {shown.length===0?(
+              {/* All / Tasks / Alerts / Assigned tabs */}
+              {!isDoneFilter&&(
+                shown.length===0?(
                   <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:220,gap:12}}>
                     <div style={{width:44,height:44,borderRadius:12,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted}}>{Ic.inbox(20)}</div>
                     <div style={{fontSize:13,fontWeight:600,color:T.textSub}}>You're all caught up</div>
-                    <div style={{fontSize:12,color:T.textMuted}}>No pending tasks or alerts</div>
+                    <div style={{fontSize:12,color:T.textMuted}}>No pending items</div>
                   </div>
                 ):(
                   <div style={{display:"flex",flexDirection:"column",gap:5,maxWidth:sel?9999:820}}>
                     {shown.map(item=><Tile key={item.id} item={item}/>)}
+                    {read.length>0&&(
+                      <div style={{marginTop:16}}>
+                        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                          <div style={{flex:1,height:1,background:T.border}}/>
+                          <span style={{fontSize:10,fontWeight:600,color:T.textMuted,letterSpacing:"0.07em"}}>COMPLETED</span>
+                          <div style={{flex:1,height:1,background:T.border}}/>
+                        </div>
+                        <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                          {read.map(item=><Tile key={item.id} item={item} done={true}/>)}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
-                {read.length>0&&(
-                  <div style={{marginTop:20,maxWidth:sel?9999:820}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-                      <div style={{flex:1,height:1,background:T.border}}/>
-                      <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.09em",whiteSpace:"nowrap"}}>Completed · {read.length}</span>
-                      <div style={{flex:1,height:1,background:T.border}}/>
-                    </div>
-                    <div style={{display:"flex",flexDirection:"column",gap:5}}>
-                      {read.map(item=><Tile key={item.id} item={item} done={true}/>)}
-                    </div>
-                  </div>
-                )}
-              </>}
-
+                )
+              )}
             </div>
           )}
 
