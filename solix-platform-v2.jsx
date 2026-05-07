@@ -14822,33 +14822,24 @@ const AccessSection = ({onToast}) => {
                   {MENUS.map(m=><option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
               </div>
-              {/* Operations — pill toggles, filtered by section */}
-              <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7,letterSpacing:.2}}>
-                  Operations <span style={{color:T.rose,fontWeight:700}}>*</span>
-                </label>
-                {!rf.section
-                  ? <div style={{padding:"10px 13px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,fontSize:12,color:T.textMuted}}>
+              {/* Operations — multi-select dropdown, filtered by section */}
+              {!rf.section
+                ? <div>
+                    <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7,letterSpacing:.2}}>
+                      Operations <span style={{color:T.rose,fontWeight:700}}>*</span>
+                    </label>
+                    <div style={{padding:"10px 13px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,fontSize:12,color:T.textMuted}}>
                       Select a section first
                     </div>
-                  : <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                      {(SECTION_OPS[rf.section]||[]).map(op=>{
-                        const active = rf.operations.includes(op);
-                        return (
-                          <button key={op} onClick={()=>toggleOp(op)} style={{
-                            padding:"7px 16px",borderRadius:8,cursor:"pointer",transition:"all .12s",
-                            fontSize:12,fontWeight:active?700:500,
-                            background:active?`${T.accent}18`:T.bgElevated,
-                            border:`1.5px solid ${active?T.accent:T.border}`,
-                            color:active?T.accent:T.textSub,
-                          }}>
-                            {op}
-                          </button>
-                        );
-                      })}
-                    </div>
-                }
-              </div>
+                  </div>
+                : <RuleMultiSelect
+                    label="Operations" required
+                    flat={SECTION_OPS[rf.section]||[]}
+                    selected={rf.operations}
+                    onChange={v=>setRf(f=>({...f,operations:v}))}
+                    placeholder="Select operations…"
+                  />
+              }
             </div>
 
 
