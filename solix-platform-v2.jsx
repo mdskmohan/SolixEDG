@@ -14025,64 +14025,21 @@ const AccessSection = ({onToast}) => {
 
   // ── Constants ──
   const OPERATIONS = [
-    {group:"View", ops:[
-      "ViewAll","ViewBasic","ViewSampleData","ViewDataProfile",
-      "ViewTests","ViewUsage","ViewQueries","ViewCustomFields",
-    ]},
-    {group:"Edit", ops:[
-      "EditAll","EditDescription","EditDisplayName","EditTags","EditOwners",
-      "EditLineage","EditGlossaryTerms","EditTier","EditCertification",
-      "EditCustomFields","EditStatus","EditReviewers","EditDataProfile",
-      "EditSampleData","EditTests","EditUsers","EditRole","EditPolicy",
-      "EditIngestionPipelineStatus",
-    ]},
-    {group:"Create / Delete", ops:[
-      "Create","Delete","BulkCreate","BulkUpdate","CreateTests",
-    ]},
-    {group:"Admin", ops:[
-      "Deploy","Trigger","Kill","GenerateToken","Impersonate","AuditLogs",
-    ]},
+    {group:"View",         ops:["View"]},
+    {group:"Edit",         ops:["Edit"]},
+    {group:"Create/Delete",ops:["Create","Delete"]},
+    {group:"Admin",        ops:["TriggerIngestion"]},
   ];
-  const ALL_OPS = OPERATIONS.flatMap(g=>g.ops);
-  const RESOURCES = [
-    "All",
-    // Data assets
-    "table","databaseSchema","database","databaseService",
-    "dashboard","dashboardService","pipeline","topic","messagingService",
-    "mlmodel","container","searchIndex","query","storedProcedure",
-    // Governance
-    "glossary","glossaryTerm","tag","classification","domain",
-    "dataProduct","dataContract","kpi","metric",
-    // Quality
-    "testCase","testSuite","testDefinition",
-    // Ingestion
-    "ingestionPipeline",
-    // Platform
-    "user","team","role","policy",
-  ];
-  const CONDITIONS = [
-    {label:"Owner only",             value:"isOwner()"},
-    {label:"No owner — claimable",   value:"noOwner()"},
-    {label:"Same team only",         value:"matchTeam()"},
-    {label:"Outside team — deny",    value:"!matchTeam()"},
-    {label:"Within domain",          value:"hasDomain()"},
-    {label:"Outside domain — deny",  value:"!hasDomain()"},
-    {label:"In specific teams",      value:"inAnyTeam()"},
-    {label:"Has any role",           value:"hasAnyRole()"},
-    {label:"Matches any tag",        value:"matchAnyTag()"},
-    {label:"Matches all tags",       value:"matchAllTags()"},
-    {label:"Has certification",      value:"matchAnyCertification()"},
-    {label:"Custom expression",      value:"__custom__"},
-  ];
+  const ALL_OPS = ["View","Edit","Create","Delete","TriggerIngestion"];
   const MENUS = [
-    {label:"Connections",    value:"connections",   resources:["connection","databaseService","messagingService","dashboardService","pipeline","ingestionPipeline"]},
-    {label:"Asset Catalog",  value:"catalog",       resources:["database","databaseSchema","table","container","dashboard","topic","mlmodel","searchIndex","query","storedProcedure"]},
-    {label:"Stewardship",    value:"stewardship",   resources:["stewardshipInbox","accessRequest","certification","domain","dataProduct","dataContract"]},
-    {label:"Data Quality",   value:"quality",       resources:["testCase","testSuite","testDefinition","kpi","metric"]},
-    {label:"Glossary",       value:"glossary",      resources:["glossary","glossaryTerm","tag","classification"]},
-    {label:"Users & Teams",  value:"usersTeams",    resources:["user","team"]},
-    {label:"Access Control", value:"access",        resources:["role","policy"]},
-    {label:"Settings",       value:"settings",      resources:["settings","workflow"]},
+    {label:"Connections",    value:"connections",  resources:["databaseService","ingestionPipeline"]},
+    {label:"Asset Catalog",  value:"catalog",      resources:["database","databaseSchema","table","container"]},
+    {label:"Glossary",       value:"glossary",     resources:["glossary","glossaryTerm","glossaryCategory"]},
+    {label:"Tags",           value:"tags",         resources:["tag","tagCategory","classification"]},
+    {label:"Data Quality",   value:"quality",      resources:["testCase","testDefinition"]},
+    {label:"Users & Teams",  value:"usersTeams",   resources:["user","team"]},
+    {label:"Access Control", value:"access",       resources:["role","policy"]},
+    {label:"Settings",       value:"settings",     resources:["settings","workflow"]},
   ];
 
   const ROLE_COLORS_AC = {Admin:"#ee2424","Connection Admin":"#0891b2","Steward":"#d97706","Viewer":"#7c3aed"};
@@ -14090,49 +14047,36 @@ const AccessSection = ({onToast}) => {
 
   // ── Data ──
   const [policies, setPolicies] = useState([
-    {id:"pol1",name:"PlatformAdminPolicy", desc:"Full access to all platform resources and operations.", enabled:true, system:true,
+    {id:"pol1",name:"PlatformAdminPolicy", desc:"Full access to all platform sections and operations.", enabled:true, system:true,
       rules:[
-        {id:"rl1", name:"Connection-Management",  effect:"allow", resources:["connection"],                          operations:["ViewBasic","Create","Edit","Delete","TestConnection","EditStatus"],                                                             condition:"", desc:"Manage all data source connections."},
-        {id:"rl2", name:"Tag-Management",         effect:"allow", resources:["tagCategory","tag"],                   operations:["ViewBasic","Create","Edit","Delete","EditStatus"],                                                                              condition:"", desc:"Full control over tag categories and tags."},
-        {id:"rl3", name:"User-Team-Role-Mgmt",    effect:"allow", resources:["user","team","role"],                  operations:["ViewBasic","Create","Edit","Delete","EditRole","EditUsers","EditTeam"],                                                         condition:"", desc:"Manage users, teams, and role assignments."},
-        {id:"rl4", name:"Domain-Management",      effect:"allow", resources:["domain"],                              operations:["ViewBasic","Create","Edit","Delete"],                                                                                           condition:"", desc:"Create and manage data domains."},
-        {id:"rl5", name:"Glossary-Management",    effect:"allow", resources:["glossary","glossaryCategory","glossaryTerm"], operations:["ViewBasic","Create","Edit","Delete","EditStatus"],                                                                  condition:"", desc:"Full control over glossaries, categories, and terms."},
-        {id:"rl6", name:"Data-Quality-Mgmt",      effect:"allow", resources:["testDefinition","testCase"],           operations:["ViewBasic","ViewTests","Create","Edit","Delete","TriggerIngestion","AcknowledgeIncident","AssignIncident","ResolveIncident"],   condition:"", desc:"Manage test definitions, test cases, and DQ incidents."},
-        {id:"rl7", name:"Policy-Management",      effect:"allow", resources:["policy"],                              operations:["ViewBasic","Create","Edit","Delete","Apply","EditPolicy"],                                                                      condition:"", desc:"Create, manage, and apply governance policies."},
-        {id:"rl8", name:"Certification-Mgmt",     effect:"allow", resources:["certification"],                       operations:["ViewBasic","EditStatus","Delete"],                                                                                              condition:"", desc:"Manage asset certification lifecycle."},
-        {id:"rl9", name:"Access-Request-Mgmt",    effect:"allow", resources:["accessRequest"],                       operations:["ViewBasic","Approve","Revoke","Delete"],                                                                                        condition:"", desc:"Approve, revoke, and manage all access requests."},
-        {id:"rl10",name:"Workflow-Management",    effect:"allow", resources:["workflow"],                             operations:["ViewBasic","Create","Edit","Delete","EditStatus","TriggerIngestion"],                                                           condition:"", desc:"Create and manage automation workflows."},
-        {id:"rl11",name:"Settings-Management",    effect:"allow", resources:["settings"],                             operations:["ViewBasic","Edit"],                                                                                                             condition:"", desc:"Edit platform settings and configuration."},
-        {id:"rl12",name:"Asset-Full-Access",       effect:"allow", resources:["database","databaseSchema","table","container"], operations:["ViewBasic","ViewTests","TriggerIngestion","Create","Edit","Delete","EditDescription","EditOwner","EditSteward","EditTags","EditStatus"], condition:"", desc:"Full access to all data assets — databases, schemas, tables, and object storage containers."},
+        {id:"rl1", name:"Connections-Full",     effect:"allow", section:"connections", operations:["View","Edit","Create","Delete","TriggerIngestion"], desc:"Full access to connections and ingestion pipelines."},
+        {id:"rl2", name:"Asset-Catalog-Full",   effect:"allow", section:"catalog",     operations:["View","Edit","Create","Delete","TriggerIngestion"], desc:"Full access to all data assets."},
+        {id:"rl3", name:"Glossary-Full",        effect:"allow", section:"glossary",    operations:["View","Edit","Create","Delete","TriggerIngestion"], desc:"Full control over glossary terms and categories."},
+        {id:"rl4", name:"Tags-Full",            effect:"allow", section:"tags",        operations:["View","Edit","Create","Delete","TriggerIngestion"], desc:"Full control over tags and classifications."},
+        {id:"rl5", name:"Data-Quality-Full",    effect:"allow", section:"quality",     operations:["View","Edit","Create","Delete","TriggerIngestion"], desc:"Full access to data quality tests and definitions."},
+        {id:"rl6", name:"Users-Teams-Full",     effect:"allow", section:"usersTeams",  operations:["View","Edit","Create","Delete","TriggerIngestion"], desc:"Full user and team management."},
+        {id:"rl7", name:"Access-Control-Full",  effect:"allow", section:"access",      operations:["View","Edit","Create","Delete","TriggerIngestion"], desc:"Full access control management."},
+        {id:"rl8", name:"Settings-Full",        effect:"allow", section:"settings",    operations:["View","Edit","Create","Delete","TriggerIngestion"], desc:"Full settings management."},
       ]},
-    {id:"pol2",name:"ConnectionAdminPolicy", desc:"Manage connections and workflows. Read-only access to catalog and tags.", enabled:true, system:false,
+    {id:"pol2",name:"ConnectionAdminPolicy", desc:"Manage connections and ingestion pipelines. Read-only access to catalog and settings.", enabled:true, system:false,
       rules:[
-        {id:"rl13",name:"Connection-Management",  effect:"allow", resources:["connection"],          operations:["ViewBasic","Create","Edit","Delete","TestConnection","EditStatus"],         condition:"", desc:"Full control over data source connections."},
-        {id:"rl14",name:"Workflow-Management",    effect:"allow", resources:["workflow"],             operations:["ViewBasic","Create","Edit","Delete","EditStatus","TriggerIngestion"],       condition:"", desc:"Create and manage automation workflows."},
-        {id:"rl15",name:"Asset-Read",              effect:"allow", resources:["database","databaseSchema","table","container"], operations:["ViewBasic"],                condition:"", desc:"Read-only access to all data assets."},
-        {id:"rl16",name:"Tag-Read",               effect:"allow", resources:["tagCategory","tag"],    operations:["ViewBasic"],                                                               condition:"", desc:"Read-only access to tags and tag categories."},
+        {id:"rl9", name:"Connections-Full",     effect:"allow", section:"connections", operations:["View","Edit","Create","Delete","TriggerIngestion"], desc:"Full control over data source connections and ingestion pipelines."},
+        {id:"rl10",name:"Asset-Catalog-View",   effect:"allow", section:"catalog",     operations:["View"], desc:"Read-only access to all data assets."},
+        {id:"rl11",name:"Settings-View",        effect:"allow", section:"settings",    operations:["View"], desc:"Read-only access to platform settings."},
       ]},
-    {id:"pol3",name:"DataStewardPolicy", desc:"Domain-scoped governance — certify assets, manage glossary, handle DQ incidents and access requests.", enabled:true, system:false,
+    {id:"pol3",name:"DataStewardPolicy", desc:"Govern data assets — enrich catalog, manage glossary, view tags and quality.", enabled:true, system:false,
       rules:[
-        {id:"rl17",name:"Asset-Governance",       effect:"allow", resources:["database","databaseSchema","table","container"], operations:["ViewBasic","ViewTests","TriggerIngestion","EditDescription","EditOwner","EditTags","EditStatus"], condition:"", desc:"Govern data assets within assigned domain only."},
-        {id:"rl18",name:"Tag-Apply",              effect:"allow", resources:["tag"],                   operations:["ViewBasic","EditTags"],                                                    condition:"", desc:"View and apply tags to assets."},
-        {id:"rl19",name:"Tag-Browse",             effect:"allow", resources:["tagCategory"],           operations:["ViewBasic"],                                                               condition:"", desc:"Browse tag categories."},
-        {id:"rl20",name:"Glossary-Management",    effect:"allow", resources:["glossaryCategory","glossaryTerm"], operations:["ViewBasic","Create","Edit","EditStatus"],                       condition:"", desc:"Create and manage glossary categories and terms."},
-        {id:"rl21",name:"Glossary-Browse",        effect:"allow", resources:["glossary"],              operations:["ViewBasic"],                                                               condition:"", desc:"Browse top-level glossaries."},
-        {id:"rl22",name:"Certification-Mgmt",     effect:"allow", resources:["certification"],         operations:["ViewBasic","EditStatus"],                                                  condition:"", desc:"Approve, defer, or deprecate asset certifications."},
-        {id:"rl23",name:"TestDef-Browse",         effect:"allow", resources:["testDefinition"],        operations:["ViewBasic"],                                                               condition:"", desc:"Read-only access to test definitions."},
-        {id:"rl24",name:"TestCase-Management",    effect:"allow", resources:["testCase"],              operations:["ViewBasic","Create","Edit","Delete","TriggerIngestion","AcknowledgeIncident","AssignIncident","ResolveIncident"], condition:"", desc:"Manage test cases and resolve DQ incidents."},
-        {id:"rl25",name:"Access-Request-Mgmt",    effect:"allow", resources:["accessRequest"],         operations:["ViewBasic","Approve","Revoke"],                                            condition:"", desc:"Approve or revoke access requests in assigned domain."},
-        {id:"rl26",name:"Policy-Browse",          effect:"allow", resources:["policy"],                operations:["ViewBasic"],                                                               condition:"", desc:"Read-only access to governance policies."},
-        {id:"rl27",name:"Stewardship-Inbox",      effect:"allow", resources:["stewardshipInbox"],      operations:["ViewBasic","Resolve"],                                                     condition:"", desc:"View and resolve stewardship inbox tasks."},
+        {id:"rl12",name:"Asset-Catalog-Edit",   effect:"allow", section:"catalog",     operations:["View","Edit"], desc:"View and edit data assets within assigned domain."},
+        {id:"rl13",name:"Glossary-Full",        effect:"allow", section:"glossary",    operations:["View","Edit","Create","Delete"], desc:"Create and manage glossary terms and categories."},
+        {id:"rl14",name:"Tags-View",            effect:"allow", section:"tags",        operations:["View"], desc:"Read-only access to tags and classifications."},
+        {id:"rl15",name:"Data-Quality-View",    effect:"allow", section:"quality",     operations:["View"], desc:"View data quality test results."},
       ]},
-    {id:"pol4",name:"ViewerPolicy", desc:"Read-only access to all data assets, tags, glossary, certifications, and DQ results.", enabled:true, system:false,
+    {id:"pol4",name:"ViewerPolicy", desc:"Read-only access to data assets, glossary, tags, and data quality.", enabled:true, system:false,
       rules:[
-        {id:"rl28",name:"Asset-Browse",           effect:"allow", resources:["database","databaseSchema","table","container"], operations:["ViewBasic"],       condition:"", desc:"Read-only access to all data assets."},
-        {id:"rl29",name:"Tag-Browse",             effect:"allow", resources:["tagCategory","tag"],                             operations:["ViewBasic"],       condition:"", desc:"Read-only access to tags and tag categories."},
-        {id:"rl30",name:"Glossary-Browse",        effect:"allow", resources:["glossary","glossaryCategory","glossaryTerm"],    operations:["ViewBasic"],       condition:"", desc:"Read-only access to all glossary content."},
-        {id:"rl31",name:"Certification-View",     effect:"allow", resources:["certification"],                                 operations:["ViewBasic"],       condition:"", desc:"View asset certification status."},
-        {id:"rl32",name:"DQ-Browse",              effect:"allow", resources:["testDefinition","testCase"],                     operations:["ViewBasic"],       condition:"", desc:"View DQ test definitions and results."},
+        {id:"rl16",name:"Asset-Catalog-View",   effect:"allow", section:"catalog",     operations:["View"], desc:"Read-only access to all data assets."},
+        {id:"rl17",name:"Glossary-View",        effect:"allow", section:"glossary",    operations:["View"], desc:"Read-only access to all glossary content."},
+        {id:"rl18",name:"Tags-View",            effect:"allow", section:"tags",        operations:["View"], desc:"Read-only access to tags and classifications."},
+        {id:"rl19",name:"Data-Quality-View",    effect:"allow", section:"quality",     operations:["View"], desc:"View data quality results."},
       ]},
   ]);
 
@@ -14158,7 +14102,7 @@ const AccessSection = ({onToast}) => {
   const [newPolDesc,      setNewPolDesc]      = useState("");
   const [newPolRules,     setNewPolRules]     = useState([]);
   // Rule form
-  const [rf, setRf] = useState({name:"",desc:"",effect:"allow",menu:"",resources:[],operations:[],condition:"",condParam:"",editId:null});
+  const [rf, setRf] = useState({name:"",desc:"",effect:"allow",section:"",operations:[],editId:null});
 
   const [acSearch,   setAcSearch]   = useState("");
   const [acRolePage, setAcRolePage] = useState(1);
@@ -14211,44 +14155,17 @@ const AccessSection = ({onToast}) => {
     setRoles(prev=>prev.map(r=>r.id===roleDetail?{...r,policyIds:r.policyIds.filter(id=>id!==policyId)}:r));
     onToast("Policy detached","success");
   };
-  const parseCondition = (cond) => {
-    if(!cond) return {condition:"",condParam:""};
-    const paramFns = ["inAnyTeam","hasAnyRole","matchAnyTag","matchAllTags","matchAnyCertification"];
-    for(const fn of paramFns) {
-      if(cond.startsWith(fn+"(")&&cond.endsWith(")")) {
-        const inner = cond.slice(fn.length+1,-1);
-        const params = inner.split(",").map(s=>s.trim().replace(/^'|'$/g,"")).join(", ");
-        return {condition:fn+"()",condParam:params};
-      }
-    }
-    const knownSimple = ["isOwner()","noOwner()","matchTeam()","!matchTeam()","hasDomain()","!hasDomain()"];
-    if(knownSimple.includes(cond)) return {condition:cond,condParam:""};
-    return {condition:"__custom__",condParam:cond};
-  };
   const openRuleModal = (policyId, rule=null) => {
     setRuleModal({policyId});
     if(rule) {
-      const {condition,condParam} = parseCondition(rule.condition);
-      setRf({name:rule.name,desc:rule.desc,effect:rule.effect,menu:rule.menu||"",resources:[...rule.resources],operations:[...rule.operations],condition,condParam,editId:rule.id});
+      setRf({name:rule.name,desc:rule.desc,effect:rule.effect,section:rule.section||rule.menu||"",operations:[...rule.operations],editId:rule.id});
     } else {
-      setRf({name:"",desc:"",effect:"allow",menu:"",resources:[],operations:[],condition:"",condParam:"",editId:null});
+      setRf({name:"",desc:"",effect:"allow",section:"",operations:[],editId:null});
     }
   };
   const handleSaveRule = () => {
-    if(!rf.name.trim()||!rf.menu||!rf.resources.length||!rf.operations.length) return;
-    let cond = "";
-    if(rf.condition==="__custom__") {
-      cond = rf.condParam||"";
-    } else if(rf.condition) {
-      const paramFns = ["inAnyTeam()","hasAnyRole()","matchAnyTag()","matchAllTags()","matchAnyCertification()"];
-      if(paramFns.includes(rf.condition)&&rf.condParam.trim()) {
-        const params = rf.condParam.split(",").map(s=>`'${s.trim()}'`).filter(s=>s!=="''").join(",");
-        cond = rf.condition.replace("()",`(${params})`);
-      } else {
-        cond = rf.condition;
-      }
-    }
-    const rule = {id:rf.editId||`rl${Date.now()}`,name:rf.name,desc:rf.desc,effect:rf.effect,menu:rf.menu,resources:rf.resources,operations:rf.operations,condition:cond};
+    if(!rf.name.trim()||!rf.section||!rf.operations.length) return;
+    const rule = {id:rf.editId||`rl${Date.now()}`,name:rf.name,desc:rf.desc,effect:rf.effect,section:rf.section,operations:rf.operations};
     if(ruleModal.policyId==="__new__") {
       setNewPolRules(prev=>rf.editId ? prev.map(r=>r.id===rf.editId?rule:r) : [...prev,rule]);
     } else {
@@ -14264,12 +14181,7 @@ const AccessSection = ({onToast}) => {
     onToast("Rule deleted","error");
   };
   const toggleOp = (op) => {
-    if(op==="All"||op==="ViewAll"||op==="EditAll"){setRf(f=>({...f,operations:[op]}));return;}
-    setRf(f=>({...f,operations:f.operations.includes(op)?f.operations.filter(o=>o!==op):[...f.operations.filter(o=>o!=="All"&&o!=="ViewAll"&&o!=="EditAll"),op]}));
-  };
-  const toggleRes = (res) => {
-    if(res==="All"){setRf(f=>({...f,resources:["All"]}));return;}
-    setRf(f=>({...f,resources:f.resources.includes(res)?f.resources.filter(r=>r!==res):[...f.resources.filter(r=>r!=="All"),res]}));
+    setRf(f=>({...f,operations:f.operations.includes(op)?f.operations.filter(o=>o!==op):[...f.operations,op]}));
   };
 
   // ── Sub-components ──
@@ -14449,8 +14361,12 @@ const AccessSection = ({onToast}) => {
                     <div style={{minWidth:80,flexShrink:0}}><EffectBadge effect={rule.effect}/></div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:2}}>{rule.name}</div>
-                      <div style={{fontSize:11,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                        {rule.resources.join(", ")} → {rule.operations.slice(0,3).join(", ")}{rule.operations.length>3?` +${rule.operations.length-3} more`:""}
+                      <div style={{fontSize:11,color:T.textMuted,display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
+                        <span style={{fontWeight:600,color:T.textSub}}>{MENUS.find(m=>m.value===(rule.section||rule.menu))?.label||rule.section||rule.menu||"—"}</span>
+                        <span style={{opacity:.4}}>·</span>
+                        {rule.operations.map(o=>(
+                          <span key={o} style={{padding:"1px 5px",borderRadius:3,fontSize:10,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{o}</span>
+                        ))}
                       </div>
                     </div>
                   </div>
@@ -14585,8 +14501,10 @@ const AccessSection = ({onToast}) => {
                       }}>{rule.effect==="allow"?"✓ Allow":"✕ Deny"}</span>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:12.5,fontWeight:600,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{rule.name}</div>
-                        <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>
-                          {rule.resources.join(", ")} · {rule.operations.join(", ")}
+                        <div style={{fontSize:10.5,color:T.textMuted,marginTop:1,display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
+                          <span style={{fontWeight:600}}>{MENUS.find(m=>m.value===(rule.section||rule.menu))?.label||rule.section||rule.menu||"—"}</span>
+                          <span style={{opacity:.4}}>·</span>
+                          {rule.operations.join(", ")}
                         </div>
                       </div>
                       <div style={{display:"flex",gap:4,flexShrink:0}}>
@@ -14700,8 +14618,12 @@ const AccessSection = ({onToast}) => {
                       <EffectBadge effect={rule.effect}/>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:11.5,fontWeight:600,color:T.text}}>{rule.name}</div>
-                        <div style={{fontSize:10.5,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                          {rule.resources.join(", ")} → {rule.operations.slice(0,3).join(", ")}{rule.operations.length>3?` +${rule.operations.length-3}`:""}
+                        <div style={{fontSize:10.5,color:T.textMuted,display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",marginTop:2}}>
+                          <span style={{fontWeight:600,color:T.textSub}}>{MENUS.find(m=>m.value===(rule.section||rule.menu))?.label||rule.section||rule.menu||"—"}</span>
+                          <span style={{opacity:.4}}>·</span>
+                          {rule.operations.map(o=>(
+                            <span key={o} style={{padding:"1px 5px",borderRadius:3,fontSize:10,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{o}</span>
+                          ))}
                         </div>
                       </div>
                     </div>
@@ -14788,12 +14710,13 @@ const AccessSection = ({onToast}) => {
                   <div style={{padding:"10px 14px",display:"flex",flexDirection:"column",gap:8}}>
                     {rule.desc&&<div style={{fontSize:11,color:T.textMuted,fontStyle:"italic"}}>{rule.desc}</div>}
                     <div style={{display:"grid",gridTemplateColumns:"80px 1fr",gap:"6px 0",alignItems:"start"}}>
-                      <span style={{fontSize:10.5,fontWeight:600,color:T.textMuted,paddingTop:2}}>Resources</span>
-                      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{rule.resources.map(r=><TagChip key={r} label={r}/>)}</div>
+                      <span style={{fontSize:10.5,fontWeight:600,color:T.textMuted,paddingTop:2}}>Section</span>
+                      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                        <TagChip label={MENUS.find(m=>m.value===(rule.section||rule.menu))?.label||rule.section||rule.menu||"—"}/>
+                      </div>
                       <span style={{fontSize:10.5,fontWeight:600,color:T.textMuted,paddingTop:6}}>Operations</span>
                       <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:4}}>
-                        {rule.operations.slice(0,8).map(o=><TagChip key={o} label={o}/>)}
-                        {rule.operations.length>8&&<TagChip label={`+${rule.operations.length-8} more`}/>}
+                        {rule.operations.map(o=><TagChip key={o} label={o}/>)}
                       </div>
                     </div>
                   </div>
@@ -14817,7 +14740,7 @@ const AccessSection = ({onToast}) => {
     {/* Rule Editor Modal */}
     {ruleModal&&(()=>{
       const polName = ruleModal.policyId==="__new__" ? (newPolName.trim()||"New Policy") : (policies.find(p=>p.id===ruleModal.policyId)?.name||"");
-      const isValid = rf.name.trim()&&rf.resources.length&&rf.operations.length;
+      const isValid = rf.name.trim()&&rf.section&&rf.operations.length;
       return (
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.65)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1100,backdropFilter:"blur(5px)"}}>
         <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:16,width:600,maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,.45)"}}>
@@ -14849,7 +14772,7 @@ const AccessSection = ({onToast}) => {
               <div>
                 <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7,letterSpacing:.2}}>Rule name <span style={{color:T.rose}}>*</span></label>
                 <input value={rf.name} onChange={e=>setRf(f=>({...f,name:e.target.value}))}
-                  placeholder="e.g. Allow-Steward-EditAll"
+                  placeholder="e.g. Steward-Glossary-Edit"
                   style={{width:"100%",padding:"10px 13px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,
                     color:T.text,fontSize:13,outline:"none",boxSizing:"border-box",transition:"border-color .15s"}}
                   onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
@@ -14882,27 +14805,19 @@ const AccessSection = ({onToast}) => {
             </div>
 
             <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:20}}>
-              {/* Menu picker — required */}
+              {/* Section picker — required */}
               <div>
                 <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7,letterSpacing:.2}}>
-                  Menu <span style={{color:T.rose,fontWeight:700}}>*</span>
+                  Section <span style={{color:T.rose,fontWeight:700}}>*</span>
                 </label>
-                <select value={rf.menu} onChange={e=>setRf(f=>({...f,menu:e.target.value,resources:[]}))}
-                  style={{width:"100%",padding:"10px 13px",background:T.bgElevated,border:`1.5px solid ${!rf.menu?"rgba(225,29,72,.4)":T.border}`,borderRadius:9,
-                    color:rf.menu?T.text:T.textMuted,fontSize:13,outline:"none",boxSizing:"border-box",cursor:"pointer",transition:"border-color .15s"}}
-                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=rf.menu?T.border:"rgba(225,29,72,.4)"}>
-                  <option value="">Select a menu…</option>
+                <select value={rf.section} onChange={e=>setRf(f=>({...f,section:e.target.value}))}
+                  style={{width:"100%",padding:"10px 13px",background:T.bgElevated,border:`1.5px solid ${!rf.section?"rgba(225,29,72,.4)":T.border}`,borderRadius:9,
+                    color:rf.section?T.text:T.textMuted,fontSize:13,outline:"none",boxSizing:"border-box",cursor:"pointer",transition:"border-color .15s"}}
+                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=rf.section?T.border:"rgba(225,29,72,.4)"}>
+                  <option value="">Select a section…</option>
                   {MENUS.map(m=><option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
               </div>
-              <RuleMultiSelect
-                label="Resources" required
-                flat={rf.menu?(MENUS.find(m=>m.value===rf.menu)?.resources||RESOURCES):RESOURCES}
-                selected={rf.resources}
-                onChange={v=>setRf(f=>({...f,resources:v}))}
-                placeholder="Select resources…"
-                mono
-              />
               <RuleMultiSelect
                 label="Operations" required
                 groups={OPERATIONS}
@@ -14939,8 +14854,8 @@ const AccessSection = ({onToast}) => {
           <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,background:T.bgElevated,borderRadius:"0 0 16px 16px"}}>
             <div style={{fontSize:11,color:T.textMuted}}>
               {!rf.name.trim()&&<span>Rule name required · </span>}
-              {!rf.resources.length&&<span>Resources required · </span>}
-              {!rf.operations.length&&<span>Operations required</span>}
+              {!rf.section&&<span>Section required · </span>}
+              {!rf.operations.length&&<span>At least one operation required</span>}
               {isValid&&<span style={{color:"#16a34a"}}>Ready to save</span>}
             </div>
             <div style={{display:"flex",gap:8}}>
