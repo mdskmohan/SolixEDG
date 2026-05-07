@@ -14024,13 +14024,17 @@ const TeamsSection = ({onToast}) => {
 const AccessSection = ({onToast}) => {
 
   // ── Constants ──
-  const OPERATIONS = [
-    {group:"View",         ops:["View"]},
-    {group:"Edit",         ops:["Edit"]},
-    {group:"Create/Delete",ops:["Create","Delete"]},
-    {group:"Admin",        ops:["TriggerIngestion"]},
-  ];
   const ALL_OPS = ["View","Edit","Create","Delete","TriggerIngestion"];
+  const SECTION_OPS = {
+    connections: ["View","Edit","Create","Delete","TriggerIngestion"],
+    catalog:     ["View","Edit"],
+    glossary:    ["View","Edit","Create","Delete"],
+    tags:        ["View","Edit","Create","Delete"],
+    quality:     ["View","Edit","Create","Delete","TriggerIngestion"],
+    usersTeams:  ["View","Edit","Create","Delete"],
+    access:      ["View","Edit","Create","Delete"],
+    settings:    ["View","Edit"],
+  };
   const MENUS = [
     {label:"Connections",    value:"connections",  resources:["databaseService","ingestionPipeline"]},
     {label:"Asset Catalog",  value:"catalog",      resources:["database","databaseSchema","table","container"]},
@@ -14050,7 +14054,7 @@ const AccessSection = ({onToast}) => {
     {id:"pol1",name:"PlatformAdminPolicy", desc:"Full access to all platform sections and operations.", enabled:true, system:true,
       rules:[
         {id:"rl1", name:"Connections-Full",     effect:"allow", section:"connections", operations:["View","Edit","Create","Delete","TriggerIngestion"], desc:"Full access to connections and ingestion pipelines."},
-        {id:"rl2", name:"Asset-Catalog-Full",   effect:"allow", section:"catalog",     operations:["View","Edit","Create","Delete","TriggerIngestion"], desc:"Full access to all data assets."},
+        {id:"rl2", name:"Asset-Catalog-Full",   effect:"allow", section:"catalog",     operations:["View","Edit"], desc:"Full access to all data assets."},
         {id:"rl3", name:"Glossary-Full",        effect:"allow", section:"glossary",    operations:["View","Edit","Create","Delete","TriggerIngestion"], desc:"Full control over glossary terms and categories."},
         {id:"rl4", name:"Tags-Full",            effect:"allow", section:"tags",        operations:["View","Edit","Create","Delete","TriggerIngestion"], desc:"Full control over tags and classifications."},
         {id:"rl5", name:"Data-Quality-Full",    effect:"allow", section:"quality",     operations:["View","Edit","Create","Delete","TriggerIngestion"], desc:"Full access to data quality tests and definitions."},
@@ -14810,7 +14814,7 @@ const AccessSection = ({onToast}) => {
                 <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7,letterSpacing:.2}}>
                   Section <span style={{color:T.rose,fontWeight:700}}>*</span>
                 </label>
-                <select value={rf.section} onChange={e=>setRf(f=>({...f,section:e.target.value}))}
+                <select value={rf.section} onChange={e=>setRf(f=>({...f,section:e.target.value,operations:[]}))}
                   style={{width:"100%",padding:"10px 13px",background:T.bgElevated,border:`1.5px solid ${!rf.section?"rgba(225,29,72,.4)":T.border}`,borderRadius:9,
                     color:rf.section?T.text:T.textMuted,fontSize:13,outline:"none",boxSizing:"border-box",cursor:"pointer",transition:"border-color .15s"}}
                   onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=rf.section?T.border:"rgba(225,29,72,.4)"}>
@@ -14818,14 +14822,33 @@ const AccessSection = ({onToast}) => {
                   {MENUS.map(m=><option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
               </div>
-              <RuleMultiSelect
-                label="Operations" required
-                groups={OPERATIONS}
-                selected={rf.operations}
-                onChange={v=>setRf(f=>({...f,operations:v}))}
-                placeholder="Select operations…"
-                mono
-              />
+              {/* Operations — pill toggles, filtered by section */}
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7,letterSpacing:.2}}>
+                  Operations <span style={{color:T.rose,fontWeight:700}}>*</span>
+                </label>
+                {!rf.section
+                  ? <div style={{padding:"10px 13px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,fontSize:12,color:T.textMuted}}>
+                      Select a section first
+                    </div>
+                  : <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                      {(SECTION_OPS[rf.section]||[]).map(op=>{
+                        const active = rf.operations.includes(op);
+                        return (
+                          <button key={op} onClick={()=>toggleOp(op)} style={{
+                            padding:"7px 16px",borderRadius:8,cursor:"pointer",transition:"all .12s",
+                            fontSize:12,fontWeight:active?700:500,
+                            background:active?`${T.accent}18`:T.bgElevated,
+                            border:`1.5px solid ${active?T.accent:T.border}`,
+                            color:active?T.accent:T.textSub,
+                          }}>
+                            {op}
+                          </button>
+                        );
+                      })}
+                    </div>
+                }
+              </div>
             </div>
 
 
