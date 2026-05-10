@@ -669,6 +669,37 @@ const COMPLIANCE_CONTROLS = [
   {framework:"CCPA",  control:"Opt-out mechanism",          status:"passing",category:"Privacy",  asset:"user_sessions"},
 ];
 
+const POLICY_VIOLATIONS = [
+  {id:"v1",policyId:3,policyName:"GDPR Compliance",      asset:"customers",      issue:"Right to erasure not honored within SLA",     severity:"High",    status:"Open",    owner:"maya.chen",  detected:"2d ago"},
+  {id:"v2",policyId:3,policyName:"GDPR Compliance",      asset:"user_sessions",  issue:"EU data stored outside EU region",            severity:"Critical",status:"Open",    owner:"dev.patel",  detected:"1d ago"},
+  {id:"v3",policyId:1,policyName:"PII Data Handling",    asset:"orders",         issue:"Email column unmasked for analyst role",      severity:"High",    status:"Open",    owner:"sarah.kim",  detected:"3d ago"},
+  {id:"v4",policyId:1,policyName:"PII Data Handling",    asset:"customers",      issue:"SSN field visible without data masking",      severity:"Critical",status:"Resolved",owner:"maya.chen",  detected:"1w ago"},
+  {id:"v5",policyId:6,policyName:"Model Governance",     asset:"ml_churn_model", issue:"Model card incomplete — bias analysis missing",severity:"Medium",  status:"Open",    owner:"priya.nair", detected:"5d ago"},
+  {id:"v6",policyId:2,policyName:"Data Retention 90d",   asset:"product_events", issue:"Events older than 90 days retained",          severity:"Medium",  status:"Resolved",owner:"dev.patel",  detected:"2w ago"},
+  {id:"v7",policyId:3,policyName:"GDPR Compliance",      asset:"customers",      issue:"Consent flag missing for EU records",         severity:"High",    status:"Open",    owner:"maya.chen",  detected:"4d ago"},
+  {id:"v8",policyId:4,policyName:"SOC2 Access Controls", asset:"finance_summary",issue:"Quarterly access review overdue by 15 days",  severity:"Medium",  status:"Open",    owner:"sarah.kim",  detected:"6d ago"},
+];
+
+const POLICY_WORKFLOWS = [
+  {id:"wf1",policyId:1,policyName:"PII Data Handling",    stage:"Active", reviewer:"priya.nair",updated:"3d ago"},
+  {id:"wf2",policyId:2,policyName:"Data Retention 90d",   stage:"Active", reviewer:"maya.chen", updated:"1w ago"},
+  {id:"wf3",policyId:3,policyName:"GDPR Compliance",      stage:"Active", reviewer:"sarah.kim", updated:"2d ago"},
+  {id:"wf4",policyId:4,policyName:"SOC2 Access Controls", stage:"Active", reviewer:"dev.patel",  updated:"1w ago"},
+  {id:"wf5",policyId:5,policyName:"Column Encryption PII",stage:"Review", reviewer:"maya.chen", updated:"Today"},
+  {id:"wf6",policyId:6,policyName:"Model Governance",     stage:"Active", reviewer:"priya.nair",updated:"5d ago"},
+];
+
+const POLICY_ASSET_IMPACTS = [
+  {id:"pai1",asset:"customers",      type:"Table", policies:["PII Data Handling","GDPR Compliance"],                       complianceStatus:"Violated", violations:3},
+  {id:"pai2",asset:"orders",         type:"Table", policies:["PII Data Handling","SOC2 Access Controls"],                  complianceStatus:"Violated", violations:1},
+  {id:"pai3",asset:"user_sessions",  type:"Table", policies:["Data Retention 90d","GDPR Compliance"],                      complianceStatus:"Violated", violations:2},
+  {id:"pai4",asset:"finance_summary",type:"Table", policies:["SOC2 Access Controls"],                                      complianceStatus:"Compliant",violations:0},
+  {id:"pai5",asset:"product_events", type:"Table", policies:["Data Retention 90d"],                                        complianceStatus:"Compliant",violations:0},
+  {id:"pai6",asset:"ml_churn_model", type:"Model", policies:["Model Governance"],                                          complianceStatus:"Violated", violations:1},
+  {id:"pai7",asset:"orders.email",   type:"Column",policies:["PII Data Handling","Column Encryption PII"],                 complianceStatus:"Violated", violations:1},
+  {id:"pai8",asset:"customers.ssn",  type:"Column",policies:["PII Data Handling","Column Encryption PII"],                 complianceStatus:"Compliant",violations:0},
+];
+
 const ACCESS_REQUESTS = [
   {id:1,user:"john.doe",asset:"customers",level:"Read",status:"Pending",since:"2h ago",reason:"Analytics project Q4",team:"Analytics"},
   {id:2,user:"alice.wang",asset:"orders",level:"Write",status:"Pending",since:"5h ago",reason:"Data cleanup sprint",team:"Data Eng"},
@@ -5397,404 +5428,432 @@ const QualityView = () => {
 };
 
 const PolicyManagerView = ({onToast}) => {
-  const [tab,             setTab]             = useState("overview");
-  const [selectedPolicy,  setSelectedPolicy]  = useState(null);
-  const [selectedReg,     setSelectedReg]     = useState(null);
-  const [catFilter,       setCatFilter]       = useState("All");
-  const [ruleTypeFilter,  setRuleTypeFilter]  = useState("All");
-  const [riskView,        setRiskView]        = useState("list");
-  const [pdTab,           setPdTab]           = useState("overview");
+  const [tab,        setTab]        = useState("policies");
+  const [q,          setQ]          = useState("");
+  const [selPolicy,  setSelPolicy]  = useState(null);
+  const [selReg,     setSelReg]     = useState(null);
+  const [pdTab,      setPdTab]      = useState("overview");
+  const [rdTab,      setRdTab]      = useState("overview");
+  const [violFilter, setViolFilter] = useState("All");
 
-  const LIFECYCLE_STEPS = ["Draft","Under Review","Approved","Active","Deprecated"];
-  const lifIdx = lc => LIFECYCLE_STEPS.indexOf(lc);
-  const lifColor = lc => lc==="Active"?T.green:lc==="Draft"?T.textMuted:lc==="Deprecated"?T.rose:T.amber;
+  const changeTab = t => { setTab(t); setSelPolicy(null); setSelReg(null); };
 
-  const activePolicies    = POLICIES.filter(p=>p.lifecycle==="Active");
-  const avgConformity     = Math.round(activePolicies.reduce((a,p)=>a+p.conformity,0)/Math.max(activePolicies.length,1));
-  const totalViolations   = POLICIES.reduce((a,p)=>a+p.violations,0);
-  const openRisks         = GOVERNANCE_RISKS.filter(r=>r.status!=="Resolved").length;
-  const compliantFrameworks = REGULATIONS.filter(r=>r.status==="Compliant").length;
+  const impactColor = imp => imp==="High"||imp==="Critical"?T.rose:imp==="Medium"?T.amber:T.green;
+  const impactDim   = imp => imp==="High"||imp==="Critical"?T.roseDim:imp==="Medium"?T.amberDim:`${T.green}15`;
+  const statusColor = s => s==="Active"?T.green:s==="Draft"?T.textMuted:s==="Review"||s==="Under Review"?T.amber:s==="Approved"?T.blue:T.textMuted;
+  const sevColor    = s => s==="Critical"?T.rose:s==="High"?T.amber:s==="Medium"?T.blue:T.textSub;
+  const sevDim      = s => s==="Critical"?T.roseDim:s==="High"?T.amberDim:s==="Medium"?T.blueDim:`${T.textSub}15`;
+  const csColor     = s => s==="Compliant"?T.green:s==="Violated"?T.rose:T.textMuted;
 
-  const POLICY_CATS = ["All",...[...new Set(POLICIES.map(p=>p.category))]];
-  const filteredPolicies = catFilter==="All" ? POLICIES : POLICIES.filter(p=>p.category===catFilter);
-  const RULE_TYPES = ["All","Classification","Retention","Access","Security","Process","Documentation"];
-  const filteredRules = ruleTypeFilter==="All" ? GOVERNANCE_RULES : GOVERNANCE_RULES.filter(r=>r.type===ruleTypeFilter);
+  const CONTROLS_BY_POLICY = {
+    1:["Masking Required","PII Flagged","Access Restricted"],
+    2:["Retention Enforced","Auto-Delete Enabled"],
+    3:["Masking Required","Right-to-Erasure","Data Locality"],
+    4:["Access Restricted","Quarterly Review","Least Privilege"],
+    5:["Encryption Required","AES-256","Key Rotation"],
+    6:["Model Card Required","Audit Trail","Version Control"],
+  };
 
-  const riskScore  = r => ({Low:1,Med:2,High:3}[r.likelihood]*{Low:1,Med:2,High:3}[r.impact]);
-  const riskColor  = score => score>=6?T.red:score>=3?T.amber:T.green;
-  const typeColor  = t => ({Classification:T.violet,Retention:T.blue,Access:T.amber,Security:T.rose,Process:T.green,Documentation:T.textSub}[t]||T.textSub);
+  const ACTIVITY_LOG = [
+    {time:"2d ago",user:"maya.chen", action:"Updated description"},
+    {time:"1w ago",user:"dev.patel",  action:"Added linked asset: orders"},
+    {time:"2w ago",user:"sarah.kim",  action:"Submitted for review"},
+    {time:"3w ago",user:"maya.chen", action:"Created policy"},
+  ];
 
-  const changeTab = t => { setTab(t); setSelectedPolicy(null); setSelectedReg(null); };
+  const openViolations = POLICY_VIOLATIONS.filter(v=>v.status==="Open").length;
+  const activePolicies = POLICIES.filter(p=>p.lifecycle==="Active").length;
+  const draftPolicies  = POLICIES.filter(p=>p.lifecycle==="Draft").length;
+
+  const filteredPolicies   = POLICIES.filter(p => !q || p.name.toLowerCase().includes(q.toLowerCase()) || p.category.toLowerCase().includes(q.toLowerCase()));
+  const filteredViolations = POLICY_VIOLATIONS.filter(v => violFilter==="All" || v.status===violFilter);
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <Topbar breadcrumb={[{label:"Policy Manager"}]}/>
-      <div style={{padding:"0 28px",borderBottom:`1px solid ${T.border}`,flexShrink:0,paddingTop:18}}>
-        <Tabs2 tabs={[{key:"overview",label:"Overview"},{key:"policies",label:`Policies (${POLICIES.length})`},{key:"regulations",label:"Regulations"},{key:"rules",label:`Rules (${GOVERNANCE_RULES.length})`},{key:"risks",label:"Risk Register"}]} active={tab} onChange={changeTab}/>
+      <Topbar breadcrumb={[{label:"Policy Management"}]}/>
+
+      {/* ── Tab bar ── */}
+      <div style={{padding:"0 28px",borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bgSurface}}>
+        <Tabs2 tabs={[
+          {key:"policies",   label:`Policies (${POLICIES.length})`},
+          {key:"regulations",label:"Regulations"},
+          {key:"impact",     label:"Data Assets Impact"},
+          {key:"violations", label:`Violations (${openViolations})`},
+          {key:"workflows",  label:"Workflows"},
+        ]} active={tab} onChange={changeTab}/>
       </div>
 
+      {/* ── Body ── */}
       <div style={{flex:1,display:"flex",overflow:"hidden"}}>
         <div style={{flex:1,overflowY:"auto",padding:28}}>
 
-          {/* ── OVERVIEW ── */}
-          {tab==="overview"&&<>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12,marginBottom:24}}>
-              <Metric label="Total Policies"  value={String(POLICIES.length)}      sub={`${activePolicies.length} active`}                                    color={T.accent}/>
-              <Metric label="Avg Conformity"  value={`${avgConformity}%`}           sub="across active policies"                                               color={avgConformity>=80?T.green:avgConformity>=60?T.amber:T.red}/>
-              <Metric label="Open Violations" value={String(totalViolations)}       sub="across all policies"                                                  color={totalViolations>0?T.rose:T.green}/>
-              <Metric label="Open Risks"      value={String(openRisks)}             sub={`${GOVERNANCE_RISKS.filter(r=>r.status==="Open").length} unmitigated`} color={openRisks>0?T.amber:T.green}/>
-              <Metric label="Frameworks"      value={String(REGULATIONS.length)}    sub={`${compliantFrameworks} compliant`}                                   color={T.blue}/>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:20}}>
-              <Card2><div style={{padding:16}}>
-                <SH title="Regulation Coverage"/>
-                {REGULATIONS.map(reg=>{
-                  const sc = reg.status==="Compliant"?T.green:reg.status==="In Review"?T.amber:T.rose;
-                  return (<div key={reg.id} style={{marginBottom:12}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                      <div style={{display:"flex",alignItems:"center",gap:7}}>
-                        <span style={{fontSize:13,fontWeight:600,color:T.text}}>{reg.name}</span>
-                        <span style={{fontSize:10,color:T.textMuted}}>{reg.region}</span>
-                      </div>
-                      <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                        <span style={{fontSize:11,fontWeight:600,color:sc}}>{reg.status}</span>
-                        <span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",fontWeight:700,color:reg.score>=90?T.green:reg.score>=75?T.amber:T.red}}>{reg.score}%</span>
-                      </div>
-                    </div>
-                    <div style={{height:4,borderRadius:2,background:T.bgElevated,overflow:"hidden"}}>
-                      <div style={{width:`${reg.score}%`,height:"100%",background:reg.score>=90?T.green:reg.score>=75?T.amber:T.red,borderRadius:2}}/>
-                    </div>
-                  </div>);
-                })}
-              </div></Card2>
-              <Card2><div style={{padding:16}}>
-                <SH title="Open Risks"/>
-                {GOVERNANCE_RISKS.filter(r=>r.status!=="Resolved").map(r=>{
-                  const sc = riskScore(r); const rc = riskColor(sc);
-                  return (<div key={r.id} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"9px 0",borderBottom:`1px solid ${T.border}`}}>
-                    <div style={{width:8,height:8,borderRadius:2,background:rc,flexShrink:0,marginTop:4}}/>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12.5,fontWeight:500,color:T.text,marginBottom:2}}>{r.name}</div>
-                      <div style={{fontSize:11,color:T.textMuted}}>{r.category} · {r.linkedPolicy}</div>
-                    </div>
-                    <span style={{fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:5,background:`${rc}18`,color:rc,flexShrink:0}}>{r.status}</span>
-                  </div>);
-                })}
-              </div></Card2>
-            </div>
-            <Card2><div style={{padding:16}}>
-              <SH title="Conformity by Policy"/>
-              {activePolicies.map(p=>(
-                <div key={p.id} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10}}>
-                  <span style={{fontSize:12,color:T.text,width:190,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flexShrink:0}}>{p.name}</span>
-                  <div style={{flex:1,height:5,borderRadius:3,background:T.bgElevated,overflow:"hidden"}}>
-                    <div style={{width:`${p.conformity}%`,height:"100%",background:p.conformity>=80?T.green:p.conformity>=60?T.amber:T.red,borderRadius:3}}/>
-                  </div>
-                  <span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:p.conformity>=80?T.green:p.conformity>=60?T.amber:T.red,width:36,textAlign:"right",flexShrink:0}}>{p.conformity}%</span>
-                  {p.violations>0&&<span style={{fontSize:10.5,color:T.rose,fontFamily:"'Geist Mono',monospace",width:76,flexShrink:0}}>{p.violations} violations</span>}
-                </div>
-              ))}
-            </div></Card2>
-          </>}
-
-          {/* ── POLICIES ── */}
+          {/* ────────── TAB: POLICIES ────────── */}
           {tab==="policies"&&<>
-            <div style={{display:"flex",gap:6,marginBottom:18,flexWrap:"wrap",alignItems:"center",justifyContent:"space-between"}}>
-              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                {POLICY_CATS.map(cat=>(
-                  <button key={cat} onClick={()=>{setCatFilter(cat);setSelectedPolicy(null);}} style={{padding:"4px 12px",borderRadius:99,fontSize:11.5,fontWeight:catFilter===cat?600:400,border:`1px solid ${catFilter===cat?T.accent:T.border}`,background:catFilter===cat?T.accentDim:"transparent",color:catFilter===cat?T.accent:T.textSub,cursor:"pointer",transition:"all .12s"}}>{cat}</button>
-                ))}
-              </div>
-              <Btn icon={Ic.plus(12)} variant="primary" onClick={()=>onToast("Policy editor opened","success")}>New Policy</Btn>
+            {/* Metrics strip */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+              <Metric label="Total Policies"  value={String(POLICIES.length)}   sub={`${activePolicies} active`}  color={T.accent}/>
+              <Metric label="Draft"           value={String(draftPolicies)}      sub="pending review"              color={T.textSub}/>
+              <Metric label="Open Violations" value={String(openViolations)}     sub="require action"              color={openViolations>0?T.rose:T.green}/>
+              <Metric label="Frameworks"      value={String(REGULATIONS.length)} sub="linked regulations"          color={T.blue}/>
             </div>
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {filteredPolicies.map(p=>{
-                const isSel = selectedPolicy?.id===p.id;
-                return (
-                  <div key={p.id} onClick={()=>{setSelectedPolicy(isSel?null:p);setPdTab("overview");}}
-                    style={{padding:"14px 18px",background:T.bgSurface,border:`1.5px solid ${isSel?T.accent:T.border}`,borderRadius:10,cursor:"pointer",transition:"all .15s",boxShadow:isSel?`0 0 0 3px ${T.accent}15`:"none"}}
-                    onMouseEnter={e=>{if(!isSel)e.currentTarget.style.borderColor=T.borderLight;}} onMouseLeave={e=>{if(!isSel)e.currentTarget.style.borderColor=T.border;}}>
-                    <div style={{display:"flex",alignItems:"center",gap:12}}>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
-                          <span style={{fontSize:13,fontWeight:600,color:T.text}}>{p.name}</span>
-                          <Badge color={p.severity==="Critical"?T.rose:p.severity==="High"?T.amber:T.blue}>{p.severity}</Badge>
-                          {p.regulations.map(r=><span key={r} style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.blueDim,color:T.blue,border:`1px solid ${T.blue}20`}}>{r}</span>)}
-                        </div>
-                        <div style={{fontSize:11.5,color:T.textMuted}}>{p.scope} · {p.category} · Updated {p.updated}</div>
-                      </div>
-                      <div style={{textAlign:"center",flexShrink:0,width:58}}>
-                        <div style={{fontSize:16,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:p.lifecycle==="Draft"?T.textMuted:p.conformity>=80?T.green:p.conformity>=60?T.amber:T.red}}>{p.lifecycle==="Draft"?"—":`${p.conformity}%`}</div>
-                        <div style={{fontSize:9.5,color:T.textMuted}}>conformity</div>
-                      </div>
-                      <div style={{display:"flex",alignItems:"center",gap:5,flexShrink:0}}>
-                        <span style={{width:7,height:7,borderRadius:"50%",background:lifColor(p.lifecycle),display:"inline-block"}}/>
-                        <span style={{fontSize:11.5,color:lifColor(p.lifecycle),fontWeight:500}}>{p.lifecycle}</span>
-                      </div>
-                      {p.violations>0&&<span style={{padding:"3px 8px",borderRadius:6,background:T.roseDim,border:`1px solid ${T.rose}30`,fontSize:11,fontWeight:600,color:T.rose,flexShrink:0}}>{p.violations} violations</span>}
-                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,transform:isSel?"rotate(90deg)":"none",transition:"transform .15s",flexShrink:0}}><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-                    </div>
-                  </div>
-                );
-              })}
+            {/* Toolbar */}
+            <div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center"}}>
+              <Input2 value={q} onChange={e=>setQ(e.target.value)} placeholder="Search policies…" icon={Ic.search(12)} style={{maxWidth:280}}/>
+              <div style={{flex:1}}/>
+              <Btn icon={Ic.plus(12)} variant="primary" onClick={()=>onToast("Create policy dialog opened","success")}>Create Policy</Btn>
             </div>
+            {/* Table */}
+            <Card2 style={{overflow:"hidden",padding:0}}>
+              <DataTable
+                cols={[
+                  {key:"name",     label:"Policy Name",   render:v=><span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{v}</span>},
+                  {key:"category", label:"Type",          render:v=><span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}25`}}>{v}</span>},
+                  {key:"lifecycle",label:"Status",        render:v=><span style={{display:"flex",alignItems:"center",gap:5,fontSize:12}}><SDot status={v}/><span style={{color:statusColor(v),fontWeight:500}}>{v}</span></span>},
+                  {key:"owner",    label:"Owner",         render:v=><span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{v}</span>},
+                  {key:"assets",   label:"Linked Assets", render:v=><span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",fontWeight:600,color:T.text}}>{v}</span>},
+                  {key:"severity", label:"Impact",        render:v=>{const imp=v==="Critical"?"High":v; return <span style={{display:"inline-flex",alignItems:"center",padding:"2px 8px",borderRadius:99,fontSize:11,fontWeight:600,background:impactDim(imp),color:impactColor(imp),border:`1px solid ${impactColor(imp)}25`}}>{imp}</span>;}},
+                ]}
+                rows={filteredPolicies}
+                onRowClick={row=>{setSelPolicy(selPolicy?.id===row.id?null:row);setPdTab("overview");}}
+                emptyMsg="No policies found"
+              />
+            </Card2>
           </>}
 
-          {/* ── REGULATIONS ── */}
+          {/* ────────── TAB: REGULATIONS ────────── */}
           {tab==="regulations"&&<>
-            <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}>
-              <Btn small ghost icon={Ic.refresh(12)} onClick={()=>onToast("Audit started","success")}>Run Audit</Btn>
-            </div>
+            {/* Coverage gap banner */}
             {(()=>{const gaps=REGULATIONS.flatMap(r=>r.requirements.filter(req=>!req.linked)).length;return gaps>0&&(
-              <div style={{padding:"10px 14px",background:T.amberDim,border:`1px solid ${T.amber}30`,borderRadius:9,marginBottom:18,display:"flex",alignItems:"center",gap:10}}>
-                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{color:T.amber,flexShrink:0}}><path d="M8 2.5L14.5 13.5H1.5L8 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M8 7v3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/><circle cx="8" cy="12" r=".6" fill="currentColor"/></svg>
+              <div style={{padding:"10px 14px",background:T.amberDim,border:`1px solid ${T.amber}30`,borderRadius:9,marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
+                <span style={{color:T.amber,flexShrink:0}}>{Ic.alert(13)}</span>
                 <span style={{fontSize:12.5,color:T.text}}><strong>{gaps} regulation requirements</strong> have no linked internal policy — <span style={{color:T.amber}}>coverage gaps identified</span></span>
+                <Btn small ghost onClick={()=>onToast("Audit started","success")} style={{marginLeft:"auto",flexShrink:0}}>Run Audit</Btn>
               </div>
             );})()}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12,marginBottom:24}}>
-              {REGULATIONS.map(reg=>{
-                const isSel = selectedReg===reg.id;
-                const sc = reg.status==="Compliant"?T.green:reg.status==="In Review"?T.amber:T.rose;
-                const gaps = reg.requirements.filter(r=>!r.linked).length;
-                return (
-                  <Card2 key={reg.id} style={{cursor:"pointer",border:`1.5px solid ${isSel?T.accent:T.border}`,transition:"border-color .15s"}} onClick={()=>setSelectedReg(isSel?null:reg.id)}>
-                    <div style={{padding:18}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-                        <div>
-                          <div style={{fontSize:20,fontWeight:800,color:T.text,letterSpacing:"-0.5px"}}>{reg.name}</div>
-                          <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{reg.fullName}</div>
-                        </div>
-                        <span style={{fontSize:10.5,fontWeight:700,padding:"3px 9px",borderRadius:99,background:`${sc}18`,color:sc,border:`1px solid ${sc}33`,flexShrink:0}}>{reg.status}</span>
-                      </div>
-                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                        <div style={{flex:1,height:5,borderRadius:3,background:T.bgElevated,overflow:"hidden"}}><div style={{width:`${reg.score}%`,height:"100%",background:reg.score>=90?T.green:reg.score>=75?T.amber:T.red,borderRadius:3}}/></div>
-                        <span style={{fontSize:13,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:reg.score>=90?T.green:reg.score>=75?T.amber:T.red}}>{reg.score}%</span>
-                      </div>
-                      <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:T.textMuted}}>
-                        <span>{reg.passing}/{reg.controls} controls passing</span>
-                        {gaps>0&&<span style={{color:T.amber,fontWeight:600}}>{gaps} gap{gaps>1?"s":""}</span>}
-                      </div>
-                    </div>
-                    {isSel&&<div style={{borderTop:`1px solid ${T.border}`,padding:"12px 18px"}}>
-                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Requirements</div>
-                      {reg.requirements.map(req=>(
-                        <div key={req.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 0",borderBottom:`1px solid ${T.border}`}}>
-                          <div style={{width:16,height:16,borderRadius:"50%",background:req.linked?`${T.green}18`:`${T.amber}18`,border:`1.5px solid ${req.linked?T.green:T.amber}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                            {req.linked
-                              ?<svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1.5 4l2 2L6.5 2" stroke={T.green} strokeWidth="1.3" strokeLinecap="round"/></svg>
-                              :<svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M4 2v2.5" stroke={T.amber} strokeWidth="1.2" strokeLinecap="round"/><circle cx="4" cy="6" r=".5" fill={T.amber}/></svg>}
-                          </div>
-                          <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,flexShrink:0}}>{req.id}</span>
-                          <span style={{fontSize:12,color:T.text,flex:1}}>{req.title}</span>
-                          {!req.linked&&<button onClick={e=>{e.stopPropagation();onToast(`New policy for ${req.id} opened`,"success");}} style={{fontSize:11,padding:"3px 9px",borderRadius:6,background:T.amberDim,border:`1px solid ${T.amber}30`,color:T.amber,cursor:"pointer",flexShrink:0}}>Create Policy</button>}
-                        </div>
-                      ))}
-                    </div>}
-                  </Card2>
-                );
-              })}
-            </div>
             <Card2 style={{overflow:"hidden",padding:0}}>
-              <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.border}`}}><SH title="Control Checks"/></div>
-              <DataTable cols={[
-                {key:"framework",label:"Framework",render:v=><Badge>{v}</Badge>},
-                {key:"control",  label:"Control",  render:v=><span style={{fontSize:12.5,color:T.text}}>{v}</span>},
-                {key:"category", label:"Category", render:v=><span style={{fontSize:12,color:T.textSub}}>{v}</span>},
-                {key:"asset",    label:"Asset",    render:v=><span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{v}</span>},
-                {key:"status",   label:"Status",   render:v=><span style={{display:"flex",alignItems:"center",gap:5,fontSize:12}}><SDot status={v}/>{v}</span>},
-              ]} rows={COMPLIANCE_CONTROLS}/>
+              <DataTable
+                cols={[
+                  {key:"name",          label:"Regulation",      render:v=><span style={{fontSize:13,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text}}>{v}</span>},
+                  {key:"fullName",      label:"Description",     render:v=><span style={{fontSize:12,color:T.textSub}}>{v}</span>},
+                  {key:"region",        label:"Region",          render:v=><Badge>{v}</Badge>},
+                  {key:"linkedPolicies",label:"Linked Policies", render:v=><span style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",fontWeight:600,color:T.accent}}>{v.length}</span>},
+                  {key:"status",        label:"Status",          render:v=>{const sc=v==="Compliant"?T.green:v==="In Review"?T.amber:T.rose;return <span style={{display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,color:sc}}><SDot status={v==="Compliant"?"passing":v==="In Progress"?"Pending":"warning"}/>{v}</span>;}},
+                  {key:"score",         label:"Score",           render:v=><span style={{fontSize:13,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:v>=90?T.green:v>=75?T.amber:T.red}}>{v}%</span>},
+                ]}
+                rows={REGULATIONS}
+                onRowClick={row=>{setSelReg(selReg?.id===row.id?null:row);setRdTab("overview");}}
+                emptyMsg="No regulations found"
+              />
             </Card2>
           </>}
 
-          {/* ── RULES ── */}
-          {tab==="rules"&&<>
-            <div style={{display:"flex",gap:6,marginBottom:18,flexWrap:"wrap"}}>
-              {RULE_TYPES.map(type=>(
-                <button key={type} onClick={()=>setRuleTypeFilter(type)} style={{padding:"4px 12px",borderRadius:99,fontSize:11.5,fontWeight:ruleTypeFilter===type?600:400,border:`1px solid ${ruleTypeFilter===type?T.accent:T.border}`,background:ruleTypeFilter===type?T.accentDim:"transparent",color:ruleTypeFilter===type?T.accent:T.textSub,cursor:"pointer",transition:"all .12s"}}>{type}</button>
+          {/* ────────── TAB: DATA ASSETS IMPACT ────────── */}
+          {tab==="impact"&&<>
+            <div style={{fontSize:12,color:T.textMuted,marginBottom:14}}>Data assets affected by one or more active policies</div>
+            <Card2 style={{overflow:"hidden",padding:0}}>
+              <DataTable
+                cols={[
+                  {key:"asset",           label:"Asset Name",       render:v=><span style={{fontSize:12.5,fontWeight:600,fontFamily:"'Geist Mono',monospace",color:T.text}}>{v}</span>},
+                  {key:"type",            label:"Type",             render:v=><span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:5,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`}}>{v}</span>},
+                  {key:"policies",        label:"Applied Policies",  render:v=><span style={{fontSize:11.5,color:T.textSub}}>{v.slice(0,2).join(", ")}{v.length>2?<span style={{color:T.textMuted}}> +{v.length-2}</span>:""}</span>},
+                  {key:"complianceStatus",label:"Compliance Status", render:v=><span style={{display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,color:csColor(v)}}><SDot status={v==="Compliant"?"passing":"failing"}/>{v}</span>},
+                  {key:"violations",      label:"Violations",        render:v=><span style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",fontWeight:700,color:v>0?T.rose:T.green}}>{v>0?v:"—"}</span>},
+                ]}
+                rows={POLICY_ASSET_IMPACTS}
+                emptyMsg="No impacted assets"
+              />
+            </Card2>
+          </>}
+
+          {/* ────────── TAB: VIOLATIONS ────────── */}
+          {tab==="violations"&&<>
+            {/* Filter pills */}
+            <div style={{display:"flex",gap:6,marginBottom:14,alignItems:"center"}}>
+              {["All","Open","Resolved"].map(f=>(
+                <button key={f} onClick={()=>setViolFilter(f)} style={{padding:"4px 12px",borderRadius:99,fontSize:11.5,fontWeight:violFilter===f?600:400,border:`1px solid ${violFilter===f?T.accent:T.border}`,background:violFilter===f?T.accentDim:"transparent",color:violFilter===f?T.accent:T.textSub,cursor:"pointer",transition:"all .12s"}}>{f}</button>
               ))}
+              <span style={{marginLeft:4,fontSize:11.5,color:T.textMuted}}>{filteredViolations.length} violation{filteredViolations.length!==1?"s":""}</span>
             </div>
             <Card2 style={{overflow:"hidden",padding:0}}>
-              <DataTable cols={[
-                {key:"name",       label:"Rule",       render:v=><span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{v}</span>},
-                {key:"type",       label:"Type",       render:v=><span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:5,background:`${typeColor(v)}18`,color:typeColor(v),border:`1px solid ${typeColor(v)}25`}}>{v}</span>},
-                {key:"policyName", label:"Policy",     render:v=><span style={{fontSize:12,color:T.textSub}}>{v}</span>},
-                {key:"assets",     label:"Assets",     render:v=><span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{v.slice(0,2).join(", ")}{v.length>2?` +${v.length-2}`:""}</span>},
-                {key:"status",     label:"Status",     render:v=><span style={{display:"flex",alignItems:"center",gap:5,fontSize:12}}><SDot status={v==="Violated"?"failing":v==="Warning"?"warning":v==="Draft"?"Pending":"passing"}/>{v}</span>},
-                {key:"violations", label:"Violations", render:v=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:v>0?T.rose:T.textMuted}}>{v}</span>},
-              ]} rows={filteredRules}/>
+              <DataTable
+                cols={[
+                  {key:"policyName",label:"Policy",      render:v=><span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{v}</span>},
+                  {key:"asset",     label:"Data Asset",  render:v=><span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.accent}}>{v}</span>},
+                  {key:"issue",     label:"Issue",       render:v=><span style={{fontSize:12,color:T.textSub}}>{v}</span>},
+                  {key:"severity",  label:"Severity",    render:v=><span style={{display:"inline-flex",alignItems:"center",padding:"2px 8px",borderRadius:99,fontSize:11,fontWeight:600,background:sevDim(v),color:sevColor(v),border:`1px solid ${sevColor(v)}25`}}>{v}</span>},
+                  {key:"status",    label:"Status",      render:v=><span style={{display:"flex",alignItems:"center",gap:5,fontSize:12}}><SDot status={v==="Open"?"failing":"passing"}/><span style={{fontWeight:500,color:v==="Open"?T.rose:T.green}}>{v}</span></span>},
+                  {key:"owner",     label:"Owner",       render:v=><span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{v}</span>},
+                  {key:"id",        label:"Actions",     render:(v,row)=>row.status==="Open"?(
+                    <div style={{display:"flex",gap:6}}>
+                      <button onClick={e=>{e.stopPropagation();onToast("Violation assigned","success");}} style={{fontSize:11,padding:"3px 9px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer",whiteSpace:"nowrap"}}>Assign</button>
+                      <button onClick={e=>{e.stopPropagation();onToast("Marked as resolved","success");}} style={{fontSize:11,padding:"3px 9px",borderRadius:6,background:`${T.green}15`,border:`1px solid ${T.green}30`,color:T.green,cursor:"pointer",whiteSpace:"nowrap"}}>Resolve</button>
+                    </div>
+                  ):<span style={{fontSize:11,color:T.textMuted}}>—</span>},
+                ]}
+                rows={filteredViolations}
+                emptyMsg="No violations found"
+              />
             </Card2>
           </>}
 
-          {/* ── RISK REGISTER ── */}
-          {tab==="risks"&&<>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
-              <div style={{display:"flex",gap:6}}>
-                {["list","matrix"].map(v=>(
-                  <button key={v} onClick={()=>setRiskView(v)} style={{padding:"5px 14px",borderRadius:99,fontSize:12,fontWeight:riskView===v?600:400,border:`1px solid ${riskView===v?T.accent:T.border}`,background:riskView===v?T.accentDim:"transparent",color:riskView===v?T.accent:T.textSub,cursor:"pointer",transition:"all .12s",textTransform:"capitalize"}}>{v} View</button>
-                ))}
-              </div>
-              <Btn icon={Ic.plus(12)} onClick={()=>onToast("New risk dialog opened","success")}>Log Risk</Btn>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
-              <Metric label="Open"       value={String(GOVERNANCE_RISKS.filter(r=>r.status==="Open").length)}        color={T.rose}/>
-              <Metric label="In Progress"value={String(GOVERNANCE_RISKS.filter(r=>r.status==="In Progress").length)} color={T.amber}/>
-              <Metric label="Resolved"   value={String(GOVERNANCE_RISKS.filter(r=>r.status==="Resolved").length)}    color={T.green}/>
-              <Metric label="Critical"   value={String(GOVERNANCE_RISKS.filter(r=>r.likelihood==="High"&&r.impact==="High").length)} color={T.red}/>
-            </div>
-            {riskView==="list"&&(
-              <Card2 style={{overflow:"hidden",padding:0}}>
-                <DataTable cols={[
-                  {key:"name",       label:"Risk",       render:v=><span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{v}</span>},
-                  {key:"category",   label:"Category",   render:v=><Badge>{v}</Badge>},
-                  {key:"likelihood", label:"Likelihood", render:v=><span style={{fontSize:12,fontWeight:600,color:v==="High"?T.red:v==="Med"?T.amber:T.green}}>{v}</span>},
-                  {key:"impact",     label:"Impact",     render:v=><span style={{fontSize:12,fontWeight:600,color:v==="High"?T.red:v==="Med"?T.amber:T.green}}>{v}</span>},
-                  {key:"linkedPolicy",label:"Policy",    render:v=><span style={{fontSize:11.5,color:T.textSub}}>{v}</span>},
-                  {key:"owner",      label:"Owner",      render:v=><span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{v}</span>},
-                  {key:"status",     label:"Status",     render:v=><span style={{fontSize:11,fontWeight:600,padding:"2px 7px",borderRadius:5,background:v==="Open"?`${T.rose}15`:v==="In Progress"?`${T.amber}15`:`${T.green}15`,color:v==="Open"?T.rose:v==="In Progress"?T.amber:T.green}}>{v}</span>},
-                ]} rows={GOVERNANCE_RISKS}/>
-              </Card2>
-            )}
-            {riskView==="matrix"&&(
-              <Card2><div style={{padding:20}}>
-                <SH title="Risk Matrix" sub="Likelihood (vertical) × Impact (horizontal)"/>
-                <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
-                  <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingBottom:38,alignItems:"flex-end",gap:0,flexShrink:0,height:270}}>
-                    {["High","Med","Low"].map(l=><span key={l} style={{fontSize:10.5,color:T.textMuted}}>{l}</span>)}
-                  </div>
-                  <div style={{flex:1}}>
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gridTemplateRows:"repeat(3,80px)",gap:4}}>
-                      {[
-                        {lh:"High",im:"Low",bg:`${T.amber}15`},{lh:"High",im:"Med",bg:`${T.red}18`},   {lh:"High",im:"High",bg:`${T.red}25`},
-                        {lh:"Med", im:"Low",bg:`${T.green}10`},{lh:"Med", im:"Med",bg:`${T.amber}14`}, {lh:"Med", im:"High",bg:`${T.amber}20`},
-                        {lh:"Low", im:"Low",bg:`${T.green}08`},{lh:"Low", im:"Med",bg:`${T.green}10`}, {lh:"Low", im:"High",bg:`${T.amber}12`},
-                      ].map((cell,i)=>{
-                        const cellRisks = GOVERNANCE_RISKS.filter(r=>r.likelihood===cell.lh&&r.impact===cell.im);
-                        return (<div key={i} style={{background:cell.bg,borderRadius:7,border:`1px solid ${T.border}`,padding:8,display:"flex",flexWrap:"wrap",gap:4,alignContent:"flex-start"}}>
-                          {cellRisks.map(r=>(
-                            <div key={r.id} title={r.name} style={{width:10,height:10,borderRadius:"50%",background:r.status==="Resolved"?T.green:riskColor(riskScore(r)),cursor:"pointer",flexShrink:0}}/>
-                          ))}
-                        </div>);
-                      })}
+          {/* ────────── TAB: WORKFLOWS ────────── */}
+          {tab==="workflows"&&<>
+            <div style={{fontSize:12,color:T.textMuted,marginBottom:14}}>Track policy approval lifecycle from Draft to Active</div>
+            <Card2 style={{overflow:"hidden",padding:0}}>
+              <DataTable
+                cols={[
+                  {key:"policyName",label:"Policy",        render:v=><span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{v}</span>},
+                  {key:"stage",     label:"Current Stage", render:v=>{
+                    const STAGES=["Draft","Review","Approved","Active"];
+                    return (
+                      <div style={{display:"flex",alignItems:"center",gap:4}}>
+                        {STAGES.map((s,i)=>(
+                          <React.Fragment key={s}>
+                            <span style={{fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:99,
+                              background:s===v?(s==="Active"?`${T.green}18`:s==="Draft"?T.bgElevated:s==="Review"?T.amberDim:T.blueDim):T.bgElevated,
+                              color:s===v?(s==="Active"?T.green:s==="Draft"?T.textSub:s==="Review"?T.amber:T.blue):T.textMuted,
+                              border:`1px solid ${s===v?(s==="Active"?`${T.green}40`:s==="Draft"?T.border:s==="Review"?`${T.amber}40`:`${T.blue}40`):T.border}`,
+                            }}>{s}</span>
+                            {i<STAGES.length-1&&<span style={{fontSize:9,color:T.textMuted}}>›</span>}
+                          </React.Fragment>
+                        ))}
+                      </div>
+                    );
+                  }},
+                  {key:"reviewer",  label:"Reviewer",     render:v=><span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{v}</span>},
+                  {key:"updated",   label:"Last Updated", render:v=><span style={{fontSize:11.5,color:T.textMuted}}>{v}</span>},
+                  {key:"id",        label:"Actions",      render:(v,row)=>(
+                    <div style={{display:"flex",gap:6}}>
+                      {row.stage==="Draft"&&<button onClick={e=>{e.stopPropagation();onToast("Submitted for review","success");}} style={{fontSize:11,padding:"3px 9px",borderRadius:6,background:T.accentDim,border:`1px solid ${T.accent}30`,color:T.accent,cursor:"pointer",whiteSpace:"nowrap"}}>Submit for Review</button>}
+                      {row.stage==="Review"&&<>
+                        <button onClick={e=>{e.stopPropagation();onToast("Policy approved","success");}} style={{fontSize:11,padding:"3px 9px",borderRadius:6,background:`${T.green}15`,border:`1px solid ${T.green}30`,color:T.green,cursor:"pointer",whiteSpace:"nowrap"}}>Approve</button>
+                        <button onClick={e=>{e.stopPropagation();onToast("Policy rejected — returned to Draft","warning");}} style={{fontSize:11,padding:"3px 9px",borderRadius:6,background:T.roseDim,border:`1px solid ${T.rose}30`,color:T.rose,cursor:"pointer",whiteSpace:"nowrap"}}>Reject</button>
+                      </>}
+                      {(row.stage==="Approved"||row.stage==="Active")&&<span style={{fontSize:11,color:T.textMuted}}>—</span>}
                     </div>
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4,marginTop:6}}>
-                      {["Low","Med","High"].map(l=><div key={l} style={{textAlign:"center",fontSize:10.5,color:T.textMuted}}>{l}</div>)}
-                    </div>
-                    <div style={{textAlign:"center",fontSize:10.5,color:T.textMuted,marginTop:4}}>Impact →</div>
-                  </div>
-                </div>
-                <div style={{marginTop:14,paddingTop:12,borderTop:`1px solid ${T.border}`,display:"flex",flexWrap:"wrap",gap:12}}>
-                  {GOVERNANCE_RISKS.map(r=>(
-                    <div key={r.id} style={{display:"flex",alignItems:"center",gap:5}}>
-                      <div style={{width:8,height:8,borderRadius:"50%",background:r.status==="Resolved"?T.green:riskColor(riskScore(r))}}/>
-                      <span style={{fontSize:10.5,color:T.textMuted}}>{r.name.split(" ").slice(0,4).join(" ")}</span>
-                    </div>
-                  ))}
-                </div>
-              </div></Card2>
-            )}
+                  )},
+                ]}
+                rows={POLICY_WORKFLOWS}
+                emptyMsg="No workflows"
+              />
+            </Card2>
           </>}
 
         </div>
 
-        {/* ── POLICY DETAIL PANEL ── */}
-        {tab==="policies"&&selectedPolicy&&(()=>{
-          const p = selectedPolicy;
-          const pRules = GOVERNANCE_RULES.filter(r=>r.policyId===p.id);
-          const lc = lifIdx(p.lifecycle);
+        {/* ────────── POLICY DETAIL PANEL ────────── */}
+        {tab==="policies"&&selPolicy&&(()=>{
+          const p = selPolicy;
+          const controls = CONTROLS_BY_POLICY[p.id]||[];
+          const pviol = POLICY_VIOLATIONS.filter(v=>v.policyId===p.id);
+          const openPviol = pviol.filter(v=>v.status==="Open").length;
+          const csStatus = openPviol>0?"Violated":p.lifecycle==="Draft"?"Unknown":"Compliant";
           return (
-            <div className="slideIn" style={{width:320,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto",flexShrink:0,display:"flex",flexDirection:"column"}}>
+            <div className="slideIn" style={{width:340,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,flexShrink:0,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+              {/* Panel header */}
               <div style={{padding:"16px 18px 12px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:5,lineHeight:1.3,paddingRight:8}}>{p.name}</div>
+                  <div style={{flex:1,minWidth:0,paddingRight:8}}>
+                    <div style={{fontSize:14,fontWeight:700,color:T.text,lineHeight:1.3,marginBottom:6}}>{p.name}</div>
                     <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                      <span style={{width:7,height:7,borderRadius:"50%",background:lifColor(p.lifecycle),display:"inline-block"}}/>
-                      <span style={{fontSize:11.5,color:lifColor(p.lifecycle),fontWeight:500}}>{p.lifecycle}</span>
-                      <Badge color={p.severity==="Critical"?T.rose:T.amber}>{p.severity}</Badge>
+                      <SDot status={p.lifecycle}/>
+                      <span style={{fontSize:11.5,color:statusColor(p.lifecycle),fontWeight:600}}>{p.lifecycle}</span>
+                      <span style={{fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:99,background:impactDim(p.severity==="Critical"?"High":p.severity),color:impactColor(p.severity==="Critical"?"High":p.severity),border:`1px solid ${impactColor(p.severity==="Critical"?"High":p.severity)}25`}}>{p.severity==="Critical"?"High":p.severity} Impact</span>
                     </div>
                   </div>
-                  <button onClick={()=>setSelectedPolicy(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,flexShrink:0}}>{Ic.x(13)}</button>
+                  <button onClick={()=>setSelPolicy(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,flexShrink:0}}>{Ic.x(13)}</button>
                 </div>
-                {/* Lifecycle stepper */}
-                <div style={{display:"flex",alignItems:"center",marginTop:12}}>
-                  {LIFECYCLE_STEPS.filter(s=>s!=="Deprecated").map((step,i,arr)=>(
-                    <React.Fragment key={step}>
-                      <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
-                        <div style={{width:10,height:10,borderRadius:"50%",background:i<=lc?T.accent:T.bgElevated,border:`2px solid ${i<=lc?T.accent:T.border}`,marginBottom:3}}/>
-                        <span style={{fontSize:8,color:i<=lc?T.text:T.textMuted,textAlign:"center",lineHeight:1.3,whiteSpace:"nowrap"}}>{step}</span>
-                      </div>
-                      {i<arr.length-1&&<div style={{height:2,flex:1,background:i<lc?T.accent:T.border,marginBottom:14,flexShrink:0}}/>}
-                    </React.Fragment>
-                  ))}
+                {/* Workflow stepper */}
+                <div style={{display:"flex",alignItems:"center",marginTop:10}}>
+                  {["Draft","Review","Approved","Active"].map((step,i,arr)=>{
+                    const stageIdx = ["Draft","Under Review","Approved","Active"].indexOf(p.lifecycle);
+                    const stepIdx  = ["Draft","Review","Approved","Active"].indexOf(step);
+                    const done = stepIdx<=Math.max(stageIdx,0);
+                    return (
+                      <React.Fragment key={step}>
+                        <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+                          <div style={{width:9,height:9,borderRadius:"50%",background:done?T.accent:T.bgElevated,border:`2px solid ${done?T.accent:T.border}`,marginBottom:3,transition:"all .2s"}}/>
+                          <span style={{fontSize:8,color:done?T.text:T.textMuted,textAlign:"center",lineHeight:1.3,whiteSpace:"nowrap"}}>{step}</span>
+                        </div>
+                        {i<arr.length-1&&<div style={{height:2,flex:1,background:stepIdx<Math.max(stageIdx,0)?T.accent:T.border,marginBottom:14,flexShrink:0,transition:"all .2s"}}/>}
+                      </React.Fragment>
+                    );
+                  })}
                 </div>
               </div>
-              {/* Conformity */}
-              <div style={{padding:"12px 18px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
-                  <span style={{fontSize:11.5,color:T.textMuted}}>Conformity Score</span>
-                  <span style={{fontSize:17,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:p.lifecycle==="Draft"?T.textMuted:p.conformity>=80?T.green:p.conformity>=60?T.amber:T.red}}>{p.lifecycle==="Draft"?"—":`${p.conformity}%`}</span>
-                </div>
-                {p.lifecycle!=="Draft"&&<div style={{height:5,borderRadius:3,background:T.bgElevated,overflow:"hidden"}}>
-                  <div style={{width:`${p.conformity}%`,height:"100%",background:p.conformity>=80?T.green:p.conformity>=60?T.amber:T.red,borderRadius:3}}/>
-                </div>}
-                {p.violations>0&&<div style={{marginTop:5,fontSize:11.5,color:T.rose}}>{p.violations} violations detected</div>}
-              </div>
-              {/* Sub-tabs */}
+
+              {/* Panel sub-tabs */}
               <div style={{display:"flex",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-                {["overview","rules","assets"].map(dt=>(
-                  <button key={dt} onClick={()=>setPdTab(dt)} style={{flex:1,padding:"7px 0",background:"none",border:"none",borderBottom:`2px solid ${pdTab===dt?T.accent:"transparent"}`,color:pdTab===dt?T.text:T.textMuted,fontSize:11,fontWeight:pdTab===dt?600:400,cursor:"pointer",textTransform:"capitalize",marginBottom:-1}}>{dt}</button>
+                {[{k:"overview",l:"Overview"},{k:"assets",l:`Assets (${p.assets})`},{k:"violations",l:`Violations (${pviol.length})`},{k:"activity",l:"Activity"}].map(t=>(
+                  <button key={t.k} onClick={()=>setPdTab(t.k)} style={{flex:1,padding:"7px 0",background:"none",border:"none",borderBottom:`2px solid ${pdTab===t.k?T.accent:"transparent"}`,color:pdTab===t.k?T.text:T.textMuted,fontSize:10,fontWeight:pdTab===t.k?600:400,cursor:"pointer",marginBottom:-1,transition:"all .12s"}}>{t.l}</button>
                 ))}
               </div>
+
+              {/* Panel content */}
               <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+
                 {pdTab==="overview"&&<>
-                  {[{l:"Category",v:p.category},{l:"Owner",v:p.owner},{l:"Scope",v:p.scope},{l:"Severity",v:p.severity},{l:"Updated",v:p.updated}].map(({l,v})=>(
-                    <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,marginBottom:9}}>
-                      <span style={{color:T.textMuted}}>{l}</span><span style={{color:T.text,fontWeight:500}}>{v}</span>
+                  {/* Description */}
+                  <div style={{fontSize:12,color:T.textSub,lineHeight:1.7,marginBottom:14,padding:"10px 12px",background:T.bgElevated,borderRadius:8}}>{p.description}</div>
+                  {/* Key fields */}
+                  {[{l:"Owner",v:p.owner,mono:true},{l:"Type",v:p.category},{l:"Scope",v:p.scope},{l:"Last Updated",v:p.updated}].map(({l,v,mono})=>(
+                    <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,padding:"7px 0",borderBottom:`1px solid ${T.border}`}}>
+                      <span style={{color:T.textMuted}}>{l}</span>
+                      <span style={{color:T.text,fontWeight:500,fontFamily:mono?"'Geist Mono',monospace":"inherit"}}>{v}</span>
                     </div>
                   ))}
-                  {p.regulations.length>0&&<div style={{marginTop:10}}>
-                    <div style={{fontSize:11,color:T.textMuted,marginBottom:6}}>Linked Regulations</div>
+                  {/* Controls */}
+                  {controls.length>0&&<div style={{marginTop:14}}>
+                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:7}}>Controls</div>
+                    <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                      {controls.map(c=><span key={c} style={{fontSize:11,fontWeight:600,padding:"3px 9px",borderRadius:99,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}25`}}>{c}</span>)}
+                    </div>
+                  </div>}
+                  {/* Compliance status block */}
+                  <div style={{marginTop:14,padding:"10px 12px",background:csStatus==="Compliant"?`${T.green}10`:csStatus==="Violated"?T.roseDim:T.bgElevated,border:`1px solid ${csStatus==="Compliant"?`${T.green}30`:csStatus==="Violated"?`${T.rose}30`:T.border}`,borderRadius:8}}>
+                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>Compliance Status</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <SDot status={csStatus==="Compliant"?"passing":csStatus==="Violated"?"failing":"Pending"}/>
+                      <span style={{fontSize:13,fontWeight:700,color:csColor(csStatus)}}>{csStatus}</span>
+                      {openPviol>0&&<span style={{fontSize:11,color:T.rose,marginLeft:"auto"}}>{openPviol} open violation{openPviol!==1?"s":""}</span>}
+                    </div>
+                  </div>
+                  {/* Linked regulations */}
+                  {p.regulations.length>0&&<div style={{marginTop:12}}>
+                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Linked Regulations</div>
                     <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{p.regulations.map(r=><span key={r} style={{fontSize:11,fontWeight:600,padding:"3px 8px",borderRadius:5,background:T.blueDim,color:T.blue,border:`1px solid ${T.blue}20`}}>{r}</span>)}</div>
                   </div>}
-                  <div style={{marginTop:14,paddingTop:12,borderTop:`1px solid ${T.border}`}}>
-                    <div style={{fontSize:11,color:T.textMuted,marginBottom:6}}>Description</div>
-                    <p style={{fontSize:12,color:T.textSub,lineHeight:1.7}}>{p.description}</p>
-                  </div>
                 </>}
-                {pdTab==="rules"&&<>
-                  {pRules.length===0&&<div style={{fontSize:12,color:T.textMuted,textAlign:"center",padding:"20px 0"}}>No rules defined yet</div>}
-                  {pRules.map(r=>(
-                    <div key={r.id} style={{padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:8}}>
-                      <div style={{fontSize:12.5,fontWeight:600,color:T.text,marginBottom:5}}>{r.name}</div>
+
+                {pdTab==="assets"&&<>
+                  <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>{p.assets} asset{p.assets!==1?"s":""} governed by this policy</div>
+                  {ASSETS.slice(0,Math.min(p.assets||3,6)).map(a=>(
+                    <div key={a.id} style={{padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:7}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                        <span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",fontWeight:600,color:T.text}}>{a.name}</span>
+                        <span style={{fontSize:11,fontWeight:600,padding:"2px 6px",borderRadius:4,background:T.bgSurface,color:T.textMuted,border:`1px solid ${T.border}`}}>{a.type}</span>
+                      </div>
                       <div style={{display:"flex",alignItems:"center",gap:6}}>
-                        <span style={{fontSize:10.5,padding:"2px 6px",borderRadius:4,background:`${typeColor(r.type)}18`,color:typeColor(r.type)}}>{r.type}</span>
-                        <span style={{display:"flex",alignItems:"center",gap:3,fontSize:11}}><SDot status={r.status==="Violated"?"failing":r.status==="Warning"?"warning":"passing"}/>{r.status}</span>
-                        {r.violations>0&&<span style={{fontSize:10.5,color:T.rose,marginLeft:"auto"}}>{r.violations} violations</span>}
+                        <div style={{flex:1,height:3,borderRadius:2,background:T.bgSurface,overflow:"hidden"}}><div style={{width:`${a.quality}%`,height:"100%",background:a.quality>=80?T.green:a.quality>=60?T.amber:T.red,borderRadius:2}}/></div>
+                        <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:a.quality>=80?T.green:a.quality>=60?T.amber:T.red,flexShrink:0}}>{a.quality}%</span>
                       </div>
                     </div>
                   ))}
-                  <button onClick={()=>onToast("Add rule dialog opened","success")} style={{width:"100%",marginTop:6,padding:"7px 0",borderRadius:8,background:"transparent",border:`1px dashed ${T.border}`,color:T.textMuted,fontSize:12,cursor:"pointer",transition:"all .12s"}}
-                    onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>+ Add Rule</button>
                 </>}
-                {pdTab==="assets"&&<>
-                  <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>{p.assets} asset{p.assets!==1?"s":""} governed by this policy</div>
-                  {ASSETS.slice(0,Math.min(p.assets||3,5)).map(a=>(
-                    <div key={a.id} style={{padding:"9px 0",borderBottom:`1px solid ${T.border}`}}>
-                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                        <span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.accent}}>{a.name}</span>
-                        <span style={{fontSize:11.5,fontWeight:600,color:a.quality>=80?T.green:a.quality>=60?T.amber:T.red}}>{a.quality}%</span>
+
+                {pdTab==="violations"&&<>
+                  {pviol.length===0
+                    ? <div style={{padding:"32px 0",textAlign:"center"}}>
+                        <div style={{fontSize:12,color:T.textMuted}}>No violations for this policy</div>
                       </div>
-                      <div style={{height:3,borderRadius:2,background:T.bgElevated,overflow:"hidden"}}>
-                        <div style={{width:`${a.quality}%`,height:"100%",background:a.quality>=80?T.green:a.quality>=60?T.amber:T.red,borderRadius:2}}/>
+                    : pviol.map(v=>(
+                      <div key={v.id} style={{padding:"10px 12px",background:v.status==="Open"?T.roseDim:T.bgElevated,border:`1px solid ${v.status==="Open"?`${T.rose}30`:T.border}`,borderRadius:8,marginBottom:8}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:5}}>
+                          <span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",fontWeight:600,color:T.accent}}>{v.asset}</span>
+                          <span style={{fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:99,background:sevDim(v.severity),color:sevColor(v.severity),border:`1px solid ${sevColor(v.severity)}25`,flexShrink:0}}>{v.severity}</span>
+                        </div>
+                        <div style={{fontSize:12,color:T.textSub,marginBottom:5,lineHeight:1.5}}>{v.issue}</div>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:11}}>
+                          <span style={{color:T.textMuted}}>{v.detected}</span>
+                          <span style={{fontWeight:600,color:v.status==="Open"?T.rose:T.green}}>{v.status}</span>
+                        </div>
+                      </div>
+                    ))
+                  }
+                </>}
+
+                {pdTab==="activity"&&<>
+                  {ACTIVITY_LOG.map((entry,i)=>(
+                    <div key={i} style={{display:"flex",gap:10,padding:"9px 0",borderBottom:`1px solid ${T.border}`}}>
+                      <div style={{width:6,height:6,borderRadius:"50%",background:T.accent,flexShrink:0,marginTop:5}}/>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:12,color:T.text,marginBottom:2}}><span style={{fontFamily:"'Geist Mono',monospace",fontWeight:600}}>{entry.user}</span> {entry.action}</div>
+                        <div style={{fontSize:11,color:T.textMuted}}>{entry.time}</div>
                       </div>
                     </div>
                   ))}
                 </>}
               </div>
+
+              {/* Panel footer */}
               <div style={{padding:"12px 18px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,flexShrink:0}}>
                 <Btn small ghost icon={Ic.edit(11)} onClick={()=>onToast("Policy editor opened","success")} style={{flex:1}}>Edit</Btn>
                 {p.lifecycle==="Draft"&&<Btn small variant="primary" onClick={()=>onToast("Policy submitted for review","success")} style={{flex:1}}>Submit for Review</Btn>}
-                {p.lifecycle==="Active"&&<Btn small variant="danger" onClick={()=>onToast("Policy deprecated","success")} style={{flex:1}}>Deprecate</Btn>}
+                {p.lifecycle==="Under Review"&&<Btn small variant="primary" onClick={()=>onToast("Policy approved","success")} style={{flex:1}}>Approve</Btn>}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ────────── REGULATION DETAIL PANEL ────────── */}
+        {tab==="regulations"&&selReg&&(()=>{
+          const reg = selReg;
+          const sc = reg.status==="Compliant"?T.green:reg.status==="In Review"?T.amber:T.rose;
+          const linkedPols = POLICIES.filter(p=>reg.linkedPolicies.includes(p.id));
+          return (
+            <div className="slideIn" style={{width:340,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,flexShrink:0,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+              {/* Header */}
+              <div style={{padding:"16px 18px 14px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                  <div>
+                    <div style={{fontSize:24,fontWeight:800,color:T.text,letterSpacing:"-0.5px",marginBottom:2}}>{reg.name}</div>
+                    <div style={{fontSize:12,color:T.textMuted,marginBottom:8}}>{reg.fullName}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <Badge>{reg.region}</Badge>
+                      <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:99,background:`${sc}18`,color:sc,border:`1px solid ${sc}30`}}>{reg.status}</span>
+                    </div>
+                  </div>
+                  <button onClick={()=>setSelReg(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted}}>{Ic.x(13)}</button>
+                </div>
+              </div>
+              {/* Sub-tabs */}
+              <div style={{display:"flex",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                {[{k:"overview",l:"Overview"},{k:"policies",l:`Policies (${linkedPols.length})`}].map(t=>(
+                  <button key={t.k} onClick={()=>setRdTab(t.k)} style={{flex:1,padding:"8px 0",background:"none",border:"none",borderBottom:`2px solid ${rdTab===t.k?T.accent:"transparent"}`,color:rdTab===t.k?T.text:T.textMuted,fontSize:11,fontWeight:rdTab===t.k?600:400,cursor:"pointer",marginBottom:-1}}>{t.l}</button>
+                ))}
+              </div>
+              <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+                {rdTab==="overview"&&<>
+                  {/* Score */}
+                  <div style={{marginBottom:16}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                      <span style={{fontSize:11.5,color:T.textMuted}}>Compliance Score</span>
+                      <span style={{fontSize:18,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:reg.score>=90?T.green:reg.score>=75?T.amber:T.red}}>{reg.score}%</span>
+                    </div>
+                    <div style={{height:5,borderRadius:3,background:T.bgElevated,overflow:"hidden"}}>
+                      <div style={{width:`${reg.score}%`,height:"100%",background:reg.score>=90?T.green:reg.score>=75?T.amber:T.red,borderRadius:3}}/>
+                    </div>
+                    <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{reg.passing}/{reg.controls} controls passing · Last audit {reg.lastAudit}</div>
+                  </div>
+                  {/* Requirements */}
+                  <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Requirements</div>
+                  {reg.requirements.map(req=>(
+                    <div key={req.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:`1px solid ${T.border}`}}>
+                      <div style={{width:16,height:16,borderRadius:"50%",background:req.linked?`${T.green}18`:`${T.amber}18`,border:`1.5px solid ${req.linked?T.green:T.amber}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        {req.linked
+                          ?<svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1.5 4l2 2L6.5 2" stroke={T.green} strokeWidth="1.3" strokeLinecap="round"/></svg>
+                          :<svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M4 2v2.5" stroke={T.amber} strokeWidth="1.2" strokeLinecap="round"/><circle cx="4" cy="6" r=".5" fill={T.amber}/></svg>}
+                      </div>
+                      <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,flexShrink:0}}>{req.id}</span>
+                      <span style={{fontSize:12,color:T.text,flex:1}}>{req.title}</span>
+                      {!req.linked&&<span style={{fontSize:10,fontWeight:600,color:T.amber,flexShrink:0}}>Gap</span>}
+                    </div>
+                  ))}
+                </>}
+                {rdTab==="policies"&&<>
+                  {linkedPols.length===0
+                    ? <div style={{padding:"32px 0",textAlign:"center",fontSize:12,color:T.textMuted}}>No policies linked to this regulation</div>
+                    : linkedPols.map(p=>(
+                      <div key={p.id} style={{padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:7}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
+                          <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{p.name}</span>
+                          <span style={{display:"flex",alignItems:"center",gap:4,fontSize:11,fontWeight:600,color:statusColor(p.lifecycle)}}><SDot status={p.lifecycle}/>{p.lifecycle}</span>
+                        </div>
+                        <div style={{fontSize:11.5,color:T.textMuted}}>{p.category} · {p.assets} assets</div>
+                      </div>
+                    ))
+                  }
+                </>}
               </div>
             </div>
           );
