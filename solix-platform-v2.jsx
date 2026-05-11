@@ -2477,6 +2477,8 @@ const Ic = {
   inbox:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/><path d="M2 10h3l1.5 2h3L11 10h3" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>,
   arrowDown:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>,
   arrowRight:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  dataproducts:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5.5" height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.3"/><rect x="8.5" y="2" width="5.5" height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.3"/><rect x="2" y="8.5" width="5.5" height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.3"/><path d="M8.5 11.25h5.5M11.25 8.5v5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
+  tableIc:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><rect x="1.5" y="1.5" width="13" height="2.5" rx=".7" fill="currentColor" opacity=".9"/><rect x="1.5" y="5.5" width="13" height="2.5" rx=".7" fill="currentColor" opacity=".5"/><rect x="1.5" y="9.5" width="13" height="2.5" rx=".7" fill="currentColor" opacity=".25"/><rect x="1.5" y="13" width="13" height="1.5" rx=".7" fill="currentColor" opacity=".15"/></svg>,
 };
 
 // ─────────────────────────────────────────────
@@ -3268,6 +3270,7 @@ const GROUPS = [
   {section:"Knowledge",items:[
     {key:"glossary",       icon:"glossary",      label:"Business Glossary"},
     {key:"domains",        icon:"domains",       label:"Data Domains"},
+    {key:"dataproducts",   icon:"dataproducts",  label:"Data Products"},
   ]},
   {section:"Insights",items:[
     {key:"observability",  icon:"obs",           label:"Observability"},
@@ -3278,7 +3281,7 @@ const GROUPS = [
 const Sidebar = ({active, onNav, exp, setExp}) => {
   const {roleCfg} = useRole();
   const inboxBadgeCount = INBOX_DATA.filter(i=>!i.readAt).length;
-  const allowedNav = roleCfg?.nav || ["home","search","catalog","lineage","quality","observability","contracts","policymanager","access","certifications","stewardship","glossary","domains","analytics","settings"];
+  const allowedNav = roleCfg?.nav || ["home","search","catalog","lineage","quality","observability","contracts","policymanager","access","certifications","stewardship","glossary","domains","dataproducts","analytics","settings"];
   return (
     <div style={{position:"fixed",top:0,left:0,height:"100vh",width:exp?EXPANDED_W:COLLAPSED_W,background:T.bgSurface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:100,transition:"width .2s ease",overflow:"hidden"}}>
       {/* Logo */}
@@ -9706,6 +9709,52 @@ const DATA_PRODUCTS_DATA = [
 ];
 
 // ─────────────────────────────────────────────
+// SHARED: domain/product badge sub-components
+// ─────────────────────────────────────────────
+const LIFECYCLE_COLORS_DP = {PRODUCTION:"#16a34a",DEVELOPMENT:"#0891b2",TESTING:"#d97706",IDEATION:"#8b5cf6",DEPRECATED:"#6b7280",RETIRED:"#374151"};
+const SLA_COLORS_DP = {GOLD:"#f59e0b",SILVER:"#9ca3af",BRONZE:"#b45309",CUSTOM:"#6366f1"};
+
+const LifecycleBadge = ({stage}) => (
+  <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 9px",borderRadius:99,fontSize:10.5,fontWeight:700,
+    background:`${LIFECYCLE_COLORS_DP[stage]||"#6b7280"}18`,color:LIFECYCLE_COLORS_DP[stage]||"#6b7280",
+    border:`1px solid ${LIFECYCLE_COLORS_DP[stage]||"#6b7280"}30`}}>
+    <span style={{width:5,height:5,borderRadius:"50%",background:LIFECYCLE_COLORS_DP[stage]||"#6b7280",flexShrink:0}}/>
+    {stage}
+  </span>
+);
+const SlaTierBadge = ({tier}) => (
+  <span style={{display:"inline-flex",alignItems:"center",padding:"3px 8px",borderRadius:4,fontSize:10,fontWeight:700,
+    background:`${SLA_COLORS_DP[tier]||T.textMuted}18`,color:SLA_COLORS_DP[tier]||T.textMuted,
+    border:`1px solid ${SLA_COLORS_DP[tier]||T.textMuted}30`,letterSpacing:"0.04em"}}>
+    {tier} SLA
+  </span>
+);
+const DomainTypeBadge = ({type}) => {
+  const colors = {"Source-aligned":T.blue,"Consumer-aligned":T.green,"Aggregate":T.violet};
+  const c = colors[type]||T.textMuted;
+  return <span style={{display:"inline-flex",padding:"2px 8px",borderRadius:4,fontSize:10,fontWeight:600,background:`${c}15`,color:c,border:`1px solid ${c}25`}}>{type}</span>;
+};
+const OwnerChip = ({name}) => (
+  <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:99,fontSize:11,fontWeight:500,
+    background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>
+    <span style={{width:16,height:16,borderRadius:"50%",background:T.accent,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#fff",flexShrink:0}}>{name[0].toUpperCase()}</span>
+    {name}
+  </span>
+);
+const AssetRowDP = ({asset}) => (
+  <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:`1px solid ${T.border}`}}>
+    <div style={{width:28,height:28,borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+      {Ic.tableIc(12)}
+    </div>
+    <div style={{flex:1,minWidth:0}}>
+      <div style={{fontSize:12.5,fontWeight:600,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{asset.name}</div>
+      <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{asset.type} · {asset.connectionLabel}</div>
+    </div>
+    <QScore score={asset.quality}/>
+  </div>
+);
+
+// ─────────────────────────────────────────────
 // DOMAINS VIEW
 // ─────────────────────────────────────────────
 const DomainsView = () => {
@@ -9728,8 +9777,8 @@ const DomainsView = () => {
   const domainAssets    = selectedDomain ? ASSETS.filter(a=>a.domain===selectedDomain.name) : [];
   const productAssets   = selectedProduct ? ASSETS.filter(a=>selectedProduct.assetIds.includes(a.id)) : [];
 
-  const LIFECYCLE_COLORS = {PRODUCTION:"#16a34a",DEVELOPMENT:"#0891b2",TESTING:"#d97706",IDEATION:"#8b5cf6",DEPRECATED:"#6b7280",RETIRED:"#374151"};
-  const SLA_COLORS = {GOLD:"#f59e0b",SILVER:"#9ca3af",BRONZE:"#b45309",CUSTOM:"#6366f1"};
+  const LIFECYCLE_COLORS = LIFECYCLE_COLORS_DP;
+  const SLA_COLORS = SLA_COLORS_DP;
   const DOMAIN_TYPES = ["Source-aligned","Consumer-aligned","Aggregate"];
   const LIFECYCLE_STAGES = ["IDEATION","DEVELOPMENT","TESTING","PRODUCTION","DEPRECATED","RETIRED"];
   const ICON_OPTIONS = ["🗂️","📊","💼","🏢","🔬","🌐","📡","🔗","⚡","🎯","🛡️","📈"];
@@ -9751,50 +9800,7 @@ const DomainsView = () => {
     setDomainTab("dataproducts");
   };
 
-  // ── Sub-components ──
-  const LifecycleBadge = ({stage}) => (
-    <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 9px",borderRadius:99,fontSize:10.5,fontWeight:700,
-      background:`${LIFECYCLE_COLORS[stage]||"#6b7280"}18`,color:LIFECYCLE_COLORS[stage]||"#6b7280",
-      border:`1px solid ${LIFECYCLE_COLORS[stage]||"#6b7280"}30`}}>
-      <span style={{width:5,height:5,borderRadius:"50%",background:LIFECYCLE_COLORS[stage]||"#6b7280",flexShrink:0}}/>
-      {stage}
-    </span>
-  );
-  const SlaTierBadge = ({tier}) => (
-    <span style={{display:"inline-flex",alignItems:"center",padding:"3px 8px",borderRadius:4,fontSize:10,fontWeight:700,
-      background:`${SLA_COLORS[tier]||T.textMuted}18`,color:SLA_COLORS[tier]||T.textMuted,
-      border:`1px solid ${SLA_COLORS[tier]||T.textMuted}30`,letterSpacing:"0.04em"}}>
-      {tier} SLA
-    </span>
-  );
-  const DomainTypeBadge = ({type}) => {
-    const colors = {"Source-aligned":T.blue,"Consumer-aligned":T.green,"Aggregate":T.violet};
-    const c = colors[type]||T.textMuted;
-    return <span style={{display:"inline-flex",padding:"2px 8px",borderRadius:4,fontSize:10,fontWeight:600,background:`${c}15`,color:c,border:`1px solid ${c}25`}}>{type}</span>;
-  };
-  const OwnerChip = ({name}) => (
-    <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:99,fontSize:11,fontWeight:500,
-      background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>
-      <span style={{width:16,height:16,borderRadius:"50%",background:T.accent,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#fff",flexShrink:0}}>{name[0].toUpperCase()}</span>
-      {name}
-    </span>
-  );
-
   const COLOR_PALETTE = ["#0ea5e9","#f59e0b","#3b82f6","#8b5cf6","#f43f5e","#10b981","#f97316","#06b6d4","#84cc16","#ec4899"];
-
-  // ── ASSET ROW (reusable inside tabs) ──
-  const AssetRow = ({asset}) => (
-    <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:`1px solid ${T.border}`}}>
-      <div style={{width:28,height:28,borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-        {Ic.table(12)}
-      </div>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{fontSize:12.5,fontWeight:600,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{asset.name}</div>
-        <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{asset.type} · {asset.connectionLabel}</div>
-      </div>
-      <QScore score={asset.quality}/>
-    </div>
-  );
 
   // ══════════════════════════════════════════════
   // DATA PRODUCT DETAIL VIEW
@@ -9945,7 +9951,7 @@ const DomainsView = () => {
                       <div style={{fontSize:12,color:T.textMuted,marginBottom:16}}>Add tables, views, or pipelines to this data product</div>
                       <button style={{padding:"9px 20px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Add First Asset</button>
                     </div>
-                  : productAssets.map(a=><AssetRow key={a.id} asset={a}/>)
+                  : productAssets.map(a=><AssetRowDP key={a.id} asset={a}/>)
                 }
               </div>
             )}
@@ -10143,7 +10149,7 @@ const DomainsView = () => {
                 </div>
                 {domainAssets.length===0
                   ? <div style={{padding:"60px 0",textAlign:"center",color:T.textMuted,fontSize:13}}>No assets assigned to this domain</div>
-                  : domainAssets.map(a=><AssetRow key={a.id} asset={a}/>)
+                  : domainAssets.map(a=><AssetRowDP key={a.id} asset={a}/>)
                 }
               </div>
             )}
@@ -10408,6 +10414,416 @@ const DomainsView = () => {
             <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.bgElevated,borderRadius:"0 0 16px 16px"}}>
               <button onClick={()=>setCreateDomainOpen(false)} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
               <button onClick={handleCreateDomain} disabled={!nd.name.trim()} style={{padding:"8px 18px",borderRadius:8,background:nd.name.trim()?T.accent:"rgba(100,100,120,.35)",border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:nd.name.trim()?"pointer":"default",opacity:nd.name.trim()?1:.7}}>Create Domain</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
+// DATA PRODUCTS VIEW (standalone top-level page)
+// ─────────────────────────────────────────────
+const DataProductsView = () => {
+  const [products, setProducts]         = useState(DATA_PRODUCTS_DATA);
+  const [domains]                       = useState(DOMAIN_LIST_DATA);
+  const [selectedProductId, setSelectedProductId] = useState(null);
+  const [productTab, setProductTab]     = useState("overview");
+  const [domainFilter, setDomainFilter] = useState("All");
+  const [lifecycleFilter, setLifecycleFilter] = useState("All");
+  const [listView, setListView]         = useState("grid");
+  const [createOpen, setCreateOpen]     = useState(false);
+  const [createDomain, setCreateDomain] = useState("");
+  const [np, setNp] = useState({name:"",displayName:"",description:"",lifecycleStage:"DEVELOPMENT",icon:"📦"});
+
+  const LIFECYCLE_STAGES = ["IDEATION","DEVELOPMENT","TESTING","PRODUCTION","DEPRECATED","RETIRED"];
+  const PRODUCT_ICONS = ["📦","📊","💹","📱","🧮","🎯","📋","🔬","💼","🗃️","📡","⚡"];
+
+  const filteredProducts = products.filter(p=>{
+    const dm = domainFilter==="All" || p.domain===domainFilter;
+    const lf = lifecycleFilter==="All" || p.lifecycleStage===lifecycleFilter;
+    return dm && lf;
+  });
+
+  const selectedProduct = products.find(p=>p.id===selectedProductId);
+  const productAssets   = selectedProduct ? ASSETS.filter(a=>selectedProduct.assetIds.includes(a.id)) : [];
+
+  const handleCreateProduct = () => {
+    if(!np.name.trim()||!createDomain) return;
+    const domain = domains.find(d=>d.name===createDomain);
+    const p = {
+      id:`dp${Date.now()}`,name:np.name.trim(),displayName:np.displayName.trim()||np.name.trim(),
+      domain:createDomain,icon:np.icon,color:domain?.color||"#6366f1",
+      description:np.description.trim()||"No description provided.",
+      owners:domain?.owners||[],experts:[],lifecycleStage:np.lifecycleStage,
+      sla:{tier:"SILVER",availability:99.0,dataFreshness:60,dataQuality:80},
+      assetIds:[],tags:[],consumesFrom:[],providesTo:[],
+      createdAt:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
+    };
+    setProducts(prev=>[...prev,p]);
+    setCreateOpen(false);
+    setNp({name:"",displayName:"",description:"",lifecycleStage:"DEVELOPMENT",icon:"📦"});
+    setCreateDomain("");
+    setSelectedProductId(p.id);
+    setProductTab("overview");
+  };
+
+  // ── Stats ──
+  const inProd      = products.filter(p=>p.lifecycleStage==="PRODUCTION").length;
+  const goldSla     = products.filter(p=>p.sla?.tier==="GOLD").length;
+  const avgQuality  = Math.round(products.reduce((a,p)=>a+(p.sla?.dataQuality||0),0)/Math.max(products.length,1));
+
+  // ── Product detail view ──
+  if(selectedProduct) {
+    const pd = selectedProduct;
+    const pdDomain = domains.find(d=>d.name===pd.domain);
+    const upstream   = (pd.consumesFrom||[]).map(id=>products.find(p=>p.id===id)).filter(Boolean);
+    const downstream = (pd.providesTo||[]).map(id=>products.find(p=>p.id===id)).filter(Boolean);
+    return (
+      <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+        <Topbar breadcrumb={[
+          {label:"Data Products",onClick:()=>setSelectedProductId(null)},
+          {label:pd.displayName},
+        ]}/>
+        <div style={{flex:1,overflowY:"auto"}}>
+          {/* Header */}
+          <div style={{padding:"24px 28px 0",borderBottom:`1px solid ${T.border}`}}>
+            <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:18}}>
+              <div style={{width:52,height:52,borderRadius:14,background:`${pd.color}18`,border:`2px solid ${pd.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>{pd.icon}</div>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
+                  <h1 style={{fontSize:20,fontWeight:800,color:T.text,margin:0}}>{pd.displayName}</h1>
+                  <LifecycleBadge stage={pd.lifecycleStage}/>
+                  {pd.sla&&<SlaTierBadge tier={pd.sla.tier}/>}
+                </div>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:8}}>
+                  <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 8px",borderRadius:4,fontSize:10.5,fontWeight:600,
+                    background:`${pdDomain?.color||"#6366f1"}15`,color:pdDomain?.color||"#6366f1",border:`1px solid ${pdDomain?.color||"#6366f1"}25`,marginRight:8}}>
+                    {pdDomain?.icon} {pd.domain}
+                  </span>
+                  Created {pd.createdAt}
+                </div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {(pd.owners||[]).map(o=><OwnerChip key={o} name={o}/>)}
+                </div>
+              </div>
+              <div style={{display:"flex",gap:8,flexShrink:0}}>
+                <Btn onClick={()=>{}}>Edit</Btn>
+              </div>
+            </div>
+            <Tabs2 tabs={[{key:"overview",label:"Overview"},{key:"assets",label:`Assets (${productAssets.length})`},{key:"lineage",label:"Lineage"}]} active={productTab} onChange={setProductTab}/>
+          </div>
+
+          <div style={{padding:28}}>
+            {productTab==="overview"&&(
+              <div style={{display:"grid",gridTemplateColumns:"1fr 300px",gap:24}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:10}}>Description</div>
+                  <p style={{fontSize:13,color:T.textSub,lineHeight:1.7,marginBottom:24}}>{pd.description}</p>
+                  {pd.sla&&(
+                    <>
+                      <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Service Level Agreement</div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:24}}>
+                        {[
+                          {label:"SLA Tier",    value:pd.sla.tier,                                                        color:SLA_COLORS_DP[pd.sla.tier]},
+                          {label:"Availability",value:`${pd.sla.availability}%`,                                          color:T.green},
+                          {label:"Freshness",   value:pd.sla.dataFreshness>=60?`${pd.sla.dataFreshness/60}h`:`${pd.sla.dataFreshness}m`, color:T.blue},
+                          {label:"Min. Quality",value:`${pd.sla.dataQuality}%`,                                           color:T.accent},
+                        ].map(m=>(
+                          <div key={m.label} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,padding:"12px 14px"}}>
+                            <div style={{fontSize:10,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>{m.label}</div>
+                            <div style={{fontSize:18,fontWeight:800,color:m.color,fontFamily:"'Geist Mono',monospace"}}>{m.value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  {(upstream.length>0||downstream.length>0)&&(
+                    <>
+                      <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Data Flow</div>
+                      <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:24}}>
+                        {upstream.length>0&&<>
+                          <div style={{flex:1,minWidth:120}}>
+                            <div style={{fontSize:10,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Consumes from</div>
+                            {upstream.map(p=>(
+                              <button key={p.id} onClick={()=>setSelectedProductId(p.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,fontSize:12,cursor:"pointer",width:"100%",marginBottom:4,textAlign:"left"}}>{p.icon} {p.displayName}</button>
+                            ))}
+                          </div>
+                          <span style={{color:T.textMuted,fontSize:20}}>→</span>
+                        </>}
+                        <div style={{padding:"10px 16px",borderRadius:10,background:`${pd.color}15`,border:`2px solid ${pd.color}40`,fontSize:12,fontWeight:700,color:T.text}}>{pd.icon} {pd.displayName}</div>
+                        {downstream.length>0&&<>
+                          <span style={{color:T.textMuted,fontSize:20}}>→</span>
+                          <div style={{flex:1,minWidth:120}}>
+                            <div style={{fontSize:10,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Provides to</div>
+                            {downstream.map(p=>(
+                              <button key={p.id} onClick={()=>setSelectedProductId(p.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,fontSize:12,cursor:"pointer",width:"100%",marginBottom:4,textAlign:"left"}}>{p.icon} {p.displayName}</button>
+                            ))}
+                          </div>
+                        </>}
+                      </div>
+                    </>
+                  )}
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
+                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:12}}>Details</div>
+                    {[["Domain",pd.domain],["Lifecycle",pd.lifecycleStage],["Created",pd.createdAt],["Assets",String(productAssets.length)]].map(([l,v])=>(
+                      <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${T.border}`}}>
+                        <span style={{fontSize:11.5,color:T.textMuted}}>{l}</span>
+                        <span style={{fontSize:11.5,color:T.text,fontWeight:500}}>{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {(pd.experts||[]).length>0&&(
+                    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Experts</div>
+                      <div style={{display:"flex",flexDirection:"column",gap:6}}>{(pd.experts||[]).map(e=><OwnerChip key={e} name={e}/>)}</div>
+                    </div>
+                  )}
+                  {(pd.tags||[]).length>0&&(
+                    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Tags</div>
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{(pd.tags||[]).map(t=><span key={t} style={{padding:"3px 8px",borderRadius:4,fontSize:10.5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>{t}</span>)}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            {productTab==="assets"&&(
+              <div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+                  <div style={{fontSize:13,color:T.textMuted}}>{productAssets.length} asset{productAssets.length!==1?"s":""}</div>
+                  <button style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>{Ic.plus(10)} Add Assets</button>
+                </div>
+                {productAssets.length===0
+                  ? <div style={{padding:"60px 0",textAlign:"center"}}>
+                      <div style={{fontSize:32,marginBottom:12}}>📭</div>
+                      <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>No assets yet</div>
+                      <div style={{fontSize:12,color:T.textMuted}}>Add tables or views to this data product</div>
+                    </div>
+                  : productAssets.map(a=><AssetRowDP key={a.id} asset={a}/>)
+                }
+              </div>
+            )}
+            {productTab==="lineage"&&(
+              <div style={{textAlign:"center",padding:"80px 0"}}>
+                <div style={{fontSize:40,marginBottom:16}}>🔗</div>
+                <div style={{fontSize:15,fontWeight:600,color:T.text,marginBottom:8}}>Data Product Lineage</div>
+                <div style={{fontSize:13,color:T.textMuted,maxWidth:400,margin:"0 auto",lineHeight:1.6}}>
+                  {(upstream.length+downstream.length)===0
+                    ? "No upstream or downstream connections defined."
+                    : `Consumes from ${upstream.length}, provides to ${downstream.length} other product${downstream.length!==1?"s":""}.`}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── List view ──
+  return (
+    <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+      <Topbar breadcrumb={[{label:"Data Products"}]} actions={
+        <Btn icon={Ic.plus(12)} onClick={()=>setCreateOpen(true)}>New Data Product</Btn>
+      }/>
+      <div style={{flex:1,overflowY:"auto",padding:28}}>
+
+        {/* Stats bar */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
+          <Metric label="Total Products" value={String(products.length)}  sub="registered"        color={T.accent}/>
+          <Metric label="In Production"  value={String(inProd)}           sub="live products"     color="#16a34a"/>
+          <Metric label="Gold SLA"        value={String(goldSla)}          sub="tier 1 products"   color="#f59e0b"/>
+          <Metric label="Avg Quality"     value={`${avgQuality}%`}         sub="min quality score" color={avgQuality>=85?T.green:avgQuality>=70?T.amber:T.rose}/>
+        </div>
+
+        {/* Filters + view toggle */}
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18,flexWrap:"wrap"}}>
+          {/* Domain filter */}
+          <div style={{display:"flex",gap:5,flexWrap:"wrap",flex:1}}>
+            {["All",...domains.map(d=>d.name)].map(d=>{
+              const dm = domains.find(x=>x.name===d);
+              const active = domainFilter===d;
+              return (
+                <button key={d} onClick={()=>setDomainFilter(d)} style={{
+                  display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:99,fontSize:11.5,fontWeight:active?700:500,cursor:"pointer",transition:"all .12s",
+                  background:active?(dm?`${dm.color}18`:T.accentDim):"transparent",
+                  border:`1.5px solid ${active?(dm?.color||T.accent):T.border}`,
+                  color:active?(dm?.color||T.accent):T.textSub,
+                }}>
+                  {dm&&<span style={{fontSize:12}}>{dm.icon}</span>} {d}
+                </button>
+              );
+            })}
+          </div>
+          {/* Lifecycle filter */}
+          <select value={lifecycleFilter} onChange={e=>setLifecycleFilter(e.target.value)}
+            style={{padding:"6px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",cursor:"pointer"}}>
+            <option value="All">All Stages</option>
+            {LIFECYCLE_STAGES.map(s=><option key={s} value={s}>{s}</option>)}
+          </select>
+          {/* Grid/list toggle */}
+          <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+            {[["grid","⊞"],["list","☰"]].map(([v,ic])=>(
+              <button key={v} onClick={()=>setListView(v)} style={{padding:"4px 10px",borderRadius:5,border:"none",cursor:"pointer",fontSize:13,
+                background:listView===v?T.bgSurface:"transparent",color:listView===v?T.text:T.textMuted,
+                boxShadow:listView===v?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{ic}</button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{fontSize:12,color:T.textMuted,marginBottom:14}}>{filteredProducts.length} product{filteredProducts.length!==1?"s":""}</div>
+
+        {filteredProducts.length===0&&(
+          <div style={{padding:"60px 0",textAlign:"center"}}>
+            <div style={{fontSize:36,marginBottom:12}}>📭</div>
+            <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>No data products match</div>
+            <div style={{fontSize:12,color:T.textMuted}}>Try adjusting your domain or lifecycle filter</div>
+          </div>
+        )}
+
+        {/* Grid */}
+        {listView==="grid"&&filteredProducts.length>0&&(
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:16}}>
+            {filteredProducts.map(p=>{
+              const dm = domains.find(d=>d.name===p.domain);
+              return (
+                <div key={p.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,overflow:"hidden",cursor:"pointer",transition:"all .15s"}}
+                  onClick={()=>{setSelectedProductId(p.id);setProductTab("overview");}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor=p.color;e.currentTarget.style.boxShadow=`0 4px 20px ${p.color}20`;}}
+                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
+                  <div style={{height:4,background:p.color}}/>
+                  <div style={{padding:"16px 18px"}}>
+                    <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:10}}>
+                      <div style={{width:40,height:40,borderRadius:10,background:`${p.color}15`,border:`1px solid ${p.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{p.icon}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13.5,fontWeight:700,color:T.text,marginBottom:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.displayName}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                          <LifecycleBadge stage={p.lifecycleStage}/>
+                          {p.sla&&<SlaTierBadge tier={p.sla.tier}/>}
+                        </div>
+                      </div>
+                    </div>
+                    <p style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginBottom:12,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{p.description}</p>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                      {dm&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,color:dm.color,fontWeight:600}}>
+                        {dm.icon} {p.domain}
+                      </span>}
+                      <span style={{fontSize:11,color:T.textMuted}}>{p.owners?.[0]||"—"}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* List */}
+        {listView==="list"&&filteredProducts.length>0&&(
+          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
+            <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 80px",padding:"10px 18px",borderBottom:`1px solid ${T.border}`,background:T.bgElevated}}>
+              {["Product","Domain","Lifecycle","SLA Tier","Quality"].map(h=>(
+                <div key={h} style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</div>
+              ))}
+            </div>
+            {filteredProducts.map((p,i)=>{
+              const dm = domains.find(d=>d.name===p.domain);
+              return (
+                <div key={p.id} style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 80px",padding:"12px 18px",borderBottom:i<filteredProducts.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"background .1s",alignItems:"center"}}
+                  onClick={()=>{setSelectedProductId(p.id);setProductTab("overview");}}
+                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{width:32,height:32,borderRadius:8,background:`${p.color}15`,border:`1px solid ${p.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>{p.icon}</div>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:600,color:T.text}}>{p.displayName}</div>
+                      <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{p.owners?.[0]||"—"}</div>
+                    </div>
+                  </div>
+                  <span style={{fontSize:11.5,color:dm?.color||T.textSub,fontWeight:500}}>{dm?.icon} {p.domain}</span>
+                  <LifecycleBadge stage={p.lifecycleStage}/>
+                  {p.sla?<SlaTierBadge tier={p.sla.tier}/>:<span style={{fontSize:11,color:T.textMuted}}>—</span>}
+                  {p.sla?<span style={{fontSize:13,fontWeight:700,color:p.sla.dataQuality>=85?T.green:p.sla.dataQuality>=70?T.amber:T.rose,fontFamily:"'Geist Mono',monospace"}}>{p.sla.dataQuality}%</span>:<span>—</span>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Create Data Product Modal */}
+      {createOpen&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:900,backdropFilter:"blur(4px)"}}>
+          <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:16,width:540,maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 60px rgba(0,0,0,.35)"}}>
+            <div style={{padding:"20px 24px 16px",borderBottom:`1px solid ${T.border}`}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <div>
+                  <div style={{fontSize:15,fontWeight:700,color:T.text}}>New Data Product</div>
+                  <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Bundle related assets into a governed, discoverable unit</div>
+                </div>
+                <button onClick={()=>setCreateOpen(false)} style={{width:28,height:28,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+              </div>
+            </div>
+            <div style={{padding:"20px 24px",flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:16}}>
+              {/* Icon picker */}
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Icon</label>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {PRODUCT_ICONS.map(ic=>(
+                    <button key={ic} onClick={()=>setNp(p=>({...p,icon:ic}))} style={{width:34,height:34,borderRadius:8,background:np.icon===ic?T.accentDim:T.bgElevated,border:`1.5px solid ${np.icon===ic?T.accent:T.border}`,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>{ic}</button>
+                  ))}
+                </div>
+              </div>
+              {/* Domain (required) */}
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Domain <span style={{color:T.rose}}>*</span></label>
+                <select value={createDomain} onChange={e=>setCreateDomain(e.target.value)}
+                  style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${!createDomain?"rgba(225,29,72,.4)":T.border}`,borderRadius:8,color:createDomain?T.text:T.textMuted,fontSize:12,outline:"none",cursor:"pointer"}}>
+                  <option value="">Select a domain…</option>
+                  {domains.map(d=><option key={d.id} value={d.name}>{d.icon} {d.displayName}</option>)}
+                </select>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Name <span style={{color:T.rose}}>*</span></label>
+                  <input value={np.name} onChange={e=>setNp(p=>({...p,name:e.target.value}))} placeholder="e.g. order-analytics" autoFocus
+                    style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"'Geist Mono',monospace"}}
+                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                </div>
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Display Name</label>
+                  <input value={np.displayName} onChange={e=>setNp(p=>({...p,displayName:e.target.value}))} placeholder="e.g. Order Analytics"
+                    style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                </div>
+              </div>
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Description</label>
+                <textarea value={np.description} onChange={e=>setNp(p=>({...p,description:e.target.value}))} rows={3} placeholder="What data does this product contain, and who consumes it?"
+                  style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box"}}
+                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+              </div>
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Lifecycle Stage</label>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {LIFECYCLE_STAGES.map(s=>(
+                    <button key={s} onClick={()=>setNp(p=>({...p,lifecycleStage:s}))} style={{padding:"5px 12px",borderRadius:6,fontSize:11,fontWeight:600,cursor:"pointer",
+                      background:np.lifecycleStage===s?`${LIFECYCLE_COLORS_DP[s]}18`:T.bgElevated,
+                      border:`1.5px solid ${np.lifecycleStage===s?LIFECYCLE_COLORS_DP[s]:T.border}`,
+                      color:np.lifecycleStage===s?LIFECYCLE_COLORS_DP[s]:T.textMuted}}>{s}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.bgElevated,borderRadius:"0 0 16px 16px"}}>
+              <button onClick={()=>setCreateOpen(false)} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+              <button onClick={handleCreateProduct} disabled={!np.name.trim()||!createDomain}
+                style={{padding:"8px 18px",borderRadius:8,background:(np.name.trim()&&createDomain)?T.accent:"rgba(100,100,120,.35)",border:"none",color:"#fff",fontSize:12,fontWeight:700,
+                  cursor:(np.name.trim()&&createDomain)?"pointer":"default",opacity:(np.name.trim()&&createDomain)?1:.7}}>
+                Create Data Product
+              </button>
             </div>
           </div>
         </div>
@@ -14945,7 +15361,8 @@ const AccessSection = ({onToast}) => {
     </div>
 
     {/* ── Split-pane: left list + right detail ── */}
-    <div style={{display:"flex",border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden",minHeight:560}}>
+    <div style={{display:"flex",border:`1px solid ${T.border}`,borderRadius:12,height:620}}>
+
 
       {/* LEFT PANEL: Tab bar + search + compact list */}
       <div style={{width:310,flexShrink:0,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",background:T.bgSurface}}>
@@ -16997,7 +17414,7 @@ const SettingsView = ({onToast})=>{
         {/* ── main content + optional detail panel ── */}
         <div style={{display:"flex",overflow:"hidden"}}>
           <div style={{flex:1,overflowY:"auto",padding:"24px 28px",background:T.bg}}>
-            <div style={{maxWidth:740}}>
+            <div style={{maxWidth:["access","teams","personas"].includes(section)?undefined:740}}>
 
             {/* ══ SERVICES ══ */}
             {section==="connections"&&<>
@@ -19392,6 +19809,7 @@ export default function App(){
       case "steward-inbox": return <InboxView onToast={showToast}/>;
       case "glossary":      return <GlossaryView onToast={showToast}/>;
       case "domains":       return <DomainsView/>;
+      case "dataproducts":  return <DataProductsView/>;
       case "observability": return <ObsView onToast={showToast}/>;
       case "analytics":     return <AnalyticsView/>;
       case "teams":         return <TeamsView onToast={showToast}/>;
