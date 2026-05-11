@@ -5407,6 +5407,7 @@ const PolicyManagerView = ({onToast}) => {
   const [ruleTypeFilter,  setRuleTypeFilter]  = useState("All");
   const [riskView,        setRiskView]        = useState("list");
   const [pdTab,           setPdTab]           = useState("overview");
+  const [polSearch,       setPolSearch]       = useState("");
 
   const LIFECYCLE_STEPS = ["Draft","Under Review","Approved","Active","Deprecated"];
   const lifIdx = lc => LIFECYCLE_STEPS.indexOf(lc);
@@ -5419,7 +5420,11 @@ const PolicyManagerView = ({onToast}) => {
   const compliantFrameworks = REGULATIONS.filter(r=>r.status==="Compliant").length;
 
   const POLICY_CATS = ["All",...[...new Set(POLICIES.map(p=>p.category))]];
-  const filteredPolicies = catFilter==="All" ? POLICIES : POLICIES.filter(p=>p.category===catFilter);
+  const filteredPolicies = POLICIES.filter(p=>{
+    const byCat = catFilter==="All" || p.category===catFilter;
+    const byQ   = !polSearch || p.name.toLowerCase().includes(polSearch.toLowerCase()) || p.category.toLowerCase().includes(polSearch.toLowerCase()) || (p.owner||"").toLowerCase().includes(polSearch.toLowerCase());
+    return byCat && byQ;
+  });
   const RULE_TYPES = ["All","Classification","Retention","Access","Security","Process","Documentation"];
   const filteredRules = ruleTypeFilter==="All" ? GOVERNANCE_RULES : GOVERNANCE_RULES.filter(r=>r.type===ruleTypeFilter);
 
@@ -5432,7 +5437,7 @@ const PolicyManagerView = ({onToast}) => {
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
       <Topbar breadcrumb={[{label:"Policy Manager"}]}/>
-      <div style={{padding:"0 28px",borderBottom:`1px solid ${T.border}`,flexShrink:0,paddingTop:18}}>
+      <div style={{padding:"0 28px",flexShrink:0,paddingTop:18}}>
         <Tabs2 tabs={[{key:"overview",label:"Overview"},{key:"policies",label:`Policies (${POLICIES.length})`},{key:"regulations",label:"Regulations"},{key:"rules",label:`Rules (${GOVERNANCE_RULES.length})`},{key:"risks",label:"Risk Register"}]} active={tab} onChange={changeTab}/>
       </div>
 
@@ -5502,41 +5507,62 @@ const PolicyManagerView = ({onToast}) => {
 
           {/* ── POLICIES ── */}
           {tab==="policies"&&<>
-            <div style={{display:"flex",gap:6,marginBottom:18,flexWrap:"wrap",alignItems:"center",justifyContent:"space-between"}}>
-              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                {POLICY_CATS.map(cat=>(
-                  <button key={cat} onClick={()=>{setCatFilter(cat);setSelectedPolicy(null);}} style={{padding:"4px 12px",borderRadius:99,fontSize:11.5,fontWeight:catFilter===cat?600:400,border:`1px solid ${catFilter===cat?T.accent:T.border}`,background:catFilter===cat?T.accentDim:"transparent",color:catFilter===cat?T.accent:T.textSub,cursor:"pointer",transition:"all .12s"}}>{cat}</button>
-                ))}
+            {/* Toolbar */}
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+              <div style={{flex:1,position:"relative"}}>
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.5"/><path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                <input value={polSearch} onChange={e=>{setPolSearch(e.target.value);setSelectedPolicy(null);}} placeholder="Search policies by name, category, owner…"
+                  style={{width:"100%",padding:"8px 12px 8px 32px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",transition:"border-color .15s"}}
+                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
               </div>
+              <select value={catFilter} onChange={e=>{setCatFilter(e.target.value);setSelectedPolicy(null);}}
+                style={{padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",cursor:"pointer",flexShrink:0}}>
+                {POLICY_CATS.map(cat=><option key={cat} value={cat}>{cat}</option>)}
+              </select>
               <Btn icon={Ic.plus(12)} variant="primary" onClick={()=>onToast("Policy editor opened","success")}>New Policy</Btn>
             </div>
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {filteredPolicies.map(p=>{
+            {/* Table */}
+            <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
+              <div style={{display:"grid",gridTemplateColumns:"2.5fr 1fr 1fr 1fr 88px 100px",padding:"10px 18px",borderBottom:`1px solid ${T.border}`,background:T.bgElevated}}>
+                {["Policy","Category","Owner","Lifecycle","Conformity","Violations"].map(h=>(
+                  <div key={h} style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</div>
+                ))}
+              </div>
+              {filteredPolicies.length===0&&(
+                <div style={{padding:"40px 0",textAlign:"center",color:T.textMuted,fontSize:12}}>No policies match your search</div>
+              )}
+              {filteredPolicies.map((p,i)=>{
                 const isSel = selectedPolicy?.id===p.id;
                 return (
                   <div key={p.id} onClick={()=>{setSelectedPolicy(isSel?null:p);setPdTab("overview");}}
-                    style={{padding:"14px 18px",background:T.bgSurface,border:`1.5px solid ${isSel?T.accent:T.border}`,borderRadius:10,cursor:"pointer",transition:"all .15s",boxShadow:isSel?`0 0 0 3px ${T.accent}15`:"none"}}
-                    onMouseEnter={e=>{if(!isSel)e.currentTarget.style.borderColor=T.borderLight;}} onMouseLeave={e=>{if(!isSel)e.currentTarget.style.borderColor=T.border;}}>
-                    <div style={{display:"flex",alignItems:"center",gap:12}}>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
-                          <span style={{fontSize:13,fontWeight:600,color:T.text}}>{p.name}</span>
-                          <Badge color={p.severity==="Critical"?T.rose:p.severity==="High"?T.amber:T.blue}>{p.severity}</Badge>
-                          {p.regulations.map(r=><span key={r} style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.blueDim,color:T.blue,border:`1px solid ${T.blue}20`}}>{r}</span>)}
-                        </div>
-                        <div style={{fontSize:11.5,color:T.textMuted}}>{p.scope} · {p.category} · Updated {p.updated}</div>
+                    style={{display:"grid",gridTemplateColumns:"2.5fr 1fr 1fr 1fr 88px 100px",padding:"13px 18px",
+                      borderBottom:i<filteredPolicies.length-1?`1px solid ${T.border}`:"none",
+                      cursor:"pointer",transition:"background .1s",alignItems:"center",
+                      background:isSel?T.accentDim:"transparent",
+                      borderLeft:`3px solid ${isSel?T.accent:"transparent"}`}}
+                    onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.bgHover;}}
+                    onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
+                    <div style={{minWidth:0,paddingRight:8}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap"}}>
+                        <span style={{fontSize:13,fontWeight:600,color:isSel?T.accent:T.text}}>{p.name}</span>
+                        <Badge color={p.severity==="Critical"?T.rose:p.severity==="High"?T.amber:T.blue}>{p.severity}</Badge>
                       </div>
-                      <div style={{textAlign:"center",flexShrink:0,width:58}}>
-                        <div style={{fontSize:16,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:p.lifecycle==="Draft"?T.textMuted:p.conformity>=80?T.green:p.conformity>=60?T.amber:T.red}}>{p.lifecycle==="Draft"?"—":`${p.conformity}%`}</div>
-                        <div style={{fontSize:9.5,color:T.textMuted}}>conformity</div>
+                      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                        {(p.regulations||[]).map(r=><span key={r} style={{fontSize:10,fontWeight:600,padding:"1px 5px",borderRadius:3,background:T.blueDim,color:T.blue,border:`1px solid ${T.blue}20`}}>{r}</span>)}
                       </div>
-                      <div style={{display:"flex",alignItems:"center",gap:5,flexShrink:0}}>
-                        <span style={{width:7,height:7,borderRadius:"50%",background:lifColor(p.lifecycle),display:"inline-block"}}/>
-                        <span style={{fontSize:11.5,color:lifColor(p.lifecycle),fontWeight:500}}>{p.lifecycle}</span>
-                      </div>
-                      {p.violations>0&&<span style={{padding:"3px 8px",borderRadius:6,background:T.roseDim,border:`1px solid ${T.rose}30`,fontSize:11,fontWeight:600,color:T.rose,flexShrink:0}}>{p.violations} violations</span>}
-                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,transform:isSel?"rotate(90deg)":"none",transition:"transform .15s",flexShrink:0}}><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
                     </div>
+                    <span style={{fontSize:12,color:T.textSub}}>{p.category}</span>
+                    <span style={{fontSize:11.5,color:T.textMuted}}>{p.owner||"—"}</span>
+                    <div style={{display:"flex",alignItems:"center",gap:5}}>
+                      <span style={{width:6,height:6,borderRadius:"50%",background:lifColor(p.lifecycle),flexShrink:0}}/>
+                      <span style={{fontSize:11.5,color:lifColor(p.lifecycle),fontWeight:500}}>{p.lifecycle}</span>
+                    </div>
+                    <span style={{fontSize:14,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:p.lifecycle==="Draft"?T.textMuted:p.conformity>=80?T.green:p.conformity>=60?T.amber:T.red}}>
+                      {p.lifecycle==="Draft"?"—":`${p.conformity}%`}
+                    </span>
+                    <span style={{fontSize:12,fontWeight:600,color:p.violations>0?T.rose:T.textMuted}}>
+                      {p.violations>0?`${p.violations} violations`:"—"}
+                    </span>
                   </div>
                 );
               })}
@@ -9765,7 +9791,7 @@ const DomainsView = () => {
   const [selectedProductId, setSelectedProductId]   = useState(null);
   const [domainTab, setDomainTab]   = useState("documentation");
   const [productTab, setProductTab] = useState("overview");
-  const [listView, setListView]     = useState("grid"); // "grid" | "list"
+  const [listView, setListView]     = useState("list"); // "grid" | "list"
   const [createDomainOpen, setCreateDomainOpen]   = useState(false);
   const [createProductOpen, setCreateProductOpen] = useState(false);
   const [nd, setNd] = useState({name:"",displayName:"",description:"",domainType:"Source-aligned",icon:"🗂️",color:"#0ea5e9"});
@@ -10432,7 +10458,7 @@ const DataProductsView = () => {
   const [productTab, setProductTab]     = useState("overview");
   const [domainFilter, setDomainFilter] = useState("All");
   const [lifecycleFilter, setLifecycleFilter] = useState("All");
-  const [listView, setListView]         = useState("grid");
+  const [listView, setListView]         = useState("list");
   const [createOpen, setCreateOpen]     = useState(false);
   const [createDomain, setCreateDomain] = useState("");
   const [np, setNp] = useState({name:"",displayName:"",description:"",lifecycleStage:"DEVELOPMENT",icon:"📦"});
@@ -10640,10 +10666,9 @@ const DataProductsView = () => {
           <Metric label="Avg Quality"     value={`${avgQuality}%`}         sub="min quality score" color={avgQuality>=85?T.green:avgQuality>=70?T.amber:T.rose}/>
         </div>
 
-        {/* Filters + view toggle */}
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:18,flexWrap:"wrap"}}>
-          {/* Domain filter */}
-          <div style={{display:"flex",gap:5,flexWrap:"wrap",flex:1}}>
+        {/* Toolbar row: count left, controls right */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+          <div style={{display:"flex",gap:5,flexWrap:"wrap",flex:1,marginRight:12}}>
             {["All",...domains.map(d=>d.name)].map(d=>{
               const dm = domains.find(x=>x.name===d);
               const active = domainFilter===d;
@@ -10659,19 +10684,19 @@ const DataProductsView = () => {
               );
             })}
           </div>
-          {/* Lifecycle filter */}
-          <select value={lifecycleFilter} onChange={e=>setLifecycleFilter(e.target.value)}
-            style={{padding:"6px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",cursor:"pointer"}}>
-            <option value="All">All Stages</option>
-            {LIFECYCLE_STAGES.map(s=><option key={s} value={s}>{s}</option>)}
-          </select>
-          {/* Grid/list toggle */}
-          <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
-            {[["grid","⊞"],["list","☰"]].map(([v,ic])=>(
-              <button key={v} onClick={()=>setListView(v)} style={{padding:"4px 10px",borderRadius:5,border:"none",cursor:"pointer",fontSize:13,
-                background:listView===v?T.bgSurface:"transparent",color:listView===v?T.text:T.textMuted,
-                boxShadow:listView===v?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{ic}</button>
-            ))}
+          <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+            <select value={lifecycleFilter} onChange={e=>setLifecycleFilter(e.target.value)}
+              style={{padding:"6px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",cursor:"pointer"}}>
+              <option value="All">All Stages</option>
+              {LIFECYCLE_STAGES.map(s=><option key={s} value={s}>{s}</option>)}
+            </select>
+            <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+              {[["grid","⊞"],["list","☰"]].map(([v,ic])=>(
+                <button key={v} onClick={()=>setListView(v)} style={{padding:"4px 10px",borderRadius:5,border:"none",cursor:"pointer",fontSize:13,
+                  background:listView===v?T.bgSurface:"transparent",color:listView===v?T.text:T.textMuted,
+                  boxShadow:listView===v?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{ic}</button>
+              ))}
+            </div>
           </div>
         </div>
 
