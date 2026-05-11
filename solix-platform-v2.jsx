@@ -15349,318 +15349,190 @@ const AccessSection = ({onToast}) => {
   );
 
   return <>
-    {/* ── How policies work callout ── */}
-    <div style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 16px",background:`${T.accent}08`,border:`1px solid ${T.accent}25`,borderRadius:10,marginBottom:18}}>
-      <span style={{fontSize:18,flexShrink:0,marginTop:1}}>🔐</span>
-      <div>
-        <div style={{fontSize:12,fontWeight:700,color:T.text,marginBottom:3}}>How access control works for MVP</div>
-        <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.6}}>
-          <b>Role → Policy → Resources.</b> Each user is assigned a Role (in Teams). Each Role bundles one or more Policies. Each Policy defines what operations (View, Edit, Create…) are allowed on which resource sections. Assets inherit access based on the requesting user's role — no per-asset policy assignment needed for MVP.
-        </div>
+    {/* ── Tab bar ── */}
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:22}}>
+      <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9}}>
+        {[["roles","Roles",roles.length],["policies","Policies",policies.length]].map(([k,l,count])=>(
+          <button key={k} onClick={()=>setActiveTab(k)} style={{
+            display:"flex",alignItems:"center",gap:6,padding:"5px 16px",borderRadius:6,
+            fontSize:12,fontWeight:activeTab===k?700:500,cursor:"pointer",transition:"all .12s",
+            background:activeTab===k?T.bgSurface:"transparent",
+            border:activeTab===k?`1px solid ${T.border}`:"1px solid transparent",
+            color:activeTab===k?T.text:T.textMuted,
+            boxShadow:activeTab===k?"0 1px 3px rgba(0,0,0,.07)":"none",
+          }}>
+            {l}
+            <span style={{fontSize:10,background:activeTab===k?T.accent:T.bgHover,color:activeTab===k?"#fff":T.textMuted,padding:"1px 6px",borderRadius:99,minWidth:18,textAlign:"center"}}>{count}</span>
+          </button>
+        ))}
       </div>
+      {activeTab==="roles"
+        ? <AddBtn label="New Role"   onClick={()=>setCreateRoleModal(true)}/>
+        : <AddBtn label="New Policy" onClick={()=>setCreatePolModal(true)}/>
+      }
     </div>
 
-    {/* ── Split-pane: left list + right detail ── */}
-    <div style={{display:"flex",border:`1px solid ${T.border}`,borderRadius:12,height:620}}>
+    {/* AC search */}
+    <div style={{marginBottom:14}}>
+      <input value={acSearch} onChange={e=>{setAcSearch(e.target.value);setAcRolePage(1);setAcPolPage(1);}}
+        placeholder="Search roles or policies…"
+        style={{width:"100%",padding:"9px 13px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",transition:"border-color .15s"}}
+        onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+    </div>
 
-
-      {/* LEFT PANEL: Tab bar + search + compact list */}
-      <div style={{width:310,flexShrink:0,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",background:T.bgSurface}}>
-        {/* Tab bar */}
-        <div style={{padding:"12px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-          <div style={{display:"flex",gap:1,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,flex:1}}>
-            {[["roles","Roles",roles.length],["policies","Policies",policies.length]].map(([k,l,count])=>(
-              <button key={k} onClick={()=>{setActiveTab(k);setRoleDetail(null);setPolicyDetail(null);setAddPolToRole(false);}} style={{
-                flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"5px 10px",borderRadius:5,
-                fontSize:11.5,fontWeight:activeTab===k?700:500,cursor:"pointer",transition:"all .12s",
-                background:activeTab===k?T.bgSurface:"transparent",
-                border:activeTab===k?`1px solid ${T.border}`:"1px solid transparent",
-                color:activeTab===k?T.text:T.textMuted,
-                boxShadow:activeTab===k?"0 1px 3px rgba(0,0,0,.07)":"none",
-              }}>
-                {l}
-                <span style={{fontSize:9.5,background:activeTab===k?T.accent:T.bgHover,color:activeTab===k?"#fff":T.textMuted,padding:"1px 5px",borderRadius:99,minWidth:16,textAlign:"center"}}>{count}</span>
-              </button>
-            ))}
-          </div>
-          <button onClick={()=>activeTab==="roles"?setCreateRoleModal(true):setCreatePolModal(true)}
-            style={{width:28,height:28,borderRadius:7,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
-            title={activeTab==="roles"?"New Role":"New Policy"}>
-            <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-          </button>
-        </div>
-        {/* Search */}
-        <div style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`}}>
-          <input value={acSearch} onChange={e=>{setAcSearch(e.target.value);setAcRolePage(1);setAcPolPage(1);}}
-            placeholder={`Search ${activeTab}…`}
-            style={{width:"100%",padding:"7px 10px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box",transition:"border-color .15s"}}
-            onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-        </div>
-        {/* Scrollable list */}
-        <div style={{flex:1,overflowY:"auto"}}>
-          {/* ROLES */}
-          {activeTab==="roles"&&(
-            acRoleList.length===0
-              ? <div style={{padding:"24px 0",textAlign:"center",fontSize:11.5,color:T.textMuted}}>No roles match</div>
-              : acRoleList.map(role=>{
-                  const rPolicies = policies.filter(p=>role.policyIds.includes(p.id));
-                  const isSelected = roleDetail===role.id;
-                  return (
-                    <div key={role.id} onClick={()=>{setRoleDetail(role.id);setPolicyDetail(null);setAddPolToRole(false);}}
-                      style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",cursor:"pointer",transition:"background .1s",
-                        borderBottom:`1px solid ${T.border}`,borderLeft:`3px solid ${isSelected?role.color:"transparent"}`,
-                        background:isSelected?`${role.color}08`:T.bgSurface}}
-                      onMouseEnter={e=>{if(!isSelected)e.currentTarget.style.background=T.bgHover;}}
-                      onMouseLeave={e=>{if(!isSelected)e.currentTarget.style.background=T.bgSurface;}}>
-                      <div style={{width:32,height:32,borderRadius:8,background:`${role.color}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                        <span style={{fontSize:11,fontWeight:800,color:role.color}}>{role.name.split(" ").map(w=>w[0]).join("").slice(0,2)}</span>
-                      </div>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:2}}>
-                          <span style={{fontSize:12,fontWeight:700,color:isSelected?role.color:T.text}}>{role.name}</span>
-                          {role.system&&<span style={{fontSize:8.5,padding:"1px 4px",borderRadius:3,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,fontWeight:700,textTransform:"uppercase"}}>SYS</span>}
-                        </div>
-                        <div style={{fontSize:10.5,color:T.textMuted}}>{role.users} user{role.users!==1?"s":""} · {rPolicies.length} polic{rPolicies.length!==1?"ies":"y"}</div>
-                      </div>
-                      <svg width="10" height="10" viewBox="0 0 12 12" fill="none" style={{color:isSelected?role.color:T.textMuted,opacity:isSelected?1:.4,flexShrink:0}}><path d="M4.5 3l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </div>
-                  );
-                })
-          )}
-          {/* POLICIES */}
-          {activeTab==="policies"&&(
-            acPolList.length===0
-              ? <div style={{padding:"24px 0",textAlign:"center",fontSize:11.5,color:T.textMuted}}>No policies match</div>
-              : acPolList.map(policy=>{
-                  const isSelected = policyDetail===policy.id;
-                  const attachedRoles = roles.filter(r=>r.policyIds.includes(policy.id));
-                  return (
-                    <div key={policy.id} onClick={()=>{setPolicyDetail(policy.id);setRoleDetail(null);}}
-                      style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",cursor:"pointer",transition:"background .1s",
-                        borderBottom:`1px solid ${T.border}`,borderLeft:`3px solid ${isSelected?T.accent:"transparent"}`,
-                        background:isSelected?T.accentDim:T.bgSurface}}
-                      onMouseEnter={e=>{if(!isSelected)e.currentTarget.style.background=T.bgHover;}}
-                      onMouseLeave={e=>{if(!isSelected)e.currentTarget.style.background=T.bgSurface;}}>
-                      <div style={{width:32,height:32,borderRadius:8,background:isSelected?T.accentDim:`${policy.enabled?"#16a34a":"#6b7280"}10`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 1.5L13.5 4v4c0 3-2.5 5.5-5.5 6C5 13.5 2.5 11 2.5 8V4L8 1.5z" stroke={policy.enabled?"#16a34a":"#6b7280"} strokeWidth="1.5" strokeLinejoin="round"/></svg>
-                      </div>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:2}}>
-                          <span style={{fontSize:12,fontWeight:700,color:isSelected?T.accent:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{policy.name}</span>
-                          {policy.system&&<span style={{fontSize:8.5,padding:"1px 4px",borderRadius:3,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,fontWeight:700,textTransform:"uppercase",flexShrink:0}}>SYS</span>}
-                        </div>
-                        <div style={{fontSize:10.5,color:T.textMuted}}>{policy.rules.length} rule{policy.rules.length!==1?"s":""} · {attachedRoles.length} role{attachedRoles.length!==1?"s":""}</div>
-                      </div>
-                      <span style={{width:7,height:7,borderRadius:"50%",background:policy.enabled?"#16a34a":"#9ca3af",flexShrink:0}}/>
-                    </div>
-                  );
-                })
-          )}
-        </div>
-      </div>
-
-      {/* RIGHT PANEL: inline detail */}
-      <div style={{flex:1,overflowY:"auto",background:T.bg}}>
-
-        {/* ROLE DETAIL (inline) */}
-        {activeTab==="roles"&&currentRole&&(
-          <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
-            {/* Header */}
-            <div style={{padding:"20px 24px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bgSurface}}>
-              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:14}}>
-                <div style={{display:"flex",alignItems:"center",gap:12}}>
-                  <div style={{width:44,height:44,borderRadius:11,background:`${currentRole.color}15`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,borderLeft:`3px solid ${currentRole.color}`}}>
-                    <span style={{fontSize:15,fontWeight:800,color:currentRole.color}}>{currentRole.name.split(" ").map(w=>w[0]).join("").slice(0,2)}</span>
+    {/* ════ ROLES TAB ════ */}
+    {activeTab==="roles"&&(
+      <>
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {acRoleList.length===0&&<div style={{textAlign:"center",padding:"32px 0",fontSize:12,color:T.textMuted}}>No roles match your search</div>}
+        {pagedRoles.map(role=>{
+          const rPolicies = policies.filter(p=>role.policyIds.includes(p.id));
+          return (
+            <div key={role.id}
+              style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",
+                borderLeft:`3px solid ${role.color}`,transition:"box-shadow .15s,border-color .15s",cursor:"pointer"}}
+              onClick={()=>{setRoleDetail(role.id);setAddPolToRole(false);}}
+              onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 2px 12px rgba(0,0,0,.08)";e.currentTarget.style.borderColor=T.borderLight;}}
+              onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.borderColor=T.border;}}>
+              <div style={{display:"flex",alignItems:"center",gap:14,padding:"14px 18px"}}>
+                {/* Avatar */}
+                <div style={{width:38,height:38,borderRadius:9,background:`${role.color}15`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <span style={{fontSize:13,fontWeight:800,color:role.color}}>{role.name.split(" ").map(w=>w[0]).join("").slice(0,2)}</span>
+                </div>
+                {/* Info */}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                    <span style={{fontSize:13,fontWeight:700,color:T.text}}>{role.name}</span>
+                    {role.system&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em"}}>System</span>}
                   </div>
-                  <div>
-                    <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}>
-                      <span style={{fontSize:17,fontWeight:700,color:T.text}}>{currentRole.name}</span>
-                      {currentRole.system&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,fontWeight:700,textTransform:"uppercase"}}>System</span>}
-                    </div>
-                    <div style={{fontSize:12,color:T.textMuted}}>{currentRole.desc}</div>
+                  <div style={{fontSize:11.5,color:T.textMuted,marginBottom:8}}>{role.desc}</div>
+                  {/* Policy tags — max 3 visible */}
+                  <div style={{display:"flex",gap:5,alignItems:"center",flexWrap:"nowrap",overflow:"hidden"}}>
+                    {rPolicies.length===0
+                      ? <span style={{fontSize:11,color:T.textMuted,fontStyle:"italic"}}>No policies attached</span>
+                      : <>
+                          {rPolicies.slice(0,3).map(p=>(
+                            <span key={p.id} style={{
+                              fontSize:11,padding:"3px 9px",borderRadius:5,fontWeight:500,whiteSpace:"nowrap",
+                              background:p.enabled?`${T.accent}10`:T.bgElevated,
+                              border:`1px solid ${p.enabled?T.accent+"30":T.border}`,
+                              color:p.enabled?T.accent:T.textMuted,
+                            }}>{p.name}</span>
+                          ))}
+                          {rPolicies.length>3&&(
+                            <span style={{
+                              fontSize:11,padding:"3px 9px",borderRadius:5,fontWeight:600,whiteSpace:"nowrap",
+                              background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",
+                            }}
+                              title={rPolicies.slice(3).map(p=>p.name).join(", ")}>
+                              +{rPolicies.length-3} more
+                            </span>
+                          )}
+                        </>
+                    }
                   </div>
                 </div>
-                {!currentRole.system&&(
-                  <button onClick={()=>handleDeleteRole(currentRole.id)} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:7,background:"transparent",border:`1px solid ${T.rose}44`,color:T.rose,fontSize:11.5,fontWeight:600,cursor:"pointer",flexShrink:0,transition:"background .12s"}}
-                    onMouseEnter={e=>e.currentTarget.style.background=T.roseDim} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                    {Ic.trash(10)} Delete
-                  </button>
-                )}
+                {/* Right side */}
+                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
+                  <span style={{fontSize:11,color:T.textMuted}}>{role.users} user{role.users!==1?"s":""}</span>
+                  <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:T.textMuted}}>
+                    <span>{rPolicies.length} polic{rPolicies.length!==1?"ies":"y"}</span>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{opacity:.4}}><path d="M4.5 3l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </div>
+                </div>
               </div>
-              <div style={{display:"flex",gap:10}}>
-                {[["Users",currentRole.users],["Policies",rolePolicies.length],["Rules",rolePolicies.reduce((a,p)=>a+p.rules.length,0)]].map(([l,v])=>(
-                  <div key={l} style={{textAlign:"center",padding:"8px 14px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`,flex:1}}>
-                    <div style={{fontSize:20,fontWeight:700,color:T.text}}>{v}</div>
-                    <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{l}</div>
+            </div>
+          );
+        })}
+      </div>
+      {totalRolePages>1&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10,paddingTop:10,borderTop:`1px solid ${T.border}`}}>
+        <span style={{fontSize:11,color:T.textMuted}}>{acRoleList.length} role{acRoleList.length!==1?"s":""} · page {acRolePage}/{totalRolePages}</span>
+        <div style={{display:"flex",gap:4}}>
+          <button onClick={()=>setAcRolePage(p=>Math.max(1,p-1))} disabled={acRolePage===1} style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:acRolePage===1?T.textMuted:T.text,fontSize:11,cursor:acRolePage===1?"default":"pointer"}}>← Prev</button>
+          <button onClick={()=>setAcRolePage(p=>Math.min(totalRolePages,p+1))} disabled={acRolePage===totalRolePages} style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:acRolePage===totalRolePages?T.textMuted:T.text,fontSize:11,cursor:acRolePage===totalRolePages?"default":"pointer"}}>Next →</button>
+        </div>
+      </div>}
+      </>
+    )}
+
+    {/* ════ POLICIES TAB ════ */}
+    {activeTab==="policies"&&(
+      <>
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {acPolList.length===0&&<div style={{textAlign:"center",padding:"32px 0",fontSize:12,color:T.textMuted}}>No policies match your search</div>}
+        {pagedPolicies.map(policy=>(
+          <div key={policy.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+            {/* Policy header */}
+            <div style={{display:"flex",alignItems:"center",gap:14,padding:"14px 18px"}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4,flexWrap:"wrap"}}>
+                  <span style={{fontSize:13,fontWeight:700,color:T.text}}>{policy.name}</span>
+                  {policy.system&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em"}}>System</span>}
+                  <span style={{fontSize:10.5,padding:"2px 7px",borderRadius:4,fontWeight:600,
+                    background:policy.enabled?"rgba(22,163,74,.1)":T.bgElevated,
+                    color:policy.enabled?"#16a34a":T.textMuted,
+                    border:`1px solid ${policy.enabled?"rgba(22,163,74,.2)":T.border}`}}>
+                    {policy.enabled?"● Active":"○ Disabled"}
+                  </span>
+                </div>
+                <div style={{fontSize:11.5,color:T.textMuted}}>{policy.desc}</div>
+              </div>
+              <div style={{display:"flex",gap:6,flexShrink:0,alignItems:"center"}}>
+                <button onClick={e=>{e.stopPropagation();handleTogglePolicy(policy.id);}}
+                  style={{padding:"5px 11px",borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:11,cursor:"pointer",transition:"all .12s"}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.amber;e.currentTarget.style.color=T.amber;}}
+                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+                  {policy.enabled?"Disable":"Enable"}
+                </button>
+                <button onClick={()=>setPolicyDetail(policy.id)}
+                  style={{padding:"5px 12px",borderRadius:6,background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent,fontSize:11,fontWeight:600,cursor:"pointer",transition:"all .12s"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=`${T.accent}22`}
+                  onMouseLeave={e=>e.currentTarget.style.background=T.accentDim}>
+                  Edit Rules
+                </button>
+              </div>
+            </div>
+            {/* Rules preview — clean rows */}
+            {policy.rules.length>0&&(
+              <div style={{borderTop:`1px solid ${T.border}`,background:T.bgElevated}}>
+                {policy.rules.map((rule,ri)=>(
+                  <div key={rule.id} style={{
+                    display:"flex",alignItems:"center",gap:12,padding:"9px 18px",
+                    borderBottom:ri<policy.rules.length-1?`1px solid ${T.border}`:"none",
+                  }}>
+                    <div style={{width:3,height:32,borderRadius:2,background:rule.effect==="allow"?"#16a34a":"#dc2626",flexShrink:0}}/>
+                    <div style={{minWidth:80,flexShrink:0}}><EffectBadge effect={rule.effect}/></div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:2}}>{rule.name}</div>
+                      <div style={{fontSize:11,color:T.textMuted,display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
+                        <span style={{fontWeight:600,color:T.textSub}}>{MENUS.find(m=>m.value===(rule.section||rule.menu))?.label||rule.section||rule.menu||"—"}</span>
+                        <span style={{opacity:.4}}>·</span>
+                        {rule.operations.map(o=>(
+                          <span key={o} style={{padding:"1px 5px",borderRadius:3,fontSize:10,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{o}</span>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
-            </div>
-            {/* Policies body */}
-            <div style={{padding:"18px 24px",flex:1,overflowY:"auto"}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-                <SectionLabel>Attached Policies</SectionLabel>
-                <button onClick={()=>setAddPolToRole(o=>!o)} style={{
-                  display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:6,
-                  background:addPolToRole?T.accentDim:"transparent",border:`1px solid ${addPolToRole?T.accent:T.border}`,
-                  color:addPolToRole?T.accent:T.textSub,fontSize:11,fontWeight:600,cursor:"pointer",transition:"all .12s",
-                }}>
-                  <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
-                  Attach Policy
-                </button>
+            )}
+            {policy.rules.length===0&&(
+              <div style={{borderTop:`1px solid ${T.border}`,padding:"12px 18px",fontSize:11.5,color:T.textMuted,fontStyle:"italic",background:T.bgElevated}}>
+                No rules yet — click "Edit Rules" to add the first one.
               </div>
-              {addPolToRole&&(
-                <div style={{marginBottom:14,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>
-                  {unattachedPols.length===0
-                    ? <div style={{padding:"14px",fontSize:11.5,color:T.textMuted,textAlign:"center"}}>All policies are already attached.</div>
-                    : unattachedPols.map((p,i)=>(
-                      <div key={p.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:i<unattachedPols.length-1?`1px solid ${T.border}`:"none",transition:"background .1s"}}
-                        onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                        <div>
-                          <div style={{fontSize:12,fontWeight:600,color:T.text}}>{p.name}</div>
-                          <div style={{fontSize:10.5,color:T.textMuted,marginTop:2}}>{p.rules.length} rule{p.rules.length!==1?"s":""} · {p.desc.slice(0,55)}{p.desc.length>55?"…":""}</div>
-                        </div>
-                        <button onClick={()=>handleAttachPolicy(p.id)} style={{padding:"5px 12px",borderRadius:6,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:11,fontWeight:600,cursor:"pointer",flexShrink:0,marginLeft:12}}>Attach</button>
-                      </div>
-                    ))
-                  }
-                </div>
-              )}
-              {rolePolicies.length===0
-                ? <div style={{padding:"36px 0",textAlign:"center",color:T.textMuted,fontSize:12,fontStyle:"italic"}}>No policies attached yet. Use "Attach Policy" to define what this role can do.</div>
-                : rolePolicies.map((p,pi)=>(
-                  <div key={p.id} style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",marginBottom:10}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",background:T.bgElevated}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <div style={{width:3,height:18,borderRadius:2,background:p.enabled?"#16a34a":T.textMuted}}/>
-                        <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{p.name}</span>
-                        <span style={{fontSize:10,padding:"1px 6px",borderRadius:3,background:p.enabled?"rgba(22,163,74,.1)":T.bgHover,color:p.enabled?"#16a34a":T.textMuted,fontWeight:600}}>{p.enabled?"Active":"Off"}</span>
-                      </div>
-                      <button onClick={()=>handleDetachPolicy(p.id)} style={{fontSize:11,color:T.textMuted,background:"transparent",border:`1px solid transparent`,borderRadius:5,cursor:"pointer",padding:"2px 8px",transition:"all .1s"}}
-                        onMouseEnter={e=>{e.currentTarget.style.borderColor=T.rose+"66";e.currentTarget.style.color=T.rose;}}
-                        onMouseLeave={e=>{e.currentTarget.style.borderColor="transparent";e.currentTarget.style.color=T.textMuted;}}>Detach</button>
-                    </div>
-                    {p.rules.map((rule,ri)=>(
-                      <div key={rule.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px",borderTop:`1px solid ${T.border}`,background:T.bgSurface}}>
-                        <div style={{width:3,height:20,borderRadius:2,background:rule.effect==="allow"?"#16a34a":"#dc2626",flexShrink:0}}/>
-                        <EffectBadge effect={rule.effect}/>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:11.5,fontWeight:600,color:T.text}}>{rule.name}</div>
-                          <div style={{fontSize:10.5,color:T.textMuted,display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",marginTop:2}}>
-                            <span style={{fontWeight:600,color:T.textSub}}>{MENUS.find(m=>m.value===(rule.section||rule.menu))?.label||rule.section||rule.menu||"—"}</span>
-                            <span style={{opacity:.4}}>·</span>
-                            {rule.operations.map(o=>(
-                              <span key={o} style={{padding:"1px 5px",borderRadius:3,fontSize:10,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{o}</span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ))
-              }
-            </div>
+            )}
           </div>
-        )}
-
-        {/* POLICY DETAIL (inline) */}
-        {activeTab==="policies"&&currentPolicy&&(
-          <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
-            {/* Header */}
-            <div style={{padding:"20px 24px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bgSurface}}>
-              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:4}}>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
-                    <span style={{fontSize:17,fontWeight:700,color:T.text}}>{currentPolicy.name}</span>
-                    {currentPolicy.system&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,fontWeight:700,textTransform:"uppercase"}}>System</span>}
-                    <span style={{fontSize:10.5,padding:"2px 7px",borderRadius:4,fontWeight:600,
-                      background:currentPolicy.enabled?"rgba(22,163,74,.1)":T.bgElevated,
-                      color:currentPolicy.enabled?"#16a34a":T.textMuted,
-                      border:`1px solid ${currentPolicy.enabled?"rgba(22,163,74,.2)":T.border}`}}>
-                      {currentPolicy.enabled?"Active":"Disabled"}
-                    </span>
-                  </div>
-                  <div style={{fontSize:12,color:T.textMuted}}>{currentPolicy.desc}</div>
-                </div>
-                <div style={{display:"flex",gap:8,flexShrink:0,marginLeft:12}}>
-                  {!currentPolicy.system&&(
-                    <button onClick={()=>handleTogglePolicy(currentPolicy.id)} style={{padding:"6px 12px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:11,cursor:"pointer",transition:"all .12s"}}
-                      onMouseEnter={e=>{e.currentTarget.style.borderColor=T.amber;e.currentTarget.style.color=T.amber;}}
-                      onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
-                      {currentPolicy.enabled?"Disable":"Enable"}
-                    </button>
-                  )}
-                  <AddBtn label="Add Rule" onClick={()=>openRuleModal(currentPolicy.id)}/>
-                  {!currentPolicy.system&&(
-                    <button onClick={()=>handleDeletePolicy(currentPolicy.id)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:7,background:"transparent",border:`1px solid ${T.rose}44`,color:T.rose,fontSize:11,fontWeight:600,cursor:"pointer",transition:"background .12s"}}
-                      onMouseEnter={e=>e.currentTarget.style.background=T.roseDim} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                      {Ic.trash(10)}
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-            {/* Rules */}
-            <div style={{padding:"16px 24px",flex:1,overflowY:"auto"}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-                <SectionLabel>Rules ({currentPolicy.rules.length})</SectionLabel>
-                <div style={{fontSize:10.5,color:T.violet,padding:"3px 8px",borderRadius:4,background:`${T.violet}10`,border:`1px solid ${T.violet}20`}}>
-                  Deny evaluated first · No match = denied
-                </div>
-              </div>
-              {currentPolicy.rules.length===0
-                ? <div style={{padding:"40px 0",textAlign:"center",color:T.textMuted,fontSize:12,fontStyle:"italic"}}>No rules yet. Click "Add Rule" to define what this policy allows or denies.</div>
-                : currentPolicy.rules.map((rule,i)=>(
-                  <div key={rule.id} style={{
-                    background:T.bgSurface,border:`1px solid ${T.border}`,
-                    borderLeft:`3px solid ${rule.effect==="allow"?"#16a34a":"#dc2626"}`,
-                    borderRadius:8,marginBottom:10,overflow:"hidden",
-                  }}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 14px",borderBottom:`1px solid ${T.border}`}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <EffectBadge effect={rule.effect}/>
-                        <span style={{fontSize:13,fontWeight:700,color:T.text}}>{rule.name}</span>
-                      </div>
-                      <div style={{display:"flex",gap:5}}>
-                        <button onClick={()=>openRuleModal(currentPolicy.id,rule)} style={{padding:"4px 10px",borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,fontSize:11,cursor:"pointer",transition:"all .12s"}}
-                          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
-                          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>Edit</button>
-                        <button onClick={()=>handleDeleteRule(currentPolicy.id,rule.id)} style={{padding:"4px 9px",borderRadius:6,background:"transparent",border:`1px solid transparent`,color:T.textMuted,fontSize:11,cursor:"pointer",transition:"all .12s"}}
-                          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.rose+"55";e.currentTarget.style.color=T.rose;}}
-                          onMouseLeave={e=>{e.currentTarget.style.borderColor="transparent";e.currentTarget.style.color=T.textMuted;}}>✕</button>
-                      </div>
-                    </div>
-                    <div style={{padding:"10px 14px",background:T.bgElevated}}>
-                      <div style={{fontSize:11.5,color:T.textMuted,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                        <span style={{fontWeight:600,color:T.textSub}}>{MENUS.find(m=>m.value===(rule.section||rule.menu))?.label||rule.section||rule.menu||"—"}</span>
-                        <span style={{opacity:.4}}>·</span>
-                        {rule.operations.map(o=><TagChip key={o} label={o}/>)}
-                      </div>
-                      {rule.desc&&<div style={{fontSize:11,color:T.textMuted,marginTop:5}}>{rule.desc}</div>}
-                    </div>
-                  </div>
-                ))
-              }
-            </div>
-          </div>
-        )}
-
-        {/* EMPTY STATE */}
-        {!currentRole&&!currentPolicy&&(
-          <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",padding:"40px 32px",textAlign:"center"}}>
-            <div style={{width:56,height:56,borderRadius:16,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:16,fontSize:24}}>🔐</div>
-            <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:8}}>
-              Select a {activeTab==="roles"?"role":"policy"} to view details
-            </div>
-            <div style={{fontSize:12,color:T.textMuted,maxWidth:280,lineHeight:1.6}}>
-              {activeTab==="roles"
-                ? "Click any role on the left to see its attached policies, assigned users, and permission summary."
-                : "Click any policy on the left to view its rules, edit operations, or delete the policy."}
-            </div>
-          </div>
-        )}
+        ))}
       </div>
-    </div>
+      {totalPolPages>1&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10,paddingTop:10,borderTop:`1px solid ${T.border}`}}>
+        <span style={{fontSize:11,color:T.textMuted}}>{acPolList.length} polic{acPolList.length!==1?"ies":"y"} · page {acPolPage}/{totalPolPages}</span>
+        <div style={{display:"flex",gap:4}}>
+          <button onClick={()=>setAcPolPage(p=>Math.max(1,p-1))} disabled={acPolPage===1} style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:acPolPage===1?T.textMuted:T.text,fontSize:11,cursor:acPolPage===1?"default":"pointer"}}>← Prev</button>
+          <button onClick={()=>setAcPolPage(p=>Math.min(totalPolPages,p+1))} disabled={acPolPage===totalPolPages} style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:acPolPage===totalPolPages?T.textMuted:T.text,fontSize:11,cursor:acPolPage===totalPolPages?"default":"pointer"}}>Next →</button>
+        </div>
+      </div>}
+      </>
+    )}
 
     {/* ════ MODALS ════ */}
 
@@ -15806,7 +15678,210 @@ const AccessSection = ({onToast}) => {
       </div>
     )}
 
-    {/* Rule Editor Modal */}
+    {/* Role Detail — slide-in panel */}
+    {roleDetail&&currentRole&&(
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",display:"flex",justifyContent:"flex-end",zIndex:900,backdropFilter:"blur(3px)"}}
+        onClick={e=>e.target===e.currentTarget&&setRoleDetail(null)}>
+        <div className="scaleIn" style={{background:T.bgSurface,borderLeft:`1px solid ${T.border}`,width:480,maxWidth:"90vw",height:"100%",display:"flex",flexDirection:"column",boxShadow:"-12px 0 40px rgba(0,0,0,.15)"}}>
+          {/* Header */}
+          <div style={{padding:"20px 22px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:12}}>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <div style={{width:40,height:40,borderRadius:10,background:`${currentRole.color}15`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,borderLeft:`3px solid ${currentRole.color}`}}>
+                  <span style={{fontSize:14,fontWeight:800,color:currentRole.color}}>{currentRole.name.split(" ").map(w=>w[0]).join("").slice(0,2)}</span>
+                </div>
+                <div>
+                  <div style={{display:"flex",alignItems:"center",gap:7}}>
+                    <div style={{fontSize:16,fontWeight:700,color:T.text}}>{currentRole.name}</div>
+                    {currentRole.system&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,fontWeight:700,textTransform:"uppercase"}}>System</span>}
+                  </div>
+                  <div style={{fontSize:12,color:T.textMuted,marginTop:2}}>{currentRole.desc}</div>
+                </div>
+              </div>
+              <button onClick={()=>setRoleDetail(null)} style={{width:28,height:28,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.x(10)}</button>
+            </div>
+            <div style={{display:"flex",gap:16}}>
+              {[["Users",currentRole.users],["Policies",rolePolicies.length],["Rules",rolePolicies.reduce((a,p)=>a+p.rules.length,0)]].map(([l,v])=>(
+                <div key={l} style={{textAlign:"center",padding:"8px 14px",background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,flex:1}}>
+                  <div style={{fontSize:18,fontWeight:700,color:T.text}}>{v}</div>
+                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Attached policies */}
+          <div style={{padding:"16px 22px",flex:1,overflowY:"auto"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+              <SectionLabel>Attached Policies</SectionLabel>
+              <button onClick={()=>setAddPolToRole(o=>!o)} style={{
+                display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:6,
+                background:addPolToRole?T.accentDim:"transparent",border:`1px solid ${addPolToRole?T.accent:T.border}`,
+                color:addPolToRole?T.accent:T.textSub,fontSize:11,fontWeight:600,cursor:"pointer",transition:"all .12s",
+              }}>
+                <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                Attach Policy
+              </button>
+            </div>
+            {/* Attach picker */}
+            {addPolToRole&&(
+              <div style={{marginBottom:14,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+                {unattachedPols.length===0
+                  ? <div style={{padding:"14px",fontSize:11.5,color:T.textMuted,textAlign:"center"}}>All policies are already attached.</div>
+                  : unattachedPols.map((p,i)=>(
+                    <div key={p.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:i<unattachedPols.length-1?`1px solid ${T.border}`:"none",transition:"background .1s"}}
+                      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
+                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                      <div>
+                        <div style={{fontSize:12,fontWeight:600,color:T.text}}>{p.name}</div>
+                        <div style={{fontSize:10.5,color:T.textMuted,marginTop:2}}>{p.rules.length} rule{p.rules.length!==1?"s":""} · {p.desc.slice(0,55)}{p.desc.length>55?"…":""}</div>
+                      </div>
+                      <button onClick={()=>handleAttachPolicy(p.id)} style={{padding:"5px 12px",borderRadius:6,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:11,fontWeight:600,cursor:"pointer",flexShrink:0,marginLeft:12}}>Attach</button>
+                    </div>
+                  ))
+                }
+              </div>
+            )}
+            {rolePolicies.length===0
+              ? <div style={{padding:"36px 0",textAlign:"center",color:T.textMuted,fontSize:12,fontStyle:"italic"}}>No policies attached yet. Use "Attach Policy" to define what this role can do.</div>
+              : rolePolicies.map((p,pi)=>(
+                <div key={p.id} style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",marginBottom:10}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",background:T.bgElevated}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{width:3,height:18,borderRadius:2,background:p.enabled?"#16a34a":T.textMuted}}/>
+                      <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{p.name}</span>
+                      <span style={{fontSize:10,padding:"1px 6px",borderRadius:3,background:p.enabled?"rgba(22,163,74,.1)":T.bgHover,color:p.enabled?"#16a34a":T.textMuted,fontWeight:600}}>{p.enabled?"Active":"Off"}</span>
+                    </div>
+                    <button onClick={()=>handleDetachPolicy(p.id)} style={{fontSize:11,color:T.textMuted,background:"transparent",border:`1px solid transparent`,borderRadius:5,cursor:"pointer",padding:"2px 8px",transition:"all .1s"}}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor=T.rose+"66";e.currentTarget.style.color=T.rose;}}
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor="transparent";e.currentTarget.style.color=T.textMuted;}}>Detach</button>
+                  </div>
+                  {p.rules.map((rule,ri)=>(
+                    <div key={rule.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px",borderTop:`1px solid ${T.border}`,background:T.bgSurface}}>
+                      <div style={{width:3,height:20,borderRadius:2,background:rule.effect==="allow"?"#16a34a":"#dc2626",flexShrink:0}}/>
+                      <EffectBadge effect={rule.effect}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:11.5,fontWeight:600,color:T.text}}>{rule.name}</div>
+                        <div style={{fontSize:10.5,color:T.textMuted,display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",marginTop:2}}>
+                          <span style={{fontWeight:600,color:T.textSub}}>{MENUS.find(m=>m.value===(rule.section||rule.menu))?.label||rule.section||rule.menu||"—"}</span>
+                          <span style={{opacity:.4}}>·</span>
+                          {rule.operations.map(o=>(
+                            <span key={o} style={{padding:"1px 5px",borderRadius:3,fontSize:10,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{o}</span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))
+            }
+          </div>
+          {/* Footer */}
+          {!currentRole.system&&(
+            <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,flexShrink:0}}>
+              <button onClick={()=>handleDeleteRole(currentRole.id)} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:7,background:"transparent",border:`1px solid ${T.rose}44`,color:T.rose,fontSize:12,fontWeight:600,cursor:"pointer",transition:"background .12s"}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.roseDim}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                {Ic.trash(11)} Delete Role
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+
+    {/* Policy Detail (Rules editor) */}
+    {policyDetail&&currentPolicy&&(
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",display:"flex",justifyContent:"flex-end",zIndex:900,backdropFilter:"blur(3px)"}}
+        onClick={e=>e.target===e.currentTarget&&setPolicyDetail(null)}>
+        <div className="scaleIn" style={{background:T.bgSurface,borderLeft:`1px solid ${T.border}`,width:560,maxWidth:"92vw",height:"100%",display:"flex",flexDirection:"column",boxShadow:"-12px 0 40px rgba(0,0,0,.15)"}}>
+          {/* Header */}
+          <div style={{padding:"20px 22px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:4}}>
+              <div>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                  <div style={{fontSize:16,fontWeight:700,color:T.text}}>{currentPolicy.name}</div>
+                  {currentPolicy.system&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,fontWeight:700,textTransform:"uppercase"}}>System</span>}
+                  <span style={{fontSize:10.5,padding:"2px 7px",borderRadius:4,fontWeight:600,
+                    background:currentPolicy.enabled?"rgba(22,163,74,.1)":T.bgElevated,
+                    color:currentPolicy.enabled?"#16a34a":T.textMuted,
+                    border:`1px solid ${currentPolicy.enabled?"rgba(22,163,74,.2)":T.border}`}}>
+                    {currentPolicy.enabled?"Active":"Disabled"}
+                  </span>
+                </div>
+                <div style={{fontSize:12,color:T.textMuted}}>{currentPolicy.desc}</div>
+              </div>
+              <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0,marginLeft:12}}>
+                <AddBtn label="Add Rule" onClick={()=>openRuleModal(currentPolicy.id)}/>
+                <button onClick={()=>setPolicyDetail(null)} style={{width:28,height:28,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(10)}</button>
+              </div>
+            </div>
+          </div>
+          {/* Rules */}
+          <div style={{padding:"16px 22px",flex:1,overflowY:"auto"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+              <SectionLabel>Rules ({currentPolicy.rules.length})</SectionLabel>
+              <div style={{fontSize:10.5,color:T.violet,padding:"3px 8px",borderRadius:4,background:`${T.violet}10`,border:`1px solid ${T.violet}20`}}>
+                Deny checked first · No match = denied
+              </div>
+            </div>
+            {currentPolicy.rules.length===0
+              ? <div style={{padding:"40px 0",textAlign:"center",color:T.textMuted,fontSize:12,fontStyle:"italic"}}>No rules yet. Click "Add Rule" to define what this policy allows or denies.</div>
+              : currentPolicy.rules.map((rule,i)=>(
+                <div key={rule.id} style={{
+                  background:T.bgSurface,border:`1px solid ${T.border}`,
+                  borderLeft:`3px solid ${rule.effect==="allow"?"#16a34a":"#dc2626"}`,
+                  borderRadius:8,marginBottom:10,overflow:"hidden",
+                }}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 14px",borderBottom:`1px solid ${T.border}`}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <EffectBadge effect={rule.effect}/>
+                      <span style={{fontSize:13,fontWeight:700,color:T.text}}>{rule.name}</span>
+                    </div>
+                    <div style={{display:"flex",gap:6}}>
+                      <button onClick={()=>openRuleModal(currentPolicy.id,rule)}
+                        style={{padding:"4px 10px",borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:11,fontWeight:500,cursor:"pointer",transition:"all .1s"}}
+                        onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                        onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>Edit</button>
+                      <button onClick={()=>handleDeleteRule(currentPolicy.id,rule.id)}
+                        style={{width:26,height:26,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .1s"}}
+                        onMouseEnter={e=>{e.currentTarget.style.borderColor=T.rose+"66";e.currentTarget.style.color=T.rose;}}
+                        onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
+                        {Ic.trash(10)}
+                      </button>
+                    </div>
+                  </div>
+                  <div style={{padding:"10px 14px",display:"flex",flexDirection:"column",gap:8}}>
+                    {rule.desc&&<div style={{fontSize:11,color:T.textMuted,fontStyle:"italic"}}>{rule.desc}</div>}
+                    <div style={{display:"grid",gridTemplateColumns:"80px 1fr",gap:"6px 0",alignItems:"start"}}>
+                      <span style={{fontSize:10.5,fontWeight:600,color:T.textMuted,paddingTop:2}}>Section</span>
+                      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                        <TagChip label={MENUS.find(m=>m.value===(rule.section||rule.menu))?.label||rule.section||rule.menu||"—"}/>
+                      </div>
+                      <span style={{fontSize:10.5,fontWeight:600,color:T.textMuted,paddingTop:6}}>Operations</span>
+                      <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:4}}>
+                        {rule.operations.map(o=><TagChip key={o} label={o}/>)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            }
+          </div>
+          {!currentPolicy.system&&(
+            <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,flexShrink:0}}>
+              <button onClick={()=>handleDeletePolicy(currentPolicy.id)} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:7,background:"transparent",border:`1px solid ${T.rose}44`,color:T.rose,fontSize:12,fontWeight:600,cursor:"pointer",transition:"background .12s"}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.roseDim}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                {Ic.trash(11)} Delete Policy
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+
+
+        {/* Rule Editor Modal */}
     {ruleModal&&(()=>{
       const polName = ruleModal.policyId==="__new__" ? (newPolName.trim()||"New Policy") : (policies.find(p=>p.id===ruleModal.policyId)?.name||"");
       const isValid = rf.name.trim()&&rf.section&&rf.operations.length;
@@ -17414,7 +17489,7 @@ const SettingsView = ({onToast})=>{
         {/* ── main content + optional detail panel ── */}
         <div style={{display:"flex",overflow:"hidden"}}>
           <div style={{flex:1,overflowY:"auto",padding:"24px 28px",background:T.bg}}>
-            <div style={{maxWidth:["access","teams","personas"].includes(section)?undefined:740}}>
+            <div style={{maxWidth:740}}>
 
             {/* ══ SERVICES ══ */}
             {section==="connections"&&<>
