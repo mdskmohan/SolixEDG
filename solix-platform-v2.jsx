@@ -9796,6 +9796,18 @@ const DomainsView = () => {
   const [createProductOpen, setCreateProductOpen] = useState(false);
   const [nd, setNd] = useState({name:"",displayName:"",description:"",domainType:"Source-aligned",icon:"🗂️",color:"#0ea5e9"});
   const [np, setNp] = useState({name:"",displayName:"",description:"",lifecycleStage:"DEVELOPMENT",icon:"📦"});
+  const [dmOwnerOpen, setDmOwnerOpen] = useState(false);
+  const [dmOwnerSearch, setDmOwnerSearch] = useState("");
+  const [dmStewOpen, setDmStewOpen] = useState(false);
+  const [dmStewSearch, setDmStewSearch] = useState("");
+  const [pdOwnerOpen, setPdOwnerOpen] = useState(false);
+  const [pdOwnerSearch, setPdOwnerSearch] = useState("");
+  const [pdStewOpen, setPdStewOpen] = useState(false);
+  const [pdStewSearch, setPdStewSearch] = useState("");
+  const ALL_USERS = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
+  const ava = name => (name||"?").split(".").map(s=>s[0]?.toUpperCase()||"").join("");
+  const patchDomain = (id,patch) => setDomains(prev=>prev.map(d=>d.id===id?{...d,...patch}:d));
+  const patchProduct = (id,patch) => setProducts(prev=>prev.map(p=>p.id===id?{...p,...patch}:p));
 
   const selectedDomain  = domains.find(d=>d.id===selectedDomainId);
   const selectedProduct = products.find(p=>p.id===selectedProductId);
@@ -9931,32 +9943,60 @@ const DomainsView = () => {
                 <div style={{display:"flex",flexDirection:"column",gap:12}}>
                   <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
                     <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:12}}>Details</div>
-                    {[
-                      ["Domain",pd.domain],["Lifecycle",pd.lifecycleStage],["Created",pd.createdAt],
-                      ["Assets",String(productAssets.length)],
-                    ].map(([l,v])=>(
+                    {[["Domain",pd.domain],["Lifecycle",pd.lifecycleStage],["Created",pd.createdAt],["Assets",String(productAssets.length)]].map(([l,v])=>(
                       <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${T.border}`}}>
                         <span style={{fontSize:11.5,color:T.textMuted}}>{l}</span>
                         <span style={{fontSize:11.5,color:T.text,fontWeight:500}}>{v}</span>
                       </div>
                     ))}
                   </div>
-                  {pd.experts.length>0&&(
-                    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
-                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Experts</div>
-                      <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                        {pd.experts.map(e=><OwnerChip key={e} name={e}/>)}
+                  {/* Owners / Stewards / Tags card */}
+                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                    {/* Owners */}
+                    <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Owners</div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:(pd.owners||[]).length>0?8:0}}>
+                        {(pd.owners||[]).map((o,i)=>(
+                          <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                            <div style={{width:20,height:20,borderRadius:"50%",background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(o)}</div>
+                            <span style={{fontSize:12,color:T.text,fontWeight:500}}>{o}</span>
+                            <button onClick={()=>patchProduct(pd.id,{owners:(pd.owners||[]).filter(x=>x!==o)})} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex",lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{Ic.x(8)}</button>
+                          </div>
+                        ))}
+                      </div>
+                      <button onClick={()=>{setPdOwnerOpen(p=>!p);setPdOwnerSearch("");}} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,color:pdOwnerOpen?T.accent:T.textMuted,background:"none",border:`1px dashed ${pdOwnerOpen?T.accent:T.border}`,borderRadius:6,padding:"4px 10px",cursor:"pointer",transition:"all .12s"}}>{Ic.plus(9)} Add owner</button>
+                      {pdOwnerOpen&&<div style={{position:"absolute",left:16,right:16,top:"calc(100% - 4px)",zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.22)",overflow:"hidden"}}>
+                        <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}><input autoFocus placeholder="Search users…" value={pdOwnerSearch} onChange={e=>setPdOwnerSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none"}}/></div>
+                        <div style={{maxHeight:160,overflowY:"auto"}}>{ALL_USERS.filter(u=>!pdOwnerSearch||u.toLowerCase().includes(pdOwnerSearch.toLowerCase())).map(u=>{const sel=(pd.owners||[]).includes(u);return(<button key={u} onMouseDown={e=>{e.stopPropagation();patchProduct(pd.id,{owners:sel?(pd.owners||[]).filter(x=>x!==u):[...(pd.owners||[]),u]});}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 12px",background:sel?T.bgElevated:"transparent",border:"none",cursor:"pointer",textAlign:"left"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{width:24,height:24,borderRadius:"50%",background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8.5,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(u)}</div><span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>{sel&&<span style={{fontSize:12,color:T.accent,fontWeight:700}}>✓</span>}</button>);})}</div>
+                      </div>}
+                    </div>
+                    {/* Stewards */}
+                    <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Stewards</div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:(pd.experts||[]).length>0?8:0}}>
+                        {(pd.experts||[]).map((s,i)=>(
+                          <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                            <div style={{width:20,height:20,borderRadius:"50%",background:"rgba(217,119,6,.12)",border:"1px solid rgba(217,119,6,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(s)}</div>
+                            <span style={{fontSize:12,color:T.text,fontWeight:500}}>{s}</span>
+                            <button onClick={()=>patchProduct(pd.id,{experts:(pd.experts||[]).filter(x=>x!==s)})} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex",lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{Ic.x(8)}</button>
+                          </div>
+                        ))}
+                      </div>
+                      <button onClick={()=>{setPdStewOpen(p=>!p);setPdStewSearch("");}} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,color:pdStewOpen?"#d97706":T.textMuted,background:"none",border:`1px dashed ${pdStewOpen?"#d97706":T.border}`,borderRadius:6,padding:"4px 10px",cursor:"pointer",transition:"all .12s"}}>{Ic.plus(9)} Add steward</button>
+                      {pdStewOpen&&<div style={{position:"absolute",left:16,right:16,top:"calc(100% - 4px)",zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.22)",overflow:"hidden"}}>
+                        <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}><input autoFocus placeholder="Search users…" value={pdStewSearch} onChange={e=>setPdStewSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none"}}/></div>
+                        <div style={{maxHeight:160,overflowY:"auto"}}>{ALL_USERS.filter(u=>!pdStewSearch||u.toLowerCase().includes(pdStewSearch.toLowerCase())).map(u=>{const sel=(pd.experts||[]).includes(u);return(<button key={u} onMouseDown={e=>{e.stopPropagation();patchProduct(pd.id,{experts:sel?(pd.experts||[]).filter(x=>x!==u):[...(pd.experts||[]),u]});}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 12px",background:sel?T.bgElevated:"transparent",border:"none",cursor:"pointer",textAlign:"left"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{width:24,height:24,borderRadius:"50%",background:"rgba(217,119,6,.12)",border:"1px solid rgba(217,119,6,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8.5,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(u)}</div><span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>{sel&&<span style={{fontSize:12,color:"#d97706",fontWeight:700}}>✓</span>}</button>);})}</div>
+                      </div>}
+                    </div>
+                    {/* Tags */}
+                    <div style={{padding:"14px 16px"}}>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Tags</div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                        {(pd.tags||[]).map(t=><span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"3px 9px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}>{t}<button onClick={()=>patchProduct(pd.id,{tags:(pd.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+                        {(pd.tags||[]).length===0&&<span style={{fontSize:11.5,color:T.textMuted}}>No tags</span>}
                       </div>
                     </div>
-                  )}
-                  {pd.tags.length>0&&(
-                    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
-                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Tags</div>
-                      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                        {pd.tags.map(t=><span key={t} style={{padding:"3px 8px",borderRadius:4,fontSize:10.5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>{t}</span>)}
-                      </div>
-                    </div>
-                  )}
+                  </div>
                 </div>
               </div>
             )}
@@ -10074,29 +10114,60 @@ const DomainsView = () => {
                 <div style={{display:"flex",flexDirection:"column",gap:12}}>
                   <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
                     <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:12}}>Domain Info</div>
-                    {[["Type",<DomainTypeBadge key="t" type={dm.domainType}/>],["Owner",dm.owners[0]||"—"]].map(([l,v])=>(
+                    {[["Type",<DomainTypeBadge key="t" type={dm.domainType}/>],["Assets",dm.assetCount],["Data Products",domainProducts.length]].map(([l,v])=>(
                       <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${T.border}`}}>
                         <span style={{fontSize:11.5,color:T.textMuted}}>{l}</span>
                         <span style={{fontSize:11.5,color:T.text,fontWeight:500}}>{v}</span>
                       </div>
                     ))}
                   </div>
-                  {dm.experts.length>0&&(
-                    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
-                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Experts</div>
-                      <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                        {dm.experts.map(e=><OwnerChip key={e} name={e}/>)}
+                  {/* Owners / Stewards / Tags card */}
+                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                    {/* Owners */}
+                    <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Owners</div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:(dm.owners||[]).length>0?8:0}}>
+                        {(dm.owners||[]).map((o,i)=>(
+                          <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                            <div style={{width:20,height:20,borderRadius:"50%",background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(o)}</div>
+                            <span style={{fontSize:12,color:T.text,fontWeight:500}}>{o}</span>
+                            <button onClick={()=>patchDomain(dm.id,{owners:(dm.owners||[]).filter(x=>x!==o)})} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex",lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{Ic.x(8)}</button>
+                          </div>
+                        ))}
+                      </div>
+                      <button onClick={()=>{setDmOwnerOpen(p=>!p);setDmOwnerSearch("");}} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,color:dmOwnerOpen?T.accent:T.textMuted,background:"none",border:`1px dashed ${dmOwnerOpen?T.accent:T.border}`,borderRadius:6,padding:"4px 10px",cursor:"pointer",transition:"all .12s"}}>{Ic.plus(9)} Add owner</button>
+                      {dmOwnerOpen&&<div style={{position:"absolute",left:16,right:16,top:"calc(100% - 4px)",zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.22)",overflow:"hidden"}}>
+                        <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}><input autoFocus placeholder="Search users…" value={dmOwnerSearch} onChange={e=>setDmOwnerSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none"}}/></div>
+                        <div style={{maxHeight:160,overflowY:"auto"}}>{ALL_USERS.filter(u=>!dmOwnerSearch||u.toLowerCase().includes(dmOwnerSearch.toLowerCase())).map(u=>{const sel=(dm.owners||[]).includes(u);return(<button key={u} onMouseDown={e=>{e.stopPropagation();patchDomain(dm.id,{owners:sel?(dm.owners||[]).filter(x=>x!==u):[...(dm.owners||[]),u]});}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 12px",background:sel?T.bgElevated:"transparent",border:"none",cursor:"pointer",textAlign:"left"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{width:24,height:24,borderRadius:"50%",background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8.5,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(u)}</div><span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>{sel&&<span style={{fontSize:12,color:T.accent,fontWeight:700}}>✓</span>}</button>);})}</div>
+                      </div>}
+                    </div>
+                    {/* Stewards */}
+                    <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Stewards</div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:(dm.experts||[]).length>0?8:0}}>
+                        {(dm.experts||[]).map((s,i)=>(
+                          <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                            <div style={{width:20,height:20,borderRadius:"50%",background:"rgba(217,119,6,.12)",border:"1px solid rgba(217,119,6,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(s)}</div>
+                            <span style={{fontSize:12,color:T.text,fontWeight:500}}>{s}</span>
+                            <button onClick={()=>patchDomain(dm.id,{experts:(dm.experts||[]).filter(x=>x!==s)})} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex",lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{Ic.x(8)}</button>
+                          </div>
+                        ))}
+                      </div>
+                      <button onClick={()=>{setDmStewOpen(p=>!p);setDmStewSearch("");}} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,color:dmStewOpen?"#d97706":T.textMuted,background:"none",border:`1px dashed ${dmStewOpen?"#d97706":T.border}`,borderRadius:6,padding:"4px 10px",cursor:"pointer",transition:"all .12s"}}>{Ic.plus(9)} Add steward</button>
+                      {dmStewOpen&&<div style={{position:"absolute",left:16,right:16,top:"calc(100% - 4px)",zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.22)",overflow:"hidden"}}>
+                        <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}><input autoFocus placeholder="Search users…" value={dmStewSearch} onChange={e=>setDmStewSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none"}}/></div>
+                        <div style={{maxHeight:160,overflowY:"auto"}}>{ALL_USERS.filter(u=>!dmStewSearch||u.toLowerCase().includes(dmStewSearch.toLowerCase())).map(u=>{const sel=(dm.experts||[]).includes(u);return(<button key={u} onMouseDown={e=>{e.stopPropagation();patchDomain(dm.id,{experts:sel?(dm.experts||[]).filter(x=>x!==u):[...(dm.experts||[]),u]});}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 12px",background:sel?T.bgElevated:"transparent",border:"none",cursor:"pointer",textAlign:"left"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{width:24,height:24,borderRadius:"50%",background:"rgba(217,119,6,.12)",border:"1px solid rgba(217,119,6,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8.5,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(u)}</div><span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>{sel&&<span style={{fontSize:12,color:"#d97706",fontWeight:700}}>✓</span>}</button>);})}</div>
+                      </div>}
+                    </div>
+                    {/* Tags */}
+                    <div style={{padding:"14px 16px"}}>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Tags</div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                        {(dm.tags||[]).map(t=><span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"3px 9px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}>{t}<button onClick={()=>patchDomain(dm.id,{tags:(dm.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+                        {(dm.tags||[]).length===0&&<span style={{fontSize:11.5,color:T.textMuted}}>No tags</span>}
                       </div>
                     </div>
-                  )}
-                  {dm.tags.length>0&&(
-                    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
-                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Tags</div>
-                      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                        {dm.tags.map(t=><span key={t} style={{padding:"3px 8px",borderRadius:4,fontSize:10.5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>{t}</span>)}
-                      </div>
-                    </div>
-                  )}
+                  </div>
                 </div>
               </div>
             )}
@@ -10462,6 +10533,13 @@ const DataProductsView = () => {
   const [createOpen, setCreateOpen]     = useState(false);
   const [createDomain, setCreateDomain] = useState("");
   const [np, setNp] = useState({name:"",displayName:"",description:"",lifecycleStage:"DEVELOPMENT",icon:"📦"});
+  const [prodOwnerOpen, setProdOwnerOpen] = useState(false);
+  const [prodOwnerSearch, setProdOwnerSearch] = useState("");
+  const [prodStewOpen, setProdStewOpen] = useState(false);
+  const [prodStewSearch, setProdStewSearch] = useState("");
+  const DP_USERS = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
+  const dpAva = name => (name||"?").split(".").map(s=>s[0]?.toUpperCase()||"").join("");
+  const patchDP = (id,patch) => setProducts(prev=>prev.map(p=>p.id===id?{...p,...patch}:p));
 
   const LIFECYCLE_STAGES = ["IDEATION","DEVELOPMENT","TESTING","PRODUCTION","DEPRECATED","RETIRED"];
   const PRODUCT_ICONS = ["📦","📊","💹","📱","🧮","🎯","📋","🔬","💼","🗃️","📡","⚡"];
@@ -10602,18 +10680,53 @@ const DataProductsView = () => {
                       </div>
                     ))}
                   </div>
-                  {(pd.experts||[]).length>0&&(
-                    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
-                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Experts</div>
-                      <div style={{display:"flex",flexDirection:"column",gap:6}}>{(pd.experts||[]).map(e=><OwnerChip key={e} name={e}/>)}</div>
+                  {/* Owners / Stewards / Tags card */}
+                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                    {/* Owners */}
+                    <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Owners</div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:(pd.owners||[]).length>0?8:0}}>
+                        {(pd.owners||[]).map((o,i)=>(
+                          <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                            <div style={{width:20,height:20,borderRadius:"50%",background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:T.accent,flexShrink:0}}>{dpAva(o)}</div>
+                            <span style={{fontSize:12,color:T.text,fontWeight:500}}>{o}</span>
+                            <button onClick={()=>patchDP(pd.id,{owners:(pd.owners||[]).filter(x=>x!==o)})} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex",lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{Ic.x(8)}</button>
+                          </div>
+                        ))}
+                      </div>
+                      <button onClick={()=>{setProdOwnerOpen(p=>!p);setProdOwnerSearch("");}} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,color:prodOwnerOpen?T.accent:T.textMuted,background:"none",border:`1px dashed ${prodOwnerOpen?T.accent:T.border}`,borderRadius:6,padding:"4px 10px",cursor:"pointer",transition:"all .12s"}}>{Ic.plus(9)} Add owner</button>
+                      {prodOwnerOpen&&<div style={{position:"absolute",left:16,right:16,top:"calc(100% - 4px)",zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.22)",overflow:"hidden"}}>
+                        <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}><input autoFocus placeholder="Search users…" value={prodOwnerSearch} onChange={e=>setProdOwnerSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none"}}/></div>
+                        <div style={{maxHeight:160,overflowY:"auto"}}>{DP_USERS.filter(u=>!prodOwnerSearch||u.toLowerCase().includes(prodOwnerSearch.toLowerCase())).map(u=>{const sel=(pd.owners||[]).includes(u);return(<button key={u} onMouseDown={e=>{e.stopPropagation();patchDP(pd.id,{owners:sel?(pd.owners||[]).filter(x=>x!==u):[...(pd.owners||[]),u]});}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 12px",background:sel?T.bgElevated:"transparent",border:"none",cursor:"pointer",textAlign:"left"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{width:24,height:24,borderRadius:"50%",background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8.5,fontWeight:700,color:T.accent,flexShrink:0}}>{dpAva(u)}</div><span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>{sel&&<span style={{fontSize:12,color:T.accent,fontWeight:700}}>✓</span>}</button>);})}</div>
+                      </div>}
                     </div>
-                  )}
-                  {(pd.tags||[]).length>0&&(
-                    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
-                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Tags</div>
-                      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{(pd.tags||[]).map(t=><span key={t} style={{padding:"3px 8px",borderRadius:4,fontSize:10.5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>{t}</span>)}</div>
+                    {/* Stewards */}
+                    <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Stewards</div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:(pd.experts||[]).length>0?8:0}}>
+                        {(pd.experts||[]).map((s,i)=>(
+                          <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                            <div style={{width:20,height:20,borderRadius:"50%",background:"rgba(217,119,6,.12)",border:"1px solid rgba(217,119,6,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:"#d97706",flexShrink:0}}>{dpAva(s)}</div>
+                            <span style={{fontSize:12,color:T.text,fontWeight:500}}>{s}</span>
+                            <button onClick={()=>patchDP(pd.id,{experts:(pd.experts||[]).filter(x=>x!==s)})} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex",lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{Ic.x(8)}</button>
+                          </div>
+                        ))}
+                      </div>
+                      <button onClick={()=>{setProdStewOpen(p=>!p);setProdStewSearch("");}} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,color:prodStewOpen?"#d97706":T.textMuted,background:"none",border:`1px dashed ${prodStewOpen?"#d97706":T.border}`,borderRadius:6,padding:"4px 10px",cursor:"pointer",transition:"all .12s"}}>{Ic.plus(9)} Add steward</button>
+                      {prodStewOpen&&<div style={{position:"absolute",left:16,right:16,top:"calc(100% - 4px)",zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.22)",overflow:"hidden"}}>
+                        <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}><input autoFocus placeholder="Search users…" value={prodStewSearch} onChange={e=>setProdStewSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none"}}/></div>
+                        <div style={{maxHeight:160,overflowY:"auto"}}>{DP_USERS.filter(u=>!prodStewSearch||u.toLowerCase().includes(prodStewSearch.toLowerCase())).map(u=>{const sel=(pd.experts||[]).includes(u);return(<button key={u} onMouseDown={e=>{e.stopPropagation();patchDP(pd.id,{experts:sel?(pd.experts||[]).filter(x=>x!==u):[...(pd.experts||[]),u]});}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 12px",background:sel?T.bgElevated:"transparent",border:"none",cursor:"pointer",textAlign:"left"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{width:24,height:24,borderRadius:"50%",background:"rgba(217,119,6,.12)",border:"1px solid rgba(217,119,6,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8.5,fontWeight:700,color:"#d97706",flexShrink:0}}>{dpAva(u)}</div><span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>{sel&&<span style={{fontSize:12,color:"#d97706",fontWeight:700}}>✓</span>}</button>);})}</div>
+                      </div>}
                     </div>
-                  )}
+                    {/* Tags */}
+                    <div style={{padding:"14px 16px"}}>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Tags</div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                        {(pd.tags||[]).map(t=><span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"3px 9px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}>{t}<button onClick={()=>patchDP(pd.id,{tags:(pd.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+                        {(pd.tags||[]).length===0&&<span style={{fontSize:11.5,color:T.textMuted}}>No tags</span>}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
