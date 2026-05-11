@@ -10409,28 +10409,46 @@ const DomainsView = () => {
         {/* List view */}
         {listView==="list"&&(
           <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
-            <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 80px",padding:"10px 18px",borderBottom:`1px solid ${T.border}`,background:T.bgElevated}}>
-              {["Domain","Type","Assets","Products","Quality"].map(h=>(
-                <div key={h} style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</div>
+            {/* Header */}
+            <div style={{display:"grid",gridTemplateColumns:"minmax(200px,3fr) 130px 90px 110px 90px 36px",padding:"10px 20px",borderBottom:`2px solid ${T.border}`,background:T.bgElevated,alignItems:"center"}}>
+              {[["Domain","left"],["Type","left"],["Assets","right"],["Products","right"],["Quality","right"],["",""]].map(([h,align])=>(
+                <div key={h} style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",textAlign:align||"left"}}>{h}</div>
               ))}
             </div>
             {domains.map((d,i)=>{
               const dp = products.filter(p=>p.domain===d.name);
               return (
-                <div key={d.id} style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 80px",padding:"13px 18px",borderBottom:i<domains.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"background .1s",alignItems:"center"}}
+                <div key={d.id}
+                  style={{display:"grid",gridTemplateColumns:"minmax(200px,3fr) 130px 90px 110px 90px 36px",padding:"13px 20px",borderBottom:i<domains.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"all .1s",alignItems:"center",borderLeft:"3px solid transparent"}}
                   onClick={()=>{setSelectedDomainId(d.id);setDomainTab("documentation");}}
-                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                  <div style={{display:"flex",alignItems:"center",gap:10}}>
-                    <div style={{width:32,height:32,borderRadius:8,background:`${d.color}15`,border:`1px solid ${d.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>{d.icon}</div>
-                    <div>
-                      <div style={{fontSize:13,fontWeight:600,color:T.text}}>{d.displayName}</div>
-                      <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{d.owners[0]||"—"}</div>
+                  onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;e.currentTarget.style.borderLeftColor=d.color;}}
+                  onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderLeftColor="transparent";}}>
+                  {/* Domain name */}
+                  <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+                    <div style={{width:34,height:34,borderRadius:9,background:`${d.color}18`,border:`1.5px solid ${d.color}35`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,flexShrink:0}}>{d.icon}</div>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:600,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{d.displayName}</div>
+                      <div style={{fontSize:11,color:T.textMuted,marginTop:2,display:"flex",alignItems:"center",gap:4}}>
+                        {d.owners[0]&&<><span style={{width:14,height:14,borderRadius:"50%",background:T.accentDim,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:T.accent}}>{(d.owners[0]).split(".").map(s=>s[0]?.toUpperCase()).join("")}</span>{d.owners[0]}</>}
+                        {!d.owners[0]&&<span style={{color:T.textMuted}}>No owner</span>}
+                      </div>
                     </div>
                   </div>
-                  <DomainTypeBadge type={d.domainType}/>
-                  <span style={{fontSize:13,fontWeight:600,color:d.color,fontFamily:"'Geist Mono',monospace"}}>{d.assetCount}</span>
-                  <span style={{fontSize:13,fontWeight:600,color:"#8b5cf6",fontFamily:"'Geist Mono',monospace"}}>{dp.length}</span>
-                  <QScore score={d.quality}/>
+                  {/* Type */}
+                  <div><DomainTypeBadge type={d.domainType}/></div>
+                  {/* Assets */}
+                  <div style={{textAlign:"right"}}>
+                    <span style={{fontSize:13,fontWeight:700,color:d.color,fontFamily:"'Geist Mono',monospace"}}>{d.assetCount}</span>
+                  </div>
+                  {/* Products */}
+                  <div style={{textAlign:"right"}}>
+                    <span style={{fontSize:13,fontWeight:700,color:"#8b5cf6",fontFamily:"'Geist Mono',monospace"}}>{dp.length}</span>
+                    <span style={{fontSize:10,color:T.textMuted,marginLeft:4}}>product{dp.length!==1?"s":""}</span>
+                  </div>
+                  {/* Quality */}
+                  <div style={{display:"flex",justifyContent:"flex-end"}}><QScore score={d.quality}/></div>
+                  {/* Chevron */}
+                  <div style={{display:"flex",justifyContent:"center",color:T.textMuted,opacity:.5}}>{Ic.chevRight?.(10)||<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3.5 2l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}</div>
                 </div>
               );
             })}
@@ -10862,28 +10880,48 @@ const DataProductsView = () => {
         {/* List */}
         {listView==="list"&&filteredProducts.length>0&&(
           <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
-            <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 80px",padding:"10px 18px",borderBottom:`1px solid ${T.border}`,background:T.bgElevated}}>
-              {["Product","Domain","Lifecycle","SLA Tier","Quality"].map(h=>(
-                <div key={h} style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</div>
+            {/* Header */}
+            <div style={{display:"grid",gridTemplateColumns:"minmax(200px,3fr) 150px 130px 100px 80px 36px",padding:"10px 20px",borderBottom:`2px solid ${T.border}`,background:T.bgElevated,alignItems:"center"}}>
+              {[["Product","left"],["Domain","left"],["Lifecycle","left"],["SLA Tier","left"],["Quality","right"],["",""]].map(([h,align])=>(
+                <div key={h} style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",textAlign:align||"left"}}>{h}</div>
               ))}
             </div>
             {filteredProducts.map((p,i)=>{
               const dm = domains.find(d=>d.name===p.domain);
               return (
-                <div key={p.id} style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 80px",padding:"12px 18px",borderBottom:i<filteredProducts.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"background .1s",alignItems:"center"}}
+                <div key={p.id}
+                  style={{display:"grid",gridTemplateColumns:"minmax(200px,3fr) 150px 130px 100px 80px 36px",padding:"13px 20px",borderBottom:i<filteredProducts.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"all .1s",alignItems:"center",borderLeft:"3px solid transparent"}}
                   onClick={()=>{setSelectedProductId(p.id);setProductTab("overview");}}
-                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                  <div style={{display:"flex",alignItems:"center",gap:10}}>
-                    <div style={{width:32,height:32,borderRadius:8,background:`${p.color}15`,border:`1px solid ${p.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>{p.icon}</div>
-                    <div>
-                      <div style={{fontSize:13,fontWeight:600,color:T.text}}>{p.displayName}</div>
-                      <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{p.owners?.[0]||"—"}</div>
+                  onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;e.currentTarget.style.borderLeftColor=p.color;}}
+                  onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderLeftColor="transparent";}}>
+                  {/* Product name */}
+                  <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+                    <div style={{width:34,height:34,borderRadius:9,background:`${p.color}18`,border:`1.5px solid ${p.color}35`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,flexShrink:0}}>{p.icon}</div>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:600,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.displayName}</div>
+                      <div style={{fontSize:11,color:T.textMuted,marginTop:2,display:"flex",alignItems:"center",gap:4}}>
+                        {p.owners?.[0]&&<><span style={{width:14,height:14,borderRadius:"50%",background:T.accentDim,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:T.accent}}>{(p.owners[0]).split(".").map(s=>s[0]?.toUpperCase()).join("")}</span>{p.owners[0]}</>}
+                        {!p.owners?.[0]&&<span>No owner</span>}
+                      </div>
                     </div>
                   </div>
-                  <span style={{fontSize:11.5,color:dm?.color||T.textSub,fontWeight:500}}>{dm?.icon} {p.domain}</span>
-                  <LifecycleBadge stage={p.lifecycleStage}/>
-                  {p.sla?<SlaTierBadge tier={p.sla.tier}/>:<span style={{fontSize:11,color:T.textMuted}}>—</span>}
-                  {p.sla?<span style={{fontSize:13,fontWeight:700,color:p.sla.dataQuality>=85?T.green:p.sla.dataQuality>=70?T.amber:T.rose,fontFamily:"'Geist Mono',monospace"}}>{p.sla.dataQuality}%</span>:<span>—</span>}
+                  {/* Domain */}
+                  <div style={{display:"flex",alignItems:"center",gap:5}}>
+                    <span style={{fontSize:13}}>{dm?.icon}</span>
+                    <span style={{fontSize:12,fontWeight:500,color:dm?.color||T.textSub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.domain}</span>
+                  </div>
+                  {/* Lifecycle */}
+                  <div><LifecycleBadge stage={p.lifecycleStage}/></div>
+                  {/* SLA Tier */}
+                  <div>{p.sla?<SlaTierBadge tier={p.sla.tier}/>:<span style={{fontSize:11,color:T.textMuted}}>—</span>}</div>
+                  {/* Quality */}
+                  <div style={{textAlign:"right"}}>
+                    {p.sla
+                      ? <span style={{fontSize:13,fontWeight:700,color:p.sla.dataQuality>=85?T.green:p.sla.dataQuality>=70?T.amber:T.rose,fontFamily:"'Geist Mono',monospace"}}>{p.sla.dataQuality}%</span>
+                      : <span style={{color:T.textMuted}}>—</span>}
+                  </div>
+                  {/* Chevron */}
+                  <div style={{display:"flex",justifyContent:"center",color:T.textMuted,opacity:.5}}><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3.5 2l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
                 </div>
               );
             })}
