@@ -12112,7 +12112,7 @@ const ROLES_CONFIG = {
     badge: "rgba(238,36,36,0.15)",
     desc:  "Full platform access including settings, user management, and all configurations.",
     rbacRole: "admin",
-    nav: ["home","search","catalog","lineage","quality","contracts","policymanager","access","certifications","stewardship","glossary","domains","observability","analytics","settings","tags"],
+    nav: ["home","search","catalog","lineage","quality","contracts","policymanager","access","certifications","stewardship","glossary","domains","dataproducts","observability","analytics","settings","tags"],
     homeWidgets: ["metrics","tasks","quality","recentAssets","services","activity"],
   },
   steward: {
@@ -12125,7 +12125,7 @@ const ROLES_CONFIG = {
     desc:  "Govern assets in your domain: certify data, manage glossary terms, resolve conflicts.",
     rbacRole: "steward",
     domain: "Commerce",
-    nav: ["home","search","catalog","lineage","quality","policymanager","certifications","stewardship","glossary","domains","tags"],
+    nav: ["home","search","catalog","lineage","quality","policymanager","certifications","stewardship","glossary","domains","dataproducts","tags"],
     homeWidgets: ["tasks","certQueue","qualityAlerts","recentAssets","activity"],
   },
   analyst: {
@@ -12137,7 +12137,7 @@ const ROLES_CONFIG = {
     badge: "rgba(2,132,199,0.12)",
     desc:  "Browse the catalog, explore lineage, run quality checks, and access approved datasets.",
     rbacRole: "analyst",
-    nav: ["home","search","catalog","lineage","quality","glossary","domains","observability","analytics"],
+    nav: ["home","search","catalog","lineage","quality","glossary","domains","dataproducts","observability","analytics"],
     homeWidgets: ["metrics","recentAssets","quality","lineageSnippet","activity"],
   },
   engineer: {
@@ -12161,7 +12161,7 @@ const ROLES_CONFIG = {
     badge: "rgba(75,75,96,0.12)",
     desc:  "Read-only access to approved domains, certified assets and published dashboards.",
     rbacRole: "viewer",
-    nav: ["home","search","catalog","glossary","domains"],
+    nav: ["home","search","catalog","glossary","domains","dataproducts"],
     homeWidgets: ["recentAssets","certifiedAssets","activity"],
   },
 };
