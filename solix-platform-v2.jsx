@@ -9625,72 +9625,795 @@ const AnalyticsView = ()=>{
 };
 
 // ─────────────────────────────────────────────
-// DOMAINS
+// DOMAINS & DATA PRODUCTS — MOCK DATA
 // ─────────────────────────────────────────────
-const DomainsView = ()=>{
+const DOMAIN_LIST_DATA = [
+  {id:"d1",name:"Commerce",displayName:"Commerce",icon:"🛒",color:"#0ea5e9",
+   domainType:"Source-aligned",
+   description:"Core transactional and order management data. Owns the order lifecycle from cart to fulfillment, customer records, and product catalog. All commerce revenue metrics originate here.",
+   owners:["maya.chen"],experts:["dev.patel","sarah.kim"],tags:["revenue","PII"],
+   quality:94,assetCount:342},
+  {id:"d2",name:"Finance",displayName:"Finance",icon:"💰",color:"#f59e0b",
+   domainType:"Consumer-aligned",
+   description:"Revenue, P&L, and financial reporting data. Serves finance, accounting, and FP&A stakeholders with GAAP-compliant metrics. All board-level reporting flows through this domain.",
+   owners:["sarah.kim"],experts:["alex.wu"],tags:["revenue","GDPR"],
+   quality:91,assetCount:156},
+  {id:"d3",name:"Product",displayName:"Product",icon:"📱",color:"#3b82f6",
+   domainType:"Consumer-aligned",
+   description:"User behavior, events, and product analytics. Tracks feature adoption, retention, funnel drop-off, and engagement for product decision-making.",
+   owners:["alex.wu"],experts:["priya.nair"],tags:["behavioral"],
+   quality:72,assetCount:289},
+  {id:"d4",name:"ML",displayName:"Machine Learning",icon:"🤖",color:"#8b5cf6",
+   domainType:"Aggregate",
+   description:"Model artifacts, feature store, and experiment tracking. Provides curated feature sets and model performance metrics across the organization. Aggregates from Commerce, Product, and Finance.",
+   owners:["priya.nair"],experts:["dev.patel"],tags:["ML"],
+   quality:88,assetCount:94},
+  {id:"d5",name:"Marketing",displayName:"Marketing",icon:"📣",color:"#f43f5e",
+   domainType:"Consumer-aligned",
+   description:"Attribution, campaign performance, and acquisition analytics. Measures CAC, ROAS, and channel effectiveness for paid and organic channels.",
+   owners:["lisa.ray"],experts:["maya.chen"],tags:["marketing","PII"],
+   quality:79,assetCount:67},
+  {id:"d6",name:"Engineering",displayName:"Engineering",icon:"⚙️",color:"#10b981",
+   domainType:"Source-aligned",
+   description:"Platform infrastructure metrics, service observability, and pipeline health data. Supports SRE and data engineering teams with system telemetry and operational KPIs.",
+   owners:["dev.patel"],experts:["alex.wu"],tags:["operational"],
+   quality:85,assetCount:121},
+];
+
+const DATA_PRODUCTS_DATA = [
+  {id:"dp1",name:"order-analytics",displayName:"Order Analytics",domain:"Commerce",
+   icon:"📊",color:"#0ea5e9",
+   description:"Core order metrics and KPIs for business reporting. Includes GMV, AOV, conversion rates, order status distribution, and fulfillment SLAs. Published weekly and consumed by Finance and Marketing domains.",
+   owners:["maya.chen"],experts:["dev.patel"],
+   lifecycleStage:"PRODUCTION",
+   sla:{tier:"GOLD",availability:99.9,dataFreshness:120,dataQuality:90},
+   assetIds:[1,2],tags:["revenue","PII"],consumesFrom:[],providesTo:["dp3"],createdAt:"Jan 15, 2024"},
+  {id:"dp2",name:"customer-360",displayName:"Customer 360",domain:"Commerce",
+   icon:"👥",color:"#0ea5e9",
+   description:"Unified customer profile combining purchase history, demographics, and behavioral signals. Used for personalization, segmentation, and churn prediction across the organization.",
+   owners:["maya.chen"],experts:["sarah.kim"],
+   lifecycleStage:"PRODUCTION",
+   sla:{tier:"GOLD",availability:99.5,dataFreshness:240,dataQuality:88},
+   assetIds:[3],tags:["PII","GDPR"],consumesFrom:[],providesTo:[],createdAt:"Feb 1, 2024"},
+  {id:"dp3",name:"revenue-reporting",displayName:"Revenue Reporting",domain:"Finance",
+   icon:"💹",color:"#f59e0b",
+   description:"Monthly and quarterly revenue reporting including GAAP metrics, rolling forecasts, and variance analysis. Official numbers used in board reports and investor communications.",
+   owners:["sarah.kim"],experts:["alex.wu"],
+   lifecycleStage:"PRODUCTION",
+   sla:{tier:"GOLD",availability:99.9,dataFreshness:1440,dataQuality:95},
+   assetIds:[4],tags:["revenue"],consumesFrom:["dp1"],providesTo:[],createdAt:"Jan 10, 2024"},
+  {id:"dp4",name:"user-behavior",displayName:"User Behavior Analytics",domain:"Product",
+   icon:"📱",color:"#3b82f6",
+   description:"Clickstream, funnel, and retention analysis for product decision-making. Powers the product analytics dashboard and A/B test evaluation framework.",
+   owners:["alex.wu"],experts:["priya.nair"],
+   lifecycleStage:"DEVELOPMENT",
+   sla:{tier:"SILVER",availability:99.0,dataFreshness:60,dataQuality:82},
+   assetIds:[5,6],tags:["behavioral"],consumesFrom:[],providesTo:[],createdAt:"Mar 5, 2024"},
+  {id:"dp5",name:"ml-feature-store",displayName:"ML Feature Store",domain:"ML",
+   icon:"🧮",color:"#8b5cf6",
+   description:"Shared feature registry for model training and inference. Includes user features, item embeddings, and real-time scoring features with versioned snapshots.",
+   owners:["priya.nair"],experts:["dev.patel"],
+   lifecycleStage:"PRODUCTION",
+   sla:{tier:"GOLD",availability:99.9,dataFreshness:30,dataQuality:91},
+   assetIds:[],tags:["ML"],consumesFrom:[],providesTo:[],createdAt:"Feb 20, 2024"},
+  {id:"dp6",name:"marketing-attribution",displayName:"Marketing Attribution",domain:"Marketing",
+   icon:"🎯",color:"#f43f5e",
+   description:"Multi-touch attribution models for paid and organic channels. Measures CAC, ROAS, and conversion path effectiveness for budget allocation decisions.",
+   owners:["lisa.ray"],experts:["maya.chen"],
+   lifecycleStage:"TESTING",
+   sla:{tier:"SILVER",availability:98.5,dataFreshness:360,dataQuality:79},
+   assetIds:[],tags:["marketing"],consumesFrom:[],providesTo:[],createdAt:"Mar 12, 2024"},
+];
+
+// ─────────────────────────────────────────────
+// DOMAINS VIEW
+// ─────────────────────────────────────────────
+const DomainsView = () => {
   const tagCtx = useTagCtx();
-  const domains=[
-    {name:"Commerce",color:T.accent,assets:342,steward:"maya.chen",quality:94,icon:"🛒",description:"Order, product, and customer transactional data."},
-    {name:"Finance",color:T.amber,assets:156,steward:"sarah.kim",quality:91,icon:"💰",description:"Revenue, P&L, and financial reporting data."},
-    {name:"Product",color:T.blue,assets:289,steward:"alex.wu",quality:72,icon:"📱",description:"User behavior, events, and product analytics."},
-    {name:"ML",color:T.violet,assets:94,steward:"priya.nair",quality:88,icon:"🤖",description:"Model artifacts, features, and experiment tracking."},
-    {name:"Marketing",color:T.rose,assets:67,steward:"lisa.ray",quality:79,icon:"📣",description:"Attribution, campaigns, and acquisition analytics."},
-  ];
-  return <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-    <Topbar breadcrumb={[{label:"Data Domains"}]}/>
-    <div style={{flex:1,overflowY:"auto",padding:28}}>
-      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}>
-        <Btn icon={Ic.plus(12)}>New Domain</Btn>
+  const [domains, setDomains]     = useState(DOMAIN_LIST_DATA);
+  const [products, setProducts]   = useState(DATA_PRODUCTS_DATA);
+  const [selectedDomainId, setSelectedDomainId]     = useState(null);
+  const [selectedProductId, setSelectedProductId]   = useState(null);
+  const [domainTab, setDomainTab]   = useState("documentation");
+  const [productTab, setProductTab] = useState("overview");
+  const [listView, setListView]     = useState("grid"); // "grid" | "list"
+  const [createDomainOpen, setCreateDomainOpen]   = useState(false);
+  const [createProductOpen, setCreateProductOpen] = useState(false);
+  const [nd, setNd] = useState({name:"",displayName:"",description:"",domainType:"Source-aligned",icon:"🗂️",color:"#0ea5e9"});
+  const [np, setNp] = useState({name:"",displayName:"",description:"",lifecycleStage:"DEVELOPMENT",icon:"📦"});
+
+  const selectedDomain  = domains.find(d=>d.id===selectedDomainId);
+  const selectedProduct = products.find(p=>p.id===selectedProductId);
+  const domainProducts  = selectedDomain ? products.filter(p=>p.domain===selectedDomain.name) : [];
+  const domainAssets    = selectedDomain ? ASSETS.filter(a=>a.domain===selectedDomain.name) : [];
+  const productAssets   = selectedProduct ? ASSETS.filter(a=>selectedProduct.assetIds.includes(a.id)) : [];
+
+  const LIFECYCLE_COLORS = {PRODUCTION:"#16a34a",DEVELOPMENT:"#0891b2",TESTING:"#d97706",IDEATION:"#8b5cf6",DEPRECATED:"#6b7280",RETIRED:"#374151"};
+  const SLA_COLORS = {GOLD:"#f59e0b",SILVER:"#9ca3af",BRONZE:"#b45309",CUSTOM:"#6366f1"};
+  const DOMAIN_TYPES = ["Source-aligned","Consumer-aligned","Aggregate"];
+  const LIFECYCLE_STAGES = ["IDEATION","DEVELOPMENT","TESTING","PRODUCTION","DEPRECATED","RETIRED"];
+  const ICON_OPTIONS = ["🗂️","📊","💼","🏢","🔬","🌐","📡","🔗","⚡","🎯","🛡️","📈"];
+
+  const handleCreateDomain = () => {
+    if(!nd.name.trim()) return;
+    const d = {id:`d${Date.now()}`,name:nd.name.trim(),displayName:nd.displayName.trim()||nd.name.trim(),icon:nd.icon,color:nd.color,domainType:nd.domainType,description:nd.description.trim()||"No description provided.",owners:[],experts:[],tags:[],quality:0,assetCount:0};
+    setDomains(prev=>[...prev,d]);
+    setCreateDomainOpen(false);
+    setNd({name:"",displayName:"",description:"",domainType:"Source-aligned",icon:"🗂️",color:"#0ea5e9"});
+    setSelectedDomainId(d.id);
+  };
+  const handleCreateProduct = () => {
+    if(!np.name.trim()||!selectedDomain) return;
+    const p = {id:`dp${Date.now()}`,name:np.name.trim(),displayName:np.displayName.trim()||np.name.trim(),domain:selectedDomain.name,icon:np.icon,color:selectedDomain.color,description:np.description.trim()||"No description provided.",owners:selectedDomain.owners||[],experts:[],lifecycleStage:np.lifecycleStage,sla:{tier:"SILVER",availability:99.0,dataFreshness:60,dataQuality:80},assetIds:[],tags:[],consumesFrom:[],providesTo:[],createdAt:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})};
+    setProducts(prev=>[...prev,p]);
+    setCreateProductOpen(false);
+    setNp({name:"",displayName:"",description:"",lifecycleStage:"DEVELOPMENT",icon:"📦"});
+    setDomainTab("dataproducts");
+  };
+
+  // ── Sub-components ──
+  const LifecycleBadge = ({stage}) => (
+    <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 9px",borderRadius:99,fontSize:10.5,fontWeight:700,
+      background:`${LIFECYCLE_COLORS[stage]||"#6b7280"}18`,color:LIFECYCLE_COLORS[stage]||"#6b7280",
+      border:`1px solid ${LIFECYCLE_COLORS[stage]||"#6b7280"}30`}}>
+      <span style={{width:5,height:5,borderRadius:"50%",background:LIFECYCLE_COLORS[stage]||"#6b7280",flexShrink:0}}/>
+      {stage}
+    </span>
+  );
+  const SlaTierBadge = ({tier}) => (
+    <span style={{display:"inline-flex",alignItems:"center",padding:"3px 8px",borderRadius:4,fontSize:10,fontWeight:700,
+      background:`${SLA_COLORS[tier]||T.textMuted}18`,color:SLA_COLORS[tier]||T.textMuted,
+      border:`1px solid ${SLA_COLORS[tier]||T.textMuted}30`,letterSpacing:"0.04em"}}>
+      {tier} SLA
+    </span>
+  );
+  const DomainTypeBadge = ({type}) => {
+    const colors = {"Source-aligned":T.blue,"Consumer-aligned":T.green,"Aggregate":T.violet};
+    const c = colors[type]||T.textMuted;
+    return <span style={{display:"inline-flex",padding:"2px 8px",borderRadius:4,fontSize:10,fontWeight:600,background:`${c}15`,color:c,border:`1px solid ${c}25`}}>{type}</span>;
+  };
+  const OwnerChip = ({name}) => (
+    <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:99,fontSize:11,fontWeight:500,
+      background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>
+      <span style={{width:16,height:16,borderRadius:"50%",background:T.accent,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#fff",flexShrink:0}}>{name[0].toUpperCase()}</span>
+      {name}
+    </span>
+  );
+
+  const COLOR_PALETTE = ["#0ea5e9","#f59e0b","#3b82f6","#8b5cf6","#f43f5e","#10b981","#f97316","#06b6d4","#84cc16","#ec4899"];
+
+  // ── ASSET ROW (reusable inside tabs) ──
+  const AssetRow = ({asset}) => (
+    <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:`1px solid ${T.border}`}}>
+      <div style={{width:28,height:28,borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+        {Ic.table(12)}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:14}}>
-        {domains.map(d=>{
-          const domainAssets = ASSETS.filter(a=>a.domain===d.name);
-          const taggedCount  = tagCtx ? domainAssets.filter(a=>tagCtx.getAssetAssignments(a.id).filter(x=>x.status!=='rejected').length>0).length : 0;
-          const tagCoverage  = domainAssets.length>0 ? Math.round(taggedCount/domainAssets.length*100) : 0;
-          const hasSensitive = tagCtx ? domainAssets.some(a=>tagCtx.getAssetAssignments(a.id).some(asn=>{const td=tagCtx.getTagDef(asn.tagId);return td?.category==='sensitivity';})) : false;
-          // Collect top 3 unique tag defs across all assets in domain
-          const domainTagIds = tagCtx ? [...new Set(domainAssets.flatMap(a=>tagCtx.getAssetAssignments(a.id).filter(x=>x.status!=='rejected').map(x=>x.tagId)))] : [];
-          const top3Tags = domainTagIds.slice(0,3).map(tid=>tagCtx?.getTagDef(tid)).filter(Boolean);
-          return (
-          <Card2 key={d.name} style={{cursor:"pointer",transition:"border-color .15s"}}
-            onMouseEnter={e=>e.currentTarget.style.borderColor=d.color}
-            onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-            <div style={{padding:18}}>
-              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
-                <span style={{fontSize:28}}>{d.icon}</span>
-                <div style={{flex:1}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <div style={{fontSize:16,fontWeight:700,color:T.text,marginBottom:2}}>{d.name}</div>
-                    {hasSensitive&&<span title="Contains sensitive data" style={{fontSize:14,marginBottom:2}}>🔒</span>}
-                  </div>
-                  <div style={{fontSize:12,color:T.textMuted}}>Steward: {d.steward}</div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:12.5,fontWeight:600,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{asset.name}</div>
+        <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{asset.type} · {asset.connectionLabel}</div>
+      </div>
+      <QScore score={asset.quality}/>
+    </div>
+  );
+
+  // ══════════════════════════════════════════════
+  // DATA PRODUCT DETAIL VIEW
+  // ══════════════════════════════════════════════
+  if(selectedProduct) {
+    const pd = selectedProduct;
+    const pdDomain = domains.find(d=>d.name===pd.domain);
+    const upstream = pd.consumesFrom.map(id=>products.find(p=>p.id===id)).filter(Boolean);
+    const downstream = pd.providesTo.map(id=>products.find(p=>p.id===id)).filter(Boolean);
+    return (
+      <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+        <Topbar breadcrumb={[
+          {label:"Data Domains",onClick:()=>{setSelectedProductId(null);setSelectedDomainId(null);}},
+          {label:pdDomain?.displayName||pd.domain,onClick:()=>setSelectedProductId(null)},
+          {label:pd.displayName}
+        ]}/>
+        <div style={{flex:1,overflowY:"auto"}}>
+          {/* Header band */}
+          <div style={{padding:"24px 28px 0",borderBottom:`1px solid ${T.border}`}}>
+            <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:18}}>
+              <div style={{width:52,height:52,borderRadius:14,background:`${pd.color}18`,border:`2px solid ${pd.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>{pd.icon}</div>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
+                  <h1 style={{fontSize:20,fontWeight:800,color:T.text,margin:0}}>{pd.displayName}</h1>
+                  <LifecycleBadge stage={pd.lifecycleStage}/>
+                  <SlaTierBadge tier={pd.sla.tier}/>
                 </div>
-                <QScore score={d.quality}/>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:8}}>{pd.domain} Domain · Created {pd.createdAt}</div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {pd.owners.map(o=><OwnerChip key={o} name={o}/>)}
+                </div>
               </div>
-              <p style={{fontSize:12,color:T.textSub,marginBottom:12,lineHeight:1.6}}>{d.description}</p>
-              {top3Tags.length>0&&(
-                <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:10}} onClick={e=>e.stopPropagation()}>
-                  {top3Tags.map(td=><TagPill key={td.id} tagDef={td} size="sm"/>)}
-                </div>
-              )}
-              <div style={{display:"flex",gap:16,alignItems:"center"}}>
-                <div><div style={{fontSize:11,color:T.textMuted,marginBottom:2}}>Assets</div><div style={{fontSize:20,fontWeight:700,color:d.color,fontFamily:"'Geist Mono',monospace"}}>{d.assets}</div></div>
-                <div style={{flex:1}}>
-                  <div style={{height:4,background:T.bgHover,borderRadius:2}}><div style={{height:"100%",width:`${d.quality}%`,background:d.color,borderRadius:2}}/></div>
-                  <div style={{fontSize:10,color:T.textMuted,marginTop:3}}>Quality Score</div>
-                </div>
-                {tagCtx&&<div style={{textAlign:"right"}}>
-                  <div style={{fontSize:11,color:T.textMuted,marginBottom:2}}>Tag coverage</div>
-                  <div style={{fontSize:13,fontWeight:700,color:tagCoverage>=50?T.accent:T.amber,fontFamily:"'Geist Mono',monospace"}}>{tagCoverage}%</div>
-                </div>}
+              <div style={{display:"flex",gap:8,flexShrink:0}}>
+                <button style={{padding:"8px 16px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Add Assets</button>
+                <Btn onClick={()=>{}}>Edit</Btn>
               </div>
             </div>
-          </Card2>
-          );
-        })}
+            <Tabs2 tabs={[{key:"overview",label:"Overview"},{key:"assets",label:`Assets (${productAssets.length})`},{key:"lineage",label:"Lineage"}]} active={productTab} onChange={setProductTab}/>
+          </div>
+
+          <div style={{padding:28}}>
+            {/* OVERVIEW TAB */}
+            {productTab==="overview"&&(
+              <div style={{display:"grid",gridTemplateColumns:"1fr 320px",gap:24}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:10}}>Description</div>
+                  <p style={{fontSize:13,color:T.textSub,lineHeight:1.7,marginBottom:24}}>{pd.description}</p>
+
+                  {/* SLA Details */}
+                  <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Service Level Agreement</div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:24}}>
+                    {[
+                      {label:"SLA Tier",value:pd.sla.tier,color:SLA_COLORS[pd.sla.tier]},
+                      {label:"Availability",value:`${pd.sla.availability}%`,color:T.green},
+                      {label:"Data Freshness",value:`${pd.sla.dataFreshness>=60?`${pd.sla.dataFreshness/60}h`:`${pd.sla.dataFreshness}m`}`,color:T.blue},
+                      {label:"Min. Quality",value:`${pd.sla.dataQuality}%`,color:T.accent},
+                    ].map(m=>(
+                      <div key={m.label} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,padding:"12px 14px"}}>
+                        <div style={{fontSize:10,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>{m.label}</div>
+                        <div style={{fontSize:18,fontWeight:800,color:m.color,fontFamily:"'Geist Mono',monospace"}}>{m.value}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Lineage mini */}
+                  {(upstream.length>0||downstream.length>0)&&(
+                    <>
+                      <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Data Flow</div>
+                      <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:24}}>
+                        {upstream.length>0&&<>
+                          <div style={{flex:1,minWidth:120}}>
+                            <div style={{fontSize:10,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Consumes from</div>
+                            {upstream.map(p=>(
+                              <button key={p.id} onClick={()=>setSelectedProductId(p.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,fontSize:12,cursor:"pointer",width:"100%",marginBottom:4,textAlign:"left",transition:"border-color .12s"}}
+                                onMouseEnter={e=>e.currentTarget.style.borderColor=p.color} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                                <span style={{fontSize:14}}>{p.icon}</span><span style={{fontWeight:500}}>{p.displayName}</span>
+                              </button>
+                            ))}
+                          </div>
+                          <div style={{color:T.textMuted,fontSize:20}}>→</div>
+                        </>}
+                        <div style={{padding:"10px 16px",borderRadius:10,background:`${pd.color}15`,border:`2px solid ${pd.color}40`,fontSize:12,fontWeight:700,color:T.text}}>
+                          {pd.icon} {pd.displayName}
+                        </div>
+                        {downstream.length>0&&<>
+                          <div style={{color:T.textMuted,fontSize:20}}>→</div>
+                          <div style={{flex:1,minWidth:120}}>
+                            <div style={{fontSize:10,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Provides to</div>
+                            {downstream.map(p=>(
+                              <button key={p.id} onClick={()=>setSelectedProductId(p.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,fontSize:12,cursor:"pointer",width:"100%",marginBottom:4,textAlign:"left",transition:"border-color .12s"}}
+                                onMouseEnter={e=>e.currentTarget.style.borderColor=p.color} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                                <span style={{fontSize:14}}>{p.icon}</span><span style={{fontWeight:500}}>{p.displayName}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </>}
+                      </div>
+                    </>
+                  )}
+                </div>
+                {/* Metadata sidebar */}
+                <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
+                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:12}}>Details</div>
+                    {[
+                      ["Domain",pd.domain],["Lifecycle",pd.lifecycleStage],["Created",pd.createdAt],
+                      ["Assets",String(productAssets.length)],
+                    ].map(([l,v])=>(
+                      <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${T.border}`}}>
+                        <span style={{fontSize:11.5,color:T.textMuted}}>{l}</span>
+                        <span style={{fontSize:11.5,color:T.text,fontWeight:500}}>{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {pd.experts.length>0&&(
+                    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Experts</div>
+                      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                        {pd.experts.map(e=><OwnerChip key={e} name={e}/>)}
+                      </div>
+                    </div>
+                  )}
+                  {pd.tags.length>0&&(
+                    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Tags</div>
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                        {pd.tags.map(t=><span key={t} style={{padding:"3px 8px",borderRadius:4,fontSize:10.5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>{t}</span>)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ASSETS TAB */}
+            {productTab==="assets"&&(
+              <div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+                  <div style={{fontSize:13,color:T.textMuted}}>{productAssets.length} asset{productAssets.length!==1?"s":""} in this data product</div>
+                  <button style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                    {Ic.plus(10)} Add Assets
+                  </button>
+                </div>
+                {productAssets.length===0
+                  ? <div style={{padding:"60px 0",textAlign:"center"}}>
+                      <div style={{fontSize:32,marginBottom:12}}>📭</div>
+                      <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>No assets yet</div>
+                      <div style={{fontSize:12,color:T.textMuted,marginBottom:16}}>Add tables, views, or pipelines to this data product</div>
+                      <button style={{padding:"9px 20px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Add First Asset</button>
+                    </div>
+                  : productAssets.map(a=><AssetRow key={a.id} asset={a}/>)
+                }
+              </div>
+            )}
+
+            {/* LINEAGE TAB */}
+            {productTab==="lineage"&&(
+              <div style={{textAlign:"center",padding:"80px 0"}}>
+                <div style={{fontSize:40,marginBottom:16}}>🔗</div>
+                <div style={{fontSize:15,fontWeight:600,color:T.text,marginBottom:8}}>Data Product Lineage</div>
+                <div style={{fontSize:13,color:T.textMuted,maxWidth:400,margin:"0 auto",lineHeight:1.6}}>
+                  {(upstream.length+downstream.length)===0
+                    ? "No upstream or downstream connections. Use consumesFrom / providesTo to wire this product into the data mesh."
+                    : `This product consumes from ${upstream.length} and provides to ${downstream.length} other data products.`}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════
+  // DOMAIN DETAIL VIEW
+  // ══════════════════════════════════════════════
+  if(selectedDomain) {
+    const dm = selectedDomain;
+    const hasSensitive = tagCtx ? domainAssets.some(a=>tagCtx.getAssetAssignments(a.id).some(asn=>{const td=tagCtx.getTagDef(asn.tagId);return td?.category==='sensitivity';})) : false;
+    return (
+      <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+        <Topbar breadcrumb={[
+          {label:"Data Domains",onClick:()=>setSelectedDomainId(null)},
+          {label:dm.displayName}
+        ]}/>
+        <div style={{flex:1,overflowY:"auto"}}>
+          {/* Header band */}
+          <div style={{padding:"24px 28px 0",borderBottom:`1px solid ${T.border}`}}>
+            <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:18}}>
+              <div style={{width:56,height:56,borderRadius:16,background:`${dm.color}18`,border:`2px solid ${dm.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,flexShrink:0}}>{dm.icon}</div>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
+                  <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:0}}>{dm.displayName}</h1>
+                  <DomainTypeBadge type={dm.domainType}/>
+                  {hasSensitive&&<span style={{padding:"3px 8px",borderRadius:4,fontSize:10,fontWeight:700,background:"rgba(239,68,68,.1)",color:"#ef4444",border:"1px solid rgba(239,68,68,.2)"}}>🔒 Sensitive</span>}
+                </div>
+                <div style={{display:"flex",gap:16,marginBottom:10}}>
+                  {[["Assets",dm.assetCount,dm.color],["Data Products",domainProducts.length,"#8b5cf6"],["Quality",`${dm.quality}%`,dm.quality>=90?T.green:dm.quality>=70?T.amber:T.rose]].map(([l,v,c])=>(
+                    <div key={l} style={{display:"flex",alignItems:"center",gap:5}}>
+                      <span style={{fontSize:15,fontWeight:800,color:c,fontFamily:"'Geist Mono',monospace"}}>{v}</span>
+                      <span style={{fontSize:11,color:T.textMuted}}>{l}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {dm.owners.map(o=><OwnerChip key={o} name={o}/>)}
+                </div>
+              </div>
+              <div style={{display:"flex",gap:8,flexShrink:0}}>
+                <button onClick={()=>setCreateProductOpen(true)} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",fontWeight:500}}>
+                  {Ic.plus(10)} Data Product
+                </button>
+                <Btn onClick={()=>{}}>Edit Domain</Btn>
+              </div>
+            </div>
+            <Tabs2 tabs={[
+              {key:"documentation",label:"Documentation"},
+              {key:"subdomains",label:"Sub Domains"},
+              {key:"dataproducts",label:`Data Products (${domainProducts.length})`},
+              {key:"assets",label:`Assets (${domainAssets.length})`},
+            ]} active={domainTab} onChange={setDomainTab}/>
+          </div>
+
+          <div style={{padding:28}}>
+            {/* DOCUMENTATION TAB */}
+            {domainTab==="documentation"&&(
+              <div style={{display:"grid",gridTemplateColumns:"1fr 300px",gap:24}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:10}}>About this domain</div>
+                  <p style={{fontSize:13,color:T.textSub,lineHeight:1.75,marginBottom:24}}>{dm.description}</p>
+                  <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Domain Health</div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+                    {[
+                      {label:"Quality Score",value:`${dm.quality}%`,color:dm.quality>=90?T.green:dm.quality>=70?T.amber:T.rose},
+                      {label:"Total Assets",value:String(dm.assetCount),color:dm.color},
+                      {label:"Data Products",value:String(domainProducts.length),color:"#8b5cf6"},
+                    ].map(m=>(
+                      <div key={m.label} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,padding:"14px 16px"}}>
+                        <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>{m.label}</div>
+                        <div style={{fontSize:22,fontWeight:800,color:m.color,fontFamily:"'Geist Mono',monospace"}}>{m.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
+                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:12}}>Domain Info</div>
+                    {[["Type",<DomainTypeBadge key="t" type={dm.domainType}/>],["Owner",dm.owners[0]||"—"]].map(([l,v])=>(
+                      <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${T.border}`}}>
+                        <span style={{fontSize:11.5,color:T.textMuted}}>{l}</span>
+                        <span style={{fontSize:11.5,color:T.text,fontWeight:500}}>{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {dm.experts.length>0&&(
+                    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Experts</div>
+                      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                        {dm.experts.map(e=><OwnerChip key={e} name={e}/>)}
+                      </div>
+                    </div>
+                  )}
+                  {dm.tags.length>0&&(
+                    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Tags</div>
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                        {dm.tags.map(t=><span key={t} style={{padding:"3px 8px",borderRadius:4,fontSize:10.5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>{t}</span>)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* SUB DOMAINS TAB */}
+            {domainTab==="subdomains"&&(
+              <div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+                  <div style={{fontSize:13,color:T.textMuted}}>Sub domains let you further segment ownership within {dm.displayName}</div>
+                  <button style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                    {Ic.plus(10)} Add Sub Domain
+                  </button>
+                </div>
+                <div style={{padding:"60px 0",textAlign:"center"}}>
+                  <div style={{fontSize:36,marginBottom:12}}>🗂️</div>
+                  <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>No sub domains yet</div>
+                  <div style={{fontSize:12,color:T.textMuted,maxWidth:380,margin:"0 auto",lineHeight:1.6}}>
+                    Sub domains help further segment large domains. For example, "Commerce" → "Order Management" and "Customer Data".
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* DATA PRODUCTS TAB */}
+            {domainTab==="dataproducts"&&(
+              <div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
+                  <div style={{fontSize:13,color:T.textMuted}}>{domainProducts.length} data product{domainProducts.length!==1?"s":""}</div>
+                  <button onClick={()=>setCreateProductOpen(true)} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                    {Ic.plus(10)} New Data Product
+                  </button>
+                </div>
+                {domainProducts.length===0
+                  ? <div style={{padding:"60px 0",textAlign:"center"}}>
+                      <div style={{fontSize:36,marginBottom:12}}>📦</div>
+                      <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>No data products yet</div>
+                      <div style={{fontSize:12,color:T.textMuted,maxWidth:380,margin:"0 auto 16px",lineHeight:1.6}}>A data product bundles related assets into a governed, discoverable unit with SLAs and ownership.</div>
+                      <button onClick={()=>setCreateProductOpen(true)} style={{padding:"9px 20px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Create First Data Product</button>
+                    </div>
+                  : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:14}}>
+                      {domainProducts.map(p=>(
+                        <div key={p.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden",cursor:"pointer",transition:"all .15s"}}
+                          onClick={()=>{setSelectedProductId(p.id);setProductTab("overview");}}
+                          onMouseEnter={e=>{e.currentTarget.style.borderColor=p.color;e.currentTarget.style.boxShadow=`0 4px 20px ${p.color}20`;}}
+                          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
+                          <div style={{height:4,background:p.color}}/>
+                          <div style={{padding:"14px 16px"}}>
+                            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                              <span style={{fontSize:20}}>{p.icon}</span>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:13,fontWeight:700,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.displayName}</div>
+                                <div style={{fontSize:10.5,color:T.textMuted,marginTop:1,display:"flex",alignItems:"center",gap:6}}>
+                                  <LifecycleBadge stage={p.lifecycleStage}/>
+                                  <SlaTierBadge tier={p.sla.tier}/>
+                                </div>
+                              </div>
+                            </div>
+                            <p style={{fontSize:11.5,color:T.textSub,lineHeight:1.6,marginBottom:10,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{p.description}</p>
+                            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                              <span style={{fontSize:11,color:T.textMuted}}>{p.assetIds.length} asset{p.assetIds.length!==1?"s":""}</span>
+                              <span style={{fontSize:10.5,color:T.textMuted}}>Owner: {p.owners[0]||"—"}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                }
+              </div>
+            )}
+
+            {/* ASSETS TAB */}
+            {domainTab==="assets"&&(
+              <div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+                  <div style={{fontSize:13,color:T.textMuted}}>{domainAssets.length} assets in this domain</div>
+                </div>
+                {domainAssets.length===0
+                  ? <div style={{padding:"60px 0",textAlign:"center",color:T.textMuted,fontSize:13}}>No assets assigned to this domain</div>
+                  : domainAssets.map(a=><AssetRow key={a.id} asset={a}/>)
+                }
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Create Data Product Modal */}
+        {createProductOpen&&(
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:900,backdropFilter:"blur(4px)"}}>
+            <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:16,width:520,maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 60px rgba(0,0,0,.35)"}}>
+              <div style={{padding:"20px 24px 16px",borderBottom:`1px solid ${T.border}`}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div>
+                    <div style={{fontSize:15,fontWeight:700,color:T.text}}>New Data Product</div>
+                    <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>in {dm.displayName} domain</div>
+                  </div>
+                  <button onClick={()=>setCreateProductOpen(false)} style={{width:28,height:28,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+                </div>
+              </div>
+              <div style={{padding:"20px 24px",flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:16}}>
+                {/* Icon picker */}
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Icon</label>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {["📦","📊","💹","📱","🧮","🎯","📋","🔬","💼","🗃️","📡","⚡"].map(ic=>(
+                      <button key={ic} onClick={()=>setNp(p=>({...p,icon:ic}))} style={{width:34,height:34,borderRadius:8,background:np.icon===ic?T.accentDim:T.bgElevated,border:`1.5px solid ${np.icon===ic?T.accent:T.border}`,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>{ic}</button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                  <div>
+                    <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Name <span style={{color:T.rose}}>*</span></label>
+                    <input value={np.name} onChange={e=>setNp(p=>({...p,name:e.target.value}))} placeholder="e.g. order-analytics" autoFocus
+                      style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"'Geist Mono',monospace"}}
+                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                  </div>
+                  <div>
+                    <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Display Name</label>
+                    <input value={np.displayName} onChange={e=>setNp(p=>({...p,displayName:e.target.value}))} placeholder="e.g. Order Analytics"
+                      style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                  </div>
+                </div>
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Description</label>
+                  <textarea value={np.description} onChange={e=>setNp(p=>({...p,description:e.target.value}))} rows={3} placeholder="What data does this product contain, and who consumes it?"
+                    style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box"}}
+                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                </div>
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Lifecycle Stage</label>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {LIFECYCLE_STAGES.map(s=>(
+                      <button key={s} onClick={()=>setNp(p=>({...p,lifecycleStage:s}))} style={{padding:"5px 12px",borderRadius:6,fontSize:11,fontWeight:600,cursor:"pointer",transition:"all .1s",
+                        background:np.lifecycleStage===s?`${LIFECYCLE_COLORS[s]}18`:T.bgElevated,
+                        border:`1.5px solid ${np.lifecycleStage===s?LIFECYCLE_COLORS[s]:T.border}`,
+                        color:np.lifecycleStage===s?LIFECYCLE_COLORS[s]:T.textMuted}}>{s}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.bgElevated,borderRadius:"0 0 16px 16px"}}>
+                <button onClick={()=>setCreateProductOpen(false)} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+                <button onClick={handleCreateProduct} disabled={!np.name.trim()} style={{padding:"8px 18px",borderRadius:8,background:np.name.trim()?T.accent:"rgba(100,100,120,.35)",border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:np.name.trim()?"pointer":"default",opacity:np.name.trim()?1:.7}}>Create Data Product</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ══════════════════════════════════════════════
+  // DOMAINS LIST VIEW (default)
+  // ══════════════════════════════════════════════
+  const totalAssets   = domains.reduce((a,d)=>a+d.assetCount,0);
+  const totalProducts = products.length;
+  const avgQuality    = Math.round(domains.reduce((a,d)=>a+d.quality,0)/Math.max(domains.length,1));
+
+  return (
+    <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+      <Topbar breadcrumb={[{label:"Data Domains"}]} actions={
+        <Btn icon={Ic.plus(12)} onClick={()=>setCreateDomainOpen(true)}>New Domain</Btn>
+      }/>
+      <div style={{flex:1,overflowY:"auto",padding:28}}>
+        {/* Summary stats */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
+          <Metric label="Domains"       value={String(domains.length)}    sub="registered"             color={T.accent}/>
+          <Metric label="Data Products" value={String(totalProducts)}     sub="across all domains"     color="#8b5cf6"/>
+          <Metric label="Total Assets"  value={String(totalAssets)}       sub="governed assets"        color={T.blue}/>
+          <Metric label="Avg Quality"   value={`${avgQuality}%`}          sub="quality score"          color={avgQuality>=85?T.green:avgQuality>=70?T.amber:T.rose}/>
+        </div>
+
+        {/* View toggle */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+          <div style={{fontSize:13,fontWeight:600,color:T.text}}>{domains.length} domain{domains.length!==1?"s":""}</div>
+          <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+            {[["grid","⊞"],["list","☰"]].map(([v,ic])=>(
+              <button key={v} onClick={()=>setListView(v)} style={{padding:"4px 10px",borderRadius:5,border:"none",cursor:"pointer",fontSize:13,
+                background:listView===v?T.bgSurface:"transparent",color:listView===v?T.text:T.textMuted,
+                boxShadow:listView===v?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{ic}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Grid view */}
+        {listView==="grid"&&(
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:16}}>
+            {domains.map(d=>{
+              const dp = products.filter(p=>p.domain===d.name);
+              const domTagCtxAssets = ASSETS.filter(a=>a.domain===d.name);
+              const taggedCount = tagCtx ? domTagCtxAssets.filter(a=>tagCtx.getAssetAssignments(a.id).filter(x=>x.status!=='rejected').length>0).length : 0;
+              const tagCoverage = domTagCtxAssets.length>0 ? Math.round(taggedCount/domTagCtxAssets.length*100) : 0;
+              return (
+                <div key={d.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,overflow:"hidden",cursor:"pointer",transition:"all .15s"}}
+                  onClick={()=>{setSelectedDomainId(d.id);setDomainTab("documentation");}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor=d.color;e.currentTarget.style.boxShadow=`0 6px 24px ${d.color}18`;}}
+                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
+                  <div style={{height:5,background:d.color}}/>
+                  <div style={{padding:"18px 20px"}}>
+                    <div style={{display:"flex",alignItems:"flex-start",gap:14,marginBottom:14}}>
+                      <div style={{width:46,height:46,borderRadius:12,background:`${d.color}15`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>{d.icon}</div>
+                      <div style={{flex:1}}>
+                        <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4,flexWrap:"wrap"}}>
+                          <span style={{fontSize:15,fontWeight:700,color:T.text}}>{d.displayName}</span>
+                          <DomainTypeBadge type={d.domainType}/>
+                        </div>
+                        <div style={{fontSize:11.5,color:T.textMuted}}>Owner: {d.owners[0]||"—"}</div>
+                      </div>
+                      <QScore score={d.quality}/>
+                    </div>
+                    <p style={{fontSize:12,color:T.textSub,lineHeight:1.65,marginBottom:14,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{d.description}</p>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
+                      {[["Assets",d.assetCount,d.color],["Products",dp.length,"#8b5cf6"],["Tag Cov.",`${tagCoverage}%`,tagCoverage>=50?T.green:T.amber]].map(([l,v,c])=>(
+                        <div key={l} style={{background:T.bgElevated,borderRadius:7,padding:"8px 10px"}}>
+                          <div style={{fontSize:9.5,color:T.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>{l}</div>
+                          <div style={{fontSize:15,fontWeight:800,color:c,fontFamily:"'Geist Mono',monospace"}}>{v}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Data product chips */}
+                    {dp.length>0&&(
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                        {dp.slice(0,3).map(p=>(
+                          <span key={p.id} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 9px",borderRadius:99,fontSize:10.5,fontWeight:500,
+                            background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>
+                            {p.icon} {p.displayName}
+                          </span>
+                        ))}
+                        {dp.length>3&&<span style={{fontSize:10.5,color:T.textMuted,padding:"3px 6px"}}>+{dp.length-3} more</span>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* List view */}
+        {listView==="list"&&(
+          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
+            <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 80px",padding:"10px 18px",borderBottom:`1px solid ${T.border}`,background:T.bgElevated}}>
+              {["Domain","Type","Assets","Products","Quality"].map(h=>(
+                <div key={h} style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</div>
+              ))}
+            </div>
+            {domains.map((d,i)=>{
+              const dp = products.filter(p=>p.domain===d.name);
+              return (
+                <div key={d.id} style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 80px",padding:"13px 18px",borderBottom:i<domains.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"background .1s",alignItems:"center"}}
+                  onClick={()=>{setSelectedDomainId(d.id);setDomainTab("documentation");}}
+                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{width:32,height:32,borderRadius:8,background:`${d.color}15`,border:`1px solid ${d.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>{d.icon}</div>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:600,color:T.text}}>{d.displayName}</div>
+                      <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{d.owners[0]||"—"}</div>
+                    </div>
+                  </div>
+                  <DomainTypeBadge type={d.domainType}/>
+                  <span style={{fontSize:13,fontWeight:600,color:d.color,fontFamily:"'Geist Mono',monospace"}}>{d.assetCount}</span>
+                  <span style={{fontSize:13,fontWeight:600,color:"#8b5cf6",fontFamily:"'Geist Mono',monospace"}}>{dp.length}</span>
+                  <QScore score={d.quality}/>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Create Domain Modal */}
+      {createDomainOpen&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:900,backdropFilter:"blur(4px)"}}>
+          <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:16,width:540,maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 60px rgba(0,0,0,.35)"}}>
+            <div style={{padding:"20px 24px 16px",borderBottom:`1px solid ${T.border}`}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <div>
+                  <div style={{fontSize:15,fontWeight:700,color:T.text}}>Create Data Domain</div>
+                  <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>A domain represents a bounded business context with data ownership</div>
+                </div>
+                <button onClick={()=>setCreateDomainOpen(false)} style={{width:28,height:28,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+              </div>
+            </div>
+            <div style={{padding:"20px 24px",flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:16}}>
+              {/* Icon + color */}
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Icon</label>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+                  {ICON_OPTIONS.map(ic=>(
+                    <button key={ic} onClick={()=>setNd(d=>({...d,icon:ic}))} style={{width:36,height:36,borderRadius:8,background:nd.icon===ic?T.accentDim:T.bgElevated,border:`1.5px solid ${nd.icon===ic?T.accent:T.border}`,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>{ic}</button>
+                  ))}
+                </div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Color</label>
+                <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                  {COLOR_PALETTE.map(c=>(
+                    <button key={c} onClick={()=>setNd(d=>({...d,color:c}))} style={{width:26,height:26,borderRadius:7,background:c,border:nd.color===c?`3px solid ${T.text}`:"2px solid transparent",cursor:"pointer",transition:"transform .1s",transform:nd.color===c?"scale(1.15)":"scale(1)"}}/>
+                  ))}
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Name <span style={{color:T.rose}}>*</span></label>
+                  <input value={nd.name} onChange={e=>setNd(d=>({...d,name:e.target.value}))} placeholder="e.g. commerce" autoFocus
+                    style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"'Geist Mono',monospace"}}
+                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                </div>
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Display Name</label>
+                  <input value={nd.displayName} onChange={e=>setNd(d=>({...d,displayName:e.target.value}))} placeholder="e.g. Commerce"
+                    style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                </div>
+              </div>
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Description</label>
+                <textarea value={nd.description} onChange={e=>setNd(d=>({...d,description:e.target.value}))} rows={3} placeholder="What data does this domain own? Who are the stakeholders?"
+                  style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box"}}
+                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+              </div>
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Domain Type <span style={{color:T.rose}}>*</span></label>
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {DOMAIN_TYPES.map(t=>{
+                    const desc = {"Source-aligned":"Aligned with a system of record or transactional source","Consumer-aligned":"Shaped to serve specific business consumers","Aggregate":"Curates data from multiple source-aligned domains"}[t];
+                    const selected = nd.domainType===t;
+                    return (
+                      <button key={t} onClick={()=>setNd(d=>({...d,domainType:t}))} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 14px",borderRadius:9,border:`1.5px solid ${selected?T.accent:T.border}`,background:selected?T.accentDim:T.bgElevated,cursor:"pointer",textAlign:"left",transition:"all .12s"}}>
+                        <div style={{width:14,height:14,borderRadius:"50%",border:`2px solid ${selected?T.accent:T.border}`,background:selected?T.accent:"transparent",flexShrink:0,marginTop:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                          {selected&&<div style={{width:5,height:5,borderRadius:"50%",background:"#fff"}}/>}
+                        </div>
+                        <div>
+                          <div style={{fontSize:12,fontWeight:600,color:selected?T.accent:T.text}}>{t}</div>
+                          <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{desc}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+            <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.bgElevated,borderRadius:"0 0 16px 16px"}}>
+              <button onClick={()=>setCreateDomainOpen(false)} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+              <button onClick={handleCreateDomain} disabled={!nd.name.trim()} style={{padding:"8px 18px",borderRadius:8,background:nd.name.trim()?T.accent:"rgba(100,100,120,.35)",border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:nd.name.trim()?"pointer":"default",opacity:nd.name.trim()?1:.7}}>Create Domain</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-  </div>;
+  );
 };
 
 // ─────────────────────────────────────────────
@@ -14210,190 +14933,317 @@ const AccessSection = ({onToast}) => {
   );
 
   return <>
-    {/* ── Tab bar ── */}
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:22}}>
-      <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9}}>
-        {[["roles","Roles",roles.length],["policies","Policies",policies.length]].map(([k,l,count])=>(
-          <button key={k} onClick={()=>setActiveTab(k)} style={{
-            display:"flex",alignItems:"center",gap:6,padding:"5px 16px",borderRadius:6,
-            fontSize:12,fontWeight:activeTab===k?700:500,cursor:"pointer",transition:"all .12s",
-            background:activeTab===k?T.bgSurface:"transparent",
-            border:activeTab===k?`1px solid ${T.border}`:"1px solid transparent",
-            color:activeTab===k?T.text:T.textMuted,
-            boxShadow:activeTab===k?"0 1px 3px rgba(0,0,0,.07)":"none",
-          }}>
-            {l}
-            <span style={{fontSize:10,background:activeTab===k?T.accent:T.bgHover,color:activeTab===k?"#fff":T.textMuted,padding:"1px 6px",borderRadius:99,minWidth:18,textAlign:"center"}}>{count}</span>
-          </button>
-        ))}
-      </div>
-      {activeTab==="roles"
-        ? <AddBtn label="New Role"   onClick={()=>setCreateRoleModal(true)}/>
-        : <AddBtn label="New Policy" onClick={()=>setCreatePolModal(true)}/>
-      }
-    </div>
-
-    {/* AC search */}
-    <div style={{marginBottom:14}}>
-      <input value={acSearch} onChange={e=>{setAcSearch(e.target.value);setAcRolePage(1);setAcPolPage(1);}}
-        placeholder="Search roles or policies…"
-        style={{width:"100%",padding:"9px 13px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",transition:"border-color .15s"}}
-        onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-    </div>
-
-    {/* ════ ROLES TAB ════ */}
-    {activeTab==="roles"&&(
-      <>
-      <div style={{display:"flex",flexDirection:"column",gap:10}}>
-        {acRoleList.length===0&&<div style={{textAlign:"center",padding:"32px 0",fontSize:12,color:T.textMuted}}>No roles match your search</div>}
-        {pagedRoles.map(role=>{
-          const rPolicies = policies.filter(p=>role.policyIds.includes(p.id));
-          return (
-            <div key={role.id}
-              style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",
-                borderLeft:`3px solid ${role.color}`,transition:"box-shadow .15s,border-color .15s",cursor:"pointer"}}
-              onClick={()=>{setRoleDetail(role.id);setAddPolToRole(false);}}
-              onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 2px 12px rgba(0,0,0,.08)";e.currentTarget.style.borderColor=T.borderLight;}}
-              onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.borderColor=T.border;}}>
-              <div style={{display:"flex",alignItems:"center",gap:14,padding:"14px 18px"}}>
-                {/* Avatar */}
-                <div style={{width:38,height:38,borderRadius:9,background:`${role.color}15`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                  <span style={{fontSize:13,fontWeight:800,color:role.color}}>{role.name.split(" ").map(w=>w[0]).join("").slice(0,2)}</span>
-                </div>
-                {/* Info */}
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                    <span style={{fontSize:13,fontWeight:700,color:T.text}}>{role.name}</span>
-                    {role.system&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em"}}>System</span>}
-                  </div>
-                  <div style={{fontSize:11.5,color:T.textMuted,marginBottom:8}}>{role.desc}</div>
-                  {/* Policy tags — max 3 visible */}
-                  <div style={{display:"flex",gap:5,alignItems:"center",flexWrap:"nowrap",overflow:"hidden"}}>
-                    {rPolicies.length===0
-                      ? <span style={{fontSize:11,color:T.textMuted,fontStyle:"italic"}}>No policies attached</span>
-                      : <>
-                          {rPolicies.slice(0,3).map(p=>(
-                            <span key={p.id} style={{
-                              fontSize:11,padding:"3px 9px",borderRadius:5,fontWeight:500,whiteSpace:"nowrap",
-                              background:p.enabled?`${T.accent}10`:T.bgElevated,
-                              border:`1px solid ${p.enabled?T.accent+"30":T.border}`,
-                              color:p.enabled?T.accent:T.textMuted,
-                            }}>{p.name}</span>
-                          ))}
-                          {rPolicies.length>3&&(
-                            <span style={{
-                              fontSize:11,padding:"3px 9px",borderRadius:5,fontWeight:600,whiteSpace:"nowrap",
-                              background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",
-                            }}
-                              title={rPolicies.slice(3).map(p=>p.name).join(", ")}>
-                              +{rPolicies.length-3} more
-                            </span>
-                          )}
-                        </>
-                    }
-                  </div>
-                </div>
-                {/* Right side */}
-                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
-                  <span style={{fontSize:11,color:T.textMuted}}>{role.users} user{role.users!==1?"s":""}</span>
-                  <div style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:T.textMuted}}>
-                    <span>{rPolicies.length} polic{rPolicies.length!==1?"ies":"y"}</span>
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{opacity:.4}}><path d="M4.5 3l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {totalRolePages>1&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10,paddingTop:10,borderTop:`1px solid ${T.border}`}}>
-        <span style={{fontSize:11,color:T.textMuted}}>{acRoleList.length} role{acRoleList.length!==1?"s":""} · page {acRolePage}/{totalRolePages}</span>
-        <div style={{display:"flex",gap:4}}>
-          <button onClick={()=>setAcRolePage(p=>Math.max(1,p-1))} disabled={acRolePage===1} style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:acRolePage===1?T.textMuted:T.text,fontSize:11,cursor:acRolePage===1?"default":"pointer"}}>← Prev</button>
-          <button onClick={()=>setAcRolePage(p=>Math.min(totalRolePages,p+1))} disabled={acRolePage===totalRolePages} style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:acRolePage===totalRolePages?T.textMuted:T.text,fontSize:11,cursor:acRolePage===totalRolePages?"default":"pointer"}}>Next →</button>
+    {/* ── How policies work callout ── */}
+    <div style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 16px",background:`${T.accent}08`,border:`1px solid ${T.accent}25`,borderRadius:10,marginBottom:18}}>
+      <span style={{fontSize:18,flexShrink:0,marginTop:1}}>🔐</span>
+      <div>
+        <div style={{fontSize:12,fontWeight:700,color:T.text,marginBottom:3}}>How access control works for MVP</div>
+        <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.6}}>
+          <b>Role → Policy → Resources.</b> Each user is assigned a Role (in Teams). Each Role bundles one or more Policies. Each Policy defines what operations (View, Edit, Create…) are allowed on which resource sections. Assets inherit access based on the requesting user's role — no per-asset policy assignment needed for MVP.
         </div>
-      </div>}
-      </>
-    )}
+      </div>
+    </div>
 
-    {/* ════ POLICIES TAB ════ */}
-    {activeTab==="policies"&&(
-      <>
-      <div style={{display:"flex",flexDirection:"column",gap:10}}>
-        {acPolList.length===0&&<div style={{textAlign:"center",padding:"32px 0",fontSize:12,color:T.textMuted}}>No policies match your search</div>}
-        {pagedPolicies.map(policy=>(
-          <div key={policy.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-            {/* Policy header */}
-            <div style={{display:"flex",alignItems:"center",gap:14,padding:"14px 18px"}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4,flexWrap:"wrap"}}>
-                  <span style={{fontSize:13,fontWeight:700,color:T.text}}>{policy.name}</span>
-                  {policy.system&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em"}}>System</span>}
-                  <span style={{fontSize:10.5,padding:"2px 7px",borderRadius:4,fontWeight:600,
-                    background:policy.enabled?"rgba(22,163,74,.1)":T.bgElevated,
-                    color:policy.enabled?"#16a34a":T.textMuted,
-                    border:`1px solid ${policy.enabled?"rgba(22,163,74,.2)":T.border}`}}>
-                    {policy.enabled?"● Active":"○ Disabled"}
-                  </span>
-                </div>
-                <div style={{fontSize:11.5,color:T.textMuted}}>{policy.desc}</div>
-              </div>
-              <div style={{display:"flex",gap:6,flexShrink:0,alignItems:"center"}}>
-                <button onClick={e=>{e.stopPropagation();handleTogglePolicy(policy.id);}}
-                  style={{padding:"5px 11px",borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:11,cursor:"pointer",transition:"all .12s"}}
-                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.amber;e.currentTarget.style.color=T.amber;}}
-                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
-                  {policy.enabled?"Disable":"Enable"}
-                </button>
-                <button onClick={()=>setPolicyDetail(policy.id)}
-                  style={{padding:"5px 12px",borderRadius:6,background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent,fontSize:11,fontWeight:600,cursor:"pointer",transition:"all .12s"}}
-                  onMouseEnter={e=>e.currentTarget.style.background=`${T.accent}22`}
-                  onMouseLeave={e=>e.currentTarget.style.background=T.accentDim}>
-                  Edit Rules
-                </button>
-              </div>
-            </div>
-            {/* Rules preview — clean rows */}
-            {policy.rules.length>0&&(
-              <div style={{borderTop:`1px solid ${T.border}`,background:T.bgElevated}}>
-                {policy.rules.map((rule,ri)=>(
-                  <div key={rule.id} style={{
-                    display:"flex",alignItems:"center",gap:12,padding:"9px 18px",
-                    borderBottom:ri<policy.rules.length-1?`1px solid ${T.border}`:"none",
-                  }}>
-                    <div style={{width:3,height:32,borderRadius:2,background:rule.effect==="allow"?"#16a34a":"#dc2626",flexShrink:0}}/>
-                    <div style={{minWidth:80,flexShrink:0}}><EffectBadge effect={rule.effect}/></div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:2}}>{rule.name}</div>
-                      <div style={{fontSize:11,color:T.textMuted,display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
-                        <span style={{fontWeight:600,color:T.textSub}}>{MENUS.find(m=>m.value===(rule.section||rule.menu))?.label||rule.section||rule.menu||"—"}</span>
-                        <span style={{opacity:.4}}>·</span>
-                        {rule.operations.map(o=>(
-                          <span key={o} style={{padding:"1px 5px",borderRadius:3,fontSize:10,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{o}</span>
-                        ))}
+    {/* ── Split-pane: left list + right detail ── */}
+    <div style={{display:"flex",border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden",minHeight:560}}>
+
+      {/* LEFT PANEL: Tab bar + search + compact list */}
+      <div style={{width:310,flexShrink:0,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",background:T.bgSurface}}>
+        {/* Tab bar */}
+        <div style={{padding:"12px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+          <div style={{display:"flex",gap:1,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,flex:1}}>
+            {[["roles","Roles",roles.length],["policies","Policies",policies.length]].map(([k,l,count])=>(
+              <button key={k} onClick={()=>{setActiveTab(k);setRoleDetail(null);setPolicyDetail(null);setAddPolToRole(false);}} style={{
+                flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"5px 10px",borderRadius:5,
+                fontSize:11.5,fontWeight:activeTab===k?700:500,cursor:"pointer",transition:"all .12s",
+                background:activeTab===k?T.bgSurface:"transparent",
+                border:activeTab===k?`1px solid ${T.border}`:"1px solid transparent",
+                color:activeTab===k?T.text:T.textMuted,
+                boxShadow:activeTab===k?"0 1px 3px rgba(0,0,0,.07)":"none",
+              }}>
+                {l}
+                <span style={{fontSize:9.5,background:activeTab===k?T.accent:T.bgHover,color:activeTab===k?"#fff":T.textMuted,padding:"1px 5px",borderRadius:99,minWidth:16,textAlign:"center"}}>{count}</span>
+              </button>
+            ))}
+          </div>
+          <button onClick={()=>activeTab==="roles"?setCreateRoleModal(true):setCreatePolModal(true)}
+            style={{width:28,height:28,borderRadius:7,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+            title={activeTab==="roles"?"New Role":"New Policy"}>
+            <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+        {/* Search */}
+        <div style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`}}>
+          <input value={acSearch} onChange={e=>{setAcSearch(e.target.value);setAcRolePage(1);setAcPolPage(1);}}
+            placeholder={`Search ${activeTab}…`}
+            style={{width:"100%",padding:"7px 10px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box",transition:"border-color .15s"}}
+            onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+        </div>
+        {/* Scrollable list */}
+        <div style={{flex:1,overflowY:"auto"}}>
+          {/* ROLES */}
+          {activeTab==="roles"&&(
+            acRoleList.length===0
+              ? <div style={{padding:"24px 0",textAlign:"center",fontSize:11.5,color:T.textMuted}}>No roles match</div>
+              : acRoleList.map(role=>{
+                  const rPolicies = policies.filter(p=>role.policyIds.includes(p.id));
+                  const isSelected = roleDetail===role.id;
+                  return (
+                    <div key={role.id} onClick={()=>{setRoleDetail(role.id);setPolicyDetail(null);setAddPolToRole(false);}}
+                      style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",cursor:"pointer",transition:"background .1s",
+                        borderBottom:`1px solid ${T.border}`,borderLeft:`3px solid ${isSelected?role.color:"transparent"}`,
+                        background:isSelected?`${role.color}08`:T.bgSurface}}
+                      onMouseEnter={e=>{if(!isSelected)e.currentTarget.style.background=T.bgHover;}}
+                      onMouseLeave={e=>{if(!isSelected)e.currentTarget.style.background=T.bgSurface;}}>
+                      <div style={{width:32,height:32,borderRadius:8,background:`${role.color}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <span style={{fontSize:11,fontWeight:800,color:role.color}}>{role.name.split(" ").map(w=>w[0]).join("").slice(0,2)}</span>
                       </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:2}}>
+                          <span style={{fontSize:12,fontWeight:700,color:isSelected?role.color:T.text}}>{role.name}</span>
+                          {role.system&&<span style={{fontSize:8.5,padding:"1px 4px",borderRadius:3,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,fontWeight:700,textTransform:"uppercase"}}>SYS</span>}
+                        </div>
+                        <div style={{fontSize:10.5,color:T.textMuted}}>{role.users} user{role.users!==1?"s":""} · {rPolicies.length} polic{rPolicies.length!==1?"ies":"y"}</div>
+                      </div>
+                      <svg width="10" height="10" viewBox="0 0 12 12" fill="none" style={{color:isSelected?role.color:T.textMuted,opacity:isSelected?1:.4,flexShrink:0}}><path d="M4.5 3l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </div>
+                  );
+                })
+          )}
+          {/* POLICIES */}
+          {activeTab==="policies"&&(
+            acPolList.length===0
+              ? <div style={{padding:"24px 0",textAlign:"center",fontSize:11.5,color:T.textMuted}}>No policies match</div>
+              : acPolList.map(policy=>{
+                  const isSelected = policyDetail===policy.id;
+                  const attachedRoles = roles.filter(r=>r.policyIds.includes(policy.id));
+                  return (
+                    <div key={policy.id} onClick={()=>{setPolicyDetail(policy.id);setRoleDetail(null);}}
+                      style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",cursor:"pointer",transition:"background .1s",
+                        borderBottom:`1px solid ${T.border}`,borderLeft:`3px solid ${isSelected?T.accent:"transparent"}`,
+                        background:isSelected?T.accentDim:T.bgSurface}}
+                      onMouseEnter={e=>{if(!isSelected)e.currentTarget.style.background=T.bgHover;}}
+                      onMouseLeave={e=>{if(!isSelected)e.currentTarget.style.background=T.bgSurface;}}>
+                      <div style={{width:32,height:32,borderRadius:8,background:isSelected?T.accentDim:`${policy.enabled?"#16a34a":"#6b7280"}10`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 1.5L13.5 4v4c0 3-2.5 5.5-5.5 6C5 13.5 2.5 11 2.5 8V4L8 1.5z" stroke={policy.enabled?"#16a34a":"#6b7280"} strokeWidth="1.5" strokeLinejoin="round"/></svg>
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:2}}>
+                          <span style={{fontSize:12,fontWeight:700,color:isSelected?T.accent:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{policy.name}</span>
+                          {policy.system&&<span style={{fontSize:8.5,padding:"1px 4px",borderRadius:3,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,fontWeight:700,textTransform:"uppercase",flexShrink:0}}>SYS</span>}
+                        </div>
+                        <div style={{fontSize:10.5,color:T.textMuted}}>{policy.rules.length} rule{policy.rules.length!==1?"s":""} · {attachedRoles.length} role{attachedRoles.length!==1?"s":""}</div>
+                      </div>
+                      <span style={{width:7,height:7,borderRadius:"50%",background:policy.enabled?"#16a34a":"#9ca3af",flexShrink:0}}/>
+                    </div>
+                  );
+                })
+          )}
+        </div>
+      </div>
+
+      {/* RIGHT PANEL: inline detail */}
+      <div style={{flex:1,overflowY:"auto",background:T.bg}}>
+
+        {/* ROLE DETAIL (inline) */}
+        {activeTab==="roles"&&currentRole&&(
+          <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
+            {/* Header */}
+            <div style={{padding:"20px 24px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bgSurface}}>
+              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:14}}>
+                <div style={{display:"flex",alignItems:"center",gap:12}}>
+                  <div style={{width:44,height:44,borderRadius:11,background:`${currentRole.color}15`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,borderLeft:`3px solid ${currentRole.color}`}}>
+                    <span style={{fontSize:15,fontWeight:800,color:currentRole.color}}>{currentRole.name.split(" ").map(w=>w[0]).join("").slice(0,2)}</span>
+                  </div>
+                  <div>
+                    <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}>
+                      <span style={{fontSize:17,fontWeight:700,color:T.text}}>{currentRole.name}</span>
+                      {currentRole.system&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,fontWeight:700,textTransform:"uppercase"}}>System</span>}
+                    </div>
+                    <div style={{fontSize:12,color:T.textMuted}}>{currentRole.desc}</div>
+                  </div>
+                </div>
+                {!currentRole.system&&(
+                  <button onClick={()=>handleDeleteRole(currentRole.id)} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:7,background:"transparent",border:`1px solid ${T.rose}44`,color:T.rose,fontSize:11.5,fontWeight:600,cursor:"pointer",flexShrink:0,transition:"background .12s"}}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.roseDim} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    {Ic.trash(10)} Delete
+                  </button>
+                )}
+              </div>
+              <div style={{display:"flex",gap:10}}>
+                {[["Users",currentRole.users],["Policies",rolePolicies.length],["Rules",rolePolicies.reduce((a,p)=>a+p.rules.length,0)]].map(([l,v])=>(
+                  <div key={l} style={{textAlign:"center",padding:"8px 14px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`,flex:1}}>
+                    <div style={{fontSize:20,fontWeight:700,color:T.text}}>{v}</div>
+                    <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{l}</div>
                   </div>
                 ))}
               </div>
-            )}
-            {policy.rules.length===0&&(
-              <div style={{borderTop:`1px solid ${T.border}`,padding:"12px 18px",fontSize:11.5,color:T.textMuted,fontStyle:"italic",background:T.bgElevated}}>
-                No rules yet — click "Edit Rules" to add the first one.
+            </div>
+            {/* Policies body */}
+            <div style={{padding:"18px 24px",flex:1,overflowY:"auto"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                <SectionLabel>Attached Policies</SectionLabel>
+                <button onClick={()=>setAddPolToRole(o=>!o)} style={{
+                  display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:6,
+                  background:addPolToRole?T.accentDim:"transparent",border:`1px solid ${addPolToRole?T.accent:T.border}`,
+                  color:addPolToRole?T.accent:T.textSub,fontSize:11,fontWeight:600,cursor:"pointer",transition:"all .12s",
+                }}>
+                  <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                  Attach Policy
+                </button>
               </div>
-            )}
+              {addPolToRole&&(
+                <div style={{marginBottom:14,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>
+                  {unattachedPols.length===0
+                    ? <div style={{padding:"14px",fontSize:11.5,color:T.textMuted,textAlign:"center"}}>All policies are already attached.</div>
+                    : unattachedPols.map((p,i)=>(
+                      <div key={p.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:i<unattachedPols.length-1?`1px solid ${T.border}`:"none",transition:"background .1s"}}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                        <div>
+                          <div style={{fontSize:12,fontWeight:600,color:T.text}}>{p.name}</div>
+                          <div style={{fontSize:10.5,color:T.textMuted,marginTop:2}}>{p.rules.length} rule{p.rules.length!==1?"s":""} · {p.desc.slice(0,55)}{p.desc.length>55?"…":""}</div>
+                        </div>
+                        <button onClick={()=>handleAttachPolicy(p.id)} style={{padding:"5px 12px",borderRadius:6,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:11,fontWeight:600,cursor:"pointer",flexShrink:0,marginLeft:12}}>Attach</button>
+                      </div>
+                    ))
+                  }
+                </div>
+              )}
+              {rolePolicies.length===0
+                ? <div style={{padding:"36px 0",textAlign:"center",color:T.textMuted,fontSize:12,fontStyle:"italic"}}>No policies attached yet. Use "Attach Policy" to define what this role can do.</div>
+                : rolePolicies.map((p,pi)=>(
+                  <div key={p.id} style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",marginBottom:10}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",background:T.bgElevated}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <div style={{width:3,height:18,borderRadius:2,background:p.enabled?"#16a34a":T.textMuted}}/>
+                        <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{p.name}</span>
+                        <span style={{fontSize:10,padding:"1px 6px",borderRadius:3,background:p.enabled?"rgba(22,163,74,.1)":T.bgHover,color:p.enabled?"#16a34a":T.textMuted,fontWeight:600}}>{p.enabled?"Active":"Off"}</span>
+                      </div>
+                      <button onClick={()=>handleDetachPolicy(p.id)} style={{fontSize:11,color:T.textMuted,background:"transparent",border:`1px solid transparent`,borderRadius:5,cursor:"pointer",padding:"2px 8px",transition:"all .1s"}}
+                        onMouseEnter={e=>{e.currentTarget.style.borderColor=T.rose+"66";e.currentTarget.style.color=T.rose;}}
+                        onMouseLeave={e=>{e.currentTarget.style.borderColor="transparent";e.currentTarget.style.color=T.textMuted;}}>Detach</button>
+                    </div>
+                    {p.rules.map((rule,ri)=>(
+                      <div key={rule.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px",borderTop:`1px solid ${T.border}`,background:T.bgSurface}}>
+                        <div style={{width:3,height:20,borderRadius:2,background:rule.effect==="allow"?"#16a34a":"#dc2626",flexShrink:0}}/>
+                        <EffectBadge effect={rule.effect}/>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:11.5,fontWeight:600,color:T.text}}>{rule.name}</div>
+                          <div style={{fontSize:10.5,color:T.textMuted,display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",marginTop:2}}>
+                            <span style={{fontWeight:600,color:T.textSub}}>{MENUS.find(m=>m.value===(rule.section||rule.menu))?.label||rule.section||rule.menu||"—"}</span>
+                            <span style={{opacity:.4}}>·</span>
+                            {rule.operations.map(o=>(
+                              <span key={o} style={{padding:"1px 5px",borderRadius:3,fontSize:10,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{o}</span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))
+              }
+            </div>
           </div>
-        ))}
+        )}
+
+        {/* POLICY DETAIL (inline) */}
+        {activeTab==="policies"&&currentPolicy&&(
+          <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
+            {/* Header */}
+            <div style={{padding:"20px 24px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0,background:T.bgSurface}}>
+              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:4}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
+                    <span style={{fontSize:17,fontWeight:700,color:T.text}}>{currentPolicy.name}</span>
+                    {currentPolicy.system&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,fontWeight:700,textTransform:"uppercase"}}>System</span>}
+                    <span style={{fontSize:10.5,padding:"2px 7px",borderRadius:4,fontWeight:600,
+                      background:currentPolicy.enabled?"rgba(22,163,74,.1)":T.bgElevated,
+                      color:currentPolicy.enabled?"#16a34a":T.textMuted,
+                      border:`1px solid ${currentPolicy.enabled?"rgba(22,163,74,.2)":T.border}`}}>
+                      {currentPolicy.enabled?"Active":"Disabled"}
+                    </span>
+                  </div>
+                  <div style={{fontSize:12,color:T.textMuted}}>{currentPolicy.desc}</div>
+                </div>
+                <div style={{display:"flex",gap:8,flexShrink:0,marginLeft:12}}>
+                  {!currentPolicy.system&&(
+                    <button onClick={()=>handleTogglePolicy(currentPolicy.id)} style={{padding:"6px 12px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:11,cursor:"pointer",transition:"all .12s"}}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor=T.amber;e.currentTarget.style.color=T.amber;}}
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+                      {currentPolicy.enabled?"Disable":"Enable"}
+                    </button>
+                  )}
+                  <AddBtn label="Add Rule" onClick={()=>openRuleModal(currentPolicy.id)}/>
+                  {!currentPolicy.system&&(
+                    <button onClick={()=>handleDeletePolicy(currentPolicy.id)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:7,background:"transparent",border:`1px solid ${T.rose}44`,color:T.rose,fontSize:11,fontWeight:600,cursor:"pointer",transition:"background .12s"}}
+                      onMouseEnter={e=>e.currentTarget.style.background=T.roseDim} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                      {Ic.trash(10)}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+            {/* Rules */}
+            <div style={{padding:"16px 24px",flex:1,overflowY:"auto"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                <SectionLabel>Rules ({currentPolicy.rules.length})</SectionLabel>
+                <div style={{fontSize:10.5,color:T.violet,padding:"3px 8px",borderRadius:4,background:`${T.violet}10`,border:`1px solid ${T.violet}20`}}>
+                  Deny evaluated first · No match = denied
+                </div>
+              </div>
+              {currentPolicy.rules.length===0
+                ? <div style={{padding:"40px 0",textAlign:"center",color:T.textMuted,fontSize:12,fontStyle:"italic"}}>No rules yet. Click "Add Rule" to define what this policy allows or denies.</div>
+                : currentPolicy.rules.map((rule,i)=>(
+                  <div key={rule.id} style={{
+                    background:T.bgSurface,border:`1px solid ${T.border}`,
+                    borderLeft:`3px solid ${rule.effect==="allow"?"#16a34a":"#dc2626"}`,
+                    borderRadius:8,marginBottom:10,overflow:"hidden",
+                  }}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 14px",borderBottom:`1px solid ${T.border}`}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <EffectBadge effect={rule.effect}/>
+                        <span style={{fontSize:13,fontWeight:700,color:T.text}}>{rule.name}</span>
+                      </div>
+                      <div style={{display:"flex",gap:5}}>
+                        <button onClick={()=>openRuleModal(currentPolicy.id,rule)} style={{padding:"4px 10px",borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,fontSize:11,cursor:"pointer",transition:"all .12s"}}
+                          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>Edit</button>
+                        <button onClick={()=>handleDeleteRule(currentPolicy.id,rule.id)} style={{padding:"4px 9px",borderRadius:6,background:"transparent",border:`1px solid transparent`,color:T.textMuted,fontSize:11,cursor:"pointer",transition:"all .12s"}}
+                          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.rose+"55";e.currentTarget.style.color=T.rose;}}
+                          onMouseLeave={e=>{e.currentTarget.style.borderColor="transparent";e.currentTarget.style.color=T.textMuted;}}>✕</button>
+                      </div>
+                    </div>
+                    <div style={{padding:"10px 14px",background:T.bgElevated}}>
+                      <div style={{fontSize:11.5,color:T.textMuted,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                        <span style={{fontWeight:600,color:T.textSub}}>{MENUS.find(m=>m.value===(rule.section||rule.menu))?.label||rule.section||rule.menu||"—"}</span>
+                        <span style={{opacity:.4}}>·</span>
+                        {rule.operations.map(o=><TagChip key={o} label={o}/>)}
+                      </div>
+                      {rule.desc&&<div style={{fontSize:11,color:T.textMuted,marginTop:5}}>{rule.desc}</div>}
+                    </div>
+                  </div>
+                ))
+              }
+            </div>
+          </div>
+        )}
+
+        {/* EMPTY STATE */}
+        {!currentRole&&!currentPolicy&&(
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",padding:"40px 32px",textAlign:"center"}}>
+            <div style={{width:56,height:56,borderRadius:16,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:16,fontSize:24}}>🔐</div>
+            <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:8}}>
+              Select a {activeTab==="roles"?"role":"policy"} to view details
+            </div>
+            <div style={{fontSize:12,color:T.textMuted,maxWidth:280,lineHeight:1.6}}>
+              {activeTab==="roles"
+                ? "Click any role on the left to see its attached policies, assigned users, and permission summary."
+                : "Click any policy on the left to view its rules, edit operations, or delete the policy."}
+            </div>
+          </div>
+        )}
       </div>
-      {totalPolPages>1&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10,paddingTop:10,borderTop:`1px solid ${T.border}`}}>
-        <span style={{fontSize:11,color:T.textMuted}}>{acPolList.length} polic{acPolList.length!==1?"ies":"y"} · page {acPolPage}/{totalPolPages}</span>
-        <div style={{display:"flex",gap:4}}>
-          <button onClick={()=>setAcPolPage(p=>Math.max(1,p-1))} disabled={acPolPage===1} style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:acPolPage===1?T.textMuted:T.text,fontSize:11,cursor:acPolPage===1?"default":"pointer"}}>← Prev</button>
-          <button onClick={()=>setAcPolPage(p=>Math.min(totalPolPages,p+1))} disabled={acPolPage===totalPolPages} style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:acPolPage===totalPolPages?T.textMuted:T.text,fontSize:11,cursor:acPolPage===totalPolPages?"default":"pointer"}}>Next →</button>
-        </div>
-      </div>}
-      </>
-    )}
+    </div>
 
     {/* ════ MODALS ════ */}
 
@@ -14535,208 +15385,6 @@ const AccessSection = ({onToast}) => {
               <button onClick={handleCreatePolicy} disabled={!newPolName.trim()} style={{padding:"8px 18px",borderRadius:8,background:newPolName.trim()?T.accent:"rgba(100,100,120,.35)",border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:newPolName.trim()?"pointer":"default",opacity:newPolName.trim()?1:.7}}>Create Policy</button>
             </div>
           </div>
-        </div>
-      </div>
-    )}
-
-    {/* Role Detail — slide-in panel */}
-    {roleDetail&&currentRole&&(
-      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",display:"flex",justifyContent:"flex-end",zIndex:900,backdropFilter:"blur(3px)"}}
-        onClick={e=>e.target===e.currentTarget&&setRoleDetail(null)}>
-        <div className="scaleIn" style={{background:T.bgSurface,borderLeft:`1px solid ${T.border}`,width:480,maxWidth:"90vw",height:"100%",display:"flex",flexDirection:"column",boxShadow:"-12px 0 40px rgba(0,0,0,.15)"}}>
-          {/* Header */}
-          <div style={{padding:"20px 22px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:12}}>
-              <div style={{display:"flex",alignItems:"center",gap:12}}>
-                <div style={{width:40,height:40,borderRadius:10,background:`${currentRole.color}15`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,borderLeft:`3px solid ${currentRole.color}`}}>
-                  <span style={{fontSize:14,fontWeight:800,color:currentRole.color}}>{currentRole.name.split(" ").map(w=>w[0]).join("").slice(0,2)}</span>
-                </div>
-                <div>
-                  <div style={{display:"flex",alignItems:"center",gap:7}}>
-                    <div style={{fontSize:16,fontWeight:700,color:T.text}}>{currentRole.name}</div>
-                    {currentRole.system&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,fontWeight:700,textTransform:"uppercase"}}>System</span>}
-                  </div>
-                  <div style={{fontSize:12,color:T.textMuted,marginTop:2}}>{currentRole.desc}</div>
-                </div>
-              </div>
-              <button onClick={()=>setRoleDetail(null)} style={{width:28,height:28,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.x(10)}</button>
-            </div>
-            <div style={{display:"flex",gap:16}}>
-              {[["Users",currentRole.users],["Policies",rolePolicies.length],["Rules",rolePolicies.reduce((a,p)=>a+p.rules.length,0)]].map(([l,v])=>(
-                <div key={l} style={{textAlign:"center",padding:"8px 14px",background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,flex:1}}>
-                  <div style={{fontSize:18,fontWeight:700,color:T.text}}>{v}</div>
-                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{l}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-          {/* Attached policies */}
-          <div style={{padding:"16px 22px",flex:1,overflowY:"auto"}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-              <SectionLabel>Attached Policies</SectionLabel>
-              <button onClick={()=>setAddPolToRole(o=>!o)} style={{
-                display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:6,
-                background:addPolToRole?T.accentDim:"transparent",border:`1px solid ${addPolToRole?T.accent:T.border}`,
-                color:addPolToRole?T.accent:T.textSub,fontSize:11,fontWeight:600,cursor:"pointer",transition:"all .12s",
-              }}>
-                <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
-                Attach Policy
-              </button>
-            </div>
-            {/* Attach picker */}
-            {addPolToRole&&(
-              <div style={{marginBottom:14,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
-                {unattachedPols.length===0
-                  ? <div style={{padding:"14px",fontSize:11.5,color:T.textMuted,textAlign:"center"}}>All policies are already attached.</div>
-                  : unattachedPols.map((p,i)=>(
-                    <div key={p.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:i<unattachedPols.length-1?`1px solid ${T.border}`:"none",transition:"background .1s"}}
-                      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
-                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                      <div>
-                        <div style={{fontSize:12,fontWeight:600,color:T.text}}>{p.name}</div>
-                        <div style={{fontSize:10.5,color:T.textMuted,marginTop:2}}>{p.rules.length} rule{p.rules.length!==1?"s":""} · {p.desc.slice(0,55)}{p.desc.length>55?"…":""}</div>
-                      </div>
-                      <button onClick={()=>handleAttachPolicy(p.id)} style={{padding:"5px 12px",borderRadius:6,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:11,fontWeight:600,cursor:"pointer",flexShrink:0,marginLeft:12}}>Attach</button>
-                    </div>
-                  ))
-                }
-              </div>
-            )}
-            {rolePolicies.length===0
-              ? <div style={{padding:"36px 0",textAlign:"center",color:T.textMuted,fontSize:12,fontStyle:"italic"}}>No policies attached yet. Use "Attach Policy" to define what this role can do.</div>
-              : rolePolicies.map((p,pi)=>(
-                <div key={p.id} style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",marginBottom:10}}>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",background:T.bgElevated}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <div style={{width:3,height:18,borderRadius:2,background:p.enabled?"#16a34a":T.textMuted}}/>
-                      <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{p.name}</span>
-                      <span style={{fontSize:10,padding:"1px 6px",borderRadius:3,background:p.enabled?"rgba(22,163,74,.1)":T.bgHover,color:p.enabled?"#16a34a":T.textMuted,fontWeight:600}}>{p.enabled?"Active":"Off"}</span>
-                    </div>
-                    <button onClick={()=>handleDetachPolicy(p.id)} style={{fontSize:11,color:T.textMuted,background:"transparent",border:`1px solid transparent`,borderRadius:5,cursor:"pointer",padding:"2px 8px",transition:"all .1s"}}
-                      onMouseEnter={e=>{e.currentTarget.style.borderColor=T.rose+"66";e.currentTarget.style.color=T.rose;}}
-                      onMouseLeave={e=>{e.currentTarget.style.borderColor="transparent";e.currentTarget.style.color=T.textMuted;}}>Detach</button>
-                  </div>
-                  {p.rules.map((rule,ri)=>(
-                    <div key={rule.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px",borderTop:`1px solid ${T.border}`,background:T.bgSurface}}>
-                      <div style={{width:3,height:20,borderRadius:2,background:rule.effect==="allow"?"#16a34a":"#dc2626",flexShrink:0}}/>
-                      <EffectBadge effect={rule.effect}/>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:11.5,fontWeight:600,color:T.text}}>{rule.name}</div>
-                        <div style={{fontSize:10.5,color:T.textMuted,display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",marginTop:2}}>
-                          <span style={{fontWeight:600,color:T.textSub}}>{MENUS.find(m=>m.value===(rule.section||rule.menu))?.label||rule.section||rule.menu||"—"}</span>
-                          <span style={{opacity:.4}}>·</span>
-                          {rule.operations.map(o=>(
-                            <span key={o} style={{padding:"1px 5px",borderRadius:3,fontSize:10,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{o}</span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ))
-            }
-          </div>
-          {/* Footer */}
-          {!currentRole.system&&(
-            <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,flexShrink:0}}>
-              <button onClick={()=>handleDeleteRole(currentRole.id)} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:7,background:"transparent",border:`1px solid ${T.rose}44`,color:T.rose,fontSize:12,fontWeight:600,cursor:"pointer",transition:"background .12s"}}
-                onMouseEnter={e=>e.currentTarget.style.background=T.roseDim}
-                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                {Ic.trash(11)} Delete Role
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    )}
-
-    {/* Policy Detail (Rules editor) */}
-    {policyDetail&&currentPolicy&&(
-      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",display:"flex",justifyContent:"flex-end",zIndex:900,backdropFilter:"blur(3px)"}}
-        onClick={e=>e.target===e.currentTarget&&setPolicyDetail(null)}>
-        <div className="scaleIn" style={{background:T.bgSurface,borderLeft:`1px solid ${T.border}`,width:560,maxWidth:"92vw",height:"100%",display:"flex",flexDirection:"column",boxShadow:"-12px 0 40px rgba(0,0,0,.15)"}}>
-          {/* Header */}
-          <div style={{padding:"20px 22px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:4}}>
-              <div>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                  <div style={{fontSize:16,fontWeight:700,color:T.text}}>{currentPolicy.name}</div>
-                  {currentPolicy.system&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,fontWeight:700,textTransform:"uppercase"}}>System</span>}
-                  <span style={{fontSize:10.5,padding:"2px 7px",borderRadius:4,fontWeight:600,
-                    background:currentPolicy.enabled?"rgba(22,163,74,.1)":T.bgElevated,
-                    color:currentPolicy.enabled?"#16a34a":T.textMuted,
-                    border:`1px solid ${currentPolicy.enabled?"rgba(22,163,74,.2)":T.border}`}}>
-                    {currentPolicy.enabled?"Active":"Disabled"}
-                  </span>
-                </div>
-                <div style={{fontSize:12,color:T.textMuted}}>{currentPolicy.desc}</div>
-              </div>
-              <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0,marginLeft:12}}>
-                <AddBtn label="Add Rule" onClick={()=>openRuleModal(currentPolicy.id)}/>
-                <button onClick={()=>setPolicyDetail(null)} style={{width:28,height:28,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(10)}</button>
-              </div>
-            </div>
-          </div>
-          {/* Rules */}
-          <div style={{padding:"16px 22px",flex:1,overflowY:"auto"}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-              <SectionLabel>Rules ({currentPolicy.rules.length})</SectionLabel>
-              <div style={{fontSize:10.5,color:T.violet,padding:"3px 8px",borderRadius:4,background:`${T.violet}10`,border:`1px solid ${T.violet}20`}}>
-                Deny checked first · No match = denied
-              </div>
-            </div>
-            {currentPolicy.rules.length===0
-              ? <div style={{padding:"40px 0",textAlign:"center",color:T.textMuted,fontSize:12,fontStyle:"italic"}}>No rules yet. Click "Add Rule" to define what this policy allows or denies.</div>
-              : currentPolicy.rules.map((rule,i)=>(
-                <div key={rule.id} style={{
-                  background:T.bgSurface,border:`1px solid ${T.border}`,
-                  borderLeft:`3px solid ${rule.effect==="allow"?"#16a34a":"#dc2626"}`,
-                  borderRadius:8,marginBottom:10,overflow:"hidden",
-                }}>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 14px",borderBottom:`1px solid ${T.border}`}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <EffectBadge effect={rule.effect}/>
-                      <span style={{fontSize:13,fontWeight:700,color:T.text}}>{rule.name}</span>
-                    </div>
-                    <div style={{display:"flex",gap:6}}>
-                      <button onClick={()=>openRuleModal(currentPolicy.id,rule)}
-                        style={{padding:"4px 10px",borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:11,fontWeight:500,cursor:"pointer",transition:"all .1s"}}
-                        onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
-                        onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>Edit</button>
-                      <button onClick={()=>handleDeleteRule(currentPolicy.id,rule.id)}
-                        style={{width:26,height:26,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .1s"}}
-                        onMouseEnter={e=>{e.currentTarget.style.borderColor=T.rose+"66";e.currentTarget.style.color=T.rose;}}
-                        onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
-                        {Ic.trash(10)}
-                      </button>
-                    </div>
-                  </div>
-                  <div style={{padding:"10px 14px",display:"flex",flexDirection:"column",gap:8}}>
-                    {rule.desc&&<div style={{fontSize:11,color:T.textMuted,fontStyle:"italic"}}>{rule.desc}</div>}
-                    <div style={{display:"grid",gridTemplateColumns:"80px 1fr",gap:"6px 0",alignItems:"start"}}>
-                      <span style={{fontSize:10.5,fontWeight:600,color:T.textMuted,paddingTop:2}}>Section</span>
-                      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                        <TagChip label={MENUS.find(m=>m.value===(rule.section||rule.menu))?.label||rule.section||rule.menu||"—"}/>
-                      </div>
-                      <span style={{fontSize:10.5,fontWeight:600,color:T.textMuted,paddingTop:6}}>Operations</span>
-                      <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:4}}>
-                        {rule.operations.map(o=><TagChip key={o} label={o}/>)}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))
-            }
-          </div>
-          {!currentPolicy.system&&(
-            <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,flexShrink:0}}>
-              <button onClick={()=>handleDeletePolicy(currentPolicy.id)} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:7,background:"transparent",border:`1px solid ${T.rose}44`,color:T.rose,fontSize:12,fontWeight:600,cursor:"pointer",transition:"background .12s"}}
-                onMouseEnter={e=>e.currentTarget.style.background=T.roseDim}
-                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                {Ic.trash(11)} Delete Policy
-              </button>
-            </div>
-          )}
         </div>
       </div>
     )}
