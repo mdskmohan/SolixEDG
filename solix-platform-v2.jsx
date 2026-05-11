@@ -9845,7 +9845,7 @@ const DomainsView = () => {
         ]}/>
         <div style={{flex:1,overflowY:"auto"}}>
           {/* Header band */}
-          <div style={{padding:"24px 28px 0",borderBottom:`1px solid ${T.border}`}}>
+          <div style={{padding:"24px 28px 0"}}>
             <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:18}}>
               <div style={{width:52,height:52,borderRadius:14,background:`${pd.color}18`,border:`2px solid ${pd.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>{pd.icon}</div>
               <div style={{flex:1}}>
@@ -10014,7 +10014,7 @@ const DomainsView = () => {
         ]}/>
         <div style={{flex:1,overflowY:"auto"}}>
           {/* Header band */}
-          <div style={{padding:"24px 28px 0",borderBottom:`1px solid ${T.border}`}}>
+          <div style={{padding:"24px 28px 0"}}>
             <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:18}}>
               <div style={{width:56,height:56,borderRadius:16,background:`${dm.color}18`,border:`2px solid ${dm.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,flexShrink:0}}>{dm.icon}</div>
               <div style={{flex:1}}>
@@ -10514,7 +10514,7 @@ const DataProductsView = () => {
         ]}/>
         <div style={{flex:1,overflowY:"auto"}}>
           {/* Header */}
-          <div style={{padding:"24px 28px 0",borderBottom:`1px solid ${T.border}`}}>
+          <div style={{padding:"24px 28px 0"}}>
             <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:18}}>
               <div style={{width:52,height:52,borderRadius:14,background:`${pd.color}18`,border:`2px solid ${pd.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>{pd.icon}</div>
               <div style={{flex:1}}>
