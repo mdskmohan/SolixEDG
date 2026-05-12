@@ -9748,6 +9748,24 @@ const DomainsView = () => {
   const [pdOwnerSearch, setPdOwnerSearch] = useState("");
   const [pdStewOpen, setPdStewOpen] = useState(false);
   const [pdStewSearch, setPdStewSearch] = useState("");
+  // new-domain owner/expert pickers
+  const [ndOwners,      setNdOwners]      = useState([]);
+  const [ndOwnerOpen,   setNdOwnerOpen]   = useState(false);
+  const [ndOwnerSearch, setNdOwnerSearch] = useState("");
+  const [ndExperts,     setNdExperts]     = useState([]);
+  const [ndExpertOpen,  setNdExpertOpen]  = useState(false);
+  const [ndExpertSearch,setNdExpertSearch]= useState("");
+  // add assets to domain
+  const [addAssetsOpen,     setAddAssetsOpen]     = useState(false);
+  const [addAssetsSearch,   setAddAssetsSearch]   = useState("");
+  const [addAssetsSelected, setAddAssetsSelected] = useState(new Set());
+  // edit domain
+  const [editDomainOpen,    setEditDomainOpen]    = useState(false);
+  const [editDd,            setEditDd]            = useState(null);
+  const [editDdOwnerOpen,   setEditDdOwnerOpen]   = useState(false);
+  const [editDdOwnerSearch, setEditDdOwnerSearch] = useState("");
+  const [editDdExpertOpen,  setEditDdExpertOpen]  = useState(false);
+  const [editDdExpertSearch,setEditDdExpertSearch]= useState("");
   const ALL_USERS = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
   const ava = name => (name||"?").split(".").map(s=>s[0]?.toUpperCase()||"").join("");
   const patchDomain = (id,patch) => setDomains(prev=>prev.map(d=>d.id===id?{...d,...patch}:d));
@@ -9756,7 +9774,7 @@ const DomainsView = () => {
   const selectedDomain  = domains.find(d=>d.id===selectedDomainId);
   const selectedProduct = products.find(p=>p.id===selectedProductId);
   const domainProducts  = selectedDomain ? products.filter(p=>p.domain===selectedDomain.name) : [];
-  const domainAssets    = selectedDomain ? ASSETS.filter(a=>a.domain===selectedDomain.name) : [];
+  const domainAssets    = selectedDomain ? ASSETS.filter(a=>a.domain===selectedDomain.name||(selectedDomain.extraAssetIds||[]).includes(a.id)) : [];
   const productAssets   = selectedProduct ? ASSETS.filter(a=>selectedProduct.assetIds.includes(a.id)) : [];
 
   const LIFECYCLE_COLORS = LIFECYCLE_COLORS_DP;
@@ -9767,11 +9785,26 @@ const DomainsView = () => {
 
   const handleCreateDomain = () => {
     if(!nd.name.trim()) return;
-    const d = {id:`d${Date.now()}`,name:nd.name.trim(),displayName:nd.displayName.trim()||nd.name.trim(),icon:nd.icon,color:nd.color,domainType:nd.domainType,description:nd.description.trim()||"No description provided.",owners:[],experts:[],tags:[],quality:0,assetCount:0};
+    const d = {id:`d${Date.now()}`,name:nd.name.trim(),displayName:nd.displayName.trim()||nd.name.trim(),icon:nd.icon,color:nd.color,domainType:nd.domainType,description:nd.description.trim()||"No description provided.",owners:ndOwners,experts:ndExperts,tags:[],quality:0,assetCount:0,extraAssetIds:[]};
     setDomains(prev=>[...prev,d]);
     setCreateDomainOpen(false);
     setNd({name:"",displayName:"",description:"",domainType:"Source-aligned",icon:"🗂️",color:"#0ea5e9"});
+    setNdOwners([]); setNdExperts([]);
     setSelectedDomainId(d.id);
+  };
+
+  const handleEditDomain = () => {
+    if(!editDd||!editDd.name.trim()) return;
+    patchDomain(editDd.id,{name:editDd.name.trim(),displayName:editDd.displayName.trim()||editDd.name.trim(),icon:editDd.icon,color:editDd.color,domainType:editDd.domainType,description:editDd.description.trim(),owners:editDd.owners||[],experts:editDd.experts||[]});
+    setEditDomainOpen(false); setEditDd(null);
+  };
+
+  const handleAddAssets = () => {
+    if(!selectedDomain||addAssetsSelected.size===0) return;
+    const existing = new Set((selectedDomain.extraAssetIds||[]).concat(ASSETS.filter(a=>a.domain===selectedDomain.name).map(a=>a.id)));
+    const toAdd = [...addAssetsSelected].filter(id=>!existing.has(id));
+    patchDomain(selectedDomain.id,{extraAssetIds:[...(selectedDomain.extraAssetIds||[]),...toAdd]});
+    setAddAssetsOpen(false); setAddAssetsSelected(new Set()); setAddAssetsSearch("");
   };
   const handleCreateProduct = () => {
     if(!np.name.trim()||!selectedDomain) return;
@@ -10023,7 +10056,7 @@ const DomainsView = () => {
                 <button onClick={()=>setCreateProductOpen(true)} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",fontWeight:500}}>
                   {Ic.plus(10)} Data Product
                 </button>
-                <Btn onClick={()=>{}}>Edit Domain</Btn>
+                <Btn onClick={()=>{setEditDd({...dm});setEditDomainOpen(true);}}>Edit Domain</Btn>
               </div>
             </div>
             <Tabs2 tabs={[
@@ -10187,6 +10220,10 @@ const DomainsView = () => {
               <div>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
                   <div style={{fontSize:13,color:T.textMuted}}>{domainAssets.length} assets in this domain</div>
+                  <button onClick={()=>{setAddAssetsSelected(new Set());setAddAssetsSearch("");setAddAssetsOpen(true);}}
+                    style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",fontWeight:500}}>
+                    {Ic.plus(10)} Add Assets
+                  </button>
                 </div>
                 {domainAssets.length===0
                   ? <div style={{padding:"60px 0",textAlign:"center",color:T.textMuted,fontSize:13}}>No assets assigned to this domain</div>
@@ -10469,6 +10506,78 @@ const DomainsView = () => {
                   })}
                 </div>
               </div>
+              {/* Owners picker */}
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Owners</label>
+                <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
+                  {ndOwners.map(o=>(
+                    <div key={o} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:5,background:T.accentDim,border:`1px solid ${T.accent}33`,borderLeft:`3px solid ${T.accent}`}}>
+                      <div style={{width:16,height:16,borderRadius:3,background:T.accent+"33",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:T.accent}}>{o[0].toUpperCase()}</div>
+                      <span style={{fontSize:11.5,color:T.accent,fontWeight:500}}>{o}</span>
+                      <button onClick={()=>setNdOwners(p=>p.filter(x=>x!==o))} style={{background:"none",border:"none",color:T.accent,cursor:"pointer",padding:0,fontSize:11,lineHeight:1,marginLeft:1}}>×</button>
+                    </div>
+                  ))}
+                </div>
+                <div style={{position:"relative"}}>
+                  <button onClick={()=>{setNdOwnerOpen(p=>!p);setNdOwnerSearch("");}} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",borderRadius:8,border:`1.5px solid ${ndOwnerOpen?T.accent:T.border}`,background:T.bgElevated,color:T.textSub,fontSize:12,cursor:"pointer",width:"100%"}}>
+                    {Ic.plus(10)} Add owner
+                  </button>
+                  {ndOwnerOpen&&(
+                    <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,boxShadow:"0 8px 24px rgba(0,0,0,.25)",zIndex:50,overflow:"hidden"}}>
+                      <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}>
+                        <input autoFocus value={ndOwnerSearch} onChange={e=>setNdOwnerSearch(e.target.value)} placeholder="Search users…"
+                          style={{width:"100%",padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+                      </div>
+                      <div style={{maxHeight:160,overflowY:"auto"}}>
+                        {ALL_USERS.filter(u=>!ndOwners.includes(u)&&(!ndOwnerSearch||u.includes(ndOwnerSearch.toLowerCase()))).map(u=>(
+                          <button key={u} onClick={()=>{setNdOwners(p=>[...p,u]);setNdOwnerOpen(false);setNdOwnerSearch("");}}
+                            style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:12,textAlign:"left"}}
+                            onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                            <div style={{width:22,height:22,borderRadius:5,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:T.accent}}>{u[0].toUpperCase()}</div>
+                            {u}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {/* Experts picker */}
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Domain Experts</label>
+                <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
+                  {ndExperts.map(o=>(
+                    <div key={o} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:5,background:"rgba(217,119,6,.1)",border:`1px solid rgba(217,119,6,.2)`,borderLeft:`3px solid #d97706`}}>
+                      <div style={{width:16,height:16,borderRadius:3,background:"rgba(217,119,6,.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#d97706"}}>{o[0].toUpperCase()}</div>
+                      <span style={{fontSize:11.5,color:"#d97706",fontWeight:500}}>{o}</span>
+                      <button onClick={()=>setNdExperts(p=>p.filter(x=>x!==o))} style={{background:"none",border:"none",color:"#d97706",cursor:"pointer",padding:0,fontSize:11,lineHeight:1,marginLeft:1}}>×</button>
+                    </div>
+                  ))}
+                </div>
+                <div style={{position:"relative"}}>
+                  <button onClick={()=>{setNdExpertOpen(p=>!p);setNdExpertSearch("");}} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",borderRadius:8,border:`1.5px solid ${ndExpertOpen?T.accent:T.border}`,background:T.bgElevated,color:T.textSub,fontSize:12,cursor:"pointer",width:"100%"}}>
+                    {Ic.plus(10)} Add expert
+                  </button>
+                  {ndExpertOpen&&(
+                    <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,boxShadow:"0 8px 24px rgba(0,0,0,.25)",zIndex:50,overflow:"hidden"}}>
+                      <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}>
+                        <input autoFocus value={ndExpertSearch} onChange={e=>setNdExpertSearch(e.target.value)} placeholder="Search users…"
+                          style={{width:"100%",padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+                      </div>
+                      <div style={{maxHeight:160,overflowY:"auto"}}>
+                        {ALL_USERS.filter(u=>!ndExperts.includes(u)&&(!ndExpertSearch||u.includes(ndExpertSearch.toLowerCase()))).map(u=>(
+                          <button key={u} onClick={()=>{setNdExperts(p=>[...p,u]);setNdExpertOpen(false);setNdExpertSearch("");}}
+                            style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:12,textAlign:"left"}}
+                            onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                            <div style={{width:22,height:22,borderRadius:5,background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#d97706"}}>{u[0].toUpperCase()}</div>
+                            {u}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
             <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.bgElevated,borderRadius:"0 0 16px 16px"}}>
               <button onClick={()=>setCreateDomainOpen(false)} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
@@ -10477,6 +10586,222 @@ const DomainsView = () => {
           </div>
         </div>
       )}
+
+      {/* Add Assets Modal */}
+      {addAssetsOpen&&selectedDomain&&(()=>{
+        const existingIds = new Set(
+          (selectedDomain.extraAssetIds||[]).concat(ASSETS.filter(a=>a.domain===selectedDomain.name).map(a=>a.id))
+        );
+        const candidates = ASSETS.filter(a=>!existingIds.has(a.id)&&(!addAssetsSearch||a.name.toLowerCase().includes(addAssetsSearch.toLowerCase())||a.type.toLowerCase().includes(addAssetsSearch.toLowerCase())));
+        return (
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:900,backdropFilter:"blur(4px)"}}>
+            <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:16,width:560,maxHeight:"85vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 60px rgba(0,0,0,.35)"}}>
+              <div style={{padding:"20px 24px 16px",borderBottom:`1px solid ${T.border}`}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div>
+                    <div style={{fontSize:15,fontWeight:700,color:T.text}}>Add Assets</div>
+                    <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>to {selectedDomain.displayName}</div>
+                  </div>
+                  <button onClick={()=>setAddAssetsOpen(false)} style={{width:28,height:28,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+                </div>
+              </div>
+              <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`}}>
+                <input autoFocus value={addAssetsSearch} onChange={e=>setAddAssetsSearch(e.target.value)} placeholder="Search assets by name or type…"
+                  style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+              </div>
+              {addAssetsSelected.size>0&&(
+                <div style={{padding:"8px 16px",borderBottom:`1px solid ${T.border}`,background:T.accentDim,fontSize:12,color:T.accent,fontWeight:500}}>
+                  {addAssetsSelected.size} asset{addAssetsSelected.size!==1?"s":""} selected
+                </div>
+              )}
+              <div style={{flex:1,overflowY:"auto"}}>
+                {candidates.length===0
+                  ? <div style={{padding:"40px 0",textAlign:"center",color:T.textMuted,fontSize:13}}>No matching assets available</div>
+                  : candidates.map(a=>{
+                    const sel = addAssetsSelected.has(a.id);
+                    return (
+                      <button key={a.id} onClick={()=>setAddAssetsSelected(p=>{const n=new Set(p);sel?n.delete(a.id):n.add(a.id);return n;})}
+                        style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"10px 16px",background:sel?T.accentDim:"none",border:"none",borderBottom:`1px solid ${T.border}`,cursor:"pointer",textAlign:"left",transition:"background .1s"}}
+                        onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="none";}}>
+                        <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${sel?T.accent:T.border}`,background:sel?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                          {sel&&<svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 5l2.5 2.5L8 3" stroke="#fff" strokeWidth="1.8" fill="none" strokeLinecap="round"/>  </svg>}
+                        </div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:1}}>{a.name}</div>
+                          <div style={{fontSize:11,color:T.textMuted}}>{a.type} · {a.connector}</div>
+                        </div>
+                        {a.domain&&<span style={{fontSize:10.5,padding:"2px 7px",borderRadius:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted}}>{a.domain}</span>}
+                      </button>
+                    );
+                  })
+                }
+              </div>
+              <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.bgElevated,borderRadius:"0 0 16px 16px"}}>
+                <button onClick={()=>setAddAssetsOpen(false)} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+                <button onClick={handleAddAssets} disabled={addAssetsSelected.size===0} style={{padding:"8px 18px",borderRadius:8,background:addAssetsSelected.size>0?T.accent:"rgba(100,100,120,.35)",border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:addAssetsSelected.size>0?"pointer":"default",opacity:addAssetsSelected.size>0?1:.7}}>
+                  Add {addAssetsSelected.size>0?`${addAssetsSelected.size} `:""}Asset{addAssetsSelected.size!==1?"s":""}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Edit Domain Modal */}
+      {editDomainOpen&&editDd&&(()=>{
+        const ICON_OPTS = ["🗂️","🏪","💰","📦","📊","🎯","🔬","💼","⚡","🌐","📡","🧮"];
+        const COL_PAL = ["#0ea5e9","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#06b6d4","#84cc16","#f97316","#6366f1"];
+        const DOM_TYPES = ["Source-aligned","Consumer-aligned","Aggregate"];
+        return (
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:900,backdropFilter:"blur(4px)"}}>
+            <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:16,width:540,maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 60px rgba(0,0,0,.35)"}}>
+              <div style={{padding:"20px 24px 16px",borderBottom:`1px solid ${T.border}`}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div>
+                    <div style={{fontSize:15,fontWeight:700,color:T.text}}>Edit Domain</div>
+                    <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{editDd.displayName}</div>
+                  </div>
+                  <button onClick={()=>{setEditDomainOpen(false);setEditDd(null);}} style={{width:28,height:28,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+                </div>
+              </div>
+              <div style={{padding:"20px 24px",flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:16}}>
+                {/* Icon + color */}
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Icon</label>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+                    {ICON_OPTS.map(ic=>(
+                      <button key={ic} onClick={()=>setEditDd(p=>({...p,icon:ic}))} style={{width:36,height:36,borderRadius:8,background:editDd.icon===ic?T.accentDim:T.bgElevated,border:`1.5px solid ${editDd.icon===ic?T.accent:T.border}`,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>{ic}</button>
+                    ))}
+                  </div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Color</label>
+                  <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                    {COL_PAL.map(c=>(
+                      <button key={c} onClick={()=>setEditDd(p=>({...p,color:c}))} style={{width:26,height:26,borderRadius:7,background:c,border:editDd.color===c?`3px solid ${T.text}`:"2px solid transparent",cursor:"pointer",transition:"transform .1s",transform:editDd.color===c?"scale(1.15)":"scale(1)"}}/>
+                    ))}
+                  </div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                  <div>
+                    <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Name <span style={{color:T.rose}}>*</span></label>
+                    <input value={editDd.name} onChange={e=>setEditDd(p=>({...p,name:e.target.value}))} autoFocus
+                      style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"'Geist Mono',monospace"}}
+                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                  </div>
+                  <div>
+                    <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Display Name</label>
+                    <input value={editDd.displayName||""} onChange={e=>setEditDd(p=>({...p,displayName:e.target.value}))}
+                      style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                  </div>
+                </div>
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Description</label>
+                  <textarea value={editDd.description||""} onChange={e=>setEditDd(p=>({...p,description:e.target.value}))} rows={3}
+                    style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box"}}
+                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                </div>
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Domain Type</label>
+                  <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                    {DOM_TYPES.map(t=>{
+                      const desc = {"Source-aligned":"Aligned with a system of record or transactional source","Consumer-aligned":"Shaped to serve specific business consumers","Aggregate":"Curates data from multiple source-aligned domains"}[t];
+                      const selected = editDd.domainType===t;
+                      return (
+                        <button key={t} onClick={()=>setEditDd(p=>({...p,domainType:t}))} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 14px",borderRadius:9,border:`1.5px solid ${selected?T.accent:T.border}`,background:selected?T.accentDim:T.bgElevated,cursor:"pointer",textAlign:"left"}}>
+                          <div style={{width:14,height:14,borderRadius:"50%",border:`2px solid ${selected?T.accent:T.border}`,background:selected?T.accent:"transparent",flexShrink:0,marginTop:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                            {selected&&<div style={{width:5,height:5,borderRadius:"50%",background:"#fff"}}/>}
+                          </div>
+                          <div>
+                            <div style={{fontSize:12,fontWeight:600,color:selected?T.accent:T.text}}>{t}</div>
+                            <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{desc}</div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                {/* Owners */}
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Owners</label>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
+                    {(editDd.owners||[]).map(o=>(
+                      <div key={o} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:5,background:T.accentDim,border:`1px solid ${T.accent}33`,borderLeft:`3px solid ${T.accent}`}}>
+                        <div style={{width:16,height:16,borderRadius:3,background:T.accent+"33",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:T.accent}}>{o[0].toUpperCase()}</div>
+                        <span style={{fontSize:11.5,color:T.accent,fontWeight:500}}>{o}</span>
+                        <button onClick={()=>setEditDd(p=>({...p,owners:(p.owners||[]).filter(x=>x!==o)}))} style={{background:"none",border:"none",color:T.accent,cursor:"pointer",padding:0,fontSize:11,lineHeight:1,marginLeft:1}}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{position:"relative"}}>
+                    <button onClick={()=>{setEditDdOwnerOpen(p=>!p);setEditDdOwnerSearch("");}} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",borderRadius:8,border:`1.5px solid ${editDdOwnerOpen?T.accent:T.border}`,background:T.bgElevated,color:T.textSub,fontSize:12,cursor:"pointer",width:"100%"}}>
+                      {Ic.plus(10)} Add owner
+                    </button>
+                    {editDdOwnerOpen&&(
+                      <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,boxShadow:"0 8px 24px rgba(0,0,0,.25)",zIndex:50,overflow:"hidden"}}>
+                        <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}>
+                          <input autoFocus value={editDdOwnerSearch} onChange={e=>setEditDdOwnerSearch(e.target.value)} placeholder="Search users…"
+                            style={{width:"100%",padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+                        </div>
+                        <div style={{maxHeight:150,overflowY:"auto"}}>
+                          {ALL_USERS.filter(u=>!(editDd.owners||[]).includes(u)&&(!editDdOwnerSearch||u.includes(editDdOwnerSearch.toLowerCase()))).map(u=>(
+                            <button key={u} onClick={()=>{setEditDd(p=>({...p,owners:[...(p.owners||[]),u]}));setEditDdOwnerOpen(false);setEditDdOwnerSearch("");}}
+                              style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:12,textAlign:"left"}}
+                              onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                              <div style={{width:22,height:22,borderRadius:5,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:T.accent}}>{u[0].toUpperCase()}</div>
+                              {u}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {/* Experts */}
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Domain Experts</label>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
+                    {(editDd.experts||[]).map(o=>(
+                      <div key={o} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:5,background:"rgba(217,119,6,.1)",border:`1px solid rgba(217,119,6,.2)`,borderLeft:`3px solid #d97706`}}>
+                        <div style={{width:16,height:16,borderRadius:3,background:"rgba(217,119,6,.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#d97706"}}>{o[0].toUpperCase()}</div>
+                        <span style={{fontSize:11.5,color:"#d97706",fontWeight:500}}>{o}</span>
+                        <button onClick={()=>setEditDd(p=>({...p,experts:(p.experts||[]).filter(x=>x!==o)}))} style={{background:"none",border:"none",color:"#d97706",cursor:"pointer",padding:0,fontSize:11,lineHeight:1,marginLeft:1}}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{position:"relative"}}>
+                    <button onClick={()=>{setEditDdExpertOpen(p=>!p);setEditDdExpertSearch("");}} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",borderRadius:8,border:`1.5px solid ${editDdExpertOpen?T.accent:T.border}`,background:T.bgElevated,color:T.textSub,fontSize:12,cursor:"pointer",width:"100%"}}>
+                      {Ic.plus(10)} Add expert
+                    </button>
+                    {editDdExpertOpen&&(
+                      <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,boxShadow:"0 8px 24px rgba(0,0,0,.25)",zIndex:50,overflow:"hidden"}}>
+                        <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}>
+                          <input autoFocus value={editDdExpertSearch} onChange={e=>setEditDdExpertSearch(e.target.value)} placeholder="Search users…"
+                            style={{width:"100%",padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+                        </div>
+                        <div style={{maxHeight:150,overflowY:"auto"}}>
+                          {ALL_USERS.filter(u=>!(editDd.experts||[]).includes(u)&&(!editDdExpertSearch||u.includes(editDdExpertSearch.toLowerCase()))).map(u=>(
+                            <button key={u} onClick={()=>{setEditDd(p=>({...p,experts:[...(p.experts||[]),u]}));setEditDdExpertOpen(false);setEditDdExpertSearch("");}}
+                              style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:12,textAlign:"left"}}
+                              onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                              <div style={{width:22,height:22,borderRadius:5,background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#d97706"}}>{u[0].toUpperCase()}</div>
+                              {u}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.bgElevated,borderRadius:"0 0 16px 16px"}}>
+                <button onClick={()=>{setEditDomainOpen(false);setEditDd(null);}} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+                <button onClick={handleEditDomain} disabled={!editDd.name.trim()} style={{padding:"8px 18px",borderRadius:8,background:editDd.name.trim()?T.accent:"rgba(100,100,120,.35)",border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:editDd.name.trim()?"pointer":"default",opacity:editDd.name.trim()?1:.7}}>Save Changes</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
