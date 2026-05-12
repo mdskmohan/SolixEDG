@@ -7884,11 +7884,24 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
           {/* DOMAIN */}
           <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
             <MetaLabel>Domain</MetaLabel>
+            {data.domain&&(
+              <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
+                <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 10px",borderRadius:99,background:T.accentDim,border:`1px solid ${T.accent}33`,transition:"border-color .1s"}}
+                  onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent+"66"} onMouseLeave={e=>e.currentTarget.style.borderColor=`${T.accent}33`}>
+                  <span style={{fontSize:12,color:T.accent,fontWeight:600}}>{data.domain}</span>
+                  <button onClick={()=>setData(d=>({...d,domain:""}))} style={{background:"none",border:"none",cursor:"pointer",color:T.accent,padding:0,display:"flex",lineHeight:1,opacity:.6}}
+                    onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>
+                    <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                  </button>
+                </div>
+              </div>
+            )}
             <button onMouseDown={e=>{e.stopPropagation();setDomainOpen(p=>!p);setCertOpen(false);setOwnerOpen(false);}}
-              style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 11px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}33`,cursor:"pointer",fontSize:13,fontWeight:600,color:T.accent,transition:"opacity .1s"}}
-              onMouseEnter={e=>e.currentTarget.style.opacity=".8"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
-              {data.domain||"—"}
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:T.accent}}><path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+              style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"4px 10px",borderRadius:6,border:`1px dashed ${domainOpen?T.accent:T.border}`,background:"none",color:domainOpen?T.accent:T.textMuted,cursor:"pointer",transition:"all .12s"}}
+              onMouseEnter={e=>{if(!domainOpen){e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}}
+              onMouseLeave={e=>{if(!domainOpen){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}}>
+              <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+              {data.domain?"Change domain":"Add domain"}
             </button>
             {domainOpen&&(
               <div onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",top:"calc(100% - 4px)",left:16,right:16,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",overflow:"hidden"}}>
@@ -8799,6 +8812,41 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
           ))}
         </div>
 
+        {/* DOMAIN */}
+        <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
+          <MetaLabel>Domain</MetaLabel>
+          {data.domain&&(
+            <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
+              <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:99,background:T.accentDim,border:`1px solid ${T.accent}33`,transition:"border-color .1s"}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent+"66"} onMouseLeave={e=>e.currentTarget.style.borderColor=`${T.accent}33`}>
+                <span style={{fontSize:12,color:T.accent,fontWeight:600}}>{data.domain}</span>
+                <button onClick={()=>setData(d=>({...d,domain:""}))} style={{background:"none",border:"none",cursor:"pointer",color:T.accent,padding:0,display:"flex",lineHeight:1,opacity:.6}}
+                  onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>
+                  <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                </button>
+              </div>
+            </div>
+          )}
+          <button onMouseDown={e=>{e.stopPropagation();setDomainOpen(p=>!p);setCertOpen(false);setOwnerOpen(false);}}
+            style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"4px 10px",borderRadius:6,border:`1px dashed ${domainOpen?T.accent:T.border}`,background:"none",color:domainOpen?T.accent:T.textMuted,cursor:"pointer",transition:"all .12s"}}
+            onMouseEnter={e=>{if(!domainOpen){e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}}
+            onMouseLeave={e=>{if(!domainOpen){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}}>
+            <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+            {data.domain?"Change domain":"Add domain"}
+          </button>
+          {domainOpen&&(
+            <div onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",top:"calc(100% - 4px)",left:16,right:16,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",overflow:"hidden"}}>
+              {DOMAINS_LIST.map(d=>(
+                <button key={d} onMouseDown={e=>{e.stopPropagation();setData(dd=>({...dd,domain:d}));setDomainOpen(false);onToast(`Domain set to ${d}`,"success");}}
+                  style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 14px",background:data.domain===d?T.accentDim:"transparent",border:"none",cursor:"pointer",fontSize:12.5,color:data.domain===d?T.accent:T.textSub,fontWeight:data.domain===d?600:400,transition:"background .1s"}}
+                  onMouseEnter={e=>{if(data.domain!==d)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(data.domain!==d)e.currentTarget.style.background="transparent";}}>
+                  {d}{data.domain===d&&<span style={{color:T.accent,fontSize:12}}>✓</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* OWNERS */}
         <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
           <MetaLabel>Owners</MetaLabel>
@@ -9186,6 +9234,10 @@ const CatalogView = ({onAsset})=>{
               items={ALL_ASSET_TYPES.sort().map(v=>({val:v,label:v}))}
               sel={selTypes} onToggle={(v,c)=>c?setSelTypes(new Set()):toggle(setSelTypes,v)}
               renderItem={item=><div style={{display:"flex",alignItems:"center",gap:5}}><TypeBadge type={item.val}/></div>}/>
+            <FacetGroup id="domain" label="Domain"
+              icon={<svg width="11" height="11" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.2"/><path d="M6 1.5c-1.5 1.5-2 3-2 4.5s.5 3 2 4.5M6 1.5c1.5 1.5 2 3 2 4.5s-.5 3-2 4.5M1.5 6h9" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>}
+              items={[...new Set(ASSETS.map(a=>a.domain))].filter(Boolean).sort().map(v=>({val:v,label:v}))}
+              sel={selDomains} onToggle={(v,c)=>c?setSelDomains(new Set()):toggle(setSelDomains,v)}/>
             <FacetGroup id="owner" label="Owner" icon={Ic.access(11)}
               items={[...new Set(ASSETS.map(a=>a.owner))].map(v=>({val:v,label:v}))}
               sel={selOwners} onToggle={(v,c)=>c?setSelOwners(new Set()):toggle(setSelOwners,v)}
