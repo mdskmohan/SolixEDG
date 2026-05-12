@@ -19074,39 +19074,41 @@ const TagManagementView = ({onToast}) => {
                     </div>
 
                     {/* Right sidebar */}
-                    <div style={{width:256,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:'auto',padding:'20px 16px',display:'flex',flexDirection:'column',gap:0}}>
+                    {(()=>{
+                      const SideLabel = ({ch,onEdit})=>(
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:9}}>
+                          <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.08em'}}>{ch}</div>
+                          {onEdit&&<button onClick={onEdit} style={{background:'none',border:'none',cursor:'pointer',color:T.textMuted,padding:'2px 3px',display:'flex',borderRadius:4,transition:'all .12s'}}
+                            onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
+                            onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background='none';}}>
+                            <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          </button>}
+                        </div>
+                      );
+                      const currentCat = editing ? (editDraft?.category||'') : (selTag.category||'');
+                      const catSearchLower = catDropSearch.toLowerCase().trim();
+                      const filteredCats = allCategories.filter(c=>!catSearchLower||c.toLowerCase().includes(catSearchLower));
+                      const showInlineCreate = catDropSearch.trim() && !allCategories.map(c=>c.toLowerCase()).includes(catDropSearch.trim().toLowerCase());
+                      const applyCategory = (cat) => {
+                        const trimmed = cat.trim();
+                        if(!trimmed) return;
+                        if(!allCategories.includes(trimmed)) setCustomCategories(p=>[...new Set([...p,trimmed])]);
+                        if(editing){ setEditDraft(d=>({...d,category:trimmed})); } else { updateTagDef(selTag.id,{...selTag,category:trimmed}); onToast('Category assigned','success'); }
+                        setCatDropOpen(false); setCatDropSearch('');
+                      };
+                      const clearCategory = () => {
+                        if(editing) setEditDraft(d=>({...d,category:''}));
+                        else { updateTagDef(selTag.id,{...selTag,category:''}); onToast('Category removed','success'); }
+                      };
+                      const tagDomain = (editing?editDraft?.domain:null)||(selTag.domain)||null;
+                      return (
+                      <div style={{width:272,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:'auto'}}>
 
-                      {/* Category */}
+                      {/* CATEGORY */}
                       {(()=>{
-                        const currentCat = editing ? (editDraft?.category||'') : (selTag.category||'');
-                        const catSearchLower = catDropSearch.toLowerCase().trim();
-                        const filteredCats = allCategories.filter(c=>!catSearchLower||c.toLowerCase().includes(catSearchLower));
-                        const showInlineCreate = catDropSearch.trim() && !allCategories.map(c=>c.toLowerCase()).includes(catDropSearch.trim().toLowerCase());
-
-                        const applyCategory = (cat) => {
-                          const trimmed = cat.trim();
-                          if(!trimmed) return;
-                          // Add to customCategories if new
-                          if(!allCategories.includes(trimmed)) setCustomCategories(p=>[...new Set([...p,trimmed])]);
-                          if(editing){
-                            setEditDraft(d=>({...d,category:trimmed}));
-                          } else {
-                            // Quick-assign without entering edit mode
-                            updateTagDef(selTag.id,{...selTag,category:trimmed});
-                            onToast('Category assigned','success');
-                          }
-                          setCatDropOpen(false);
-                          setCatDropSearch('');
-                        };
-
-                        const clearCategory = () => {
-                          if(editing) setEditDraft(d=>({...d,category:''}));
-                          else { updateTagDef(selTag.id,{...selTag,category:''}); onToast('Category removed','success'); }
-                        };
-
                         return (
-                          <div style={{marginBottom:18,position:'relative'}} ref={catDropRef}>
-                            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Category</div>
+                          <div style={{padding:'16px',borderBottom:`1px solid ${T.border}`,position:'relative'}} ref={catDropRef}>
+                            <SideLabel ch="Category"/>
 
                             {/* Read mode — categorized: badge + edit pencil on hover */}
                             {!editing && currentCat && (
@@ -19208,51 +19210,20 @@ const TagManagementView = ({onToast}) => {
                         );
                       })()}
 
-                      <div style={{height:1,background:T.border,marginBottom:18}}/>
+                      {/* DOMAIN */}
+                      <div style={{padding:'16px',borderBottom:`1px solid ${T.border}`}}>
+                        <SideLabel ch="Domain" onEdit={()=>{setTagEditModal('domain');setTagModalSearch('');}}/>
+                        {tagDomain
+                          ? <div style={{display:'inline-flex',alignItems:'center',padding:'4px 12px 4px 9px',borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
+                              <span style={{fontSize:12,color:T.accent,fontWeight:600}}>{tagDomain}</span>
+                            </div>
+                          : <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No domain assigned</span>
+                        }
+                      </div>
 
-                      {/* Domain */}
-                      {(()=>{
-                        const DOMAIN_LIST = ["Commerce","Finance","Product","Marketing","ML","Engineering"];
-                        const DOMAIN_COLORS = {Commerce:T.amber,Finance:T.green,Product:T.accent,Marketing:T.rose,ML:T.violet,Engineering:T.blue};
-                        const tagDomain = (editing?editDraft?.domain:null)||(selTag.domain)||null;
-                        return (
-                          <div style={{marginBottom:18}}>
-                            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Domain</div>
-                            {editing
-                              ? <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
-                                  {DOMAIN_LIST.map(d=>{
-                                    const sel=(editDraft?.domain||'')=== d;
-                                    const dc=DOMAIN_COLORS[d]||T.accent;
-                                    return (
-                                      <button key={d} onClick={()=>setEditDraft(p=>({...p,domain:sel?'':d}))}
-                                        style={{padding:'3px 10px',borderRadius:99,fontSize:11,fontWeight:sel?600:400,border:`1.5px solid ${sel?dc:T.border}`,background:sel?`${dc}15`:'transparent',color:sel?dc:T.textMuted,cursor:'pointer',transition:'all .12s'}}>
-                                        {d}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              : tagDomain
-                                ? <div style={{display:'inline-flex',alignItems:'center',padding:'4px 12px 4px 9px',borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
-                                    <span style={{fontSize:12,color:T.accent,fontWeight:600}}>{tagDomain}</span>
-                                  </div>
-                                : <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No domain assigned</span>
-                            }
-                          </div>
-                        );
-                      })()}
-
-                      <div style={{height:1,background:T.border,marginBottom:18}}/>
-
-                      {/* Owner */}
-                      <div style={{marginBottom:18}}>
-                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-                          <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Owner</div>
-                          <button onClick={()=>{setTagEditModal('owners');setTagModalSearch('');}} style={{background:'none',border:'none',cursor:'pointer',color:T.textMuted,padding:'2px 3px',display:'flex',borderRadius:4,transition:'all .12s'}}
-                            onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
-                            onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background='none';}}>
-                            <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                          </button>
-                        </div>
+                      {/* OWNER */}
+                      <div style={{padding:'16px',borderBottom:`1px solid ${T.border}`}}>
+                        <SideLabel ch="Owner" onEdit={()=>{setTagEditModal('owners');setTagModalSearch('');}}/>
                         <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
                           {tagOwners.length>0?tagOwners.map((o,i)=>(
                             <div key={i} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 10px 3px 6px',borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
@@ -19263,18 +19234,9 @@ const TagManagementView = ({onToast}) => {
                         </div>
                       </div>
 
-                      <div style={{height:1,background:T.border,marginBottom:18}}/>
-
-                      {/* Steward */}
-                      <div style={{marginBottom:18}}>
-                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-                          <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Steward</div>
-                          <button onClick={()=>{setTagEditModal('stewards');setTagModalSearch('');}} style={{background:'none',border:'none',cursor:'pointer',color:T.textMuted,padding:'2px 3px',display:'flex',borderRadius:4,transition:'all .12s'}}
-                            onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
-                            onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background='none';}}>
-                            <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                          </button>
-                        </div>
+                      {/* STEWARD */}
+                      <div style={{padding:'16px',borderBottom:`1px solid ${T.border}`}}>
+                        <SideLabel ch="Steward" onEdit={()=>{setTagEditModal('stewards');setTagModalSearch('');}}/>
                         <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
                           {tagStewards.length>0?tagStewards.map((s,i)=>(
                             <div key={i} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 10px 3px 6px',borderRadius:5,background:'rgba(217,119,6,.08)',borderTop:'1px solid rgba(217,119,6,.2)',borderRight:'1px solid rgba(217,119,6,.2)',borderBottom:'1px solid rgba(217,119,6,.2)',borderLeft:'3px solid #d97706'}}>
@@ -19285,7 +19247,33 @@ const TagManagementView = ({onToast}) => {
                         </div>
                       </div>
 
+                      {/* LINKED ASSETS */}
+                      <div style={{padding:'16px',borderBottom:`1px solid ${T.border}`}}>
+                        <SideLabel ch="Linked Assets"/>
+                        <button onClick={()=>setDetailTab('assets')} style={{fontSize:13,fontWeight:700,color:T.accent,background:'none',border:'none',cursor:'pointer',padding:0}}
+                          onMouseEnter={e=>e.currentTarget.style.opacity='0.7'} onMouseLeave={e=>e.currentTarget.style.opacity='1'}>
+                          {affectedAssets.length} asset{affectedAssets.length!==1?'s':''} →
+                        </button>
+                      </div>
+
+                      {/* ACTIONS */}
+                      <div style={{padding:'16px'}}>
+                        <SideLabel ch="Actions"/>
+                        {[
+                          {l:'Request Changes',action:()=>onToast('Review request sent','success')},
+                          {l:'Copy Link',action:()=>onToast('Link copied','success')},
+                          {l:'View in Catalog',action:()=>onToast('Opening catalog…','success')},
+                        ].map((a,i)=>(
+                          <button key={i} onClick={a.action} style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 0',background:'none',border:'none',borderBottom:i<2?`1px solid ${T.border}`:'none',color:T.textSub,fontSize:12.5,cursor:'pointer'}}
+                            onMouseEnter={e=>e.currentTarget.style.color=T.accent} onMouseLeave={e=>e.currentTarget.style.color=T.textSub}>
+                            {a.l}<svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                          </button>
+                        ))}
+                      </div>
+
                     </div>
+                      );
+                    })()}
                   </div>
                 )}
 
@@ -19468,6 +19456,31 @@ const TagManagementView = ({onToast}) => {
                           <div style={{width:26,height:26,borderRadius:isSt?'50%':4,background:isSt?'rgba(217,119,6,.15)':T.accentDim,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:isSt?'#d97706':T.accent,flexShrink:0}}>{tava(u)}</div>
                           <span style={{flex:1,fontSize:13,color:T.text}}>{u}</span>
                           {sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={isSt?'#d97706':T.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                        </button>
+                      );
+                    });
+                  })()}
+                  {tagEditModal==='domain'&&(()=>{
+                    const DOMAIN_LIST=["Commerce","Finance","Product","Marketing","ML","Engineering"];
+                    const DOMAIN_COLORS={Commerce:T.amber,Finance:T.green,Product:T.accent,Marketing:T.rose,ML:T.violet,Engineering:T.blue};
+                    const currDom=(editing?editDraft?.domain:null)||(selTag?.domain)||null;
+                    return DOMAIN_LIST.filter(d=>!tagModalSearch||d.toLowerCase().includes(tagModalSearch.toLowerCase())).map(d=>{
+                      const sel=currDom===d;
+                      const dc=DOMAIN_COLORS[d]||T.accent;
+                      return (
+                        <button key={d} onClick={()=>{
+                          const nd=sel?'':d;
+                          if(editing)setEditDraft(p=>({...p,domain:nd}));
+                          else{updateTagDef(selTag.id,{...selTag,domain:nd});onToast(sel?'Domain cleared':'Domain assigned','success');}
+                          setTagEditModal(null);
+                        }}
+                          style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 14px',background:sel?T.bgElevated:'transparent',border:'none',cursor:'pointer',transition:'background .1s'}}
+                          onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background='transparent';}}>
+                          <div style={{width:26,height:26,borderRadius:4,background:`${dc}18`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                            <div style={{width:10,height:10,borderRadius:'50%',background:dc}}/>
+                          </div>
+                          <span style={{flex:1,fontSize:13,color:T.text}}>{d}</span>
+                          {sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={dc} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                         </button>
                       );
                     });
