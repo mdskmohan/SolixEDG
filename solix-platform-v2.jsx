@@ -1044,6 +1044,18 @@ const GlossaryView = ({onToast}) => {
   const USERS   = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
   const DOMAINS = ["Commerce","Finance","Product","Marketing","ML","Engineering"];
   const ava     = name => name.split(".").map(s=>s[0].toUpperCase()).join("");
+  const TAG_COLORS_GLOSS = {
+    PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},
+    revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},
+    finance:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},
+    KPI:{bg:"rgba(22,163,74,.08)",color:"#16a34a",border:"rgba(22,163,74,.2)"},
+    sensitive:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"},
+    events:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},
+    model:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},
+    etl:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},
+    marketing:{bg:"rgba(236,72,153,.08)",color:"#db2777",border:"rgba(236,72,153,.2)"},
+    dimension:{bg:"rgba(20,184,166,.08)",color:"#0d9488",border:"rgba(20,184,166,.2)"},
+  };
 
   const openModal = (type,data={}) => { setModal({type,data}); setForm({...data}); };
   const closeModal = () => { setModal(null); setForm({}); };
@@ -1282,7 +1294,7 @@ const GlossaryView = ({onToast}) => {
         <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10.5,flexWrap:"wrap"}}>
           <span style={{width:6,height:6,borderRadius:"50%",background:sm.color,display:"inline-block",flexShrink:0}}/>
           <span style={{color:sm.color,fontWeight:600}}>{t.status}</span>
-          {(t.tags||[]).slice(0,2).map(tag=><span key={tag} style={{padding:"1px 6px",borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>{tag}</span>)}
+          {(t.tags||[]).slice(0,2).map(tag=>{const tc_=TAG_COLORS_GLOSS[tag]||{bg:T.bgElevated,color:T.textSub,border:T.border};return <span key={tag} style={{padding:"2px 8px 2px 7px",borderRadius:4,background:tc_.bg,borderTop:`1px solid ${tc_.border}`,borderRight:`1px solid ${tc_.border}`,borderBottom:`1px solid ${tc_.border}`,borderLeft:`3px solid ${tc_.color}`,color:tc_.color,fontSize:10.5,fontWeight:600}}>{tag}</span>;})}
           <span style={{marginLeft:"auto",color:T.textMuted}}>{t.linked} assets</span>
         </div>
       </div>
@@ -1802,14 +1814,7 @@ const GlossaryView = ({onToast}) => {
     const owners = Array.isArray(term.owners) ? term.owners : (term.owner ? [term.owner] : []);
     const stewardsG = Array.isArray(term.stewards)?term.stewards:(term.steward?[term.steward]:[]);
     const ALL_TAGS_GLOSS = ["PII","revenue","finance","KPI","events","sensitive","dimension","model","etl","marketing"];
-    const GTAG_COLORS = {
-      PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},
-      revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},
-      finance:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},
-      KPI:{bg:"rgba(22,163,74,.08)",color:"#16a34a",border:"rgba(22,163,74,.2)"},
-      sensitive:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"},
-    };
-    const gTagColor = t => GTAG_COLORS[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};
+    const gTagColor = t => TAG_COLORS_GLOSS[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};
     return (
       <><div style={{flex:1,display:"flex",overflow:"hidden",minWidth:0}}>
         <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
@@ -2013,9 +2018,9 @@ const GlossaryView = ({onToast}) => {
             {/* GLOSSARY */}
             <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
               <SideLabel ch="Glossary"/>
-              <div style={{display:"flex",alignItems:"center",gap:7,padding:"5px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,width:"fit-content"}}>
-                <span style={{fontSize:14}}>{termGlossary?.icon}</span>
-                <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{termGlossary?.name||term.domain}</span>
+              <div style={{display:"inline-flex",alignItems:"center",gap:7,padding:"4px 12px 4px 9px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
+                <span style={{fontSize:13}}>{termGlossary?.icon}</span>
+                <span style={{fontSize:12,fontWeight:600,color:T.accent}}>{termGlossary?.name||term.domain}</span>
               </div>
             </div>
 
@@ -8138,11 +8143,9 @@ const FileAssetDetail = ({asset, onBack, onToast}) => {
               {(asset.tags||[]).length===0
                 ? <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags applied</span>
                 : <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                    {asset.tags.map(t=>(
-                      <span key={t} style={{fontSize:11.5,padding:"3px 10px",borderRadius:99,background:t==="PII"?T.roseDim:T.bgHover,color:t==="PII"?T.rose:T.textSub,border:`1px solid ${t==="PII"?"rgba(253,164,175,.25)":T.border}`,fontWeight:t==="PII"?700:400}}>
-                        {t==="PII"&&"🔒 "}{t}
-                      </span>
-                    ))}
+                    {asset.tags.map(t=>{const c=tc(t);return(
+                      <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}</span>
+                    );})}
                   </div>
               }
             </Card2>
