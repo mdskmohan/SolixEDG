@@ -7594,12 +7594,8 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
   const [tab,          setTab]         = useState("overview");
   const [data,         setData]        = useState({...asset, owners:asset.owners||[asset.owner], stewards:asset.stewards||(asset.steward?[asset.steward]:[]), tags:[...(asset.tags||[])]});
   const [certOpen,     setCertOpen]    = useState(false);
-  const [domainOpen,   setDomainOpen]  = useState(false);
-  const [ownerOpen,    setOwnerOpen]   = useState(false);
-  const [ownerSearch,  setOwnerSearch] = useState("");
-  const [stewardOpen,  setStewardOpen] = useState(false);
-  const [stewardSearch,setStewardSearch]=useState("");
-  const [tagInput,       setTagInput]       = useState("");
+  const [editModal,    setEditModal]   = useState(null);
+  const [modalSearch,  setModalSearch] = useState("");
   const [certModal,      setCertModal]      = useState(false);
   const [certNote,       setCertNote]       = useState("");
   const [showAllOwners,  setShowAllOwners]  = useState(false);
@@ -7630,16 +7626,23 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
   const stewards = Array.isArray(data.stewards) ? data.stewards : (data.steward ? [data.steward] : []);
 
   useEffect(()=>{
-    if(!certOpen&&!domainOpen&&!ownerOpen&&!stewardOpen) return;
-    const close=()=>{setCertOpen(false);setDomainOpen(false);setOwnerOpen(false);setOwnerSearch("");setStewardOpen(false);setStewardSearch("");};
+    if(!certOpen) return;
+    const close=()=>setCertOpen(false);
     document.addEventListener("mousedown",close);
     return ()=>document.removeEventListener("mousedown",close);
-  },[certOpen,domainOpen,ownerOpen,stewardOpen]);
+  },[certOpen]);
 
   const handleCertify = () => { setData(d=>({...d,cert:"Approved"})); setCertModal(false); onToast(`${asset.name} certified successfully`,"success"); };
 
-  const MetaLabel = ({children})=>(
-    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>{children}</div>
+  const MetaLabel = ({children,onEdit})=>(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>{children}</div>
+      {onEdit&&<button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}}
+        onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
+        onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
+        <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </button>}
+    </div>
   );
 
   const FILE_FORMAT_COLORS = {CSV:"#16a34a",Parquet:"#0891b2",JSON:"#d97706",ORC:"#7c3aed"};
@@ -7882,44 +7885,28 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
           </div>
 
           {/* DOMAIN */}
-          <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
-            <MetaLabel>Domain</MetaLabel>
-            {data.domain&&(
-              <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
-                <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 10px",borderRadius:99,background:T.accentDim,border:`1px solid ${T.accent}33`,transition:"border-color .1s"}}
-                  onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent+"66"} onMouseLeave={e=>e.currentTarget.style.borderColor=`${T.accent}33`}>
+          <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
+            <MetaLabel onEdit={()=>{setEditModal("domain");setModalSearch("");}}>Domain</MetaLabel>
+            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+              {data.domain?(
+                <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:99,background:T.accentDim,border:`1px solid ${T.accent}33`}}>
                   <span style={{fontSize:12,color:T.accent,fontWeight:600}}>{data.domain}</span>
                   <button onClick={()=>setData(d=>({...d,domain:""}))} style={{background:"none",border:"none",cursor:"pointer",color:T.accent,padding:0,display:"flex",lineHeight:1,opacity:.6}}
                     onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>
                     <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
                   </button>
                 </div>
-              </div>
-            )}
-            <button onMouseDown={e=>{e.stopPropagation();setDomainOpen(p=>!p);setCertOpen(false);setOwnerOpen(false);}}
-              style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"4px 10px",borderRadius:6,border:`1px dashed ${domainOpen?T.accent:T.border}`,background:"none",color:domainOpen?T.accent:T.textMuted,cursor:"pointer",transition:"all .12s"}}
-              onMouseEnter={e=>{if(!domainOpen){e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}}
-              onMouseLeave={e=>{if(!domainOpen){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}}>
-              <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-              {data.domain?"Change domain":"Add domain"}
-            </button>
-            {domainOpen&&(
-              <div onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",top:"calc(100% - 4px)",left:16,right:16,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",overflow:"hidden"}}>
-                {DOMAINS_LIST.map(d=>(
-                  <button key={d} onMouseDown={e=>{e.stopPropagation();setData(dd=>({...dd,domain:d}));setDomainOpen(false);onToast(`Domain set to ${d}`,"success");}}
-                    style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 14px",background:data.domain===d?T.accentDim:"transparent",border:"none",cursor:"pointer",fontSize:12.5,color:data.domain===d?T.accent:T.textSub,fontWeight:data.domain===d?600:400,transition:"background .1s"}}
-                    onMouseEnter={e=>{if(data.domain!==d)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(data.domain!==d)e.currentTarget.style.background="transparent";}}>
-                    {d}{data.domain===d&&<span style={{color:T.accent,fontSize:12}}>✓</span>}
-                  </button>
-                ))}
-              </div>
-            )}
+              ):(
+                <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No domain set</span>
+              )}
+            </div>
           </div>
 
           {/* OWNERS */}
-          <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
-            <MetaLabel>Owners</MetaLabel>
-            <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
+          <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
+            <MetaLabel onEdit={()=>{setEditModal("owners");setModalSearch("");}}>Owners</MetaLabel>
+            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+              {owners.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owners assigned</span>}
               {(showAllOwners?owners:owners.slice(0,3)).map((o,i)=>(
                 <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,transition:"border-color .1s"}}
                   onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderLight} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
@@ -7935,133 +7922,48 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
               {owners.length>3&&!showAllOwners&&<span onClick={()=>setShowAllOwners(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{owners.length-3} more</span>}
               {owners.length>3&&showAllOwners&&<span onClick={()=>setShowAllOwners(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
             </div>
-            <button onMouseDown={e=>{e.stopPropagation();setOwnerOpen(p=>{if(!p)setOwnerSearch("");return !p;});setCertOpen(false);setDomainOpen(false);}}
-              style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"4px 10px",borderRadius:6,border:`1px dashed ${ownerOpen?T.accent:T.border}`,background:"none",color:ownerOpen?T.accent:T.textMuted,cursor:"pointer",transition:"all .12s"}}
-              onMouseEnter={e=>{if(!ownerOpen){e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}}
-              onMouseLeave={e=>{if(!ownerOpen){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}}>
-              <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg> Add owner
-            </button>
-            {ownerOpen&&(
-              <div onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",left:16,right:16,top:"calc(100% - 4px)",zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",overflow:"hidden"}}>
-                <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}>
-                  <input autoFocus value={ownerSearch} onChange={e=>setOwnerSearch(e.target.value)} placeholder="Search users…"
-                    style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none"}}
-                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                </div>
-                <div style={{maxHeight:170,overflowY:"auto"}}>
-                  {USERS_LIST.filter(u=>!ownerSearch||u.toLowerCase().includes(ownerSearch.toLowerCase())).map(u=>{
-                    const sel=owners.includes(u);
-                    return <button key={u} onMouseDown={e=>{e.stopPropagation();
-                      if(sel){const no=owners.filter(x=>x!==u);setData(d=>({...d,owners:no,owner:no[0]||""}));}
-                      else setData(d=>({...d,owners:[...owners,u],owner:owners[0]||u}));}}
-                      style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 12px",background:sel?T.bgElevated:"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}}
-                      onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
-                      <div style={{width:22,height:22,borderRadius:6,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(u)}</div>
-                      <span style={{flex:1,fontSize:12,color:T.text}}>{u}</span>
-                      {sel&&<span style={{fontSize:12,color:T.accent,fontWeight:700}}>✓</span>}
-                    </button>;
-                  })}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* STEWARDS */}
-          {(()=>{
-            return (
-            <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
-              <MetaLabel>Stewards</MetaLabel>
-              <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:stewards.length?8:0}}>
-                {(showAllStewards?stewards:stewards.slice(0,3)).map((s,i)=>(
-                  <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,transition:"border-color .1s"}}
-                    onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderLight} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                    <div style={{width:20,height:20,borderRadius:"50%",background:"rgba(217,119,6,.12)",border:"1px solid rgba(217,119,6,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(s)}</div>
-                    <span style={{fontSize:12,color:T.text,fontWeight:500}}>{s}</span>
-                    <button onClick={()=>{const ns=stewards.filter((_,j)=>j!==i);setData(d=>({...d,stewards:ns,steward:ns[0]||""}));}}
-                      style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex",lineHeight:1}}
-                      onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
-                      <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                    </button>
-                  </div>
-                ))}
-                {stewards.length>3&&!showAllStewards&&<span onClick={()=>setShowAllStewards(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{stewards.length-3} more</span>}
-                {stewards.length>3&&showAllStewards&&<span onClick={()=>setShowAllStewards(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
-              </div>
-              <button onMouseDown={e=>{e.stopPropagation();setStewardOpen(p=>!p);setCertOpen(false);setDomainOpen(false);setOwnerOpen(false);}}
-                style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,color:stewardOpen?"#d97706":T.textMuted,background:"none",border:`1px dashed ${stewardOpen?"#d97706":T.border}`,borderRadius:6,padding:"4px 10px",cursor:"pointer",transition:"all .12s"}}
-                onMouseEnter={e=>{if(!stewardOpen){e.currentTarget.style.borderColor="#d97706";e.currentTarget.style.color="#d97706";}}}
-                onMouseLeave={e=>{if(!stewardOpen){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}}>
-                <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg> Add steward
-              </button>
-              {stewardOpen&&(
-                <div onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",left:16,right:16,top:"calc(100% - 4px)",zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",overflow:"hidden"}}>
-                  <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}>
-                    <input autoFocus placeholder="Search users…" value={stewardSearch} onChange={e=>setStewardSearch(e.target.value)}
-                      style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
-                      onFocus={e=>e.target.style.borderColor="#d97706"} onBlur={e=>e.target.style.borderColor=T.border}/>
-                  </div>
-                  <div style={{maxHeight:170,overflowY:"auto"}}>
-                    {USERS_LIST.filter(u=>!stewardSearch||u.toLowerCase().includes(stewardSearch.toLowerCase())).map(u=>{
-                      const sel=stewards.includes(u);
-                      return <button key={u} onMouseDown={e=>{e.stopPropagation();
-                        if(sel){const ns=stewards.filter(x=>x!==u);setData(d=>({...d,stewards:ns,steward:ns[0]||""}));}
-                        else setData(d=>({...d,stewards:[...stewards,u],steward:stewards[0]||u}));}}
-                        style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 12px",background:sel?"rgba(217,119,6,.08)":"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}}
-                        onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
-                        <div style={{width:22,height:22,borderRadius:"50%",background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(u)}</div>
-                        <span style={{flex:1,fontSize:12,color:T.text}}>{u}</span>
-                        {sel&&<span style={{fontSize:12,color:"#d97706",fontWeight:700}}>✓</span>}
-                      </button>;
-                    })}
-                  </div>
+          <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
+            <MetaLabel onEdit={()=>{setEditModal("stewards");setModalSearch("");}}>Stewards</MetaLabel>
+            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+              {stewards.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards assigned</span>}
+              {(showAllStewards?stewards:stewards.slice(0,3)).map((s,i)=>(
+                <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,transition:"border-color .1s"}}
+                  onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderLight} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                  <div style={{width:20,height:20,borderRadius:"50%",background:"rgba(217,119,6,.12)",border:"1px solid rgba(217,119,6,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(s)}</div>
+                  <span style={{fontSize:12,color:T.text,fontWeight:500}}>{s}</span>
+                  <button onClick={()=>{const ns=stewards.filter((_,j)=>j!==i);setData(d=>({...d,stewards:ns,steward:ns[0]||""}));}}
+                    style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex",lineHeight:1}}
+                    onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
+                    <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                  </button>
                 </div>
-              )}
+              ))}
+              {stewards.length>3&&!showAllStewards&&<span onClick={()=>setShowAllStewards(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{stewards.length-3} more</span>}
+              {stewards.length>3&&showAllStewards&&<span onClick={()=>setShowAllStewards(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
             </div>
-            );
-          })()}
+          </div>
 
           {/* TAGS */}
-          {(()=>{
-            return (
-            <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
-              <MetaLabel>Tags</MetaLabel>
-              <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
-                {(showAllTags?data.tags||[]:(data.tags||[]).slice(0,3)).map(t=>{const c=tc(t);return(
-                  <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"3px 10px",borderRadius:6,background:c.bg,color:c.color,border:`1px solid ${c.border}`,fontWeight:500}}>
-                    {t}
-                    <button onClick={()=>setData(d=>({...d,tags:d.tags.filter(x=>x!==t)}))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,display:"flex",opacity:.6,lineHeight:1}}
-                      onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>
-                      <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                    </button>
-                  </span>
-                );})}
-                {(data.tags||[]).length>3&&!showAllTags&&<span onClick={()=>setShowAllTags(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{(data.tags||[]).length-3} more</span>}
-                {(data.tags||[]).length>3&&showAllTags&&<span onClick={()=>setShowAllTags(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
-              </div>
-              <button onMouseDown={e=>{e.stopPropagation();setTagInput(p=>p==="_open_"?"":"_open_");setCertOpen(false);setDomainOpen(false);setOwnerOpen(false);}}
-                style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"4px 10px",borderRadius:6,border:`1px dashed ${tagInput==="_open_"?T.accent:T.border}`,background:"none",color:tagInput==="_open_"?T.accent:T.textMuted,cursor:"pointer",transition:"all .12s"}}
-                onMouseEnter={e=>{if(tagInput!=="open_"){e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}}
-                onMouseLeave={e=>{if(tagInput!=="open_"){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}}>
-                <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg> Add tag
-              </button>
-              {tagInput==="_open_"&&(
-                <div onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",left:16,top:"calc(100% + 4px)",zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",padding:"10px 12px",minWidth:220}}>
-                  <div style={{fontSize:11,color:T.textMuted,marginBottom:8,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>Suggested</div>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                    {["PII","revenue","finance","KPI","events","sensitive","dimension","model","etl","marketing"].filter(s=>!(data.tags||[]).includes(s)).map(s=>(
-                      <button key={s} onMouseDown={e=>{e.stopPropagation();setData(d=>({...d,tags:[...(d.tags||[]),s]}));setTagInput("");}}
-                        style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",transition:"all .1s"}}
-                        onMouseEnter={e=>{e.currentTarget.style.background=T.accentDim;e.currentTarget.style.color=T.accent;e.currentTarget.style.borderColor=T.accent+"55";}}
-                        onMouseLeave={e=>{e.currentTarget.style.background=T.bgElevated;e.currentTarget.style.color=T.textSub;e.currentTarget.style.borderColor=T.border;}}>
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+          <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
+            <MetaLabel onEdit={()=>{setEditModal("tags");setModalSearch("");}}>Tags</MetaLabel>
+            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+              {(data.tags||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
+              {(showAllTags?data.tags||[]:(data.tags||[]).slice(0,3)).map(t=>{const c=tc(t);return(
+                <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"3px 10px",borderRadius:6,background:c.bg,color:c.color,border:`1px solid ${c.border}`,fontWeight:500}}>
+                  {t}
+                  <button onClick={()=>setData(d=>({...d,tags:d.tags.filter(x=>x!==t)}))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,display:"flex",opacity:.6,lineHeight:1}}
+                    onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>
+                    <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                  </button>
+                </span>
+              );})}
+              {(data.tags||[]).length>3&&!showAllTags&&<span onClick={()=>setShowAllTags(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{(data.tags||[]).length-3} more</span>}
+              {(data.tags||[]).length>3&&showAllTags&&<span onClick={()=>setShowAllTags(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
             </div>
-            );
-          })()}
+          </div>
 
           {/* ACTIONS */}
           <div style={{padding:"16px"}}>
@@ -8082,6 +7984,90 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
 
         </div>
       </div>
+
+      {/* Edit Metadata Modal */}
+      {editModal&&(
+        <>
+          <div onClick={()=>setEditModal(null)} style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,.4)"}}/>
+          <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:501,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:300,display:"flex",flexDirection:"column",maxHeight:"80vh",overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+              <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Edit {editModal==="domain"?"Domain":editModal==="owners"?"Owners":editModal==="stewards"?"Stewards":"Tags"}</span>
+              <button onClick={()=>setEditModal(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5,transition:"all .1s"}}
+                onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
+                <svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+            {editModal!=="domain"&&(
+              <div style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                <input autoFocus value={modalSearch} onChange={e=>setModalSearch(e.target.value)}
+                  placeholder={editModal==="tags"?"Search tags…":"Search users…"}
+                  style={{width:"100%",padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"}}
+                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+              </div>
+            )}
+            <div style={{overflowY:"auto",flex:1}}>
+              {editModal==="domain"&&DOMAINS_LIST.map(d=>(
+                <button key={d} onClick={()=>{setData(dd=>({...dd,domain:d}));setEditModal(null);onToast(`Domain set to ${d}`,"success");}}
+                  style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 16px",background:data.domain===d?T.accentDim:"transparent",border:"none",cursor:"pointer",fontSize:13,color:data.domain===d?T.accent:T.textSub,fontWeight:data.domain===d?600:400,transition:"background .1s"}}
+                  onMouseEnter={e=>{if(data.domain!==d)e.currentTarget.style.background=T.bgHover;}}
+                  onMouseLeave={e=>{if(data.domain!==d)e.currentTarget.style.background="transparent";}}>
+                  {d}
+                  {data.domain===d&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={T.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </button>
+              ))}
+              {editModal==="owners"&&USERS_LIST.filter(u=>!modalSearch||u.toLowerCase().includes(modalSearch.toLowerCase())).map(u=>{
+                const sel=owners.includes(u);
+                return <button key={u} onClick={()=>{
+                  if(sel){const no=owners.filter(x=>x!==u);setData(d=>({...d,owners:no,owner:no[0]||""}));}
+                  else setData(d=>({...d,owners:[...owners,u],owner:owners[0]||u}));}}
+                  style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 16px",background:sel?T.bgElevated:"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}}
+                  onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
+                  <div style={{width:24,height:24,borderRadius:6,background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8.5,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(u)}</div>
+                  <span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>
+                  {sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={T.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </button>;
+              })}
+              {editModal==="stewards"&&USERS_LIST.filter(u=>!modalSearch||u.toLowerCase().includes(modalSearch.toLowerCase())).map(u=>{
+                const sel=stewards.includes(u);
+                return <button key={u} onClick={()=>{
+                  if(sel){const ns=stewards.filter(x=>x!==u);setData(d=>({...d,stewards:ns,steward:ns[0]||""}));}
+                  else setData(d=>({...d,stewards:[...stewards,u],steward:stewards[0]||u}));}}
+                  style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 16px",background:sel?"rgba(217,119,6,.08)":"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}}
+                  onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
+                  <div style={{width:24,height:24,borderRadius:"50%",background:"rgba(217,119,6,.12)",border:"1px solid rgba(217,119,6,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8.5,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(u)}</div>
+                  <span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>
+                  {sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke="#d97706" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </button>;
+              })}
+              {editModal==="tags"&&(
+                <div style={{padding:"12px 16px"}}>
+                  <div style={{fontSize:11,color:T.textMuted,marginBottom:10,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>{modalSearch?"Results":"Suggested"}</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                    {["PII","revenue","finance","KPI","events","sensitive","dimension","model","etl","marketing"]
+                      .filter(s=>!modalSearch||s.toLowerCase().includes(modalSearch.toLowerCase()))
+                      .map(s=>{
+                        const sel=(data.tags||[]).includes(s);
+                        const c=tc(s);
+                        return <button key={s} onClick={()=>setData(d=>({...d,tags:sel?d.tags.filter(x=>x!==s):[...(d.tags||[]),s]}))}
+                          style={{display:"inline-flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,fontSize:12,cursor:"pointer",transition:"all .1s",background:sel?c.bg:T.bgElevated,border:`1px solid ${sel?c.border:T.border}`,color:sel?c.color:T.textSub,fontWeight:sel?600:400}}>
+                          {sel&&<svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                          {s}
+                        </button>;
+                      })}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div style={{padding:"12px 16px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",flexShrink:0}}>
+              <button onClick={()=>setEditModal(null)}
+                style={{padding:"7px 20px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer",transition:"opacity .1s"}}
+                onMouseEnter={e=>e.currentTarget.style.opacity=".85"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+                Done
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Certification Modal */}
       <Modal open={certModal} onClose={()=>setCertModal(false)} title={`Certify "${asset.name}"`}>
@@ -8404,12 +8390,8 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
   const [colPanelTab,setColPanelTab]=useState("overview");
   const [data,         setData]        = useState({...asset,owners:asset.owners||[asset.owner],stewards:asset.stewards||(asset.steward?[asset.steward]:[]),tags:[...(asset.tags||[])]});
   const [certOpen,     setCertOpen]    = useState(false);
-  const [domainOpen,   setDomainOpen]  = useState(false);
-  const [ownerOpen,    setOwnerOpen]   = useState(false);
-  const [ownerSearch,  setOwnerSearch] = useState("");
-  const [stewardOpen,  setStewardOpen] = useState(false);
-  const [stewardSearch,setStewardSearch]=useState("");
-  const [tagInput,     setTagInput]    = useState("");
+  const [editModal,    setEditModal]   = useState(null);
+  const [modalSearch,  setModalSearch] = useState("");
   const [certModal,  setCertModal] = useState(false);
   const [certNote,   setCertNote]  = useState("");
   const [colTagsMap,       setColTagsMap]       = useState({});
@@ -8438,20 +8420,12 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
   const owners   = Array.isArray(data.owners)  ? data.owners   : (data.owner   ? [data.owner]   : []);
   const stewards = Array.isArray(data.stewards) ? data.stewards : (data.steward ? [data.steward] : []);
 
-  // close all dropdowns on outside click
   useEffect(()=>{
-    if(!certOpen&&!domainOpen&&!ownerOpen&&!stewardOpen) return;
-    const close=()=>{setCertOpen(false);setDomainOpen(false);setOwnerOpen(false);setOwnerSearch("");setStewardOpen(false);setStewardSearch("");};
+    if(!certOpen) return;
+    const close=()=>setCertOpen(false);
     document.addEventListener("mousedown",close);
     return ()=>document.removeEventListener("mousedown",close);
-  },[certOpen,domainOpen,ownerOpen,stewardOpen]);
-
-  const addTag=()=>{
-    const t=tagInput.trim().toLowerCase();
-    if(!t||data.tags.includes(t))return;
-    setData(d=>({...d,tags:[...d.tags,t]}));
-    setTagInput("");
-  };
+  },[certOpen]);
 
   const tabs=[
     {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},
@@ -8464,10 +8438,26 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
     onToast(`${asset.name} certified successfully`,"success");
   };
 
-  // helper label for sidebar sections
-  const MetaLabel = ({children})=>(
-    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>
-      {children}
+  const TAG_C_FULL = {
+    PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},
+    revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},
+    finance:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},
+    KPI:{bg:"rgba(22,163,74,.08)",color:"#16a34a",border:"rgba(22,163,74,.2)"},
+    sensitive:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"},
+    events:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},
+    model:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},
+    etl:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},
+  };
+  const tcFull = tag => TAG_C_FULL[tag]||{bg:T.bgElevated,color:T.textSub,border:T.border};
+
+  const MetaLabel = ({children,onEdit})=>(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>{children}</div>
+      {onEdit&&<button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}}
+        onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
+        onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
+        <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </button>}
     </div>
   );
 
@@ -8813,44 +8803,28 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
         </div>
 
         {/* DOMAIN */}
-        <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
-          <MetaLabel>Domain</MetaLabel>
-          {data.domain&&(
-            <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
-              <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:99,background:T.accentDim,border:`1px solid ${T.accent}33`,transition:"border-color .1s"}}
-                onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent+"66"} onMouseLeave={e=>e.currentTarget.style.borderColor=`${T.accent}33`}>
+        <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
+          <MetaLabel onEdit={()=>{setEditModal("domain");setModalSearch("");}}>Domain</MetaLabel>
+          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+            {data.domain?(
+              <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:99,background:T.accentDim,border:`1px solid ${T.accent}33`}}>
                 <span style={{fontSize:12,color:T.accent,fontWeight:600}}>{data.domain}</span>
                 <button onClick={()=>setData(d=>({...d,domain:""}))} style={{background:"none",border:"none",cursor:"pointer",color:T.accent,padding:0,display:"flex",lineHeight:1,opacity:.6}}
                   onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>
                   <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
                 </button>
               </div>
-            </div>
-          )}
-          <button onMouseDown={e=>{e.stopPropagation();setDomainOpen(p=>!p);setCertOpen(false);setOwnerOpen(false);}}
-            style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"4px 10px",borderRadius:6,border:`1px dashed ${domainOpen?T.accent:T.border}`,background:"none",color:domainOpen?T.accent:T.textMuted,cursor:"pointer",transition:"all .12s"}}
-            onMouseEnter={e=>{if(!domainOpen){e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}}
-            onMouseLeave={e=>{if(!domainOpen){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}}>
-            <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-            {data.domain?"Change domain":"Add domain"}
-          </button>
-          {domainOpen&&(
-            <div onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",top:"calc(100% - 4px)",left:16,right:16,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",overflow:"hidden"}}>
-              {DOMAINS_LIST.map(d=>(
-                <button key={d} onMouseDown={e=>{e.stopPropagation();setData(dd=>({...dd,domain:d}));setDomainOpen(false);onToast(`Domain set to ${d}`,"success");}}
-                  style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 14px",background:data.domain===d?T.accentDim:"transparent",border:"none",cursor:"pointer",fontSize:12.5,color:data.domain===d?T.accent:T.textSub,fontWeight:data.domain===d?600:400,transition:"background .1s"}}
-                  onMouseEnter={e=>{if(data.domain!==d)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(data.domain!==d)e.currentTarget.style.background="transparent";}}>
-                  {d}{data.domain===d&&<span style={{color:T.accent,fontSize:12}}>✓</span>}
-                </button>
-              ))}
-            </div>
-          )}
+            ):(
+              <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No domain set</span>
+            )}
+          </div>
         </div>
 
         {/* OWNERS */}
-        <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
-          <MetaLabel>Owners</MetaLabel>
-          <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
+        <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
+          <MetaLabel onEdit={()=>{setEditModal("owners");setModalSearch("");}}>Owners</MetaLabel>
+          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+            {owners.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owners assigned</span>}
             {(showAllOwners?owners:owners.slice(0,3)).map((o,i)=>(
               <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,transition:"border-color .1s"}}
                 onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderLight} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
@@ -8866,110 +8840,36 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
             {owners.length>3&&!showAllOwners&&<span onClick={()=>setShowAllOwners(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{owners.length-3} more</span>}
             {owners.length>3&&showAllOwners&&<span onClick={()=>setShowAllOwners(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
           </div>
-          <button onMouseDown={e=>{e.stopPropagation();setOwnerOpen(p=>{if(!p)setOwnerSearch("");return !p;});setCertOpen(false);setDomainOpen(false);}}
-            style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"4px 10px",borderRadius:6,border:`1px dashed ${ownerOpen?T.accent:T.border}`,background:"none",color:ownerOpen?T.accent:T.textMuted,cursor:"pointer",transition:"all .12s"}}
-            onMouseEnter={e=>{if(!ownerOpen){e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}}
-            onMouseLeave={e=>{if(!ownerOpen){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}}>
-            <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg> Add owner
-          </button>
-          {ownerOpen&&(
-            <div onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",left:16,right:16,top:"calc(100% - 4px)",zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",overflow:"hidden"}}>
-              <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}>
-                <input autoFocus value={ownerSearch} onChange={e=>setOwnerSearch(e.target.value)} placeholder="Search users…"
-                  style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none"}}
-                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-              </div>
-              <div style={{maxHeight:170,overflowY:"auto"}}>
-                {USERS_LIST.filter(u=>!ownerSearch||u.toLowerCase().includes(ownerSearch.toLowerCase())).map(u=>{
-                  const sel=owners.includes(u);
-                  return <button key={u} onMouseDown={e=>{e.stopPropagation();
-                    if(sel){const no=owners.filter(x=>x!==u);setData(d=>({...d,owners:no,owner:no[0]||""}));}
-                    else setData(d=>({...d,owners:[...owners,u],owner:owners[0]||u}));}}
-                    style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 12px",background:sel?T.bgElevated:"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}}
-                    onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
-                    <div style={{width:22,height:22,borderRadius:6,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(u)}</div>
-                    <span style={{flex:1,fontSize:12,color:T.text}}>{u}</span>
-                    {sel&&<span style={{fontSize:12,color:T.accent,fontWeight:700}}>✓</span>}
-                  </button>;
-                })}
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* STEWARDS — multi-select */}
-        {(()=>{
-          return (
-          <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
-            <MetaLabel>Stewards</MetaLabel>
-            <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:stewards.length?8:0}}>
-              {(showAllStewards?stewards:stewards.slice(0,3)).map((s,i)=>(
-                <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,transition:"border-color .1s"}}
-                  onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderLight} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                  <div style={{width:20,height:20,borderRadius:"50%",background:"rgba(217,119,6,.12)",border:"1px solid rgba(217,119,6,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(s)}</div>
-                  <span style={{fontSize:12,color:T.text,fontWeight:500}}>{s}</span>
-                  <button onClick={()=>{const ns=stewards.filter((_,j)=>j!==i);setData(d=>({...d,stewards:ns,steward:ns[0]||""}));}}
-                    style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex",lineHeight:1}}
-                    onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
-                    <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                  </button>
-                </div>
-              ))}
-              {stewards.length>3&&!showAllStewards&&<span onClick={()=>setShowAllStewards(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{stewards.length-3} more</span>}
-              {stewards.length>3&&showAllStewards&&<span onClick={()=>setShowAllStewards(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
-            </div>
-            <button onMouseDown={e=>{e.stopPropagation();setStewardOpen(p=>!p);setCertOpen(false);setDomainOpen(false);setOwnerOpen(false);}}
-              style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,color:stewardOpen?"#d97706":T.textMuted,background:"none",border:`1px dashed ${stewardOpen?"#d97706":T.border}`,borderRadius:6,padding:"4px 10px",cursor:"pointer",transition:"all .12s"}}
-              onMouseEnter={e=>{if(!stewardOpen){e.currentTarget.style.borderColor="#d97706";e.currentTarget.style.color="#d97706";}}}
-              onMouseLeave={e=>{if(!stewardOpen){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}}>
-              <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-              Add steward
-            </button>
-            {stewardOpen&&(
-              <div onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",left:16,right:16,top:"calc(100% - 4px)",zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",overflow:"hidden"}}>
-                <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}>
-                  <input autoFocus placeholder="Search users…" value={stewardSearch} onChange={e=>setStewardSearch(e.target.value)}
-                    style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
-                    onFocus={e=>e.target.style.borderColor="#d97706"} onBlur={e=>e.target.style.borderColor=T.border}/>
-                </div>
-                <div style={{maxHeight:170,overflowY:"auto"}}>
-                  {USERS_LIST.filter(u=>!stewardSearch||u.toLowerCase().includes(stewardSearch.toLowerCase())).map(u=>{
-                    const sel=stewards.includes(u);
-                    return <button key={u} onMouseDown={e=>{e.stopPropagation();
-                      if(sel){const ns=stewards.filter(x=>x!==u);setData(d=>({...d,stewards:ns,steward:ns[0]||""}));}
-                      else setData(d=>({...d,stewards:[...stewards,u],steward:stewards[0]||u}));}}
-                      style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 12px",background:sel?"rgba(217,119,6,.08)":"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}}
-                      onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
-                      <div style={{width:22,height:22,borderRadius:"50%",background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(u)}</div>
-                      <span style={{flex:1,fontSize:12,color:T.text}}>{u}</span>
-                      {sel&&<span style={{fontSize:12,color:"#d97706",fontWeight:700}}>✓</span>}
-                    </button>;
-                  })}
-                </div>
+        {/* STEWARDS */}
+        <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
+          <MetaLabel onEdit={()=>{setEditModal("stewards");setModalSearch("");}}>Stewards</MetaLabel>
+          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+            {stewards.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards assigned</span>}
+            {(showAllStewards?stewards:stewards.slice(0,3)).map((s,i)=>(
+              <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,transition:"border-color .1s"}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderLight} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                <div style={{width:20,height:20,borderRadius:"50%",background:"rgba(217,119,6,.12)",border:"1px solid rgba(217,119,6,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(s)}</div>
+                <span style={{fontSize:12,color:T.text,fontWeight:500}}>{s}</span>
+                <button onClick={()=>{const ns=stewards.filter((_,j)=>j!==i);setData(d=>({...d,stewards:ns,steward:ns[0]||""}));}}
+                  style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex",lineHeight:1}}
+                  onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
+                  <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                </button>
               </div>
-            )}
+            ))}
+            {stewards.length>3&&!showAllStewards&&<span onClick={()=>setShowAllStewards(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{stewards.length-3} more</span>}
+            {stewards.length>3&&showAllStewards&&<span onClick={()=>setShowAllStewards(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
           </div>
-          );
-        })()}
+        </div>
 
         {/* TAGS */}
-        {(()=>{
-          const TAG_C = {
-            PII:       {bg:"rgba(225,29,72,.1)",  color:"#e11d48",border:"rgba(225,29,72,.25)"},
-            revenue:   {bg:"rgba(37,99,235,.08)", color:"#2563eb",border:"rgba(37,99,235,.2)"},
-            finance:   {bg:"rgba(37,99,235,.08)", color:"#2563eb",border:"rgba(37,99,235,.2)"},
-            KPI:       {bg:"rgba(22,163,74,.08)", color:"#16a34a",border:"rgba(22,163,74,.2)"},
-            sensitive: {bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"},
-            events:    {bg:"rgba(6,182,212,.08)", color:"#0891b2",border:"rgba(6,182,212,.2)"},
-            model:     {bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},
-            etl:       {bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},
-          };
-          const tc = tag => TAG_C[tag]||{bg:T.bgElevated,color:T.textSub,border:T.border};
-          return (
-        <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
-          <MetaLabel>Tags</MetaLabel>
-          <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
-            {(showAllTags?data.tags||[]:(data.tags||[]).slice(0,3)).map(t=>{const c=tc(t);return(
+        <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
+          <MetaLabel onEdit={()=>{setEditModal("tags");setModalSearch("");}}>Tags</MetaLabel>
+          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+            {(data.tags||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
+            {(showAllTags?data.tags||[]:(data.tags||[]).slice(0,3)).map(t=>{const c=tcFull(t);return(
               <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"3px 10px",borderRadius:6,background:c.bg,color:c.color,border:`1px solid ${c.border}`,fontWeight:500}}>
                 {t}
                 <button onClick={()=>setData(d=>({...d,tags:d.tags.filter(x=>x!==t)}))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,display:"flex",opacity:.6,lineHeight:1}}
@@ -8981,30 +8881,91 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
             {(data.tags||[]).length>3&&!showAllTags&&<span onClick={()=>setShowAllTags(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{(data.tags||[]).length-3} more</span>}
             {(data.tags||[]).length>3&&showAllTags&&<span onClick={()=>setShowAllTags(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
           </div>
-          <button onMouseDown={e=>{e.stopPropagation();setTagInput(p=>p==="_open_"?"":("_open_"));setCertOpen(false);setDomainOpen(false);setOwnerOpen(false);}}
-            style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"4px 10px",borderRadius:6,border:`1px dashed ${tagInput==="_open_"?T.accent:T.border}`,background:"none",color:tagInput==="_open_"?T.accent:T.textMuted,cursor:"pointer",transition:"all .12s"}}
-            onMouseEnter={e=>{if(tagInput!=="open_"){e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}}
-            onMouseLeave={e=>{if(tagInput!=="open_"){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}}>
-            <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg> Add tag
-          </button>
-          {tagInput==="_open_"&&(
-            <div onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",left:16,top:"calc(100% + 4px)",zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",padding:"10px 12px",minWidth:220}}>
-              <div style={{fontSize:11,color:T.textMuted,marginBottom:8,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>Suggested</div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                {["PII","revenue","finance","KPI","events","sensitive","dimension","model","etl","marketing"].filter(s=>!data.tags.includes(s)).map(s=>(
-                  <button key={s} onMouseDown={e=>{e.stopPropagation();if(!data.tags.includes(s)){setData(d=>({...d,tags:[...d.tags,s]}));}setTagInput("");}}
-                    style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",transition:"all .1s"}}
-                    onMouseEnter={e=>{e.currentTarget.style.background=T.accentDim;e.currentTarget.style.color=T.accent;e.currentTarget.style.borderColor=T.accent+"55";}}
-                    onMouseLeave={e=>{e.currentTarget.style.background=T.bgElevated;e.currentTarget.style.color=T.textSub;e.currentTarget.style.borderColor=T.border;}}>
-                    {s}
+        </div>
+
+        {/* Edit Metadata Modal */}
+        {editModal&&(
+          <>
+            <div onClick={()=>setEditModal(null)} style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,.4)"}}/>
+            <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:501,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:300,display:"flex",flexDirection:"column",maxHeight:"80vh",overflow:"hidden"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Edit {editModal==="domain"?"Domain":editModal==="owners"?"Owners":editModal==="stewards"?"Stewards":"Tags"}</span>
+                <button onClick={()=>setEditModal(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5,transition:"all .1s"}}
+                  onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
+                  <svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                </button>
+              </div>
+              {editModal!=="domain"&&(
+                <div style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                  <input autoFocus value={modalSearch} onChange={e=>setModalSearch(e.target.value)}
+                    placeholder={editModal==="tags"?"Search tags…":"Search users…"}
+                    style={{width:"100%",padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"}}
+                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                </div>
+              )}
+              <div style={{overflowY:"auto",flex:1}}>
+                {editModal==="domain"&&DOMAINS_LIST.map(d=>(
+                  <button key={d} onClick={()=>{setData(dd=>({...dd,domain:d}));setEditModal(null);onToast(`Domain set to ${d}`,"success");}}
+                    style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 16px",background:data.domain===d?T.accentDim:"transparent",border:"none",cursor:"pointer",fontSize:13,color:data.domain===d?T.accent:T.textSub,fontWeight:data.domain===d?600:400,transition:"background .1s"}}
+                    onMouseEnter={e=>{if(data.domain!==d)e.currentTarget.style.background=T.bgHover;}}
+                    onMouseLeave={e=>{if(data.domain!==d)e.currentTarget.style.background="transparent";}}>
+                    {d}
+                    {data.domain===d&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={T.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                   </button>
                 ))}
+                {editModal==="owners"&&USERS_LIST.filter(u=>!modalSearch||u.toLowerCase().includes(modalSearch.toLowerCase())).map(u=>{
+                  const sel=owners.includes(u);
+                  return <button key={u} onClick={()=>{
+                    if(sel){const no=owners.filter(x=>x!==u);setData(d=>({...d,owners:no,owner:no[0]||""}));}
+                    else setData(d=>({...d,owners:[...owners,u],owner:owners[0]||u}));}}
+                    style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 16px",background:sel?T.bgElevated:"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}}
+                    onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
+                    <div style={{width:24,height:24,borderRadius:6,background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8.5,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(u)}</div>
+                    <span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>
+                    {sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={T.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </button>;
+                })}
+                {editModal==="stewards"&&USERS_LIST.filter(u=>!modalSearch||u.toLowerCase().includes(modalSearch.toLowerCase())).map(u=>{
+                  const sel=stewards.includes(u);
+                  return <button key={u} onClick={()=>{
+                    if(sel){const ns=stewards.filter(x=>x!==u);setData(d=>({...d,stewards:ns,steward:ns[0]||""}));}
+                    else setData(d=>({...d,stewards:[...stewards,u],steward:stewards[0]||u}));}}
+                    style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 16px",background:sel?"rgba(217,119,6,.08)":"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}}
+                    onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
+                    <div style={{width:24,height:24,borderRadius:"50%",background:"rgba(217,119,6,.12)",border:"1px solid rgba(217,119,6,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8.5,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(u)}</div>
+                    <span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>
+                    {sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke="#d97706" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </button>;
+                })}
+                {editModal==="tags"&&(
+                  <div style={{padding:"12px 16px"}}>
+                    <div style={{fontSize:11,color:T.textMuted,marginBottom:10,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>{modalSearch?"Results":"Suggested"}</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                      {["PII","revenue","finance","KPI","events","sensitive","dimension","model","etl","marketing"]
+                        .filter(s=>!modalSearch||s.toLowerCase().includes(modalSearch.toLowerCase()))
+                        .map(s=>{
+                          const sel=(data.tags||[]).includes(s);
+                          const c=tcFull(s);
+                          return <button key={s} onClick={()=>setData(d=>({...d,tags:sel?d.tags.filter(x=>x!==s):[...(d.tags||[]),s]}))}
+                            style={{display:"inline-flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,fontSize:12,cursor:"pointer",transition:"all .1s",background:sel?c.bg:T.bgElevated,border:`1px solid ${sel?c.border:T.border}`,color:sel?c.color:T.textSub,fontWeight:sel?600:400}}>
+                            {sel&&<svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                            {s}
+                          </button>;
+                        })}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div style={{padding:"12px 16px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",flexShrink:0}}>
+                <button onClick={()=>setEditModal(null)}
+                  style={{padding:"7px 20px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer",transition:"opacity .1s"}}
+                  onMouseEnter={e=>e.currentTarget.style.opacity=".85"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+                  Done
+                </button>
               </div>
             </div>
-          )}
-        </div>
-          );
-        })()}
+          </>
+        )}
 
         {/* ACTIONS */}
         <div style={{padding:"16px"}}>
