@@ -1024,6 +1024,8 @@ const GlossaryView = ({onToast}) => {
   const [synonymInput, setSynonymInput]  = useState("");
   const [glossEditModal,setGlossEditModal] = useState(null);
   const [glossModalSearch,setGlossModalSearch] = useState("");
+  const [showAllGlossOwners,  setShowAllGlossOwners]   = useState(false);
+  const [showAllGlossStewards,setShowAllGlossStewards] = useState(false);
 
   useEffect(()=>{
     if(!ctxMenu) return;
@@ -1031,6 +1033,8 @@ const GlossaryView = ({onToast}) => {
     document.addEventListener("mousedown",close);
     return ()=>document.removeEventListener("mousedown",close);
   },[ctxMenu]);
+
+  useEffect(()=>{ setShowAllGlossOwners(false); setShowAllGlossStewards(false); },[selTerm]);
 
   const glossary  = glossaries.find(g=>g.id===selG);
   const category  = glossary?.categories.find(c=>c.id===selCat);
@@ -1980,12 +1984,15 @@ const GlossaryView = ({onToast}) => {
             <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
               <SideLabel ch="Owners" onEdit={()=>{setGlossEditModal("owners");setGlossModalSearch("");}}/>
               <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                {owners.length>0?owners.map((o,i)=>(
+                {owners.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owners set</span>}
+                {(showAllGlossOwners?owners:owners.slice(0,3)).map((o,i)=>(
                   <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
                     <div style={{width:18,height:18,borderRadius:3,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(o)}</div>
                     <span style={{fontSize:12,color:T.accent,fontWeight:500}}>{o}</span>
                   </div>
-                )):<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owners set</span>}
+                ))}
+                {owners.length>3&&!showAllGlossOwners&&<span onClick={()=>setShowAllGlossOwners(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{owners.length-3} more</span>}
+                {owners.length>3&&showAllGlossOwners&&<span onClick={()=>setShowAllGlossOwners(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
               </div>
             </div>
 
@@ -1993,12 +2000,15 @@ const GlossaryView = ({onToast}) => {
             <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
               <SideLabel ch="Stewards" onEdit={()=>{setGlossEditModal("stewards");setGlossModalSearch("");}}/>
               <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                {stewards.length>0?stewards.map((s,i)=>(
+                {stewards.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards set</span>}
+                {(showAllGlossStewards?stewards:stewards.slice(0,3)).map((s,i)=>(
                   <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:"rgba(217,119,6,.08)",borderTop:"1px solid rgba(217,119,6,.2)",borderRight:"1px solid rgba(217,119,6,.2)",borderBottom:"1px solid rgba(217,119,6,.2)",borderLeft:"3px solid #d97706"}}>
                     <div style={{width:18,height:18,borderRadius:"50%",background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(s)}</div>
                     <span style={{fontSize:12,color:"#d97706",fontWeight:500}}>{s}</span>
                   </div>
-                )):<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards set</span>}
+                ))}
+                {stewards.length>3&&!showAllGlossStewards&&<span onClick={()=>setShowAllGlossStewards(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{stewards.length-3} more</span>}
+                {stewards.length>3&&showAllGlossStewards&&<span onClick={()=>setShowAllGlossStewards(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
               </div>
             </div>
 
@@ -18510,6 +18520,8 @@ const TagManagementView = ({onToast}) => {
   const [tagStewards,     setTagStewards]     = useState([]);
   const [tagEditModal,    setTagEditModal]    = useState(null); // 'owners'|'stewards'|'domain'
   const [tagModalSearch,  setTagModalSearch]  = useState('');
+  const [showAllTagOwners,   setShowAllTagOwners]   = useState(false);
+  const [showAllTagStewards, setShowAllTagStewards] = useState(false);
   const TAG_USERS = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
   const tava = (name) => (name||"?").split(".").map(s=>s[0]?.toUpperCase()||"").join("");
 
@@ -18539,6 +18551,8 @@ const TagManagementView = ({onToast}) => {
     }
     setTagEditModal(null);
     setTagModalSearch('');
+    setShowAllTagOwners(false);
+    setShowAllTagStewards(false);
   },[selTagId]);
 
   // Dynamic categories derived from tag data + custom ones
@@ -19105,12 +19119,15 @@ const TagManagementView = ({onToast}) => {
                       <div style={{padding:'16px',borderBottom:`1px solid ${T.border}`}}>
                         <SideLabel ch="Owner" onEdit={()=>{setTagEditModal('owners');setTagModalSearch('');}}/>
                         <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
-                          {tagOwners.length>0?tagOwners.map((o,i)=>(
+                          {tagOwners.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No owners set</span>}
+                          {(showAllTagOwners?tagOwners:tagOwners.slice(0,3)).map((o,i)=>(
                             <div key={i} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 10px 3px 6px',borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
                               <div style={{width:18,height:18,borderRadius:3,background:T.accentDim,display:'flex',alignItems:'center',justifyContent:'center',fontSize:7,fontWeight:700,color:T.accent,flexShrink:0}}>{tava(o)}</div>
                               <span style={{fontSize:12,color:T.accent,fontWeight:500}}>{o}</span>
                             </div>
-                          )):<span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No owners set</span>}
+                          ))}
+                          {tagOwners.length>3&&!showAllTagOwners&&<span onClick={()=>setShowAllTagOwners(true)} style={{display:'inline-flex',alignItems:'center',fontSize:11.5,padding:'3px 10px',borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:'pointer',fontWeight:600}}>+{tagOwners.length-3} more</span>}
+                          {tagOwners.length>3&&showAllTagOwners&&<span onClick={()=>setShowAllTagOwners(false)} style={{display:'inline-flex',alignItems:'center',fontSize:11.5,padding:'3px 10px',borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:'pointer',fontWeight:600}}>− less</span>}
                         </div>
                       </div>
 
@@ -19118,12 +19135,15 @@ const TagManagementView = ({onToast}) => {
                       <div style={{padding:'16px',borderBottom:`1px solid ${T.border}`}}>
                         <SideLabel ch="Steward" onEdit={()=>{setTagEditModal('stewards');setTagModalSearch('');}}/>
                         <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
-                          {tagStewards.length>0?tagStewards.map((s,i)=>(
+                          {tagStewards.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No stewards set</span>}
+                          {(showAllTagStewards?tagStewards:tagStewards.slice(0,3)).map((s,i)=>(
                             <div key={i} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 10px 3px 6px',borderRadius:5,background:'rgba(217,119,6,.08)',borderTop:'1px solid rgba(217,119,6,.2)',borderRight:'1px solid rgba(217,119,6,.2)',borderBottom:'1px solid rgba(217,119,6,.2)',borderLeft:'3px solid #d97706'}}>
                               <div style={{width:18,height:18,borderRadius:'50%',background:'rgba(217,119,6,.15)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:7,fontWeight:700,color:'#d97706',flexShrink:0}}>{tava(s)}</div>
                               <span style={{fontSize:12,color:'#d97706',fontWeight:500}}>{s}</span>
                             </div>
-                          )):<span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No stewards set</span>}
+                          ))}
+                          {tagStewards.length>3&&!showAllTagStewards&&<span onClick={()=>setShowAllTagStewards(true)} style={{display:'inline-flex',alignItems:'center',fontSize:11.5,padding:'3px 10px',borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:'pointer',fontWeight:600}}>+{tagStewards.length-3} more</span>}
+                          {tagStewards.length>3&&showAllTagStewards&&<span onClick={()=>setShowAllTagStewards(false)} style={{display:'inline-flex',alignItems:'center',fontSize:11.5,padding:'3px 10px',borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:'pointer',fontWeight:600}}>− less</span>}
                         </div>
                       </div>
 
