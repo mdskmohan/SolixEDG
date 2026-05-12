@@ -18505,13 +18505,11 @@ const TagManagementView = ({onToast}) => {
   const [catDropSearch,setCatDropSearch]= useState('');    // search within that dropdown
   const catDropRef = useRef(null);
 
-  // ── Tag owner/steward state (BG-style avatar chips) ──
+  // ── Tag owner/steward state ──
   const [tagOwners,       setTagOwners]       = useState([]);
-  const [tagOwnerInput,   setTagOwnerInput]   = useState(false);
-  const [tagOwnerSearch,  setTagOwnerSearch]  = useState('');
   const [tagStewards,     setTagStewards]     = useState([]);
-  const [tagStewardInput, setTagStewardInput] = useState(false);
-  const [tagStewardSearch,setTagStewardSearch]= useState('');
+  const [tagEditModal,    setTagEditModal]    = useState(null); // 'owners'|'stewards'|'domain'
+  const [tagModalSearch,  setTagModalSearch]  = useState('');
   const TAG_USERS = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
   const tava = (name) => (name||"?").split(".").map(s=>s[0]?.toUpperCase()||"").join("");
 
@@ -18525,8 +18523,6 @@ const TagManagementView = ({onToast}) => {
       if(dotMenuRef.current&&!dotMenuRef.current.contains(e.target)) setDotMenuOpen(null);
       if(catRef.current&&!catRef.current.contains(e.target)) setCatOpen(false);
       if(catDropRef.current&&!catDropRef.current.contains(e.target)){setCatDropOpen(false);setCatDropSearch('');}
-      setTagOwnerInput(false);
-      setTagStewardInput(false);
     };
     document.addEventListener('mousedown',handler);
     return ()=>document.removeEventListener('mousedown',handler);
@@ -19238,9 +19234,9 @@ const TagManagementView = ({onToast}) => {
                                   })}
                                 </div>
                               : tagDomain
-                                ? <span style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 10px',borderRadius:99,background:`${DOMAIN_COLORS[tagDomain]||T.accent}15`,border:`1px solid ${DOMAIN_COLORS[tagDomain]||T.accent}44`,fontSize:11.5,fontWeight:600,color:DOMAIN_COLORS[tagDomain]||T.accent}}>
-                                    {tagDomain}
-                                  </span>
+                                ? <div style={{display:'inline-flex',alignItems:'center',padding:'4px 12px 4px 9px',borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
+                                    <span style={{fontSize:12,color:T.accent,fontWeight:600}}>{tagDomain}</span>
+                                  </div>
                                 : <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No domain assigned</span>
                             }
                           </div>
@@ -19249,112 +19245,46 @@ const TagManagementView = ({onToast}) => {
 
                       <div style={{height:1,background:T.border,marginBottom:18}}/>
 
-                      {/* Owner — BG-style avatar chips */}
-                      <div style={{marginBottom:18,position:'relative'}}>
-                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Owner</div>
-                        <div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:tagOwners.length>0?8:0}}>
-                          {tagOwners.map((o,i)=>(
-                            <div key={i} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 8px 3px 5px',borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,transition:'border-color .1s'}}
-                              onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderLight} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                              <div style={{width:20,height:20,borderRadius:'50%',background:T.accentDim,border:`1px solid ${T.accent}33`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:7.5,fontWeight:700,color:T.accent,flexShrink:0}}>{tava(o)}</div>
-                              <span style={{fontSize:12,color:T.text,fontWeight:500}}>{o}</span>
-                              <button onMouseDown={e=>{e.stopPropagation();const no=tagOwners.filter((_,j)=>j!==i);setTagOwners(no);if(editing)setEditDraft(d=>({...d,owner:no[0]||''}));}}
-                                style={{background:'none',border:'none',cursor:'pointer',color:T.textMuted,padding:0,display:'flex',lineHeight:1}}
-                                onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
-                                {Ic.x(8)}
-                              </button>
-                            </div>
-                          ))}
+                      {/* Owner */}
+                      <div style={{marginBottom:18}}>
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                          <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Owner</div>
+                          <button onClick={()=>{setTagEditModal('owners');setTagModalSearch('');}} style={{background:'none',border:'none',cursor:'pointer',color:T.textMuted,padding:'2px 3px',display:'flex',borderRadius:4,transition:'all .12s'}}
+                            onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
+                            onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background='none';}}>
+                            <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          </button>
                         </div>
-                        <button onMouseDown={e=>{e.stopPropagation();setTagOwnerInput(p=>{if(!p)setTagOwnerSearch('');return !p;});setTagStewardInput(false);}}
-                          style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:11.5,color:tagOwnerInput?T.accent:T.textMuted,background:'none',border:`1px dashed ${tagOwnerInput?T.accent:T.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',transition:'all .12s'}}
-                          onMouseEnter={e=>{if(!tagOwnerInput){e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}}
-                          onMouseLeave={e=>{if(!tagOwnerInput){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}}>
-                          {Ic.plus(9)} Add owner
-                        </button>
-                        {tagOwnerInput&&(
-                          <div onMouseDown={e=>e.stopPropagation()} style={{position:'absolute',left:0,right:0,top:'calc(100% - 2px)',zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:'0 8px 28px rgba(0,0,0,.22)',overflow:'hidden'}}>
-                            <div style={{padding:'8px 10px',borderBottom:`1px solid ${T.border}`}}>
-                              <input autoFocus placeholder="Search users…" value={tagOwnerSearch} onChange={e=>setTagOwnerSearch(e.target.value)}
-                                style={{width:'100%',padding:'5px 9px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:'none'}}
-                                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                        <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+                          {tagOwners.length>0?tagOwners.map((o,i)=>(
+                            <div key={i} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 10px 3px 6px',borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
+                              <div style={{width:18,height:18,borderRadius:3,background:T.accentDim,display:'flex',alignItems:'center',justifyContent:'center',fontSize:7,fontWeight:700,color:T.accent,flexShrink:0}}>{tava(o)}</div>
+                              <span style={{fontSize:12,color:T.accent,fontWeight:500}}>{o}</span>
                             </div>
-                            <div style={{maxHeight:168,overflowY:'auto'}}>
-                              {TAG_USERS.filter(u=>!tagOwnerSearch||u.toLowerCase().includes(tagOwnerSearch.toLowerCase())).map(u=>{
-                                const sel=tagOwners.includes(u);
-                                return (
-                                  <button key={u} onMouseDown={e=>{e.stopPropagation();
-                                    const no=sel?tagOwners.filter(x=>x!==u):[...tagOwners,u];
-                                    setTagOwners(no);
-                                    if(editing)setEditDraft(d=>({...d,owner:no[0]||''}));
-                                    if(!sel)setTagOwnerInput(false);
-                                  }}
-                                    style={{width:'100%',display:'flex',alignItems:'center',gap:9,padding:'8px 12px',background:sel?T.bgElevated:'transparent',border:'none',cursor:'pointer',textAlign:'left'}}
-                                    onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background='transparent';}}>
-                                    <div style={{width:24,height:24,borderRadius:'50%',background:T.accentDim,border:`1px solid ${T.accent}33`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8.5,fontWeight:700,color:T.accent,flexShrink:0}}>{tava(u)}</div>
-                                    <span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>
-                                    {sel&&<span style={{fontSize:12,color:T.accent,fontWeight:700}}>✓</span>}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
+                          )):<span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No owners set</span>}
+                        </div>
                       </div>
 
                       <div style={{height:1,background:T.border,marginBottom:18}}/>
 
-                      {/* Steward — BG-style avatar chips */}
-                      <div style={{marginBottom:18,position:'relative'}}>
-                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:8}}>Steward</div>
-                        <div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:tagStewards.length>0?8:0}}>
-                          {tagStewards.map((s,i)=>(
-                            <div key={i} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 8px 3px 5px',borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,transition:'border-color .1s'}}
-                              onMouseEnter={e=>e.currentTarget.style.borderColor=T.borderLight} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                              <div style={{width:20,height:20,borderRadius:'50%',background:'rgba(217,119,6,.12)',border:'1px solid rgba(217,119,6,.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:7.5,fontWeight:700,color:'#d97706',flexShrink:0}}>{tava(s)}</div>
-                              <span style={{fontSize:12,color:T.text,fontWeight:500}}>{s}</span>
-                              <button onMouseDown={e=>{e.stopPropagation();const ns=tagStewards.filter((_,j)=>j!==i);setTagStewards(ns);if(editing)setEditDraft(d=>({...d,managedBy:ns[0]||''}));}}
-                                style={{background:'none',border:'none',cursor:'pointer',color:T.textMuted,padding:0,display:'flex',lineHeight:1}}
-                                onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
-                                {Ic.x(8)}
-                              </button>
-                            </div>
-                          ))}
+                      {/* Steward */}
+                      <div style={{marginBottom:18}}>
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                          <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Steward</div>
+                          <button onClick={()=>{setTagEditModal('stewards');setTagModalSearch('');}} style={{background:'none',border:'none',cursor:'pointer',color:T.textMuted,padding:'2px 3px',display:'flex',borderRadius:4,transition:'all .12s'}}
+                            onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
+                            onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background='none';}}>
+                            <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          </button>
                         </div>
-                        <button onMouseDown={e=>{e.stopPropagation();setTagStewardInput(p=>{if(!p)setTagStewardSearch('');return !p;});setTagOwnerInput(false);}}
-                          style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:11.5,color:tagStewardInput?'#d97706':T.textMuted,background:'none',border:`1px dashed ${tagStewardInput?'#d97706':T.border}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',transition:'all .12s'}}
-                          onMouseEnter={e=>{if(!tagStewardInput){e.currentTarget.style.borderColor='#d97706';e.currentTarget.style.color='#d97706';}}}
-                          onMouseLeave={e=>{if(!tagStewardInput){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}}>
-                          {Ic.plus(9)} Add steward
-                        </button>
-                        {tagStewardInput&&(
-                          <div onMouseDown={e=>e.stopPropagation()} style={{position:'absolute',left:0,right:0,top:'calc(100% - 2px)',zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:'0 8px 28px rgba(0,0,0,.22)',overflow:'hidden'}}>
-                            <div style={{padding:'8px 10px',borderBottom:`1px solid ${T.border}`}}>
-                              <input autoFocus placeholder="Search users…" value={tagStewardSearch} onChange={e=>setTagStewardSearch(e.target.value)}
-                                style={{width:'100%',padding:'5px 9px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:'none'}}
-                                onFocus={e=>e.target.style.borderColor='#d97706'} onBlur={e=>e.target.style.borderColor=T.border}/>
+                        <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+                          {tagStewards.length>0?tagStewards.map((s,i)=>(
+                            <div key={i} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 10px 3px 6px',borderRadius:5,background:'rgba(217,119,6,.08)',borderTop:'1px solid rgba(217,119,6,.2)',borderRight:'1px solid rgba(217,119,6,.2)',borderBottom:'1px solid rgba(217,119,6,.2)',borderLeft:'3px solid #d97706'}}>
+                              <div style={{width:18,height:18,borderRadius:'50%',background:'rgba(217,119,6,.15)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:7,fontWeight:700,color:'#d97706',flexShrink:0}}>{tava(s)}</div>
+                              <span style={{fontSize:12,color:'#d97706',fontWeight:500}}>{s}</span>
                             </div>
-                            <div style={{maxHeight:168,overflowY:'auto'}}>
-                              {TAG_USERS.filter(u=>!tagStewardSearch||u.toLowerCase().includes(tagStewardSearch.toLowerCase())).map(u=>{
-                                const sel=tagStewards.includes(u);
-                                return (
-                                  <button key={u} onMouseDown={e=>{e.stopPropagation();
-                                    const ns=sel?tagStewards.filter(x=>x!==u):[...tagStewards,u];
-                                    setTagStewards(ns);
-                                    if(editing)setEditDraft(d=>({...d,managedBy:ns[0]||''}));
-                                    if(!sel)setTagStewardInput(false);
-                                  }}
-                                    style={{width:'100%',display:'flex',alignItems:'center',gap:9,padding:'8px 12px',background:sel?T.bgElevated:'transparent',border:'none',cursor:'pointer',textAlign:'left'}}
-                                    onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background='transparent';}}>
-                                    <div style={{width:24,height:24,borderRadius:'50%',background:'rgba(217,119,6,.12)',border:'1px solid rgba(217,119,6,.25)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:8.5,fontWeight:700,color:'#d97706',flexShrink:0}}>{tava(u)}</div>
-                                    <span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>
-                                    {sel&&<span style={{fontSize:12,color:'#d97706',fontWeight:700}}>✓</span>}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
+                          )):<span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No stewards set</span>}
+                        </div>
                       </div>
 
                     </div>
@@ -19510,6 +19440,44 @@ const TagManagementView = ({onToast}) => {
               </div>
             );
           })()}
+
+          {/* ── Tag edit modal (owners / stewards) ── */}
+          {tagEditModal&&(
+            <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1200,backdropFilter:'blur(3px)'}} onClick={()=>setTagEditModal(null)}>
+              <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,width:360,maxHeight:'80vh',overflow:'auto',boxShadow:'0 24px 60px rgba(0,0,0,.35)'}} onClick={e=>e.stopPropagation()}>
+                <div style={{padding:'14px 18px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                  <div style={{fontSize:13,fontWeight:700,color:T.text}}>Edit {tagEditModal==='owners'?'Owner':tagEditModal==='stewards'?'Steward':'Domain'}</div>
+                  <button onClick={()=>setTagEditModal(null)} style={{background:T.bgHover,border:`1px solid ${T.border}`,borderRadius:6,color:T.textMuted,cursor:'pointer',padding:'3px 6px',display:'flex'}}>{Ic.x(10)}</button>
+                </div>
+                <div style={{padding:'10px 14px',borderBottom:`1px solid ${T.border}`}}>
+                  <input autoFocus placeholder={`Search ${tagEditModal==='owners'?'users':tagEditModal==='stewards'?'users':'domains'}…`} value={tagModalSearch} onChange={e=>setTagModalSearch(e.target.value)}
+                    style={{width:'100%',padding:'7px 11px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:'none',boxSizing:'border-box'}}
+                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                </div>
+                <div style={{padding:'6px 0'}}>
+                  {(tagEditModal==='owners'||tagEditModal==='stewards')&&(()=>{
+                    const isSt = tagEditModal==='stewards';
+                    const list = isSt ? tagStewards : tagOwners;
+                    return TAG_USERS.filter(u=>!tagModalSearch||u.toLowerCase().includes(tagModalSearch.toLowerCase())).map(u=>{
+                      const sel=list.includes(u);
+                      return (
+                        <button key={u} onClick={()=>{
+                          if(isSt){const ns=sel?tagStewards.filter(x=>x!==u):[...tagStewards,u];setTagStewards(ns);if(editing)setEditDraft(d=>({...d,managedBy:ns[0]||''}));}
+                          else{const no=sel?tagOwners.filter(x=>x!==u):[...tagOwners,u];setTagOwners(no);if(editing)setEditDraft(d=>({...d,owner:no[0]||''}));}
+                        }}
+                          style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 14px',background:sel?T.bgElevated:'transparent',border:'none',cursor:'pointer',transition:'background .1s'}}
+                          onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background='transparent';}}>
+                          <div style={{width:26,height:26,borderRadius:isSt?'50%':4,background:isSt?'rgba(217,119,6,.15)':T.accentDim,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:isSt?'#d97706':T.accent,flexShrink:0}}>{tava(u)}</div>
+                          <span style={{flex:1,fontSize:13,color:T.text}}>{u}</span>
+                          {sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={isSt?'#d97706':T.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                        </button>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Slide-in backdrop ── */}
