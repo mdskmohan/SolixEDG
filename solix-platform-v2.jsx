@@ -18537,10 +18537,8 @@ const TagManagementView = ({onToast}) => {
       setTagOwners([]);
       setTagStewards([]);
     }
-    setTagOwnerInput(false);
-    setTagStewardInput(false);
-    setTagOwnerSearch('');
-    setTagStewardSearch('');
+    setTagEditModal(null);
+    setTagModalSearch('');
   },[selTagId]);
 
   // Dynamic categories derived from tag data + custom ones
