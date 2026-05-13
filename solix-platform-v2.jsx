@@ -5546,7 +5546,19 @@ const PolicyManagerView = ({onToast}) => {
   const [linkModalOpen, setLinkModalOpen]= useState(false);
   const [linkForm,      setLinkForm]    = useState({assetIdx:0,rel:"governs"});
   const EMPTY_POL = {name:"",category:"Privacy",severity:"High",description:"",owner:"",regulations:[],scope:{domains:[]},conditions:[],rules:[],links:[],history:[],fqn:"",version:1};
-  const [newPol, setNewPol] = useState(EMPTY_POL);
+  const [newPol,         setNewPol]        = useState(EMPTY_POL);
+  const [catFilter,      setCatFilter]     = useState([]);
+  const [filterDropOpen, setFilterDropOpen]= useState(false);
+  const [hovPolId,       setHovPolId]      = useState(null);
+  const [deleteConfPol,  setDeleteConfPol] = useState(null);
+  const filterDropRef = useRef(null);
+
+  useEffect(()=>{
+    if(!filterDropOpen) return;
+    const close=e=>{if(filterDropRef.current&&!filterDropRef.current.contains(e.target))setFilterDropOpen(false);};
+    document.addEventListener("mousedown",close);
+    return()=>document.removeEventListener("mousedown",close);
+  },[filterDropOpen]);
 
   // ─── computed ────────────────────────────────────────────────────────
   const getGovAssets = (pol) => {
@@ -5588,7 +5600,8 @@ const PolicyManagerView = ({onToast}) => {
   const filteredPols = policies.filter(p=>{
     const ms = !polSearch || p.name.toLowerCase().includes(polSearch.toLowerCase()) || p.category.toLowerCase().includes(polSearch.toLowerCase());
     const ml = lcFilter==="All" || p.lifecycle===lcFilter;
-    return ms && ml;
+    const mc = catFilter.length===0 || catFilter.includes(p.category);
+    return ms && ml && mc;
   });
 
   const derivedRisks = activePols.map(p=>{
@@ -5849,11 +5862,24 @@ const PolicyManagerView = ({onToast}) => {
       </Topbar>
 
       {/* ── Metric strip ── */}
-      <div style={{padding:"10px 28px 0",flexShrink:0,display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-        <Metric label="Total Policies"  value={String(policies.length)}   sub={`${activePols.length} active`}            color={T.blue}/>
-        <Metric label="Under Review"    value={String(policies.filter(p=>p.lifecycle==="In Review").length)} sub="awaiting approval" color={T.amber}/>
-        <Metric label="Open Violations" value={String(totalViols)}        sub="across active policies"                    color={totalViols>0?T.rose:T.green}/>
-        <Metric label="Asset Coverage"  value={`${coveragePct}%`}         sub={`${coveredIds.size}/${ASSETS.length} assets governed`} color={coveragePct>=80?T.green:T.amber}/>
+      <div style={{padding:"12px 28px 0",flexShrink:0,display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+        {[
+          {label:"Total Policies",value:policies.length,sub:`${activePols.length} active · ${policies.filter(p=>p.lifecycle==="Draft").length} draft`,color:T.blue,pct:null},
+          {label:"Under Review",  value:policies.filter(p=>p.lifecycle==="In Review").length,sub:"awaiting approval",color:T.amber,pct:Math.round(policies.filter(p=>p.lifecycle==="In Review").length/Math.max(policies.length,1)*100)},
+          {label:"Open Violations",value:totalViols,sub:totalViols===0?"All active policies compliant":"across active policies",color:totalViols>0?T.rose:T.green,pct:null},
+          {label:"Asset Coverage",value:`${coveragePct}%`,sub:`${coveredIds.size} of ${ASSETS.length} assets governed`,color:coveragePct>=80?T.green:T.amber,pct:coveragePct},
+        ].map(m=>(
+          <div key={m.label} style={{padding:"13px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,borderLeft:`3px solid ${m.color}`,position:"relative",overflow:"hidden"}}>
+            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>{m.label}</div>
+            <div style={{fontSize:22,fontWeight:800,color:m.color,lineHeight:1,marginBottom:4,fontFamily:"'Geist Mono',monospace"}}>{m.value}</div>
+            <div style={{fontSize:11,color:T.textMuted}}>{m.sub}</div>
+            {m.pct!==null&&(
+              <div style={{position:"absolute",bottom:0,left:0,right:0,height:3,background:T.bgElevated}}>
+                <div style={{width:`${m.pct}%`,height:"100%",background:m.color,borderRadius:"0 1px 0 0",transition:"width .4s"}}/>
+              </div>
+            )}
+          </div>
+        ))}
       </div>
 
       {/* ── Main tab bar ── */}
@@ -5867,53 +5893,154 @@ const PolicyManagerView = ({onToast}) => {
         {/* ══════ POLICIES TAB ══════ */}
         {tab==="policies"&&<>
 
-          {/* Left: policy list panel */}
+          {/* Left: policy list panel — Tags-style */}
           <div style={{width:258,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",flexShrink:0,background:T.bgSurface}}>
-            {/* Search */}
-            <div style={{padding:"14px 12px 8px"}}>
-              <div style={{position:"relative"}}>
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.5"/><path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                <input value={polSearch} onChange={e=>setPolSearch(e.target.value)} placeholder="Search policies…"
-                  style={{width:"100%",padding:"7px 10px 7px 28px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,fontSize:12,color:T.text,outline:"none",boxSizing:"border-box"}}/>
+            {/* Panel header */}
+            <div style={{padding:"12px 12px 10px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:9}}>
+                <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Policies</span>
+                <button onClick={()=>setCreateOpen(true)} title="New Policy"
+                  style={{width:22,height:22,borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",transition:"all .12s"}}
+                  onMouseEnter={e=>{e.currentTarget.style.background=T.accentDim;e.currentTarget.style.color=T.accent;e.currentTarget.style.borderColor=T.accent;}}
+                  onMouseLeave={e=>{e.currentTarget.style.background=T.bgElevated;e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>
+                  {Ic.plus(10)}
+                </button>
+              </div>
+              {/* Search + filter button row */}
+              <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                <div style={{flex:1,position:"relative"}}>
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.5"/><path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                  <input value={polSearch} onChange={e=>setPolSearch(e.target.value)} placeholder="Search policies…"
+                    style={{width:"100%",padding:"6px 8px 6px 26px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,fontSize:12,color:T.text,outline:"none",boxSizing:"border-box"}}
+                    onFocus={e=>e.target.style.borderColor=T.blue} onBlur={e=>e.target.style.borderColor=T.border}/>
+                </div>
+                {/* Filter button */}
+                <div ref={filterDropRef} style={{position:"relative",flexShrink:0}}>
+                  <button onClick={()=>setFilterDropOpen(o=>!o)} title="Filter"
+                    style={{height:30,padding:"0 9px",borderRadius:7,background:filterDropOpen||catFilter.length>0?T.accentDim:"transparent",border:`1px solid ${filterDropOpen||catFilter.length>0?T.accent:T.border}`,color:filterDropOpen||catFilter.length>0?T.accent:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontSize:11,transition:"all .12s"}}>
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M4 8h8M7 12h2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                    {catFilter.length>0&&<span style={{minWidth:14,height:14,borderRadius:99,background:T.accent,color:"#fff",fontSize:9,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{catFilter.length}</span>}
+                  </button>
+                  {filterDropOpen&&(
+                    <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,width:210,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",zIndex:200,overflow:"hidden"}}>
+                      <div style={{padding:"9px 12px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                        <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Filter by Category</span>
+                        {catFilter.length>0&&<button onClick={()=>setCatFilter([])} style={{fontSize:10.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:600}}>Clear</button>}
+                      </div>
+                      <div style={{padding:"4px 0",maxHeight:220,overflowY:"auto"}}>
+                        {POLICY_CATS.map(cat=>{
+                          const checked = catFilter.includes(cat);
+                          const cnt = policies.filter(p=>p.category===cat).length;
+                          return (
+                            <button key={cat} onClick={()=>setCatFilter(prev=>checked?prev.filter(c=>c!==cat):[...prev,cat])}
+                              style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"7px 12px",background:checked?T.accentDim:"transparent",border:"none",cursor:"pointer",textAlign:"left"}}
+                              onMouseEnter={e=>{if(!checked)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!checked)e.currentTarget.style.background="transparent";}}>
+                              <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${checked?T.accent:T.border}`,background:checked?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .1s"}}>
+                                {checked&&<svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1 4l2 2 4-4" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                              </div>
+                              <div style={{width:7,height:7,borderRadius:1,background:CAT_COLORS[cat]||T.blue,flexShrink:0}}/>
+                              <span style={{flex:1,fontSize:12,color:T.text}}>{cat}</span>
+                              <span style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{cnt}</span>
+                            </button>
+                          );
+                        })}
+                        <div style={{borderTop:`1px solid ${T.border}`,marginTop:4,padding:"8px 10px"}}>
+                          <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",display:"block",marginBottom:6}}>Lifecycle</span>
+                          {["All",...LC_STEPS].map(lc=>(
+                            <button key={lc} onClick={()=>setLcFilter(lc)}
+                              style={{display:"inline-block",margin:"2px 3px 2px 0",padding:"3px 9px",borderRadius:99,fontSize:11,fontWeight:lcFilter===lc?700:400,border:`1px solid ${lcFilter===lc?(LC_COLORS[lc]||T.blue):T.border}`,background:lcFilter===lc?`${LC_COLORS[lc]||T.blue}14`:"transparent",color:lcFilter===lc?(LC_COLORS[lc]||T.blue):T.textSub,cursor:"pointer"}}>
+                              {lc}{lc!=="All"&&<span style={{marginLeft:3,fontSize:9.5,opacity:.65}}>{policies.filter(p=>p.lifecycle===lc).length}</span>}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div style={{padding:"8px 10px",borderTop:`1px solid ${T.border}`}}>
+                        <button onClick={()=>setFilterDropOpen(false)} style={{width:"100%",padding:"5px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Done</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-            {/* Lifecycle filter chips */}
-            <div style={{padding:"0 12px 10px",display:"flex",gap:4,flexWrap:"wrap"}}>
-              {["All",...LC_STEPS].map(lc=>(
-                <button key={lc} onClick={()=>setLcFilter(lc)} style={{padding:"3px 8px",borderRadius:99,fontSize:10.5,fontWeight:lcFilter===lc?700:400,border:`1px solid ${lcFilter===lc?(LC_COLORS[lc]||T.blue):T.border}`,background:lcFilter===lc?`${LC_COLORS[lc]||T.blue}14`:"transparent",color:lcFilter===lc?(LC_COLORS[lc]||T.blue):T.textSub,cursor:"pointer"}}>
-                  {lc}{lc!=="All"&&<span style={{marginLeft:4,fontSize:9.5,opacity:.65}}>{policies.filter(p=>p.lifecycle===lc).length}</span>}
-                </button>
-              ))}
-            </div>
-            {/* Policy list grouped by category */}
-            <div style={{flex:1,overflowY:"auto",padding:"0 8px 12px"}}>
-              {filteredPols.length===0&&<div style={{textAlign:"center",padding:"32px 12px",color:T.textMuted,fontSize:12}}>No policies match.</div>}
+
+            {/* Active filter strip */}
+            {(polSearch||catFilter.length>0||lcFilter!=="All")&&(
+              <div style={{padding:"5px 10px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:4,flexShrink:0,flexWrap:"wrap",background:T.bgElevated}}>
+                <span style={{fontSize:10.5,color:T.textMuted,flexShrink:0}}>{filteredPols.length} result{filteredPols.length!==1?"s":""}:</span>
+                {catFilter.map(cat=>(
+                  <span key={cat} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10.5,padding:"1px 6px",borderRadius:99,background:`${CAT_COLORS[cat]||T.blue}15`,color:CAT_COLORS[cat]||T.blue,border:`1px solid ${CAT_COLORS[cat]||T.blue}30`,fontWeight:600}}>
+                    {cat}<button onClick={()=>setCatFilter(p=>p.filter(c=>c!==cat))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,fontSize:11,lineHeight:1}}>×</button>
+                  </span>
+                ))}
+                {lcFilter!=="All"&&(
+                  <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10.5,padding:"1px 6px",borderRadius:99,background:`${lcColor(lcFilter)}14`,color:lcColor(lcFilter),border:`1px solid ${lcColor(lcFilter)}30`,fontWeight:600}}>
+                    {lcFilter}<button onClick={()=>setLcFilter("All")} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,fontSize:11,lineHeight:1}}>×</button>
+                  </span>
+                )}
+                {polSearch&&(
+                  <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10.5,padding:"1px 6px",borderRadius:99,background:T.bgSurface,color:T.textSub,border:`1px solid ${T.border}`,fontFamily:"'Geist Mono',monospace"}}>
+                    "{polSearch}"<button onClick={()=>setPolSearch("")} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,fontSize:11,lineHeight:1}}>×</button>
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Policy list grouped by category — Tags-style with hover actions */}
+            <div style={{flex:1,overflowY:"auto"}}>
+              {filteredPols.length===0&&(
+                <div style={{textAlign:"center",padding:"36px 16px"}}>
+                  <div style={{fontSize:12.5,fontWeight:600,color:T.textSub,marginBottom:4}}>No policies match</div>
+                  <div style={{fontSize:11,color:T.textMuted,marginBottom:12}}>Try clearing your filters or create a new policy</div>
+                  <button onClick={()=>setCreateOpen(true)} style={{fontSize:11,padding:"5px 14px",borderRadius:7,background:T.accent,border:"none",color:"#fff",cursor:"pointer",fontWeight:600}}>+ New Policy</button>
+                </div>
+              )}
               {POLICY_CATS.map(cat=>{
                 const catPols = filteredPols.filter(p=>p.category===cat);
                 if (!catPols.length) return null;
                 return (
-                  <div key={cat} style={{marginBottom:8}}>
-                    <div style={{display:"flex",alignItems:"center",gap:6,padding:"8px 8px 4px",fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>
-                      <div style={{width:5,height:5,borderRadius:1,background:CAT_COLORS[cat]||T.blue,flexShrink:0}}/>
+                  <div key={cat}>
+                    {/* Category row */}
+                    <div style={{display:"flex",alignItems:"center",padding:"7px 8px 4px 10px",fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>
+                      <div style={{width:6,height:6,borderRadius:1,background:CAT_COLORS[cat]||T.blue,marginRight:6,flexShrink:0}}/>
                       {cat}
-                      <span style={{marginLeft:"auto",fontWeight:400,fontSize:10}}>{catPols.length}</span>
+                      <span style={{marginLeft:"auto",fontWeight:400,fontSize:10,fontFamily:"'Geist Mono',monospace"}}>{catPols.length}</span>
                     </div>
                     {catPols.map(p=>{
                       const isSel = selPolicyId===p.id;
+                      const isHov = hovPolId===p.id;
                       const viols = getViolations(p).length;
                       return (
-                        <div key={p.id} onClick={()=>{setSelPolicyId(isSel?null:p.id);setPdTab("overview");}}
-                          style={{padding:"8px 10px",borderRadius:8,cursor:"pointer",marginBottom:1,
-                            background:isSel?`${lcColor(p.lifecycle)}12`:T.bgSurface,
-                            borderLeft:`3px solid ${isSel?lcColor(p.lifecycle):"transparent"}`,transition:"all .1s"}}
-                          onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.bgElevated;}}
-                          onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background=T.bgSurface;}}>
-                          <div style={{fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,lineHeight:1.4,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                            {p.name}
+                        <div key={p.id}
+                          onClick={()=>{setSelPolicyId(isSel?null:p.id);setPdTab("overview");}}
+                          onMouseEnter={()=>setHovPolId(p.id)}
+                          onMouseLeave={()=>setHovPolId(null)}
+                          style={{display:"flex",alignItems:"center",paddingRight:6,
+                            background:isSel?`${lcColor(p.lifecycle)}10`:isHov?T.bgHover:"transparent",
+                            borderLeft:`2.5px solid ${isSel?lcColor(p.lifecycle):"transparent"}`,
+                            cursor:"pointer",transition:"all .1s"}}>
+                          <div style={{flex:1,padding:"8px 6px 8px 8px",minWidth:0}}>
+                            <div style={{fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,lineHeight:1.35,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                              {p.name}
+                            </div>
+                            <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                              <span style={{fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:99,border:`1px solid ${lcColor(p.lifecycle)}44`,color:lcColor(p.lifecycle),background:`${lcColor(p.lifecycle)}10`}}>{p.lifecycle}</span>
+                              {viols>0&&<span style={{fontSize:9.5,color:T.rose,fontWeight:600}}>● {viols}</span>}
+                            </div>
                           </div>
-                          <div style={{display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
-                            <span style={{fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:99,border:`1px solid ${lcColor(p.lifecycle)}44`,color:lcColor(p.lifecycle)}}>{p.lifecycle}</span>
-                            {viols>0&&<span style={{fontSize:9.5,color:T.rose,fontWeight:600}}>● {viols} violation{viols>1?"s":""}</span>}
+                          {/* Hover action buttons */}
+                          <div style={{display:"flex",gap:2,flexShrink:0,opacity:isHov||isSel?1:0,transition:"opacity .12s"}}>
+                            <button title="Edit" onClick={e=>{e.stopPropagation();setEditDraft({...p});setEditOpen(true);}}
+                              style={{width:24,height:24,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",transition:"all .1s"}}
+                              onMouseEnter={e=>{e.stopPropagation();e.currentTarget.style.background=T.bgElevated;e.currentTarget.style.color=T.blue;e.currentTarget.style.borderColor=T.blue;}}
+                              onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>
+                              {Ic.edit(10)}
+                            </button>
+                            <button title="Delete" onClick={e=>{e.stopPropagation();setDeleteConfPol(p);}}
+                              style={{width:24,height:24,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",transition:"all .1s"}}
+                              onMouseEnter={e=>{e.stopPropagation();e.currentTarget.style.background=`${T.rose}10`;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
+                              onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>
+                              <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 5l.5 5M8 5l-.5 5M3 3l.5 7h5L9 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            </button>
                           </div>
                         </div>
                       );
@@ -5924,15 +6051,104 @@ const PolicyManagerView = ({onToast}) => {
             </div>
           </div>
 
-          {/* Right: empty state or detail */}
+          {/* Right: overview dashboard or detail */}
           {!selPol&&(
-            <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:14}}>
-              <div style={{width:52,height:52,borderRadius:14,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{color:T.textMuted}}><path d="M9 12h6M9 16h4M5 21h14a2 2 0 002-2V7l-5-5H5a2 2 0 00-2 2v15a2 2 0 002 2z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+            <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
+              {/* Status breakdown */}
+              <div style={{marginBottom:22}}>
+                <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>Policy Status</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8}}>
+                  {LC_STEPS.map(lc=>{
+                    const cnt=policies.filter(p=>p.lifecycle===lc).length;
+                    const pct=Math.round(cnt/Math.max(policies.length,1)*100);
+                    return (
+                      <button key={lc} onClick={()=>{setLcFilter(lc);}} style={{padding:"11px 10px",borderRadius:9,border:`1.5px solid ${lcColor(lc)}30`,background:`${lcColor(lc)}08`,cursor:"pointer",textAlign:"center",transition:"all .12s"}}
+                        onMouseEnter={e=>{e.currentTarget.style.borderColor=lcColor(lc);e.currentTarget.style.background=`${lcColor(lc)}14`;}}
+                        onMouseLeave={e=>{e.currentTarget.style.borderColor=`${lcColor(lc)}30`;e.currentTarget.style.background=`${lcColor(lc)}08`;}}>
+                        <div style={{fontSize:20,fontWeight:800,color:lcColor(lc),fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{cnt}</div>
+                        <div style={{fontSize:10,color:T.textMuted,marginTop:4,fontWeight:600}}>{lc}</div>
+                        {cnt>0&&<div style={{marginTop:6,height:2,borderRadius:1,background:T.bgElevated,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:lcColor(lc)}}/></div>}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <div style={{fontSize:14,fontWeight:600,color:T.text}}>Select a policy</div>
-              <div style={{fontSize:12,color:T.textMuted,maxWidth:240,textAlign:"center",lineHeight:1.7}}>Choose a policy from the list to view details, manage rules, and track compliance.</div>
-              <Btn variant="primary" onClick={()=>setCreateOpen(true)}>+ New Policy</Btn>
+
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:22}}>
+                {/* Category health */}
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>Health by Category</div>
+                  {POLICY_CATS.map(cat=>{
+                    const catPols=policies.filter(p=>p.category===cat);
+                    const activeCnt=catPols.filter(p=>p.lifecycle==="Active").length;
+                    const totalCnt=catPols.length;
+                    const viols=catPols.reduce((s,p)=>s+getViolations(p).length,0);
+                    const pct=totalCnt?Math.round(activeCnt/totalCnt*100):0;
+                    if(!totalCnt) return null;
+                    return (
+                      <div key={cat} style={{marginBottom:10}}>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                          <div style={{display:"flex",alignItems:"center",gap:6}}>
+                            <div style={{width:7,height:7,borderRadius:1,background:CAT_COLORS[cat]||T.blue,flexShrink:0}}/>
+                            <span style={{fontSize:12,fontWeight:600,color:T.text}}>{cat}</span>
+                          </div>
+                          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                            {viols>0&&<span style={{fontSize:10.5,color:T.rose,fontWeight:600}}>⚠ {viols}</span>}
+                            <span style={{fontSize:11,color:T.textMuted}}>{activeCnt}/{totalCnt}</span>
+                          </div>
+                        </div>
+                        <div style={{height:4,borderRadius:2,background:T.bgElevated,overflow:"hidden"}}>
+                          <div style={{width:`${pct}%`,height:"100%",background:CAT_COLORS[cat]||T.blue,borderRadius:2,transition:"width .4s"}}/>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Regulation coverage */}
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>Regulation Coverage</div>
+                  {regulations.map(reg=>{
+                    const sc=reg.score>=90?T.green:reg.score>=75?T.amber:T.rose;
+                    return (
+                      <div key={reg.id} style={{marginBottom:10}}>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                          <span style={{fontSize:12,fontWeight:600,color:T.text}}>{reg.name}</span>
+                          <span style={{fontSize:12,fontWeight:700,color:sc,fontFamily:"'Geist Mono',monospace"}}>{reg.score}%</span>
+                        </div>
+                        <div style={{height:4,borderRadius:2,background:T.bgElevated,overflow:"hidden"}}>
+                          <div style={{width:`${reg.score}%`,height:"100%",background:sc,borderRadius:2,transition:"width .4s"}}/>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Recent activity */}
+              <div>
+                <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>Recent Activity</div>
+                <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                  {policies.flatMap(p=>(p.history||[]).map(h=>({...h,policyName:p.name,polId:p.id,lc:p.lifecycle}))).sort((a,b)=>b.when.localeCompare(a.when)).slice(0,7).map((h,i,arr)=>{
+                    const dot=h.action.toLowerCase().includes("deprecat")?T.rose:h.action.toLowerCase().includes("activat")||h.action.toLowerCase().includes("publish")?T.blue:h.action.toLowerCase().includes("approv")?T.green:h.action.toLowerCase().includes("submit")||h.action.toLowerCase().includes("review")?T.amber:T.textMuted;
+                    return (
+                      <div key={i} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"11px 16px",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",cursor:"pointer"}}
+                        onClick={()=>{setSelPolicyId(h.polId);setPdTab("activity");}}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.bgElevated}
+                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                        <div style={{width:8,height:8,borderRadius:"50%",background:dot,flexShrink:0,marginTop:4}}/>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:12,color:T.text,marginBottom:2,lineHeight:1.4}}>{h.action}</div>
+                          <div style={{fontSize:11,color:T.textMuted}}>
+                            <span style={{fontFamily:"'Geist Mono',monospace",fontSize:10.5}}>{h.policyName}</span>
+                            {" · "}{h.when}{" · "}{h.who}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           )}
 
@@ -6285,6 +6501,27 @@ const PolicyManagerView = ({onToast}) => {
       )}
 
       {/* Link Policy to Regulation Requirement */}
+      {/* Delete Policy confirmation */}
+      {deleteConfPol&&(
+        <Backdrop onClose={()=>setDeleteConfPol(null)}>
+          <ModalHdr title="Delete policy?" sub={`"${deleteConfPol.name}" will be permanently removed.`} onClose={()=>setDeleteConfPol(null)}/>
+          <div style={{padding:"20px 24px",flex:1}}>
+            <div style={{padding:"12px 14px",background:`${T.rose}08`,border:`1px solid ${T.rose}25`,borderRadius:9,fontSize:12.5,color:T.textSub,lineHeight:1.7}}>
+              This will permanently delete the policy and all its rules, links, and history. This action cannot be undone.
+            </div>
+          </div>
+          <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",gap:10,justifyContent:"flex-end"}}>
+            <Btn ghost onClick={()=>setDeleteConfPol(null)}>Cancel</Btn>
+            <Btn variant="danger" onClick={()=>{
+              if(selPolicyId===deleteConfPol.id) setSelPolicyId(null);
+              setPolicies(prev=>prev.filter(p=>p.id!==deleteConfPol.id));
+              setDeleteConfPol(null);
+              onToast("Policy deleted","info");
+            }}>Delete</Btn>
+          </div>
+        </Backdrop>
+      )}
+
       {linkPolOpen&&(
         <Backdrop onClose={()=>setLinkPolOpen(null)}>
           <ModalHdr title="Link policy to requirement" sub="Select an internal policy to satisfy this regulatory requirement." onClose={()=>setLinkPolOpen(null)}/>
