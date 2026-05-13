@@ -5858,7 +5858,7 @@ const PolicyManagerView = ({onToast}) => {
 
       {/* ── Main tab bar ── */}
       <div style={{padding:"10px 28px 0",flexShrink:0}}>
-        <Tabs2 tabs={[{key:"policies",label:`Policies (${policies.length})`},{key:"regulations",label:`Regulations (${regulations.length})`},{key:"risks",label:`Risks (${derivedRisks.length})`}]} active={tab} onChange={t=>{setTab(t);setSelPolicyId(null);}}/>
+        <Tabs2 tabs={[{key:"policies",label:`Policies (${policies.length})`},{key:"regulations",label:`Regulations (${regulations.length})`}]} active={tab} onChange={t=>{setTab(t);setSelPolicyId(null);}}/>
       </div>
 
       {/* ════ content area ════ */}
@@ -6217,91 +6217,6 @@ const PolicyManagerView = ({onToast}) => {
           );
         })()}
 
-        {/* ══════ RISKS TAB ══════ */}
-        {tab==="risks"&&(()=>{
-          const RISK_MATRIX = [
-            {lh:"High",im:"Low",bg:`${T.amber}15`},{lh:"High",im:"Med",bg:`${T.rose}18`},{lh:"High",im:"High",bg:`${T.rose}25`},
-            {lh:"Med", im:"Low",bg:`${T.green}10`},{lh:"Med", im:"Med",bg:`${T.amber}14`},{lh:"Med", im:"High",bg:`${T.amber}20`},
-            {lh:"Low", im:"Low",bg:`${T.green}08`},{lh:"Low", im:"Med",bg:`${T.green}10`},{lh:"Low", im:"High",bg:`${T.amber}12`},
-          ];
-          return (
-            <div style={{flex:1,overflowY:"auto",padding:"20px 28px"}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
-                <div style={{display:"flex",gap:6}}>
-                  {["list","matrix"].map(v=>(
-                    <button key={v} onClick={()=>setRiskView(v)} style={{padding:"5px 14px",borderRadius:99,fontSize:12,fontWeight:riskView===v?700:400,border:`1.5px solid ${riskView===v?T.blue:T.border}`,background:riskView===v?T.blueDim:"transparent",color:riskView===v?T.blue:T.textSub,cursor:"pointer",textTransform:"capitalize"}}>
-                      {v} view
-                    </button>
-                  ))}
-                </div>
-                <div style={{display:"flex",gap:14}}>
-                  {[{l:"Critical",n:derivedRisks.filter(r=>r.severity==="Critical").length,c:T.rose},{l:"High",n:derivedRisks.filter(r=>r.severity==="High").length,c:T.amber}].map(m=>(
-                    <span key={m.l} style={{fontSize:11.5,color:m.c,fontWeight:600}}>{m.n} {m.l}</span>
-                  ))}
-                </div>
-              </div>
-              {derivedRisks.length===0&&(
-                <div style={{padding:"60px 0",textAlign:"center"}}>
-                  <div style={{fontSize:14,color:T.green,fontWeight:700,marginBottom:6}}>No active policy violations</div>
-                  <div style={{fontSize:12,color:T.textMuted}}>All active policies are within compliance thresholds.</div>
-                </div>
-              )}
-              {riskView==="list"&&derivedRisks.length>0&&(
-                <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                  <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 80px",padding:"9px 18px",borderBottom:`1px solid ${T.border}`,background:T.bgElevated}}>
-                    {["Policy","Category","Likelihood","Impact","Violations"].map(h=><span key={h} style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{h}</span>)}
-                  </div>
-                  {derivedRisks.map((r,i)=>{
-                    const sc=riskSc(r),rc=riskClr(sc);
-                    return (
-                      <div key={r.id} style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 80px",padding:"12px 18px",borderBottom:i<derivedRisks.length-1?`1px solid ${T.border}`:"none",alignItems:"center"}}>
-                        <div>
-                          <div style={{fontSize:12.5,fontWeight:600,color:T.text,marginBottom:2}}>{r.policyName}</div>
-                          <div style={{fontSize:11,color:T.textMuted}}>owner: {r.owner}</div>
-                        </div>
-                        <span style={{fontSize:11.5,fontWeight:600,padding:"3px 9px",borderRadius:5,background:`${CAT_COLORS[r.category]||T.blue}18`,color:CAT_COLORS[r.category]||T.blue,width:"fit-content"}}>{r.category}</span>
-                        <span style={{fontSize:12,fontWeight:700,color:r.likelihood==="High"?T.rose:r.likelihood==="Med"?T.amber:T.green}}>{r.likelihood}</span>
-                        <span style={{fontSize:12,fontWeight:700,color:r.impact==="High"?T.rose:r.impact==="Med"?T.amber:T.green}}>{r.impact}</span>
-                        <span style={{fontSize:13,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:rc}}>{r.violations}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              {riskView==="matrix"&&(
-                <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:20}}>
-                  <div style={{fontSize:12,color:T.textSub,marginBottom:16}}>Likelihood × Impact — each dot is an active policy with violations</div>
-                  <div style={{display:"flex",gap:16,alignItems:"flex-start"}}>
-                    <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",height:270,paddingBottom:40,alignItems:"flex-end",flexShrink:0}}>
-                      {["High","Med","Low"].map(l=><span key={l} style={{fontSize:10.5,color:T.textMuted}}>{l}</span>)}
-                    </div>
-                    <div style={{flex:1}}>
-                      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gridTemplateRows:"repeat(3,80px)",gap:4}}>
-                        {RISK_MATRIX.map((cell,i)=>{
-                          const cr=derivedRisks.filter(r=>r.likelihood===cell.lh&&r.impact===cell.im);
-                          return (
-                            <div key={i} style={{background:cell.bg,borderRadius:7,border:`1px solid ${T.border}`,padding:8,display:"flex",flexWrap:"wrap",gap:5,alignContent:"flex-start"}}>
-                              {cr.map(r=><div key={r.id} title={`${r.policyName} — ${r.violations} violations`} style={{width:11,height:11,borderRadius:"50%",background:riskClr(riskSc(r)),cursor:"pointer"}}/>)}
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4,marginTop:6}}>
-                        {["Low","Med","High"].map(l=><div key={l} style={{textAlign:"center",fontSize:10.5,color:T.textMuted}}>{l}</div>)}
-                      </div>
-                      <div style={{textAlign:"center",fontSize:10.5,color:T.textMuted,marginTop:4}}>Impact →</div>
-                    </div>
-                  </div>
-                  {derivedRisks.length>0&&(
-                    <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${T.border}`,display:"flex",flexWrap:"wrap",gap:12}}>
-                      {derivedRisks.map(r=><div key={r.id} style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:9,height:9,borderRadius:"50%",background:riskClr(riskSc(r))}}/><span style={{fontSize:10.5,color:T.textMuted}}>{r.policyName.split(" ").slice(0,4).join(" ")}</span></div>)}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })()}
 
       </div>
 
