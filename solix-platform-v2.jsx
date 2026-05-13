@@ -5369,440 +5369,805 @@ const QualityView = () => {
 };
 
 const PolicyManagerView = ({onToast}) => {
-  const [tab,             setTab]             = useState("overview");
-  const [selectedPolicy,  setSelectedPolicy]  = useState(null);
-  const [selectedReg,     setSelectedReg]     = useState(null);
-  const [catFilter,       setCatFilter]       = useState("All");
-  const [ruleTypeFilter,  setRuleTypeFilter]  = useState("All");
-  const [riskView,        setRiskView]        = useState("list");
-  const [pdTab,           setPdTab]           = useState("overview");
-  const [polSearch,       setPolSearch]       = useState("");
+  // ─── colours & metadata ─────────────────────────────────────────────
+  const CAT_COLORS  = {Privacy:T.violet,Quality:T.green,Retention:T.amber,Access:T.rose,Classification:T.blue,Security:T.rose};
+  const SEV_COLORS  = {Critical:T.rose,High:T.amber,Medium:T.blue,Low:T.green};
+  const LC_COLORS   = {"Draft":T.textMuted,"In Review":T.amber,"Approved":T.green,"Active":T.blue,"Deprecated":T.rose};
+  const LC_STEPS    = ["Draft","In Review","Approved","Active","Deprecated"];
+  const POLICY_CATS = ["Privacy","Quality","Retention","Access","Classification","Security"];
+  const ALL_DOMAINS = (DOMAIN_LIST_DATA||[]).map(d=>d.name);
+  const PMV_USERS   = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
 
-  const LIFECYCLE_STEPS = ["Draft","Under Review","Approved","Active","Deprecated"];
-  const lifIdx = lc => LIFECYCLE_STEPS.indexOf(lc);
-  const lifColor = lc => lc==="Active"?T.green:lc==="Draft"?T.textMuted:lc==="Deprecated"?T.rose:T.amber;
+  // ─── state ──────────────────────────────────────────────────────────
+  const [policies, setPolicies] = useState([
+    {id:"pol-1",name:"Commerce PII Sensitivity",category:"Privacy",severity:"Critical",
+     description:"All assets in the Commerce and Finance domains must carry an Approved certification and maintain a quality score of at least 75. Non-compliant assets pose direct privacy and regulatory risk under GDPR and CCPA.",
+     lifecycle:"Active",owner:"maya.chen",created:"2026-02-10",updated:"2026-05-01",
+     regulations:["GDPR","CCPA"],
+     scope:{domains:["Commerce","Finance"]},
+     conditions:[{type:"min_quality",threshold:75,label:"Quality ≥ 75%"},{type:"required_cert",label:"Certification: Approved"}]},
+    {id:"pol-2",name:"Finance Data Integrity",category:"Quality",severity:"High",
+     description:"Financial datasets must maintain a minimum quality score of 80 to ensure accurate reporting and audit readiness. Assets below threshold are flagged for stewardship review.",
+     lifecycle:"Active",owner:"dev.patel",created:"2026-01-15",updated:"2026-04-20",
+     regulations:["SOC2","PCI DSS"],
+     scope:{domains:["Finance"]},
+     conditions:[{type:"min_quality",threshold:80,label:"Quality ≥ 80%"},{type:"required_cert",label:"Certification: Approved"}]},
+    {id:"pol-3",name:"ML Feature Readiness",category:"Quality",severity:"High",
+     description:"Features used in ML pipelines must score above 85 on quality checks and hold an Approved certification before promotion to production. Prevents model degradation from poor-quality training data.",
+     lifecycle:"In Review",owner:"sarah.kim",created:"2026-03-20",updated:"2026-05-05",
+     regulations:[],
+     scope:{domains:["ML","Engineering"]},
+     conditions:[{type:"min_quality",threshold:85,label:"Quality ≥ 85%"},{type:"required_cert",label:"Certification: Approved"}]},
+    {id:"pol-4",name:"HIPAA PHI Compliance",category:"Access",severity:"Critical",
+     description:"Assets containing Protected Health Information must be Approved-certified and maintain quality at or above 90 to ensure data integrity in healthcare workflows. Violations must be remediated within 72 hours.",
+     lifecycle:"Active",owner:"lisa.ray",created:"2026-01-05",updated:"2026-04-01",
+     regulations:["HIPAA"],
+     scope:{domains:["Finance","Commerce"]},
+     conditions:[{type:"required_cert",label:"Certification: Approved"},{type:"min_quality",threshold:90,label:"Quality ≥ 90%"}]},
+    {id:"pol-5",name:"Product Catalog Completeness",category:"Quality",severity:"Medium",
+     description:"Product and Marketing domain assets must meet a 70% quality threshold to be discoverable in the Data Catalog. Ensures consumers can trust and find data without steward intervention.",
+     lifecycle:"Draft",owner:"alex.wu",created:"2026-04-10",updated:"2026-05-10",
+     regulations:[],
+     scope:{domains:["Product","Marketing"]},
+     conditions:[{type:"min_quality",threshold:70,label:"Quality ≥ 70%"}]},
+    {id:"pol-6",name:"Engineering Pipeline Governance",category:"Classification",severity:"Medium",
+     description:"Data pipeline outputs must be Approved-certified before promotion to production. Deprecated — scope has been consolidated under ML Feature Readiness.",
+     lifecycle:"Deprecated",owner:"priya.nair",created:"2025-11-01",updated:"2026-02-15",
+     regulations:["SOC2"],
+     scope:{domains:["Engineering"]},
+     conditions:[{type:"required_cert",label:"Certification: Approved"}]},
+  ]);
 
-  const activePolicies    = POLICIES.filter(p=>p.lifecycle==="Active");
-  const avgConformity     = Math.round(activePolicies.reduce((a,p)=>a+p.conformity,0)/Math.max(activePolicies.length,1));
-  const totalViolations   = POLICIES.reduce((a,p)=>a+p.violations,0);
-  const openRisks         = GOVERNANCE_RISKS.filter(r=>r.status!=="Resolved").length;
-  const compliantFrameworks = REGULATIONS.filter(r=>r.status==="Compliant").length;
+  const [regulations, setRegulations] = useState([
+    {id:"gdpr",name:"GDPR",fullName:"General Data Protection Regulation",region:"EU",score:68,status:"Partial",lastAudit:"2026-03-01",
+     requirements:[
+       {id:"gdpr-1",title:"Data minimisation — collect only what is necessary",linked:null},
+       {id:"gdpr-2",title:"Purpose limitation — data used only as declared",linked:null},
+       {id:"gdpr-3",title:"Storage limitation — enforce retention periods",linked:null},
+       {id:"gdpr-4",title:"Data subject rights — erasure and portability",linked:null},
+       {id:"gdpr-5",title:"Security of processing — technical controls documented",linked:null},
+     ]},
+    {id:"soc2",name:"SOC 2",fullName:"Service Organisation Control 2",region:"Global",score:82,status:"Passing",lastAudit:"2026-02-15",
+     requirements:[
+       {id:"soc2-1",title:"CC6.1 — Logical access security measures",linked:null},
+       {id:"soc2-2",title:"CC7.1 — System monitoring and alerting",linked:null},
+       {id:"soc2-3",title:"CC8.1 — Change management controls",linked:null},
+       {id:"soc2-4",title:"A1.1 — Data backup and recovery",linked:null},
+     ]},
+    {id:"ccpa",name:"CCPA",fullName:"California Consumer Privacy Act",region:"US-CA",score:74,status:"Partial",lastAudit:"2026-01-20",
+     requirements:[
+       {id:"ccpa-1",title:"Right to know — disclose personal data collected",linked:null},
+       {id:"ccpa-2",title:"Right to delete — honour deletion requests",linked:null},
+       {id:"ccpa-3",title:"Right to opt-out — do not sell personal data",linked:null},
+     ]},
+    {id:"hipaa",name:"HIPAA",fullName:"Health Insurance Portability and Accountability Act",region:"US",score:91,status:"Passing",lastAudit:"2026-04-10",
+     requirements:[
+       {id:"hipaa-1",title:"164.308 — Administrative safeguards for PHI",linked:null},
+       {id:"hipaa-2",title:"164.310 — Physical safeguards for electronic PHI",linked:null},
+       {id:"hipaa-3",title:"164.312 — Technical safeguards and access controls",linked:null},
+     ]},
+    {id:"pci",name:"PCI DSS",fullName:"Payment Card Industry Data Security Standard",region:"Global",score:79,status:"Partial",lastAudit:"2026-03-25",
+     requirements:[
+       {id:"pci-1",title:"Req 3 — Protect stored cardholder data",linked:null},
+       {id:"pci-2",title:"Req 7 — Restrict access to need-to-know basis",linked:null},
+       {id:"pci-3",title:"Req 10 — Track and monitor all network resource access",linked:null},
+       {id:"pci-4",title:"Req 12 — Maintain an information security policy",linked:null},
+     ]},
+  ]);
 
-  const POLICY_CATS = ["All",...[...new Set(POLICIES.map(p=>p.category))]];
-  const filteredPolicies = POLICIES.filter(p=>{
-    const byCat = catFilter==="All" || p.category===catFilter;
-    const byQ   = !polSearch || p.name.toLowerCase().includes(polSearch.toLowerCase()) || p.category.toLowerCase().includes(polSearch.toLowerCase()) || (p.owner||"").toLowerCase().includes(polSearch.toLowerCase());
-    return byCat && byQ;
+  const [tab,           setTab]         = useState("policies");
+  const [selPolicyId,   setSelPolicyId] = useState(null);
+  const [pdTab,         setPdTab]       = useState("overview");
+  const [polSearch,     setPolSearch]   = useState("");
+  const [lcFilter,      setLcFilter]    = useState("All");
+  const [expandedReg,   setExpandedReg] = useState(null);
+  const [linkPolOpen,   setLinkPolOpen] = useState(null);
+  const [riskView,      setRiskView]    = useState("list");
+  const [createOpen,    setCreateOpen]  = useState(false);
+  const [editOpen,      setEditOpen]    = useState(false);
+  const [editDraft,     setEditDraft]   = useState(null);
+  const [newCondType,   setNewCondType] = useState("min_quality");
+  const [newCondThr,    setNewCondThr]  = useState(80);
+  const EMPTY_POL = {name:"",category:"Privacy",severity:"High",description:"",owner:"",regulations:[],scope:{domains:[]},conditions:[]};
+  const [newPol, setNewPol] = useState(EMPTY_POL);
+
+  // ─── computed ────────────────────────────────────────────────────────
+  const getGovAssets = (pol) => {
+    if (!pol) return [];
+    const doms = pol.scope?.domains||[];
+    return doms.length ? ASSETS.filter(a=>doms.includes(a.domain)) : ASSETS;
+  };
+  const getViolations = (pol) => {
+    const conds = pol?.conditions||[];
+    if (!conds.length) return [];
+    return getGovAssets(pol).filter(a=>conds.some(c=>{
+      if (c.type==="min_quality") return typeof a.quality==="number" && a.quality < c.threshold;
+      if (c.type==="required_cert") return a.cert && a.cert!=="Approved";
+      if (c.type==="max_tier")      return a.tier && parseInt(a.tier) > c.threshold;
+      return false;
+    })).map(a=>({
+      ...a,
+      failedConds: conds.filter(c=>{
+        if (c.type==="min_quality") return typeof a.quality==="number" && a.quality < c.threshold;
+        if (c.type==="required_cert") return a.cert && a.cert!=="Approved";
+        if (c.type==="max_tier")      return a.tier && parseInt(a.tier) > c.threshold;
+        return false;
+      }),
+    }));
+  };
+
+  const selPol       = policies.find(p=>p.id===selPolicyId)||null;
+  const selGovAssets = getGovAssets(selPol);
+  const selViols     = selPol ? getViolations(selPol) : [];
+  const linkedTerms  = selPol
+    ? GLOSSARY_TERMS.filter(t=>(selPol.scope?.domains||[]).includes(t.domain))
+    : [];
+
+  const activePols  = policies.filter(p=>p.lifecycle==="Active");
+  const totalViols  = activePols.reduce((s,p)=>s+getViolations(p).length, 0);
+  const coveredIds  = new Set(activePols.flatMap(p=>getGovAssets(p).map(a=>a.id)));
+  const coveragePct = ASSETS.length ? Math.round(coveredIds.size/ASSETS.length*100) : 0;
+
+  const filteredPols = policies.filter(p=>{
+    const ms = !polSearch || p.name.toLowerCase().includes(polSearch.toLowerCase()) || p.category.toLowerCase().includes(polSearch.toLowerCase());
+    const ml = lcFilter==="All" || p.lifecycle===lcFilter;
+    return ms && ml;
   });
-  const RULE_TYPES = ["All","Classification","Retention","Access","Security","Process","Documentation"];
-  const filteredRules = ruleTypeFilter==="All" ? GOVERNANCE_RULES : GOVERNANCE_RULES.filter(r=>r.type===ruleTypeFilter);
 
-  const riskScore  = r => ({Low:1,Med:2,High:3}[r.likelihood]*{Low:1,Med:2,High:3}[r.impact]);
-  const riskColor  = score => score>=6?T.red:score>=3?T.amber:T.green;
-  const typeColor  = t => ({Classification:T.violet,Retention:T.blue,Access:T.amber,Security:T.rose,Process:T.green,Documentation:T.textSub}[t]||T.textSub);
+  const derivedRisks = activePols.map(p=>{
+    const v = getViolations(p);
+    if (!v.length) return null;
+    const lh = v.length>=10?"High":v.length>=4?"Med":"Low";
+    const imp = p.severity==="Critical"?"High":p.severity==="High"?"Med":"Low";
+    return {id:p.id,policyName:p.name,category:p.category,violations:v.length,likelihood:lh,impact:imp,owner:p.owner,severity:p.severity};
+  }).filter(Boolean);
 
-  const changeTab = t => { setTab(t); setSelectedPolicy(null); setSelectedReg(null); };
+  // ─── handlers ────────────────────────────────────────────────────────
+  const advanceLifecycle = (pol) => {
+    const idx = LC_STEPS.indexOf(pol.lifecycle);
+    if (idx<0||idx>=3) return;
+    const next = LC_STEPS[idx+1];
+    setPolicies(prev=>prev.map(p=>p.id===pol.id?{...p,lifecycle:next,updated:new Date().toISOString().slice(0,10)}:p));
+    onToast(`Policy moved to "${next}"`,"success");
+  };
+  const deprecatePol = (pol) => {
+    setPolicies(prev=>prev.map(p=>p.id===pol.id?{...p,lifecycle:"Deprecated",updated:new Date().toISOString().slice(0,10)}:p));
+    onToast("Policy deprecated","info");
+  };
+  const handleCreate = () => {
+    if (!newPol.name.trim()) return;
+    const p = {...newPol,id:`pol-${Date.now()}`,lifecycle:"Draft",created:new Date().toISOString().slice(0,10),updated:new Date().toISOString().slice(0,10)};
+    setPolicies(prev=>[...prev,p]);
+    setCreateOpen(false); setNewPol(EMPTY_POL);
+    setSelPolicyId(p.id); setPdTab("overview");
+    onToast("Policy created","success");
+  };
+  const handleSaveEdit = () => {
+    if (!editDraft?.name?.trim()) return;
+    setPolicies(prev=>prev.map(p=>p.id===editDraft.id?{...editDraft,updated:new Date().toISOString().slice(0,10)}:p));
+    setEditOpen(false); setEditDraft(null);
+    onToast("Policy updated","success");
+  };
+  const handleLinkPol = (polId) => {
+    if (!linkPolOpen) return;
+    const {regId,reqId} = linkPolOpen;
+    setRegulations(prev=>prev.map(r=>r.id===regId?{...r,requirements:r.requirements.map(req=>req.id===reqId?{...req,linked:polId}:req)}:r));
+    setLinkPolOpen(null);
+    onToast(polId?"Requirement linked to policy":"Requirement unlinked","success");
+  };
+  const addCondition = (isEdit) => {
+    let cond;
+    if (newCondType==="min_quality")  cond={type:"min_quality",threshold:newCondThr,label:`Quality ≥ ${newCondThr}%`};
+    else if (newCondType==="required_cert") cond={type:"required_cert",label:"Certification: Approved"};
+    else cond={type:"max_tier",threshold:newCondThr,label:`Tier ≤ ${newCondThr}`};
+    if (isEdit) {
+      if (!(editDraft?.conditions||[]).find(c=>c.type===cond.type))
+        setEditDraft(p=>({...p,conditions:[...(p.conditions||[]),cond]}));
+    } else {
+      if (!(newPol.conditions||[]).find(c=>c.type===cond.type))
+        setNewPol(p=>({...p,conditions:[...(p.conditions||[]),cond]}));
+    }
+  };
 
+  // ─── sub-components ──────────────────────────────────────────────────
+  const ConditionBuilder = ({isEdit}) => {
+    const pol = isEdit ? editDraft : newPol;
+    const set = isEdit ? setEditDraft : setNewPol;
+    return (
+      <div>
+        <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Conditions</label>
+        {(pol?.conditions||[]).map((c,i)=>(
+          <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,marginBottom:6}}>
+            <div style={{width:7,height:7,borderRadius:"50%",background:T.green,flexShrink:0}}/>
+            <span style={{flex:1,fontSize:12,color:T.text}}>{c.label}</span>
+            <button onClick={()=>set(p=>({...p,conditions:(p.conditions||[]).filter((_,j)=>j!==i)}))} style={{background:"none",border:"none",color:T.rose,cursor:"pointer",fontSize:14,padding:0,lineHeight:1}}>×</button>
+          </div>
+        ))}
+        <div style={{display:"flex",gap:6,marginTop:8}}>
+          <select value={newCondType} onChange={e=>setNewCondType(e.target.value)}
+            style={{flex:1,padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none"}}>
+            <option value="min_quality">Minimum Quality Score</option>
+            <option value="required_cert">Certification: Approved</option>
+            <option value="max_tier">Maximum Tier Level</option>
+          </select>
+          {(newCondType==="min_quality"||newCondType==="max_tier")&&(
+            <input type="number" value={newCondThr} onChange={e=>setNewCondThr(Number(e.target.value))} min={newCondType==="max_tier"?1:0} max={newCondType==="max_tier"?3:100}
+              style={{width:64,padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",textAlign:"center"}}/>
+          )}
+          <button onClick={()=>addCondition(isEdit)} style={{padding:"7px 14px",borderRadius:7,background:T.blue,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0}}>+ Add</button>
+        </div>
+      </div>
+    );
+  };
+
+  const PolicyFormBody = ({isEdit}) => {
+    const pol = isEdit ? editDraft : newPol;
+    const set = isEdit ? setEditDraft : setNewPol;
+    if (!pol) return null;
+    const inpStyle = {width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"};
+    return (
+      <div style={{padding:"20px 24px",flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:14}}>
+        <div>
+          <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Policy Name <span style={{color:T.rose}}>*</span></label>
+          <input value={pol.name} onChange={e=>set(p=>({...p,name:e.target.value}))} autoFocus placeholder="e.g. Commerce PII Sensitivity"
+            style={inpStyle} onFocus={e=>e.target.style.borderColor=T.blue} onBlur={e=>e.target.style.borderColor=T.border}/>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div>
+            <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Category</label>
+            <select value={pol.category} onChange={e=>set(p=>({...p,category:e.target.value}))} style={inpStyle}>
+              {POLICY_CATS.map(c=><option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Severity</label>
+            <select value={pol.severity} onChange={e=>set(p=>({...p,severity:e.target.value}))} style={inpStyle}>
+              {["Critical","High","Medium","Low"].map(s=><option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+        </div>
+        <div>
+          <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Description</label>
+          <textarea value={pol.description} onChange={e=>set(p=>({...p,description:e.target.value}))} rows={3} placeholder="What does this policy enforce and why?"
+            style={{...inpStyle,resize:"vertical",fontFamily:"inherit"}} onFocus={e=>e.target.style.borderColor=T.blue} onBlur={e=>e.target.style.borderColor=T.border}/>
+        </div>
+        <div>
+          <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Owner</label>
+          <select value={pol.owner} onChange={e=>set(p=>({...p,owner:e.target.value}))} style={inpStyle}>
+            <option value="">— Select owner —</option>
+            {PMV_USERS.map(u=><option key={u} value={u}>{u}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Scope — Domains</label>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {ALL_DOMAINS.map(d=>{
+              const sel=(pol.scope?.domains||[]).includes(d);
+              return (
+                <button key={d} onClick={()=>set(p=>{const doms=p.scope?.domains||[];return{...p,scope:{...p.scope,domains:sel?doms.filter(x=>x!==d):[...doms,d]}}})}
+                  style={{padding:"5px 12px",borderRadius:6,border:`1.5px solid ${sel?T.blue:T.border}`,background:sel?T.blueDim:T.bgElevated,color:sel?T.blue:T.textSub,fontSize:12,fontWeight:sel?600:400,cursor:"pointer",transition:"all .1s"}}>
+                  {d}
+                </button>
+              );
+            })}
+          </div>
+          {!(pol.scope?.domains||[]).length&&<div style={{fontSize:11,color:T.textMuted,marginTop:5,fontStyle:"italic"}}>No domains selected = applies to all assets</div>}
+        </div>
+        <ConditionBuilder isEdit={isEdit}/>
+        <div>
+          <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Regulatory Frameworks</label>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {["GDPR","SOC2","CCPA","HIPAA","PCI DSS"].map(r=>{
+              const sel=(pol.regulations||[]).includes(r);
+              return (
+                <button key={r} onClick={()=>set(p=>{const regs=p.regulations||[];return{...p,regulations:sel?regs.filter(x=>x!==r):[...regs,r]};})}
+                  style={{padding:"4px 12px",borderRadius:6,border:`1.5px solid ${sel?T.blue:T.border}`,background:sel?T.blueDim:T.bgElevated,color:sel?T.blue:T.textSub,fontSize:11.5,fontWeight:sel?600:400,cursor:"pointer"}}>
+                  {r}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ─── render helpers ──────────────────────────────────────────────────
+  const lcColor = lc => LC_COLORS[lc]||T.textMuted;
+  const lcIdx   = lc => LC_STEPS.indexOf(lc);
+  const riskSc  = r => ({Low:1,Med:2,High:3}[r.likelihood]||1)*({Low:1,Med:2,High:3}[r.impact]||1);
+  const riskClr = s => s>=6?T.rose:s>=3?T.amber:T.green;
+
+  // ─── modal backdrop ──────────────────────────────────────────────────
+  const Backdrop = ({onClose,children}) => (
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div onClick={e=>e.stopPropagation()} style={{width:560,maxHeight:"85vh",background:T.bgSurface,borderRadius:14,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 24px 80px rgba(0,0,0,.4)"}}>{children}</div>
+    </div>
+  );
+
+  const POLICY_CATS_ALL = ["All",...POLICY_CATS];
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <Topbar breadcrumb={[{label:"Policy Manager"}]}/>
-      <div style={{padding:"0 28px",flexShrink:0,paddingTop:18}}>
-        <Tabs2 tabs={[{key:"overview",label:"Overview"},{key:"policies",label:`Policies (${POLICIES.length})`},{key:"regulations",label:"Regulations"},{key:"rules",label:`Rules (${GOVERNANCE_RULES.length})`},{key:"risks",label:"Risk Register"}]} active={tab} onChange={changeTab}/>
+      <Topbar breadcrumb={[{label:"Policy Manager"}]}>
+        <Btn icon={Ic.plus(12)} variant="primary" onClick={()=>setCreateOpen(true)}>New Policy</Btn>
+      </Topbar>
+
+      {/* ── Metrics bar ── */}
+      <div style={{padding:"12px 28px 0",flexShrink:0,display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
+        <Metric label="Total Policies"    value={String(policies.length)}    sub={`${activePols.length} active`}        color={T.blue}/>
+        <Metric label="Active Policies"   value={String(activePols.length)}  sub="enforced"                             color={T.green}/>
+        <Metric label="Open Violations"   value={String(totalViols)}         sub="across active policies"               color={totalViols>0?T.rose:T.green}/>
+        <Metric label="Asset Coverage"    value={`${coveragePct}%`}          sub={`${coveredIds.size} / ${ASSETS.length} assets`} color={coveragePct>=80?T.green:T.amber}/>
+      </div>
+
+      <div style={{padding:"14px 28px 0",flexShrink:0}}>
+        <Tabs2 tabs={[{key:"policies",label:`Policies (${policies.length})`},{key:"regulations",label:`Regulations (${regulations.length})`},{key:"risks",label:`Risks (${derivedRisks.length})`}]} active={tab} onChange={t=>{setTab(t);setSelPolicyId(null);}}/>
       </div>
 
       <div style={{flex:1,display:"flex",overflow:"hidden"}}>
-        <div style={{flex:1,overflowY:"auto",padding:28}}>
+        <div style={{flex:1,overflowY:"auto",padding:"20px 28px"}}>
 
-          {/* ── OVERVIEW ── */}
-          {tab==="overview"&&<>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12,marginBottom:24}}>
-              <Metric label="Total Policies"  value={String(POLICIES.length)}      sub={`${activePolicies.length} active`}                                    color={T.accent}/>
-              <Metric label="Avg Conformity"  value={`${avgConformity}%`}           sub="across active policies"                                               color={avgConformity>=80?T.green:avgConformity>=60?T.amber:T.red}/>
-              <Metric label="Open Violations" value={String(totalViolations)}       sub="across all policies"                                                  color={totalViolations>0?T.rose:T.green}/>
-              <Metric label="Open Risks"      value={String(openRisks)}             sub={`${GOVERNANCE_RISKS.filter(r=>r.status==="Open").length} unmitigated`} color={openRisks>0?T.amber:T.green}/>
-              <Metric label="Frameworks"      value={String(REGULATIONS.length)}    sub={`${compliantFrameworks} compliant`}                                   color={T.blue}/>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:20}}>
-              <Card2><div style={{padding:16}}>
-                <SH title="Regulation Coverage"/>
-                {REGULATIONS.map(reg=>{
-                  const sc = reg.status==="Compliant"?T.green:reg.status==="In Review"?T.amber:T.rose;
-                  return (<div key={reg.id} style={{marginBottom:12}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                      <div style={{display:"flex",alignItems:"center",gap:7}}>
-                        <span style={{fontSize:13,fontWeight:600,color:T.text}}>{reg.name}</span>
-                        <span style={{fontSize:10,color:T.textMuted}}>{reg.region}</span>
-                      </div>
-                      <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                        <span style={{fontSize:11,fontWeight:600,color:sc}}>{reg.status}</span>
-                        <span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",fontWeight:700,color:reg.score>=90?T.green:reg.score>=75?T.amber:T.red}}>{reg.score}%</span>
-                      </div>
-                    </div>
-                    <div style={{height:4,borderRadius:2,background:T.bgElevated,overflow:"hidden"}}>
-                      <div style={{width:`${reg.score}%`,height:"100%",background:reg.score>=90?T.green:reg.score>=75?T.amber:T.red,borderRadius:2}}/>
-                    </div>
-                  </div>);
-                })}
-              </div></Card2>
-              <Card2><div style={{padding:16}}>
-                <SH title="Open Risks"/>
-                {GOVERNANCE_RISKS.filter(r=>r.status!=="Resolved").map(r=>{
-                  const sc = riskScore(r); const rc = riskColor(sc);
-                  return (<div key={r.id} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"9px 0",borderBottom:`1px solid ${T.border}`}}>
-                    <div style={{width:8,height:8,borderRadius:2,background:rc,flexShrink:0,marginTop:4}}/>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12.5,fontWeight:500,color:T.text,marginBottom:2}}>{r.name}</div>
-                      <div style={{fontSize:11,color:T.textMuted}}>{r.category} · {r.linkedPolicy}</div>
-                    </div>
-                    <span style={{fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:5,background:`${rc}18`,color:rc,flexShrink:0}}>{r.status}</span>
-                  </div>);
-                })}
-              </div></Card2>
-            </div>
-            <Card2><div style={{padding:16}}>
-              <SH title="Conformity by Policy"/>
-              {activePolicies.map(p=>(
-                <div key={p.id} style={{display:"flex",alignItems:"center",gap:12,marginBottom:10}}>
-                  <span style={{fontSize:12,color:T.text,width:190,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flexShrink:0}}>{p.name}</span>
-                  <div style={{flex:1,height:5,borderRadius:3,background:T.bgElevated,overflow:"hidden"}}>
-                    <div style={{width:`${p.conformity}%`,height:"100%",background:p.conformity>=80?T.green:p.conformity>=60?T.amber:T.red,borderRadius:3}}/>
-                  </div>
-                  <span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:p.conformity>=80?T.green:p.conformity>=60?T.amber:T.red,width:36,textAlign:"right",flexShrink:0}}>{p.conformity}%</span>
-                  {p.violations>0&&<span style={{fontSize:10.5,color:T.rose,fontFamily:"'Geist Mono',monospace",width:76,flexShrink:0}}>{p.violations} violations</span>}
-                </div>
-              ))}
-            </div></Card2>
-          </>}
-
-          {/* ── POLICIES ── */}
+          {/* ── POLICIES TAB ── */}
           {tab==="policies"&&<>
-            {/* Toolbar */}
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+            {/* policies tab search + filter */}
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
               <div style={{flex:1,position:"relative"}}>
                 <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.5"/><path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                <input value={polSearch} onChange={e=>{setPolSearch(e.target.value);setSelectedPolicy(null);}} placeholder="Search policies by name, category, owner…"
-                  style={{width:"100%",padding:"8px 12px 8px 32px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",transition:"border-color .15s"}}
-                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                <input value={polSearch} onChange={e=>setPolSearch(e.target.value)} placeholder="Search policies…"
+                  style={{width:"100%",padding:"8px 12px 8px 32px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"}}/>
               </div>
-              <select value={catFilter} onChange={e=>{setCatFilter(e.target.value);setSelectedPolicy(null);}}
-                style={{padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",cursor:"pointer",flexShrink:0}}>
-                {POLICY_CATS.map(cat=><option key={cat} value={cat}>{cat}</option>)}
-              </select>
-              <Btn icon={Ic.plus(12)} variant="primary" onClick={()=>onToast("Policy editor opened","success")}>New Policy</Btn>
             </div>
-            {/* Table */}
-            <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
-              <div style={{display:"grid",gridTemplateColumns:"2.5fr 1fr 1fr 1fr 88px 100px",padding:"10px 18px",borderBottom:`1px solid ${T.border}`,background:T.bgElevated}}>
-                {["Policy","Category","Owner","Lifecycle","Conformity","Violations"].map(h=>(
-                  <div key={h} style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</div>
-                ))}
-              </div>
-              {filteredPolicies.length===0&&(
-                <div style={{padding:"40px 0",textAlign:"center",color:T.textMuted,fontSize:12}}>No policies match your search</div>
-              )}
-              {filteredPolicies.map((p,i)=>{
-                const isSel = selectedPolicy?.id===p.id;
-                return (
-                  <div key={p.id} onClick={()=>{setSelectedPolicy(isSel?null:p);setPdTab("overview");}}
-                    style={{display:"grid",gridTemplateColumns:"2.5fr 1fr 1fr 1fr 88px 100px",padding:"13px 18px",
-                      borderBottom:i<filteredPolicies.length-1?`1px solid ${T.border}`:"none",
-                      cursor:"pointer",transition:"background .1s",alignItems:"center",
-                      background:isSel?T.accentDim:"transparent",
-                      borderLeft:`3px solid ${isSel?T.accent:"transparent"}`}}
-                    onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.bgHover;}}
-                    onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
-                    <div style={{minWidth:0,paddingRight:8}}>
-                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap"}}>
-                        <span style={{fontSize:13,fontWeight:600,color:isSel?T.accent:T.text}}>{p.name}</span>
-                        <Badge color={p.severity==="Critical"?T.rose:p.severity==="High"?T.amber:T.blue}>{p.severity}</Badge>
-                      </div>
-                      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                        {(p.regulations||[]).map(r=><span key={r} style={{fontSize:10,fontWeight:600,padding:"1px 5px",borderRadius:3,background:T.blueDim,color:T.blue,border:`1px solid ${T.blue}20`}}>{r}</span>)}
-                      </div>
-                    </div>
-                    <span style={{fontSize:12,color:T.textSub}}>{p.category}</span>
-                    <span style={{fontSize:11.5,color:T.textMuted}}>{p.owner||"—"}</span>
-                    <div style={{display:"flex",alignItems:"center",gap:5}}>
-                      <span style={{width:6,height:6,borderRadius:"50%",background:lifColor(p.lifecycle),flexShrink:0}}/>
-                      <span style={{fontSize:11.5,color:lifColor(p.lifecycle),fontWeight:500}}>{p.lifecycle}</span>
-                    </div>
-                    <span style={{fontSize:14,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:p.lifecycle==="Draft"?T.textMuted:p.conformity>=80?T.green:p.conformity>=60?T.amber:T.red}}>
-                      {p.lifecycle==="Draft"?"—":`${p.conformity}%`}
-                    </span>
-                    <span style={{fontSize:12,fontWeight:600,color:p.violations>0?T.rose:T.textMuted}}>
-                      {p.violations>0?`${p.violations} violations`:"—"}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </>}
-
-          {/* ── REGULATIONS ── */}
-          {tab==="regulations"&&<>
-            <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}>
-              <Btn small ghost icon={Ic.refresh(12)} onClick={()=>onToast("Audit started","success")}>Run Audit</Btn>
-            </div>
-            {(()=>{const gaps=REGULATIONS.flatMap(r=>r.requirements.filter(req=>!req.linked)).length;return gaps>0&&(
-              <div style={{padding:"10px 14px",background:T.amberDim,border:`1px solid ${T.amber}30`,borderRadius:9,marginBottom:18,display:"flex",alignItems:"center",gap:10}}>
-                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{color:T.amber,flexShrink:0}}><path d="M8 2.5L14.5 13.5H1.5L8 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M8 7v3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/><circle cx="8" cy="12" r=".6" fill="currentColor"/></svg>
-                <span style={{fontSize:12.5,color:T.text}}><strong>{gaps} regulation requirements</strong> have no linked internal policy — <span style={{color:T.amber}}>coverage gaps identified</span></span>
-              </div>
-            );})()}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12,marginBottom:24}}>
-              {REGULATIONS.map(reg=>{
-                const isSel = selectedReg===reg.id;
-                const sc = reg.status==="Compliant"?T.green:reg.status==="In Review"?T.amber:T.rose;
-                const gaps = reg.requirements.filter(r=>!r.linked).length;
-                return (
-                  <Card2 key={reg.id} style={{cursor:"pointer",border:`1.5px solid ${isSel?T.accent:T.border}`,transition:"border-color .15s"}} onClick={()=>setSelectedReg(isSel?null:reg.id)}>
-                    <div style={{padding:18}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-                        <div>
-                          <div style={{fontSize:20,fontWeight:800,color:T.text,letterSpacing:"-0.5px"}}>{reg.name}</div>
-                          <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{reg.fullName}</div>
-                        </div>
-                        <span style={{fontSize:10.5,fontWeight:700,padding:"3px 9px",borderRadius:99,background:`${sc}18`,color:sc,border:`1px solid ${sc}33`,flexShrink:0}}>{reg.status}</span>
-                      </div>
-                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                        <div style={{flex:1,height:5,borderRadius:3,background:T.bgElevated,overflow:"hidden"}}><div style={{width:`${reg.score}%`,height:"100%",background:reg.score>=90?T.green:reg.score>=75?T.amber:T.red,borderRadius:3}}/></div>
-                        <span style={{fontSize:13,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:reg.score>=90?T.green:reg.score>=75?T.amber:T.red}}>{reg.score}%</span>
-                      </div>
-                      <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:T.textMuted}}>
-                        <span>{reg.passing}/{reg.controls} controls passing</span>
-                        {gaps>0&&<span style={{color:T.amber,fontWeight:600}}>{gaps} gap{gaps>1?"s":""}</span>}
-                      </div>
-                    </div>
-                    {isSel&&<div style={{borderTop:`1px solid ${T.border}`,padding:"12px 18px"}}>
-                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Requirements</div>
-                      {reg.requirements.map(req=>(
-                        <div key={req.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 0",borderBottom:`1px solid ${T.border}`}}>
-                          <div style={{width:16,height:16,borderRadius:"50%",background:req.linked?`${T.green}18`:`${T.amber}18`,border:`1.5px solid ${req.linked?T.green:T.amber}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                            {req.linked
-                              ?<svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1.5 4l2 2L6.5 2" stroke={T.green} strokeWidth="1.3" strokeLinecap="round"/></svg>
-                              :<svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M4 2v2.5" stroke={T.amber} strokeWidth="1.2" strokeLinecap="round"/><circle cx="4" cy="6" r=".5" fill={T.amber}/></svg>}
-                          </div>
-                          <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,flexShrink:0}}>{req.id}</span>
-                          <span style={{fontSize:12,color:T.text,flex:1}}>{req.title}</span>
-                          {!req.linked&&<button onClick={e=>{e.stopPropagation();onToast(`New policy for ${req.id} opened`,"success");}} style={{fontSize:11,padding:"3px 9px",borderRadius:6,background:T.amberDim,border:`1px solid ${T.amber}30`,color:T.amber,cursor:"pointer",flexShrink:0}}>Create Policy</button>}
-                        </div>
-                      ))}
-                    </div>}
-                  </Card2>
-                );
-              })}
-            </div>
-            <Card2 style={{overflow:"hidden",padding:0}}>
-              <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.border}`}}><SH title="Control Checks"/></div>
-              <DataTable cols={[
-                {key:"framework",label:"Framework",render:v=><Badge>{v}</Badge>},
-                {key:"control",  label:"Control",  render:v=><span style={{fontSize:12.5,color:T.text}}>{v}</span>},
-                {key:"category", label:"Category", render:v=><span style={{fontSize:12,color:T.textSub}}>{v}</span>},
-                {key:"asset",    label:"Asset",    render:v=><span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{v}</span>},
-                {key:"status",   label:"Status",   render:v=><span style={{display:"flex",alignItems:"center",gap:5,fontSize:12}}><SDot status={v}/>{v}</span>},
-              ]} rows={COMPLIANCE_CONTROLS}/>
-            </Card2>
-          </>}
-
-          {/* ── RULES ── */}
-          {tab==="rules"&&<>
-            <div style={{display:"flex",gap:6,marginBottom:18,flexWrap:"wrap"}}>
-              {RULE_TYPES.map(type=>(
-                <button key={type} onClick={()=>setRuleTypeFilter(type)} style={{padding:"4px 12px",borderRadius:99,fontSize:11.5,fontWeight:ruleTypeFilter===type?600:400,border:`1px solid ${ruleTypeFilter===type?T.accent:T.border}`,background:ruleTypeFilter===type?T.accentDim:"transparent",color:ruleTypeFilter===type?T.accent:T.textSub,cursor:"pointer",transition:"all .12s"}}>{type}</button>
+            <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+              {["All",...LC_STEPS].map(lc=>(
+                <button key={lc} onClick={()=>setLcFilter(lc)}
+                  style={{padding:"4px 11px",borderRadius:99,fontSize:11.5,fontWeight:lcFilter===lc?700:400,
+                    border:`1.5px solid ${lcFilter===lc?(LC_COLORS[lc]||T.blue):T.border}`,
+                    background:lcFilter===lc?`${LC_COLORS[lc]||T.blue}18`:"transparent",
+                    color:lcFilter===lc?(LC_COLORS[lc]||T.blue):T.textSub,cursor:"pointer"}}>
+                  {lc}
+                  {lc!=="All"&&<span style={{marginLeft:5,fontSize:10,opacity:.7}}>{policies.filter(p=>p.lifecycle===lc).length}</span>}
+                </button>
               ))}
             </div>
-            <Card2 style={{overflow:"hidden",padding:0}}>
-              <DataTable cols={[
-                {key:"name",       label:"Rule",       render:v=><span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{v}</span>},
-                {key:"type",       label:"Type",       render:v=><span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:5,background:`${typeColor(v)}18`,color:typeColor(v),border:`1px solid ${typeColor(v)}25`}}>{v}</span>},
-                {key:"policyName", label:"Policy",     render:v=><span style={{fontSize:12,color:T.textSub}}>{v}</span>},
-                {key:"assets",     label:"Assets",     render:v=><span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{v.slice(0,2).join(", ")}{v.length>2?` +${v.length-2}`:""}</span>},
-                {key:"status",     label:"Status",     render:v=><span style={{display:"flex",alignItems:"center",gap:5,fontSize:12}}><SDot status={v==="Violated"?"failing":v==="Warning"?"warning":v==="Draft"?"Pending":"passing"}/>{v}</span>},
-                {key:"violations", label:"Violations", render:v=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:v>0?T.rose:T.textMuted}}>{v}</span>},
-              ]} rows={filteredRules}/>
-            </Card2>
+            {/* ── policy card list ── */}
+            {filteredPols.length===0&&<div style={{textAlign:"center",padding:"60px 0",color:T.textMuted,fontSize:13}}>No policies match your filters.</div>}
+            {filteredPols.map(p=>{
+              const isSel = selPolicyId===p.id;
+              const viols = getViolations(p);
+              return (
+                <div key={p.id} onClick={()=>{setSelPolicyId(isSel?null:p.id);setPdTab("overview");}}
+                  style={{padding:"14px 16px",borderRadius:10,border:`1.5px solid ${isSel?lcColor(p.lifecycle):T.border}`,
+                    background:isSel?`${lcColor(p.lifecycle)}08`:T.bgSurface,cursor:"pointer",marginBottom:8,transition:"all .1s"}}
+                  onMouseEnter={e=>{if(!isSel){e.currentTarget.style.borderColor=lcColor(p.lifecycle);e.currentTarget.style.background=`${lcColor(p.lifecycle)}06`;}}}
+                  onMouseLeave={e=>{if(!isSel){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.bgSurface;}}}>
+                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:8}}>
+                    <div style={{flex:1,minWidth:0,paddingRight:10}}>
+                      <span style={{fontSize:13.5,fontWeight:700,color:isSel?lcColor(p.lifecycle):T.text,display:"block",marginBottom:6,lineHeight:1.3}}>{p.name}</span>
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                        <span style={{fontSize:10.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:`${CAT_COLORS[p.category]||T.blue}18`,color:CAT_COLORS[p.category]||T.blue}}>{p.category}</span>
+                        <span style={{fontSize:10.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:`${SEV_COLORS[p.severity]}18`,color:SEV_COLORS[p.severity]}}>{p.severity}</span>
+                        <span style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:4,border:`1.5px solid ${lcColor(p.lifecycle)}`,color:lcColor(p.lifecycle)}}>{p.lifecycle}</span>
+                      </div>
+                    </div>
+                    {viols.length>0&&<span style={{fontSize:11,fontWeight:700,padding:"3px 9px",borderRadius:99,background:`${T.rose}15`,color:T.rose,flexShrink:0,whiteSpace:"nowrap"}}>{viols.length} violation{viols.length>1?"s":""}</span>}
+                  </div>
+                  {(p.conditions||[]).length>0&&(
+                    <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:7}}>
+                      {p.conditions.map((c,i)=><span key={i} style={{fontSize:10,padding:"2px 7px",borderRadius:4,background:`${T.green}12`,color:T.green,border:`1px solid ${T.green}20`}}>{c.label}</span>)}
+                    </div>
+                  )}
+                  <div style={{display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
+                    {(p.scope?.domains||[]).map(d=><span key={d} style={{fontSize:10,padding:"2px 6px",borderRadius:4,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`}}>{d}</span>)}
+                    {(p.regulations||[]).map(r=><span key={r} style={{fontSize:10,fontWeight:600,padding:"2px 6px",borderRadius:4,background:T.blueDim,color:T.blue}}>{r}</span>)}
+                    <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>by {p.owner||"—"}</span>
+                  </div>
+                </div>
+              );
+            })}
           </>}
 
-          {/* ── RISK REGISTER ── */}
-          {tab==="risks"&&<>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
-              <div style={{display:"flex",gap:6}}>
-                {["list","matrix"].map(v=>(
-                  <button key={v} onClick={()=>setRiskView(v)} style={{padding:"5px 14px",borderRadius:99,fontSize:12,fontWeight:riskView===v?600:400,border:`1px solid ${riskView===v?T.accent:T.border}`,background:riskView===v?T.accentDim:"transparent",color:riskView===v?T.accent:T.textSub,cursor:"pointer",transition:"all .12s",textTransform:"capitalize"}}>{v} View</button>
-                ))}
-              </div>
-              <Btn icon={Ic.plus(12)} onClick={()=>onToast("New risk dialog opened","success")}>Log Risk</Btn>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
-              <Metric label="Open"       value={String(GOVERNANCE_RISKS.filter(r=>r.status==="Open").length)}        color={T.rose}/>
-              <Metric label="In Progress"value={String(GOVERNANCE_RISKS.filter(r=>r.status==="In Progress").length)} color={T.amber}/>
-              <Metric label="Resolved"   value={String(GOVERNANCE_RISKS.filter(r=>r.status==="Resolved").length)}    color={T.green}/>
-              <Metric label="Critical"   value={String(GOVERNANCE_RISKS.filter(r=>r.likelihood==="High"&&r.impact==="High").length)} color={T.red}/>
-            </div>
-            {riskView==="list"&&(
-              <Card2 style={{overflow:"hidden",padding:0}}>
-                <DataTable cols={[
-                  {key:"name",       label:"Risk",       render:v=><span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{v}</span>},
-                  {key:"category",   label:"Category",   render:v=><Badge>{v}</Badge>},
-                  {key:"likelihood", label:"Likelihood", render:v=><span style={{fontSize:12,fontWeight:600,color:v==="High"?T.red:v==="Med"?T.amber:T.green}}>{v}</span>},
-                  {key:"impact",     label:"Impact",     render:v=><span style={{fontSize:12,fontWeight:600,color:v==="High"?T.red:v==="Med"?T.amber:T.green}}>{v}</span>},
-                  {key:"linkedPolicy",label:"Policy",    render:v=><span style={{fontSize:11.5,color:T.textSub}}>{v}</span>},
-                  {key:"owner",      label:"Owner",      render:v=><span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{v}</span>},
-                  {key:"status",     label:"Status",     render:v=><span style={{fontSize:11,fontWeight:600,padding:"2px 7px",borderRadius:5,background:v==="Open"?`${T.rose}15`:v==="In Progress"?`${T.amber}15`:`${T.green}15`,color:v==="Open"?T.rose:v==="In Progress"?T.amber:T.green}}>{v}</span>},
-                ]} rows={GOVERNANCE_RISKS}/>
-              </Card2>
-            )}
-            {riskView==="matrix"&&(
-              <Card2><div style={{padding:20}}>
-                <SH title="Risk Matrix" sub="Likelihood (vertical) × Impact (horizontal)"/>
-                <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
-                  <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",paddingBottom:38,alignItems:"flex-end",gap:0,flexShrink:0,height:270}}>
-                    {["High","Med","Low"].map(l=><span key={l} style={{fontSize:10.5,color:T.textMuted}}>{l}</span>)}
-                  </div>
-                  <div style={{flex:1}}>
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gridTemplateRows:"repeat(3,80px)",gap:4}}>
-                      {[
-                        {lh:"High",im:"Low",bg:`${T.amber}15`},{lh:"High",im:"Med",bg:`${T.red}18`},   {lh:"High",im:"High",bg:`${T.red}25`},
-                        {lh:"Med", im:"Low",bg:`${T.green}10`},{lh:"Med", im:"Med",bg:`${T.amber}14`}, {lh:"Med", im:"High",bg:`${T.amber}20`},
-                        {lh:"Low", im:"Low",bg:`${T.green}08`},{lh:"Low", im:"Med",bg:`${T.green}10`}, {lh:"Low", im:"High",bg:`${T.amber}12`},
-                      ].map((cell,i)=>{
-                        const cellRisks = GOVERNANCE_RISKS.filter(r=>r.likelihood===cell.lh&&r.impact===cell.im);
-                        return (<div key={i} style={{background:cell.bg,borderRadius:7,border:`1px solid ${T.border}`,padding:8,display:"flex",flexWrap:"wrap",gap:4,alignContent:"flex-start"}}>
-                          {cellRisks.map(r=>(
-                            <div key={r.id} title={r.name} style={{width:10,height:10,borderRadius:"50%",background:r.status==="Resolved"?T.green:riskColor(riskScore(r)),cursor:"pointer",flexShrink:0}}/>
-                          ))}
-                        </div>);
-                      })}
-                    </div>
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4,marginTop:6}}>
-                      {["Low","Med","High"].map(l=><div key={l} style={{textAlign:"center",fontSize:10.5,color:T.textMuted}}>{l}</div>)}
-                    </div>
-                    <div style={{textAlign:"center",fontSize:10.5,color:T.textMuted,marginTop:4}}>Impact →</div>
-                  </div>
+          {/* ── REGULATIONS TAB ── */}
+          {tab==="regulations"&&(()=>{
+            const totalGaps = regulations.reduce((s,r)=>s+r.requirements.filter(req=>!req.linked).length,0);
+            return <>
+              {totalGaps>0&&(
+                <div style={{padding:"10px 14px",background:T.amberDim,border:`1px solid ${T.amber}30`,borderRadius:9,marginBottom:18,display:"flex",alignItems:"center",gap:10}}>
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{color:T.amber,flexShrink:0}}><path d="M8 2.5L14.5 13.5H1.5L8 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M8 7v3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/><circle cx="8" cy="12" r=".6" fill="currentColor"/></svg>
+                  <span style={{fontSize:12.5,color:T.text}}><strong>{totalGaps} requirements</strong> have no linked policy — coverage gaps exist</span>
                 </div>
-                <div style={{marginTop:14,paddingTop:12,borderTop:`1px solid ${T.border}`,display:"flex",flexWrap:"wrap",gap:12}}>
-                  {GOVERNANCE_RISKS.map(r=>(
-                    <div key={r.id} style={{display:"flex",alignItems:"center",gap:5}}>
-                      <div style={{width:8,height:8,borderRadius:"50%",background:r.status==="Resolved"?T.green:riskColor(riskScore(r))}}/>
-                      <span style={{fontSize:10.5,color:T.textMuted}}>{r.name.split(" ").slice(0,4).join(" ")}</span>
+              )}
+              {regulations.map(reg=>{
+                const isExp = expandedReg===reg.id;
+                const sc = reg.score>=90?T.green:reg.score>=75?T.amber:T.rose;
+                const gaps = reg.requirements.filter(r=>!r.linked).length;
+                return (
+                  <div key={reg.id} style={{background:T.bgSurface,border:`1.5px solid ${isExp?T.blue:T.border}`,borderRadius:10,marginBottom:10,overflow:"hidden",transition:"border-color .15s"}}>
+                    <div onClick={()=>setExpandedReg(isExp?null:reg.id)} style={{padding:"14px 18px",cursor:"pointer",display:"flex",alignItems:"center",gap:14}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                          <span style={{fontSize:16,fontWeight:800,letterSpacing:"-0.5px",color:T.text}}>{reg.name}</span>
+                          <span style={{fontSize:10.5,color:T.textMuted}}>{reg.region}</span>
+                          <span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${sc}18`,color:sc,border:`1px solid ${sc}33`}}>{reg.status}</span>
+                          {gaps>0&&<span style={{fontSize:10.5,fontWeight:600,color:T.amber}}>{gaps} gap{gaps>1?"s":""}</span>}
+                        </div>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <div style={{width:140,height:4,borderRadius:2,background:T.bgElevated,overflow:"hidden"}}><div style={{width:`${reg.score}%`,height:"100%",background:sc,borderRadius:2}}/></div>
+                          <span style={{fontSize:12,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:sc}}>{reg.score}%</span>
+                          <span style={{fontSize:11,color:T.textMuted}}>{reg.requirements.filter(r=>r.linked).length}/{reg.requirements.length} requirements covered</span>
+                        </div>
+                      </div>
+                      <div style={{fontSize:11,color:T.textMuted,flexShrink:0,userSelect:"none"}}>{isExp?"▲":"▼"}</div>
                     </div>
+                    {isExp&&(
+                      <div style={{borderTop:`1px solid ${T.border}`,padding:"0 18px 14px"}}>
+                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",padding:"12px 0 8px"}}>Requirements</div>
+                        {reg.requirements.map(req=>{
+                          const linkedPol = req.linked ? policies.find(p=>p.id===req.linked) : null;
+                          return (
+                            <div key={req.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:`1px solid ${T.border}`}}>
+                              <div style={{width:18,height:18,borderRadius:"50%",background:req.linked?`${T.green}18`:`${T.amber}15`,border:`1.5px solid ${req.linked?T.green:T.amber}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                                {req.linked
+                                  ?<svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M2 4.5l2 2L7 2.5" stroke={T.green} strokeWidth="1.4" strokeLinecap="round"/></svg>
+                                  :<span style={{fontSize:9,color:T.amber,fontWeight:700}}>!</span>}
+                              </div>
+                              <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,flexShrink:0,width:68}}>{req.id}</span>
+                              <span style={{fontSize:12,color:T.text,flex:1,lineHeight:1.5}}>{req.title}</span>
+                              {linkedPol
+                                ?<div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                                    <span style={{fontSize:11,padding:"3px 9px",borderRadius:6,background:`${T.green}15`,color:T.green,border:`1px solid ${T.green}25`}}>{linkedPol.name}</span>
+                                    <button onClick={e=>{e.stopPropagation();setLinkPolOpen({regId:reg.id,reqId:req.id});}} style={{fontSize:11,padding:"3px 9px",borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer"}}>Change</button>
+                                  </div>
+                                :<button onClick={e=>{e.stopPropagation();setLinkPolOpen({regId:reg.id,reqId:req.id});}}
+                                    style={{fontSize:11,padding:"4px 11px",borderRadius:6,background:T.amberDim,border:`1px solid ${T.amber}30`,color:T.amber,cursor:"pointer",flexShrink:0,fontWeight:600}}>
+                                    Link Policy
+                                  </button>
+                              }
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </>;
+          })()}
+
+          {/* ── RISKS TAB ── */}
+          {tab==="risks"&&(()=>{
+            const RISK_MATRIX = [
+              {lh:"High",im:"Low",bg:`${T.amber}15`},{lh:"High",im:"Med",bg:`${T.rose}18`},{lh:"High",im:"High",bg:`${T.rose}25`},
+              {lh:"Med", im:"Low",bg:`${T.green}10`},{lh:"Med", im:"Med",bg:`${T.amber}14`},{lh:"Med", im:"High",bg:`${T.amber}20`},
+              {lh:"Low", im:"Low",bg:`${T.green}08`},{lh:"Low", im:"Med",bg:`${T.green}10`},{lh:"Low", im:"High",bg:`${T.amber}12`},
+            ];
+            return <>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
+                <div style={{display:"flex",gap:6}}>
+                  {["list","matrix"].map(v=>(
+                    <button key={v} onClick={()=>setRiskView(v)}
+                      style={{padding:"5px 14px",borderRadius:99,fontSize:12,fontWeight:riskView===v?700:400,
+                        border:`1.5px solid ${riskView===v?T.blue:T.border}`,
+                        background:riskView===v?T.blueDim:"transparent",
+                        color:riskView===v?T.blue:T.textSub,cursor:"pointer",textTransform:"capitalize"}}>
+                      {v} view
+                    </button>
                   ))}
                 </div>
-              </div></Card2>
-            )}
-          </>}
+                <div style={{display:"flex",gap:14}}>
+                  {[{l:"Critical",n:derivedRisks.filter(r=>r.severity==="Critical").length,c:T.rose},{l:"High",n:derivedRisks.filter(r=>r.severity==="High").length,c:T.amber}].map(m=>(
+                    <span key={m.l} style={{fontSize:11.5,color:m.c,fontWeight:600}}>{m.n} {m.l}</span>
+                  ))}
+                </div>
+              </div>
+              {derivedRisks.length===0&&(
+                <div style={{padding:"60px 0",textAlign:"center"}}>
+                  <div style={{fontSize:14,color:T.green,fontWeight:700,marginBottom:6}}>No active policy violations</div>
+                  <div style={{fontSize:12,color:T.textMuted}}>All active policies are within compliance thresholds.</div>
+                </div>
+              )}
+              {riskView==="list"&&derivedRisks.length>0&&(
+                <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                  <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 80px",padding:"9px 18px",borderBottom:`1px solid ${T.border}`,background:T.bgElevated}}>
+                    {["Policy","Category","Likelihood","Impact","Violations"].map(h=>(
+                      <span key={h} style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{h}</span>
+                    ))}
+                  </div>
+                  {derivedRisks.map((r,i)=>{
+                    const sc = riskSc(r); const rc = riskClr(sc);
+                    return (
+                      <div key={r.id} style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 80px",padding:"12px 18px",borderBottom:i<derivedRisks.length-1?`1px solid ${T.border}`:"none",alignItems:"center"}}>
+                        <div>
+                          <div style={{fontSize:12.5,fontWeight:600,color:T.text,marginBottom:2}}>{r.policyName}</div>
+                          <div style={{fontSize:11,color:T.textMuted}}>owner: {r.owner}</div>
+                        </div>
+                        <span style={{fontSize:11.5,fontWeight:600,padding:"3px 9px",borderRadius:5,background:`${CAT_COLORS[r.category]||T.blue}18`,color:CAT_COLORS[r.category]||T.blue,width:"fit-content"}}>{r.category}</span>
+                        <span style={{fontSize:12,fontWeight:700,color:r.likelihood==="High"?T.rose:r.likelihood==="Med"?T.amber:T.green}}>{r.likelihood}</span>
+                        <span style={{fontSize:12,fontWeight:700,color:r.impact==="High"?T.rose:r.impact==="Med"?T.amber:T.green}}>{r.impact}</span>
+                        <span style={{fontSize:13,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:rc}}>{r.violations}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {riskView==="matrix"&&(
+                <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:20}}>
+                  <div style={{fontSize:12,color:T.textSub,marginBottom:16}}>Likelihood × Impact — each dot is a policy with active violations</div>
+                  <div style={{display:"flex",gap:16,alignItems:"flex-start"}}>
+                    <div style={{display:"flex",flexDirection:"column",justifyContent:"space-around",height:270,paddingBottom:40,alignItems:"flex-end",flexShrink:0}}>
+                      {["High","Med","Low"].map(l=><span key={l} style={{fontSize:10.5,color:T.textMuted}}>{l}</span>)}
+                    </div>
+                    <div style={{flex:1}}>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gridTemplateRows:"repeat(3,80px)",gap:4}}>
+                        {RISK_MATRIX.map((cell,i)=>{
+                          const cr = derivedRisks.filter(r=>r.likelihood===cell.lh&&r.impact===cell.im);
+                          return (
+                            <div key={i} style={{background:cell.bg,borderRadius:7,border:`1px solid ${T.border}`,padding:8,display:"flex",flexWrap:"wrap",gap:5,alignContent:"flex-start"}}>
+                              {cr.map(r=>(
+                                <div key={r.id} title={`${r.policyName} — ${r.violations} violations`}
+                                  style={{width:11,height:11,borderRadius:"50%",background:riskClr(riskSc(r)),cursor:"pointer",flexShrink:0}}/>
+                              ))}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4,marginTop:6}}>
+                        {["Low","Med","High"].map(l=><div key={l} style={{textAlign:"center",fontSize:10.5,color:T.textMuted}}>{l}</div>)}
+                      </div>
+                      <div style={{textAlign:"center",fontSize:10.5,color:T.textMuted,marginTop:4}}>Impact →</div>
+                    </div>
+                  </div>
+                  {derivedRisks.length>0&&(
+                    <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${T.border}`,display:"flex",flexWrap:"wrap",gap:12}}>
+                      {derivedRisks.map(r=>(
+                        <div key={r.id} style={{display:"flex",alignItems:"center",gap:5}}>
+                          <div style={{width:9,height:9,borderRadius:"50%",background:riskClr(riskSc(r))}}/>
+                          <span style={{fontSize:10.5,color:T.textMuted}}>{r.policyName.split(" ").slice(0,4).join(" ")}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>;
+          })()}
 
         </div>
 
-        {/* ── POLICY DETAIL PANEL ── */}
-        {tab==="policies"&&selectedPolicy&&(()=>{
-          const p = selectedPolicy;
-          const pRules = GOVERNANCE_RULES.filter(r=>r.policyId===p.id);
-          const lc = lifIdx(p.lifecycle);
+        {/* ── Policy detail side panel ── */}
+        {tab==="policies"&&selPol&&(()=>{
+          const p = selPol;
+          const ci = lcIdx(p.lifecycle);
           return (
-            <div className="slideIn" style={{width:320,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto",flexShrink:0,display:"flex",flexDirection:"column"}}>
+            <div className="slideIn" style={{width:340,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto",flexShrink:0,display:"flex",flexDirection:"column"}}>
               <div style={{padding:"16px 18px 12px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:5,lineHeight:1.3,paddingRight:8}}>{p.name}</div>
-                    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                      <span style={{width:7,height:7,borderRadius:"50%",background:lifColor(p.lifecycle),display:"inline-block"}}/>
-                      <span style={{fontSize:11.5,color:lifColor(p.lifecycle),fontWeight:500}}>{p.lifecycle}</span>
-                      <Badge color={p.severity==="Critical"?T.rose:T.amber}>{p.severity}</Badge>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+                  <div style={{flex:1,minWidth:0,paddingRight:8}}>
+                    <div style={{fontSize:14,fontWeight:700,color:T.text,lineHeight:1.35,marginBottom:6}}>{p.name}</div>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                      <span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:4,background:`${CAT_COLORS[p.category]||T.blue}18`,color:CAT_COLORS[p.category]||T.blue}}>{p.category}</span>
+                      <span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:4,background:`${SEV_COLORS[p.severity]}18`,color:SEV_COLORS[p.severity]}}>{p.severity}</span>
                     </div>
                   </div>
-                  <button onClick={()=>setSelectedPolicy(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,flexShrink:0}}>{Ic.x(13)}</button>
+                  <button onClick={()=>setSelPolicyId(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:4,flexShrink:0,lineHeight:1}}>{Ic.x(14)}</button>
                 </div>
                 {/* Lifecycle stepper */}
                 <div style={{display:"flex",alignItems:"center",marginTop:12}}>
-                  {LIFECYCLE_STEPS.filter(s=>s!=="Deprecated").map((step,i,arr)=>(
+                  {LC_STEPS.filter(s=>s!=="Deprecated").map((step,i,arr)=>(
                     <React.Fragment key={step}>
                       <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
-                        <div style={{width:10,height:10,borderRadius:"50%",background:i<=lc?T.accent:T.bgElevated,border:`2px solid ${i<=lc?T.accent:T.border}`,marginBottom:3}}/>
-                        <span style={{fontSize:8,color:i<=lc?T.text:T.textMuted,textAlign:"center",lineHeight:1.3,whiteSpace:"nowrap"}}>{step}</span>
+                        <div style={{width:10,height:10,borderRadius:"50%",marginBottom:3,
+                          background:i<=ci?lcColor(p.lifecycle):T.bgElevated,
+                          border:`2px solid ${i<=ci?lcColor(p.lifecycle):T.border}`}}/>
+                        <span style={{fontSize:8,color:i<=ci?T.text:T.textMuted,whiteSpace:"nowrap",lineHeight:1.3,textAlign:"center"}}>{step}</span>
                       </div>
-                      {i<arr.length-1&&<div style={{height:2,flex:1,background:i<lc?T.accent:T.border,marginBottom:14,flexShrink:0}}/>}
+                      {i<arr.length-1&&<div style={{height:2,flex:1,background:i<ci?lcColor(p.lifecycle):T.border,marginBottom:14,flexShrink:0}}/>}
                     </React.Fragment>
                   ))}
                 </div>
-              </div>
-              {/* Conformity */}
-              <div style={{padding:"12px 18px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
-                  <span style={{fontSize:11.5,color:T.textMuted}}>Conformity Score</span>
-                  <span style={{fontSize:17,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:p.lifecycle==="Draft"?T.textMuted:p.conformity>=80?T.green:p.conformity>=60?T.amber:T.red}}>{p.lifecycle==="Draft"?"—":`${p.conformity}%`}</span>
+                {/* Action buttons */}
+                <div style={{display:"flex",gap:7,marginTop:12}}>
+                  {ci>=0&&ci<3&&(
+                    <button onClick={()=>advanceLifecycle(p)}
+                      style={{flex:1,padding:"7px 0",borderRadius:7,background:lcColor(p.lifecycle),border:"none",color:"#fff",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+                      → {LC_STEPS[ci+1]}
+                    </button>
+                  )}
+                  {p.lifecycle!=="Deprecated"&&p.lifecycle!=="Draft"&&(
+                    <button onClick={()=>deprecatePol(p)}
+                      style={{padding:"7px 12px",borderRadius:7,background:"transparent",border:`1.5px solid ${T.rose}`,color:T.rose,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+                      Deprecate
+                    </button>
+                  )}
+                  <button onClick={()=>{setEditDraft({...p});setEditOpen(true);}}
+                    style={{padding:"7px 12px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer"}}>
+                    {Ic.edit(12)}
+                  </button>
                 </div>
-                {p.lifecycle!=="Draft"&&<div style={{height:5,borderRadius:3,background:T.bgElevated,overflow:"hidden"}}>
-                  <div style={{width:`${p.conformity}%`,height:"100%",background:p.conformity>=80?T.green:p.conformity>=60?T.amber:T.red,borderRadius:3}}/>
-                </div>}
-                {p.violations>0&&<div style={{marginTop:5,fontSize:11.5,color:T.rose}}>{p.violations} violations detected</div>}
               </div>
+
               {/* Sub-tabs */}
               <div style={{display:"flex",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-                {["overview","rules","assets"].map(dt=>(
-                  <button key={dt} onClick={()=>setPdTab(dt)} style={{flex:1,padding:"7px 0",background:"none",border:"none",borderBottom:`2px solid ${pdTab===dt?T.accent:"transparent"}`,color:pdTab===dt?T.text:T.textMuted,fontSize:11,fontWeight:pdTab===dt?600:400,cursor:"pointer",textTransform:"capitalize",marginBottom:-1}}>{dt}</button>
+                {[{k:"overview",l:"Overview"},{k:"assets",l:`Assets (${selGovAssets.length})`},{k:"violations",l:`Viols (${selViols.length})`},{k:"terms",l:"Terms"}].map(({k,l})=>(
+                  <button key={k} onClick={()=>setPdTab(k)}
+                    style={{flex:1,padding:"7px 4px",background:"none",border:"none",borderBottom:`2px solid ${pdTab===k?T.blue:"transparent"}`,
+                      color:pdTab===k?T.text:T.textMuted,fontSize:10.5,fontWeight:pdTab===k?700:400,cursor:"pointer",marginBottom:-1,lineHeight:1.4}}>
+                    {l}
+                  </button>
                 ))}
               </div>
+
               <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
                 {pdTab==="overview"&&<>
-                  {[{l:"Category",v:p.category},{l:"Owner",v:p.owner},{l:"Scope",v:p.scope},{l:"Severity",v:p.severity},{l:"Updated",v:p.updated}].map(({l,v})=>(
-                    <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,marginBottom:9}}>
+                  <div style={{fontSize:12,color:T.textSub,lineHeight:1.75,marginBottom:14}}>{p.description}</div>
+                  {[{l:"Owner",v:p.owner||"—"},{l:"Created",v:p.created},{l:"Updated",v:p.updated}].map(({l,v})=>(
+                    <div key={l} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:8}}>
                       <span style={{color:T.textMuted}}>{l}</span><span style={{color:T.text,fontWeight:500}}>{v}</span>
                     </div>
                   ))}
-                  {p.regulations.length>0&&<div style={{marginTop:10}}>
-                    <div style={{fontSize:11,color:T.textMuted,marginBottom:6}}>Linked Regulations</div>
-                    <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{p.regulations.map(r=><span key={r} style={{fontSize:11,fontWeight:600,padding:"3px 8px",borderRadius:5,background:T.blueDim,color:T.blue,border:`1px solid ${T.blue}20`}}>{r}</span>)}</div>
-                  </div>}
-                  <div style={{marginTop:14,paddingTop:12,borderTop:`1px solid ${T.border}`}}>
-                    <div style={{fontSize:11,color:T.textMuted,marginBottom:6}}>Description</div>
-                    <p style={{fontSize:12,color:T.textSub,lineHeight:1.7}}>{p.description}</p>
-                  </div>
-                </>}
-                {pdTab==="rules"&&<>
-                  {pRules.length===0&&<div style={{fontSize:12,color:T.textMuted,textAlign:"center",padding:"20px 0"}}>No rules defined yet</div>}
-                  {pRules.map(r=>(
-                    <div key={r.id} style={{padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:8}}>
-                      <div style={{fontSize:12.5,fontWeight:600,color:T.text,marginBottom:5}}>{r.name}</div>
-                      <div style={{display:"flex",alignItems:"center",gap:6}}>
-                        <span style={{fontSize:10.5,padding:"2px 6px",borderRadius:4,background:`${typeColor(r.type)}18`,color:typeColor(r.type)}}>{r.type}</span>
-                        <span style={{display:"flex",alignItems:"center",gap:3,fontSize:11}}><SDot status={r.status==="Violated"?"failing":r.status==="Warning"?"warning":"passing"}/>{r.status}</span>
-                        {r.violations>0&&<span style={{fontSize:10.5,color:T.rose,marginLeft:"auto"}}>{r.violations} violations</span>}
+                  {(p.scope?.domains||[]).length>0&&(
+                    <div style={{marginTop:10}}>
+                      <div style={{fontSize:11,color:T.textMuted,marginBottom:6}}>Scope — Domains</div>
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                        {p.scope.domains.map(d=><span key={d} style={{fontSize:11.5,padding:"3px 9px",borderRadius:5,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`}}>{d}</span>)}
                       </div>
                     </div>
-                  ))}
-                  <button onClick={()=>onToast("Add rule dialog opened","success")} style={{width:"100%",marginTop:6,padding:"7px 0",borderRadius:8,background:"transparent",border:`1px dashed ${T.border}`,color:T.textMuted,fontSize:12,cursor:"pointer",transition:"all .12s"}}
-                    onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>+ Add Rule</button>
+                  )}
+                  {(p.regulations||[]).length>0&&(
+                    <div style={{marginTop:12}}>
+                      <div style={{fontSize:11,color:T.textMuted,marginBottom:6}}>Regulatory Frameworks</div>
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                        {p.regulations.map(r=><span key={r} style={{fontSize:11.5,fontWeight:600,padding:"3px 9px",borderRadius:5,background:T.blueDim,color:T.blue,border:`1px solid ${T.blue}20`}}>{r}</span>)}
+                      </div>
+                    </div>
+                  )}
+                  {(p.conditions||[]).length>0&&(
+                    <div style={{marginTop:12}}>
+                      <div style={{fontSize:11,color:T.textMuted,marginBottom:6}}>Enforcement Conditions</div>
+                      {p.conditions.map((c,i)=>(
+                        <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,marginBottom:6}}>
+                          <div style={{width:6,height:6,borderRadius:"50%",background:T.green,flexShrink:0}}/>
+                          <span style={{fontSize:12,color:T.text}}>{c.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </>}
+
                 {pdTab==="assets"&&<>
-                  <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>{p.assets} asset{p.assets!==1?"s":""} governed by this policy</div>
-                  {ASSETS.slice(0,Math.min(p.assets||3,5)).map(a=>(
-                    <div key={a.id} style={{padding:"9px 0",borderBottom:`1px solid ${T.border}`}}>
-                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                        <span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.accent}}>{a.name}</span>
-                        <span style={{fontSize:11.5,fontWeight:600,color:a.quality>=80?T.green:a.quality>=60?T.amber:T.red}}>{a.quality}%</span>
-                      </div>
-                      <div style={{height:3,borderRadius:2,background:T.bgElevated,overflow:"hidden"}}>
-                        <div style={{width:`${a.quality}%`,height:"100%",background:a.quality>=80?T.green:a.quality>=60?T.amber:T.red,borderRadius:2}}/>
-                      </div>
-                    </div>
-                  ))}
+                  {selGovAssets.length===0
+                    ?<div style={{padding:"30px 0",textAlign:"center",color:T.textMuted,fontSize:12}}>No assets in scope.</div>
+                    :<>
+                      <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>{selGovAssets.length} asset{selGovAssets.length!==1?"s":""} in scope</div>
+                      {selGovAssets.map(a=>{
+                        const inViol = selViols.some(v=>v.id===a.id);
+                        return (
+                          <div key={a.id} style={{padding:"8px 0",borderBottom:`1px solid ${T.border}`}}>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
+                              <span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:inViol?T.rose:T.text,fontWeight:inViol?600:400}}>{a.name}</span>
+                              {typeof a.quality==="number"
+                                ?<span style={{fontSize:11.5,fontWeight:700,color:a.quality>=80?T.green:a.quality>=60?T.amber:T.rose}}>{a.quality}%</span>
+                                :<span style={{fontSize:11,color:T.textMuted}}>—</span>}
+                            </div>
+                            {typeof a.quality==="number"&&<div style={{height:3,borderRadius:2,background:T.bgElevated,overflow:"hidden"}}><div style={{width:`${a.quality}%`,height:"100%",background:a.quality>=80?T.green:a.quality>=60?T.amber:T.rose,borderRadius:2}}/></div>}
+                            {inViol&&<div style={{fontSize:10.5,color:T.rose,marginTop:3}}>Violates policy conditions</div>}
+                          </div>
+                        );
+                      })}
+                    </>
+                  }
                 </>}
-              </div>
-              <div style={{padding:"12px 18px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,flexShrink:0}}>
-                <Btn small ghost icon={Ic.edit(11)} onClick={()=>onToast("Policy editor opened","success")} style={{flex:1}}>Edit</Btn>
-                {p.lifecycle==="Draft"&&<Btn small variant="primary" onClick={()=>onToast("Policy submitted for review","success")} style={{flex:1}}>Submit for Review</Btn>}
-                {p.lifecycle==="Active"&&<Btn small variant="danger" onClick={()=>onToast("Policy deprecated","success")} style={{flex:1}}>Deprecate</Btn>}
+
+                {pdTab==="violations"&&<>
+                  {selViols.length===0
+                    ?<div style={{padding:"30px 0",textAlign:"center"}}>
+                        <div style={{fontSize:13,color:T.green,fontWeight:700,marginBottom:5}}>No violations</div>
+                        <div style={{fontSize:12,color:T.textMuted}}>All governed assets are compliant.</div>
+                      </div>
+                    :<>
+                      <div style={{fontSize:11.5,color:T.rose,fontWeight:600,marginBottom:12}}>{selViols.length} asset{selViols.length!==1?"s":""} failing conditions</div>
+                      {selViols.map(a=>(
+                        <div key={a.id} style={{padding:"10px 12px",background:`${T.rose}08`,border:`1px solid ${T.rose}25`,borderRadius:8,marginBottom:8}}>
+                          <div style={{fontSize:12.5,fontWeight:600,color:T.text,marginBottom:5}}>{a.name}</div>
+                          {a.failedConds.map((c,i)=>(
+                            <div key={i} style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:T.rose,marginBottom:3}}>
+                              <span style={{width:5,height:5,borderRadius:"50%",background:T.rose,flexShrink:0}}/>
+                              {c.label}
+                              {c.type==="min_quality"&&typeof a.quality==="number"&&<span style={{marginLeft:"auto",fontFamily:"'Geist Mono',monospace",fontSize:10.5}}>actual: {a.quality}%</span>}
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </>
+                  }
+                </>}
+
+                {pdTab==="terms"&&<>
+                  {linkedTerms.length===0
+                    ?<div style={{padding:"30px 0",textAlign:"center",color:T.textMuted,fontSize:12}}>No glossary terms in governed domains.</div>
+                    :<>
+                      <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>{linkedTerms.length} term{linkedTerms.length!==1?"s":""} in governed domains</div>
+                      {linkedTerms.map(t=>(
+                        <div key={t.term} style={{padding:"8px 0",borderBottom:`1px solid ${T.border}`}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
+                            <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{t.term}</span>
+                            <span style={{fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:4,background:t.cert==="Approved"?`${T.green}15`:`${T.amber}15`,color:t.cert==="Approved"?T.green:T.amber}}>{t.cert}</span>
+                          </div>
+                          <div style={{fontSize:11,color:T.textMuted}}>{t.domain}</div>
+                        </div>
+                      ))}
+                    </>
+                  }
+                </>}
               </div>
             </div>
           );
         })()}
 
       </div>
+
+      {/* ── Create Policy Modal ── */}
+      {createOpen&&(
+        <Backdrop onClose={()=>{setCreateOpen(false);setNewPol(EMPTY_POL);}}>
+          <div style={{padding:"18px 24px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+            <div style={{fontSize:15,fontWeight:700,color:T.text}}>New Policy</div>
+            <button onClick={()=>{setCreateOpen(false);setNewPol(EMPTY_POL);}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted}}>{Ic.x(15)}</button>
+          </div>
+          <PolicyFormBody isEdit={false}/>
+          <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",gap:10,justifyContent:"flex-end",flexShrink:0}}>
+            <Btn ghost onClick={()=>{setCreateOpen(false);setNewPol(EMPTY_POL);}}>Cancel</Btn>
+            <Btn variant="primary" onClick={handleCreate}>Create Policy</Btn>
+          </div>
+        </Backdrop>
+      )}
+
+      {/* ── Edit Policy Modal ── */}
+      {editOpen&&editDraft&&(
+        <Backdrop onClose={()=>{setEditOpen(false);setEditDraft(null);}}>
+          <div style={{padding:"18px 24px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+            <div style={{fontSize:15,fontWeight:700,color:T.text}}>Edit Policy</div>
+            <button onClick={()=>{setEditOpen(false);setEditDraft(null);}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted}}>{Ic.x(15)}</button>
+          </div>
+          <PolicyFormBody isEdit={true}/>
+          <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",gap:10,justifyContent:"flex-end",flexShrink:0}}>
+            <Btn ghost onClick={()=>{setEditOpen(false);setEditDraft(null);}}>Cancel</Btn>
+            <Btn variant="primary" onClick={handleSaveEdit}>Save Changes</Btn>
+          </div>
+        </Backdrop>
+      )}
+
+      {/* ── Link Policy Modal ── */}
+      {linkPolOpen&&(
+        <Backdrop onClose={()=>setLinkPolOpen(null)}>
+          <div style={{padding:"18px 24px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+            <div>
+              <div style={{fontSize:15,fontWeight:700,color:T.text}}>Link Policy to Requirement</div>
+              <div style={{fontSize:11.5,color:T.textMuted,marginTop:3}}>Select an internal policy to satisfy this regulatory requirement</div>
+            </div>
+            <button onClick={()=>setLinkPolOpen(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted}}>{Ic.x(15)}</button>
+          </div>
+          <div style={{flex:1,overflowY:"auto",padding:"14px 24px"}}>
+            {policies.filter(p=>p.lifecycle!=="Deprecated").map(p=>(
+              <div key={p.id} onClick={()=>handleLinkPol(p.id)}
+                style={{padding:"12px 14px",borderRadius:9,border:`1.5px solid ${T.border}`,marginBottom:8,cursor:"pointer",transition:"all .1s"}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor=T.blue;e.currentTarget.style.background=T.blueDim;}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background="transparent";}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                  <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{p.name}</span>
+                  <span style={{fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:4,background:`${lcColor(p.lifecycle)}18`,color:lcColor(p.lifecycle)}}>{p.lifecycle}</span>
+                </div>
+                <div style={{fontSize:11,color:T.textMuted}}>{p.category} · {p.severity} · owner: {p.owner}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{padding:"12px 24px",borderTop:`1px solid ${T.border}`,flexShrink:0}}>
+            <Btn ghost onClick={()=>setLinkPolOpen(null)} style={{width:"100%"}}>Cancel</Btn>
+          </div>
+        </Backdrop>
+      )}
+
     </div>
   );
 };
-
 const AccessView = ({onToast}) => {
   const [tab, setTab] = useState("requests");
   return (
