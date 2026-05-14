@@ -89,12 +89,14 @@ input,textarea,select{font-family:inherit;font-size:inherit;transition:backgroun
 @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
 @keyframes scaleIn{from{opacity:0;transform:scale(.96);}to{opacity:1;}}
 @keyframes slideIn{from{opacity:0;transform:translateX(-8px);}to{opacity:1;}}
+@keyframes slideInRight{from{opacity:0;transform:translateX(32px);}to{opacity:1;transform:translateX(0);}}
 @keyframes pulse2{0%,100%{opacity:1;}50%{opacity:.4;}}
 @keyframes spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
 .fadeUp{animation:fadeUp .2s ease both;}
 .fadeIn{animation:fadeIn .15s ease both;}
 .scaleIn{animation:scaleIn .18s ease both;}
 .slideIn{animation:slideIn .15s ease both;}
+.slideInRight{animation:slideInRight .22s ease both;}
 .row-hover:hover{background:${t.bgHover}!important;cursor:pointer;}
 .btn-hover:hover{opacity:.8;}
 *{transition:background-color .2s,border-color .2s,color .15s,box-shadow .2s;}
@@ -10486,9 +10488,32 @@ const DomainsView = () => {
   const [productTab, setProductTab] = useState("overview");
   const [listView, setListView]     = useState("list"); // "grid" | "list"
   const [createDomainOpen, setCreateDomainOpen]   = useState(false);
-  const [createProductOpen, setCreateProductOpen] = useState(false);
   const [nd, setNd] = useState({name:"",displayName:"",description:"",domainType:"Source-aligned",icon:"🗂️",color:"#0ea5e9"});
-  const [np, setNp] = useState({name:"",displayName:"",description:"",lifecycleStage:"DEVELOPMENT",icon:"📦"});
+  // expanded product/subdomain panel state
+  const [np, setNp] = useState({name:"",displayName:"",description:"",lifecycleStage:"DEVELOPMENT",icon:"📦",color:"#8b5cf6",tags:[],glossaryTerms:[],owners:[],stewards:[]});
+  const [ns, setNs] = useState({name:"",displayName:"",description:"",domainType:"Source-aligned",icon:"🗂️",color:"#0ea5e9",tags:[],glossaryTerms:[],owners:[],stewards:[]});
+  // add panel (replaces create-product modal)
+  const [addPanelOpen,       setAddPanelOpen]       = useState(false);
+  const [addPanelType,       setAddPanelType]        = useState("dataproduct"); // "dataproduct" | "subdomain"
+  const [addHeaderDropdown,  setAddHeaderDropdown]   = useState(false);
+  // inline description edit
+  const [descEditMode,  setDescEditMode]  = useState(false);
+  const [descEditValue, setDescEditValue] = useState("");
+  // panel tag/glossary inputs
+  const [npTagInput,  setNpTagInput]  = useState("");
+  const [npGlInput,   setNpGlInput]   = useState("");
+  const [nsTagInput,  setNsTagInput]  = useState("");
+  const [nsGlInput,   setNsGlInput]   = useState("");
+  // panel owner/steward pickers (product)
+  const [npOwnerOpen,   setNpOwnerOpen]   = useState(false);
+  const [npOwnerSearch, setNpOwnerSearch] = useState("");
+  const [npStewOpen,    setNpStewOpen]    = useState(false);
+  const [npStewSearch,  setNpStewSearch]  = useState("");
+  // panel owner/steward pickers (subdomain)
+  const [nsOwnerOpen,   setNsOwnerOpen]   = useState(false);
+  const [nsOwnerSearch, setNsOwnerSearch] = useState("");
+  const [nsStewOpen,    setNsStewOpen]    = useState(false);
+  const [nsStewSearch,  setNsStewSearch]  = useState("");
   const [dmOwnerOpen, setDmOwnerOpen] = useState(false);
   const [dmOwnerSearch, setDmOwnerSearch] = useState("");
   const [dmStewOpen, setDmStewOpen] = useState(false);
@@ -10555,13 +10580,26 @@ const DomainsView = () => {
     patchDomain(selectedDomain.id,{extraAssetIds:[...(selectedDomain.extraAssetIds||[]),...toAdd]});
     setAddAssetsOpen(false); setAddAssetsSelected(new Set()); setAddAssetsSearch("");
   };
+  const resetAddPanel = () => {
+    setAddPanelOpen(false);
+    setNp({name:"",displayName:"",description:"",lifecycleStage:"DEVELOPMENT",icon:"📦",color:"#8b5cf6",tags:[],glossaryTerms:[],owners:[],stewards:[]});
+    setNs({name:"",displayName:"",description:"",domainType:"Source-aligned",icon:"🗂️",color:"#0ea5e9",tags:[],glossaryTerms:[],owners:[],stewards:[]});
+    setNpTagInput(""); setNpGlInput(""); setNsTagInput(""); setNsGlInput("");
+    setNpOwnerOpen(false); setNpStewOpen(false); setNsOwnerOpen(false); setNsStewOpen(false);
+  };
   const handleCreateProduct = () => {
     if(!np.name.trim()||!selectedDomain) return;
-    const p = {id:`dp${Date.now()}`,name:np.name.trim(),displayName:np.displayName.trim()||np.name.trim(),domain:selectedDomain.name,icon:np.icon,color:selectedDomain.color,description:np.description.trim()||"No description provided.",owners:selectedDomain.owners||[],experts:[],lifecycleStage:np.lifecycleStage,sla:{tier:"SILVER",availability:99.0,dataFreshness:60,dataQuality:80},assetIds:[],tags:[],consumesFrom:[],providesTo:[],createdAt:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})};
+    const p = {id:`dp${Date.now()}`,name:np.name.trim(),displayName:np.displayName.trim()||np.name.trim(),domain:selectedDomain.name,icon:np.icon,color:np.color||selectedDomain.color,description:np.description.trim()||"No description provided.",owners:np.owners.length?np.owners:selectedDomain.owners||[],experts:np.stewards||[],lifecycleStage:np.lifecycleStage,sla:{tier:"SILVER",availability:99.0,dataFreshness:60,dataQuality:80},assetIds:[],tags:np.tags||[],consumesFrom:[],providesTo:[],createdAt:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})};
     setProducts(prev=>[...prev,p]);
-    setCreateProductOpen(false);
-    setNp({name:"",displayName:"",description:"",lifecycleStage:"DEVELOPMENT",icon:"📦"});
+    resetAddPanel();
     setDomainTab("dataproducts");
+  };
+  const handleCreateSubdomain = () => {
+    if(!ns.name.trim()||!selectedDomain) return;
+    const sub = {id:`d${Date.now()}`,name:ns.name.trim(),displayName:ns.displayName.trim()||ns.name.trim(),icon:ns.icon,color:ns.color,domainType:ns.domainType,description:ns.description.trim()||"No description provided.",owners:ns.owners,experts:ns.stewards,tags:ns.tags,quality:0,assetCount:0,extraAssetIds:[],parentDomain:selectedDomain.id};
+    setDomains(prev=>[...prev,sub]);
+    resetAddPanel();
+    setDomainTab("subdomains");
   };
 
   const COLOR_PALETTE = ["#0ea5e9","#f59e0b","#3b82f6","#8b5cf6","#f43f5e","#10b981","#f97316","#06b6d4","#84cc16","#ec4899"];
@@ -10801,10 +10839,29 @@ const DomainsView = () => {
                   {dm.owners.map(o=><OwnerChip key={o} name={o}/>)}
                 </div>
               </div>
-              <div style={{display:"flex",gap:8,flexShrink:0}}>
-                <button onClick={()=>setCreateProductOpen(true)} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",fontWeight:500}}>
-                  {Ic.plus(10)} Data Product
-                </button>
+              <div style={{display:"flex",gap:8,flexShrink:0,position:"relative"}}>
+                {/* Unified + Add dropdown */}
+                <div style={{position:"relative"}}>
+                  <button onClick={()=>setAddHeaderDropdown(p=>!p)}
+                    style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                    {Ic.plus(10)} Add ▾
+                  </button>
+                  {addHeaderDropdown&&(
+                    <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:400,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.22)",minWidth:180,overflow:"hidden"}}>
+                      <button onMouseDown={()=>{setAddHeaderDropdown(false);setAddPanelType("subdomain");setAddPanelOpen(true);}}
+                        style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",fontSize:12,color:T.text}}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                        <span style={{fontSize:15}}>🗂️</span> Add Sub Domain
+                      </button>
+                      <div style={{height:1,background:T.border}}/>
+                      <button onMouseDown={()=>{setAddHeaderDropdown(false);setAddPanelType("dataproduct");setAddPanelOpen(true);}}
+                        style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",fontSize:12,color:T.text}}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                        <span style={{fontSize:15}}>📦</span> Add Data Product
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <Btn onClick={()=>{setEditDd({...dm});setEditDomainOpen(true);}}>Edit Domain</Btn>
               </div>
             </div>
@@ -10821,8 +10878,27 @@ const DomainsView = () => {
             {domainTab==="documentation"&&(
               <div style={{display:"grid",gridTemplateColumns:"1fr 300px",gap:24}}>
                 <div>
-                  <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:10}}>About this domain</div>
-                  <p style={{fontSize:13,color:T.textSub,lineHeight:1.75,marginBottom:24}}>{dm.description}</p>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                    <div style={{fontSize:13,fontWeight:700,color:T.text}}>About this domain</div>
+                    {!descEditMode&&<button onClick={()=>{setDescEditValue(dm.description);setDescEditMode(true);}}
+                      style={{display:"flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:6,background:"none",border:`1px solid ${T.border}`,color:T.textMuted,fontSize:11.5,cursor:"pointer",fontWeight:500}}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
+                      ✏️ Edit
+                    </button>}
+                  </div>
+                  {descEditMode
+                    ? <div style={{marginBottom:24}}>
+                        <textarea value={descEditValue} onChange={e=>setDescEditValue(e.target.value)} rows={5} autoFocus
+                          style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,lineHeight:1.75,resize:"vertical",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
+                        <div style={{display:"flex",gap:8,marginTop:8}}>
+                          <button onClick={()=>{patchDomain(dm.id,{description:descEditValue.trim()||dm.description});setDescEditMode(false);}}
+                            style={{padding:"6px 16px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Save</button>
+                          <button onClick={()=>setDescEditMode(false)}
+                            style={{padding:"6px 14px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+                        </div>
+                      </div>
+                    : <p style={{fontSize:13,color:T.textSub,lineHeight:1.75,marginBottom:24}}>{dm.description}</p>
+                  }
                   <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Domain Health</div>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
                     {[
@@ -10903,17 +10979,46 @@ const DomainsView = () => {
               <div>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
                   <div style={{fontSize:13,color:T.textMuted}}>Sub domains let you further segment ownership within {dm.displayName}</div>
-                  <button style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                  <button onClick={()=>{setAddPanelType("subdomain");setAddPanelOpen(true);}} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>
                     {Ic.plus(10)} Add Sub Domain
                   </button>
                 </div>
-                <div style={{padding:"60px 0",textAlign:"center"}}>
-                  <div style={{fontSize:36,marginBottom:12}}>🗂️</div>
-                  <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>No sub domains yet</div>
-                  <div style={{fontSize:12,color:T.textMuted,maxWidth:380,margin:"0 auto",lineHeight:1.6}}>
-                    Sub domains help further segment large domains. For example, "Commerce" → "Order Management" and "Customer Data".
-                  </div>
-                </div>
+                {(() => {
+                  const subDomains = domains.filter(d=>d.parentDomain===dm.id);
+                  return subDomains.length===0
+                    ? <div style={{padding:"64px 0",textAlign:"center"}}>
+                        <div style={{fontSize:40,marginBottom:14}}>🗂️</div>
+                        <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:6}}>No sub domains yet</div>
+                        <div style={{fontSize:12.5,color:T.textMuted,maxWidth:380,margin:"0 auto 20px",lineHeight:1.65}}>
+                          Sub domains help segment large domains by ownership area. For example, "Commerce" → "Order Management" and "Customer Data".
+                        </div>
+                        <button onClick={()=>{setAddPanelType("subdomain");setAddPanelOpen(true);}}
+                          style={{padding:"9px 22px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
+                          {Ic.plus(11)} Add First Sub Domain
+                        </button>
+                      </div>
+                    : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:14}}>
+                        {subDomains.map(sd=>(
+                          <div key={sd.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden",cursor:"pointer",transition:"all .15s"}}
+                            onClick={()=>{setSelectedDomainId(sd.id);setDomainTab("documentation");}}
+                            onMouseEnter={e=>{e.currentTarget.style.borderColor=sd.color;e.currentTarget.style.boxShadow=`0 4px 20px ${sd.color}20`;}}
+                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
+                            <div style={{height:4,background:sd.color}}/>
+                            <div style={{padding:"14px 16px"}}>
+                              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                                <div style={{width:36,height:36,borderRadius:10,background:`${sd.color}18`,border:`1.5px solid ${sd.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{sd.icon}</div>
+                                <div>
+                                  <div style={{fontSize:13,fontWeight:700,color:T.text}}>{sd.displayName}</div>
+                                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:2}}>{sd.domainType}</div>
+                                </div>
+                              </div>
+                              <p style={{fontSize:11.5,color:T.textSub,lineHeight:1.6,marginBottom:8,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{sd.description}</p>
+                              <div style={{fontSize:11,color:T.textMuted}}>{sd.assetCount} assets · Owner: {sd.owners[0]||"—"}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                })()}
               </div>
             )}
 
@@ -10922,8 +11027,8 @@ const DomainsView = () => {
               <div>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
                   <div style={{fontSize:13,color:T.textMuted}}>{domainProducts.length} data product{domainProducts.length!==1?"s":""}</div>
-                  <button onClick={()=>setCreateProductOpen(true)} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                    {Ic.plus(10)} New Data Product
+                  <button onClick={()=>{setAddPanelType("dataproduct");setAddPanelOpen(true);}} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                    {Ic.plus(10)} Add Data Product
                   </button>
                 </div>
                 {domainProducts.length===0
@@ -10931,7 +11036,7 @@ const DomainsView = () => {
                       <div style={{fontSize:36,marginBottom:12}}>📦</div>
                       <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>No data products yet</div>
                       <div style={{fontSize:12,color:T.textMuted,maxWidth:380,margin:"0 auto 16px",lineHeight:1.6}}>A data product bundles related assets into a governed, discoverable unit with SLAs and ownership.</div>
-                      <button onClick={()=>setCreateProductOpen(true)} style={{padding:"9px 20px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Create First Data Product</button>
+                      <button onClick={()=>{setAddPanelType("dataproduct");setAddPanelOpen(true);}} style={{padding:"9px 22px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:600,cursor:"pointer"}}>{Ic.plus(11)} Add Data Product</button>
                     </div>
                   : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:14}}>
                       {domainProducts.map(p=>(
@@ -10983,67 +11088,233 @@ const DomainsView = () => {
           </div>
         </div>
 
-        {/* Create Data Product Modal */}
-        {createProductOpen&&(
-          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:900,backdropFilter:"blur(4px)"}}>
-            <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:16,width:520,maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 60px rgba(0,0,0,.35)"}}>
-              <div style={{padding:"20px 24px 16px",borderBottom:`1px solid ${T.border}`}}>
+        {/* Add Side Panel — Data Product or Sub Domain */}
+        {addPanelOpen&&(
+          <>
+            <div onClick={resetAddPanel} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:800}}/>
+            <div className="slideInRight" style={{position:"fixed",top:0,right:0,bottom:0,width:420,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:801,display:"flex",flexDirection:"column",boxShadow:"-8px 0 32px rgba(0,0,0,.2)"}}>
+              {/* Panel header */}
+              <div style={{padding:"20px 22px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                   <div>
-                    <div style={{fontSize:15,fontWeight:700,color:T.text}}>New Data Product</div>
-                    <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>in {dm.displayName} domain</div>
+                    <div style={{fontSize:15,fontWeight:700,color:T.text}}>{addPanelType==="dataproduct"?"Add Data Product":"Add Sub Domain"}</div>
+                    <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>in <span style={{color:T.text,fontWeight:600}}>{dm.displayName}</span></div>
                   </div>
-                  <button onClick={()=>setCreateProductOpen(false)} style={{width:28,height:28,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+                  <button onClick={resetAddPanel} style={{width:28,height:28,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
                 </div>
               </div>
-              <div style={{padding:"20px 24px",flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:16}}>
-                {/* Icon picker */}
-                <div>
-                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Icon</label>
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                    {["📦","📊","💹","📱","🧮","🎯","📋","🔬","💼","🗃️","📡","⚡"].map(ic=>(
-                      <button key={ic} onClick={()=>setNp(p=>({...p,icon:ic}))} style={{width:34,height:34,borderRadius:8,background:np.icon===ic?T.accentDim:T.bgElevated,border:`1.5px solid ${np.icon===ic?T.accent:T.border}`,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>{ic}</button>
-                    ))}
-                  </div>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                  <div>
-                    <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Name <span style={{color:T.rose}}>*</span></label>
-                    <input value={np.name} onChange={e=>setNp(p=>({...p,name:e.target.value}))} placeholder="e.g. order-analytics" autoFocus
-                      style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"'Geist Mono',monospace"}}
-                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                  </div>
-                  <div>
-                    <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Display Name</label>
-                    <input value={np.displayName} onChange={e=>setNp(p=>({...p,displayName:e.target.value}))} placeholder="e.g. Order Analytics"
-                      style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
-                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                  </div>
-                </div>
-                <div>
-                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Description</label>
-                  <textarea value={np.description} onChange={e=>setNp(p=>({...p,description:e.target.value}))} rows={3} placeholder="What data does this product contain, and who consumes it?"
-                    style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box"}}
-                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                </div>
-                <div>
-                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Lifecycle Stage</label>
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                    {LIFECYCLE_STAGES.map(s=>(
-                      <button key={s} onClick={()=>setNp(p=>({...p,lifecycleStage:s}))} style={{padding:"5px 12px",borderRadius:6,fontSize:11,fontWeight:600,cursor:"pointer",transition:"all .1s",
-                        background:np.lifecycleStage===s?`${LIFECYCLE_COLORS[s]}18`:T.bgElevated,
-                        border:`1.5px solid ${np.lifecycleStage===s?LIFECYCLE_COLORS[s]:T.border}`,
-                        color:np.lifecycleStage===s?LIFECYCLE_COLORS[s]:T.textMuted}}>{s}</button>
-                    ))}
-                  </div>
-                </div>
+
+              {/* Panel body */}
+              <div style={{flex:1,overflowY:"auto",padding:"18px 22px",display:"flex",flexDirection:"column",gap:18}}>
+                {(() => {
+                  const isDP = addPanelType==="dataproduct";
+                  const st = isDP ? np : ns;
+                  const setSt = isDP ? setNp : setNs;
+                  const icons = isDP
+                    ? ["📦","📊","💹","📱","🧮","🎯","📋","🔬","💼","🗃️","📡","⚡","🔁","🌊","🏷️","🔑"]
+                    : ["🗂️","📁","🏢","🌐","🔬","📡","⚡","🎯","🛡️","📈","🔗","🧩","🌍","🏗️","💡","🔍"];
+                  const tagInput = isDP ? npTagInput : nsTagInput;
+                  const setTagInput = isDP ? setNpTagInput : setNsTagInput;
+                  const glInput = isDP ? npGlInput : nsGlInput;
+                  const setGlInput = isDP ? setNpGlInput : setNsGlInput;
+                  const ownerOpen = isDP ? npOwnerOpen : nsOwnerOpen;
+                  const setOwnerOpen = isDP ? setNpOwnerOpen : setNsOwnerOpen;
+                  const ownerSearch = isDP ? npOwnerSearch : nsOwnerSearch;
+                  const setOwnerSearch = isDP ? setNpOwnerSearch : setNsOwnerSearch;
+                  const stewOpen = isDP ? npStewOpen : nsStewOpen;
+                  const setStewOpen = isDP ? setNpStewOpen : setNsStewOpen;
+                  const stewSearch = isDP ? npStewSearch : nsStewSearch;
+                  const setStewSearch = isDP ? setNpStewSearch : setNsStewSearch;
+                  const fldStyle = {width:"100%",padding:"8px 11px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
+                  const lblStyle = {display:"block",fontSize:11,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:7};
+                  const glossaryOptions = GLOSSARY_TERMS.filter(t=>!glInput||t.term.toLowerCase().includes(glInput.toLowerCase())).slice(0,8);
+                  return (<>
+                    {/* Icon + Color row */}
+                    <div>
+                      <label style={lblStyle}>Icon</label>
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                        {icons.map(ic=>(
+                          <button key={ic} onClick={()=>setSt(p=>({...p,icon:ic}))}
+                            style={{width:34,height:34,borderRadius:8,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
+                              background:st.icon===ic?`${st.color}20`:T.bgElevated,
+                              border:`1.5px solid ${st.icon===ic?st.color:T.border}`}}>{ic}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label style={lblStyle}>Color</label>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {COLOR_PALETTE.map(c=>(
+                          <button key={c} onClick={()=>setSt(p=>({...p,color:c}))}
+                            style={{width:24,height:24,borderRadius:"50%",background:c,border:`2.5px solid ${st.color===c?"#fff":c}`,outline:st.color===c?`2px solid ${c}`:"none",cursor:"pointer"}}/>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Name + Display Name */}
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                      <div>
+                        <label style={lblStyle}>Name <span style={{color:T.rose}}>*</span></label>
+                        <input value={st.name} onChange={e=>setSt(p=>({...p,name:e.target.value}))} placeholder={isDP?"order-analytics":"order-mgmt"} autoFocus
+                          style={{...fldStyle,fontFamily:"'Geist Mono',monospace"}}
+                          onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                      </div>
+                      <div>
+                        <label style={lblStyle}>Display Name</label>
+                        <input value={st.displayName} onChange={e=>setSt(p=>({...p,displayName:e.target.value}))} placeholder={isDP?"Order Analytics":"Order Management"}
+                          style={fldStyle}
+                          onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                      </div>
+                    </div>
+
+                    {/* Description */}
+                    <div>
+                      <label style={lblStyle}>Description</label>
+                      <textarea value={st.description} onChange={e=>setSt(p=>({...p,description:e.target.value}))} rows={3}
+                        placeholder={isDP?"What data does this product contain, and who consumes it?":"What ownership area does this sub domain cover?"}
+                        style={{...fldStyle,resize:"vertical"}}
+                        onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                    </div>
+
+                    {/* Domain Type (sub domain only) */}
+                    {!isDP&&(
+                      <div>
+                        <label style={lblStyle}>Domain Type</label>
+                        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                          {DOMAIN_TYPES.map(t=>(
+                            <button key={t} onClick={()=>setSt(p=>({...p,domainType:t}))}
+                              style={{padding:"5px 12px",borderRadius:6,fontSize:11.5,fontWeight:600,cursor:"pointer",
+                                background:st.domainType===t?T.accentDim:T.bgElevated,
+                                border:`1.5px solid ${st.domainType===t?T.accent:T.border}`,
+                                color:st.domainType===t?T.accent:T.textMuted}}>{t}</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Lifecycle Stage (data product only) */}
+                    {isDP&&(
+                      <div>
+                        <label style={lblStyle}>Lifecycle Stage</label>
+                        <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                          {LIFECYCLE_STAGES.map(s=>(
+                            <button key={s} onClick={()=>setSt(p=>({...p,lifecycleStage:s}))}
+                              style={{padding:"4px 11px",borderRadius:6,fontSize:11,fontWeight:600,cursor:"pointer",
+                                background:st.lifecycleStage===s?`${LIFECYCLE_COLORS[s]}18`:T.bgElevated,
+                                border:`1.5px solid ${st.lifecycleStage===s?LIFECYCLE_COLORS[s]:T.border}`,
+                                color:st.lifecycleStage===s?LIFECYCLE_COLORS[s]:T.textMuted}}>{s}</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Tags */}
+                    <div>
+                      <label style={lblStyle}>Tags</label>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
+                        {(st.tags||[]).map(t=>(
+                          <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textSub}}>
+                            {t}<button onClick={()=>setSt(p=>({...p,tags:p.tags.filter(x=>x!==t)}))} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,lineHeight:1,display:"flex"}}>{Ic.x(7)}</button>
+                          </span>
+                        ))}
+                      </div>
+                      <input value={tagInput} onChange={e=>setTagInput(e.target.value)}
+                        onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&tagInput.trim()){setSt(p=>({...p,tags:[...(p.tags||[]),tagInput.trim()]}));setTagInput("");e.preventDefault();}}}
+                        placeholder="Type and press Enter to add…"
+                        style={{...fldStyle,fontSize:12}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                    </div>
+
+                    {/* Glossary Terms */}
+                    <div>
+                      <label style={lblStyle}>Glossary Terms</label>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
+                        {(st.glossaryTerms||[]).map(t=>(
+                          <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:6,background:"rgba(139,92,246,.08)",border:"1px solid rgba(139,92,246,.2)",fontSize:11.5,color:"#8b5cf6"}}>
+                            {t}<button onClick={()=>setSt(p=>({...p,glossaryTerms:p.glossaryTerms.filter(x=>x!==t)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#8b5cf6",padding:0,lineHeight:1,display:"flex",opacity:.6}}>{Ic.x(7)}</button>
+                          </span>
+                        ))}
+                      </div>
+                      <div style={{position:"relative"}}>
+                        <input value={glInput} onChange={e=>setGlInput(e.target.value)} placeholder="Search glossary terms…"
+                          style={{...fldStyle,fontSize:12}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>setTimeout(()=>setGlInput(""),150)}/>
+                        {glInput.length>0&&glossaryOptions.length>0&&(
+                          <div style={{position:"absolute",left:0,right:0,top:"calc(100% + 4px)",zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,boxShadow:"0 6px 20px rgba(0,0,0,.18)",overflow:"hidden"}}>
+                            {glossaryOptions.map(t=>(
+                              <button key={t.id} onMouseDown={()=>{if(!(st.glossaryTerms||[]).includes(t.term)){setSt(p=>({...p,glossaryTerms:[...(p.glossaryTerms||[]),t.term]}));}setGlInput("");}}
+                                style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}
+                                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                                <span style={{fontSize:11,padding:"2px 6px",borderRadius:4,background:"rgba(139,92,246,.1)",color:"#8b5cf6",fontWeight:600}}>{t.abbr}</span>
+                                <span style={{fontSize:12,color:T.text}}>{t.term}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Owners */}
+                    <div style={{position:"relative"}}>
+                      <label style={lblStyle}>Owners</label>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
+                        {(st.owners||[]).map(o=>(
+                          <div key={o} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                            <div style={{width:18,height:18,borderRadius:"50%",background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:T.accent}}>{ava(o)}</div>
+                            <span style={{fontSize:12,color:T.text}}>{o}</span>
+                            <button onClick={()=>setSt(p=>({...p,owners:p.owners.filter(x=>x!==o)}))} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex"}} onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{Ic.x(7)}</button>
+                          </div>
+                        ))}
+                      </div>
+                      <button onClick={()=>{setOwnerOpen(p=>!p);setOwnerSearch("");}}
+                        style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,color:ownerOpen?T.accent:T.textMuted,background:"none",border:`1px dashed ${ownerOpen?T.accent:T.border}`,borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>
+                        {Ic.plus(9)} Add owner
+                      </button>
+                      {ownerOpen&&(
+                        <div style={{position:"absolute",left:0,right:0,top:"calc(100% - 2px)",zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.22)",overflow:"hidden"}}>
+                          <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}><input autoFocus placeholder="Search users…" value={ownerSearch} onChange={e=>setOwnerSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none"}}/></div>
+                          <div style={{maxHeight:150,overflowY:"auto"}}>{ALL_USERS.filter(u=>!ownerSearch||u.includes(ownerSearch.toLowerCase())).map(u=>{const sel=(st.owners||[]).includes(u);return(<button key={u} onMouseDown={e=>{e.stopPropagation();setSt(p=>({...p,owners:sel?p.owners.filter(x=>x!==u):[...p.owners,u]}));}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 12px",background:sel?T.bgElevated:"transparent",border:"none",cursor:"pointer",textAlign:"left"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{width:22,height:22,borderRadius:"50%",background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:T.accent}}>{ava(u)}</div><span style={{flex:1,fontSize:12,color:T.text}}>{u}</span>{sel&&<span style={{fontSize:12,color:T.accent}}>✓</span>}</button>);})}</div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Stewards */}
+                    <div style={{position:"relative"}}>
+                      <label style={lblStyle}>Stewards</label>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
+                        {(st.stewards||[]).map(s=>(
+                          <div key={s} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                            <div style={{width:18,height:18,borderRadius:"50%",background:"rgba(217,119,6,.12)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#d97706"}}>{ava(s)}</div>
+                            <span style={{fontSize:12,color:T.text}}>{s}</span>
+                            <button onClick={()=>setSt(p=>({...p,stewards:p.stewards.filter(x=>x!==s)}))} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex"}} onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{Ic.x(7)}</button>
+                          </div>
+                        ))}
+                      </div>
+                      <button onClick={()=>{setStewOpen(p=>!p);setStewSearch("");}}
+                        style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,color:stewOpen?"#d97706":T.textMuted,background:"none",border:`1px dashed ${stewOpen?"#d97706":T.border}`,borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>
+                        {Ic.plus(9)} Add steward
+                      </button>
+                      {stewOpen&&(
+                        <div style={{position:"absolute",left:0,right:0,top:"calc(100% - 2px)",zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.22)",overflow:"hidden"}}>
+                          <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}><input autoFocus placeholder="Search users…" value={stewSearch} onChange={e=>setStewSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none"}}/></div>
+                          <div style={{maxHeight:150,overflowY:"auto"}}>{ALL_USERS.filter(u=>!stewSearch||u.includes(stewSearch.toLowerCase())).map(u=>{const sel=(st.stewards||[]).includes(u);return(<button key={u} onMouseDown={e=>{e.stopPropagation();setSt(p=>({...p,stewards:sel?p.stewards.filter(x=>x!==u):[...p.stewards,u]}));}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 12px",background:sel?T.bgElevated:"transparent",border:"none",cursor:"pointer",textAlign:"left"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{width:22,height:22,borderRadius:"50%",background:"rgba(217,119,6,.12)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:"#d97706"}}>{ava(u)}</div><span style={{flex:1,fontSize:12,color:T.text}}>{u}</span>{sel&&<span style={{fontSize:12,color:"#d97706"}}>✓</span>}</button>);})}</div>
+                        </div>
+                      )}
+                    </div>
+                  </>);
+                })()}
               </div>
-              <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.bgElevated,borderRadius:"0 0 16px 16px"}}>
-                <button onClick={()=>setCreateProductOpen(false)} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
-                <button onClick={handleCreateProduct} disabled={!np.name.trim()} style={{padding:"8px 18px",borderRadius:8,background:np.name.trim()?T.accent:"rgba(100,100,120,.35)",border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:np.name.trim()?"pointer":"default",opacity:np.name.trim()?1:.7}}>Create Data Product</button>
+
+              {/* Panel footer */}
+              <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.bgElevated,flexShrink:0}}>
+                <button onClick={resetAddPanel} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+                <button
+                  onClick={addPanelType==="dataproduct"?handleCreateProduct:handleCreateSubdomain}
+                  disabled={addPanelType==="dataproduct"?!np.name.trim():!ns.name.trim()}
+                  style={{padding:"8px 20px",borderRadius:8,background:(addPanelType==="dataproduct"?np.name.trim():ns.name.trim())?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:(addPanelType==="dataproduct"?np.name.trim():ns.name.trim())?"pointer":"default"}}>
+                  {addPanelType==="dataproduct"?"Add Data Product":"Add Sub Domain"}
+                </button>
               </div>
             </div>
-          </div>
+          </>
         )}
       </div>
     );
