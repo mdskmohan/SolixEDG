@@ -5528,7 +5528,7 @@ const PolicyManagerView = ({onToast}) => {
      ]},
   ]);
 
-  const [tab,           setTab]         = useState("policies");
+  const [tab,           setTab]         = useState("overview");
   const [selPolicyId,   setSelPolicyId] = useState(null);
   const [pdTab,         setPdTab]       = useState("overview");
   const [polSearch,     setPolSearch]   = useState("");
@@ -5861,34 +5861,127 @@ const PolicyManagerView = ({onToast}) => {
         <Btn icon={Ic.plus(12)} variant="primary" onClick={()=>setCreateOpen(true)}>New Policy</Btn>
       </Topbar>
 
-      {/* ── Metric strip ── */}
-      <div style={{padding:"12px 28px 0",flexShrink:0,display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-        {[
-          {label:"Total Policies",value:policies.length,sub:`${activePols.length} active · ${policies.filter(p=>p.lifecycle==="Draft").length} draft`,color:T.blue,pct:null},
-          {label:"Under Review",  value:policies.filter(p=>p.lifecycle==="In Review").length,sub:"awaiting approval",color:T.amber,pct:Math.round(policies.filter(p=>p.lifecycle==="In Review").length/Math.max(policies.length,1)*100)},
-          {label:"Open Violations",value:totalViols,sub:totalViols===0?"All active policies compliant":"across active policies",color:totalViols>0?T.rose:T.green,pct:null},
-          {label:"Asset Coverage",value:`${coveragePct}%`,sub:`${coveredIds.size} of ${ASSETS.length} assets governed`,color:coveragePct>=80?T.green:T.amber,pct:coveragePct},
-        ].map(m=>(
-          <div key={m.label} style={{padding:"13px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,borderLeft:`3px solid ${m.color}`,position:"relative",overflow:"hidden"}}>
-            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>{m.label}</div>
-            <div style={{fontSize:22,fontWeight:800,color:m.color,lineHeight:1,marginBottom:4,fontFamily:"'Geist Mono',monospace"}}>{m.value}</div>
-            <div style={{fontSize:11,color:T.textMuted}}>{m.sub}</div>
-            {m.pct!==null&&(
-              <div style={{position:"absolute",bottom:0,left:0,right:0,height:3,background:T.bgElevated}}>
-                <div style={{width:`${m.pct}%`,height:"100%",background:m.color,borderRadius:"0 1px 0 0",transition:"width .4s"}}/>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* ── Main tab bar ── */}
-      <div style={{padding:"10px 28px 0",flexShrink:0}}>
-        <Tabs2 tabs={[{key:"policies",label:`Policies (${policies.length})`},{key:"regulations",label:`Regulations (${regulations.length})`}]} active={tab} onChange={t=>{setTab(t);setSelPolicyId(null);}}/>
+      {/* ── Tab bar at top ── */}
+      <div style={{padding:"0 28px",flexShrink:0,borderBottom:`1px solid ${T.border}`}}>
+        <Tabs2 tabs={[{key:"overview",label:"Overview"},{key:"policies",label:`Policies (${policies.length})`},{key:"regulations",label:`Regulations (${regulations.length})`}]} active={tab} onChange={t=>{setTab(t);setSelPolicyId(null);}}/>
       </div>
 
       {/* ════ content area ════ */}
       <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+
+        {/* ══════ OVERVIEW TAB ══════ */}
+        {tab==="overview"&&(
+          <div style={{flex:1,overflowY:"auto",padding:"20px 28px"}}>
+            {/* Metric cards */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:24}}>
+              {[
+                {label:"Total Policies",value:policies.length,sub:`${activePols.length} active · ${policies.filter(p=>p.lifecycle==="Draft").length} draft`,color:T.blue,pct:null},
+                {label:"Under Review",value:policies.filter(p=>p.lifecycle==="In Review").length,sub:"awaiting approval",color:T.amber,pct:Math.round(policies.filter(p=>p.lifecycle==="In Review").length/Math.max(policies.length,1)*100)},
+                {label:"Open Violations",value:totalViols,sub:totalViols===0?"All active policies compliant":"across active policies",color:totalViols>0?T.rose:T.green,pct:null},
+                {label:"Asset Coverage",value:`${coveragePct}%`,sub:`${coveredIds.size} of ${ASSETS.length} assets governed`,color:coveragePct>=80?T.green:T.amber,pct:coveragePct},
+              ].map(m=>(
+                <div key={m.label} style={{padding:"13px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,borderLeft:`3px solid ${m.color}`,position:"relative",overflow:"hidden"}}>
+                  <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>{m.label}</div>
+                  <div style={{fontSize:22,fontWeight:800,color:m.color,lineHeight:1,marginBottom:4,fontFamily:"'Geist Mono',monospace"}}>{m.value}</div>
+                  <div style={{fontSize:11,color:T.textMuted}}>{m.sub}</div>
+                  {m.pct!==null&&<div style={{position:"absolute",bottom:0,left:0,right:0,height:3,background:T.bgElevated}}><div style={{width:`${m.pct}%`,height:"100%",background:m.color,borderRadius:"0 1px 0 0",transition:"width .4s"}}/></div>}
+                </div>
+              ))}
+            </div>
+            {/* Policy Status breakdown */}
+            <div style={{marginBottom:24}}>
+              <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>Policy Status</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8}}>
+                {LC_STEPS.map(lc=>{
+                  const cnt=policies.filter(p=>p.lifecycle===lc).length;
+                  const pct=Math.round(cnt/Math.max(policies.length,1)*100);
+                  return (
+                    <button key={lc} onClick={()=>{setLcFilter(lc);setTab("policies");}}
+                      style={{padding:"11px 10px",borderRadius:9,border:`1.5px solid ${lcColor(lc)}30`,background:`${lcColor(lc)}08`,cursor:"pointer",textAlign:"center",transition:"all .12s"}}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor=lcColor(lc);e.currentTarget.style.background=`${lcColor(lc)}14`;}}
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor=`${lcColor(lc)}30`;e.currentTarget.style.background=`${lcColor(lc)}08`;}}>
+                      <div style={{fontSize:20,fontWeight:800,color:lcColor(lc),fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{cnt}</div>
+                      <div style={{fontSize:10,color:T.textMuted,marginTop:4,fontWeight:600}}>{lc}</div>
+                      {cnt>0&&<div style={{marginTop:6,height:2,borderRadius:1,background:T.bgElevated,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:lcColor(lc)}}/></div>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:24}}>
+              {/* Health by Category */}
+              <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px 18px"}}>
+                <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:14}}>Health by Category</div>
+                {POLICY_CATS.map(cat=>{
+                  const catPols=policies.filter(p=>p.category===cat);
+                  const activeCnt=catPols.filter(p=>p.lifecycle==="Active").length;
+                  const totalCnt=catPols.length;
+                  const viols=catPols.reduce((s,p)=>s+getViolations(p).length,0);
+                  const pct=totalCnt?Math.round(activeCnt/totalCnt*100):0;
+                  if(!totalCnt) return null;
+                  return (
+                    <div key={cat} style={{marginBottom:12}}>
+                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                        <div style={{display:"flex",alignItems:"center",gap:6}}>
+                          <div style={{width:7,height:7,borderRadius:1,background:CAT_COLORS[cat]||T.blue,flexShrink:0}}/>
+                          <span style={{fontSize:12,fontWeight:600,color:T.text}}>{cat}</span>
+                        </div>
+                        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                          {viols>0&&<span style={{fontSize:10.5,color:T.rose,fontWeight:600}}>⚠ {viols}</span>}
+                          <span style={{fontSize:11,color:T.textMuted}}>{activeCnt}/{totalCnt}</span>
+                        </div>
+                      </div>
+                      <div style={{height:4,borderRadius:2,background:T.bgElevated,overflow:"hidden"}}>
+                        <div style={{width:`${pct}%`,height:"100%",background:CAT_COLORS[cat]||T.blue,borderRadius:2,transition:"width .4s"}}/>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Regulation Coverage */}
+              <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px 18px"}}>
+                <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:14}}>Regulation Coverage</div>
+                {regulations.map(reg=>{
+                  const sc=reg.score>=90?T.green:reg.score>=75?T.amber:T.rose;
+                  return (
+                    <div key={reg.id} style={{marginBottom:12}}>
+                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                        <span style={{fontSize:12,fontWeight:600,color:T.text}}>{reg.name}</span>
+                        <span style={{fontSize:12,fontWeight:700,color:sc,fontFamily:"'Geist Mono',monospace"}}>{reg.score}%</span>
+                      </div>
+                      <div style={{height:4,borderRadius:2,background:T.bgElevated,overflow:"hidden"}}>
+                        <div style={{width:`${reg.score}%`,height:"100%",background:sc,borderRadius:2,transition:"width .4s"}}/>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            {/* Recent Activity */}
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>Recent Activity</div>
+              <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                {policies.flatMap(p=>(p.history||[]).map(h=>({...h,policyName:p.name,polId:p.id}))).sort((a,b)=>b.when.localeCompare(a.when)).slice(0,8).map((h,i,arr)=>{
+                  const dot=h.action.toLowerCase().includes("deprecat")?T.rose:h.action.toLowerCase().includes("activat")||h.action.toLowerCase().includes("publish")?T.blue:h.action.toLowerCase().includes("approv")?T.green:h.action.toLowerCase().includes("submit")||h.action.toLowerCase().includes("review")?T.amber:T.textMuted;
+                  return (
+                    <div key={i} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"11px 16px",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"background .1s"}}
+                      onClick={()=>{setSelPolicyId(h.polId);setTab("policies");setPdTab("activity");}}
+                      onMouseEnter={e=>e.currentTarget.style.background=T.bgElevated}
+                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                      <div style={{width:8,height:8,borderRadius:"50%",background:dot,flexShrink:0,marginTop:4}}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12,color:T.text,marginBottom:2,lineHeight:1.4}}>{h.action}</div>
+                        <div style={{fontSize:11,color:T.textMuted}}>
+                          <span style={{fontFamily:"'Geist Mono',monospace",fontSize:10.5}}>{h.policyName}</span>{" · "}{h.when}{" · "}{h.who}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ══════ POLICIES TAB ══════ */}
         {tab==="policies"&&<>
@@ -6051,104 +6144,15 @@ const PolicyManagerView = ({onToast}) => {
             </div>
           </div>
 
-          {/* Right: overview dashboard or detail */}
+          {/* Right: empty state or detail */}
           {!selPol&&(
-            <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
-              {/* Status breakdown */}
-              <div style={{marginBottom:22}}>
-                <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>Policy Status</div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8}}>
-                  {LC_STEPS.map(lc=>{
-                    const cnt=policies.filter(p=>p.lifecycle===lc).length;
-                    const pct=Math.round(cnt/Math.max(policies.length,1)*100);
-                    return (
-                      <button key={lc} onClick={()=>{setLcFilter(lc);}} style={{padding:"11px 10px",borderRadius:9,border:`1.5px solid ${lcColor(lc)}30`,background:`${lcColor(lc)}08`,cursor:"pointer",textAlign:"center",transition:"all .12s"}}
-                        onMouseEnter={e=>{e.currentTarget.style.borderColor=lcColor(lc);e.currentTarget.style.background=`${lcColor(lc)}14`;}}
-                        onMouseLeave={e=>{e.currentTarget.style.borderColor=`${lcColor(lc)}30`;e.currentTarget.style.background=`${lcColor(lc)}08`;}}>
-                        <div style={{fontSize:20,fontWeight:800,color:lcColor(lc),fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{cnt}</div>
-                        <div style={{fontSize:10,color:T.textMuted,marginTop:4,fontWeight:600}}>{lc}</div>
-                        {cnt>0&&<div style={{marginTop:6,height:2,borderRadius:1,background:T.bgElevated,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:lcColor(lc)}}/></div>}
-                      </button>
-                    );
-                  })}
-                </div>
+            <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}>
+              <div style={{width:48,height:48,borderRadius:12,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style={{color:T.textMuted}}><path d="M9 12h6M9 16h4M5 21h14a2 2 0 002-2V7l-5-5H5a2 2 0 00-2 2v15a2 2 0 002 2z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
               </div>
-
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:22}}>
-                {/* Category health */}
-                <div>
-                  <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>Health by Category</div>
-                  {POLICY_CATS.map(cat=>{
-                    const catPols=policies.filter(p=>p.category===cat);
-                    const activeCnt=catPols.filter(p=>p.lifecycle==="Active").length;
-                    const totalCnt=catPols.length;
-                    const viols=catPols.reduce((s,p)=>s+getViolations(p).length,0);
-                    const pct=totalCnt?Math.round(activeCnt/totalCnt*100):0;
-                    if(!totalCnt) return null;
-                    return (
-                      <div key={cat} style={{marginBottom:10}}>
-                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                          <div style={{display:"flex",alignItems:"center",gap:6}}>
-                            <div style={{width:7,height:7,borderRadius:1,background:CAT_COLORS[cat]||T.blue,flexShrink:0}}/>
-                            <span style={{fontSize:12,fontWeight:600,color:T.text}}>{cat}</span>
-                          </div>
-                          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                            {viols>0&&<span style={{fontSize:10.5,color:T.rose,fontWeight:600}}>⚠ {viols}</span>}
-                            <span style={{fontSize:11,color:T.textMuted}}>{activeCnt}/{totalCnt}</span>
-                          </div>
-                        </div>
-                        <div style={{height:4,borderRadius:2,background:T.bgElevated,overflow:"hidden"}}>
-                          <div style={{width:`${pct}%`,height:"100%",background:CAT_COLORS[cat]||T.blue,borderRadius:2,transition:"width .4s"}}/>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Regulation coverage */}
-                <div>
-                  <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>Regulation Coverage</div>
-                  {regulations.map(reg=>{
-                    const sc=reg.score>=90?T.green:reg.score>=75?T.amber:T.rose;
-                    return (
-                      <div key={reg.id} style={{marginBottom:10}}>
-                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                          <span style={{fontSize:12,fontWeight:600,color:T.text}}>{reg.name}</span>
-                          <span style={{fontSize:12,fontWeight:700,color:sc,fontFamily:"'Geist Mono',monospace"}}>{reg.score}%</span>
-                        </div>
-                        <div style={{height:4,borderRadius:2,background:T.bgElevated,overflow:"hidden"}}>
-                          <div style={{width:`${reg.score}%`,height:"100%",background:sc,borderRadius:2,transition:"width .4s"}}/>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Recent activity */}
-              <div>
-                <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>Recent Activity</div>
-                <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                  {policies.flatMap(p=>(p.history||[]).map(h=>({...h,policyName:p.name,polId:p.id,lc:p.lifecycle}))).sort((a,b)=>b.when.localeCompare(a.when)).slice(0,7).map((h,i,arr)=>{
-                    const dot=h.action.toLowerCase().includes("deprecat")?T.rose:h.action.toLowerCase().includes("activat")||h.action.toLowerCase().includes("publish")?T.blue:h.action.toLowerCase().includes("approv")?T.green:h.action.toLowerCase().includes("submit")||h.action.toLowerCase().includes("review")?T.amber:T.textMuted;
-                    return (
-                      <div key={i} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"11px 16px",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",cursor:"pointer"}}
-                        onClick={()=>{setSelPolicyId(h.polId);setPdTab("activity");}}
-                        onMouseEnter={e=>e.currentTarget.style.background=T.bgElevated}
-                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                        <div style={{width:8,height:8,borderRadius:"50%",background:dot,flexShrink:0,marginTop:4}}/>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:12,color:T.text,marginBottom:2,lineHeight:1.4}}>{h.action}</div>
-                          <div style={{fontSize:11,color:T.textMuted}}>
-                            <span style={{fontFamily:"'Geist Mono',monospace",fontSize:10.5}}>{h.policyName}</span>
-                            {" · "}{h.when}{" · "}{h.who}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+              <div style={{fontSize:13,fontWeight:600,color:T.text}}>Select a policy</div>
+              <div style={{fontSize:12,color:T.textMuted,maxWidth:220,textAlign:"center",lineHeight:1.7}}>Choose a policy from the list to view details, manage rules, and track compliance.</div>
+              <Btn variant="primary" onClick={()=>setCreateOpen(true)}>+ New Policy</Btn>
             </div>
           )}
 
