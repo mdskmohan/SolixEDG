@@ -11812,7 +11812,7 @@ const DomainsView = () => {
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
           <div style={{fontSize:13,fontWeight:600,color:T.text}}>{domains.length} domain{domains.length!==1?"s":""}</div>
           <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
-            {[["grid","⊞"],["list","☰"]].map(([v,ic])=>(
+            {[["list","☰"],["grid","⊞"]].map(([v,ic])=>(
               <button key={v} onClick={()=>setListView(v)} style={{padding:"4px 10px",borderRadius:5,border:"none",cursor:"pointer",fontSize:13,
                 background:listView===v?T.bgSurface:"transparent",color:listView===v?T.text:T.textMuted,
                 boxShadow:listView===v?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{ic}</button>
@@ -12626,7 +12626,7 @@ const DataProductsView = () => {
               {LIFECYCLE_STAGES.map(s=><option key={s} value={s}>{s}</option>)}
             </select>
             <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
-              {[["grid","⊞"],["list","☰"]].map(([v,ic])=>(
+              {[["list","☰"],["grid","⊞"]].map(([v,ic])=>(
                 <button key={v} onClick={()=>setListView(v)} style={{padding:"4px 10px",borderRadius:5,border:"none",cursor:"pointer",fontSize:13,
                   background:listView===v?T.bgSurface:"transparent",color:listView===v?T.text:T.textMuted,
                   boxShadow:listView===v?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{ic}</button>
