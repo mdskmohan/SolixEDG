@@ -10548,6 +10548,8 @@ const DomainsView = () => {
   const [pdCustomProps,    setPdCustomProps]    = useState([]);     // [{key,value}]
   const [pdCpKey,          setPdCpKey]          = useState("");
   const [pdCpVal,          setPdCpVal]          = useState("");
+  // delete confirmation modal
+  const [deleteConfirm,    setDeleteConfirm]    = useState(null);  // {type:'domain'|'product', id, name}
   // add assets to domain
   const [addAssetsOpen,     setAddAssetsOpen]     = useState(false);
   const [addAssetsSearch,   setAddAssetsSearch]   = useState("");
@@ -10685,7 +10687,7 @@ const DomainsView = () => {
                         {label:"✏️ Rename",action:()=>{setPdRenameValue(pd.displayName);setPdRenameMode(true);setPdMenuOpen(false);}},
                         {label:"🎨 Style",action:()=>{setPdStyleOpen(p=>!p);setPdMenuOpen(false);}},
                         {label:"⚙️ Edit Details",action:()=>{setPdMenuOpen(false);}},
-                        {label:"🗑️ Delete",action:()=>{if(window.confirm(`Delete "${pd.displayName}"?`)){setProducts(prev=>prev.filter(p=>p.id!==pd.id));setSelectedProductId(null);}setPdMenuOpen(false);},danger:true},
+                        {label:"🗑️ Delete",action:()=>{setDeleteConfirm({type:"product",id:pd.id,name:pd.displayName});setPdMenuOpen(false);},danger:true},
                       ].map(item=>(
                         <button key={item.label} onClick={e=>{e.stopPropagation();item.action();}}
                           style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"transparent",border:"none",cursor:"pointer",fontSize:12.5,color:item.danger?T.rose:T.text,textAlign:"left",transition:"background .1s"}}
@@ -11168,7 +11170,7 @@ const DomainsView = () => {
                           <div><div style={{fontSize:12,fontWeight:600,color:T.text}}>{item.label}</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{item.sub}</div></div>
                         </button>
                       ))}
-                      <button onClick={()=>{if(window.confirm(`Delete domain "${dm.displayName}"? This cannot be undone.`)){setSelectedDomainId(null);setDomains(prev=>prev.filter(d=>d.id!==dm.id));}setDmMenuOpen(false);}}
+                      <button onClick={()=>{setDeleteConfirm({type:"domain",id:dm.id,name:dm.displayName});setDmMenuOpen(false);}}
                         style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}
                         onMouseEnter={e=>e.currentTarget.style.background="rgba(239,68,68,.07)"} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                         <span style={{fontSize:15,marginTop:1}}>🗑️</span>
@@ -12034,6 +12036,52 @@ const DomainsView = () => {
             <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.bgElevated,borderRadius:"0 0 16px 16px"}}>
               <button onClick={()=>setCreateDomainOpen(false)} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
               <button onClick={handleCreateDomain} disabled={!nd.name.trim()} style={{padding:"8px 18px",borderRadius:8,background:nd.name.trim()?T.accent:"rgba(100,100,120,.35)",border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:nd.name.trim()?"pointer":"default",opacity:nd.name.trim()?1:.7}}>Create Domain</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:950,backdropFilter:"blur(4px)"}}>
+          <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,width:400,padding:"28px 28px 22px",boxShadow:"0 24px 60px rgba(0,0,0,.35)"}}>
+            <div style={{width:44,height:44,borderRadius:12,background:`${T.rose}15`,border:`1px solid ${T.rose}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,marginBottom:16}}>🗑️</div>
+            <div style={{fontSize:16,fontWeight:700,color:T.text,marginBottom:8}}>
+              Delete {deleteConfirm.type==="domain"?"Domain":"Data Product"}?
+            </div>
+            <p style={{fontSize:13,color:T.textSub,lineHeight:1.65,margin:"0 0 8px"}}>
+              You are about to permanently delete <span style={{fontWeight:700,color:T.text}}>"{deleteConfirm.name}"</span>.
+            </p>
+            {deleteConfirm.type==="domain"&&(
+              <p style={{fontSize:12.5,color:T.textMuted,lineHeight:1.65,margin:"0 0 20px"}}>
+                All sub domains and data products associated with this domain will be orphaned. This action cannot be undone.
+              </p>
+            )}
+            {deleteConfirm.type==="product"&&(
+              <p style={{fontSize:12.5,color:T.textMuted,lineHeight:1.65,margin:"0 0 20px"}}>
+                All asset links, SLA settings, and metadata for this data product will be permanently removed. This action cannot be undone.
+              </p>
+            )}
+            <div style={{padding:"12px 14px",background:`${T.rose}08`,border:`1px solid ${T.rose}25`,borderRadius:9,fontSize:12.5,color:T.textSub,marginBottom:22}}>
+              ⚠️ This action is irreversible.
+            </div>
+            <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+              <button onClick={()=>setDeleteConfirm(null)}
+                style={{padding:"9px 18px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:13,fontWeight:500,cursor:"pointer"}}>
+                Cancel
+              </button>
+              <button onClick={()=>{
+                if(deleteConfirm.type==="product"){
+                  setProducts(prev=>prev.filter(p=>p.id!==deleteConfirm.id));
+                  setSelectedProductId(null);
+                } else {
+                  setSelectedDomainId(null);
+                  setDomains(prev=>prev.filter(d=>d.id!==deleteConfirm.id));
+                }
+                setDeleteConfirm(null);
+              }} style={{padding:"9px 18px",borderRadius:8,background:T.rose,border:"none",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                Delete
+              </button>
             </div>
           </div>
         </div>
