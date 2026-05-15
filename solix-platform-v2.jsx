@@ -5864,8 +5864,32 @@ const PolicyManagerView = ({onToast}) => {
       </Topbar>
 
       {/* ── Tab bar at top ── */}
-      <div style={{padding:"0 28px",flexShrink:0,borderBottom:`1px solid ${T.border}`}}>
-        <Tabs2 tabs={[{key:"overview",label:"Overview"},{key:"policies",label:`Policies (${policies.length})`},{key:"regulations",label:`Regulations (${regulations.length})`}]} active={tab} onChange={t=>{setTab(t);setSelPolicyId(null);}}/>
+      <div style={{flexShrink:0,borderBottom:`1px solid ${T.border}`,background:T.bgBase}}>
+        <div style={{display:"flex",paddingLeft:24,overflowX:"auto"}}>
+          {[
+            {key:"overview",    label:"Overview",    badge:null},
+            {key:"policies",    label:"Policies",    badge:policies.length},
+            {key:"regulations", label:"Regulations", badge:regulations.length},
+          ].map(t=>{
+            const isA = tab===t.key;
+            return (
+              <button key={t.key} onClick={()=>{setTab(t.key);setSelPolicyId(null);}}
+                style={{display:"flex",alignItems:"center",gap:7,padding:"12px 20px",background:"transparent",border:"none",borderBottom:`2.5px solid ${isA?T.accent:"transparent"}`,color:isA?T.accent:T.textMuted,fontSize:13,fontWeight:isA?600:500,cursor:"pointer",transition:"all .15s",marginBottom:-1,whiteSpace:"nowrap",flexShrink:0}}
+                onMouseEnter={e=>{if(!isA){e.currentTarget.style.color=T.text;e.currentTarget.style.background=T.bgHover;}}}
+                onMouseLeave={e=>{if(!isA){e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="transparent";}}}>
+                {t.key==="overview"&&<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" style={{flexShrink:0,opacity:isA?1:0.65}}><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>}
+                {t.key==="policies"&&<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" style={{flexShrink:0,opacity:isA?1:0.65}}><rect x="2" y="1" width="12" height="14" rx="1.5"/><line x1="5" y1="5.5" x2="11" y2="5.5"/><line x1="5" y1="8.5" x2="11" y2="8.5"/><line x1="5" y1="11.5" x2="9" y2="11.5"/></svg>}
+                {t.key==="regulations"&&<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,opacity:isA?1:0.65}}><path d="M8 1L2 4v4c0 3.5 2.7 5.5 6 6.5C11.3 13.5 14 11.5 14 8V4L8 1z"/></svg>}
+                <span>{t.label}</span>
+                {t.badge!=null&&(
+                  <span style={{display:"flex",alignItems:"center",justifyContent:"center",minWidth:18,height:18,borderRadius:9,padding:"0 5px",fontSize:10,fontWeight:700,fontFamily:"'Geist Mono',monospace",background:isA?T.accent:T.bgElevated,color:isA?"#fff":T.textMuted,transition:"all .15s",flexShrink:0}}>
+                    {t.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* ════ content area ════ */}
@@ -6191,10 +6215,21 @@ const PolicyManagerView = ({onToast}) => {
                   </div>
 
                   {/* Tab bar */}
-                  <div style={{display:"flex",borderBottom:`1px solid ${T.border}`,flexShrink:0,padding:"0 22px",overflowX:"auto"}}>
-                    {[{k:"overview",l:"Overview"},{k:"rules",l:`Rules (${(p.rules||[]).length})`},{k:"assets",l:`Governed assets`},{k:"activity",l:`Activity (${(p.history||[]).length})`}].map(({k,l})=>(
-                      <button key={k} onClick={()=>setPdTab(k)} style={{padding:"9px 14px",background:"none",border:"none",borderBottom:`2px solid ${pdTab===k?T.blue:"transparent"}`,color:pdTab===k?T.text:T.textMuted,fontSize:11.5,fontWeight:pdTab===k?600:400,cursor:"pointer",marginBottom:-1,whiteSpace:"nowrap",transition:"color .1s"}}>
+                  <div style={{display:"flex",borderBottom:`1px solid ${T.border}`,flexShrink:0,padding:"0 16px",overflowX:"auto"}}>
+                    {[
+                      {k:"overview", l:"Overview",        badge:null},
+                      {k:"rules",    l:"Rules",            badge:(p.rules||[]).length},
+                      {k:"assets",   l:"Governed assets",  badge:null},
+                      {k:"activity", l:"Activity",         badge:(p.history||[]).length},
+                    ].map(({k,l,badge})=>(
+                      <button key={k} onClick={()=>setPdTab(k)}
+                        style={{display:"flex",alignItems:"center",gap:5,padding:"9px 12px",background:"none",border:"none",borderBottom:`2px solid ${pdTab===k?T.accent:"transparent"}`,color:pdTab===k?T.accent:T.textMuted,fontSize:11.5,fontWeight:pdTab===k?600:400,cursor:"pointer",marginBottom:-1,whiteSpace:"nowrap",transition:"all .1s",flexShrink:0}}>
                         {l}
+                        {badge!=null&&badge>0&&(
+                          <span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:8,background:pdTab===k?T.accent:T.bgElevated,color:pdTab===k?"#fff":T.textMuted,fontFamily:"'Geist Mono',monospace"}}>
+                            {badge}
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>
