@@ -10529,6 +10529,25 @@ const DomainsView = () => {
   const [ndExperts,     setNdExperts]     = useState([]);
   const [ndExpertOpen,  setNdExpertOpen]  = useState(false);
   const [ndExpertSearch,setNdExpertSearch]= useState("");
+  // domain profile list + menu state
+  const [dpListSelected,   setDpListSelected]   = useState(null);   // selected product id in domain dp-list tab
+  const [dmMenuOpen,       setDmMenuOpen]       = useState(false);  // domain ⋮ menu
+  const [dmRenameMode,     setDmRenameMode]     = useState(false);
+  const [dmRenameValue,    setDmRenameValue]    = useState("");
+  const [dmStyleOpen,      setDmStyleOpen]      = useState(false);  // domain style popover
+  const [sdSearch,         setSdSearch]         = useState("");     // subdomain filter
+  const [sdTypeFilter,     setSdTypeFilter]     = useState("");
+  // data product profile state
+  const [pdMenuOpen,       setPdMenuOpen]       = useState(false);  // dp ⋮ menu
+  const [pdDescEditMode,   setPdDescEditMode]   = useState(false);
+  const [pdDescEditValue,  setPdDescEditValue]  = useState("");
+  const [pdRenameMode,     setPdRenameMode]     = useState(false);
+  const [pdRenameValue,    setPdRenameValue]    = useState("");
+  const [pdStyleOpen,      setPdStyleOpen]      = useState(false);
+  const [pdContractOpen,   setPdContractOpen]   = useState(false);
+  const [pdCustomProps,    setPdCustomProps]    = useState([]);     // [{key,value}]
+  const [pdCpKey,          setPdCpKey]          = useState("");
+  const [pdCpVal,          setPdCpVal]          = useState("");
   // add assets to domain
   const [addAssetsOpen,     setAddAssetsOpen]     = useState(false);
   const [addAssetsSearch,   setAddAssetsSearch]   = useState("");
@@ -10619,28 +10638,93 @@ const DomainsView = () => {
           {label:pdDomain?.displayName||pd.domain,onClick:()=>setSelectedProductId(null)},
           {label:pd.displayName}
         ]}/>
-        <div style={{flex:1,overflowY:"auto"}}>
-          {/* Header band */}
-          <div style={{padding:"24px 28px 0"}}>
-            <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:18}}>
-              <div style={{width:52,height:52,borderRadius:14,background:`${pd.color}18`,border:`2px solid ${pd.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>{pd.icon}</div>
-              <div style={{flex:1}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
-                  <h1 style={{fontSize:20,fontWeight:800,color:T.text,margin:0}}>{pd.displayName}</h1>
-                  <LifecycleBadge stage={pd.lifecycleStage}/>
-                  <SlaTierBadge tier={pd.sla.tier}/>
-                </div>
-                <div style={{fontSize:12,color:T.textMuted,marginBottom:8}}>{pd.domain} Domain · Created {pd.createdAt}</div>
+        <div style={{flex:1,overflowY:"auto"}} onClick={()=>{setPdMenuOpen(false);setPdStyleOpen(false);}}>
+          {/* Color banner */}
+          <div style={{height:110,background:`linear-gradient(135deg, ${pd.color}cc 0%, ${pd.color}66 60%, ${pd.color}22 100%)`,position:"relative",flexShrink:0}}/>
+          {/* Header content */}
+          <div style={{padding:"0 28px",marginTop:-32,position:"relative"}}>
+            <div style={{display:"flex",alignItems:"flex-end",gap:16,marginBottom:16}}>
+              {/* Floating icon */}
+              <div style={{width:64,height:64,borderRadius:16,background:T.bgSurface,border:`2px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,flexShrink:0,boxShadow:`0 4px 20px ${pd.color}40`,zIndex:2}}>
+                {pd.icon}
+              </div>
+              <div style={{flex:1,paddingBottom:4}}>
+                {pdRenameMode
+                  ? <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}>
+                      <input autoFocus value={pdRenameValue} onChange={e=>setPdRenameValue(e.target.value)}
+                        onKeyDown={e=>{if(e.key==="Enter"){patchProduct(pd.id,{displayName:pdRenameValue.trim()||pd.displayName});setPdRenameMode(false);}if(e.key==="Escape")setPdRenameMode(false);}}
+                        style={{fontSize:18,fontWeight:800,padding:"4px 10px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,outline:"none",fontFamily:"inherit",width:260}}/>
+                      <button onClick={()=>{patchProduct(pd.id,{displayName:pdRenameValue.trim()||pd.displayName});setPdRenameMode(false);}} style={{padding:"5px 12px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Save</button>
+                      <button onClick={()=>setPdRenameMode(false)} style={{padding:"5px 10px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+                    </div>
+                  : <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:5,flexWrap:"wrap"}}>
+                      <h1 style={{fontSize:20,fontWeight:800,color:T.text,margin:0}}>{pd.displayName}</h1>
+                      <LifecycleBadge stage={pd.lifecycleStage}/>
+                      <SlaTierBadge tier={pd.sla.tier}/>
+                    </div>
+                }
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:6}}>{pd.domain} Domain · Created {pd.createdAt}</div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                   {pd.owners.map(o=><OwnerChip key={o} name={o}/>)}
                 </div>
               </div>
-              <div style={{display:"flex",gap:8,flexShrink:0}}>
-                <button style={{padding:"8px 16px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Add Assets</button>
-                <Btn onClick={()=>{}}>Edit</Btn>
+              {/* Actions */}
+              <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0,paddingBottom:4}}>
+                <button onClick={e=>{e.stopPropagation();}} style={{padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                  {Ic.plus(10)} Add Assets
+                </button>
+                {/* ⋮ menu */}
+                <div style={{position:"relative"}}>
+                  <button onClick={e=>{e.stopPropagation();setPdMenuOpen(p=>!p);setPdStyleOpen(false);}}
+                    style={{width:34,height:34,borderRadius:9,background:pdMenuOpen?T.bgElevated:T.bgSurface,border:`1px solid ${pdMenuOpen?T.accent:T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,transition:"all .12s"}}>
+                    ⋮
+                  </button>
+                  {pdMenuOpen&&(
+                    <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,minWidth:170,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.22)",zIndex:400,overflow:"hidden"}}>
+                      {[
+                        {label:"✏️ Rename",action:()=>{setPdRenameValue(pd.displayName);setPdRenameMode(true);setPdMenuOpen(false);}},
+                        {label:"🎨 Style",action:()=>{setPdStyleOpen(p=>!p);setPdMenuOpen(false);}},
+                        {label:"⚙️ Edit Details",action:()=>{setPdMenuOpen(false);}},
+                        {label:"🗑️ Delete",action:()=>{if(window.confirm(`Delete "${pd.displayName}"?`)){setProducts(prev=>prev.filter(p=>p.id!==pd.id));setSelectedProductId(null);}setPdMenuOpen(false);},danger:true},
+                      ].map(item=>(
+                        <button key={item.label} onClick={e=>{e.stopPropagation();item.action();}}
+                          style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"transparent",border:"none",cursor:"pointer",fontSize:12.5,color:item.danger?T.rose:T.text,textAlign:"left",transition:"background .1s"}}
+                          onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {pdStyleOpen&&(
+                    <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:"calc(100% + 4px)",right:0,width:240,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,boxShadow:"0 10px 32px rgba(0,0,0,.25)",zIndex:400,padding:14}}>
+                      <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Icon</div>
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:12}}>
+                        {["📦","📊","💹","📱","🧮","🎯","📋","🔬","💼","🗃️","📡","⚡","🔁","🌊","🏷️","🔑"].map(ic=>(
+                          <button key={ic} onClick={()=>patchProduct(pd.id,{icon:ic})}
+                            style={{width:30,height:30,borderRadius:7,background:pd.icon===ic?T.accentDim:T.bgElevated,border:`1.5px solid ${pd.icon===ic?T.accent:T.border}`,cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>{ic}</button>
+                        ))}
+                      </div>
+                      <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Color</div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {COLOR_PALETTE.map(c=>(
+                          <button key={c} onClick={()=>patchProduct(pd.id,{color:c})}
+                            style={{width:24,height:24,borderRadius:"50%",background:c,border:`2.5px solid ${pd.color===c?"#fff":c}`,outline:pd.color===c?`2px solid ${c}`:"none",cursor:"pointer"}}/>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-            <Tabs2 tabs={[{key:"overview",label:"Overview"},{key:"assets",label:`Assets (${productAssets.length})`},{key:"lineage",label:"Lineage"}]} active={productTab} onChange={setProductTab}/>
+            <Tabs2 tabs={[
+              {key:"overview",label:"Overview"},
+              {key:"assets",label:`Assets (${productAssets.length})`},
+              {key:"lineage",label:"Lineage"},
+              {key:"activity",label:"Activity"},
+              {key:"ports",label:"Ports"},
+              {key:"contract",label:"Contract"},
+              {key:"customprops",label:"Custom Properties"},
+            ]} active={productTab} onChange={setProductTab}/>
           </div>
 
           <div style={{padding:28}}>
@@ -10648,8 +10732,27 @@ const DomainsView = () => {
             {productTab==="overview"&&(
               <div style={{display:"grid",gridTemplateColumns:"1fr 320px",gap:24}}>
                 <div>
-                  <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:10}}>Description</div>
-                  <p style={{fontSize:13,color:T.textSub,lineHeight:1.7,marginBottom:24}}>{pd.description}</p>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                    <div style={{fontSize:13,fontWeight:700,color:T.text}}>Description</div>
+                    {!pdDescEditMode&&<button onClick={()=>{setPdDescEditValue(pd.description);setPdDescEditMode(true);}}
+                      style={{display:"flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:6,background:"none",border:`1px solid ${T.border}`,color:T.textMuted,fontSize:11.5,cursor:"pointer",fontWeight:500}}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
+                      ✏️ Edit
+                    </button>}
+                  </div>
+                  {pdDescEditMode
+                    ? <div style={{marginBottom:24}}>
+                        <textarea value={pdDescEditValue} onChange={e=>setPdDescEditValue(e.target.value)} rows={5} autoFocus
+                          style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,lineHeight:1.75,resize:"vertical",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
+                        <div style={{display:"flex",gap:8,marginTop:8}}>
+                          <button onClick={()=>{patchProduct(pd.id,{description:pdDescEditValue.trim()||pd.description});setPdDescEditMode(false);}}
+                            style={{padding:"6px 16px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Save</button>
+                          <button onClick={()=>setPdDescEditMode(false)}
+                            style={{padding:"6px 14px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+                        </div>
+                      </div>
+                    : <p style={{fontSize:13,color:T.textSub,lineHeight:1.7,marginBottom:24}}>{pd.description}</p>
+                  }
 
                   {/* SLA Details */}
                   <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Service Level Agreement</div>
@@ -10798,6 +10901,177 @@ const DomainsView = () => {
                 </div>
               </div>
             )}
+
+            {/* ACTIVITY TAB */}
+            {productTab==="activity"&&(
+              <div style={{maxWidth:680}}>
+                <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:16}}>Recent Activity</div>
+                {[
+                  {type:"status",icon:"🔄",text:`Lifecycle stage changed from DEVELOPMENT to PRODUCTION`,user:"maya.chen",time:"2 days ago"},
+                  {type:"asset",icon:"📥",text:"3 new assets added: orders_fact, customer_dim, product_dim",user:"sarah.kim",time:"4 days ago"},
+                  {type:"owner",icon:"👤",text:"Ownership transferred to maya.chen",user:"alex.wu",time:"1 week ago"},
+                  {type:"sla",icon:"📋",text:"SLA tier upgraded from BRONZE to SILVER — availability target set to 99%",user:"dev.patel",time:"2 weeks ago"},
+                  {type:"created",icon:"✨",text:`Data product created in ${pd.domain} domain`,user:pd.owners[0]||"system",time:pd.createdAt},
+                ].map((ev,i)=>(
+                  <div key={i} style={{display:"flex",gap:12,paddingBottom:20,position:"relative"}}>
+                    {i<4&&<div style={{position:"absolute",left:15,top:30,bottom:0,width:1,background:T.border}}/>}
+                    <div style={{width:30,height:30,borderRadius:"50%",background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0,zIndex:1}}>{ev.icon}</div>
+                    <div style={{flex:1,paddingTop:4}}>
+                      <div style={{fontSize:12.5,color:T.text,lineHeight:1.5,marginBottom:4}}>{ev.text}</div>
+                      <div style={{fontSize:11,color:T.textMuted}}>by <span style={{color:T.textSub,fontWeight:500}}>{ev.user}</span> · {ev.time}</div>
+                    </div>
+                  </div>
+                ))}
+                <div style={{marginTop:8,paddingTop:20,borderTop:`1px solid ${T.border}`}}>
+                  <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Open Tasks</div>
+                  {[
+                    {label:"Add data quality checks for orders_fact",priority:"high",assignee:"maya.chen",due:"May 20"},
+                    {label:"Document column-level lineage for customer_dim",priority:"medium",assignee:"sarah.kim",due:"May 30"},
+                    {label:"Review SLA thresholds with consumers",priority:"low",assignee:"dev.patel",due:"Jun 5"},
+                  ].map((task,i)=>(
+                    <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,marginBottom:8}}>
+                      <div style={{width:8,height:8,borderRadius:"50%",background:task.priority==="high"?T.rose:task.priority==="medium"?T.amber:T.green,flexShrink:0}}/>
+                      <div style={{flex:1,fontSize:12.5,color:T.text}}>{task.label}</div>
+                      <div style={{fontSize:11,color:T.textMuted}}>{task.assignee}</div>
+                      <div style={{fontSize:11,color:T.textMuted,background:T.bgElevated,padding:"2px 7px",borderRadius:5,border:`1px solid ${T.border}`}}>Due {task.due}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* PORTS TAB */}
+            {productTab==="ports"&&(
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
+                {[
+                  {type:"Input",icon:"📥",color:T.blue,items:upstream.length>0?upstream:[{displayName:"No upstream connections",icon:"—",id:"empty"}]},
+                  {type:"Output",icon:"📤",color:T.green,items:downstream.length>0?downstream:[{displayName:"No downstream connections",icon:"—",id:"empty"}]},
+                ].map(col=>(
+                  <div key={col.type}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                      <div style={{width:28,height:28,borderRadius:8,background:`${col.color}18`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>{col.icon}</div>
+                      <div style={{fontSize:13,fontWeight:700,color:T.text}}>{col.type} Ports</div>
+                    </div>
+                    {col.items.map(item=>(
+                      item.id==="empty"
+                        ? <div key="empty" style={{padding:"20px 0",textAlign:"center",color:T.textMuted,fontSize:12,border:`1px dashed ${T.border}`,borderRadius:9}}>No {col.type.toLowerCase()} ports configured</div>
+                        : <div key={item.id} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,marginBottom:8,cursor:"pointer",transition:"all .12s"}}
+                            onClick={()=>setSelectedProductId(item.id)}
+                            onMouseEnter={e=>{e.currentTarget.style.borderColor=col.color;e.currentTarget.style.boxShadow=`0 2px 12px ${col.color}20`;}}
+                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
+                            <span style={{fontSize:18}}>{item.icon}</span>
+                            <div style={{flex:1}}>
+                              <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{item.displayName}</div>
+                              <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{item.domain||"—"} Domain</div>
+                            </div>
+                            <div style={{fontSize:11,color:col.color,fontWeight:600}}>→</div>
+                          </div>
+                    ))}
+                    {col.items[0]?.id!=="empty"&&(
+                      <button style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:T.textMuted,background:"none",border:`1px dashed ${T.border}`,borderRadius:7,padding:"7px 12px",cursor:"pointer",width:"100%",justifyContent:"center",marginTop:4}}>
+                        {Ic.plus(9)} Add {col.type} Port
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* CONTRACT TAB */}
+            {productTab==="contract"&&(
+              <div style={{maxWidth:680}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:700,color:T.text}}>Data Contract</div>
+                    <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Formal agreement on quality, schema, and delivery commitments</div>
+                  </div>
+                  <button onClick={()=>setPdContractOpen(p=>!p)} style={{padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                    {pdContractOpen?"Close":"Edit Contract"}
+                  </button>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                  {[
+                    {section:"SLA Commitments",items:[
+                      {label:"Tier",value:pd.sla.tier,badge:true},
+                      {label:"Availability",value:`${pd.sla.availability}%`},
+                      {label:"Freshness",value:`${pd.sla.dataFreshness>=60?`${pd.sla.dataFreshness/60}h`:`${pd.sla.dataFreshness}m`}`},
+                      {label:"Min. Quality Score",value:`${pd.sla.dataQuality}%`},
+                    ]},
+                    {section:"Ownership",items:[
+                      {label:"Owners",value:pd.owners.join(", ")||"—"},
+                      {label:"Stewards",value:(pd.experts||[]).join(", ")||"—"},
+                    ]},
+                    {section:"Data Classification",items:[
+                      {label:"Sensitivity",value:"Internal"},
+                      {label:"PII",value:"No"},
+                      {label:"Retention",value:"2 years"},
+                    ]},
+                  ].map(sec=>(
+                    <div key={sec.section} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                      <div style={{padding:"10px 16px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{sec.section}</div>
+                      {sec.items.map(item=>(
+                        <div key={item.label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 16px",borderBottom:`1px solid ${T.border}`}}>
+                          <span style={{fontSize:12,color:T.textMuted}}>{item.label}</span>
+                          {item.badge
+                            ? <SlaTierBadge tier={item.value}/>
+                            : <span style={{fontSize:12,color:T.text,fontWeight:500}}>{item.value}</span>
+                          }
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                    <div style={{padding:"10px 16px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Consumer Terms</div>
+                    <div style={{padding:"14px 16px",fontSize:12.5,color:T.textSub,lineHeight:1.75}}>
+                      Consumers of this data product agree to: (1) not redistribute raw data outside approved use cases, (2) report data quality issues within 24 hours of discovery, (3) not use this product for purposes inconsistent with the domain's data governance policy.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* CUSTOM PROPERTIES TAB */}
+            {productTab==="customprops"&&(
+              <div style={{maxWidth:680}}>
+                <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:16}}>Custom Properties</div>
+                <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",marginBottom:16}}>
+                  {pdCustomProps.length===0
+                    ? <div style={{padding:"32px 0",textAlign:"center",color:T.textMuted,fontSize:12.5}}>No custom properties yet. Add key-value pairs to enrich this data product's metadata.</div>
+                    : pdCustomProps.map((cp,i)=>(
+                        <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 16px",borderBottom:i<pdCustomProps.length-1?`1px solid ${T.border}`:"none"}}>
+                          <div>
+                            <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:2}}>{cp.key}</div>
+                            <div style={{fontSize:12,color:T.textSub}}>{cp.value}</div>
+                          </div>
+                          <button onClick={()=>setPdCustomProps(prev=>prev.filter((_,j)=>j!==i))}
+                            style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex",padding:4}}
+                            onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
+                            {Ic.x(10)}
+                          </button>
+                        </div>
+                      ))
+                  }
+                </div>
+                <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
+                  <div style={{flex:1}}>
+                    <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Key</label>
+                    <input value={pdCpKey} onChange={e=>setPdCpKey(e.target.value)} placeholder="e.g. team_slack"
+                      style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                  </div>
+                  <div style={{flex:2}}>
+                    <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Value</label>
+                    <input value={pdCpVal} onChange={e=>setPdCpVal(e.target.value)} placeholder="e.g. #data-commerce"
+                      style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                  </div>
+                  <button onClick={()=>{if(!pdCpKey.trim()||!pdCpVal.trim())return;setPdCustomProps(prev=>[...prev,{key:pdCpKey.trim(),value:pdCpVal.trim()}]);setPdCpKey("");setPdCpVal("");}}
+                    style={{padding:"8px 16px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0}}>
+                    Add
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -10816,18 +11090,27 @@ const DomainsView = () => {
           {label:"Data Domains",onClick:()=>setSelectedDomainId(null)},
           {label:dm.displayName}
         ]}/>
-        <div style={{flex:1,overflowY:"auto"}}>
-          {/* Header band */}
-          <div style={{padding:"24px 28px 0"}}>
-            <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:18}}>
-              <div style={{width:56,height:56,borderRadius:16,background:`${dm.color}18`,border:`2px solid ${dm.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,flexShrink:0}}>{dm.icon}</div>
-              <div style={{flex:1}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
-                  <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:0}}>{dm.displayName}</h1>
+        <div style={{flex:1,overflowY:"auto"}} onClick={()=>{setDmMenuOpen(false);setAddHeaderDropdown(false);}}>
+          {/* Color banner */}
+          <div style={{height:110,background:`linear-gradient(135deg, ${dm.color}cc 0%, ${dm.color}66 60%, ${dm.color}22 100%)`,flexShrink:0}}/>
+          {/* Header content — overlaps banner */}
+          <div style={{padding:"0 28px",marginTop:-32,position:"relative",zIndex:10}}>
+            <div style={{display:"flex",alignItems:"flex-end",gap:16,marginBottom:16}}>
+              {/* Floating icon card */}
+              <div style={{width:64,height:64,borderRadius:18,background:T.bgSurface,border:`3px solid ${T.bgBase}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,flexShrink:0,boxShadow:`0 4px 20px ${dm.color}40`}}>{dm.icon}</div>
+              <div style={{flex:1,paddingBottom:4}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:5,flexWrap:"wrap"}}>
+                  {dmRenameMode
+                    ? <input autoFocus value={dmRenameValue} onChange={e=>setDmRenameValue(e.target.value)}
+                        onKeyDown={e=>{if(e.key==="Enter"){patchDomain(dm.id,{displayName:dmRenameValue.trim()||dm.displayName});setDmRenameMode(false);}if(e.key==="Escape")setDmRenameMode(false);}}
+                        onBlur={()=>{patchDomain(dm.id,{displayName:dmRenameValue.trim()||dm.displayName});setDmRenameMode(false);}}
+                        style={{fontSize:22,fontWeight:800,color:T.text,background:"transparent",border:`1.5px solid ${T.accent}`,borderRadius:6,outline:"none",padding:"2px 8px",minWidth:200}}/>
+                    : <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:0}}>{dm.displayName}</h1>
+                  }
                   <DomainTypeBadge type={dm.domainType}/>
                   {hasSensitive&&<span style={{padding:"3px 8px",borderRadius:4,fontSize:10,fontWeight:700,background:"rgba(239,68,68,.1)",color:"#ef4444",border:"1px solid rgba(239,68,68,.2)"}}>🔒 Sensitive</span>}
                 </div>
-                <div style={{display:"flex",gap:16,marginBottom:10}}>
+                <div style={{display:"flex",gap:16,marginBottom:8}}>
                   {[["Assets",dm.assetCount,dm.color],["Data Products",domainProducts.length,"#8b5cf6"],["Quality",`${dm.quality}%`,dm.quality>=90?T.green:dm.quality>=70?T.amber:T.rose]].map(([l,v,c])=>(
                     <div key={l} style={{display:"flex",alignItems:"center",gap:5}}>
                       <span style={{fontSize:15,fontWeight:800,color:c,fontFamily:"'Geist Mono',monospace"}}>{v}</span>
@@ -10839,10 +11122,11 @@ const DomainsView = () => {
                   {dm.owners.map(o=><OwnerChip key={o} name={o}/>)}
                 </div>
               </div>
-              <div style={{display:"flex",gap:8,flexShrink:0,position:"relative"}}>
-                {/* Unified + Add dropdown */}
+              {/* Action buttons */}
+              <div style={{display:"flex",gap:8,flexShrink:0,alignItems:"center",paddingBottom:4,position:"relative"}}>
+                {/* Add ▾ dropdown */}
                 <div style={{position:"relative"}}>
-                  <button onClick={()=>setAddHeaderDropdown(p=>!p)}
+                  <button onClick={e=>{e.stopPropagation();setAddHeaderDropdown(p=>!p);setDmMenuOpen(false);}}
                     style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>
                     {Ic.plus(10)} Add ▾
                   </button>
@@ -10862,12 +11146,65 @@ const DomainsView = () => {
                     </div>
                   )}
                 </div>
-                <Btn onClick={()=>{setEditDd({...dm});setEditDomainOpen(true);}}>Edit Domain</Btn>
+                {/* Quality pill */}
+                <div style={{display:"flex",alignItems:"center",gap:5,padding:"7px 12px",borderRadius:8,background:T.bgSurface,border:`1px solid ${T.border}`,fontSize:12,fontWeight:700,color:dm.quality>=90?T.green:dm.quality>=70?T.amber:T.rose}}>
+                  ⭐ {dm.quality}%
+                </div>
+                {/* ⋮ management menu */}
+                <div style={{position:"relative"}}>
+                  <button onClick={e=>{e.stopPropagation();setDmMenuOpen(p=>!p);setAddHeaderDropdown(false);}}
+                    style={{width:34,height:34,borderRadius:8,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:700}}>⋮</button>
+                  {dmMenuOpen&&(
+                    <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:400,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.22)",minWidth:220,overflow:"hidden"}}>
+                      {[
+                        {icon:"✏️",label:"Rename",sub:"Change the domain display name",action:()=>{setDmRenameValue(dm.displayName);setDmRenameMode(true);setDmMenuOpen(false);}},
+                        {icon:"🎨",label:"Style",sub:"Change icon and color",action:()=>{setDmStyleOpen(true);setDmMenuOpen(false);}},
+                        {icon:"✏️",label:"Edit Details",sub:"Update description, type, owners",action:()=>{setEditDd({...dm});setEditDomainOpen(true);setDmMenuOpen(false);}},
+                      ].map(item=>(
+                        <button key={item.label} onClick={item.action}
+                          style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",borderBottom:`1px solid ${T.border}`}}
+                          onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                          <span style={{fontSize:15,marginTop:1}}>{item.icon}</span>
+                          <div><div style={{fontSize:12,fontWeight:600,color:T.text}}>{item.label}</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{item.sub}</div></div>
+                        </button>
+                      ))}
+                      <button onClick={()=>{if(window.confirm(`Delete domain "${dm.displayName}"? This cannot be undone.`)){setSelectedDomainId(null);setDomains(prev=>prev.filter(d=>d.id!==dm.id));}setDmMenuOpen(false);}}
+                        style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}
+                        onMouseEnter={e=>e.currentTarget.style.background="rgba(239,68,68,.07)"} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                        <span style={{fontSize:15,marginTop:1}}>🗑️</span>
+                        <div><div style={{fontSize:12,fontWeight:600,color:T.rose}}>Delete Domain</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>Permanently remove this domain</div></div>
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {/* Style popover */}
+                {dmStyleOpen&&(
+                  <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,boxShadow:"0 8px 28px rgba(0,0,0,.22)",padding:16,minWidth:260}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                      <div style={{fontSize:12,fontWeight:700,color:T.text}}>Style</div>
+                      <button onClick={()=>setDmStyleOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:14}}>{Ic.x(11)}</button>
+                    </div>
+                    <div style={{fontSize:11,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:7}}>Icon</div>
+                    <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:14}}>
+                      {ICON_OPTIONS.concat(["🏪","🌿","💎","🔮","🏆","🎪"]).map(ic=>(
+                        <button key={ic} onClick={()=>patchDomain(dm.id,{icon:ic})}
+                          style={{width:32,height:32,borderRadius:7,fontSize:15,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",background:dm.icon===ic?`${dm.color}20`:T.bgElevated,border:`1.5px solid ${dm.icon===ic?dm.color:T.border}`}}>{ic}</button>
+                      ))}
+                    </div>
+                    <div style={{fontSize:11,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:7}}>Color</div>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                      {COLOR_PALETTE.map(c=>(
+                        <button key={c} onClick={()=>patchDomain(dm.id,{color:c})}
+                          style={{width:24,height:24,borderRadius:"50%",background:c,border:`2.5px solid ${dm.color===c?"#fff":c}`,outline:dm.color===c?`2px solid ${c}`:"none",cursor:"pointer"}}/>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             <Tabs2 tabs={[
               {key:"documentation",label:"Documentation"},
-              {key:"subdomains",label:"Sub Domains"},
+              {key:"subdomains",label:`Sub Domains (${domains.filter(d=>d.parentDomain===dm.id).length})`},
               {key:"dataproducts",label:`Data Products (${domainProducts.length})`},
               {key:"assets",label:`Assets (${domainAssets.length})`},
             ]} active={domainTab} onChange={setDomainTab}/>
@@ -10977,26 +11314,43 @@ const DomainsView = () => {
             {/* SUB DOMAINS TAB */}
             {domainTab==="subdomains"&&(
               <div>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-                  <div style={{fontSize:13,color:T.textMuted}}>Sub domains let you further segment ownership within {dm.displayName}</div>
-                  <button onClick={()=>{setAddPanelType("subdomain");setAddPanelOpen(true);}} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+                  <div style={{flex:1,position:"relative"}}>
+                    <input placeholder="Search sub domains…" value={sdSearch} onChange={e=>setSdSearch(e.target.value)}
+                      style={{width:"100%",padding:"7px 12px 7px 32px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                    <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none",fontSize:13}}>🔍</span>
+                  </div>
+                  <select value={sdTypeFilter} onChange={e=>setSdTypeFilter(e.target.value)}
+                    style={{padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:sdTypeFilter?T.text:T.textMuted,fontSize:12,cursor:"pointer",outline:"none"}}>
+                    <option value="">All Types</option>
+                    {["Source-aligned","Consumer-aligned","Aggregate"].map(t=><option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <button onClick={()=>{setAddPanelType("subdomain");setAddPanelOpen(true);}} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0}}>
                     {Ic.plus(10)} Add Sub Domain
                   </button>
                 </div>
                 {(() => {
-                  const subDomains = domains.filter(d=>d.parentDomain===dm.id);
-                  return subDomains.length===0
-                    ? <div style={{padding:"64px 0",textAlign:"center"}}>
-                        <div style={{fontSize:40,marginBottom:14}}>🗂️</div>
-                        <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:6}}>No sub domains yet</div>
-                        <div style={{fontSize:12.5,color:T.textMuted,maxWidth:380,margin:"0 auto 20px",lineHeight:1.65}}>
-                          Sub domains help segment large domains by ownership area. For example, "Commerce" → "Order Management" and "Customer Data".
-                        </div>
-                        <button onClick={()=>{setAddPanelType("subdomain");setAddPanelOpen(true);}}
-                          style={{padding:"9px 22px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
-                          {Ic.plus(11)} Add First Sub Domain
-                        </button>
+                  const allSubDomains = domains.filter(d=>d.parentDomain===dm.id);
+                  const subDomains = allSubDomains.filter(d=>
+                    (!sdSearch||d.displayName.toLowerCase().includes(sdSearch.toLowerCase())||d.description.toLowerCase().includes(sdSearch.toLowerCase())) &&
+                    (!sdTypeFilter||d.domainType===sdTypeFilter)
+                  );
+                  if(allSubDomains.length===0) return (
+                    <div style={{padding:"64px 0",textAlign:"center"}}>
+                      <div style={{fontSize:40,marginBottom:14}}>🗂️</div>
+                      <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:6}}>No sub domains yet</div>
+                      <div style={{fontSize:12.5,color:T.textMuted,maxWidth:380,margin:"0 auto 20px",lineHeight:1.65}}>
+                        Sub domains help segment large domains by ownership area. For example, "Commerce" → "Order Management" and "Customer Data".
                       </div>
+                      <button onClick={()=>{setAddPanelType("subdomain");setAddPanelOpen(true);}}
+                        style={{padding:"9px 22px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
+                        {Ic.plus(11)} Add First Sub Domain
+                      </button>
+                    </div>
+                  );
+                  return subDomains.length===0
+                    ? <div style={{padding:"40px 0",textAlign:"center",color:T.textMuted,fontSize:13}}>No sub domains match your filter</div>
                     : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:14}}>
                         {subDomains.map(sd=>(
                           <div key={sd.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden",cursor:"pointer",transition:"all .15s"}}
@@ -11025,9 +11379,20 @@ const DomainsView = () => {
             {/* DATA PRODUCTS TAB */}
             {domainTab==="dataproducts"&&(
               <div>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
-                  <div style={{fontSize:13,color:T.textMuted}}>{domainProducts.length} data product{domainProducts.length!==1?"s":""}</div>
-                  <button onClick={()=>{setAddPanelType("dataproduct");setAddPanelOpen(true);}} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                {/* Toolbar */}
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+                  <div style={{flex:1,position:"relative"}}>
+                    <input placeholder="Search data products…" value={sdSearch} onChange={e=>setSdSearch(e.target.value)}
+                      style={{width:"100%",padding:"7px 12px 7px 32px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                    <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none",fontSize:13}}>🔍</span>
+                  </div>
+                  <select value={sdTypeFilter} onChange={e=>setSdTypeFilter(e.target.value)}
+                    style={{padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:sdTypeFilter?T.text:T.textMuted,fontSize:12,cursor:"pointer",outline:"none"}}>
+                    <option value="">All Stages</option>
+                    {["IDEATION","DEVELOPMENT","TESTING","PRODUCTION","DEPRECATED","RETIRED"].map(s=><option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <button onClick={()=>{setAddPanelType("dataproduct");setAddPanelOpen(true);}} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0}}>
                     {Ic.plus(10)} Add Data Product
                   </button>
                 </div>
@@ -11038,33 +11403,100 @@ const DomainsView = () => {
                       <div style={{fontSize:12,color:T.textMuted,maxWidth:380,margin:"0 auto 16px",lineHeight:1.6}}>A data product bundles related assets into a governed, discoverable unit with SLAs and ownership.</div>
                       <button onClick={()=>{setAddPanelType("dataproduct");setAddPanelOpen(true);}} style={{padding:"9px 22px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:600,cursor:"pointer"}}>{Ic.plus(11)} Add Data Product</button>
                     </div>
-                  : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:14}}>
-                      {domainProducts.map(p=>(
-                        <div key={p.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden",cursor:"pointer",transition:"all .15s"}}
-                          onClick={()=>{setSelectedProductId(p.id);setProductTab("overview");}}
-                          onMouseEnter={e=>{e.currentTarget.style.borderColor=p.color;e.currentTarget.style.boxShadow=`0 4px 20px ${p.color}20`;}}
-                          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
-                          <div style={{height:4,background:p.color}}/>
-                          <div style={{padding:"14px 16px"}}>
-                            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-                              <span style={{fontSize:20}}>{p.icon}</span>
-                              <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontSize:13,fontWeight:700,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.displayName}</div>
-                                <div style={{fontSize:10.5,color:T.textMuted,marginTop:1,display:"flex",alignItems:"center",gap:6}}>
-                                  <LifecycleBadge stage={p.lifecycleStage}/>
-                                  <SlaTierBadge tier={p.sla.tier}/>
+                  : (() => {
+                      const filtered = domainProducts.filter(p=>
+                        (!sdSearch||p.displayName.toLowerCase().includes(sdSearch.toLowerCase())||p.description.toLowerCase().includes(sdSearch.toLowerCase())) &&
+                        (!sdTypeFilter||p.lifecycleStage===sdTypeFilter)
+                      );
+                      const selPd = filtered.find(p=>p.id===dpListSelected)||filtered[0]||null;
+                      return (
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 340px",gap:0,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden",background:T.bgSurface}}>
+                          {/* List column */}
+                          <div style={{borderRight:`1px solid ${T.border}`,overflowY:"auto",maxHeight:520}}>
+                            {filtered.length===0
+                              ? <div style={{padding:"40px 0",textAlign:"center",color:T.textMuted,fontSize:13}}>No products match your filter</div>
+                              : filtered.map((p,i)=>{
+                                  const isSel = selPd?.id===p.id;
+                                  return (
+                                    <div key={p.id}
+                                      onClick={()=>setDpListSelected(p.id)}
+                                      style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",cursor:"pointer",background:isSel?T.accentDim:"transparent",borderBottom:i<filtered.length-1?`1px solid ${T.border}`:"none",borderLeft:`3px solid ${isSel?T.accent:"transparent"}`,transition:"all .1s"}}
+                                      onMouseEnter={e=>{if(!isSel){e.currentTarget.style.background=T.bgHover;}}}
+                                      onMouseLeave={e=>{if(!isSel){e.currentTarget.style.background="transparent";}}}>
+                                      <div style={{width:36,height:36,borderRadius:10,background:`${p.color}18`,border:`1.5px solid ${p.color}35`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{p.icon}</div>
+                                      <div style={{flex:1,minWidth:0}}>
+                                        <div style={{fontSize:12.5,fontWeight:600,color:isSel?T.accent:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.displayName}</div>
+                                        <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3}}>
+                                          <LifecycleBadge stage={p.lifecycleStage}/>
+                                          <SlaTierBadge tier={p.sla.tier}/>
+                                        </div>
+                                      </div>
+                                      <div style={{fontSize:11,color:T.textMuted,flexShrink:0}}>{p.assetIds.length} assets</div>
+                                    </div>
+                                  );
+                                })
+                            }
+                          </div>
+                          {/* Preview panel */}
+                          {selPd ? (
+                            <div style={{padding:20,overflowY:"auto",maxHeight:520}}>
+                              <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:16}}>
+                                <div style={{width:44,height:44,borderRadius:12,background:`${selPd.color}18`,border:`2px solid ${selPd.color}35`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>{selPd.icon}</div>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:4}}>{selPd.displayName}</div>
+                                  <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                                    <LifecycleBadge stage={selPd.lifecycleStage}/>
+                                    <SlaTierBadge tier={selPd.sla.tier}/>
+                                  </div>
                                 </div>
                               </div>
+                              <p style={{fontSize:12,color:T.textSub,lineHeight:1.7,marginBottom:16}}>{selPd.description}</p>
+                              <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
+                                {[["Domain",selPd.domain],["Assets",selPd.assetIds.length],["Created",selPd.createdAt]].map(([l,v])=>(
+                                  <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:`1px solid ${T.border}`}}>
+                                    <span style={{fontSize:11,color:T.textMuted}}>{l}</span>
+                                    <span style={{fontSize:11,color:T.text,fontWeight:500}}>{v}</span>
+                                  </div>
+                                ))}
+                              </div>
+                              {selPd.owners.length>0&&(
+                                <div style={{marginBottom:12}}>
+                                  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Owners</div>
+                                  <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                                    {selPd.owners.map(o=><OwnerChip key={o} name={o}/>)}
+                                  </div>
+                                </div>
+                              )}
+                              {(selPd.tags||[]).length>0&&(
+                                <div style={{marginBottom:16}}>
+                                  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Tags</div>
+                                  <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                                    {selPd.tags.map(t=><span key={t} style={{fontSize:11,padding:"2px 8px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>{t}</span>)}
+                                  </div>
+                                </div>
+                              )}
+                              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
+                                {[
+                                  {label:"Availability",value:`${selPd.sla.availability}%`,color:T.green},
+                                  {label:"Min. Quality",value:`${selPd.sla.dataQuality}%`,color:T.accent},
+                                ].map(m=>(
+                                  <div key={m.label} style={{background:T.bgElevated,borderRadius:8,padding:"10px 12px",border:`1px solid ${T.border}`}}>
+                                    <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{m.label}</div>
+                                    <div style={{fontSize:16,fontWeight:800,color:m.color,fontFamily:"'Geist Mono',monospace"}}>{m.value}</div>
+                                  </div>
+                                ))}
+                              </div>
+                              <button onClick={()=>{setSelectedProductId(selPd.id);setProductTab("overview");}}
+                                style={{width:"100%",padding:"9px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                                Open Data Product →
+                              </button>
                             </div>
-                            <p style={{fontSize:11.5,color:T.textSub,lineHeight:1.6,marginBottom:10,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{p.description}</p>
-                            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                              <span style={{fontSize:11,color:T.textMuted}}>{p.assetIds.length} asset{p.assetIds.length!==1?"s":""}</span>
-                              <span style={{fontSize:10.5,color:T.textMuted}}>Owner: {p.owners[0]||"—"}</span>
-                            </div>
-                          </div>
+                          ) : (
+                            <div style={{display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted,fontSize:13,padding:40}}>Select a product</div>
+                          )}
                         </div>
-                      ))}
-                    </div>
+                      );
+                    })()
                 }
               </div>
             )}
