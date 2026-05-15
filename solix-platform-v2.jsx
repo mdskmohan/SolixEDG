@@ -2680,9 +2680,9 @@ const Tabs2 = ({tabs,active,onChange,pill})=>{
     </div>
   );
   return (
-    <div style={{display:"flex",borderBottom:`1px solid ${T.border}`,marginBottom:20}}>
+    <div style={{display:"flex",borderBottom:`1px solid ${T.border}`,marginBottom:20,overflowX:"auto",flexShrink:0}}>
       {items.map(t=>(
-        <button key={t.key} onClick={()=>onChange(t.key)} style={{padding:"8px 16px",background:"transparent",border:"none",borderBottom:`2px solid ${active===t.key?T.accent:"transparent"}`,color:active===t.key?T.text:T.textMuted,fontSize:13,fontWeight:active===t.key?600:400,cursor:"pointer",transition:"all .12s",marginBottom:-1,whiteSpace:"nowrap"}}>{t.label}</button>
+        <button key={t.key} onClick={()=>onChange(t.key)} style={{padding:"8px 16px",background:"transparent",border:"none",borderBottom:`2px solid ${active===t.key?T.accent:"transparent"}`,color:active===t.key?T.text:T.textMuted,fontSize:13,fontWeight:active===t.key?600:400,cursor:"pointer",transition:"all .12s",marginBottom:-1,whiteSpace:"nowrap",flexShrink:0}}>{t.label}</button>
       ))}
     </div>
   );
@@ -5873,9 +5873,9 @@ const PolicyManagerView = ({onToast}) => {
 
         {/* ══════ OVERVIEW TAB ══════ */}
         {tab==="overview"&&(
-          <div style={{flex:1,overflowY:"auto",padding:"20px 28px"}}>
+          <div style={{flex:1,overflowY:"auto",minHeight:0,padding:"20px 28px"}}>
             {/* Metric cards */}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:24}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10,marginBottom:24}}>
               {[
                 {label:"Total Policies",value:policies.length,sub:`${activePols.length} active · ${policies.filter(p=>p.lifecycle==="Draft").length} draft`,color:T.blue,pct:null},
                 {label:"Under Review",value:policies.filter(p=>p.lifecycle==="In Review").length,sub:"awaiting approval",color:T.amber,pct:Math.round(policies.filter(p=>p.lifecycle==="In Review").length/Math.max(policies.length,1)*100)},
@@ -5893,7 +5893,7 @@ const PolicyManagerView = ({onToast}) => {
             {/* Policy Status breakdown */}
             <div style={{marginBottom:24}}>
               <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>Policy Status</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(100px,1fr))",gap:8}}>
                 {LC_STEPS.map(lc=>{
                   const cnt=policies.filter(p=>p.lifecycle===lc).length;
                   const pct=Math.round(cnt/Math.max(policies.length,1)*100);
@@ -5910,7 +5910,7 @@ const PolicyManagerView = ({onToast}) => {
                 })}
               </div>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:24}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:20,marginBottom:24}}>
               {/* Health by Category */}
               <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px 18px"}}>
                 <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:14}}>Health by Category</div>
@@ -6081,7 +6081,7 @@ const PolicyManagerView = ({onToast}) => {
             )}
 
             {/* Policy list grouped by category — Tags-style with hover actions */}
-            <div style={{flex:1,overflowY:"auto"}}>
+            <div style={{flex:1,overflowY:"auto",minHeight:0}}>
               {filteredPols.length===0&&(
                 <div style={{textAlign:"center",padding:"36px 16px"}}>
                   <div style={{fontSize:12.5,fontWeight:600,color:T.textSub,marginBottom:4}}>No policies match</div>
@@ -6200,7 +6200,7 @@ const PolicyManagerView = ({onToast}) => {
                   </div>
 
                   {/* Tab content */}
-                  <div style={{flex:1,overflowY:"auto"}}>
+                  <div style={{flex:1,overflowY:"auto",minHeight:0}}>
                     {/* ── Overview ── */}
                     {pdTab==="overview"&&(
                       <div style={{display:"grid",gridTemplateColumns:"1fr 240px",minHeight:"100%"}}>
@@ -10537,6 +10537,8 @@ const DomainsView = () => {
   const [dmStyleOpen,      setDmStyleOpen]      = useState(false);  // domain style popover
   const [sdSearch,         setSdSearch]         = useState("");     // subdomain filter
   const [sdTypeFilter,     setSdTypeFilter]     = useState("");
+  const [dpSearch,         setDpSearch]         = useState("");     // data products tab filter
+  const [dpStageFilter,    setDpStageFilter]    = useState("");
   // data product profile state
   const [pdMenuOpen,       setPdMenuOpen]       = useState(false);  // dp ⋮ menu
   const [pdDescEditMode,   setPdDescEditMode]   = useState(false);
@@ -10640,7 +10642,7 @@ const DomainsView = () => {
           {label:pdDomain?.displayName||pd.domain,onClick:()=>setSelectedProductId(null)},
           {label:pd.displayName}
         ]}/>
-        <div style={{flex:1,overflowY:"auto"}} onClick={()=>{setPdMenuOpen(false);setPdStyleOpen(false);}}>
+        <div style={{flex:1,overflowY:"auto",minHeight:0}} onClick={()=>{setPdMenuOpen(false);setPdStyleOpen(false);}}>
           {/* Color banner */}
           <div style={{height:110,background:`linear-gradient(135deg, ${pd.color}cc 0%, ${pd.color}66 60%, ${pd.color}22 100%)`,position:"relative",flexShrink:0}}/>
           {/* Header content */}
@@ -10650,7 +10652,7 @@ const DomainsView = () => {
               <div style={{width:64,height:64,borderRadius:16,background:T.bgSurface,border:`2px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,flexShrink:0,boxShadow:`0 4px 20px ${pd.color}40`,zIndex:2}}>
                 {pd.icon}
               </div>
-              <div style={{flex:1,paddingBottom:4}}>
+              <div style={{flex:1,minWidth:0,paddingBottom:4}}>
                 {pdRenameMode
                   ? <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}>
                       <input autoFocus value={pdRenameValue} onChange={e=>setPdRenameValue(e.target.value)}
@@ -10732,7 +10734,7 @@ const DomainsView = () => {
           <div style={{padding:28}}>
             {/* OVERVIEW TAB */}
             {productTab==="overview"&&(
-              <div style={{display:"grid",gridTemplateColumns:"1fr 320px",gap:24}}>
+              <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,300px)",gap:24}}>
                 <div>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
                     <div style={{fontSize:13,fontWeight:700,color:T.text}}>Description</div>
@@ -11092,7 +11094,7 @@ const DomainsView = () => {
           {label:"Data Domains",onClick:()=>setSelectedDomainId(null)},
           {label:dm.displayName}
         ]}/>
-        <div style={{flex:1,overflowY:"auto"}} onClick={()=>{setDmMenuOpen(false);setAddHeaderDropdown(false);}}>
+        <div style={{flex:1,overflowY:"auto",minHeight:0}} onClick={()=>{setDmMenuOpen(false);setAddHeaderDropdown(false);}}>
           {/* Color banner */}
           <div style={{height:110,background:`linear-gradient(135deg, ${dm.color}cc 0%, ${dm.color}66 60%, ${dm.color}22 100%)`,flexShrink:0}}/>
           {/* Header content — overlaps banner */}
@@ -11100,7 +11102,7 @@ const DomainsView = () => {
             <div style={{display:"flex",alignItems:"flex-end",gap:16,marginBottom:16}}>
               {/* Floating icon card */}
               <div style={{width:64,height:64,borderRadius:18,background:T.bgSurface,border:`3px solid ${T.bgBase}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,flexShrink:0,boxShadow:`0 4px 20px ${dm.color}40`}}>{dm.icon}</div>
-              <div style={{flex:1,paddingBottom:4}}>
+              <div style={{flex:1,minWidth:0,paddingBottom:4}}>
                 <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:5,flexWrap:"wrap"}}>
                   {dmRenameMode
                     ? <input autoFocus value={dmRenameValue} onChange={e=>setDmRenameValue(e.target.value)}
@@ -11147,10 +11149,6 @@ const DomainsView = () => {
                       </button>
                     </div>
                   )}
-                </div>
-                {/* Quality pill */}
-                <div style={{display:"flex",alignItems:"center",gap:5,padding:"7px 12px",borderRadius:8,background:T.bgSurface,border:`1px solid ${T.border}`,fontSize:12,fontWeight:700,color:dm.quality>=90?T.green:dm.quality>=70?T.amber:T.rose}}>
-                  ⭐ {dm.quality}%
                 </div>
                 {/* ⋮ management menu */}
                 <div style={{position:"relative"}}>
@@ -11215,7 +11213,7 @@ const DomainsView = () => {
           <div style={{padding:28}}>
             {/* DOCUMENTATION TAB */}
             {domainTab==="documentation"&&(
-              <div style={{display:"grid",gridTemplateColumns:"1fr 300px",gap:24}}>
+              <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,280px)",gap:24}}>
                 <div>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
                     <div style={{fontSize:13,fontWeight:700,color:T.text}}>About this domain</div>
@@ -11382,15 +11380,15 @@ const DomainsView = () => {
             {domainTab==="dataproducts"&&(
               <div>
                 {/* Toolbar */}
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-                  <div style={{flex:1,position:"relative"}}>
-                    <input placeholder="Search data products…" value={sdSearch} onChange={e=>setSdSearch(e.target.value)}
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+                  <div style={{flex:1,minWidth:160,position:"relative"}}>
+                    <input placeholder="Search data products…" value={dpSearch} onChange={e=>setDpSearch(e.target.value)}
                       style={{width:"100%",padding:"7px 12px 7px 32px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
                       onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
                     <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none",fontSize:13}}>🔍</span>
                   </div>
-                  <select value={sdTypeFilter} onChange={e=>setSdTypeFilter(e.target.value)}
-                    style={{padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:sdTypeFilter?T.text:T.textMuted,fontSize:12,cursor:"pointer",outline:"none"}}>
+                  <select value={dpStageFilter} onChange={e=>setDpStageFilter(e.target.value)}
+                    style={{padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:dpStageFilter?T.text:T.textMuted,fontSize:12,cursor:"pointer",outline:"none",flexShrink:0}}>
                     <option value="">All Stages</option>
                     {["IDEATION","DEVELOPMENT","TESTING","PRODUCTION","DEPRECATED","RETIRED"].map(s=><option key={s} value={s}>{s}</option>)}
                   </select>
@@ -11407,12 +11405,12 @@ const DomainsView = () => {
                     </div>
                   : (() => {
                       const filtered = domainProducts.filter(p=>
-                        (!sdSearch||p.displayName.toLowerCase().includes(sdSearch.toLowerCase())||p.description.toLowerCase().includes(sdSearch.toLowerCase())) &&
-                        (!sdTypeFilter||p.lifecycleStage===sdTypeFilter)
+                        (!dpSearch||p.displayName.toLowerCase().includes(dpSearch.toLowerCase())||p.description.toLowerCase().includes(dpSearch.toLowerCase())) &&
+                        (!dpStageFilter||p.lifecycleStage===dpStageFilter)
                       );
                       const selPd = filtered.find(p=>p.id===dpListSelected)||filtered[0]||null;
                       return (
-                        <div style={{display:"grid",gridTemplateColumns:"1fr 340px",gap:0,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden",background:T.bgSurface}}>
+                        <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,300px)",gap:0,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden",background:T.bgSurface}}>
                           {/* List column */}
                           <div style={{borderRight:`1px solid ${T.border}`,overflowY:"auto",maxHeight:520}}>
                             {filtered.length===0
@@ -11526,7 +11524,7 @@ const DomainsView = () => {
         {addPanelOpen&&(
           <>
             <div onClick={resetAddPanel} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:800}}/>
-            <div className="slideInRight" style={{position:"fixed",top:0,right:0,bottom:0,width:420,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:801,display:"flex",flexDirection:"column",boxShadow:"-8px 0 32px rgba(0,0,0,.2)"}}>
+            <div className="slideInRight" style={{position:"fixed",top:0,right:0,bottom:0,width:"min(420px, 92vw)",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:801,display:"flex",flexDirection:"column",boxShadow:"-8px 0 32px rgba(0,0,0,.2)"}}>
               {/* Panel header */}
               <div style={{padding:"20px 22px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
@@ -11768,7 +11766,7 @@ const DomainsView = () => {
       }/>
       <div style={{flex:1,overflowY:"auto",padding:28}}>
         {/* Summary stats */}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12,marginBottom:24}}>
           <Metric label="Domains"       value={String(domains.length)}    sub="registered"             color={T.accent}/>
           <Metric label="Data Products" value={String(totalProducts)}     sub="across all domains"     color="#8b5cf6"/>
           <Metric label="Total Assets"  value={String(totalAssets)}       sub="governed assets"        color={T.blue}/>
@@ -11843,7 +11841,8 @@ const DomainsView = () => {
 
         {/* List view */}
         {listView==="list"&&(
-          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
+          <div style={{overflowX:"auto"}}>
+          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden",minWidth:660}}>
             {/* Header */}
             <div style={{display:"grid",gridTemplateColumns:"minmax(200px,3fr) 130px 90px 110px 90px 36px",padding:"10px 20px",borderBottom:`2px solid ${T.border}`,background:T.bgElevated,alignItems:"center"}}>
               {[["Domain","left"],["Type","left"],["Assets","right"],["Products","right"],["Quality","right"],["",""]].map(([h,align])=>(
@@ -11887,6 +11886,7 @@ const DomainsView = () => {
                 </div>
               );
             })}
+          </div>
           </div>
         )}
       </div>
