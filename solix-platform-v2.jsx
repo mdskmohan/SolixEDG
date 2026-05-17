@@ -5370,6 +5370,66 @@ const QualityView = () => {
   );
 };
 
+/* Reusable multi-select dropdown for Policy Category panels */
+const CatFieldDropdown = ({label, required, options, selected, onChange, placeholder="Select…", renderOpt, renderChip}) => {
+  const [open, setOpen] = React.useState(false);
+  const [search, setSearch] = React.useState("");
+  const ref = React.useRef(null);
+  React.useEffect(()=>{
+    if(!open) return;
+    const h=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};
+    document.addEventListener("mousedown",h);
+    return()=>document.removeEventListener("mousedown",h);
+  },[open]);
+  const filtered = options.filter(o=>!search||o.toLowerCase().includes(search.toLowerCase()));
+  const remove = (v,e)=>{ e.stopPropagation(); onChange(selected.filter(x=>x!==v)); };
+  return (
+    <div>
+      <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>
+        {label}{required&&<span style={{color:T.rose}}> *</span>}
+      </label>
+      <div ref={ref} style={{position:"relative"}}>
+        <div onClick={()=>setOpen(o=>!o)}
+          style={{minHeight:38,padding:"5px 10px 5px 8px",background:T.bgElevated,border:`1.5px solid ${open?T.accent:T.border}`,borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",flexWrap:"wrap",gap:4,transition:"border .12s"}}>
+          {selected.length===0
+            ? <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic",padding:"2px 2px"}}>{placeholder}</span>
+            : selected.map(v=>(
+                <span key={v} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 6px 2px 7px",borderRadius:5,background:`${T.accent}14`,border:`1px solid ${T.accent}30`,fontSize:11.5,color:T.accent,fontWeight:500,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                  {renderChip?renderChip(v):v}
+                  <button onMouseDown={e=>remove(v,e)} style={{background:"none",border:"none",color:T.accent,cursor:"pointer",padding:"0 1px",fontSize:12,lineHeight:1,opacity:.7,flexShrink:0}}>×</button>
+                </span>
+              ))
+          }
+          <svg width="9" height="6" viewBox="0 0 10 7" fill="none" style={{marginLeft:"auto",flexShrink:0,color:T.textMuted,transform:open?"rotate(180deg)":"none",transition:"transform .15s",opacity:.6}}><path d="M1 1.5l4 4 4-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </div>
+        {open&&(
+          <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.2)",zIndex:500,overflow:"hidden"}}>
+            <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}>
+              <input autoFocus value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search…"
+                style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,color:T.text,outline:"none",boxSizing:"border-box"}}
+                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+            </div>
+            <div style={{maxHeight:200,overflowY:"auto"}}>
+              {filtered.length===0&&<div style={{padding:"12px 14px",fontSize:12,color:T.textMuted,textAlign:"center",fontStyle:"italic"}}>No results</div>}
+              {filtered.map(o=>{
+                const sel=selected.includes(o);
+                return (
+                  <button key={o} onClick={()=>onChange(sel?selected.filter(x=>x!==o):[...selected,o])}
+                    style={{width:"100%",padding:"9px 12px",background:sel?T.bgElevated:"transparent",border:"none",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:9,transition:"background .1s"}}
+                    onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
+                    {renderOpt?renderOpt(o,sel):<span style={{flex:1,fontSize:12.5,color:T.text}}>{o}</span>}
+                    {sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{flexShrink:0}}><path d="M2.5 7.5l3 3 6-6" stroke={T.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const PolicyManagerView = ({onToast, onNav}) => {
   // ─── palette & constants ──────────────────────────────────────────────
   const LC_COLORS  = {"Draft":T.textMuted,"In Review":T.amber,"Approved":T.green,"Active":T.blue,"Deprecated":T.rose};
@@ -5569,7 +5629,9 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const [deleteConfPol,  setDeleteConfPol] = useState(null);
   const [polPlusMenuOpen, setPolPlusMenuOpen] = useState(false);
   const [polNewCatOpen,   setPolNewCatOpen]   = useState(false);
-  const [polNewCatDraft,  setPolNewCatDraft]  = useState({name:"",description:"",color:"#6366f1"});
+  const [polNewCatDraft,  setPolNewCatDraft]  = useState({name:"",description:"",color:"#6366f1",owners:[],stewards:[],domains:[],tags:[],frameworks:[]});
+  const [polEditCatOpen,  setPolEditCatOpen]  = useState(false);
+  const [polEditCatDraft, setPolEditCatDraft] = useState(null);
   const filterDropRef  = useRef(null);
   const dotMenuRef     = useRef(null);
   const polPlusMenuRef = useRef(null);
@@ -6119,7 +6181,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                               onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                               {Ic.plus(11)} Add policy
                             </button>
-                            <button onMouseDown={e=>{e.stopPropagation();setCatEditId(cat);setCatEditName(cat);setDotMenuOpen(null);}}
+                            <button onMouseDown={e=>{e.stopPropagation();const catObj=policyCategories.find(c=>c.name===cat)||{name:cat,color:"#6366f1"};setPolEditCatDraft({...catObj,owners:catObj.owners||[],stewards:catObj.stewards||[],domains:catObj.domains||[],tags:catObj.tags||[],frameworks:catObj.frameworks||[],description:catObj.description||"",_origName:cat});setPolEditCatOpen(true);setDotMenuOpen(null);}}
                               style={{width:"100%",padding:"10px 12px",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",fontSize:12,color:T.text,display:"flex",alignItems:"center",gap:8,borderBottom:`1px solid ${T.border}`}}
                               onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                               <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg> Edit Category
@@ -6777,70 +6839,176 @@ const PolicyManagerView = ({onToast, onNav}) => {
       )}
 
       {/* Link Policy to Regulation Requirement — multi-select modal */}
-      {/* New Policy Category slide-in panel */}
-      {polNewCatOpen&&(
-        <>
-          <div onClick={()=>setPolNewCatOpen(false)}
-            style={{position:"absolute",inset:0,background:"rgba(0,0,0,.25)",zIndex:200}}/>
-          <div style={{position:"absolute",right:0,top:0,bottom:0,width:420,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:201,display:"flex",flexDirection:"column",boxShadow:"-8px 0 32px rgba(0,0,0,.18)"}}>
-            <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-              <div>
-                <div style={{fontSize:14,fontWeight:700,color:T.text}}>New Category</div>
-                <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>Categories group policies for navigation and filtering</div>
-              </div>
-              <button onClick={()=>setPolNewCatOpen(false)} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer",fontSize:20,lineHeight:1,padding:"0 4px"}}>×</button>
+      {/* New / Edit Policy Category slide-in panels */}
+      {(()=>{
+        const CAT_COLORS_LIST=["#ee2424","#d97706","#16a34a","#2563eb","#7c3aed","#6366f1","#0891b2","#6b7280"];
+        const FRAMEWORKS=["GDPR","SOC2","CCPA","HIPAA","PCI DSS","ISO 27001","NIST","FedRAMP"];
+        const ava=u=>u.split(".").map(s=>s[0]?.toUpperCase()).join("");
+        const userRenderOpt=(u,sel)=>(
+          <>
+            <div style={{width:24,height:24,borderRadius:6,background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8.5,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(u)}</div>
+            <span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>
+          </>
+        );
+        const stewardRenderOpt=(u,sel)=>(
+          <>
+            <div style={{width:24,height:24,borderRadius:"50%",background:"rgba(217,119,6,.12)",border:"1px solid rgba(217,119,6,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8.5,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(u)}</div>
+            <span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>
+          </>
+        );
+        const domainRenderOpt=(d,sel)=>{
+          const dc=catColor(d)||T.accent;
+          return (<>
+            <div style={{width:22,height:22,borderRadius:4,background:`${dc}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <div style={{width:8,height:8,borderRadius:"50%",background:dc}}/>
             </div>
-            <div style={{flex:1,overflowY:"auto",padding:"20px"}}>
-              <div style={{display:"flex",flexDirection:"column",gap:16}}>
-                <div>
-                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Category Name <span style={{color:T.rose}}>*</span></label>
-                  <input value={polNewCatDraft.name} onChange={e=>setPolNewCatDraft(d=>({...d,name:e.target.value}))}
-                    placeholder="e.g. Privacy, Security, Compliance"
-                    style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"}}
-                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                </div>
-                <div>
-                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Description <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
-                  <textarea value={polNewCatDraft.description} onChange={e=>setPolNewCatDraft(d=>({...d,description:e.target.value}))} rows={3}
-                    placeholder="What kinds of policies belong in this category?"
-                    style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",resize:"none",fontFamily:"inherit",lineHeight:1.6,boxSizing:"border-box"}}
-                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                </div>
-                <div>
-                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Color</label>
-                  <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
-                    {["#ee2424","#d97706","#16a34a","#2563eb","#7c3aed","#6366f1","#0891b2","#6b7280"].map(c=>(
-                      <button key={c} onClick={()=>setPolNewCatDraft(d=>({...d,color:c}))}
-                        style={{width:26,height:26,borderRadius:"50%",background:c,border:polNewCatDraft.color===c?`3px solid ${T.text}`:"3px solid transparent",cursor:"pointer",padding:0,flexShrink:0,transition:"border .12s"}}/>
-                    ))}
-                  </div>
-                </div>
-                <div style={{padding:"14px 16px",background:T.bgElevated,borderRadius:10,border:`1px solid ${T.border}`}}>
-                  <div style={{fontSize:11,color:T.textMuted,marginBottom:6}}>Preview</div>
-                  <span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px",borderRadius:99,background:`${polNewCatDraft.color}15`,border:`1px solid ${polNewCatDraft.color}40`,fontSize:12,fontWeight:600,color:polNewCatDraft.color,textTransform:"capitalize"}}>
-                    <span style={{width:7,height:7,borderRadius:"50%",background:polNewCatDraft.color,display:"block"}}/>
-                    {polNewCatDraft.name||"Category Name"}
-                  </span>
-                </div>
+            <span style={{flex:1,fontSize:12.5,color:T.text}}>{d}</span>
+          </>);
+        };
+        const frameworkRenderOpt=(f,sel)=>(
+          <span style={{flex:1,fontSize:12.5,color:T.text,fontWeight:sel?600:400}}>{f}</span>
+        );
+        const tagRenderOpt=(t,sel)=>(
+          <span style={{flex:1,fontSize:12.5,color:sel?T.accent:T.text,fontWeight:sel?600:400}}>{t}</span>
+        );
+        const CatFormBody=({draft,setDraft})=>(
+          <div style={{display:"flex",flexDirection:"column",gap:18}}>
+            <div>
+              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Category Name <span style={{color:T.rose}}>*</span></label>
+              <input value={draft.name} onChange={e=>setDraft(d=>({...d,name:e.target.value}))}
+                placeholder="e.g. Privacy, Security, Compliance"
+                style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"}}
+                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+            </div>
+            <div>
+              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Description <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
+              <textarea value={draft.description} onChange={e=>setDraft(d=>({...d,description:e.target.value}))} rows={3}
+                placeholder="What kinds of policies belong in this category?"
+                style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",resize:"none",fontFamily:"inherit",lineHeight:1.6,boxSizing:"border-box"}}
+                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+            </div>
+            <div>
+              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Color</label>
+              <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                {CAT_COLORS_LIST.map(c=>(
+                  <button key={c} onClick={()=>setDraft(d=>({...d,color:c}))}
+                    style={{width:26,height:26,borderRadius:"50%",background:c,border:draft.color===c?`3px solid ${T.text}`:"3px solid transparent",cursor:"pointer",padding:0,flexShrink:0,transition:"border .12s"}}/>
+                ))}
               </div>
             </div>
-            <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,justifyContent:"flex-end",background:T.bgSurface,flexShrink:0}}>
-              <button onClick={()=>setPolNewCatOpen(false)} style={{padding:"8px 18px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer",fontWeight:500}}>Cancel</button>
-              <button disabled={!polNewCatDraft.name.trim()} onClick={()=>{
-                const name=polNewCatDraft.name.trim();
-                if(!name) return;
-                setPolicyCategories(prev=>[...prev,{id:`cat_${Date.now()}`,name,description:polNewCatDraft.description,color:polNewCatDraft.color}]);
-                setExpCat(p=>({...p,[name]:true}));
-                setPolNewCatOpen(false);
-                onToast("Category created","success");
-              }}
-                style={{padding:"8px 20px",borderRadius:8,background:polNewCatDraft.name.trim()?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:polNewCatDraft.name.trim()?"pointer":"default"}}>
-                Create Category
-              </button>
+            {/* Owner */}
+            <CatFieldDropdown
+              label="Owner" placeholder="Select owner…"
+              options={PMV_USERS} selected={draft.owners||[]}
+              onChange={v=>setDraft(d=>({...d,owners:v}))}
+              renderOpt={userRenderOpt}
+            />
+            {/* Stewards */}
+            <CatFieldDropdown
+              label="Stewards" placeholder="Select stewards…"
+              options={PMV_USERS} selected={draft.stewards||[]}
+              onChange={v=>setDraft(d=>({...d,stewards:v}))}
+              renderOpt={stewardRenderOpt}
+            />
+            {/* Domains */}
+            <CatFieldDropdown
+              label="Domains" placeholder="Select domains…"
+              options={ALL_DOMAINS} selected={draft.domains||[]}
+              onChange={v=>setDraft(d=>({...d,domains:v}))}
+              renderOpt={domainRenderOpt}
+            />
+            {/* Tags */}
+            <CatFieldDropdown
+              label="Tags" placeholder="Select tags…"
+              options={POLICY_TAGS} selected={draft.tags||[]}
+              onChange={v=>setDraft(d=>({...d,tags:v}))}
+              renderOpt={tagRenderOpt}
+            />
+            {/* Regulatory Frameworks */}
+            <CatFieldDropdown
+              label="Regulatory Frameworks" placeholder="Select frameworks…"
+              options={FRAMEWORKS} selected={draft.frameworks||[]}
+              onChange={v=>setDraft(d=>({...d,frameworks:v}))}
+              renderOpt={frameworkRenderOpt}
+            />
+            {/* Preview */}
+            <div style={{padding:"14px 16px",background:T.bgElevated,borderRadius:10,border:`1px solid ${T.border}`}}>
+              <div style={{fontSize:11,color:T.textMuted,marginBottom:6}}>Preview</div>
+              <span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px",borderRadius:99,background:`${draft.color}15`,border:`1px solid ${draft.color}40`,fontSize:12,fontWeight:600,color:draft.color,textTransform:"capitalize"}}>
+                <span style={{width:7,height:7,borderRadius:"50%",background:draft.color,display:"block"}}/>
+                {draft.name||"Category Name"}
+              </span>
             </div>
           </div>
-        </>
-      )}
+        );
+        return (<>
+          {/* ── New Category panel ── */}
+          {polNewCatOpen&&(
+            <>
+              <div onClick={()=>setPolNewCatOpen(false)} style={{position:"absolute",inset:0,background:"rgba(0,0,0,.25)",zIndex:200}}/>
+              <div style={{position:"absolute",right:0,top:0,bottom:0,width:460,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:201,display:"flex",flexDirection:"column",boxShadow:"-8px 0 32px rgba(0,0,0,.18)"}}>
+                <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+                  <div>
+                    <div style={{fontSize:14,fontWeight:700,color:T.text}}>New Category</div>
+                    <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>Categories group policies for navigation and filtering</div>
+                  </div>
+                  <button onClick={()=>setPolNewCatOpen(false)} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer",fontSize:20,lineHeight:1,padding:"0 4px"}}>×</button>
+                </div>
+                <div style={{flex:1,overflowY:"auto",padding:"20px"}}>
+                  {CatFormBody({draft:polNewCatDraft,setDraft:setPolNewCatDraft})}
+                </div>
+                <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,justifyContent:"flex-end",background:T.bgSurface,flexShrink:0}}>
+                  <button onClick={()=>setPolNewCatOpen(false)} style={{padding:"8px 18px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer",fontWeight:500}}>Cancel</button>
+                  <button disabled={!polNewCatDraft.name.trim()} onClick={()=>{
+                    const name=polNewCatDraft.name.trim();
+                    if(!name) return;
+                    setPolicyCategories(prev=>[...prev,{id:`cat_${Date.now()}`,name,description:polNewCatDraft.description,color:polNewCatDraft.color,owners:polNewCatDraft.owners,stewards:polNewCatDraft.stewards,domains:polNewCatDraft.domains,tags:polNewCatDraft.tags,frameworks:polNewCatDraft.frameworks}]);
+                    setExpCat(p=>({...p,[name]:true}));
+                    setPolNewCatOpen(false);
+                    onToast("Category created","success");
+                  }}
+                    style={{padding:"8px 20px",borderRadius:8,background:polNewCatDraft.name.trim()?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:polNewCatDraft.name.trim()?"pointer":"default"}}>
+                    Create Category
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+          {/* ── Edit Category panel ── */}
+          {polEditCatOpen&&polEditCatDraft&&(
+            <>
+              <div onClick={()=>setPolEditCatOpen(false)} style={{position:"absolute",inset:0,background:"rgba(0,0,0,.25)",zIndex:200}}/>
+              <div style={{position:"absolute",right:0,top:0,bottom:0,width:460,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:201,display:"flex",flexDirection:"column",boxShadow:"-8px 0 32px rgba(0,0,0,.18)"}}>
+                <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+                  <div>
+                    <div style={{fontSize:14,fontWeight:700,color:T.text}}>Edit Category</div>
+                    <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>Update category details, ownership, and metadata</div>
+                  </div>
+                  <button onClick={()=>setPolEditCatOpen(false)} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer",fontSize:20,lineHeight:1,padding:"0 4px"}}>×</button>
+                </div>
+                <div style={{flex:1,overflowY:"auto",padding:"20px"}}>
+                  {CatFormBody({draft:polEditCatDraft,setDraft:setPolEditCatDraft})}
+                </div>
+                <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,justifyContent:"flex-end",background:T.bgSurface,flexShrink:0}}>
+                  <button onClick={()=>setPolEditCatOpen(false)} style={{padding:"8px 18px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer",fontWeight:500}}>Cancel</button>
+                  <button disabled={!polEditCatDraft.name.trim()} onClick={()=>{
+                    const {_origName,...rest}=polEditCatDraft;
+                    const newName=rest.name.trim();
+                    if(!newName) return;
+                    setPolicyCategories(prev=>prev.map(c=>c.name===_origName?{...c,...rest,name:newName}:c));
+                    if(_origName!==newName) setPolicies(prev=>prev.map(p=>p.category===_origName?{...p,category:newName}:p));
+                    setPolEditCatOpen(false);
+                    onToast("Category updated","success");
+                  }}
+                    style={{padding:"8px 20px",borderRadius:8,background:polEditCatDraft.name.trim()?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:polEditCatDraft.name.trim()?"pointer":"default"}}>
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </>);
+      })()}
 
       {linkPolOpen&&(()=>{
         const {regId,reqId}=linkPolOpen;
