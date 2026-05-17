@@ -14150,11 +14150,17 @@ const ROLES_CONFIG = {
 // LOGIN SCREEN
 // ─────────────────────────────────────────────
 const LoginScreen = ({onLogin}) => {
-  const [email,    setEmail]    = useState("");
-  const [password, setPassword] = useState("");
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState("");
-  const [showPw,   setShowPw]   = useState(false);
+  const [email,       setEmail]       = useState(()=>localStorage.getItem("solixSavedEmail")||"");
+  const [password,    setPassword]    = useState(()=>localStorage.getItem("solixSavedPw")||"");
+  const [rememberMe,  setRememberMe]  = useState(()=>!!localStorage.getItem("solixSavedEmail"));
+  const [loading,     setLoading]     = useState(false);
+  const [error,       setError]       = useState("");
+  const [showPw,      setShowPw]      = useState(false);
+  // forgot password flow: null | "form" | "sent"
+  const [forgotMode,  setForgotMode]  = useState(null);
+  const [resetEmail,  setResetEmail]  = useState("");
+  const [resetError,  setResetError]  = useState("");
+  const [resetLoading,setResetLoading]= useState(false);
 
   // Demo accounts mapped to roles
   const DEMO_ACCOUNTS = {
@@ -14173,6 +14179,13 @@ const LoginScreen = ({onLogin}) => {
     setTimeout(()=>{
       const account = DEMO_ACCOUNTS[email.toLowerCase().trim()];
       if(account && account.pw === password) {
+        if(rememberMe) {
+          localStorage.setItem("solixSavedEmail", email.toLowerCase().trim());
+          localStorage.setItem("solixSavedPw", password);
+        } else {
+          localStorage.removeItem("solixSavedEmail");
+          localStorage.removeItem("solixSavedPw");
+        }
         onLogin(account.role);
       } else if(DEMO_ACCOUNTS[email.toLowerCase().trim()]) {
         setError("Incorrect password. Try the demo password shown below.");
@@ -14184,6 +14197,14 @@ const LoginScreen = ({onLogin}) => {
     }, 800);
   };
 
+  const handleForgotSubmit = () => {
+    setResetError("");
+    if(!resetEmail.trim()) { setResetError("Email is required"); return; }
+    if(!/\S+@\S+\.\S+/.test(resetEmail)) { setResetError("Enter a valid email address"); return; }
+    setResetLoading(true);
+    setTimeout(()=>{ setResetLoading(false); setForgotMode("sent"); }, 1200);
+  };
+
   const quickLogin = (role) => {
     const cfg = ROLES_CONFIG[role];
     setEmail(cfg.email);
@@ -14191,64 +14212,150 @@ const LoginScreen = ({onLogin}) => {
     setError("");
   };
 
+  const leftPanel = (
+    <div style={{
+      width:"44%", background:`linear-gradient(145deg,#1a0505 0%,#2d0808 40%,#1a0505 100%)`,
+      display:"flex", flexDirection:"column", justifyContent:"space-between",
+      padding:"48px 52px", position:"relative", overflow:"hidden",
+    }}>
+      <div style={{position:"absolute",top:-120,right:-120,width:400,height:400,borderRadius:"50%",border:"1px solid rgba(238,36,36,0.3)",pointerEvents:"none"}}/>
+      <div style={{position:"absolute",top:-60,right:-60,width:250,height:250,borderRadius:"50%",border:"1px solid rgba(238,36,36,0.2)",pointerEvents:"none"}}/>
+      <div style={{position:"absolute",bottom:-80,left:-80,width:320,height:320,borderRadius:"50%",border:"1px solid rgba(238,36,36,0.15)",pointerEvents:"none"}}/>
+      <div style={{display:"flex",alignItems:"center",gap:14,position:"relative",zIndex:1}}>
+        <div style={{width:40,height:40,borderRadius:"50%",flexShrink:0,overflow:"hidden",boxShadow:"0 0 24px rgba(238,36,36,0.5)"}}>
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="20" cy="20" r="20" fill="#ee2424"/>
+            <path d="M23 7L13 22h8l-4 11 14-16h-9l1-10z" fill="white"/>
+          </svg>
+        </div>
+        <div>
+          <div style={{fontSize:15,fontWeight:700,color:"#f4f4f5",letterSpacing:"-0.3px"}}>Solix</div>
+          <div style={{fontSize:11,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:"0.1em",marginTop:1}}>Data Governance</div>
+        </div>
+      </div>
+      <div style={{position:"relative",zIndex:1}}>
+        <div style={{fontSize:32,fontWeight:700,color:"#f4f4f5",lineHeight:1.2,marginBottom:16,letterSpacing:"-0.5px"}}>
+          Trusted data.<br/>
+          <span style={{color:"#ee2424"}}>Governed</span> together.
+        </div>
+        <div style={{fontSize:14,color:"rgba(255,255,255,0.5)",lineHeight:1.7,marginBottom:40}}>
+          One platform to discover, govern, and trust your data across every team and domain at Johnson &amp; Johnson.
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {[
+            {icon:Ic.catalog(14), text:"6,724 assets indexed across 5 domains"},
+            {icon:Ic.quality(14), text:"87.3% average data quality score"},
+            {icon:Ic.compliance(14), text:"GDPR & HIPAA compliance tracked"},
+          ].map((f,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"rgba(255,255,255,0.05)",borderRadius:9,border:"1px solid rgba(255,255,255,0.07)"}}>
+              <span style={{color:"#ee2424",display:"flex",flexShrink:0}}>{f.icon}</span>
+              <span style={{fontSize:12,color:"rgba(255,255,255,0.6)"}}>{f.text}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{fontSize:11,color:"rgba(255,255,255,0.25)",position:"relative",zIndex:1}}>
+        © 2025 Johnson &amp; Johnson · Powered by Solix
+      </div>
+    </div>
+  );
+
+  /* ── Forgot password — email entry ── */
+  if(forgotMode === "form") return (
+    <div style={{minHeight:"100vh",display:"flex",background:T.bg,fontFamily:"'Geist',sans-serif"}}>
+      {leftPanel}
+      <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:"40px 60px",overflowY:"auto"}}>
+        <div style={{width:"100%",maxWidth:400}}>
+          <button onClick={()=>{setForgotMode(null);setResetEmail("");setResetError("");}}
+            style={{display:"flex",alignItems:"center",gap:6,background:"none",border:"none",color:T.textMuted,fontSize:12,cursor:"pointer",padding:0,marginBottom:28}}>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Back to sign in
+          </button>
+          <div style={{marginBottom:28}}>
+            <div style={{width:44,height:44,borderRadius:12,background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:16}}>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="2" y="5" width="16" height="12" rx="2" stroke={T.accent} strokeWidth="1.5"/><path d="M2 8l8 5 8-5" stroke={T.accent} strokeWidth="1.5"/></svg>
+            </div>
+            <div style={{fontSize:22,fontWeight:700,color:T.text,marginBottom:8,letterSpacing:"-0.4px"}}>Reset your password</div>
+            <div style={{fontSize:13,color:T.textMuted,lineHeight:1.6}}>
+              Enter your work email and we'll send a password reset link to your inbox.
+            </div>
+          </div>
+          <div style={{marginBottom:16}}>
+            <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>Work email</label>
+            <input
+              type="email" value={resetEmail} onChange={e=>{setResetEmail(e.target.value);setResetError("");}}
+              onKeyDown={e=>e.key==="Enter"&&handleForgotSubmit()}
+              placeholder="you@jnj.com" autoFocus
+              style={{width:"100%",padding:"10px 13px",background:T.bgSurface,border:`1.5px solid ${resetError?T.rose:T.border}`,borderRadius:9,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box",transition:"border-color .15s"}}
+              onFocus={e=>e.target.style.borderColor=T.accent}
+              onBlur={e=>e.target.style.borderColor=resetError?T.rose:T.border}
+            />
+          </div>
+          {resetError && (
+            <div style={{display:"flex",alignItems:"center",gap:7,padding:"8px 11px",background:T.roseDim,border:`1px solid ${T.rose}44`,borderRadius:7,marginBottom:16,fontSize:12,color:T.rose}}>
+              {Ic.alert(12)}{resetError}
+            </div>
+          )}
+          <button onClick={handleForgotSubmit} disabled={resetLoading} style={{
+            width:"100%",padding:"11px",borderRadius:9,border:"none",
+            background:resetLoading?"rgba(238,36,36,0.6)":"#ee2424",
+            color:"#fff",fontSize:13,fontWeight:700,cursor:resetLoading?"default":"pointer",
+            transition:"all .15s",boxShadow:resetLoading?"none":"0 2px 12px rgba(238,36,36,0.35)",
+          }}
+            onMouseEnter={e=>{if(!resetLoading)e.currentTarget.style.background="#d41f1f";}}
+            onMouseLeave={e=>{if(!resetLoading)e.currentTarget.style.background="#ee2424";}}
+          >
+            {resetLoading
+              ? <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{animation:"spin 1s linear infinite"}}><circle cx="7" cy="7" r="5.5" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5"/><path d="M7 1.5A5.5 5.5 0 0112.5 7" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                  Sending…
+                </span>
+              : "Send reset link"
+            }
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  /* ── Forgot password — success ── */
+  if(forgotMode === "sent") return (
+    <div style={{minHeight:"100vh",display:"flex",background:T.bg,fontFamily:"'Geist',sans-serif"}}>
+      {leftPanel}
+      <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:"40px 60px",overflowY:"auto"}}>
+        <div style={{width:"100%",maxWidth:400,textAlign:"center"}}>
+          <div style={{width:60,height:60,borderRadius:16,background:"rgba(52,211,153,0.1)",border:"1px solid rgba(52,211,153,0.25)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 24px"}}>
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </div>
+          <div style={{fontSize:22,fontWeight:700,color:T.text,marginBottom:10,letterSpacing:"-0.4px"}}>Check your inbox</div>
+          <div style={{fontSize:13,color:T.textMuted,lineHeight:1.7,marginBottom:8}}>
+            We've sent a password reset link to
+          </div>
+          <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:24,fontFamily:"'Geist Mono',monospace"}}>
+            {resetEmail}
+          </div>
+          <div style={{fontSize:12,color:T.textMuted,lineHeight:1.7,marginBottom:28,padding:"10px 13px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>
+            Didn't get the email? Check your spam folder or contact your IT admin at <span style={{color:T.accent}}>itsupport@jnj.com</span>
+          </div>
+          <button onClick={()=>{setForgotMode(null);setResetEmail("");setResetError("");}}
+            style={{background:"none",border:`1.5px solid ${T.border}`,borderRadius:9,padding:"10px 24px",color:T.text,fontSize:13,fontWeight:600,cursor:"pointer",transition:"border-color .15s"}}
+            onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent}
+            onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}
+          >
+            Back to sign in
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  /* ── Main login form ── */
   return (
     <div style={{
       minHeight:"100vh", display:"flex", background:T.bg,
       fontFamily:"'Geist',sans-serif",
     }}>
-      {/* Left panel — branding */}
-      <div style={{
-        width:"44%", background:`linear-gradient(145deg,#1a0505 0%,#2d0808 40%,#1a0505 100%)`,
-        display:"flex", flexDirection:"column", justifyContent:"space-between",
-        padding:"48px 52px", position:"relative", overflow:"hidden",
-      }}>
-        {/* Decorative circles */}
-        <div style={{position:"absolute",top:-120,right:-120,width:400,height:400,borderRadius:"50%",border:"1px solid rgba(238,36,36,0.3)",pointerEvents:"none"}}/>
-        <div style={{position:"absolute",top:-60,right:-60,width:250,height:250,borderRadius:"50%",border:"1px solid rgba(238,36,36,0.2)",pointerEvents:"none"}}/>
-        <div style={{position:"absolute",bottom:-80,left:-80,width:320,height:320,borderRadius:"50%",border:"1px solid rgba(238,36,36,0.15)",pointerEvents:"none"}}/>
-
-        {/* Logo */}
-        <div style={{display:"flex",alignItems:"center",gap:14,position:"relative",zIndex:1}}>
-          <div style={{width:40,height:40,borderRadius:"50%",flexShrink:0,overflow:"hidden",boxShadow:"0 0 24px rgba(238,36,36,0.5)"}}>
-            <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="20" cy="20" r="20" fill="#ee2424"/>
-              <path d="M23 7L13 22h8l-4 11 14-16h-9l1-10z" fill="white"/>
-            </svg>
-          </div>
-          <div>
-            <div style={{fontSize:15,fontWeight:700,color:"#f4f4f5",letterSpacing:"-0.3px"}}>Solix</div>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:"0.1em",marginTop:1}}>Data Governance</div>
-          </div>
-        </div>
-
-        {/* Center content */}
-        <div style={{position:"relative",zIndex:1}}>
-          <div style={{fontSize:32,fontWeight:700,color:"#f4f4f5",lineHeight:1.2,marginBottom:16,letterSpacing:"-0.5px"}}>
-            Trusted data.<br/>
-            <span style={{color:"#ee2424"}}>Governed</span> together.
-          </div>
-          <div style={{fontSize:14,color:"rgba(255,255,255,0.5)",lineHeight:1.7,marginBottom:40}}>
-            One platform to discover, govern, and trust your data across every team and domain at Johnson &amp; Johnson.
-          </div>
-          {/* Feature pills */}
-          <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            {[
-              {icon:Ic.catalog(14), text:"6,724 assets indexed across 5 domains"},
-              {icon:Ic.quality(14), text:"87.3% average data quality score"},
-              {icon:Ic.compliance(14), text:"GDPR & HIPAA compliance tracked"},
-            ].map((f,i)=>(
-              <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"rgba(255,255,255,0.05)",borderRadius:9,border:"1px solid rgba(255,255,255,0.07)"}}>
-                <span style={{color:"#ee2424",display:"flex",flexShrink:0}}>{f.icon}</span>
-                <span style={{fontSize:12,color:"rgba(255,255,255,0.6)"}}>{f.text}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div style={{fontSize:11,color:"rgba(255,255,255,0.25)",position:"relative",zIndex:1}}>
-          © 2025 Johnson &amp; Johnson · Powered by Solix
-        </div>
-      </div>
+      {leftPanel}
 
       {/* Right panel — login form */}
       <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:"40px 60px",overflowY:"auto"}}>
@@ -14272,10 +14379,13 @@ const LoginScreen = ({onLogin}) => {
           </div>
 
           {/* Password */}
-          <div style={{marginBottom:8}}>
+          <div style={{marginBottom:12}}>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
               <label style={{fontSize:12,fontWeight:600,color:T.textSub}}>Password</label>
-              <button style={{background:"none",border:"none",fontSize:12,color:T.accent,cursor:"pointer",padding:0}}>Forgot password?</button>
+              <button onClick={()=>{setForgotMode("form");setResetEmail(email);setResetError("");}}
+                style={{background:"none",border:"none",fontSize:12,color:T.accent,cursor:"pointer",padding:0}}>
+                Forgot password?
+              </button>
             </div>
             <div style={{position:"relative"}}>
               <input
@@ -14293,6 +14403,18 @@ const LoginScreen = ({onLogin}) => {
                 }
               </button>
             </div>
+          </div>
+
+          {/* Remember me */}
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+            <div onClick={()=>setRememberMe(v=>!v)} style={{
+              width:16,height:16,borderRadius:4,border:`1.5px solid ${rememberMe?T.accent:T.border}`,
+              background:rememberMe?T.accent:"transparent",cursor:"pointer",flexShrink:0,
+              display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s",
+            }}>
+              {rememberMe && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+            </div>
+            <span onClick={()=>setRememberMe(v=>!v)} style={{fontSize:12,color:T.textSub,cursor:"pointer",userSelect:"none"}}>Remember me on this device</span>
           </div>
 
           {/* Error */}
