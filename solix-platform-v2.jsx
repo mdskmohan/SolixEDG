@@ -5553,6 +5553,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const [catEditId,     setCatEditId]   = useState(null);
   const [catEditName,   setCatEditName] = useState("");
   const [hovCatId,      setHovCatId]   = useState(null);
+  const [expCat,        setExpCat]     = useState({});
   const [newCriteriaText, setNewCriteriaText] = useState("");
   const [ruleModalOpen, setRuleModalOpen]= useState(false);
   const [ruleForm,      setRuleForm]    = useState({name:"",criteria:""});
@@ -6041,92 +6042,100 @@ const PolicyManagerView = ({onToast, onNav}) => {
               {POLICY_CATS.map(cat=>{
                 const catPols = filteredPols.filter(p=>p.category===cat);
                 if (!catPols.length) return null;
+                const expanded = expCat[cat]!==false;
                 const isCatHov = hovCatId===cat;
+                const isCatSel = !selPolicyId && false; // categories aren't "selected"
                 return (
                   <div key={cat}>
-                    {/* Category row with 3-dot menu */}
-                    <div
-                      onMouseEnter={()=>setHovCatId(cat)} onMouseLeave={()=>setHovCatId(null)}
-                      style={{display:"flex",alignItems:"center",padding:"7px 6px 4px 10px",fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",position:"relative",gap:4}}>
-                      <div style={{width:6,height:6,borderRadius:1,background:catColor(cat),marginRight:4,flexShrink:0}}/>
-                      {catEditId===cat
-                        ? <input autoFocus value={catEditName} onChange={e=>setCatEditName(e.target.value)}
-                            onKeyDown={e=>{
-                              if(e.key==="Enter"&&catEditName.trim()){
-                                setPolicyCategories(prev=>prev.map(c=>c.name===cat?{...c,name:catEditName.trim()}:c));
-                                setPolicies(prev=>prev.map(p=>p.category===cat?{...p,category:catEditName.trim()}:p));
-                                setCatEditId(null);
-                              }
-                              if(e.key==="Escape") setCatEditId(null);
-                            }}
-                            onBlur={()=>setCatEditId(null)}
-                            style={{fontSize:10,fontWeight:700,background:T.bgElevated,border:`1px solid ${T.accent}`,borderRadius:4,color:T.text,padding:"1px 6px",outline:"none",width:100,textTransform:"none"}}/>
-                        : <span style={{flex:1}}>{cat}</span>
-                      }
-                      <span style={{fontWeight:400,fontSize:10,fontFamily:"'Geist Mono',monospace"}}>{catPols.length}</span>
-                      <div style={{position:"relative",flexShrink:0}} ref={dotMenuOpen===`cat:${cat}`?dotMenuRef:null}>
+                    {/* Category row — matches Tag Management exactly */}
+                    <div style={{display:"flex",alignItems:"center",paddingRight:6,background:isCatHov?T.bgHover:"transparent",transition:"background .1s"}}
+                      onMouseEnter={()=>setHovCatId(cat)} onMouseLeave={()=>setHovCatId(null)}>
+                      <button onClick={()=>setExpCat(p=>({...p,[cat]:!expanded}))}
+                        style={{flex:1,display:"flex",alignItems:"center",gap:5,padding:"6px 6px 6px 8px",background:"none",border:"none",cursor:"pointer",textAlign:"left",minWidth:0}}>
+                        {/* Chevron */}
+                        <span style={{width:14,height:14,display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted,flexShrink:0,transform:expanded?"rotate(90deg)":"rotate(0deg)",transition:"transform .18s"}}>
+                          <svg width="7" height="10" viewBox="0 0 7 10" fill="none"><path d="M1.5 1.5l4 3.5-4 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </span>
+                        {/* Folder icon */}
+                        <svg width="13" height="12" viewBox="0 0 16 14" fill="none" style={{flexShrink:0,color:catColor(cat)}}>
+                          <path d="M1 3a1 1 0 011-1h4.5L8 4h7a1 1 0 011 1v7a1 1 0 01-1 1H2a1 1 0 01-1-1V3z" fill="currentColor" opacity=".25" stroke="currentColor" strokeWidth="1.2"/>
+                        </svg>
+                        {catEditId===cat
+                          ? <input autoFocus value={catEditName} onChange={e=>setCatEditName(e.target.value)}
+                              onClick={e=>e.stopPropagation()}
+                              onKeyDown={e=>{
+                                if(e.key==="Enter"&&catEditName.trim()){
+                                  setPolicyCategories(prev=>prev.map(c=>c.name===cat?{...c,name:catEditName.trim()}:c));
+                                  setPolicies(prev=>prev.map(p=>p.category===cat?{...p,category:catEditName.trim()}:p));
+                                  setCatEditId(null);
+                                }
+                                if(e.key==="Escape") setCatEditId(null);
+                              }}
+                              onBlur={()=>setCatEditId(null)}
+                              style={{fontSize:12,fontWeight:500,background:T.bgElevated,border:`1px solid ${T.accent}`,borderRadius:4,color:T.text,padding:"1px 6px",outline:"none",width:100}}/>
+                          : <span style={{flex:1,fontSize:12,fontWeight:500,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textTransform:"capitalize"}}>{cat}</span>
+                        }
+                        <span style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace",flexShrink:0,marginRight:2}}>{catPols.length}</span>
+                      </button>
+                      {/* Horizontal ··· menu — matches Tags */}
+                      <div ref={dotMenuOpen===`cat:${cat}`?dotMenuRef:null} style={{position:"relative",flexShrink:0}}>
                         <button onClick={e=>{e.stopPropagation();setDotMenuOpen(dotMenuOpen===`cat:${cat}`?null:`cat:${cat}`);}}
-                          style={{width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:4,background:"transparent",border:"none",cursor:"pointer",color:T.textMuted,opacity:isCatHov||dotMenuOpen===`cat:${cat}`?1:0,transition:"opacity .1s",flexShrink:0}}>
-                          <svg width="3" height="11" viewBox="0 0 3 11" fill="currentColor"><circle cx="1.5" cy="1.5" r="1.5"/><circle cx="1.5" cy="5.5" r="1.5"/><circle cx="1.5" cy="9.5" r="1.5"/></svg>
+                          style={{width:20,height:20,borderRadius:4,background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:isCatHov||dotMenuOpen===`cat:${cat}`?1:0,transition:"opacity .12s",fontSize:14,fontWeight:700,lineHeight:1}}>
+                          ···
                         </button>
                         {dotMenuOpen===`cat:${cat}`&&(
-                          <div style={{position:"absolute",right:0,top:"100%",zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 4px 20px rgba(0,0,0,.18)",minWidth:148,overflow:"hidden"}}>
+                          <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,width:152,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",zIndex:300,overflow:"hidden"}}>
                             <button onMouseDown={e=>{e.stopPropagation();setCreateOpen(true);setNewPol({...EMPTY_POL,category:cat});setDotMenuOpen(null);}}
-                              style={{width:"100%",padding:"8px 14px",background:"transparent",border:"none",cursor:"pointer",fontSize:12,color:T.text,textAlign:"left",display:"flex",alignItems:"center",gap:8}}
+                              style={{width:"100%",padding:"10px 12px",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",fontSize:12,color:T.text,display:"flex",alignItems:"center",gap:8,borderBottom:`1px solid ${T.border}`}}
                               onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                               {Ic.plus(11)} Add policy
                             </button>
                             <button onMouseDown={e=>{e.stopPropagation();setCatEditId(cat);setCatEditName(cat);setDotMenuOpen(null);}}
-                              style={{width:"100%",padding:"8px 14px",background:"transparent",border:"none",cursor:"pointer",fontSize:12,color:T.text,textAlign:"left",display:"flex",alignItems:"center",gap:8}}
+                              style={{width:"100%",padding:"10px 12px",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",fontSize:12,color:T.text,display:"flex",alignItems:"center",gap:8,borderBottom:`1px solid ${T.border}`}}
                               onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                              {Ic.edit(11)} Rename
+                              <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg> Edit Category
                             </button>
-                            <div style={{borderTop:`1px solid ${T.border}`}}/>
                             <button onMouseDown={e=>{e.stopPropagation();if(catPols.length===0){setPolicyCategories(p=>p.filter(c=>c.name!==cat));}else{onToast(`Move or delete the ${catPols.length} policies first`,"error");}setDotMenuOpen(null);}}
-                              style={{width:"100%",padding:"8px 14px",background:"transparent",border:"none",cursor:"pointer",fontSize:12,color:T.rose,textAlign:"left",display:"flex",alignItems:"center",gap:8}}
-                              onMouseEnter={e=>e.currentTarget.style.background=`${T.rose}0d`} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                              <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 5l.5 5M8 5l-.5 5M3 3l.5 7h5L9 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg> Delete
+                              style={{width:"100%",padding:"10px 12px",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",fontSize:12,color:T.rose,display:"flex",alignItems:"center",gap:8}}
+                              onMouseEnter={e=>e.currentTarget.style.background=T.roseDim} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                              <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 5l.5 5M8 5l-.5 5M3 3l.5 7h5L9 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg> Delete Category
                             </button>
                           </div>
                         )}
                       </div>
                     </div>
 
-                    {catPols.map(p=>{
+                    {/* Policy rows — indented, shown when expanded, matches tag rows */}
+                    {expanded&&catPols.map(p=>{
                       const isSel = selPolicyId===p.id;
                       const isHov = hovPolId===p.id;
                       return (
                         <div key={p.id}
-                          onClick={()=>{setSelPolicyId(isSel?null:p.id);setPdTab("overview");setEditing(false);}}
+                          style={{display:"flex",alignItems:"center",background:isSel?T.accentDim:isHov?T.bgHover:"transparent",borderLeft:`2.5px solid ${isSel?T.accent:"transparent"}`,transition:"background .1s"}}
                           onMouseEnter={()=>setHovPolId(p.id)}
-                          onMouseLeave={()=>setHovPolId(null)}
-                          style={{display:"flex",alignItems:"center",paddingRight:4,
-                            background:isSel?`${catColor(p.category)}10`:isHov?T.bgHover:"transparent",
-                            borderLeft:`2.5px solid ${isSel?catColor(p.category):"transparent"}`,
-                            cursor:"pointer",transition:"all .1s",position:"relative"}}>
-                          <div style={{flex:1,padding:"8px 6px 8px 8px",minWidth:0}}>
-                            <div style={{fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,lineHeight:1.35,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                              {p.name}
-                            </div>
-                          </div>
-                          {/* 3-dot menu */}
-                          <div style={{position:"relative",flexShrink:0}} ref={dotMenuOpen===p.id?dotMenuRef:null}>
+                          onMouseLeave={()=>setHovPolId(null)}>
+                          <button onClick={()=>{setSelPolicyId(isSel?null:p.id);setPdTab("overview");setEditing(false);}}
+                            style={{flex:1,display:"flex",alignItems:"center",gap:7,padding:"5px 6px 5px 30px",background:"none",border:"none",cursor:"pointer",textAlign:"left",minWidth:0}}>
+                            <span style={{width:8,height:8,borderRadius:"50%",background:catColor(p.category),flexShrink:0,display:"block"}}/>
+                            <span style={{flex:1,fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+                          </button>
+                          {/* Horizontal ··· menu — matches Tags */}
+                          <div ref={dotMenuOpen===p.id?dotMenuRef:null} style={{position:"relative",flexShrink:0,paddingRight:6}}>
                             <button onClick={e=>{e.stopPropagation();setDotMenuOpen(dotMenuOpen===p.id?null:p.id);}}
-                              style={{width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:5,background:"transparent",border:"none",cursor:"pointer",color:T.textMuted,opacity:isHov||isSel||dotMenuOpen===p.id?1:0,transition:"opacity .12s"}}>
-                              <svg width="3" height="11" viewBox="0 0 3 11" fill="currentColor"><circle cx="1.5" cy="1.5" r="1.5"/><circle cx="1.5" cy="5.5" r="1.5"/><circle cx="1.5" cy="9.5" r="1.5"/></svg>
+                              style={{width:20,height:20,borderRadius:4,background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:isHov||isSel||dotMenuOpen===p.id?1:0,transition:"opacity .12s",fontSize:14,fontWeight:700,lineHeight:1}}>
+                              ···
                             </button>
                             {dotMenuOpen===p.id&&(
-                              <div style={{position:"absolute",right:0,top:"100%",zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 4px 20px rgba(0,0,0,.18)",minWidth:120,overflow:"hidden"}}>
+                              <div style={{position:"absolute",top:"100%",right:0,width:140,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 8px 24px rgba(0,0,0,.18)",zIndex:300,overflow:"hidden"}}>
                                 <button onMouseDown={e=>{e.stopPropagation();setSelPolicyId(p.id);setEditing(true);setDescDraft(p.description||"");setPdTab("overview");setDotMenuOpen(null);}}
-                                  style={{width:"100%",padding:"8px 14px",background:"transparent",border:"none",cursor:"pointer",fontSize:12,color:T.text,textAlign:"left",display:"flex",alignItems:"center",gap:8}}
+                                  style={{width:"100%",padding:"9px 12px",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",fontSize:12,color:T.text,display:"flex",alignItems:"center",gap:8,borderBottom:`1px solid ${T.border}`}}
                                   onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                                  {Ic.edit(11)} Edit
+                                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg> Edit
                                 </button>
-                                <div style={{borderTop:`1px solid ${T.border}`}}/>
                                 <button onMouseDown={e=>{e.stopPropagation();setDeleteConfPol(p);setDotMenuOpen(null);}}
-                                  style={{width:"100%",padding:"8px 14px",background:"transparent",border:"none",cursor:"pointer",fontSize:12,color:T.rose,textAlign:"left",display:"flex",alignItems:"center",gap:8}}
-                                  onMouseEnter={e=>e.currentTarget.style.background=`${T.rose}0d`} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 5l.5 5M8 5l-.5 5M3 3l.5 7h5L9 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg> Delete
+                                  style={{width:"100%",padding:"9px 12px",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",fontSize:12,color:T.rose,display:"flex",alignItems:"center",gap:8}}
+                                  onMouseEnter={e=>e.currentTarget.style.background=T.roseDim} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 5l.5 5M8 5l-.5 5M3 3l.5 7h5L9 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg> Delete
                                 </button>
                               </div>
                             )}
