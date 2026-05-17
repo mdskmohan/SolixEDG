@@ -5372,11 +5372,8 @@ const QualityView = () => {
 
 const PolicyManagerView = ({onToast, onNav}) => {
   // ─── palette & constants ──────────────────────────────────────────────
-  const CAT_COLORS = {Privacy:T.violet,Quality:T.green,Retention:T.amber,Access:T.rose,Classification:T.blue,Security:T.rose};
-  const SEV_COLORS = {Critical:T.rose,High:T.amber,Medium:T.blue,Low:T.green};
   const LC_COLORS  = {"Draft":T.textMuted,"In Review":T.amber,"Approved":T.green,"Active":T.blue,"Deprecated":T.rose};
   const LC_STEPS   = ["Draft","In Review","Approved","Active","Deprecated"];
-  const POLICY_CATS= ["Privacy","Quality","Retention","Access","Classification","Security"];
   const ALL_DOMAINS= (DOMAIN_LIST_DATA||[]).map(d=>d.name);
   const PMV_USERS  = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
   const REL_TYPES  = ["governs","enforces","complies_with","monitors"];
@@ -5523,7 +5520,15 @@ const PolicyManagerView = ({onToast, onNav}) => {
      ]},
   ]);
 
-  const [tab,           setTab]         = useState("overview");
+  const [policyCategories, setPolicyCategories] = useState([
+    {id:"priv",name:"Privacy",       color:T.violet},
+    {id:"qual",name:"Quality",       color:T.green},
+    {id:"ret", name:"Retention",     color:T.amber},
+    {id:"acc", name:"Access",        color:T.rose},
+    {id:"cls", name:"Classification",color:T.blue},
+    {id:"sec", name:"Security",      color:T.rose},
+  ]);
+  const [tab,           setTab]         = useState("policies");
   const [selPolicyId,   setSelPolicyId] = useState(null);
   const [pdTab,         setPdTab]       = useState("overview");
   const [polSearch,     setPolSearch]   = useState("");
@@ -5531,8 +5536,23 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const [expandedReg,   setExpandedReg] = useState(null);
   const [linkPolOpen,   setLinkPolOpen] = useState(null);
   const [createOpen,    setCreateOpen]  = useState(false);
-  const [editOpen,      setEditOpen]    = useState(false);
-  const [editDraft,     setEditDraft]   = useState(null);
+  const [editing,       setEditing]     = useState(false);
+  const [descDraft,     setDescDraft]   = useState("");
+  const [polEditModal,  setPolEditModal]= useState(null);
+  const [polModalSearch,setPolModalSearch]=useState("");
+  const [polDraftOwner, setPolDraftOwner]= useState("");
+  const [polDraftStewards,setPolDraftStewards]=useState([]);
+  const [polDraftCategory,setPolDraftCategory]=useState("");
+  const [polDraftDomains, setPolDraftDomains]=useState([]);
+  const [polDraftTags,    setPolDraftTags]=useState([]);
+  const [polDraftFrameworks,setPolDraftFrameworks]=useState([]);
+  const [polDraftCriteria, setPolDraftCriteria]=useState([]);
+  const [polDraftNewCriterion,setPolDraftNewCriterion]=useState("");
+  const [dotMenuOpen,   setDotMenuOpen] = useState(null);
+  const [flashSaved,    setFlashSaved]  = useState(false);
+  const [catEditId,     setCatEditId]   = useState(null);
+  const [catEditName,   setCatEditName] = useState("");
+  const [hovCatId,      setHovCatId]   = useState(null);
   const [newCriteriaText, setNewCriteriaText] = useState("");
   const [ruleModalOpen, setRuleModalOpen]= useState(false);
   const [ruleForm,      setRuleForm]    = useState({name:"",criteria:""});
@@ -5540,13 +5560,14 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const [assetSearchQ,  setAssetSearchQ]= useState("");
   const [selAssetIds,   setSelAssetIds] = useState(new Set());
   const [assetRel,      setAssetRel]    = useState("governs");
-  const EMPTY_POL = {name:"",category:"Privacy",severity:"High",description:"",owner:"",stewards:[],tags:[],regulations:[],scope:{domains:[]},criteria:[],rules:[],links:[],history:[],fqn:"",version:1};
+  const EMPTY_POL = {name:"",category:"Privacy",description:"",owner:"",stewards:[],tags:[],regulations:[],scope:{domains:[]},criteria:[],rules:[],links:[],history:[],fqn:"",version:1};
   const [newPol,         setNewPol]        = useState(EMPTY_POL);
   const [catFilter,      setCatFilter]     = useState([]);
   const [filterDropOpen, setFilterDropOpen]= useState(false);
   const [hovPolId,       setHovPolId]      = useState(null);
   const [deleteConfPol,  setDeleteConfPol] = useState(null);
   const filterDropRef = useRef(null);
+  const dotMenuRef    = useRef(null);
 
   useEffect(()=>{
     if(!filterDropOpen) return;
@@ -5555,7 +5576,29 @@ const PolicyManagerView = ({onToast, onNav}) => {
     return()=>document.removeEventListener("mousedown",close);
   },[filterDropOpen]);
 
+  useEffect(()=>{
+    if(!dotMenuOpen) return;
+    const close=e=>{if(dotMenuRef.current&&!dotMenuRef.current.contains(e.target))setDotMenuOpen(null);};
+    document.addEventListener("mousedown",close);
+    return()=>document.removeEventListener("mousedown",close);
+  },[dotMenuOpen]);
+
+  useEffect(()=>{
+    if(!polEditModal||!selPol) return;
+    if(polEditModal==="owner")      setPolDraftOwner(selPol.owner||"");
+    if(polEditModal==="stewards")   setPolDraftStewards([...(selPol.stewards||[])]);
+    if(polEditModal==="category")   setPolDraftCategory(selPol.category||"");
+    if(polEditModal==="domains")    setPolDraftDomains([...(selPol.scope?.domains||[])]);
+    if(polEditModal==="tags")       setPolDraftTags([...(selPol.tags||[])]);
+    if(polEditModal==="frameworks") setPolDraftFrameworks([...(selPol.regulations||[])]);
+    if(polEditModal==="criteria")   {setPolDraftCriteria([...(selPol.criteria||[])]);setPolDraftNewCriterion("");}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[polEditModal]);
+
   // ─── computed ────────────────────────────────────────────────────────
+  const POLICY_CATS = policyCategories.map(c=>c.name);
+  const catColor = cat => policyCategories.find(c=>c.name===cat)?.color || T.blue;
+
   const getGovAssets = (pol) => {
     if (!pol) return [];
     const doms = pol.scope?.domains||[];
@@ -5607,13 +5650,25 @@ const PolicyManagerView = ({onToast, onNav}) => {
     setSelPolicyId(p.id); setPdTab("overview");
     onToast("Policy created","success");
   };
-  const handleSaveEdit = () => {
-    if (!editDraft?.name?.trim()) return;
-    const histEntry = {when:today(),who:"You",action:"Updated policy details"};
-    setPolicies(prev=>prev.map(p=>p.id===editDraft.id
-      ?{...editDraft,updated:today(),history:[histEntry,...(editDraft.history||[])]}:p));
-    setEditOpen(false); setEditDraft(null);
-    onToast("Policy saved","success");
+  const saveInlineEdit = () => {
+    if (!selPol) return;
+    setPolicies(prev=>prev.map(p=>p.id===selPol.id
+      ?{...p,description:descDraft,updated:today(),history:[{when:today(),who:"You",action:"Updated description"},...(p.history||[])]}:p));
+    setEditing(false);
+    setFlashSaved(true);
+    setTimeout(()=>setFlashSaved(false),1500);
+    onToast("Saved","success");
+  };
+  const cancelInlineEdit = () => { setEditing(false); setDescDraft(selPol?.description||""); };
+  const applyPolField = (field,value,histLabel) => {
+    if (!selPol) return;
+    setPolicies(prev=>prev.map(p=>p.id===selPol.id
+      ?{...p,[field]:value,updated:today(),history:[{when:today(),who:"You",action:histLabel||`Updated ${field}`},...(p.history||[])]}:p));
+  };
+  const applyPolDomains = (domains) => {
+    if (!selPol) return;
+    setPolicies(prev=>prev.map(p=>p.id===selPol.id
+      ?{...p,scope:{...p.scope,domains},updated:today(),history:[{when:today(),who:"You",action:"Updated scope domains"},...(p.history||[])]}:p));
   };
   const handleLinkPol = (polId) => {
     if (!linkPolOpen) return;
@@ -5703,19 +5758,11 @@ const PolicyManagerView = ({onToast, onNav}) => {
           <input value={pol.name} onChange={e=>set(p=>({...p,name:e.target.value}))} autoFocus placeholder="e.g. Commerce PII Sensitivity"
             style={inp} onFocus={e=>e.target.style.borderColor=T.blue} onBlur={e=>e.target.style.borderColor=T.border}/>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-          <div>
-            <label style={lbl}>Category</label>
-            <select value={pol.category} onChange={e=>set(p=>({...p,category:e.target.value}))} style={inp}>
-              {POLICY_CATS.map(c=><option key={c}>{c}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={lbl}>Severity</label>
-            <select value={pol.severity} onChange={e=>set(p=>({...p,severity:e.target.value}))} style={inp}>
-              {["Critical","High","Medium","Low"].map(s=><option key={s}>{s}</option>)}
-            </select>
-          </div>
+        <div>
+          <label style={lbl}>Category</label>
+          <select value={pol.category} onChange={e=>set(p=>({...p,category:e.target.value}))} style={inp}>
+            {POLICY_CATS.map(c=><option key={c}>{c}</option>)}
+          </select>
         </div>
         <div>
           <label style={lbl}>Description</label>
@@ -5808,6 +5855,19 @@ const PolicyManagerView = ({onToast, onNav}) => {
       <Btn variant={confirmVariant||"primary"} onClick={onConfirm}>{confirmLabel}</Btn>
     </div>
   );
+  const SideLabel = ({label,onEdit}) => (
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+      <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{label}</div>
+      {onEdit&&(
+        <button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}}
+          onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
+          onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
+          <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+      )}
+    </div>
+  );
+
   const CenteredModal = ({onClose,children,wide}) => (
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div onClick={e=>e.stopPropagation()} style={{width:wide?680:520,maxHeight:"87vh",background:T.bgSurface,borderRadius:14,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 24px 80px rgba(0,0,0,.4)"}}>{children}</div>
@@ -5843,7 +5903,6 @@ const PolicyManagerView = ({onToast, onNav}) => {
       <div style={{flexShrink:0,borderBottom:`1px solid ${T.border}`,background:T.bgBase}}>
         <div style={{display:"flex",paddingLeft:24,overflowX:"auto"}}>
           {[
-            {key:"overview",    label:"Overview",    badge:null},
             {key:"policies",    label:"Policies",    badge:policies.length},
             {key:"regulations", label:"Regulations", badge:regulations.length},
           ].map(t=>{
@@ -5853,7 +5912,6 @@ const PolicyManagerView = ({onToast, onNav}) => {
                 style={{display:"flex",alignItems:"center",gap:7,padding:"12px 20px",background:"transparent",border:"none",borderBottom:`2.5px solid ${isA?T.accent:"transparent"}`,color:isA?T.accent:T.textMuted,fontSize:13,fontWeight:isA?600:500,cursor:"pointer",transition:"all .15s",marginBottom:-1,whiteSpace:"nowrap",flexShrink:0}}
                 onMouseEnter={e=>{if(!isA){e.currentTarget.style.color=T.text;e.currentTarget.style.background=T.bgHover;}}}
                 onMouseLeave={e=>{if(!isA){e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="transparent";}}}>
-                {t.key==="overview"&&<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" style={{flexShrink:0,opacity:isA?1:0.65}}><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>}
                 {t.key==="policies"&&<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" style={{flexShrink:0,opacity:isA?1:0.65}}><rect x="2" y="1" width="12" height="14" rx="1.5"/><line x1="5" y1="5.5" x2="11" y2="5.5"/><line x1="5" y1="8.5" x2="11" y2="8.5"/><line x1="5" y1="11.5" x2="9" y2="11.5"/></svg>}
                 {t.key==="regulations"&&<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,opacity:isA?1:0.65}}><path d="M8 1L2 4v4c0 3.5 2.7 5.5 6 6.5C11.3 13.5 14 11.5 14 8V4L8 1z"/></svg>}
                 <span>{t.label}</span>
@@ -5870,97 +5928,6 @@ const PolicyManagerView = ({onToast, onNav}) => {
 
       {/* ════ content area ════ */}
       <div style={{flex:1,display:"flex",overflow:"hidden"}}>
-
-        {/* ══════ OVERVIEW TAB ══════ */}
-        {tab==="overview"&&(
-          <div style={{flex:1,overflowY:"auto",minHeight:0,padding:"20px 28px"}}>
-            {/* Metric cards */}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10,marginBottom:24}}>
-              {[
-                {label:"Total Policies",value:policies.length,sub:`${activePols.length} active · ${policies.filter(p=>p.lifecycle==="Draft").length} draft`,color:T.blue,pct:null},
-                {label:"Pending Review",value:pendingReview,sub:pendingReview===0?"No policies awaiting approval":"awaiting approval",color:T.amber,pct:Math.round(pendingReview/Math.max(policies.length,1)*100)},
-                {label:"Deprecated",value:policies.filter(p=>p.lifecycle==="Deprecated").length,sub:"retired policies",color:T.textMuted,pct:null},
-                {label:"Asset Coverage",value:`${coveragePct}%`,sub:`${coveredIds.size} of ${ASSETS.length} assets governed`,color:coveragePct>=80?T.green:T.amber,pct:coveragePct},
-              ].map(m=>(
-                <div key={m.label} style={{padding:"13px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,borderLeft:`3px solid ${m.color}`,position:"relative",overflow:"hidden"}}>
-                  <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>{m.label}</div>
-                  <div style={{fontSize:22,fontWeight:800,color:m.color,lineHeight:1,marginBottom:4,fontFamily:"'Geist Mono',monospace"}}>{m.value}</div>
-                  <div style={{fontSize:11,color:T.textMuted}}>{m.sub}</div>
-                  {m.pct!==null&&<div style={{position:"absolute",bottom:0,left:0,right:0,height:3,background:T.bgElevated}}><div style={{width:`${m.pct}%`,height:"100%",background:m.color,borderRadius:"0 1px 0 0",transition:"width .4s"}}/></div>}
-                </div>
-              ))}
-            </div>
-            {/* Policy Status breakdown */}
-            <div style={{marginBottom:24}}>
-              <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>Policy Status</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(100px,1fr))",gap:8}}>
-                {LC_STEPS.map(lc=>{
-                  const cnt=policies.filter(p=>p.lifecycle===lc).length;
-                  const pct=Math.round(cnt/Math.max(policies.length,1)*100);
-                  return (
-                    <button key={lc} onClick={()=>{setLcFilter(lc);setTab("policies");}}
-                      style={{padding:"11px 10px",borderRadius:9,border:`1.5px solid ${lcColor(lc)}30`,background:`${lcColor(lc)}08`,cursor:"pointer",textAlign:"center",transition:"all .12s"}}
-                      onMouseEnter={e=>{e.currentTarget.style.borderColor=lcColor(lc);e.currentTarget.style.background=`${lcColor(lc)}14`;}}
-                      onMouseLeave={e=>{e.currentTarget.style.borderColor=`${lcColor(lc)}30`;e.currentTarget.style.background=`${lcColor(lc)}08`;}}>
-                      <div style={{fontSize:20,fontWeight:800,color:lcColor(lc),fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{cnt}</div>
-                      <div style={{fontSize:10,color:T.textMuted,marginTop:4,fontWeight:600}}>{lc}</div>
-                      {cnt>0&&<div style={{marginTop:6,height:2,borderRadius:1,background:T.bgElevated,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:lcColor(lc)}}/></div>}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:20,marginBottom:24}}>
-              {/* Health by Category */}
-              <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px 18px"}}>
-                <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:14}}>Health by Category</div>
-                {POLICY_CATS.map(cat=>{
-                  const catPols=policies.filter(p=>p.category===cat);
-                  const activeCnt=catPols.filter(p=>p.lifecycle==="Active").length;
-                  const totalCnt=catPols.length;
-                  const viols=catPols.reduce((s,p)=>s+getFlagged(p).length,0);
-                  const pct=totalCnt?Math.round(activeCnt/totalCnt*100):0;
-                  if(!totalCnt) return null;
-                  return (
-                    <div key={cat} style={{marginBottom:12}}>
-                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
-                        <div style={{display:"flex",alignItems:"center",gap:6}}>
-                          <div style={{width:7,height:7,borderRadius:1,background:CAT_COLORS[cat]||T.blue,flexShrink:0}}/>
-                          <span style={{fontSize:12,fontWeight:600,color:T.text}}>{cat}</span>
-                        </div>
-                        <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                          {viols>0&&<span style={{fontSize:10.5,color:T.rose,fontWeight:600}}>⚠ {viols}</span>}
-                          <span style={{fontSize:11,color:T.textMuted}}>{activeCnt}/{totalCnt}</span>
-                        </div>
-                      </div>
-                      <div style={{height:4,borderRadius:2,background:T.bgElevated,overflow:"hidden"}}>
-                        <div style={{width:`${pct}%`,height:"100%",background:CAT_COLORS[cat]||T.blue,borderRadius:2,transition:"width .4s"}}/>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              {/* Regulation Coverage */}
-              <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px 18px"}}>
-                <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:14}}>Regulation Coverage</div>
-                {regulations.map(reg=>{
-                  const sc=reg.score>=90?T.green:reg.score>=75?T.amber:T.rose;
-                  return (
-                    <div key={reg.id} style={{marginBottom:12}}>
-                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
-                        <span style={{fontSize:12,fontWeight:600,color:T.text}}>{reg.name}</span>
-                        <span style={{fontSize:12,fontWeight:700,color:sc,fontFamily:"'Geist Mono',monospace"}}>{reg.score}%</span>
-                      </div>
-                      <div style={{height:4,borderRadius:2,background:T.bgElevated,overflow:"hidden"}}>
-                        <div style={{width:`${reg.score}%`,height:"100%",background:sc,borderRadius:2,transition:"width .4s"}}/>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* ══════ POLICIES TAB ══════ */}
         {tab==="policies"&&<>
@@ -6010,7 +5977,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                               <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${checked?T.accent:T.border}`,background:checked?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .1s"}}>
                                 {checked&&<svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1 4l2 2 4-4" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                               </div>
-                              <div style={{width:7,height:7,borderRadius:1,background:CAT_COLORS[cat]||T.blue,flexShrink:0}}/>
+                              <div style={{width:7,height:7,borderRadius:1,background:catColor(cat),flexShrink:0}}/>
                               <span style={{flex:1,fontSize:12,color:T.text}}>{cat}</span>
                               <span style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{cnt}</span>
                             </button>
@@ -6040,7 +6007,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
               <div style={{padding:"5px 10px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:4,flexShrink:0,flexWrap:"wrap",background:T.bgElevated}}>
                 <span style={{fontSize:10.5,color:T.textMuted,flexShrink:0}}>{filteredPols.length} result{filteredPols.length!==1?"s":""}:</span>
                 {catFilter.map(cat=>(
-                  <span key={cat} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10.5,padding:"1px 6px",borderRadius:99,background:`${CAT_COLORS[cat]||T.blue}15`,color:CAT_COLORS[cat]||T.blue,border:`1px solid ${CAT_COLORS[cat]||T.blue}30`,fontWeight:600}}>
+                  <span key={cat} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10.5,padding:"1px 6px",borderRadius:99,background:`${catColor(cat)}15`,color:catColor(cat),border:`1px solid ${catColor(cat)}30`,fontWeight:600}}>
                     {cat}<button onClick={()=>setCatFilter(p=>p.filter(c=>c!==cat))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,fontSize:11,lineHeight:1}}>×</button>
                   </span>
                 ))}
@@ -6069,50 +6036,97 @@ const PolicyManagerView = ({onToast, onNav}) => {
               {POLICY_CATS.map(cat=>{
                 const catPols = filteredPols.filter(p=>p.category===cat);
                 if (!catPols.length) return null;
+                const isCatHov = hovCatId===cat;
                 return (
                   <div key={cat}>
-                    {/* Category row */}
-                    <div style={{display:"flex",alignItems:"center",padding:"7px 8px 4px 10px",fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>
-                      <div style={{width:6,height:6,borderRadius:1,background:CAT_COLORS[cat]||T.blue,marginRight:6,flexShrink:0}}/>
-                      {cat}
-                      <span style={{marginLeft:"auto",fontWeight:400,fontSize:10,fontFamily:"'Geist Mono',monospace"}}>{catPols.length}</span>
+                    {/* Category row with 3-dot menu */}
+                    <div
+                      onMouseEnter={()=>setHovCatId(cat)} onMouseLeave={()=>setHovCatId(null)}
+                      style={{display:"flex",alignItems:"center",padding:"7px 6px 4px 10px",fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",position:"relative",gap:4}}>
+                      <div style={{width:6,height:6,borderRadius:1,background:catColor(cat),marginRight:4,flexShrink:0}}/>
+                      {catEditId===cat
+                        ? <input autoFocus value={catEditName} onChange={e=>setCatEditName(e.target.value)}
+                            onKeyDown={e=>{
+                              if(e.key==="Enter"&&catEditName.trim()){
+                                setPolicyCategories(prev=>prev.map(c=>c.name===cat?{...c,name:catEditName.trim()}:c));
+                                setPolicies(prev=>prev.map(p=>p.category===cat?{...p,category:catEditName.trim()}:p));
+                                setCatEditId(null);
+                              }
+                              if(e.key==="Escape") setCatEditId(null);
+                            }}
+                            onBlur={()=>setCatEditId(null)}
+                            style={{fontSize:10,fontWeight:700,background:T.bgElevated,border:`1px solid ${T.accent}`,borderRadius:4,color:T.text,padding:"1px 6px",outline:"none",width:100,textTransform:"none"}}/>
+                        : <span style={{flex:1}}>{cat}</span>
+                      }
+                      <span style={{fontWeight:400,fontSize:10,fontFamily:"'Geist Mono',monospace"}}>{catPols.length}</span>
+                      <div style={{position:"relative",flexShrink:0}} ref={dotMenuOpen===`cat:${cat}`?dotMenuRef:null}>
+                        <button onClick={e=>{e.stopPropagation();setDotMenuOpen(dotMenuOpen===`cat:${cat}`?null:`cat:${cat}`);}}
+                          style={{width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:4,background:"transparent",border:"none",cursor:"pointer",color:T.textMuted,opacity:isCatHov||dotMenuOpen===`cat:${cat}`?1:0,transition:"opacity .1s",flexShrink:0}}>
+                          <svg width="3" height="11" viewBox="0 0 3 11" fill="currentColor"><circle cx="1.5" cy="1.5" r="1.5"/><circle cx="1.5" cy="5.5" r="1.5"/><circle cx="1.5" cy="9.5" r="1.5"/></svg>
+                        </button>
+                        {dotMenuOpen===`cat:${cat}`&&(
+                          <div style={{position:"absolute",right:0,top:"100%",zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 4px 20px rgba(0,0,0,.18)",minWidth:148,overflow:"hidden"}}>
+                            <button onMouseDown={e=>{e.stopPropagation();setCreateOpen(true);setNewPol({...EMPTY_POL,category:cat});setDotMenuOpen(null);}}
+                              style={{width:"100%",padding:"8px 14px",background:"transparent",border:"none",cursor:"pointer",fontSize:12,color:T.text,textAlign:"left",display:"flex",alignItems:"center",gap:8}}
+                              onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                              {Ic.plus(11)} Add policy
+                            </button>
+                            <button onMouseDown={e=>{e.stopPropagation();setCatEditId(cat);setCatEditName(cat);setDotMenuOpen(null);}}
+                              style={{width:"100%",padding:"8px 14px",background:"transparent",border:"none",cursor:"pointer",fontSize:12,color:T.text,textAlign:"left",display:"flex",alignItems:"center",gap:8}}
+                              onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                              {Ic.edit(11)} Rename
+                            </button>
+                            <div style={{borderTop:`1px solid ${T.border}`}}/>
+                            <button onMouseDown={e=>{e.stopPropagation();if(catPols.length===0){setPolicyCategories(p=>p.filter(c=>c.name!==cat));}else{onToast(`Move or delete the ${catPols.length} policies first`,"error");}setDotMenuOpen(null);}}
+                              style={{width:"100%",padding:"8px 14px",background:"transparent",border:"none",cursor:"pointer",fontSize:12,color:T.rose,textAlign:"left",display:"flex",alignItems:"center",gap:8}}
+                              onMouseEnter={e=>e.currentTarget.style.background=`${T.rose}0d`} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                              <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 5l.5 5M8 5l-.5 5M3 3l.5 7h5L9 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg> Delete
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
+
                     {catPols.map(p=>{
                       const isSel = selPolicyId===p.id;
                       const isHov = hovPolId===p.id;
                       const viols = getFlagged(p).length;
                       return (
                         <div key={p.id}
-                          onClick={()=>{setSelPolicyId(isSel?null:p.id);setPdTab("overview");}}
+                          onClick={()=>{setSelPolicyId(isSel?null:p.id);setPdTab("overview");setEditing(false);}}
                           onMouseEnter={()=>setHovPolId(p.id)}
                           onMouseLeave={()=>setHovPolId(null)}
-                          style={{display:"flex",alignItems:"center",paddingRight:6,
-                            background:isSel?`${lcColor(p.lifecycle)}10`:isHov?T.bgHover:"transparent",
-                            borderLeft:`2.5px solid ${isSel?lcColor(p.lifecycle):"transparent"}`,
-                            cursor:"pointer",transition:"all .1s"}}>
+                          style={{display:"flex",alignItems:"center",paddingRight:4,
+                            background:isSel?`${catColor(p.category)}10`:isHov?T.bgHover:"transparent",
+                            borderLeft:`2.5px solid ${isSel?catColor(p.category):"transparent"}`,
+                            cursor:"pointer",transition:"all .1s",position:"relative"}}>
                           <div style={{flex:1,padding:"8px 6px 8px 8px",minWidth:0}}>
-                            <div style={{fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,lineHeight:1.35,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                            <div style={{fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,lineHeight:1.35,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                               {p.name}
                             </div>
-                            <div style={{display:"flex",gap:4,alignItems:"center"}}>
-                              <span style={{fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:99,border:`1px solid ${lcColor(p.lifecycle)}44`,color:lcColor(p.lifecycle),background:`${lcColor(p.lifecycle)}10`}}>{p.lifecycle}</span>
-                              {viols>0&&<span style={{fontSize:9.5,color:T.rose,fontWeight:600}}>● {viols}</span>}
-                            </div>
+                            {viols>0&&<div style={{fontSize:9.5,color:T.amber,fontWeight:600,marginTop:2}}>● {viols} flagged</div>}
                           </div>
-                          {/* Hover action buttons */}
-                          <div style={{display:"flex",gap:2,flexShrink:0,opacity:isHov||isSel?1:0,transition:"opacity .12s"}}>
-                            <button title="Edit" onClick={e=>{e.stopPropagation();setEditDraft({...p});setEditOpen(true);}}
-                              style={{width:24,height:24,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",transition:"all .1s"}}
-                              onMouseEnter={e=>{e.stopPropagation();e.currentTarget.style.background=T.bgElevated;e.currentTarget.style.color=T.blue;e.currentTarget.style.borderColor=T.blue;}}
-                              onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>
-                              {Ic.edit(10)}
+                          {/* 3-dot menu */}
+                          <div style={{position:"relative",flexShrink:0}} ref={dotMenuOpen===p.id?dotMenuRef:null}>
+                            <button onClick={e=>{e.stopPropagation();setDotMenuOpen(dotMenuOpen===p.id?null:p.id);}}
+                              style={{width:22,height:22,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:5,background:"transparent",border:"none",cursor:"pointer",color:T.textMuted,opacity:isHov||isSel||dotMenuOpen===p.id?1:0,transition:"opacity .12s"}}>
+                              <svg width="3" height="11" viewBox="0 0 3 11" fill="currentColor"><circle cx="1.5" cy="1.5" r="1.5"/><circle cx="1.5" cy="5.5" r="1.5"/><circle cx="1.5" cy="9.5" r="1.5"/></svg>
                             </button>
-                            <button title="Delete" onClick={e=>{e.stopPropagation();setDeleteConfPol(p);}}
-                              style={{width:24,height:24,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",transition:"all .1s"}}
-                              onMouseEnter={e=>{e.stopPropagation();e.currentTarget.style.background=`${T.rose}10`;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
-                              onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>
-                              <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 5l.5 5M8 5l-.5 5M3 3l.5 7h5L9 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                            </button>
+                            {dotMenuOpen===p.id&&(
+                              <div style={{position:"absolute",right:0,top:"100%",zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 4px 20px rgba(0,0,0,.18)",minWidth:120,overflow:"hidden"}}>
+                                <button onMouseDown={e=>{e.stopPropagation();setSelPolicyId(p.id);setEditing(true);setDescDraft(p.description||"");setPdTab("overview");setDotMenuOpen(null);}}
+                                  style={{width:"100%",padding:"8px 14px",background:"transparent",border:"none",cursor:"pointer",fontSize:12,color:T.text,textAlign:"left",display:"flex",alignItems:"center",gap:8}}
+                                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                                  {Ic.edit(11)} Edit
+                                </button>
+                                <div style={{borderTop:`1px solid ${T.border}`}}/>
+                                <button onMouseDown={e=>{e.stopPropagation();setDeleteConfPol(p);setDotMenuOpen(null);}}
+                                  style={{width:"100%",padding:"8px 14px",background:"transparent",border:"none",cursor:"pointer",fontSize:12,color:T.rose,textAlign:"left",display:"flex",alignItems:"center",gap:8}}
+                                  onMouseEnter={e=>e.currentTarget.style.background=`${T.rose}0d`} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 5l.5 5M8 5l-.5 5M3 3l.5 7h5L9 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg> Delete
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
@@ -6145,25 +6159,33 @@ const PolicyManagerView = ({onToast, onNav}) => {
                 <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
                   {/* Header */}
                   <div style={{padding:"16px 22px 14px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16,marginBottom:14}}>
+                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16}}>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:17,fontWeight:700,color:T.text,lineHeight:1.3,marginBottom:4}}>{p.name}</div>
                         <div style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{p.fqn||"—"}</div>
                       </div>
-                      <div style={{display:"flex",alignItems:"center",gap:7,flexShrink:0}}>
-                        <span style={{fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:99,background:`${lcColor(p.lifecycle)}18`,color:lcColor(p.lifecycle),border:`1.5px solid ${lcColor(p.lifecycle)}40`}}>
-                          {p.lifecycle}
-                        </span>
+                      <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
                         <span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>v{p.version||1}</span>
-                        <button onClick={()=>setSelPolicyId(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:4,lineHeight:1}}>{Ic.x(13)}</button>
+                        {!editing
+                          ? <button onClick={()=>{setEditing(true);setDescDraft(p.description||"");}}
+                              style={{padding:"5px 12px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",display:"flex",alignItems:"center",gap:5,transition:"all .1s"}}
+                              onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                              onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+                              {Ic.edit(11)} Edit
+                            </button>
+                          : <>
+                              <button onClick={saveInlineEdit}
+                                style={{padding:"5px 12px",borderRadius:7,background:T.accent,border:`1px solid ${T.accent}`,color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+                                {flashSaved?"Saved ✓":"Save"}
+                              </button>
+                              <button onClick={cancelInlineEdit}
+                                style={{padding:"5px 10px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer"}}>
+                                Cancel
+                              </button>
+                            </>
+                        }
+                        <button onClick={()=>{setSelPolicyId(null);setEditing(false);}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:4,lineHeight:1}}>{Ic.x(13)}</button>
                       </div>
-                    </div>
-                    {/* Lifecycle action buttons */}
-                    <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-                      {renderLifecycleButtons(p)}
-                      <button onClick={()=>{setEditDraft({...p});setEditOpen(true);}} style={{padding:"6px 12px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-                        {Ic.edit(11)} Edit
-                      </button>
                     </div>
                   </div>
 
@@ -6191,9 +6213,9 @@ const PolicyManagerView = ({onToast, onNav}) => {
                   <div style={{flex:1,overflowY:"auto",minHeight:0}}>
                     {/* ── Overview ── */}
                     {pdTab==="overview"&&(()=>{
-                      const metaRow=(label,children)=>(
+                      const metaRow=(label,children,onEdit)=>(
                         <div style={{paddingBottom:14,marginBottom:14,borderBottom:`1px solid ${T.border}`}}>
-                          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>{label}</div>
+                          <SideLabel label={label} onEdit={onEdit}/>
                           {children}
                         </div>
                       );
@@ -6209,23 +6231,29 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       <div style={{display:"grid",gridTemplateColumns:"1fr 256px",minHeight:"100%"}}>
                         {/* Main content */}
                         <div style={{padding:"20px 22px",borderRight:`1px solid ${T.border}`,overflowY:"auto"}}>
-                          <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Description</div>
-                          <div style={{fontSize:13,lineHeight:1.8,color:T.textSub,padding:"12px 14px",background:T.bgElevated,borderRadius:8,marginBottom:24}}>{p.description||<span style={{color:T.textMuted,fontStyle:"italic"}}>No description yet.</span>}</div>
+                          <SideLabel label="Description" onEdit={()=>{setEditing(true);setDescDraft(p.description||"");}}/>
+                          {editing
+                            ? <textarea value={descDraft} onChange={e=>setDescDraft(e.target.value)} rows={5}
+                                autoFocus
+                                style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,lineHeight:1.8,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box",marginBottom:16}}/>
+                            : <div style={{fontSize:13,lineHeight:1.8,color:T.textSub,padding:"10px 12px",background:T.bgElevated,borderRadius:8,marginBottom:20,minHeight:60}}>
+                                {p.description||<span style={{color:T.textMuted,fontStyle:"italic"}}>No description — click edit to add one.</span>}
+                              </div>
+                          }
 
                           {/* Policy Criteria */}
-                          {(p.criteria||[]).length>0&&(
-                            <div style={{marginBottom:24}}>
-                              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Policy Criteria</div>
-                              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                          <SideLabel label="Policy Criteria" onEdit={()=>setPolEditModal("criteria")}/>
+                          {(p.criteria||[]).length>0
+                            ? <div style={{display:"flex",flexDirection:"column",gap:5,marginBottom:20}}>
                                 {(p.criteria||[]).map((c,i)=>(
-                                  <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+                                  <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"9px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
                                     <div style={{width:5,height:5,borderRadius:"50%",background:T.accent,flexShrink:0,marginTop:6}}/>
                                     <span style={{fontSize:12.5,color:T.textSub,lineHeight:1.7}}>{c}</span>
                                   </div>
                                 ))}
                               </div>
-                            </div>
-                          )}
+                            : <div style={{fontSize:12,color:T.textMuted,fontStyle:"italic",marginBottom:20}}>No criteria defined — click the pencil to add.</div>
+                          }
 
                           {/* Flagged assets notice */}
                           {selFlagged.length>0&&(
@@ -6239,55 +6267,64 @@ const PolicyManagerView = ({onToast, onNav}) => {
                           )}
                         </div>
 
-                        {/* Right metadata sidebar — Tags/Glossary style */}
+                        {/* Right metadata sidebar — Tags/Glossary SideLabel style */}
                         <div style={{padding:"20px 16px",background:T.bgSurface,overflowY:"auto"}}>
                           {metaRow("Owner",
                             p.owner
                               ? userChip(p.owner)
-                              : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owner</span>
+                              : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owner</span>,
+                            ()=>setPolEditModal("owner")
                           )}
                           {metaRow("Stewards",
                             (p.stewards||[]).length>0
                               ? <div style={{display:"flex",flexWrap:"wrap",gap:5}}>{(p.stewards||[]).map(u=>userChip(u))}</div>
-                              : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards assigned</span>
+                              : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards</span>,
+                            ()=>setPolEditModal("stewards")
                           )}
                           {metaRow("Category",
-                            <span style={{fontSize:11,fontWeight:700,padding:"2px 9px",borderRadius:4,background:`${CAT_COLORS[p.category]||T.blue}18`,color:CAT_COLORS[p.category]||T.blue}}>{p.category}</span>
-                          )}
-                          {metaRow("Severity",
-                            <span style={{fontSize:11,fontWeight:700,padding:"2px 9px",borderRadius:4,background:`${SEV_COLORS[p.severity]}18`,color:SEV_COLORS[p.severity]}}>{p.severity}</span>
+                            <span style={{fontSize:11,fontWeight:700,padding:"2px 9px",borderRadius:4,background:`${catColor(p.category)}18`,color:catColor(p.category)}}>{p.category}</span>,
+                            ()=>setPolEditModal("category")
                           )}
                           {metaRow("Created", <span style={{fontSize:12,color:T.text}}>{p.created}</span>)}
                           {metaRow("Updated", <span style={{fontSize:12,color:T.text}}>{p.updated}</span>)}
                           {metaRow("Version",  <span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text}}>v{p.version||1}</span>)}
 
-                          {(p.scope?.domains||[]).length>0&&metaRow("Domains",
-                            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                              {p.scope.domains.map(d=>(
-                                <button key={d} onClick={()=>{onNav&&onNav("domains");onToast(`Navigating to ${d} domain`,"info");}}
-                                  style={{fontSize:11,padding:"2px 8px",borderRadius:4,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`,cursor:"pointer",transition:"all .1s"}}
-                                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
-                                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
-                                  {d}
-                                </button>
-                              ))}
-                            </div>
+                          {metaRow("Domains",
+                            (p.scope?.domains||[]).length>0
+                              ? <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                                  {p.scope.domains.map(d=>(
+                                    <button key={d} onClick={()=>{onNav&&onNav("domains");onToast(`Navigating to ${d} domain`,"info");}}
+                                      style={{fontSize:11,padding:"2px 8px",borderRadius:4,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`,cursor:"pointer",transition:"all .1s"}}
+                                      onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                                      onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+                                      {d}
+                                    </button>
+                                  ))}
+                                </div>
+                              : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No domains</span>,
+                            ()=>setPolEditModal("domains")
                           )}
 
-                          {(p.tags||[]).length>0&&metaRow("Tags",
-                            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                              {(p.tags||[]).map(t=>(
-                                <span key={t} style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:`${T.accent}12`,color:T.accent,border:`1px solid ${T.accent}25`}}>{t}</span>
-                              ))}
-                            </div>
+                          {metaRow("Tags",
+                            (p.tags||[]).length>0
+                              ? <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                                  {(p.tags||[]).map(t=>(
+                                    <span key={t} style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:`${T.accent}12`,color:T.accent,border:`1px solid ${T.accent}25`}}>{t}</span>
+                                  ))}
+                                </div>
+                              : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags</span>,
+                            ()=>setPolEditModal("tags")
                           )}
 
-                          {(p.regulations||[]).length>0&&metaRow("Frameworks",
-                            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                              {p.regulations.map(r=>(
-                                <span key={r} style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:T.blueDim,color:T.blue,border:`1px solid ${T.blue}25`}}>{r}</span>
-                              ))}
-                            </div>
+                          {metaRow("Frameworks",
+                            (p.regulations||[]).length>0
+                              ? <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                                  {p.regulations.map(r=>(
+                                    <span key={r} style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:T.blueDim,color:T.blue,border:`1px solid ${T.blue}25`}}>{r}</span>
+                                  ))}
+                                </div>
+                              : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No frameworks</span>,
+                            ()=>setPolEditModal("frameworks")
                           )}
 
                           {linkedTerms.length>0&&metaRow("Glossary Terms",
@@ -6505,14 +6542,122 @@ const PolicyManagerView = ({onToast, onNav}) => {
         </RightPanel>
       )}
 
-      {/* Edit Policy — right-side panel */}
-      {editOpen&&editDraft&&(
-        <RightPanel title="Edit Policy" sub={editDraft.name}
-          onClose={()=>{setEditOpen(false);setEditDraft(null);}}
-          onSave={handleSaveEdit} saveLabel="Save changes">
-          <PolicyFormBody isEdit={true}/>
-        </RightPanel>
-      )}
+      {/* Field-level edit modals (Tags/Glossary-style) */}
+      {polEditModal&&selPol&&(()=>{
+        const close=()=>{setPolEditModal(null);setPolModalSearch("");};
+        const ms={padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",width:"100%",boxSizing:"border-box"};
+        const tBtn=(sel,extra)=>({padding:"5px 11px",borderRadius:6,border:`1.5px solid ${sel?T.blue:T.border}`,background:sel?T.blueDim:T.bgElevated,color:sel?T.blue:T.textSub,fontSize:11.5,fontWeight:sel?600:400,cursor:"pointer",transition:"all .1s",...extra});
+        const mHead=(title)=><div style={{padding:"18px 24px 14px",borderBottom:`1px solid ${T.border}`}}><div style={{fontSize:14,fontWeight:700,color:T.text}}>{title}</div></div>;
+        const mFoot=(onSave)=><div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",gap:10,justifyContent:"flex-end"}}><Btn ghost onClick={close}>Cancel</Btn><Btn onClick={onSave}>Save</Btn></div>;
+
+        if(polEditModal==="owner") return (
+          <CenteredModal onClose={close}>
+            {mHead("Edit Owner")}
+            <div style={{padding:"20px 24px",display:"flex",flexDirection:"column",gap:12}}>
+              <select value={polDraftOwner} onChange={e=>setPolDraftOwner(e.target.value)} style={ms}>
+                <option value="">— No owner —</option>
+                {PMV_USERS.map(u=><option key={u}>{u}</option>)}
+              </select>
+            </div>
+            {mFoot(()=>{applyPolField("owner",polDraftOwner,"Updated owner");close();})}
+          </CenteredModal>
+        );
+
+        if(polEditModal==="stewards") return (
+          <CenteredModal onClose={close}>
+            {mHead("Edit Stewards")}
+            <div style={{padding:"20px 24px",display:"flex",flexDirection:"column",gap:12}}>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {PMV_USERS.map(u=>{const sel=polDraftStewards.includes(u);return <button key={u} onClick={()=>setPolDraftStewards(prev=>sel?prev.filter(x=>x!==u):[...prev,u])} style={tBtn(sel)}>{u}</button>;})}
+              </div>
+              {polDraftStewards.length>0&&<div style={{fontSize:11,color:T.textMuted}}>Selected: {polDraftStewards.join(", ")}</div>}
+            </div>
+            {mFoot(()=>{applyPolField("stewards",polDraftStewards,"Updated stewards");close();})}
+          </CenteredModal>
+        );
+
+        if(polEditModal==="category") return (
+          <CenteredModal onClose={close}>
+            {mHead("Edit Category")}
+            <div style={{padding:"20px 24px",display:"flex",flexDirection:"column",gap:12}}>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {POLICY_CATS.map(c=>{const sel=polDraftCategory===c;return <button key={c} onClick={()=>setPolDraftCategory(c)} style={tBtn(sel,{borderColor:sel?catColor(c):T.border,background:sel?`${catColor(c)}18`:"transparent",color:sel?catColor(c):T.textSub})}>{c}</button>;})}
+              </div>
+            </div>
+            {mFoot(()=>{applyPolField("category",polDraftCategory,"Updated category");close();})}
+          </CenteredModal>
+        );
+
+        if(polEditModal==="domains"){
+          const filtered=ALL_DOMAINS.filter(d=>d.toLowerCase().includes(polModalSearch.toLowerCase()));
+          return (
+            <CenteredModal onClose={close}>
+              {mHead("Edit Scope Domains")}
+              <div style={{padding:"20px 24px",display:"flex",flexDirection:"column",gap:12}}>
+                <input value={polModalSearch} onChange={e=>setPolModalSearch(e.target.value)} placeholder="Search domains…" style={ms}/>
+                <div style={{display:"flex",flexWrap:"wrap",gap:6,maxHeight:200,overflowY:"auto"}}>
+                  {filtered.map(d=>{const sel=polDraftDomains.includes(d);return <button key={d} onClick={()=>setPolDraftDomains(prev=>sel?prev.filter(x=>x!==d):[...prev,d])} style={tBtn(sel)}>{d}</button>;})}
+                </div>
+                {polDraftDomains.length>0&&<div style={{fontSize:11,color:T.textMuted}}>Selected: {polDraftDomains.join(", ")}</div>}
+              </div>
+              {mFoot(()=>{applyPolDomains(polDraftDomains);close();})}
+            </CenteredModal>
+          );
+        }
+
+        if(polEditModal==="tags") return (
+          <CenteredModal onClose={close}>
+            {mHead("Edit Tags")}
+            <div style={{padding:"20px 24px",display:"flex",flexDirection:"column",gap:12}}>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {POLICY_TAGS.map(t=>{const sel=polDraftTags.includes(t);return <button key={t} onClick={()=>setPolDraftTags(prev=>sel?prev.filter(x=>x!==t):[...prev,t])} style={tBtn(sel)}>{t}</button>;})}
+              </div>
+              {polDraftTags.length>0&&<div style={{fontSize:11,color:T.textMuted}}>Selected: {polDraftTags.join(", ")}</div>}
+            </div>
+            {mFoot(()=>{applyPolField("tags",polDraftTags,"Updated tags");close();})}
+          </CenteredModal>
+        );
+
+        if(polEditModal==="frameworks") return (
+          <CenteredModal onClose={close}>
+            {mHead("Edit Frameworks & Regulations")}
+            <div style={{padding:"20px 24px",display:"flex",flexDirection:"column",gap:12}}>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {["GDPR","CCPA","HIPAA","SOC2","PCI DSS","ISO 27001","NIST","LGPD","PDPA","FERPA"].map(f=>{const sel=polDraftFrameworks.includes(f);return <button key={f} onClick={()=>setPolDraftFrameworks(prev=>sel?prev.filter(x=>x!==f):[...prev,f])} style={tBtn(sel)}>{f}</button>;})}
+              </div>
+              {polDraftFrameworks.length>0&&<div style={{fontSize:11,color:T.textMuted}}>Selected: {polDraftFrameworks.join(", ")}</div>}
+            </div>
+            {mFoot(()=>{applyPolField("regulations",polDraftFrameworks,"Updated frameworks");close();})}
+          </CenteredModal>
+        );
+
+        if(polEditModal==="criteria"){
+          const addCriterion=()=>{const v=polDraftNewCriterion.trim();if(v){setPolDraftCriteria(prev=>[...prev,v]);setPolDraftNewCriterion("");}};
+          return (
+            <CenteredModal onClose={close}>
+              {mHead("Edit Policy Criteria")}
+              <div style={{padding:"20px 24px",display:"flex",flexDirection:"column",gap:12,overflowY:"auto",maxHeight:"60vh"}}>
+                <div style={{display:"flex",gap:8}}>
+                  <input value={polDraftNewCriterion} onChange={e=>setPolDraftNewCriterion(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")addCriterion();}} placeholder="Add criterion…" style={{...ms,flex:1}}/>
+                  <button onClick={addCriterion} style={{padding:"8px 14px",background:T.blue,color:"#fff",border:"none",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer"}}>Add</button>
+                </div>
+                {polDraftCriteria.length===0&&<div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No criteria defined yet.</div>}
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {polDraftCriteria.map((c,i)=>(
+                    <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`}}>
+                      <span style={{flex:1,fontSize:12,color:T.text}}>{c}</span>
+                      <button onClick={()=>setPolDraftCriteria(prev=>prev.filter((_,idx)=>idx!==i))} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:14,lineHeight:1,padding:"0 2px"}} title="Remove">×</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {mFoot(()=>{applyPolField("criteria",polDraftCriteria,"Updated criteria");close();})}
+            </CenteredModal>
+          );
+        }
+
+        return null;
+      })()}
 
       {/* Link Catalog Assets — right-side panel with search */}
       {linkAssetOpen&&selPol&&(
