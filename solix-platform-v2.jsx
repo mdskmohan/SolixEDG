@@ -14319,7 +14319,7 @@ const ConnectorCard = ({c, status, statusColor, statusBg, onConfigure}) => (
 // ─────────────────────────────────────────────
 const ProfileView = ({onToast}) => {
   const {role, roleCfg, onSwitch} = useRole();
-  const cfg = roleCfg || {label:"User",name:"User",avatar:"U",color:T.accent,badge:T.accentDim,email:""};
+  const cfg = roleCfg || {label:"User",name:"User",avatar:"U",color:T.accent,badge:T.accentDim,email:"",desc:""};
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     name: cfg.name || "Maya Chen",
@@ -14328,13 +14328,17 @@ const ProfileView = ({onToast}) => {
     department: "Data Governance",
     location: "New Jersey, US",
     bio: "Data Steward for the Commerce and Finance domains. Responsible for data quality, lineage, and certification workflows.",
-    timezone: "America/New_York",
-    language: "English",
   });
   const [tab, setTab] = useState("profile");
 
-  const myTasks = STEWARDSHIP_TASKS.filter(t=>t.assigned===cfg.email?.split("@")[0].replace(".",".")||t.assigned==="maya.chen");
+  const myTasks  = STEWARDSHIP_TASKS.filter(t=>t.assigned===cfg.email?.split("@")[0]||t.assigned==="maya.chen");
   const myAssets = ASSETS.filter(a=>a.owner===cfg.email?.split("@")[0]||a.owner==="maya.chen");
+  const openTasks = myTasks.filter(t=>t.status==="Open"||t.status==="In Progress");
+  const governedDomains = [...new Set(myAssets.map(a=>a.domain).filter(Boolean))];
+  const moduleCount = (roleCfg?.nav||[]).length;
+
+  const inpSt = {width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box"};
+  const secHdr = {fontSize:11,fontWeight:700,color:T.textSub,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:14};
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
@@ -14347,23 +14351,33 @@ const ProfileView = ({onToast}) => {
           : <Btn ghost icon={Ic.edit(12)} onClick={()=>setEditing(true)}>Edit Profile</Btn>
       }/>
       <div style={{flex:1,overflowY:"auto",padding:28}}>
-        {/* Profile header */}
-        <div style={{display:"flex",alignItems:"flex-start",gap:20,marginBottom:28,padding:"24px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14}}>
-          <div style={{width:72,height:72,borderRadius:16,background:`linear-gradient(135deg,${cfg.badge},${cfg.color}33)`,border:`2px solid ${cfg.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,fontWeight:700,color:cfg.color,flexShrink:0}}>{cfg.avatar}</div>
-          <div style={{flex:1}}>
-            {editing ? (
-              <input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} style={{fontSize:22,fontWeight:700,color:T.text,background:"transparent",border:"none",borderBottom:`2px solid ${T.accent}`,outline:"none",width:"100%",marginBottom:8,paddingBottom:4}}/>
-            ) : (
-              <div style={{fontSize:22,fontWeight:700,color:T.text,marginBottom:4}}>{form.name}</div>
-            )}
-            <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+
+        {/* ── Profile header card ── */}
+        <div style={{display:"flex",alignItems:"flex-start",gap:20,marginBottom:24,padding:"22px 24px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14}}>
+          <div style={{width:68,height:68,borderRadius:16,background:`linear-gradient(135deg,${cfg.badge},${cfg.color}33)`,border:`2px solid ${cfg.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:700,color:cfg.color,flexShrink:0}}>{cfg.avatar}</div>
+          <div style={{flex:1,minWidth:0}}>
+            {editing
+              ? <input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} style={{fontSize:20,fontWeight:700,color:T.text,background:"transparent",border:"none",borderBottom:`2px solid ${T.accent}`,outline:"none",width:"100%",marginBottom:8,paddingBottom:4}}/>
+              : <div style={{fontSize:20,fontWeight:700,color:T.text,marginBottom:4}}>{form.name}</div>
+            }
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:4}}>
               <span style={{fontSize:13,color:T.textMuted}}>{form.title} · {form.department}</span>
-              <span style={{fontSize:11,fontWeight:700,padding:"2px 9px",borderRadius:99,background:cfg.badge,color:cfg.color,border:`1px solid ${cfg.color}33`}}>{cfg.label}</span>
+              <span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:99,background:cfg.badge,color:cfg.color,border:`1px solid ${cfg.color}33`}}>{cfg.label}</span>
             </div>
-            <div style={{fontSize:12,color:T.textMuted,marginTop:6}}>{form.email} · {form.location}</div>
+            <div style={{fontSize:12,color:T.textMuted}}>{form.email}</div>
           </div>
-          <div style={{display:"flex",flexDirection:"column",gap:8,alignItems:"flex-end"}}>
-            <Metric label="Assets Owned" value={String(myAssets.length)} color={T.accent}/>
+          {/* Stats */}
+          <div style={{display:"flex",gap:0,borderLeft:`1px solid ${T.border}`,paddingLeft:24,flexShrink:0}}>
+            {[
+              {label:"Assets Owned", value:String(myAssets.length), color:T.accent},
+              {label:"Open Tasks",   value:String(openTasks.length),  color:openTasks.length>0?T.amber:T.green},
+              {label:"Modules",      value:String(moduleCount||12),   color:T.blue},
+            ].map((s,i)=>(
+              <div key={i} style={{textAlign:"center",padding:"0 20px",borderRight:i<2?`1px solid ${T.border}`:"none"}}>
+                <div style={{fontSize:24,fontWeight:700,color:s.color,lineHeight:1}}>{s.value}</div>
+                <div style={{fontSize:10.5,color:T.textMuted,marginTop:4,whiteSpace:"nowrap"}}>{s.label}</div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -14371,62 +14385,91 @@ const ProfileView = ({onToast}) => {
 
         {tab==="profile"&&(
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
-            <Card2><div style={{padding:18}}>
-              <div style={{fontSize:12,fontWeight:700,color:T.textSub,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:14}}>Personal Information</div>
-              {[
-                {l:"Full Name",   k:"name",       type:"text"},
-                {l:"Email",       k:"email",       type:"email"},
-                {l:"Job Title",   k:"title",       type:"text"},
-                {l:"Department",  k:"department",  type:"text"},
-                {l:"Location",    k:"location",    type:"text"},
-              ].map(f=>(
-                <div key={f.k} style={{marginBottom:14}}>
-                  <div style={{fontSize:11,color:T.textMuted,marginBottom:5}}>{f.l}</div>
-                  {editing ? (
-                    <input value={form[f.k]} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))} type={f.type}
-                      style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box"}}
-                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                  ) : (
-                    <div style={{fontSize:13,color:T.text,padding:"8px 0",borderBottom:`1px solid ${T.border}`}}>{form[f.k]}</div>
-                  )}
-                </div>
-              ))}
-            </div></Card2>
-
+            {/* LEFT: Personal Info + Bio */}
             <div style={{display:"flex",flexDirection:"column",gap:16}}>
               <Card2><div style={{padding:18}}>
-                <div style={{fontSize:12,fontWeight:700,color:T.textSub,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:14}}>Bio</div>
-                {editing ? (
-                  <textarea value={form.bio} onChange={e=>setForm(p=>({...p,bio:e.target.value}))} rows={4}
-                    style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12.5,outline:"none",resize:"none",fontFamily:"inherit",lineHeight:1.6,boxSizing:"border-box"}}
-                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                ) : (
-                  <div style={{fontSize:13,color:T.textSub,lineHeight:1.65}}>{form.bio}</div>
-                )}
-              </div></Card2>
-
-              <Card2><div style={{padding:18}}>
-                <div style={{fontSize:12,fontWeight:700,color:T.textSub,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:14}}>Preferences</div>
-                {[{l:"Timezone",k:"timezone",opts:["America/New_York","America/Chicago","America/Los_Angeles","Europe/London","Asia/Tokyo"]},{l:"Language",k:"language",opts:["English","Spanish","French","German","Japanese"]}].map(f=>(
-                  <div key={f.k} style={{marginBottom:12}}>
+                <div style={secHdr}>Personal Information</div>
+                {[
+                  {l:"Full Name",  k:"name",       type:"text"},
+                  {l:"Email",      k:"email",       type:"email"},
+                  {l:"Job Title",  k:"title",       type:"text"},
+                  {l:"Department", k:"department",  type:"text"},
+                  {l:"Location",   k:"location",    type:"text"},
+                ].map(f=>(
+                  <div key={f.k} style={{marginBottom:14}}>
                     <div style={{fontSize:11,color:T.textMuted,marginBottom:5}}>{f.l}</div>
-                    <select value={form[f.k]} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))} disabled={!editing}
-                      style={{width:"100%",padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",opacity:editing?1:.7}}>
-                      {f.opts.map(o=><option key={o}>{o}</option>)}
-                    </select>
+                    {editing
+                      ? <input value={form[f.k]} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))} type={f.type}
+                          style={inpSt}
+                          onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                      : <div style={{fontSize:13,color:T.text,padding:"8px 0",borderBottom:`1px solid ${T.border}`}}>{form[f.k]}</div>
+                    }
                   </div>
                 ))}
               </div></Card2>
 
               <Card2><div style={{padding:18}}>
-                <div style={{fontSize:12,fontWeight:700,color:T.textSub,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:14}}>Demo — Switch Role</div>
-                <div style={{fontSize:12,color:T.textMuted,marginBottom:10}}>Switch your view to see how different roles experience Solix.</div>
+                <div style={secHdr}>Bio</div>
+                {editing
+                  ? <textarea value={form.bio} onChange={e=>setForm(p=>({...p,bio:e.target.value}))} rows={4}
+                      style={{...inpSt,resize:"none",fontFamily:"inherit",lineHeight:1.6}}
+                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                  : <div style={{fontSize:13,color:T.textSub,lineHeight:1.65}}>{form.bio}</div>
+                }
+              </div></Card2>
+            </div>
+
+            {/* RIGHT: Current Role + Switch Role */}
+            <div style={{display:"flex",flexDirection:"column",gap:16}}>
+              {/* Current Role card */}
+              <Card2><div style={{padding:18}}>
+                <div style={secHdr}>Current Role</div>
+                <div style={{display:"flex",alignItems:"flex-start",gap:12,padding:"14px",background:cfg.badge,border:`1px solid ${cfg.color}33`,borderRadius:10,marginBottom:14}}>
+                  <div style={{width:36,height:36,borderRadius:9,background:T.bgSurface,border:`1px solid ${cfg.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:cfg.color,flexShrink:0}}>{cfg.avatar}</div>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:700,color:cfg.color,marginBottom:3}}>{cfg.label}</div>
+                    <div style={{fontSize:12,color:T.textSub,lineHeight:1.55}}>{roleCfg?.desc||cfg.desc}</div>
+                  </div>
+                </div>
+                {governedDomains.length>0&&(
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:11,color:T.textMuted,marginBottom:7}}>Governed domains</div>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                      {governedDomains.map(d=>(
+                        <span key={d} style={{padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:12,color:T.text,fontWeight:500}}>{d}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <div style={{fontSize:11,color:T.textMuted,marginBottom:7}}>Accessible modules</div>
+                  <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                    {(roleCfg?.nav||["home","catalog","glossary","policies"]).map(n=>(
+                      <span key={n} style={{padding:"2px 8px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:10.5,color:T.textSub,textTransform:"capitalize"}}>{n.replace("policymanager","policies").replace("dataproducts","data products")}</span>
+                    ))}
+                  </div>
+                </div>
+              </div></Card2>
+
+              {/* Switch Role card */}
+              <Card2><div style={{padding:18}}>
+                <div style={secHdr}>Switch Role</div>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Try the prototype from a different role's perspective.</div>
                 <div style={{display:"flex",flexDirection:"column",gap:6}}>
                   {Object.entries(ROLES_CONFIG).map(([key,c])=>(
-                    <button key={key} onClick={()=>{onSwitch(key);onToast(`Switched to ${c.label}`,"success");}} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:role===key?c.badge:T.bgElevated,border:`1px solid ${role===key?c.color+"44":T.border}`,borderRadius:8,cursor:"pointer",transition:"all .12s"}}>
-                      <div style={{width:20,height:20,borderRadius:5,background:c.badge,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:c.color}}>{c.avatar}</div>
-                      <span style={{fontSize:12,fontWeight:role===key?700:400,color:role===key?c.color:T.text}}>{c.label}</span>
-                      {role===key&&<span style={{marginLeft:"auto",fontSize:10,color:c.color}}>● Active</span>}
+                    <button key={key} onClick={()=>{onSwitch(key);onToast(`Switched to ${c.label}`,"success");}}
+                      style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:role===key?c.badge:T.bgElevated,border:`1.5px solid ${role===key?c.color+"55":T.border}`,borderRadius:9,cursor:"pointer",transition:"all .12s",textAlign:"left"}}
+                      onMouseEnter={e=>{if(role!==key){e.currentTarget.style.borderColor=c.color+"44";e.currentTarget.style.background=c.badge;}}}
+                      onMouseLeave={e=>{if(role!==key){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.bgElevated;}}}>
+                      <div style={{width:28,height:28,borderRadius:7,background:role===key?T.bgSurface:c.badge,border:`1px solid ${c.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:c.color,flexShrink:0}}>{c.avatar}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12.5,fontWeight:role===key?700:500,color:role===key?c.color:T.text}}>{c.label}</div>
+                        <div style={{fontSize:11,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.desc}</div>
+                      </div>
+                      {role===key
+                        ? <span style={{fontSize:10,fontWeight:700,color:c.color,background:T.bgSurface,padding:"2px 7px",borderRadius:99,border:`1px solid ${c.color}44`,flexShrink:0}}>Active</span>
+                        : <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{color:T.textMuted,flexShrink:0}}><path d="M4.5 2.5l4 3.5-4 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      }
                     </button>
                   ))}
                 </div>
@@ -14437,11 +14480,11 @@ const ProfileView = ({onToast}) => {
 
         {tab==="tasks"&&(
           <DataTable cols={[
-            {key:"type",     label:"Task",      render:v=><span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{v}</span>},
+            {key:"label",    label:"Task",      render:v=><span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{v}</span>},
             {key:"asset",    label:"Asset",     render:v=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.accent}}>{v}</span>},
             {key:"priority", label:"Priority",  render:v=><Badge color={v==="Critical"?T.rose:v==="High"?T.amber:T.textMuted}>{v}</Badge>},
             {key:"status",   label:"Status",    render:v=><span style={{display:"flex",alignItems:"center",gap:5,fontSize:12}}><SDot status={v}/>{v}</span>},
-            {key:"due",      label:"Due",       render:v=><span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{v}</span>},
+            {key:"dueDate",  label:"Due",       render:v=><span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{v}</span>},
           ]} rows={myTasks} emptyMsg="No tasks assigned to you."/>
         )}
 
@@ -14456,25 +14499,30 @@ const ProfileView = ({onToast}) => {
         )}
 
         {tab==="activity"&&(
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {NOTIFS.map((n,i)=>(
-              <div key={i} style={{display:"flex",gap:12,padding:"12px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
-                <div style={{width:28,height:28,borderRadius:7,background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,flexShrink:0}}>
-                  {n.unread?"🔔":"✓"}
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {NOTIFS.map((n,i)=>{
+              const nc=NOTIF_TYPE_CFG[n.type]||{bg:T.accentDim,color:T.accent,icon:null};
+              return (
+                <div key={i} style={{display:"flex",gap:12,padding:"12px 16px",background:T.bgSurface,border:`1px solid ${n.unread?T.border+"88":T.border}`,borderLeft:`3px solid ${n.unread?nc.color:"transparent"}`,borderRadius:9,transition:"background .1s"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=T.bgSurface}>
+                  <div style={{width:30,height:30,borderRadius:8,background:nc.bg,display:"flex",alignItems:"center",justifyContent:"center",color:nc.color,flexShrink:0}}>{nc.icon}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
+                      <span style={{fontSize:12.5,fontWeight:n.unread?600:500,color:T.text}}>{n.title}</span>
+                      {n.unread&&<span style={{width:6,height:6,borderRadius:"50%",background:nc.color,flexShrink:0,display:"block"}}/>}
+                    </div>
+                    <div style={{fontSize:12,color:T.textSub,lineHeight:1.5}}>{n.body}</div>
+                    <div style={{fontSize:10.5,color:T.textMuted,marginTop:3}}>{n.time}</div>
+                  </div>
                 </div>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{n.title}</div>
-                  <div style={{fontSize:12,color:T.textSub,marginTop:2}}>{n.body}</div>
-                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>{n.time}</div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
     </div>
   );
-};;
+};
 
 // ─────────────────────────────────────────────
 // SETTINGS
