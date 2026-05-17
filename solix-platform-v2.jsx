@@ -5486,37 +5486,37 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const [regulations, setRegulations] = useState([
     {id:"gdpr",name:"GDPR",fullName:"General Data Protection Regulation",region:"EU",score:68,status:"Partial",lastAudit:"2026-03-01",
      requirements:[
-       {id:"gdpr-1",title:"Data minimisation — collect only what is necessary",linked:null},
-       {id:"gdpr-2",title:"Purpose limitation — data used only as declared",linked:null},
-       {id:"gdpr-3",title:"Storage limitation — enforce retention periods",linked:null},
-       {id:"gdpr-4",title:"Data subject rights — erasure and portability",linked:null},
-       {id:"gdpr-5",title:"Security of processing — technical controls documented",linked:null},
+       {id:"gdpr-1",title:"Data minimisation — collect only what is necessary",linkedPolicies:[]},
+       {id:"gdpr-2",title:"Purpose limitation — data used only as declared",linkedPolicies:[]},
+       {id:"gdpr-3",title:"Storage limitation — enforce retention periods",linkedPolicies:[]},
+       {id:"gdpr-4",title:"Data subject rights — erasure and portability",linkedPolicies:[]},
+       {id:"gdpr-5",title:"Security of processing — technical controls documented",linkedPolicies:[]},
      ]},
     {id:"soc2",name:"SOC 2",fullName:"Service Organisation Control 2",region:"Global",score:82,status:"Passing",lastAudit:"2026-02-15",
      requirements:[
-       {id:"soc2-1",title:"CC6.1 — Logical access security measures",linked:null},
-       {id:"soc2-2",title:"CC7.1 — System monitoring and alerting",linked:null},
-       {id:"soc2-3",title:"CC8.1 — Change management controls",linked:null},
-       {id:"soc2-4",title:"A1.1 — Data backup and recovery",linked:null},
+       {id:"soc2-1",title:"CC6.1 — Logical access security measures",linkedPolicies:[]},
+       {id:"soc2-2",title:"CC7.1 — System monitoring and alerting",linkedPolicies:[]},
+       {id:"soc2-3",title:"CC8.1 — Change management controls",linkedPolicies:[]},
+       {id:"soc2-4",title:"A1.1 — Data backup and recovery",linkedPolicies:[]},
      ]},
     {id:"ccpa",name:"CCPA",fullName:"California Consumer Privacy Act",region:"US-CA",score:74,status:"Partial",lastAudit:"2026-01-20",
      requirements:[
-       {id:"ccpa-1",title:"Right to know — disclose personal data collected",linked:null},
-       {id:"ccpa-2",title:"Right to delete — honour deletion requests",linked:null},
-       {id:"ccpa-3",title:"Right to opt-out — do not sell personal data",linked:null},
+       {id:"ccpa-1",title:"Right to know — disclose personal data collected",linkedPolicies:[]},
+       {id:"ccpa-2",title:"Right to delete — honour deletion requests",linkedPolicies:[]},
+       {id:"ccpa-3",title:"Right to opt-out — do not sell personal data",linkedPolicies:[]},
      ]},
     {id:"hipaa",name:"HIPAA",fullName:"Health Insurance Portability and Accountability Act",region:"US",score:91,status:"Passing",lastAudit:"2026-04-10",
      requirements:[
-       {id:"hipaa-1",title:"164.308 — Administrative safeguards for PHI",linked:null},
-       {id:"hipaa-2",title:"164.310 — Physical safeguards for electronic PHI",linked:null},
-       {id:"hipaa-3",title:"164.312 — Technical safeguards and access controls",linked:null},
+       {id:"hipaa-1",title:"164.308 — Administrative safeguards for PHI",linkedPolicies:[]},
+       {id:"hipaa-2",title:"164.310 — Physical safeguards for electronic PHI",linkedPolicies:[]},
+       {id:"hipaa-3",title:"164.312 — Technical safeguards and access controls",linkedPolicies:[]},
      ]},
     {id:"pci",name:"PCI DSS",fullName:"Payment Card Industry Data Security Standard",region:"Global",score:79,status:"Partial",lastAudit:"2026-03-25",
      requirements:[
-       {id:"pci-1",title:"Req 3 — Protect stored cardholder data",linked:null},
-       {id:"pci-2",title:"Req 7 — Restrict access to need-to-know basis",linked:null},
-       {id:"pci-3",title:"Req 10 — Track and monitor all network resource access",linked:null},
-       {id:"pci-4",title:"Req 12 — Maintain an information security policy",linked:null},
+       {id:"pci-1",title:"Req 3 — Protect stored cardholder data",linkedPolicies:[]},
+       {id:"pci-2",title:"Req 7 — Restrict access to need-to-know basis",linkedPolicies:[]},
+       {id:"pci-3",title:"Req 10 — Track and monitor all network resource access",linkedPolicies:[]},
+       {id:"pci-4",title:"Req 12 — Maintain an information security policy",linkedPolicies:[]},
      ]},
   ]);
 
@@ -5674,10 +5674,15 @@ const PolicyManagerView = ({onToast, onNav}) => {
     if (!linkPolOpen) return;
     const {regId,reqId} = linkPolOpen;
     setRegulations(prev=>prev.map(r=>r.id===regId
-      ?{...r,requirements:r.requirements.map(req=>req.id===reqId?{...req,linked:polId}:req)}:r));
-    setLinkPolOpen(null);
-    onToast(polId?"Requirement linked to policy":"Requirement unlinked","success");
+      ?{...r,requirements:r.requirements.map(req=>{
+          if(req.id!==reqId) return req;
+          const cur=req.linkedPolicies||[];
+          const next=cur.includes(polId)?cur.filter(x=>x!==polId):[...cur,polId];
+          return {...req,linkedPolicies:next};
+        })}:r));
+    onToast("Policy link updated","success");
   };
+  const handleCloseLinkPol = () => setLinkPolOpen(null);
   const handleAddRule = (polId) => {
     if (!ruleForm.name.trim()) return;
     const rule = {id:`r-${Date.now()}`,name:ruleForm.name.trim(),criteria:ruleForm.criteria.trim()||"No criteria specified."};
@@ -6090,7 +6095,6 @@ const PolicyManagerView = ({onToast, onNav}) => {
                     {catPols.map(p=>{
                       const isSel = selPolicyId===p.id;
                       const isHov = hovPolId===p.id;
-                      const viols = getFlagged(p).length;
                       return (
                         <div key={p.id}
                           onClick={()=>{setSelPolicyId(isSel?null:p.id);setPdTab("overview");setEditing(false);}}
@@ -6104,7 +6108,6 @@ const PolicyManagerView = ({onToast, onNav}) => {
                             <div style={{fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,lineHeight:1.35,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                               {p.name}
                             </div>
-                            {viols>0&&<div style={{fontSize:9.5,color:T.amber,fontWeight:600,marginTop:2}}>● {viols} flagged</div>}
                           </div>
                           {/* 3-dot menu */}
                           <div style={{position:"relative",flexShrink:0}} ref={dotMenuOpen===p.id?dotMenuRef:null}>
@@ -6213,35 +6216,37 @@ const PolicyManagerView = ({onToast, onNav}) => {
                   <div style={{flex:1,overflowY:"auto",minHeight:0}}>
                     {/* ── Overview ── */}
                     {pdTab==="overview"&&(()=>{
-                      const metaRow=(label,children,onEdit)=>(
-                        <div style={{paddingBottom:14,marginBottom:14,borderBottom:`1px solid ${T.border}`}}>
-                          <SideLabel label={label} onEdit={onEdit}/>
+                      const ava=u=>u.split(".").map(s=>s[0]?.toUpperCase()).join("");
+                      const ownerChip=(u)=>(
+                        <div key={u} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
+                          <div style={{width:18,height:18,borderRadius:3,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(u)}</div>
+                          <span style={{fontSize:12,color:T.accent,fontWeight:500}}>{u}</span>
+                        </div>
+                      );
+                      const stewardChip=(u)=>(
+                        <div key={u} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:"rgba(217,119,6,.08)",borderTop:"1px solid rgba(217,119,6,.2)",borderRight:"1px solid rgba(217,119,6,.2)",borderBottom:"1px solid rgba(217,119,6,.2)",borderLeft:"3px solid #d97706"}}>
+                          <div style={{width:18,height:18,borderRadius:"50%",background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(u)}</div>
+                          <span style={{fontSize:12,color:"#d97706",fontWeight:500}}>{u}</span>
+                        </div>
+                      );
+                      const SB=({ch,onEdit,children})=>(
+                        <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
+                          <SideLabel label={ch} onEdit={onEdit}/>
                           {children}
                         </div>
                       );
-                      const userChip=(u)=>(
-                        <span key={u} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 9px 3px 6px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.text}}>
-                          <span style={{width:18,height:18,borderRadius:"50%",background:T.accentDim,border:`1px solid ${T.accent}33`,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:T.accent,flexShrink:0}}>
-                            {u.split(".").map(s=>s[0]?.toUpperCase()).join("")}
-                          </span>
-                          {u}
-                        </span>
-                      );
                       return (
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 256px",minHeight:"100%"}}>
-                        {/* Main content */}
-                        <div style={{padding:"20px 22px",borderRight:`1px solid ${T.border}`,overflowY:"auto"}}>
+                      <div style={{display:"flex",minHeight:"100%"}}>
+                        {/* Main content — description + criteria */}
+                        <div style={{flex:1,padding:"20px 22px",borderRight:`1px solid ${T.border}`,overflowY:"auto"}}>
                           <SideLabel label="Description" onEdit={()=>{setEditing(true);setDescDraft(p.description||"");}}/>
                           {editing
-                            ? <textarea value={descDraft} onChange={e=>setDescDraft(e.target.value)} rows={5}
-                                autoFocus
+                            ? <textarea value={descDraft} onChange={e=>setDescDraft(e.target.value)} rows={5} autoFocus
                                 style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,lineHeight:1.8,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box",marginBottom:16}}/>
                             : <div style={{fontSize:13,lineHeight:1.8,color:T.textSub,padding:"10px 12px",background:T.bgElevated,borderRadius:8,marginBottom:20,minHeight:60}}>
                                 {p.description||<span style={{color:T.textMuted,fontStyle:"italic"}}>No description — click edit to add one.</span>}
                               </div>
                           }
-
-                          {/* Policy Criteria */}
                           <SideLabel label="Policy Criteria" onEdit={()=>setPolEditModal("criteria")}/>
                           {(p.criteria||[]).length>0
                             ? <div style={{display:"flex",flexDirection:"column",gap:5,marginBottom:20}}>
@@ -6254,102 +6259,83 @@ const PolicyManagerView = ({onToast, onNav}) => {
                               </div>
                             : <div style={{fontSize:12,color:T.textMuted,fontStyle:"italic",marginBottom:20}}>No criteria defined — click the pencil to add.</div>
                           }
-
-                          {/* Flagged assets notice */}
-                          {selFlagged.length>0&&(
-                            <div style={{padding:"12px 14px",background:`${T.amber}08`,border:`1px solid ${T.amber}30`,borderRadius:9}}>
-                              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2.5L14.5 13.5H1.5L8 2.5z" stroke={T.amber} strokeWidth="1.3" strokeLinejoin="round"/><path d="M8 7v3" stroke={T.amber} strokeWidth="1.4" strokeLinecap="round"/><circle cx="8" cy="12" r=".6" fill={T.amber}/></svg>
-                                <span style={{fontSize:12,fontWeight:700,color:T.amber}}>{selFlagged.length} asset{selFlagged.length>1?"s":""} in scope with quality below 70%</span>
-                              </div>
-                              <div style={{fontSize:11.5,color:T.textMuted}}>Review in the Linked Assets tab and consider assigning stewards.</div>
-                            </div>
-                          )}
                         </div>
 
-                        {/* Right metadata sidebar — Tags/Glossary SideLabel style */}
-                        <div style={{padding:"20px 16px",background:T.bgSurface,overflowY:"auto"}}>
-                          {metaRow("Owner",
-                            p.owner
-                              ? userChip(p.owner)
-                              : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owner</span>,
-                            ()=>setPolEditModal("owner")
-                          )}
-                          {metaRow("Stewards",
-                            (p.stewards||[]).length>0
-                              ? <div style={{display:"flex",flexWrap:"wrap",gap:5}}>{(p.stewards||[]).map(u=>userChip(u))}</div>
-                              : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards</span>,
-                            ()=>setPolEditModal("stewards")
-                          )}
-                          {metaRow("Category",
-                            <span style={{fontSize:11,fontWeight:700,padding:"2px 9px",borderRadius:4,background:`${catColor(p.category)}18`,color:catColor(p.category)}}>{p.category}</span>,
-                            ()=>setPolEditModal("category")
-                          )}
-                          {metaRow("Created", <span style={{fontSize:12,color:T.text}}>{p.created}</span>)}
-                          {metaRow("Updated", <span style={{fontSize:12,color:T.text}}>{p.updated}</span>)}
-                          {metaRow("Version",  <span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text}}>v{p.version||1}</span>)}
+                        {/* Right sidebar — exact Tags/Glossary pattern */}
+                        <div style={{width:272,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto"}}>
 
-                          {metaRow("Domains",
-                            (p.scope?.domains||[]).length>0
-                              ? <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                                  {p.scope.domains.map(d=>(
-                                    <button key={d} onClick={()=>{onNav&&onNav("domains");onToast(`Navigating to ${d} domain`,"info");}}
-                                      style={{fontSize:11,padding:"2px 8px",borderRadius:4,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`,cursor:"pointer",transition:"all .1s"}}
-                                      onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
-                                      onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
-                                      {d}
-                                    </button>
-                                  ))}
-                                </div>
-                              : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No domains</span>,
-                            ()=>setPolEditModal("domains")
-                          )}
+                          <SB ch="Owner" onEdit={()=>setPolEditModal("owner")}>
+                            {p.owner
+                              ? ownerChip(p.owner)
+                              : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owner set</span>}
+                          </SB>
 
-                          {metaRow("Tags",
-                            (p.tags||[]).length>0
-                              ? <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                                  {(p.tags||[]).map(t=>(
-                                    <span key={t} style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:`${T.accent}12`,color:T.accent,border:`1px solid ${T.accent}25`}}>{t}</span>
-                                  ))}
-                                </div>
-                              : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags</span>,
-                            ()=>setPolEditModal("tags")
-                          )}
-
-                          {metaRow("Frameworks",
-                            (p.regulations||[]).length>0
-                              ? <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                                  {p.regulations.map(r=>(
-                                    <span key={r} style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:T.blueDim,color:T.blue,border:`1px solid ${T.blue}25`}}>{r}</span>
-                                  ))}
-                                </div>
-                              : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No frameworks</span>,
-                            ()=>setPolEditModal("frameworks")
-                          )}
-
-                          {linkedTerms.length>0&&metaRow("Glossary Terms",
-                            <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                              {linkedTerms.slice(0,5).map(t=>(
-                                <button key={t.term} onClick={()=>{onNav&&onNav("glossary");onToast(`Navigating to term: ${t.term}`,"info");}}
-                                  style={{fontSize:11.5,padding:"3px 8px",borderRadius:5,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`,cursor:"pointer",textAlign:"left",transition:"all .1s"}}
-                                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
-                                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
-                                  {t.term}
-                                </button>
-                              ))}
-                              {linkedTerms.length>5&&<span style={{fontSize:11,color:T.textMuted}}>+{linkedTerms.length-5} more</span>}
+                          <SB ch="Stewards" onEdit={()=>setPolEditModal("stewards")}>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                              {(p.stewards||[]).length===0
+                                ? <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards set</span>
+                                : (p.stewards||[]).map(u=>stewardChip(u))}
                             </div>
-                          )}
+                          </SB>
 
-                          <div>
-                            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Coverage</div>
-                            {[{l:"Governed assets",v:selGovAssets.length},{l:"Directly linked",v:(p.links||[]).length},{l:"Glossary terms",v:linkedTerms.length}].map(m=>(
+                          <SB ch="Category" onEdit={()=>setPolEditModal("category")}>
+                            <div style={{display:"inline-flex",alignItems:"center",padding:"4px 12px 4px 9px",borderRadius:5,background:`${catColor(p.category)}0f`,borderTop:`1px solid ${catColor(p.category)}20`,borderRight:`1px solid ${catColor(p.category)}20`,borderBottom:`1px solid ${catColor(p.category)}20`,borderLeft:`3px solid ${catColor(p.category)}`}}>
+                              <span style={{fontSize:12,color:catColor(p.category),fontWeight:600}}>{p.category}</span>
+                            </div>
+                          </SB>
+
+                          <SB ch="Domains" onEdit={()=>setPolEditModal("domains")}>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                              {(p.scope?.domains||[]).length===0
+                                ? <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No domains</span>
+                                : (p.scope.domains).map(d=>(
+                                    <div key={d} style={{display:"inline-flex",alignItems:"center",padding:"4px 10px 4px 9px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
+                                      <span style={{fontSize:12,color:T.accent,fontWeight:600}}>{d}</span>
+                                    </div>
+                                  ))}
+                            </div>
+                          </SB>
+
+                          <SB ch="Tags" onEdit={()=>setPolEditModal("tags")}>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                              {(p.tags||[]).length===0
+                                ? <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags set</span>
+                                : (p.tags||[]).map(t=>(
+                                    <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`,color:T.accent,fontWeight:600}}>{t}</span>
+                                  ))}
+                            </div>
+                          </SB>
+
+                          <SB ch="Frameworks" onEdit={()=>setPolEditModal("frameworks")}>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                              {(p.regulations||[]).length===0
+                                ? <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No frameworks</span>
+                                : (p.regulations||[]).map(r=>(
+                                    <span key={r} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:`${T.blue}0f`,borderTop:`1px solid ${T.blue}20`,borderRight:`1px solid ${T.blue}20`,borderBottom:`1px solid ${T.blue}20`,borderLeft:`3px solid ${T.blue}`,color:T.blue,fontWeight:600}}>{r}</span>
+                                  ))}
+                            </div>
+                          </SB>
+
+                          <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
+                            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:9}}>Details</div>
+                            {[{l:"Created",v:p.created},{l:"Updated",v:p.updated},{l:"Version",v:`v${p.version||1}`}].map(m=>(
                               <div key={m.l} style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
-                                <span style={{fontSize:12,color:T.textSub}}>{m.l}</span>
-                                <span style={{fontSize:12.5,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text}}>{m.v}</span>
+                                <span style={{fontSize:12,color:T.textMuted}}>{m.l}</span>
+                                <span style={{fontSize:12,fontWeight:500,color:T.text,fontFamily:m.l==="Version"?"'Geist Mono',monospace":"inherit"}}>{m.v}</span>
                               </div>
                             ))}
                           </div>
+
+                          <div style={{padding:"16px"}}>
+                            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:9}}>Actions</div>
+                            {[{l:"View Linked Assets",action:()=>setPdTab("assets")},{l:"Copy Link",action:()=>onToast("Link copied","success")},{l:"View Activity",action:()=>setPdTab("activity")}].map((a,i)=>(
+                              <button key={i} onClick={a.action} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",background:"none",border:"none",borderBottom:i<2?`1px solid ${T.border}`:"none",color:T.textSub,fontSize:12.5,cursor:"pointer"}}
+                                onMouseEnter={e=>e.currentTarget.style.color=T.accent} onMouseLeave={e=>e.currentTarget.style.color=T.textSub}>
+                                {a.l}<svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                              </button>
+                            ))}
+                          </div>
+
                         </div>
                       </div>
                     );})()}
@@ -6411,29 +6397,6 @@ const PolicyManagerView = ({onToast, onNav}) => {
                             );
                           })}
                         </div>
-                        {/* Domain-scoped assets */}
-                        {(p.scope?.domains||[]).length>0&&(
-                          <div>
-                            <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:4}}>Assets in scope</div>
-                            <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>{selGovAssets.length} assets from domains: {p.scope.domains.join(", ")}</div>
-                            {selGovAssets.length===0&&<div style={{padding:"20px",textAlign:"center",border:`1.5px dashed ${T.border}`,borderRadius:9,fontSize:12.5,color:T.textMuted}}>No assets found in selected domains.</div>}
-                            {selGovAssets.map(a=>{
-                              const flagged=typeof a.quality==="number"&&a.quality<70;
-                              return (
-                                <div key={a.id} style={{padding:"9px 14px",borderRadius:8,border:`1px solid ${flagged?T.amber+"40":T.border}`,marginBottom:6,background:T.bgSurface}}>
-                                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                                    <span style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text}}>{a.name}</span>
-                                    <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                                      {typeof a.quality==="number"&&<span style={{fontSize:11.5,fontWeight:700,color:a.quality>=80?T.green:a.quality>=60?T.amber:T.rose}}>{a.quality}%</span>}
-                                      <span style={{fontSize:10.5,padding:"1px 6px",borderRadius:4,background:T.bgElevated,color:T.textMuted}}>{a.domain}</span>
-                                      {flagged&&<span style={{fontSize:10,fontWeight:700,padding:"2px 6px",borderRadius:4,background:`${T.amber}15`,color:T.amber}}>LOW QUALITY</span>}
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
                       </div>
                     )}
 
@@ -6466,7 +6429,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
 
         {/* ══════ REGULATIONS TAB ══════ */}
         {tab==="regulations"&&(()=>{
-          const totalGaps = regulations.reduce((s,r)=>s+r.requirements.filter(req=>!req.linked).length,0);
+          const totalGaps = regulations.reduce((s,r)=>s+r.requirements.filter(req=>!(req.linkedPolicies||[]).length).length,0);
           return (
             <div style={{flex:1,overflowY:"auto",padding:"20px 28px"}}>
               {totalGaps>0&&(
@@ -6478,7 +6441,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
               {regulations.map(reg=>{
                 const isExp = expandedReg===reg.id;
                 const sc = reg.score>=90?T.green:reg.score>=75?T.amber:T.rose;
-                const gaps = reg.requirements.filter(r=>!r.linked).length;
+                const gaps = reg.requirements.filter(r=>!(r.linkedPolicies||[]).length).length;
                 return (
                   <div key={reg.id} style={{background:T.bgSurface,border:`1.5px solid ${isExp?T.blue:T.border}`,borderRadius:10,marginBottom:10,overflow:"hidden",transition:"border-color .15s"}}>
                     <div onClick={()=>setExpandedReg(isExp?null:reg.id)} style={{padding:"14px 18px",cursor:"pointer",display:"flex",alignItems:"center",gap:14}}>
@@ -6501,21 +6464,32 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       <div style={{borderTop:`1px solid ${T.border}`,padding:"0 18px 14px"}}>
                         <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",padding:"12px 0 8px"}}>Requirements</div>
                         {reg.requirements.map(req=>{
-                          const linkedPol = req.linked ? policies.find(p=>p.id===req.linked) : null;
+                          const lps=(req.linkedPolicies||[]).map(id=>policies.find(p=>p.id===id)).filter(Boolean);
+                          const hasLinks=lps.length>0;
                           return (
-                            <div key={req.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:`1px solid ${T.border}`}}>
-                              <div style={{width:18,height:18,borderRadius:"50%",background:req.linked?`${T.green}18`:`${T.amber}15`,border:`1.5px solid ${req.linked?T.green:T.amber}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                                {req.linked?<svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M2 4.5l2 2L7 2.5" stroke={T.green} strokeWidth="1.4" strokeLinecap="round"/></svg>:<span style={{fontSize:9,color:T.amber,fontWeight:700}}>!</span>}
+                            <div key={req.id} style={{padding:"10px 0",borderBottom:`1px solid ${T.border}`}}>
+                              <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+                                <div style={{width:18,height:18,borderRadius:"50%",background:hasLinks?`${T.green}18`:`${T.amber}15`,border:`1.5px solid ${hasLinks?T.green:T.amber}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:2}}>
+                                  {hasLinks?<svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M2 4.5l2 2L7 2.5" stroke={T.green} strokeWidth="1.4" strokeLinecap="round"/></svg>:<span style={{fontSize:9,color:T.amber,fontWeight:700}}>!</span>}
+                                </div>
+                                <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,flexShrink:0,width:64,marginTop:2}}>{req.id}</span>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontSize:12,color:T.text,lineHeight:1.5,marginBottom:hasLinks?6:0}}>{req.title}</div>
+                                  {hasLinks&&(
+                                    <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                                      {lps.map(lp=>(
+                                        <span key={lp.id} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,padding:"2px 8px 2px 6px",borderRadius:5,background:`${T.green}12`,borderTop:`1px solid ${T.green}25`,borderRight:`1px solid ${T.green}25`,borderBottom:`1px solid ${T.green}25`,borderLeft:`3px solid ${T.green}`,color:T.green,fontWeight:600}}>
+                                          {lp.name}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                <button onClick={e=>{e.stopPropagation();setLinkPolOpen({regId:reg.id,reqId:req.id});}}
+                                  style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:hasLinks?"transparent":T.amberDim,border:`1px solid ${hasLinks?T.border:T.amber+"50"}`,color:hasLinks?T.textMuted:T.amber,cursor:"pointer",flexShrink:0,fontWeight:hasLinks?400:600,whiteSpace:"nowrap"}}>
+                                  {hasLinks?"+ Add":"Link Policy"}
+                                </button>
                               </div>
-                              <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,flexShrink:0,width:64}}>{req.id}</span>
-                              <span style={{fontSize:12,color:T.text,flex:1,lineHeight:1.5}}>{req.title}</span>
-                              {linkedPol
-                                ?<div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-                                    <span style={{fontSize:11,padding:"3px 9px",borderRadius:6,background:`${T.green}15`,color:T.green,border:`1px solid ${T.green}25`}}>{linkedPol.name}</span>
-                                    <button onClick={e=>{e.stopPropagation();setLinkPolOpen({regId:reg.id,reqId:req.id});}} style={{fontSize:11,padding:"3px 9px",borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer"}}>Change</button>
-                                  </div>
-                                :<button onClick={e=>{e.stopPropagation();setLinkPolOpen({regId:reg.id,reqId:req.id});}} style={{fontSize:11,padding:"4px 11px",borderRadius:6,background:T.amberDim,border:`1px solid ${T.amber}30`,color:T.amber,cursor:"pointer",flexShrink:0,fontWeight:600}}>Link Policy</button>
-                              }
                             </div>
                           );
                         })}
@@ -6764,32 +6738,49 @@ const PolicyManagerView = ({onToast, onNav}) => {
         </CenteredModal>
       )}
 
-      {/* Link Policy to Regulation Requirement — centered modal */}
-      {linkPolOpen&&(
-        <CenteredModal onClose={()=>setLinkPolOpen(null)}>
-          <div style={{padding:"22px 24px 18px",borderBottom:`1px solid ${T.border}`}}>
-            <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:4}}>Link policy to requirement</div>
-            <div style={{fontSize:12,color:T.textMuted}}>Select an internal policy to satisfy this regulatory requirement.</div>
-          </div>
-          <div style={{flex:1,overflowY:"auto",padding:"14px 24px",maxHeight:360}}>
-            {policies.filter(p=>p.lifecycle!=="Deprecated").map(p=>(
-              <div key={p.id} onClick={()=>handleLinkPol(p.id)}
-                style={{padding:"12px 14px",borderRadius:9,border:`1.5px solid ${T.border}`,marginBottom:8,cursor:"pointer",transition:"all .1s"}}
-                onMouseEnter={e=>{e.currentTarget.style.borderColor=T.blue;e.currentTarget.style.background=T.blueDim;}}
-                onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background="transparent";}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                  <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{p.name}</span>
-                  <span style={{fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:4,background:`${lcColor(p.lifecycle)}18`,color:lcColor(p.lifecycle)}}>{p.lifecycle}</span>
-                </div>
-                <div style={{fontSize:11,color:T.textMuted}}>{p.category} · {p.severity} · {p.owner}</div>
+      {/* Link Policy to Regulation Requirement — multi-select modal */}
+      {linkPolOpen&&(()=>{
+        const {regId,reqId}=linkPolOpen;
+        const req=regulations.find(r=>r.id===regId)?.requirements.find(r=>r.id===reqId);
+        const cur=req?.linkedPolicies||[];
+        return (
+          <CenteredModal onClose={handleCloseLinkPol}>
+            <div style={{padding:"22px 24px 14px",borderBottom:`1px solid ${T.border}`}}>
+              <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:4}}>Link policies to requirement</div>
+              <div style={{fontSize:12,color:T.textMuted}}>Select one or more policies that satisfy this requirement. Click to toggle.</div>
+            </div>
+            <div style={{flex:1,overflowY:"auto",padding:"14px 24px",maxHeight:380}}>
+              {policies.map(p=>{
+                const sel=cur.includes(p.id);
+                return (
+                  <div key={p.id} onClick={()=>handleLinkPol(p.id)}
+                    style={{padding:"12px 14px",borderRadius:9,border:`1.5px solid ${sel?T.green:T.border}`,marginBottom:8,cursor:"pointer",background:sel?`${T.green}08`:"transparent",transition:"all .1s",display:"flex",alignItems:"center",gap:10}}
+                    onMouseEnter={e=>{if(!sel){e.currentTarget.style.borderColor=T.blue;e.currentTarget.style.background=T.blueDim;}}}
+                    onMouseLeave={e=>{if(!sel){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background="transparent";}}}>
+                    <div style={{width:18,height:18,borderRadius:4,border:`1.5px solid ${sel?T.green:T.border}`,background:sel?T.green:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      {sel&&<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:2}}>
+                        <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{p.name}</span>
+                        <span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:3,background:`${catColor(p.category)}15`,color:catColor(p.category)}}>{p.category}</span>
+                      </div>
+                      <div style={{fontSize:11,color:T.textMuted}}>{p.owner||"No owner"}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",gap:10,justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:12,color:T.textMuted}}>{cur.length} polic{cur.length===1?"y":"ies"} linked</span>
+              <div style={{display:"flex",gap:8}}>
+                <Btn ghost onClick={handleCloseLinkPol}>Cancel</Btn>
+                <Btn onClick={handleCloseLinkPol}>Done</Btn>
               </div>
-            ))}
-          </div>
-          <div style={{padding:"12px 24px",borderTop:`1px solid ${T.border}`}}>
-            <Btn ghost onClick={()=>setLinkPolOpen(null)} style={{width:"100%"}}>Cancel</Btn>
-          </div>
-        </CenteredModal>
-      )}
+            </div>
+          </CenteredModal>
+        );
+      })()}
 
     </div>
   );
