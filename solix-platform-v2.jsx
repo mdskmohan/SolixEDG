@@ -5567,8 +5567,12 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const [filterDropOpen, setFilterDropOpen]= useState(false);
   const [hovPolId,       setHovPolId]      = useState(null);
   const [deleteConfPol,  setDeleteConfPol] = useState(null);
-  const filterDropRef = useRef(null);
-  const dotMenuRef    = useRef(null);
+  const [polPlusMenuOpen, setPolPlusMenuOpen] = useState(false);
+  const [polNewCatOpen,   setPolNewCatOpen]   = useState(false);
+  const [polNewCatDraft,  setPolNewCatDraft]  = useState({name:"",description:"",color:"#6366f1"});
+  const filterDropRef  = useRef(null);
+  const dotMenuRef     = useRef(null);
+  const polPlusMenuRef = useRef(null);
 
   useEffect(()=>{
     if(!filterDropOpen) return;
@@ -5583,6 +5587,13 @@ const PolicyManagerView = ({onToast, onNav}) => {
     document.addEventListener("mousedown",close);
     return()=>document.removeEventListener("mousedown",close);
   },[dotMenuOpen]);
+
+  useEffect(()=>{
+    if(!polPlusMenuOpen) return;
+    const close=e=>{if(polPlusMenuRef.current&&!polPlusMenuRef.current.contains(e.target))setPolPlusMenuOpen(false);};
+    document.addEventListener("mousedown",close);
+    return()=>document.removeEventListener("mousedown",close);
+  },[polPlusMenuOpen]);
 
   useEffect(()=>{
     if(!polEditModal||!selPol) return;
@@ -5944,12 +5955,30 @@ const PolicyManagerView = ({onToast, onNav}) => {
             <div style={{padding:"12px 12px 10px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:9}}>
                 <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Policies</span>
-                <button onClick={()=>setCreateOpen(true)} title="New Policy"
-                  style={{width:22,height:22,borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",transition:"all .12s"}}
-                  onMouseEnter={e=>{e.currentTarget.style.background=T.accentDim;e.currentTarget.style.color=T.accent;e.currentTarget.style.borderColor=T.accent;}}
-                  onMouseLeave={e=>{e.currentTarget.style.background=T.bgElevated;e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>
-                  {Ic.plus(10)}
-                </button>
+                <div ref={polPlusMenuRef} style={{position:"relative"}}>
+                  <button onClick={()=>setPolPlusMenuOpen(o=>!o)} title="New category or policy"
+                    style={{width:22,height:22,borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",transition:"all .12s"}}
+                    onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                    onMouseLeave={e=>{e.currentTarget.style.background=T.bgElevated;e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
+                    {Ic.plus(10)}
+                  </button>
+                  {polPlusMenuOpen&&(
+                    <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,width:180,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",zIndex:300,overflow:"hidden"}}>
+                      <button onClick={()=>{setPolNewCatOpen(true);setPolNewCatDraft({name:"",description:"",color:"#6366f1"});setSelPol(null);setPolPlusMenuOpen(false);}}
+                        style={{width:"100%",padding:"10px 12px",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:9,color:T.text,fontSize:12,fontWeight:500,borderBottom:`1px solid ${T.border}`}}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                        <span style={{width:20,height:20,borderRadius:5,background:"rgba(99,102,241,.12)",display:"flex",alignItems:"center",justifyContent:"center",color:"#6366f1",flexShrink:0}}>{Ic.catalog(10)}</span>
+                        New Category
+                      </button>
+                      <button onClick={()=>{setCreateOpen(true);setPolPlusMenuOpen(false);}}
+                        style={{width:"100%",padding:"10px 12px",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:9,color:T.text,fontSize:12,fontWeight:500}}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                        <span style={{width:20,height:20,borderRadius:5,background:`${T.accent}14`,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent,flexShrink:0}}>{Ic.shield(10)}</span>
+                        New Policy
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
               {/* Search + filter button row */}
               <div style={{display:"flex",gap:6,alignItems:"center"}}>
@@ -6748,6 +6777,71 @@ const PolicyManagerView = ({onToast, onNav}) => {
       )}
 
       {/* Link Policy to Regulation Requirement — multi-select modal */}
+      {/* New Policy Category slide-in panel */}
+      {polNewCatOpen&&(
+        <>
+          <div onClick={()=>setPolNewCatOpen(false)}
+            style={{position:"absolute",inset:0,background:"rgba(0,0,0,.25)",zIndex:200}}/>
+          <div style={{position:"absolute",right:0,top:0,bottom:0,width:420,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:201,display:"flex",flexDirection:"column",boxShadow:"-8px 0 32px rgba(0,0,0,.18)"}}>
+            <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+              <div>
+                <div style={{fontSize:14,fontWeight:700,color:T.text}}>New Category</div>
+                <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>Categories group policies for navigation and filtering</div>
+              </div>
+              <button onClick={()=>setPolNewCatOpen(false)} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer",fontSize:20,lineHeight:1,padding:"0 4px"}}>×</button>
+            </div>
+            <div style={{flex:1,overflowY:"auto",padding:"20px"}}>
+              <div style={{display:"flex",flexDirection:"column",gap:16}}>
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Category Name <span style={{color:T.rose}}>*</span></label>
+                  <input value={polNewCatDraft.name} onChange={e=>setPolNewCatDraft(d=>({...d,name:e.target.value}))}
+                    placeholder="e.g. Privacy, Security, Compliance"
+                    style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"}}
+                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                </div>
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Description <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
+                  <textarea value={polNewCatDraft.description} onChange={e=>setPolNewCatDraft(d=>({...d,description:e.target.value}))} rows={3}
+                    placeholder="What kinds of policies belong in this category?"
+                    style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",resize:"none",fontFamily:"inherit",lineHeight:1.6,boxSizing:"border-box"}}
+                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                </div>
+                <div>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Color</label>
+                  <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                    {["#ee2424","#d97706","#16a34a","#2563eb","#7c3aed","#6366f1","#0891b2","#6b7280"].map(c=>(
+                      <button key={c} onClick={()=>setPolNewCatDraft(d=>({...d,color:c}))}
+                        style={{width:26,height:26,borderRadius:"50%",background:c,border:polNewCatDraft.color===c?`3px solid ${T.text}`:"3px solid transparent",cursor:"pointer",padding:0,flexShrink:0,transition:"border .12s"}}/>
+                    ))}
+                  </div>
+                </div>
+                <div style={{padding:"14px 16px",background:T.bgElevated,borderRadius:10,border:`1px solid ${T.border}`}}>
+                  <div style={{fontSize:11,color:T.textMuted,marginBottom:6}}>Preview</div>
+                  <span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px",borderRadius:99,background:`${polNewCatDraft.color}15`,border:`1px solid ${polNewCatDraft.color}40`,fontSize:12,fontWeight:600,color:polNewCatDraft.color,textTransform:"capitalize"}}>
+                    <span style={{width:7,height:7,borderRadius:"50%",background:polNewCatDraft.color,display:"block"}}/>
+                    {polNewCatDraft.name||"Category Name"}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,justifyContent:"flex-end",background:T.bgSurface,flexShrink:0}}>
+              <button onClick={()=>setPolNewCatOpen(false)} style={{padding:"8px 18px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer",fontWeight:500}}>Cancel</button>
+              <button disabled={!polNewCatDraft.name.trim()} onClick={()=>{
+                const name=polNewCatDraft.name.trim();
+                if(!name) return;
+                setPolicyCategories(prev=>[...prev,{id:`cat_${Date.now()}`,name,description:polNewCatDraft.description,color:polNewCatDraft.color}]);
+                setExpCat(p=>({...p,[name]:true}));
+                setPolNewCatOpen(false);
+                onToast("Category created","success");
+              }}
+                style={{padding:"8px 20px",borderRadius:8,background:polNewCatDraft.name.trim()?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:polNewCatDraft.name.trim()?"pointer":"default"}}>
+                Create Category
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
       {linkPolOpen&&(()=>{
         const {regId,reqId}=linkPolOpen;
         const req=regulations.find(r=>r.id===regId)?.requirements.find(r=>r.id===reqId);
