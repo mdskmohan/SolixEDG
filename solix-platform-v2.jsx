@@ -5370,7 +5370,7 @@ const QualityView = () => {
   );
 };
 
-const PolicyManagerView = ({onToast}) => {
+const PolicyManagerView = ({onToast, onNav}) => {
   // ─── palette & constants ──────────────────────────────────────────────
   const CAT_COLORS = {Privacy:T.violet,Quality:T.green,Retention:T.amber,Access:T.rose,Classification:T.blue,Security:T.rose};
   const SEV_COLORS = {Critical:T.rose,High:T.amber,Medium:T.blue,Low:T.green};
@@ -5380,26 +5380,25 @@ const PolicyManagerView = ({onToast}) => {
   const ALL_DOMAINS= (DOMAIN_LIST_DATA||[]).map(d=>d.name);
   const PMV_USERS  = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
   const REL_TYPES  = ["governs","enforces","complies_with","monitors"];
+  const POLICY_TAGS= ["PII","PHI","financial","sensitive","regulated","internal","public","confidential","customer-data","healthcare"];
   const lcColor = lc => LC_COLORS[lc]||T.textMuted;
   const lcIdx   = lc => LC_STEPS.indexOf(lc);
-  const riskSc  = r => ({Low:1,Med:2,High:3}[r.likelihood]||1)*({Low:1,Med:2,High:3}[r.impact]||1);
-  const riskClr = s => s>=6?T.rose:s>=3?T.amber:T.green;
 
   // ─── state ──────────────────────────────────────────────────────────
   const [policies, setPolicies] = useState([
     {id:"pol-1",name:"Commerce PII Sensitivity",fqn:"policies.privacy.commerce_pii",version:2,
-     category:"Privacy",severity:"Critical",lifecycle:"Active",owner:"maya.chen",
+     category:"Privacy",severity:"Critical",lifecycle:"Active",owner:"maya.chen",stewards:["dev.patel","sarah.kim"],tags:["PII","sensitive"],
      created:"2026-02-10",updated:"2026-05-01",regulations:["GDPR","CCPA"],
      scope:{domains:["Commerce","Finance"]},
-     conditions:[{type:"min_quality",threshold:75,label:"Quality ≥ 75%"},{type:"required_cert",label:"Certification: Approved"}],
-     description:"All assets in the Commerce and Finance domains must carry an Approved certification and maintain a quality score of at least 75. Non-compliant assets pose direct privacy and regulatory risk under GDPR and CCPA.",
+     criteria:["All assets in Commerce and Finance domains must carry a PII classification tag before promotion to any downstream system","Data subjects' right to erasure must be honoured within 30 days of request","Assets must hold Approved certification before being queryable by downstream analytics pipelines"],
+     description:"All assets in the Commerce and Finance domains must carry an Approved certification and meet PII classification requirements. Non-compliant assets pose direct privacy and regulatory risk under GDPR and CCPA.",
      rules:[
        {id:"r1-1",name:"PII classification required",criteria:"All assets in the Commerce and Finance domains must carry a pii.customer or pii.sensitive tag before promotion to any downstream system."},
        {id:"r1-2",name:"Certification gate",criteria:"Assets must hold Approved certification to be queryable by downstream analytics and reporting pipelines."},
      ],
      links:[
-       {type:"Table",target:"crm.customers",rel:"governs"},
-       {type:"Glossary term",target:"Customer Email",rel:"governs"},
+       {type:"Table",target:"orders",rel:"governs",assetId:1},
+       {type:"Table",target:"customers",rel:"governs",assetId:2},
      ],
      history:[
        {when:"2026-05-01",who:"maya.chen",action:"Policy activated"},
@@ -5408,29 +5407,26 @@ const PolicyManagerView = ({onToast}) => {
        {when:"2026-02-10",who:"maya.chen",action:"Created draft v1"},
      ]},
     {id:"pol-2",name:"Finance Data Integrity",fqn:"policies.quality.finance_integrity",version:1,
-     category:"Quality",severity:"High",lifecycle:"Active",owner:"dev.patel",
+     category:"Quality",severity:"High",lifecycle:"Active",owner:"dev.patel",stewards:["sarah.kim"],tags:["financial","regulated"],
      created:"2026-01-15",updated:"2026-04-20",regulations:["SOC2","PCI DSS"],
      scope:{domains:["Finance"]},
-     conditions:[{type:"min_quality",threshold:80,label:"Quality ≥ 80%"},{type:"required_cert",label:"Certification: Approved"}],
+     criteria:["Financial datasets must maintain a quality score of 80 or above before use in any reporting pipeline","All financial tables must have a certified owner and a documented data contract","Assets with quality below 70 must have a steward review initiated within 24 hours"],
      description:"Financial datasets must maintain a minimum quality score of 80 to ensure accurate reporting and audit readiness. Assets below threshold are flagged for stewardship review.",
      rules:[
        {id:"r2-1",name:"Quality threshold enforcement",criteria:"Financial datasets must score ≥ 80 on automated quality checks before use in reporting pipelines."},
        {id:"r2-2",name:"Stewardship escalation",criteria:"Assets scoring below 70 must trigger an escalation to the assigned steward within 24 hours."},
      ],
-     links:[
-       {type:"Table",target:"finance.transactions",rel:"governs"},
-       {type:"Table",target:"finance.gl_entries",rel:"governs"},
-     ],
+     links:[],
      history:[
        {when:"2026-04-20",who:"dev.patel",action:"Policy activated"},
        {when:"2026-03-10",who:"sarah.kim",action:"Approved v1"},
        {when:"2026-01-15",who:"dev.patel",action:"Created draft v1"},
      ]},
     {id:"pol-3",name:"ML Feature Readiness",fqn:"policies.quality.ml_feature_readiness",version:1,
-     category:"Quality",severity:"High",lifecycle:"In Review",owner:"sarah.kim",
+     category:"Quality",severity:"High",lifecycle:"In Review",owner:"sarah.kim",stewards:["alex.wu"],tags:["regulated"],
      created:"2026-03-20",updated:"2026-05-05",regulations:[],
      scope:{domains:["ML","Engineering"]},
-     conditions:[{type:"min_quality",threshold:85,label:"Quality ≥ 85%"},{type:"required_cert",label:"Certification: Approved"}],
+     criteria:["ML features must score above 85 on quality checks before promotion to the production feature store","Features must hold Approved certification to be eligible for production ML training pipelines","All features must have documented lineage tracing back to their source tables"],
      description:"Features used in ML pipelines must score above 85 on quality checks and hold an Approved certification before promotion to production. Prevents model degradation from poor-quality training data.",
      rules:[
        {id:"r3-1",name:"Quality score gate",criteria:"ML features must score ≥ 85 before promotion to the production feature store."},
@@ -5442,19 +5438,18 @@ const PolicyManagerView = ({onToast}) => {
        {when:"2026-03-20",who:"sarah.kim",action:"Created draft v1"},
      ]},
     {id:"pol-4",name:"HIPAA PHI Compliance",fqn:"policies.access.hipaa_phi",version:3,
-     category:"Access",severity:"Critical",lifecycle:"Active",owner:"lisa.ray",
+     category:"Access",severity:"Critical",lifecycle:"Active",owner:"lisa.ray",stewards:["priya.nair","maya.chen"],tags:["PHI","healthcare","sensitive","regulated"],
      created:"2026-01-05",updated:"2026-04-01",regulations:["HIPAA"],
      scope:{domains:["Finance","Commerce"]},
-     conditions:[{type:"required_cert",label:"Certification: Approved"},{type:"min_quality",threshold:90,label:"Quality ≥ 90%"}],
-     description:"Assets containing Protected Health Information must be Approved-certified and maintain quality at or above 90 to ensure data integrity in healthcare workflows. Violations must be remediated within 72 hours.",
+     criteria:["PHI-containing assets must hold Approved certification and maintain a quality score of 90 or above","Only roles with healthcare.phi_read scope may access PHI-tagged assets","All access to PHI-tagged assets must generate an immutable audit log entry retained for 7 years","Policy violations must be remediated within 72 hours of detection"],
+     description:"Assets containing Protected Health Information must be Approved-certified and maintain quality at or above 90 to ensure data integrity in healthcare workflows.",
      rules:[
        {id:"r4-1",name:"PHI quality gate",criteria:"PHI-containing assets must score ≥ 90 on automated quality checks."},
        {id:"r4-2",name:"Access restriction",criteria:"Only roles with healthcare.phi_read scope may access PHI-tagged assets."},
        {id:"r4-3",name:"Audit logging",criteria:"All access to PHI-tagged assets must generate an immutable audit log entry retained for 7 years."},
      ],
      links:[
-       {type:"Table",target:"crm.customers",rel:"governs"},
-       {type:"Column",target:"customers.ssn",rel:"governs"},
+       {type:"Table",target:"customers",rel:"governs",assetId:2},
      ],
      history:[
        {when:"2026-04-01",who:"lisa.ray",action:"Policy activated"},
@@ -5462,10 +5457,10 @@ const PolicyManagerView = ({onToast}) => {
        {when:"2026-01-05",who:"lisa.ray",action:"Created draft v1"},
      ]},
     {id:"pol-5",name:"Product Catalog Completeness",fqn:"policies.quality.product_completeness",version:1,
-     category:"Quality",severity:"Medium",lifecycle:"Draft",owner:"alex.wu",
+     category:"Quality",severity:"Medium",lifecycle:"Draft",owner:"alex.wu",stewards:[],tags:["internal"],
      created:"2026-04-10",updated:"2026-05-10",regulations:[],
      scope:{domains:["Product","Marketing"]},
-     conditions:[{type:"min_quality",threshold:70,label:"Quality ≥ 70%"}],
+     criteria:["Product and Marketing domain assets must meet a 70% quality threshold to be discoverable in the Data Catalog","All assets must have a description and at least one owner assigned","Assets in Draft lifecycle state must not appear in self-serve catalog search results"],
      description:"Product and Marketing domain assets must meet a 70% quality threshold to be discoverable in the Data Catalog. Ensures consumers can trust and find data without steward intervention.",
      rules:[
        {id:"r5-1",name:"Catalog discoverability gate",criteria:"Product and Marketing domain assets must score ≥ 70% to appear in catalog search results and be accessible to self-serve analysts."},
@@ -5475,17 +5470,15 @@ const PolicyManagerView = ({onToast}) => {
        {when:"2026-05-10",who:"alex.wu",action:"Created draft v1"},
      ]},
     {id:"pol-6",name:"Engineering Pipeline Governance",fqn:"policies.classification.engineering_pipeline",version:2,
-     category:"Classification",severity:"Medium",lifecycle:"Deprecated",owner:"priya.nair",
+     category:"Classification",severity:"Medium",lifecycle:"Deprecated",owner:"priya.nair",stewards:[],tags:[],
      created:"2025-11-01",updated:"2026-02-15",regulations:["SOC2"],
      scope:{domains:["Engineering"]},
-     conditions:[{type:"required_cert",label:"Certification: Approved"}],
+     criteria:["Pipeline outputs must hold Approved certification before use in downstream production systems"],
      description:"Data pipeline outputs must be Approved-certified before promotion to production. Deprecated — scope has been consolidated under ML Feature Readiness.",
      rules:[
        {id:"r6-1",name:"Certification requirement",criteria:"Pipeline outputs must hold Approved certification before use in downstream production systems."},
      ],
-     links:[
-       {type:"Table",target:"ml.feature_store",rel:"governs"},
-     ],
+     links:[],
      history:[
        {when:"2026-02-15",who:"priya.nair",action:"Policy deprecated — scope merged into ML Feature Readiness"},
        {when:"2025-12-01",who:"priya.nair",action:"Policy activated"},
@@ -5537,17 +5530,17 @@ const PolicyManagerView = ({onToast}) => {
   const [lcFilter,      setLcFilter]    = useState("All");
   const [expandedReg,   setExpandedReg] = useState(null);
   const [linkPolOpen,   setLinkPolOpen] = useState(null);
-  const [riskView,      setRiskView]    = useState("list");
   const [createOpen,    setCreateOpen]  = useState(false);
   const [editOpen,      setEditOpen]    = useState(false);
   const [editDraft,     setEditDraft]   = useState(null);
-  const [newCondType,   setNewCondType] = useState("min_quality");
-  const [newCondThr,    setNewCondThr]  = useState(80);
+  const [newCriteriaText, setNewCriteriaText] = useState("");
   const [ruleModalOpen, setRuleModalOpen]= useState(false);
   const [ruleForm,      setRuleForm]    = useState({name:"",criteria:""});
-  const [linkModalOpen, setLinkModalOpen]= useState(false);
-  const [linkForm,      setLinkForm]    = useState({assetIdx:0,rel:"governs"});
-  const EMPTY_POL = {name:"",category:"Privacy",severity:"High",description:"",owner:"",regulations:[],scope:{domains:[]},conditions:[],rules:[],links:[],history:[],fqn:"",version:1};
+  const [linkAssetOpen, setLinkAssetOpen]= useState(false);
+  const [assetSearchQ,  setAssetSearchQ]= useState("");
+  const [selAssetIds,   setSelAssetIds] = useState(new Set());
+  const [assetRel,      setAssetRel]    = useState("governs");
+  const EMPTY_POL = {name:"",category:"Privacy",severity:"High",description:"",owner:"",stewards:[],tags:[],regulations:[],scope:{domains:[]},criteria:[],rules:[],links:[],history:[],fqn:"",version:1};
   const [newPol,         setNewPol]        = useState(EMPTY_POL);
   const [catFilter,      setCatFilter]     = useState([]);
   const [filterDropOpen, setFilterDropOpen]= useState(false);
@@ -5568,36 +5561,21 @@ const PolicyManagerView = ({onToast}) => {
     const doms = pol.scope?.domains||[];
     return doms.length ? ASSETS.filter(a=>doms.includes(a.domain)) : ASSETS;
   };
-  const getViolations = (pol) => {
-    const conds = pol?.conditions||[];
-    if (!conds.length) return [];
-    return getGovAssets(pol).filter(a=>conds.some(c=>{
-      if (c.type==="min_quality") return typeof a.quality==="number" && a.quality < c.threshold;
-      if (c.type==="required_cert") return a.cert && a.cert!=="Approved";
-      if (c.type==="max_tier")      return a.tier && parseInt(a.tier) > c.threshold;
-      return false;
-    })).map(a=>({
-      ...a,
-      failedConds: conds.filter(c=>{
-        if (c.type==="min_quality") return typeof a.quality==="number" && a.quality < c.threshold;
-        if (c.type==="required_cert") return a.cert && a.cert!=="Approved";
-        if (c.type==="max_tier")      return a.tier && parseInt(a.tier) > c.threshold;
-        return false;
-      }),
-    }));
+  const getFlagged = (pol) => {
+    return getGovAssets(pol).filter(a=>typeof a.quality==="number"&&a.quality<70);
   };
 
   const selPol       = policies.find(p=>p.id===selPolicyId)||null;
   const selGovAssets = getGovAssets(selPol);
-  const selViols     = selPol ? getViolations(selPol) : [];
+  const selFlagged   = selPol ? getFlagged(selPol) : [];
   const linkedTerms  = selPol
     ? GLOSSARY_TERMS.filter(t=>(selPol.scope?.domains||[]).includes(t.domain))
     : [];
 
   const activePols  = policies.filter(p=>p.lifecycle==="Active");
-  const totalViols  = activePols.reduce((s,p)=>s+getViolations(p).length, 0);
   const coveredIds  = new Set(activePols.flatMap(p=>getGovAssets(p).map(a=>a.id)));
   const coveragePct = ASSETS.length ? Math.round(coveredIds.size/ASSETS.length*100) : 0;
+  const pendingReview = policies.filter(p=>p.lifecycle==="In Review").length;
 
   const filteredPols = policies.filter(p=>{
     const ms = !polSearch || p.name.toLowerCase().includes(polSearch.toLowerCase()) || p.category.toLowerCase().includes(polSearch.toLowerCase());
@@ -5605,26 +5583,6 @@ const PolicyManagerView = ({onToast}) => {
     const mc = catFilter.length===0 || catFilter.includes(p.category);
     return ms && ml && mc;
   });
-
-  const derivedRisks = activePols.map(p=>{
-    const v = getViolations(p);
-    if (!v.length) return null;
-    const lh = v.length>=10?"High":v.length>=4?"Med":"Low";
-    const imp = p.severity==="Critical"?"High":p.severity==="High"?"Med":"Low";
-    return {id:p.id,policyName:p.name,category:p.category,violations:v.length,likelihood:lh,impact:imp,owner:p.owner,severity:p.severity};
-  }).filter(Boolean);
-
-  // ─── catalog asset list (for Link Asset modal) ───────────────────────
-  const CATALOG_ASSETS = [
-    ...ASSETS.map(a=>({id:a.id,type:"Table",name:a.name})),
-    ...GLOSSARY_TERMS.map(t=>({id:"gt_"+t.term,type:"Glossary term",name:t.term})),
-    {id:"col_email",type:"Column",name:"customers.email_addr"},
-    {id:"col_phone",type:"Column",name:"customers.phone"},
-    {id:"col_ssn",type:"Column",name:"customers.ssn"},
-    {id:"tbl_fin",type:"Table",name:"finance.transactions"},
-    {id:"tbl_gl",type:"Table",name:"finance.gl_entries"},
-    {id:"tbl_ml",type:"Table",name:"ml.feature_store"},
-  ];
 
   // ─── handlers ────────────────────────────────────────────────────────
   const today = () => new Date().toISOString().slice(0,10);
@@ -5682,13 +5640,15 @@ const PolicyManagerView = ({onToast}) => {
     }));
     onToast("Rule removed","info");
   };
-  const handleAddLink = (polId) => {
-    const asset = CATALOG_ASSETS[linkForm.assetIdx]||CATALOG_ASSETS[0];
-    const lnk = {type:asset.type,target:asset.name,rel:linkForm.rel};
+  const handleLinkAssets = (polId) => {
+    if (!selAssetIds.size) return;
+    const already = new Set((policies.find(p=>p.id===polId)?.links||[]).map(l=>l.assetId));
+    const newLinks = ASSETS.filter(a=>selAssetIds.has(a.id)&&!already.has(a.id)).map(a=>({type:a.type||"Table",target:a.name,rel:assetRel,assetId:a.id}));
+    if (!newLinks.length) { onToast("Assets already linked","info"); return; }
     setPolicies(prev=>prev.map(p=>p.id===polId
-      ?{...p,links:[...(p.links||[]),lnk],history:[{when:today(),who:"You",action:`Linked ${asset.type}: ${asset.name}`},...(p.history||[])],updated:today()}:p));
-    setLinkModalOpen(false); setLinkForm({assetIdx:0,rel:"governs"});
-    onToast("Asset linked","success");
+      ?{...p,links:[...(p.links||[]),...newLinks],history:[{when:today(),who:"You",action:`Linked ${newLinks.length} asset(s)`},...(p.history||[])],updated:today()}:p));
+    setLinkAssetOpen(false); setSelAssetIds(new Set()); setAssetSearchQ(""); setAssetRel("governs");
+    onToast(`${newLinks.length} asset(s) linked`,"success");
   };
   const handleRemoveLink = (polId, idx) => {
     setPolicies(prev=>prev.map(p=>{
@@ -5699,46 +5659,31 @@ const PolicyManagerView = ({onToast}) => {
     }));
     onToast("Asset unlinked","info");
   };
-  const addCondition = (isEdit) => {
-    let cond;
-    if (newCondType==="min_quality")  cond={type:"min_quality",threshold:newCondThr,label:`Quality ≥ ${newCondThr}%`};
-    else if (newCondType==="required_cert") cond={type:"required_cert",label:"Certification: Approved"};
-    else cond={type:"max_tier",threshold:newCondThr,label:`Tier ≤ ${newCondThr}`};
-    if (isEdit) {
-      if (!(editDraft?.conditions||[]).find(c=>c.type===cond.type))
-        setEditDraft(p=>({...p,conditions:[...(p.conditions||[]),cond]}));
-    } else {
-      if (!(newPol.conditions||[]).find(c=>c.type===cond.type))
-        setNewPol(p=>({...p,conditions:[...(p.conditions||[]),cond]}));
-    }
-  };
 
   // ─── sub-components ──────────────────────────────────────────────────
-  const ConditionBuilder = ({isEdit}) => {
+  const PolicyCriteriaBuilder = ({isEdit}) => {
     const pol = isEdit ? editDraft : newPol;
     const set = isEdit ? setEditDraft : setNewPol;
+    const lbl={display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
     return (
       <div>
-        <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Conditions</label>
-        {(pol?.conditions||[]).map((c,i)=>(
-          <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,marginBottom:6}}>
-            <div style={{width:7,height:7,borderRadius:"50%",background:T.green,flexShrink:0}}/>
-            <span style={{flex:1,fontSize:12,color:T.text}}>{c.label}</span>
-            <button onClick={()=>set(p=>({...p,conditions:(p.conditions||[]).filter((_,j)=>j!==i)}))} style={{background:"none",border:"none",color:T.rose,cursor:"pointer",fontSize:14,padding:0,lineHeight:1}}>×</button>
+        <label style={lbl}>Policy Criteria</label>
+        <div style={{fontSize:11,color:T.textMuted,marginBottom:8,lineHeight:1.6}}>Plain-text statements describing what this policy requires — human-readable governance rules.</div>
+        {(pol?.criteria||[]).map((c,i)=>(
+          <div key={i} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"8px 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,marginBottom:6}}>
+            <div style={{width:5,height:5,borderRadius:"50%",background:T.accent,flexShrink:0,marginTop:5}}/>
+            <span style={{flex:1,fontSize:12,color:T.text,lineHeight:1.6}}>{c}</span>
+            <button onClick={()=>set(p=>({...p,criteria:(p.criteria||[]).filter((_,j)=>j!==i)}))} style={{background:"none",border:"none",color:T.rose,cursor:"pointer",fontSize:16,padding:0,lineHeight:1,flexShrink:0}}>×</button>
           </div>
         ))}
         <div style={{display:"flex",gap:6,marginTop:8}}>
-          <select value={newCondType} onChange={e=>setNewCondType(e.target.value)}
-            style={{flex:1,padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none"}}>
-            <option value="min_quality">Minimum Quality Score</option>
-            <option value="required_cert">Certification: Approved</option>
-            <option value="max_tier">Maximum Tier Level</option>
-          </select>
-          {(newCondType==="min_quality"||newCondType==="max_tier")&&(
-            <input type="number" value={newCondThr} onChange={e=>setNewCondThr(Number(e.target.value))} min={newCondType==="max_tier"?1:0} max={newCondType==="max_tier"?3:100}
-              style={{width:64,padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",textAlign:"center"}}/>
-          )}
-          <button onClick={()=>addCondition(isEdit)} style={{padding:"7px 14px",borderRadius:7,background:T.blue,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0}}>+ Add</button>
+          <input value={newCriteriaText} onChange={e=>setNewCriteriaText(e.target.value)}
+            onKeyDown={e=>{if(e.key==="Enter"&&newCriteriaText.trim()){set(p=>({...p,criteria:[...(p.criteria||[]),newCriteriaText.trim()]}));setNewCriteriaText("");}}}
+            placeholder="e.g. All PII columns must carry a sensitivity tag before publication…"
+            style={{flex:1,padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none"}}
+            onFocus={e=>e.target.style.borderColor=T.blue} onBlur={e=>e.target.style.borderColor=T.border}/>
+          <button onClick={()=>{if(newCriteriaText.trim()){set(p=>({...p,criteria:[...(p.criteria||[]),newCriteriaText.trim()]}));setNewCriteriaText("");}}}
+            style={{padding:"8px 14px",borderRadius:7,background:T.blue,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0}}>Add</button>
         </div>
       </div>
     );
@@ -5748,67 +5693,77 @@ const PolicyManagerView = ({onToast}) => {
     const pol = isEdit ? editDraft : newPol;
     const set = isEdit ? setEditDraft : setNewPol;
     if (!pol) return null;
-    const inpStyle = {width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"};
+    const inp={width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"};
+    const lbl={display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5};
+    const toggleBtn=(val,sel,style)=>({padding:"5px 11px",borderRadius:6,border:`1.5px solid ${sel?T.blue:T.border}`,background:sel?T.blueDim:T.bgElevated,color:sel?T.blue:T.textSub,fontSize:11.5,fontWeight:sel?600:400,cursor:"pointer",transition:"all .1s",...style});
     return (
-      <div style={{padding:"20px 24px",flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:14}}>
+      <div style={{padding:"20px 24px",display:"flex",flexDirection:"column",gap:16}}>
         <div>
-          <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Policy Name <span style={{color:T.rose}}>*</span></label>
+          <label style={lbl}>Policy Name <span style={{color:T.rose}}>*</span></label>
           <input value={pol.name} onChange={e=>set(p=>({...p,name:e.target.value}))} autoFocus placeholder="e.g. Commerce PII Sensitivity"
-            style={inpStyle} onFocus={e=>e.target.style.borderColor=T.blue} onBlur={e=>e.target.style.borderColor=T.border}/>
+            style={inp} onFocus={e=>e.target.style.borderColor=T.blue} onBlur={e=>e.target.style.borderColor=T.border}/>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
           <div>
-            <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Category</label>
-            <select value={pol.category} onChange={e=>set(p=>({...p,category:e.target.value}))} style={inpStyle}>
-              {POLICY_CATS.map(c=><option key={c} value={c}>{c}</option>)}
+            <label style={lbl}>Category</label>
+            <select value={pol.category} onChange={e=>set(p=>({...p,category:e.target.value}))} style={inp}>
+              {POLICY_CATS.map(c=><option key={c}>{c}</option>)}
             </select>
           </div>
           <div>
-            <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Severity</label>
-            <select value={pol.severity} onChange={e=>set(p=>({...p,severity:e.target.value}))} style={inpStyle}>
-              {["Critical","High","Medium","Low"].map(s=><option key={s} value={s}>{s}</option>)}
+            <label style={lbl}>Severity</label>
+            <select value={pol.severity} onChange={e=>set(p=>({...p,severity:e.target.value}))} style={inp}>
+              {["Critical","High","Medium","Low"].map(s=><option key={s}>{s}</option>)}
             </select>
           </div>
         </div>
         <div>
-          <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Description</label>
-          <textarea value={pol.description} onChange={e=>set(p=>({...p,description:e.target.value}))} rows={3} placeholder="What does this policy enforce and why?"
-            style={{...inpStyle,resize:"vertical",fontFamily:"inherit"}} onFocus={e=>e.target.style.borderColor=T.blue} onBlur={e=>e.target.style.borderColor=T.border}/>
+          <label style={lbl}>Description</label>
+          <textarea value={pol.description} onChange={e=>set(p=>({...p,description:e.target.value}))} rows={3} placeholder="What does this policy govern and why does it exist?"
+            style={{...inp,resize:"vertical",fontFamily:"inherit"}} onFocus={e=>e.target.style.borderColor=T.blue} onBlur={e=>e.target.style.borderColor=T.border}/>
         </div>
         <div>
-          <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Owner</label>
-          <select value={pol.owner} onChange={e=>set(p=>({...p,owner:e.target.value}))} style={inpStyle}>
+          <label style={lbl}>Owner</label>
+          <select value={pol.owner} onChange={e=>set(p=>({...p,owner:e.target.value}))} style={inp}>
             <option value="">— Select owner —</option>
-            {PMV_USERS.map(u=><option key={u} value={u}>{u}</option>)}
+            {PMV_USERS.map(u=><option key={u}>{u}</option>)}
           </select>
         </div>
         <div>
-          <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Scope — Domains</label>
+          <label style={lbl}>Stewards</label>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {PMV_USERS.map(u=>{
+              const sel=(pol.stewards||[]).includes(u);
+              return <button key={u} onClick={()=>set(p=>{const s=p.stewards||[];return{...p,stewards:sel?s.filter(x=>x!==u):[...s,u]};})} style={toggleBtn(u,sel)}>{u}</button>;
+            })}
+          </div>
+        </div>
+        <div>
+          <label style={lbl}>Scope — Domains</label>
           <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
             {ALL_DOMAINS.map(d=>{
               const sel=(pol.scope?.domains||[]).includes(d);
-              return (
-                <button key={d} onClick={()=>set(p=>{const doms=p.scope?.domains||[];return{...p,scope:{...p.scope,domains:sel?doms.filter(x=>x!==d):[...doms,d]}}})}
-                  style={{padding:"5px 12px",borderRadius:6,border:`1.5px solid ${sel?T.blue:T.border}`,background:sel?T.blueDim:T.bgElevated,color:sel?T.blue:T.textSub,fontSize:12,fontWeight:sel?600:400,cursor:"pointer",transition:"all .1s"}}>
-                  {d}
-                </button>
-              );
+              return <button key={d} onClick={()=>set(p=>{const ds=p.scope?.domains||[];return{...p,scope:{...p.scope,domains:sel?ds.filter(x=>x!==d):[...ds,d]}};})} style={toggleBtn(d,sel)}>{d}</button>;
             })}
           </div>
-          {!(pol.scope?.domains||[]).length&&<div style={{fontSize:11,color:T.textMuted,marginTop:5,fontStyle:"italic"}}>No domains selected = applies to all assets</div>}
+          {!(pol.scope?.domains||[]).length&&<div style={{fontSize:11,color:T.textMuted,marginTop:5,fontStyle:"italic"}}>No domains selected — applies to all assets</div>}
         </div>
-        <ConditionBuilder isEdit={isEdit}/>
         <div>
-          <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Regulatory Frameworks</label>
+          <label style={lbl}>Tags</label>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {POLICY_TAGS.map(t=>{
+              const sel=(pol.tags||[]).includes(t);
+              return <button key={t} onClick={()=>set(p=>{const ts=p.tags||[];return{...p,tags:sel?ts.filter(x=>x!==t):[...ts,t]};})} style={toggleBtn(t,sel)}>{t}</button>;
+            })}
+          </div>
+        </div>
+        <PolicyCriteriaBuilder isEdit={isEdit}/>
+        <div>
+          <label style={lbl}>Regulatory Frameworks</label>
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
             {["GDPR","SOC2","CCPA","HIPAA","PCI DSS"].map(r=>{
               const sel=(pol.regulations||[]).includes(r);
-              return (
-                <button key={r} onClick={()=>set(p=>{const regs=p.regulations||[];return{...p,regulations:sel?regs.filter(x=>x!==r):[...regs,r]};})}
-                  style={{padding:"4px 12px",borderRadius:6,border:`1.5px solid ${sel?T.blue:T.border}`,background:sel?T.blueDim:T.bgElevated,color:sel?T.blue:T.textSub,fontSize:11.5,fontWeight:sel?600:400,cursor:"pointer"}}>
-                  {r}
-                </button>
-              );
+              return <button key={r} onClick={()=>set(p=>{const rs=p.regulations||[];return{...p,regulations:sel?rs.filter(x=>x!==r):[...rs,r]};})} style={toggleBtn(r,sel)}>{r}</button>;
             })}
           </div>
         </div>
@@ -5817,10 +5772,26 @@ const PolicyManagerView = ({onToast}) => {
   };
 
   // ─── render helpers ──────────────────────────────────────────────────
-  const Backdrop = ({onClose,children,wide}) => (
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div onClick={e=>e.stopPropagation()} style={{width:wide?680:520,maxHeight:"87vh",background:T.bgSurface,borderRadius:14,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 24px 80px rgba(0,0,0,.4)"}}>{children}</div>
-    </div>
+  const RightPanel = ({onClose,children,title,sub,onSave,saveLabel}) => (
+    <>
+      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:1000}}/>
+      <div className="slideInRight" style={{position:"fixed",right:0,top:0,height:"100vh",width:580,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:1001,display:"flex",flexDirection:"column",boxShadow:"-16px 0 48px rgba(0,0,0,.28)",overflowY:"hidden"}}>
+        <div style={{padding:"18px 24px",borderBottom:`1px solid ${T.border}`,flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:700,color:T.text}}>{title}</div>
+            {sub&&<div style={{fontSize:12,color:T.textMuted,marginTop:3}}>{sub}</div>}
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:4}}>{Ic.x(15)}</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",minHeight:0}}>{children}</div>
+        {onSave&&(
+          <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,flexShrink:0,display:"flex",gap:10,justifyContent:"flex-end"}}>
+            <Btn ghost onClick={onClose}>Cancel</Btn>
+            <Btn variant="primary" onClick={onSave}>{saveLabel||"Save"}</Btn>
+          </div>
+        )}
+      </div>
+    </>
   );
   const ModalHdr = ({title,sub,onClose}) => (
     <div style={{padding:"18px 24px",borderBottom:`1px solid ${T.border}`,flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
@@ -5835,6 +5806,11 @@ const PolicyManagerView = ({onToast}) => {
     <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,flexShrink:0,display:"flex",gap:10,justifyContent:"flex-end"}}>
       <Btn ghost onClick={onCancel}>Cancel</Btn>
       <Btn variant={confirmVariant||"primary"} onClick={onConfirm}>{confirmLabel}</Btn>
+    </div>
+  );
+  const CenteredModal = ({onClose,children,wide}) => (
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div onClick={e=>e.stopPropagation()} style={{width:wide?680:520,maxHeight:"87vh",background:T.bgSurface,borderRadius:14,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 24px 80px rgba(0,0,0,.4)"}}>{children}</div>
     </div>
   );
   const renderLifecycleButtons = (p) => {
@@ -5902,8 +5878,8 @@ const PolicyManagerView = ({onToast}) => {
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10,marginBottom:24}}>
               {[
                 {label:"Total Policies",value:policies.length,sub:`${activePols.length} active · ${policies.filter(p=>p.lifecycle==="Draft").length} draft`,color:T.blue,pct:null},
-                {label:"Under Review",value:policies.filter(p=>p.lifecycle==="In Review").length,sub:"awaiting approval",color:T.amber,pct:Math.round(policies.filter(p=>p.lifecycle==="In Review").length/Math.max(policies.length,1)*100)},
-                {label:"Open Violations",value:totalViols,sub:totalViols===0?"All active policies compliant":"across active policies",color:totalViols>0?T.rose:T.green,pct:null},
+                {label:"Pending Review",value:pendingReview,sub:pendingReview===0?"No policies awaiting approval":"awaiting approval",color:T.amber,pct:Math.round(pendingReview/Math.max(policies.length,1)*100)},
+                {label:"Deprecated",value:policies.filter(p=>p.lifecycle==="Deprecated").length,sub:"retired policies",color:T.textMuted,pct:null},
                 {label:"Asset Coverage",value:`${coveragePct}%`,sub:`${coveredIds.size} of ${ASSETS.length} assets governed`,color:coveragePct>=80?T.green:T.amber,pct:coveragePct},
               ].map(m=>(
                 <div key={m.label} style={{padding:"13px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,borderLeft:`3px solid ${m.color}`,position:"relative",overflow:"hidden"}}>
@@ -5942,7 +5918,7 @@ const PolicyManagerView = ({onToast}) => {
                   const catPols=policies.filter(p=>p.category===cat);
                   const activeCnt=catPols.filter(p=>p.lifecycle==="Active").length;
                   const totalCnt=catPols.length;
-                  const viols=catPols.reduce((s,p)=>s+getViolations(p).length,0);
+                  const viols=catPols.reduce((s,p)=>s+getFlagged(p).length,0);
                   const pct=totalCnt?Math.round(activeCnt/totalCnt*100):0;
                   if(!totalCnt) return null;
                   return (
@@ -5977,29 +5953,6 @@ const PolicyManagerView = ({onToast}) => {
                       </div>
                       <div style={{height:4,borderRadius:2,background:T.bgElevated,overflow:"hidden"}}>
                         <div style={{width:`${reg.score}%`,height:"100%",background:sc,borderRadius:2,transition:"width .4s"}}/>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            {/* Recent Activity */}
-            <div>
-              <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>Recent Activity</div>
-              <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                {policies.flatMap(p=>(p.history||[]).map(h=>({...h,policyName:p.name,polId:p.id}))).sort((a,b)=>b.when.localeCompare(a.when)).slice(0,8).map((h,i,arr)=>{
-                  const dot=h.action.toLowerCase().includes("deprecat")?T.rose:h.action.toLowerCase().includes("activat")||h.action.toLowerCase().includes("publish")?T.blue:h.action.toLowerCase().includes("approv")?T.green:h.action.toLowerCase().includes("submit")||h.action.toLowerCase().includes("review")?T.amber:T.textMuted;
-                  return (
-                    <div key={i} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"11px 16px",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"background .1s"}}
-                      onClick={()=>{setSelPolicyId(h.polId);setTab("policies");setPdTab("activity");}}
-                      onMouseEnter={e=>e.currentTarget.style.background=T.bgElevated}
-                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                      <div style={{width:8,height:8,borderRadius:"50%",background:dot,flexShrink:0,marginTop:4}}/>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:12,color:T.text,marginBottom:2,lineHeight:1.4}}>{h.action}</div>
-                        <div style={{fontSize:11,color:T.textMuted}}>
-                          <span style={{fontFamily:"'Geist Mono',monospace",fontSize:10.5}}>{h.policyName}</span>{" · "}{h.when}{" · "}{h.who}
-                        </div>
                       </div>
                     </div>
                   );
@@ -6127,7 +6080,7 @@ const PolicyManagerView = ({onToast}) => {
                     {catPols.map(p=>{
                       const isSel = selPolicyId===p.id;
                       const isHov = hovPolId===p.id;
-                      const viols = getViolations(p).length;
+                      const viols = getFlagged(p).length;
                       return (
                         <div key={p.id}
                           onClick={()=>{setSelPolicyId(isSel?null:p.id);setPdTab("overview");}}
@@ -6237,78 +6190,132 @@ const PolicyManagerView = ({onToast}) => {
                   {/* Tab content */}
                   <div style={{flex:1,overflowY:"auto",minHeight:0}}>
                     {/* ── Overview ── */}
-                    {pdTab==="overview"&&(
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 240px",minHeight:"100%"}}>
-                        <div style={{padding:"20px 22px",borderRight:`1px solid ${T.border}`}}>
+                    {pdTab==="overview"&&(()=>{
+                      const metaRow=(label,children)=>(
+                        <div style={{paddingBottom:14,marginBottom:14,borderBottom:`1px solid ${T.border}`}}>
+                          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>{label}</div>
+                          {children}
+                        </div>
+                      );
+                      const userChip=(u)=>(
+                        <span key={u} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 9px 3px 6px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.text}}>
+                          <span style={{width:18,height:18,borderRadius:"50%",background:T.accentDim,border:`1px solid ${T.accent}33`,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:T.accent,flexShrink:0}}>
+                            {u.split(".").map(s=>s[0]?.toUpperCase()).join("")}
+                          </span>
+                          {u}
+                        </span>
+                      );
+                      return (
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 256px",minHeight:"100%"}}>
+                        {/* Main content */}
+                        <div style={{padding:"20px 22px",borderRight:`1px solid ${T.border}`,overflowY:"auto"}}>
                           <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Description</div>
-                          <div style={{fontSize:13,lineHeight:1.8,color:T.textSub,padding:"12px 14px",background:T.bgElevated,borderRadius:8,marginBottom:20}}>{p.description}</div>
-                          {/* Violations warning */}
-                          {selViols.length>0&&(
-                            <div style={{padding:"12px 14px",background:`${T.rose}08`,border:`1px solid ${T.rose}25`,borderRadius:9,marginBottom:20}}>
-                              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                                <div style={{width:7,height:7,borderRadius:"50%",background:T.rose,flexShrink:0}}/>
-                                <span style={{fontSize:12.5,fontWeight:700,color:T.rose}}>{selViols.length} violation{selViols.length>1?"s":""} detected</span>
+                          <div style={{fontSize:13,lineHeight:1.8,color:T.textSub,padding:"12px 14px",background:T.bgElevated,borderRadius:8,marginBottom:24}}>{p.description||<span style={{color:T.textMuted,fontStyle:"italic"}}>No description yet.</span>}</div>
+
+                          {/* Policy Criteria */}
+                          {(p.criteria||[]).length>0&&(
+                            <div style={{marginBottom:24}}>
+                              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Policy Criteria</div>
+                              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                                {(p.criteria||[]).map((c,i)=>(
+                                  <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+                                    <div style={{width:5,height:5,borderRadius:"50%",background:T.accent,flexShrink:0,marginTop:6}}/>
+                                    <span style={{fontSize:12.5,color:T.textSub,lineHeight:1.7}}>{c}</span>
+                                  </div>
+                                ))}
                               </div>
-                              {selViols.slice(0,3).map(a=>(
-                                <div key={a.id} style={{fontSize:12,color:T.text,padding:"5px 0",borderTop:`1px solid ${T.rose}15`}}>
-                                  <span style={{fontFamily:"'Geist Mono',monospace",color:T.rose}}>{a.name}</span>{" — "}{a.failedConds.map(c=>c.label).join(", ")}
-                                </div>
-                              ))}
-                              {selViols.length>3&&<div style={{fontSize:11,color:T.rose,marginTop:4}}>+{selViols.length-3} more — see Governed assets tab</div>}
                             </div>
                           )}
-                          {/* Enforcement conditions */}
-                          {(p.conditions||[]).length>0&&(
-                            <div>
-                              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Enforcement Conditions</div>
-                              {(p.conditions||[]).map((c,i)=>(
-                                <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6}}>
-                                  <div style={{width:6,height:6,borderRadius:"50%",background:T.green,flexShrink:0}}/>
-                                  <span style={{fontSize:12.5,color:T.text}}>{c.label}</span>
-                                </div>
-                              ))}
+
+                          {/* Flagged assets notice */}
+                          {selFlagged.length>0&&(
+                            <div style={{padding:"12px 14px",background:`${T.amber}08`,border:`1px solid ${T.amber}30`,borderRadius:9}}>
+                              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2.5L14.5 13.5H1.5L8 2.5z" stroke={T.amber} strokeWidth="1.3" strokeLinejoin="round"/><path d="M8 7v3" stroke={T.amber} strokeWidth="1.4" strokeLinecap="round"/><circle cx="8" cy="12" r=".6" fill={T.amber}/></svg>
+                                <span style={{fontSize:12,fontWeight:700,color:T.amber}}>{selFlagged.length} asset{selFlagged.length>1?"s":""} in scope with quality below 70%</span>
+                              </div>
+                              <div style={{fontSize:11.5,color:T.textMuted}}>Review in the Linked Assets tab and consider assigning stewards.</div>
                             </div>
                           )}
                         </div>
-                        {/* Right metadata sidebar */}
-                        <div style={{padding:"20px 16px",background:T.bgSurface}}>
-                          {[
-                            {l:"Owner",    v:<span style={{fontSize:12.5,fontWeight:500,color:T.text}}>{p.owner||"—"}</span>},
-                            {l:"Category", v:<span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:4,background:`${CAT_COLORS[p.category]||T.blue}18`,color:CAT_COLORS[p.category]||T.blue}}>{p.category}</span>},
-                            {l:"Severity", v:<span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:4,background:`${SEV_COLORS[p.severity]}18`,color:SEV_COLORS[p.severity]}}>{p.severity}</span>},
-                            {l:"Created",  v:<span style={{fontSize:12,color:T.text}}>{p.created}</span>},
-                            {l:"Updated",  v:<span style={{fontSize:12,color:T.text}}>{p.updated}</span>},
-                            {l:"Version",  v:<span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text}}>v{p.version||1}</span>},
-                          ].map(({l,v})=>(
-                            <div key={l} style={{paddingBottom:12,marginBottom:12,borderBottom:`1px solid ${T.border}`}}>
-                              <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:5}}>{l}</div>
-                              {v}
-                            </div>
-                          ))}
-                          {(p.scope?.domains||[]).length>0&&(
-                            <div style={{paddingBottom:12,marginBottom:12,borderBottom:`1px solid ${T.border}`}}>
-                              <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Scope</div>
-                              <div style={{display:"flex",flexWrap:"wrap",gap:4}}>{p.scope.domains.map(d=><span key={d} style={{fontSize:11,padding:"2px 7px",borderRadius:4,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`}}>{d}</span>)}</div>
+
+                        {/* Right metadata sidebar — Tags/Glossary style */}
+                        <div style={{padding:"20px 16px",background:T.bgSurface,overflowY:"auto"}}>
+                          {metaRow("Owner",
+                            p.owner
+                              ? userChip(p.owner)
+                              : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owner</span>
+                          )}
+                          {metaRow("Stewards",
+                            (p.stewards||[]).length>0
+                              ? <div style={{display:"flex",flexWrap:"wrap",gap:5}}>{(p.stewards||[]).map(u=>userChip(u))}</div>
+                              : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards assigned</span>
+                          )}
+                          {metaRow("Category",
+                            <span style={{fontSize:11,fontWeight:700,padding:"2px 9px",borderRadius:4,background:`${CAT_COLORS[p.category]||T.blue}18`,color:CAT_COLORS[p.category]||T.blue}}>{p.category}</span>
+                          )}
+                          {metaRow("Severity",
+                            <span style={{fontSize:11,fontWeight:700,padding:"2px 9px",borderRadius:4,background:`${SEV_COLORS[p.severity]}18`,color:SEV_COLORS[p.severity]}}>{p.severity}</span>
+                          )}
+                          {metaRow("Created", <span style={{fontSize:12,color:T.text}}>{p.created}</span>)}
+                          {metaRow("Updated", <span style={{fontSize:12,color:T.text}}>{p.updated}</span>)}
+                          {metaRow("Version",  <span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text}}>v{p.version||1}</span>)}
+
+                          {(p.scope?.domains||[]).length>0&&metaRow("Domains",
+                            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                              {p.scope.domains.map(d=>(
+                                <button key={d} onClick={()=>{onNav&&onNav("domains");onToast(`Navigating to ${d} domain`,"info");}}
+                                  style={{fontSize:11,padding:"2px 8px",borderRadius:4,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`,cursor:"pointer",transition:"all .1s"}}
+                                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+                                  {d}
+                                </button>
+                              ))}
                             </div>
                           )}
-                          {(p.regulations||[]).length>0&&(
-                            <div style={{paddingBottom:12,marginBottom:12,borderBottom:`1px solid ${T.border}`}}>
-                              <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Frameworks</div>
-                              <div style={{display:"flex",flexWrap:"wrap",gap:4}}>{p.regulations.map(r=><span key={r} style={{fontSize:11,fontWeight:600,padding:"2px 7px",borderRadius:4,background:T.blueDim,color:T.blue,border:`1px solid ${T.blue}20`}}>{r}</span>)}</div>
+
+                          {(p.tags||[]).length>0&&metaRow("Tags",
+                            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                              {(p.tags||[]).map(t=>(
+                                <span key={t} style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:`${T.accent}12`,color:T.accent,border:`1px solid ${T.accent}25`}}>{t}</span>
+                              ))}
                             </div>
                           )}
+
+                          {(p.regulations||[]).length>0&&metaRow("Frameworks",
+                            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                              {p.regulations.map(r=>(
+                                <span key={r} style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:T.blueDim,color:T.blue,border:`1px solid ${T.blue}25`}}>{r}</span>
+                              ))}
+                            </div>
+                          )}
+
+                          {linkedTerms.length>0&&metaRow("Glossary Terms",
+                            <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                              {linkedTerms.slice(0,5).map(t=>(
+                                <button key={t.term} onClick={()=>{onNav&&onNav("glossary");onToast(`Navigating to term: ${t.term}`,"info");}}
+                                  style={{fontSize:11.5,padding:"3px 8px",borderRadius:5,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`,cursor:"pointer",textAlign:"left",transition:"all .1s"}}
+                                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+                                  {t.term}
+                                </button>
+                              ))}
+                              {linkedTerms.length>5&&<span style={{fontSize:11,color:T.textMuted}}>+{linkedTerms.length-5} more</span>}
+                            </div>
+                          )}
+
                           <div>
-                            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Compliance</div>
-                            {[{l:"Governed assets",v:selGovAssets.length,c:T.text},{l:"Violations",v:selViols.length,c:selViols.length>0?T.rose:T.green},{l:"Linked terms",v:linkedTerms.length,c:T.text}].map(m=>(
+                            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Coverage</div>
+                            {[{l:"Governed assets",v:selGovAssets.length},{l:"Directly linked",v:(p.links||[]).length},{l:"Glossary terms",v:linkedTerms.length}].map(m=>(
                               <div key={m.l} style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
                                 <span style={{fontSize:12,color:T.textSub}}>{m.l}</span>
-                                <span style={{fontSize:12.5,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:m.c}}>{m.v}</span>
+                                <span style={{fontSize:12.5,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text}}>{m.v}</span>
                               </div>
                             ))}
                           </div>
                         </div>
                       </div>
-                    )}
+                    );})()}
 
                     {/* ── Rules ── */}
                     {pdTab==="rules"&&(
@@ -6335,51 +6342,61 @@ const PolicyManagerView = ({onToast}) => {
                       </div>
                     )}
 
-                    {/* ── Governed Assets ── */}
+                    {/* ── Linked Assets ── */}
                     {pdTab==="assets"&&(
                       <div style={{padding:"20px 22px"}}>
                         {/* Directly linked */}
                         <div style={{marginBottom:28}}>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
                             <div>
-                              <div style={{fontSize:13,fontWeight:600,color:T.text}}>Directly linked assets</div>
-                              <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Specific catalog assets this policy explicitly governs</div>
+                              <div style={{fontSize:13,fontWeight:600,color:T.text}}>Linked assets</div>
+                              <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Catalog assets this policy explicitly governs</div>
                             </div>
-                            <Btn onClick={()=>setLinkModalOpen(true)}>Link asset</Btn>
+                            <Btn onClick={()=>{setSelAssetIds(new Set());setAssetSearchQ("");setAssetRel("governs");setLinkAssetOpen(true);}}>+ Link assets</Btn>
                           </div>
                           {(p.links||[]).length===0&&(
-                            <div style={{padding:"20px",textAlign:"center",border:`1.5px dashed ${T.border}`,borderRadius:9,fontSize:12.5,color:T.textMuted}}>No assets directly linked yet.</div>
-                          )}
-                          {(p.links||[]).map((l,i)=>(
-                            <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6,background:T.bgSurface}}>
-                              <span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:4,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`,flexShrink:0}}>{l.type}</span>
-                              <span style={{fontSize:13,fontWeight:500,color:T.text,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.target}</span>
-                              <span style={{fontSize:11,color:T.textMuted,fontStyle:"italic",flexShrink:0}}>{l.rel}</span>
-                              <button onClick={()=>handleRemoveLink(p.id,i)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:18,padding:0,lineHeight:1,flexShrink:0}}>×</button>
+                            <div style={{padding:"28px",textAlign:"center",border:`1.5px dashed ${T.border}`,borderRadius:9,fontSize:12.5,color:T.textMuted}}>
+                              No assets linked yet — click "+ Link assets" to add from the catalog.
                             </div>
-                          ))}
-                        </div>
-                        {/* Computed scope */}
-                        <div>
-                          <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:4}}>Computed scope</div>
-                          <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>{selGovAssets.length} assets match domain/condition criteria and are automatically governed.</div>
-                          {selGovAssets.length===0&&<div style={{padding:"20px",textAlign:"center",border:`1.5px dashed ${T.border}`,borderRadius:9,fontSize:12.5,color:T.textMuted}}>No assets in scope — add domain filters in policy settings.</div>}
-                          {selGovAssets.map(a=>{
-                            const inViol = selViols.some(v=>v.id===a.id);
+                          )}
+                          {(p.links||[]).map((l,i)=>{
+                            const asset = ASSETS.find(a=>a.id===l.assetId);
+                            const flagged = asset&&typeof asset.quality==="number"&&asset.quality<70;
                             return (
-                              <div key={a.id} style={{padding:"9px 14px",borderRadius:8,border:`1px solid ${inViol?T.rose+"40":T.border}`,marginBottom:6,background:inViol?`${T.rose}05`:T.bgSurface}}>
-                                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:inViol?4:0}}>
-                                  <span style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:inViol?T.rose:T.text}}>{a.name}</span>
-                                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                                    {typeof a.quality==="number"&&<span style={{fontSize:11.5,fontWeight:700,color:a.quality>=80?T.green:a.quality>=60?T.amber:T.rose}}>{a.quality}%</span>}
-                                    {inViol&&<span style={{fontSize:10,fontWeight:700,padding:"2px 6px",borderRadius:4,background:`${T.rose}15`,color:T.rose}}>VIOLATION</span>}
-                                  </div>
-                                </div>
-                                {inViol&&<div style={{fontSize:11,color:T.rose}}>{selViols.find(v=>v.id===a.id)?.failedConds?.map(c=>c.label).join(" · ")}</div>}
+                              <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",border:`1px solid ${flagged?T.amber+"50":T.border}`,borderRadius:8,marginBottom:6,background:flagged?`${T.amber}05`:T.bgSurface}}>
+                                <span style={{fontSize:10.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`,flexShrink:0}}>{l.type}</span>
+                                <span style={{fontSize:13,fontWeight:500,color:T.text,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontFamily:"'Geist Mono',monospace"}}>{l.target}</span>
+                                {asset&&<span style={{fontSize:11,fontWeight:700,color:asset.quality>=80?T.green:asset.quality>=60?T.amber:T.rose,flexShrink:0}}>{asset.quality}%</span>}
+                                {asset&&<span style={{fontSize:10.5,padding:"1px 6px",borderRadius:4,background:T.bgElevated,color:T.textMuted,flexShrink:0}}>{asset.domain}</span>}
+                                <span style={{fontSize:11,color:T.textMuted,fontStyle:"italic",flexShrink:0}}>{l.rel}</span>
+                                <button onClick={()=>handleRemoveLink(p.id,i)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:18,padding:0,lineHeight:1,flexShrink:0}}>×</button>
                               </div>
                             );
                           })}
                         </div>
+                        {/* Domain-scoped assets */}
+                        {(p.scope?.domains||[]).length>0&&(
+                          <div>
+                            <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:4}}>Assets in scope</div>
+                            <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>{selGovAssets.length} assets from domains: {p.scope.domains.join(", ")}</div>
+                            {selGovAssets.length===0&&<div style={{padding:"20px",textAlign:"center",border:`1.5px dashed ${T.border}`,borderRadius:9,fontSize:12.5,color:T.textMuted}}>No assets found in selected domains.</div>}
+                            {selGovAssets.map(a=>{
+                              const flagged=typeof a.quality==="number"&&a.quality<70;
+                              return (
+                                <div key={a.id} style={{padding:"9px 14px",borderRadius:8,border:`1px solid ${flagged?T.amber+"40":T.border}`,marginBottom:6,background:T.bgSurface}}>
+                                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                                    <span style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text}}>{a.name}</span>
+                                    <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                                      {typeof a.quality==="number"&&<span style={{fontSize:11.5,fontWeight:700,color:a.quality>=80?T.green:a.quality>=60?T.amber:T.rose}}>{a.quality}%</span>}
+                                      <span style={{fontSize:10.5,padding:"1px 6px",borderRadius:4,background:T.bgElevated,color:T.textMuted}}>{a.domain}</span>
+                                      {flagged&&<span style={{fontSize:10,fontWeight:700,padding:"2px 6px",borderRadius:4,background:`${T.amber}15`,color:T.amber}}>LOW QUALITY</span>}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -6477,31 +6494,89 @@ const PolicyManagerView = ({onToast}) => {
 
       </div>
 
-      {/* ════ MODALS ════ */}
+      {/* ════ PANELS & MODALS ════ */}
 
-      {/* Create Policy */}
+      {/* Create Policy — right-side panel */}
       {createOpen&&(
-        <Backdrop onClose={()=>{setCreateOpen(false);setNewPol(EMPTY_POL);}} wide>
-          <ModalHdr title="New Policy" sub="Starts in Draft — submit for review when ready." onClose={()=>{setCreateOpen(false);setNewPol(EMPTY_POL);}}/>
+        <RightPanel title="New Policy" sub="Starts in Draft — submit for review when ready."
+          onClose={()=>{setCreateOpen(false);setNewPol(EMPTY_POL);}}
+          onSave={handleCreate} saveLabel="Create draft">
           <PolicyFormBody isEdit={false}/>
-          <ModalFtr onCancel={()=>{setCreateOpen(false);setNewPol(EMPTY_POL);}} onConfirm={handleCreate} confirmLabel="Create draft"/>
-        </Backdrop>
+        </RightPanel>
       )}
 
-      {/* Edit Policy */}
+      {/* Edit Policy — right-side panel */}
       {editOpen&&editDraft&&(
-        <Backdrop onClose={()=>{setEditOpen(false);setEditDraft(null);}} wide>
-          <ModalHdr title="Edit Policy" onClose={()=>{setEditOpen(false);setEditDraft(null);}}/>
+        <RightPanel title="Edit Policy" sub={editDraft.name}
+          onClose={()=>{setEditOpen(false);setEditDraft(null);}}
+          onSave={handleSaveEdit} saveLabel="Save changes">
           <PolicyFormBody isEdit={true}/>
-          <ModalFtr onCancel={()=>{setEditOpen(false);setEditDraft(null);}} onConfirm={handleSaveEdit} confirmLabel="Save changes"/>
-        </Backdrop>
+        </RightPanel>
       )}
 
-      {/* Add Rule */}
+      {/* Link Catalog Assets — right-side panel with search */}
+      {linkAssetOpen&&selPol&&(
+        <RightPanel title="Link assets" sub={`Attaching assets to "${selPol.name}"`}
+          onClose={()=>{setLinkAssetOpen(false);setAssetSearchQ("");setSelAssetIds(new Set());}}
+          onSave={()=>handleLinkAssets(selPol.id)} saveLabel={`Link ${selAssetIds.size||""} asset${selAssetIds.size===1?"":"s"}`}>
+          <div style={{padding:"16px 22px",display:"flex",flexDirection:"column",gap:14}}>
+            <div>
+              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Relationship type</label>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {REL_TYPES.map(r=>(
+                  <button key={r} onClick={()=>setAssetRel(r)}
+                    style={{padding:"5px 12px",borderRadius:6,fontSize:11.5,fontWeight:assetRel===r?700:400,
+                      background:assetRel===r?T.blue:"transparent",
+                      color:assetRel===r?"#fff":T.textSub,
+                      border:`1.5px solid ${assetRel===r?T.blue:T.border}`,cursor:"pointer",transition:"all .1s"}}>
+                    {r}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Search catalog assets</label>
+              <input value={assetSearchQ} onChange={e=>setAssetSearchQ(e.target.value)} placeholder="Filter by name, type, or domain…"
+                style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,
+                  borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+            </div>
+            <div style={{fontSize:11,color:T.textMuted}}>{selAssetIds.size} selected</div>
+            <div style={{display:"flex",flexDirection:"column",gap:4,maxHeight:400,overflowY:"auto"}}>
+              {ASSETS.filter(a=>{
+                const alreadyLinked=new Set((selPol.links||[]).map(l=>l.assetId));
+                if(alreadyLinked.has(a.id)) return false;
+                const q=assetSearchQ.toLowerCase();
+                return !q||(a.name||"").toLowerCase().includes(q)||(a.type||"").toLowerCase().includes(q)||(a.domain||"").toLowerCase().includes(q);
+              }).map(a=>{
+                const sel=selAssetIds.has(a.id);
+                return (
+                  <div key={a.id} onClick={()=>setSelAssetIds(prev=>{const n=new Set(prev);sel?n.delete(a.id):n.add(a.id);return n;})}
+                    style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:8,cursor:"pointer",
+                      border:`1.5px solid ${sel?T.blue:T.border}`,
+                      background:sel?`${T.blue}0d`:"transparent",transition:"all .1s"}}>
+                    <div style={{width:16,height:16,borderRadius:4,border:`2px solid ${sel?T.blue:T.border}`,
+                      background:sel?T.blue:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .1s"}}>
+                      {sel&&<svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M2 4.5l2 2L7 2.5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round"/></svg>}
+                    </div>
+                    <span style={{fontSize:10,fontWeight:600,padding:"2px 6px",borderRadius:4,background:`${T.blue}18`,color:T.blue,flexShrink:0}}>{a.type||"Table"}</span>
+                    <span style={{fontSize:12,color:T.text,fontFamily:"'Geist Mono',monospace",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</span>
+                    {a.domain&&<span style={{fontSize:10.5,color:T.textMuted,flexShrink:0}}>{a.domain}</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </RightPanel>
+      )}
+
+      {/* Add Rule — centered modal */}
       {ruleModalOpen&&(
-        <Backdrop onClose={()=>{setRuleModalOpen(false);setRuleForm({name:"",criteria:""});}}>
-          <ModalHdr title="Add rule" sub="Rules describe specific criteria that implement this policy." onClose={()=>{setRuleModalOpen(false);setRuleForm({name:"",criteria:""});}}/>
-          <div style={{padding:"20px 24px",flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:14}}>
+        <CenteredModal onClose={()=>{setRuleModalOpen(false);setRuleForm({name:"",criteria:""});}}>
+          <div style={{padding:"22px 24px 18px",borderBottom:`1px solid ${T.border}`}}>
+            <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:4}}>Add rule</div>
+            <div style={{fontSize:12,color:T.textMuted}}>Rules describe specific criteria that implement this policy.</div>
+          </div>
+          <div style={{padding:"20px 24px",display:"flex",flexDirection:"column",gap:14}}>
             <div>
               <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Rule name <span style={{color:T.rose}}>*</span></label>
               <input value={ruleForm.name} onChange={e=>setRuleForm(p=>({...p,name:e.target.value}))} autoFocus placeholder="e.g. PII tagging required"
@@ -6509,44 +6584,25 @@ const PolicyManagerView = ({onToast}) => {
             </div>
             <div>
               <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Criteria</label>
-              <textarea value={ruleForm.criteria} onChange={e=>setRuleForm(p=>({...p,criteria:e.target.value}))} rows={4} placeholder="How will this be checked or enforced?"
+              <textarea value={ruleForm.criteria} onChange={e=>setRuleForm(p=>({...p,criteria:e.target.value}))} rows={4} placeholder="What does this rule require?"
                 style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box"}}/>
             </div>
           </div>
-          <ModalFtr onCancel={()=>{setRuleModalOpen(false);setRuleForm({name:"",criteria:""}); }} onConfirm={()=>selPol&&handleAddRule(selPol.id)} confirmLabel="Add rule"/>
-        </Backdrop>
-      )}
-
-      {/* Link Catalog Asset */}
-      {linkModalOpen&&(
-        <Backdrop onClose={()=>setLinkModalOpen(false)}>
-          <ModalHdr title="Link catalog asset" sub="Directly associate a catalog asset with this policy." onClose={()=>setLinkModalOpen(false)}/>
-          <div style={{padding:"20px 24px",flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:14}}>
-            <div>
-              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Asset</label>
-              <select value={linkForm.assetIdx} onChange={e=>setLinkForm(p=>({...p,assetIdx:Number(e.target.value)}))}
-                style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}>
-                {CATALOG_ASSETS.map((a,i)=><option key={a.id} value={i}>{a.type}: {a.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Relationship</label>
-              <select value={linkForm.rel} onChange={e=>setLinkForm(p=>({...p,rel:e.target.value}))}
-                style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}>
-                {REL_TYPES.map(r=><option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
+          <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",gap:10,justifyContent:"flex-end"}}>
+            <Btn ghost onClick={()=>{setRuleModalOpen(false);setRuleForm({name:"",criteria:""});}}>Cancel</Btn>
+            <Btn onClick={()=>selPol&&handleAddRule(selPol.id)}>Add rule</Btn>
           </div>
-          <ModalFtr onCancel={()=>setLinkModalOpen(false)} onConfirm={()=>selPol&&handleAddLink(selPol.id)} confirmLabel="Link asset"/>
-        </Backdrop>
+        </CenteredModal>
       )}
 
-      {/* Link Policy to Regulation Requirement */}
-      {/* Delete Policy confirmation */}
+      {/* Delete Policy — centered modal */}
       {deleteConfPol&&(
-        <Backdrop onClose={()=>setDeleteConfPol(null)}>
-          <ModalHdr title="Delete policy?" sub={`"${deleteConfPol.name}" will be permanently removed.`} onClose={()=>setDeleteConfPol(null)}/>
-          <div style={{padding:"20px 24px",flex:1}}>
+        <CenteredModal onClose={()=>setDeleteConfPol(null)}>
+          <div style={{padding:"22px 24px 18px",borderBottom:`1px solid ${T.border}`}}>
+            <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:4}}>Delete policy?</div>
+            <div style={{fontSize:12,color:T.textMuted}}>"{deleteConfPol.name}" will be permanently removed.</div>
+          </div>
+          <div style={{padding:"20px 24px"}}>
             <div style={{padding:"12px 14px",background:`${T.rose}08`,border:`1px solid ${T.rose}25`,borderRadius:9,fontSize:12.5,color:T.textSub,lineHeight:1.7}}>
               This will permanently delete the policy and all its rules, links, and history. This action cannot be undone.
             </div>
@@ -6560,13 +6616,17 @@ const PolicyManagerView = ({onToast}) => {
               onToast("Policy deleted","info");
             }}>Delete</Btn>
           </div>
-        </Backdrop>
+        </CenteredModal>
       )}
 
+      {/* Link Policy to Regulation Requirement — centered modal */}
       {linkPolOpen&&(
-        <Backdrop onClose={()=>setLinkPolOpen(null)}>
-          <ModalHdr title="Link policy to requirement" sub="Select an internal policy to satisfy this regulatory requirement." onClose={()=>setLinkPolOpen(null)}/>
-          <div style={{flex:1,overflowY:"auto",padding:"14px 24px"}}>
+        <CenteredModal onClose={()=>setLinkPolOpen(null)}>
+          <div style={{padding:"22px 24px 18px",borderBottom:`1px solid ${T.border}`}}>
+            <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:4}}>Link policy to requirement</div>
+            <div style={{fontSize:12,color:T.textMuted}}>Select an internal policy to satisfy this regulatory requirement.</div>
+          </div>
+          <div style={{flex:1,overflowY:"auto",padding:"14px 24px",maxHeight:360}}>
             {policies.filter(p=>p.lifecycle!=="Deprecated").map(p=>(
               <div key={p.id} onClick={()=>handleLinkPol(p.id)}
                 style={{padding:"12px 14px",borderRadius:9,border:`1.5px solid ${T.border}`,marginBottom:8,cursor:"pointer",transition:"all .1s"}}
@@ -6580,10 +6640,10 @@ const PolicyManagerView = ({onToast}) => {
               </div>
             ))}
           </div>
-          <div style={{padding:"12px 24px",borderTop:`1px solid ${T.border}`,flexShrink:0}}>
+          <div style={{padding:"12px 24px",borderTop:`1px solid ${T.border}`}}>
             <Btn ghost onClick={()=>setLinkPolOpen(null)} style={{width:"100%"}}>Cancel</Btn>
           </div>
-        </Backdrop>
+        </CenteredModal>
       )}
 
     </div>
@@ -21847,7 +21907,7 @@ export default function App(){
       case "lineage":       return <LineageView/>;
       case "quality":       return <QualityView/>;
       case "contracts":     return <ContractsView onToast={showToast}/>;
-      case "policymanager": return <PolicyManagerView onToast={showToast}/>;
+      case "policymanager": return <PolicyManagerView onToast={showToast} onNav={handleNav}/>;
       case "access":        return <AccessView onToast={showToast}/>;
       case "certifications":return <CertificationsView onToast={showToast}/>;
       case "stewardship":   return <InboxView onToast={showToast}/>;
