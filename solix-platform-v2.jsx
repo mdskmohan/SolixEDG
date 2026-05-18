@@ -5612,7 +5612,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const [assetSearchQ,  setAssetSearchQ]= useState("");
   const [selAssetIds,   setSelAssetIds] = useState(new Set());
   const [assetRel,      setAssetRel]    = useState("governs");
-  const EMPTY_POL = {name:"",category:"Data",description:"",owner:"",stewards:[],tags:[],regulations:[],scope:{domains:[]},criteria:[],rules:[],links:[],history:[],fqn:"",version:1,severity:"Medium",evalSchedule:"Daily"};
+  const EMPTY_POL = {name:"",category:"Data",description:"",owner:"",stewards:[],tags:[],regulations:[],scope:{domains:[],assetTypes:[],sources:[]},criteria:[],rules:[],links:[],history:[],fqn:"",version:1,severity:"Medium"};
   const [newPol,         setNewPol]        = useState(EMPTY_POL);
   const [catFilter,      setCatFilter]     = useState([]);
   const [filterDropOpen, setFilterDropOpen]= useState(false);
@@ -5666,11 +5666,11 @@ const PolicyManagerView = ({onToast, onNav}) => {
 
   // ─── wizard constants ────────────────────────────────────────────────
   const W_STEPS = [
-    {id:"identity",   label:"Identity",    sub:"Name, category & severity"},
-    {id:"scope",      label:"Scope",       sub:"Domains & asset types"},
-    {id:"rules",      label:"Rules",       sub:"IF/THEN conditions"},
-    {id:"enforcement",label:"Enforcement", sub:"Schedule & ownership"},
-    {id:"review",     label:"Review",      sub:"Confirm & create"},
+    {id:"identity", label:"Identity",  sub:"Name, category & severity"},
+    {id:"scope",    label:"Scope",     sub:"Domains, sources & asset types"},
+    {id:"rules",    label:"Rules",     sub:"IF/THEN conditions"},
+    {id:"ownership",label:"Ownership", sub:"Owner, stewards & frameworks"},
+    {id:"review",   label:"Review",    sub:"Confirm & create"},
   ];
   const W_FIELD_LABELS = {sensitivity_tag:"Sensitivity Tag",quality_score:"Quality Score",certification:"Certification Status",data_classification:"Data Classification",owner_assigned:"Owner Assigned",description_present:"Description Present",masking_applied:"Column Masking",encryption_at_rest:"Encryption at Rest",row_security:"Row-Level Security",retention_days:"Retention Period (days)",access_role_count:"Access Role Count",tag_count:"Tag Count"};
   const closeWizard = () => { setCreateOpen(false); setNewPol(EMPTY_POL); setCreateStep(1); setWizardRules([]); };
@@ -5866,26 +5866,6 @@ const PolicyManagerView = ({onToast, onNav}) => {
           <select value={pol.category} onChange={e=>set(p=>({...p,category:e.target.value}))} style={inp}>
             {POLICY_CATS.map(c=><option key={c}>{c}</option>)}
           </select>
-        </div>
-        <div style={{display:"flex",gap:12}}>
-          <div style={{flex:1}}>
-            <label style={lbl}>Severity</label>
-            <div style={{display:"flex",gap:6}}>
-              {["Critical","High","Medium","Low"].map(sev=>{
-                const sel=(pol.severity||"Medium")===sev;
-                return <button key={sev} onClick={()=>set(p=>({...p,severity:sev}))} style={{...toggleBtn(sev,sel),borderColor:sel?SEV_COLOR[sev]:T.border,background:sel?SEV_BG[sev]:T.bgElevated,color:sel?SEV_COLOR[sev]:T.textSub}}>{sev}</button>;
-              })}
-            </div>
-          </div>
-          <div style={{flex:1}}>
-            <label style={lbl}>Evaluation</label>
-            <div style={{display:"flex",gap:6}}>
-              {["Real-time","Daily","Weekly","On-demand"].map(s=>{
-                const sel=(pol.evalSchedule||"Daily")===s;
-                return <button key={s} onClick={()=>set(p=>({...p,evalSchedule:s}))} style={toggleBtn(s,sel)}>{s}</button>;
-              })}
-            </div>
-          </div>
         </div>
         <div>
           <label style={lbl}>Description</label>
@@ -6509,7 +6489,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                           </div>
                           <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
                             <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:9}}>Details</div>
-                            {[{l:"Created",v:p.created},{l:"Updated",v:p.updated},{l:"Version",v:`v${p.version||1}`},{l:"Evaluation",v:p.evalSchedule||"Daily"}].map(m=>(
+                            {[{l:"Created",v:p.created},{l:"Updated",v:p.updated},{l:"Version",v:`v${p.version||1}`}].map(m=>(
                               <div key={m.l} style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
                                 <span style={{fontSize:12,color:T.textMuted}}>{m.l}</span>
                                 <span style={{fontSize:12,fontWeight:500,color:T.text,fontFamily:m.l==="Version"?"'Geist Mono',monospace":"inherit"}}>{m.v}</span>
@@ -6847,104 +6827,84 @@ const PolicyManagerView = ({onToast, onNav}) => {
 
       {/* ════ PANELS & MODALS ════ */}
 
-      {/* ══ Create Policy — Multi-Step Wizard Modal ══ */}
+      {/* ══ Create Policy — Multi-Step Right Panel ══ */}
       {createOpen&&(
-        <div onClick={closeWizard} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",zIndex:1200,display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <div onClick={e=>e.stopPropagation()} style={{width:900,maxHeight:"92vh",background:T.bgSurface,borderRadius:14,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 28px 90px rgba(0,0,0,.5)"}}>
+        <>
+          <div onClick={closeWizard} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1200}}/>
+          <div className="slideInRight" style={{position:"fixed",right:0,top:0,height:"100vh",width:580,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:1201,display:"flex",flexDirection:"column",boxShadow:"-16px 0 48px rgba(0,0,0,.28)"}}>
 
             {/* Header */}
-            <div style={{padding:"16px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:T.bgBase}}>
-              <div style={{display:"flex",alignItems:"center",gap:12}}>
-                <div style={{width:32,height:32,borderRadius:8,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent}}>{Ic.shield(15)}</div>
-                <div>
-                  <div style={{fontSize:14,fontWeight:700,color:T.text}}>New Policy</div>
-                  <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{W_STEPS[createStep-1].label} — Step {createStep} of {W_STEPS.length}</div>
+            <div style={{padding:"16px 22px 14px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <div style={{width:30,height:30,borderRadius:7,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent}}>{Ic.shield(14)}</div>
+                  <div>
+                    <div style={{fontSize:14,fontWeight:700,color:T.text}}>New Policy</div>
+                    <div style={{fontSize:11,color:T.textMuted}}>{W_STEPS[createStep-1].label}</div>
+                  </div>
                 </div>
+                <button onClick={closeWizard} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:4}}>{Ic.x(14)}</button>
               </div>
-              <button onClick={closeWizard} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:20,padding:4,lineHeight:1}}>{Ic.x(14)}</button>
-            </div>
-
-            {/* Body */}
-            <div style={{display:"flex",flex:1,overflow:"hidden",minHeight:0}}>
-
-              {/* Left step rail */}
-              <div style={{width:200,borderRight:`1px solid ${T.border}`,padding:"14px 0",background:T.bgBase,flexShrink:0,display:"flex",flexDirection:"column"}}>
+              {/* Horizontal step indicator */}
+              <div style={{display:"flex",alignItems:"center"}}>
                 {W_STEPS.map((s,i)=>{
                   const n=i+1,done=createStep>n,active=createStep===n;
                   return (
-                    <button key={n} onClick={()=>{if(done)setCreateStep(n);}}
-                      style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:active?T.accentDim:"transparent",border:"none",borderLeft:`3px solid ${active?T.accent:"transparent"}`,cursor:done?"pointer":"default",textAlign:"left",transition:"all .1s"}}>
-                      <div style={{width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:active?T.accent:done?T.green:T.bgElevated,border:`1.5px solid ${active?T.accent:done?T.green:T.border}`,transition:"all .2s"}}>
-                        {done
-                          ? <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5 3.5-4" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                          : <span style={{fontSize:9.5,fontWeight:700,color:active?"#fff":T.textMuted,lineHeight:1}}>{n}</span>}
+                    <React.Fragment key={n}>
+                      <div style={{display:"flex",flexDirection:"column",alignItems:"center",flex:1,cursor:done?"pointer":"default"}} onClick={()=>{if(done)setCreateStep(n);}}>
+                        <div style={{width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",background:active?T.accent:done?T.green:T.bgElevated,border:`1.5px solid ${active?T.accent:done?T.green:T.border}`,transition:"all .2s",marginBottom:4}}>
+                          {done
+                            ? <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5 3.5-4" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            : <span style={{fontSize:9,fontWeight:700,color:active?"#fff":T.textMuted}}>{n}</span>}
+                        </div>
+                        <span style={{fontSize:9.5,color:active?T.accent:done?T.textSub:T.textMuted,fontWeight:active?600:400,whiteSpace:"nowrap"}}>{s.label}</span>
                       </div>
-                      <div style={{minWidth:0}}>
-                        <div style={{fontSize:12,fontWeight:active?600:400,color:active?T.accent:done?T.text:T.textMuted,lineHeight:1.3}}>{s.label}</div>
-                        <div style={{fontSize:10,color:T.textMuted,marginTop:2}}>{s.sub}</div>
-                      </div>
-                    </button>
+                      {i<W_STEPS.length-1&&<div style={{height:1.5,flex:2,background:done?T.accent:T.border,marginBottom:16,transition:"background .3s"}}/>}
+                    </React.Fragment>
                   );
                 })}
-                <div style={{marginTop:"auto",padding:"16px 14px 8px"}}>
-                  <div style={{fontSize:10,color:T.textMuted,marginBottom:5}}>Progress</div>
-                  <div style={{height:3,borderRadius:2,background:T.bgElevated,overflow:"hidden"}}>
-                    <div style={{height:"100%",width:`${((createStep-1)/(W_STEPS.length-1))*100}%`,background:T.accent,borderRadius:2,transition:"width .3s"}}/>
-                  </div>
-                </div>
               </div>
+            </div>
 
-              {/* Right step content */}
-              <div style={{flex:1,overflowY:"auto",minHeight:0,padding:"28px 32px"}}>
+            {/* Step content */}
+            <div style={{flex:1,overflowY:"auto",minHeight:0,padding:"22px 24px"}}>
                 {(()=>{
-                  const inp={width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
-                  const lbl={display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5,letterSpacing:"0.02em"};
-                  const tBtn=(sel,extra)=>({padding:"6px 13px",borderRadius:7,border:`1.5px solid ${sel?T.accent:T.border}`,background:sel?T.accentDim:T.bgElevated,color:sel?T.accent:T.textSub,fontSize:12,fontWeight:sel?600:400,cursor:"pointer",transition:"all .1s",...extra});
+                  const inp={width:"100%",padding:"8px 11px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
+                  const lbl={display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5};
+                  const tBtn=(sel,extra)=>({padding:"5px 12px",borderRadius:7,border:`1.5px solid ${sel?T.accent:T.border}`,background:sel?T.accentDim:T.bgElevated,color:sel?T.accent:T.textSub,fontSize:11.5,fontWeight:sel?600:400,cursor:"pointer",transition:"all .1s",...extra});
                   const secHead=(title,desc)=>(
-                    <div style={{marginBottom:24}}>
-                      <div style={{fontSize:16,fontWeight:700,color:T.text,lineHeight:1.3}}>{title}</div>
-                      {desc&&<div style={{fontSize:12,color:T.textMuted,marginTop:5,lineHeight:1.7}}>{desc}</div>}
+                    <div style={{marginBottom:20}}>
+                      <div style={{fontSize:14,fontWeight:700,color:T.text}}>{title}</div>
+                      {desc&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:4,lineHeight:1.7}}>{desc}</div>}
                     </div>
                   );
 
                   /* ─── Step 1: Identity ─── */
                   if(createStep===1) return (
-                    <div style={{display:"flex",flexDirection:"column",gap:20}}>
-                      {secHead("Policy Identity","Give this policy a clear name and define its purpose, category, and urgency level.")}
+                    <div style={{display:"flex",flexDirection:"column",gap:18}}>
+                      {secHead("Policy Identity","Give this policy a name, category, and severity. Description helps reviewers understand intent.")}
                       <div>
                         <label style={lbl}>Policy Name <span style={{color:T.rose}}>*</span></label>
                         <input value={newPol.name} onChange={e=>setNewPol(p=>({...p,name:e.target.value}))} autoFocus
-                          placeholder="e.g. Commerce PII Data Governance, HIPAA PHI Access Control…"
+                          placeholder="e.g. Commerce PII Sensitivity, HIPAA PHI Access Control…"
                           style={inp} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
                       </div>
                       <div>
                         <label style={lbl}>Category</label>
-                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
-                          {[
-                            {name:"Data",     icon:"🗄️", desc:"Sensitivity tagging, classification, PII/PHI governance"},
-                            {name:"Security", icon:"🔐", desc:"Encryption, masking, row security, access hardening"},
-                            {name:"Retention",icon:"⏱️", desc:"Storage lifetime, archival triggers, deletion enforcement"},
-                            {name:"Access",   icon:"🛡️", desc:"Role-based access, least-privilege, auth controls"},
-                            {name:"Quality",  icon:"✅", desc:"Completeness, accuracy scores, certification gates"},
-                          ].map(c=>{
-                            const sel=newPol.category===c.name;
-                            const cc=catColor(c.name);
-                            return (
-                              <button key={c.name} onClick={()=>setNewPol(p=>({...p,category:c.name}))}
-                                style={{padding:"12px 14px",borderRadius:9,border:`1.5px solid ${sel?cc:T.border}`,background:sel?`${cc}0e`:T.bgElevated,cursor:"pointer",textAlign:"left",transition:"all .12s",display:"flex",flexDirection:"column",gap:4}}>
-                                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                                  <span style={{fontSize:16}}>{c.icon}</span>
-                                  <span style={{fontSize:13,fontWeight:700,color:sel?cc:T.text}}>{c.name}</span>
-                                </div>
-                                <div style={{fontSize:10.5,color:T.textMuted,lineHeight:1.5}}>{c.desc}</div>
-                              </button>
-                            );
-                          })}
+                        <select value={newPol.category} onChange={e=>setNewPol(p=>({...p,category:e.target.value}))} style={inp}>
+                          {POLICY_CATS.map(c=><option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <div style={{fontSize:10.5,color:T.textMuted,marginTop:5,lineHeight:1.5}}>
+                          {newPol.category==="Data"&&"Sensitivity tagging, classification, PII/PHI governance rules."}
+                          {newPol.category==="Security"&&"Encryption at rest, column masking, row-level security enforcement."}
+                          {newPol.category==="Retention"&&"Storage lifetime, archival triggers, deletion period enforcement."}
+                          {newPol.category==="Access"&&"Role-based access, least-privilege, authentication controls."}
+                          {newPol.category==="Quality"&&"Completeness scores, accuracy thresholds, certification gates."}
                         </div>
                       </div>
                       <div>
                         <label style={lbl}>Severity</label>
-                        <div style={{display:"flex",gap:8}}>
+                        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                           {["Critical","High","Medium","Low"].map(sev=>{
                             const sel=newPol.severity===sev;
                             return <button key={sev} onClick={()=>setNewPol(p=>({...p,severity:sev}))} style={{...tBtn(sel),borderColor:sel?SEV_COLOR[sev]:T.border,background:sel?SEV_BG[sev]:T.bgElevated,color:sel?SEV_COLOR[sev]:T.textSub,fontWeight:sel?700:400}}>{sev}</button>;
@@ -6954,8 +6914,8 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       <div>
                         <label style={lbl}>Description</label>
                         <textarea value={newPol.description} onChange={e=>setNewPol(p=>({...p,description:e.target.value}))} rows={3}
-                          placeholder="What does this policy govern? Who does it protect? What's the business reason?"
-                          style={{...inp,resize:"none"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                          placeholder="What does this policy govern? What's the business or compliance reason?"
+                          style={{...inp,resize:"vertical"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
                       </div>
                     </div>
                   );
@@ -7103,72 +7063,59 @@ const PolicyManagerView = ({onToast, onNav}) => {
                             </div>
                         }
                         <div style={{padding:"10px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textMuted,lineHeight:1.7}}>
-                          <strong style={{color:T.textSub}}>How rules work:</strong> Rules are evaluated against every in-scope asset on your configured schedule. A failed rule creates a <strong>Violation</strong> record and triggers notifications to the owner, stewards, or Slack as configured in the next step.
+                          <strong style={{color:T.textSub}}>How rules work:</strong> Each rule is evaluated <strong>independently</strong> on every workflow run. If a rule fails on an asset, a separate violation record is created for that rule — so one asset can have multiple violations if multiple rules fail. An asset is fully compliant only when all rules pass.
                         </div>
                       </div>
                     );
                   }
 
-                  /* ─── Step 4: Enforcement ─── */
-                  if(createStep===4) return (
-                    <div style={{display:"flex",flexDirection:"column",gap:20}}>
-                      {secHead("Enforcement & Ownership","Configure when rules evaluate, who owns this policy, and which regulations it satisfies.")}
-                      <div>
-                        <label style={lbl}>Evaluation Schedule</label>
-                        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:6}}>
-                          {[
-                            {v:"Real-time",desc:"Evaluates on every asset change"},
-                            {v:"Daily",    desc:"Runs automatically every 24 hours"},
-                            {v:"Weekly",   desc:"Runs once per week"},
-                            {v:"On-demand",desc:"Manual trigger only"},
-                          ].map(({v,desc})=>{
-                            const sel=(newPol.evalSchedule||"Daily")===v;
-                            return (
-                              <button key={v} onClick={()=>setNewPol(p=>({...p,evalSchedule:v}))}
-                                style={{flex:"0 0 auto",padding:"10px 16px",borderRadius:9,border:`1.5px solid ${sel?T.accent:T.border}`,background:sel?T.accentDim:T.bgElevated,cursor:"pointer",textAlign:"left",transition:"all .12s"}}>
-                                <div style={{fontSize:12.5,fontWeight:sel?700:500,color:sel?T.accent:T.text}}>{v}</div>
-                                <div style={{fontSize:10.5,color:T.textMuted,marginTop:2}}>{desc}</div>
-                              </button>
-                            );
-                          })}
+                  /* ─── Step 4: Ownership ─── */
+                  if(createStep===4){
+                    const ava=u=>u.split(".").map(s=>s[0]?.toUpperCase()).join("");
+                    const userRenderOpt=(u)=>(
+                      <>
+                        <div style={{width:22,height:22,borderRadius:5,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(u)}</div>
+                        <span style={{flex:1,fontSize:12,color:T.text}}>{u}</span>
+                      </>
+                    );
+                    return (
+                      <div style={{display:"flex",flexDirection:"column",gap:18}}>
+                        {secHead("Ownership & Classification","Assign who is responsible for this policy and link it to regulations and tags.")}
+                        <div>
+                          <label style={lbl}>Policy Owner</label>
+                          <select value={newPol.owner||""} onChange={e=>setNewPol(p=>({...p,owner:e.target.value}))} style={inp}>
+                            <option value="">— Select owner —</option>
+                            {PMV_USERS.map(u=><option key={u}>{u}</option>)}
+                          </select>
+                        </div>
+                        <CatFieldDropdown
+                          label="Stewards"
+                          placeholder="Search and select stewards…"
+                          options={PMV_USERS}
+                          selected={newPol.stewards||[]}
+                          onChange={v=>setNewPol(p=>({...p,stewards:v}))}
+                          renderOpt={userRenderOpt}
+                        />
+                        <CatFieldDropdown
+                          label="Regulatory Frameworks"
+                          placeholder="Search and select frameworks…"
+                          options={["GDPR","CCPA","HIPAA","SOC2","PCI DSS","ISO 27001","NIST","LGPD","PDPA","FERPA"]}
+                          selected={newPol.regulations||[]}
+                          onChange={v=>setNewPol(p=>({...p,regulations:v}))}
+                        />
+                        <CatFieldDropdown
+                          label="Tags"
+                          placeholder="Search and select tags…"
+                          options={POLICY_TAGS}
+                          selected={newPol.tags||[]}
+                          onChange={v=>setNewPol(p=>({...p,tags:v}))}
+                        />
+                        <div style={{padding:"10px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textMuted,lineHeight:1.7}}>
+                          <strong style={{color:T.textSub}}>Evaluation:</strong> Policy rules run automatically on every workflow run — no manual schedule needed. Violations are created immediately when a rule fails.
                         </div>
                       </div>
-                      <div>
-                        <label style={lbl}>Policy Owner</label>
-                        <select value={newPol.owner||""} onChange={e=>setNewPol(p=>({...p,owner:e.target.value}))} style={inp}>
-                          <option value="">— Select owner —</option>
-                          {PMV_USERS.map(u=><option key={u}>{u}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label style={lbl}>Stewards <span style={{fontWeight:400,color:T.textMuted,fontSize:10}}>(receive violation notifications)</span></label>
-                        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:6}}>
-                          {PMV_USERS.map(u=>{
-                            const sel=(newPol.stewards||[]).includes(u);
-                            return <button key={u} onClick={()=>setNewPol(p=>{const s=p.stewards||[];return{...p,stewards:sel?s.filter(x=>x!==u):[...s,u]};})} style={tBtn(sel)}>{u}</button>;
-                          })}
-                        </div>
-                      </div>
-                      <div>
-                        <label style={lbl}>Regulatory Frameworks</label>
-                        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:6}}>
-                          {["GDPR","CCPA","HIPAA","SOC2","PCI DSS","ISO 27001","NIST","LGPD"].map(f=>{
-                            const sel=(newPol.regulations||[]).includes(f);
-                            return <button key={f} onClick={()=>setNewPol(p=>{const rs=p.regulations||[];return{...p,regulations:sel?rs.filter(x=>x!==f):[...rs,f]};})} style={tBtn(sel)}>{f}</button>;
-                          })}
-                        </div>
-                      </div>
-                      <div>
-                        <label style={lbl}>Tags</label>
-                        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:6}}>
-                          {POLICY_TAGS.map(t=>{
-                            const sel=(newPol.tags||[]).includes(t);
-                            return <button key={t} onClick={()=>setNewPol(p=>{const ts=p.tags||[];return{...p,tags:sel?ts.filter(x=>x!==t):[...ts,t]};})} style={tBtn(sel)}>{t}</button>;
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  );
+                    );
+                  }
 
                   /* ─── Step 5: Review ─── */
                   if(createStep===5){
@@ -7204,11 +7151,11 @@ const PolicyManagerView = ({onToast, onNav}) => {
                                 return [`Rule ${i+1}`, `IF ${fl} ${r.operator}${valStr} → ${r.action.replace(/_/g," ")}`];
                               })
                           },
-                          {title:"Enforcement", rows:[
-                            ["Evaluation", newPol.evalSchedule||"Daily"],
+                          {title:"Ownership", rows:[
                             ["Owner", newPol.owner||null],
                             ["Stewards", (newPol.stewards||[]).join(", ")||null],
                             ["Frameworks", (newPol.regulations||[]).join(", ")||null],
+                            ["Tags", (newPol.tags||[]).join(", ")||null],
                           ]},
                         ].map(sec=>(
                           <div key={sec.title} style={{background:T.bgElevated,borderRadius:10,border:`1px solid ${T.border}`,overflow:"hidden"}}>
@@ -7234,7 +7181,6 @@ const PolicyManagerView = ({onToast, onNav}) => {
                   return null;
                 })()}
               </div>
-            </div>
 
             {/* Footer */}
             <div style={{padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:T.bgBase}}>
@@ -7259,7 +7205,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
               </div>
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Field-level edit modals (Tags/Glossary-style) */}
