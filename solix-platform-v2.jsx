@@ -5626,7 +5626,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const [assetSearchQ,  setAssetSearchQ]= useState("");
   const [selAssetIds,   setSelAssetIds] = useState(new Set());
   const [assetRel,      setAssetRel]    = useState("governs");
-  const EMPTY_POL = {name:"",category:"Data",description:"",owner:"",stewards:[],tags:[],regulations:[],scope:{domains:[],assetTypes:[],sources:[]},criteria:[],rules:[],links:[],history:[],fqn:"",version:1,severity:"Medium"};
+  const EMPTY_POL = {name:"",category:"Data",description:"",owner:[],stewards:[],tags:[],regulations:[],scope:{domains:[],assetTypes:[],sources:[]},criteria:[],rules:[],links:[],history:[],fqn:"",version:1,severity:"Medium"};
   const [newPol,         setNewPol]        = useState(EMPTY_POL);
   const [catFilter,      setCatFilter]     = useState([]);
   const [filterDropOpen, setFilterDropOpen]= useState(false);
@@ -5752,8 +5752,10 @@ const PolicyManagerView = ({onToast, onNav}) => {
     });
     const autoText = wizardRules.map(r=>{const fl=W_FIELD_LABELS[r.field]||r.field;const valStr=r.value?` ${r.value}`:"";const actStr=(r.actions||[]).map(a=>a.replace(/_/g," ")).join(", ")||"flag violation";return `IF ${fl} ${r.operator}${valStr}, THEN ${actStr}.`;});
     const scopeCount = (newPol.scope?.domains||[]).length?ASSETS.filter(a=>(newPol.scope.domains||[]).includes(a.domain)).length:ASSETS.length;
+    const ownerArr = Array.isArray(newPol.owner)?newPol.owner:(newPol.owner?[newPol.owner]:[]);
     const p = {...newPol,
       id:`pol-${Date.now()}`,fqn:`policies.${cat}.${nm}`,version:1,
+      owner:ownerArr[0]||"", owners:ownerArr,
       lifecycle:"Draft",created:today(),updated:today(),
       criteria:autoText,rules:convertedRules,links:[],
       violations:0,compliancePct:null,lastEvaluated:null,assetsInScope:scopeCount,
@@ -7125,10 +7127,9 @@ const PolicyManagerView = ({onToast, onNav}) => {
                         {secHead("Ownership & Classification","Assign who is responsible for this policy and link it to regulations and tags.")}
                         <CatFieldDropdown
                           label="Policy Owner"
-                          multi={false}
-                          placeholder="Search and select owner…"
+                          placeholder="Search and select owners…"
                           options={PMV_USERS}
-                          selected={newPol.owner||""}
+                          selected={newPol.owner||[]}
                           onChange={v=>setNewPol(p=>({...p,owner:v}))}
                           renderOpt={userRenderOpt}
                         />
@@ -7196,7 +7197,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                               })
                           },
                           {title:"Ownership", rows:[
-                            ["Owner", newPol.owner||null],
+                            ["Owner", (Array.isArray(newPol.owner)?newPol.owner:[newPol.owner]).filter(Boolean).join(", ")||null],
                             ["Stewards", (newPol.stewards||[]).join(", ")||null],
                             ["Frameworks", (newPol.regulations||[]).join(", ")||null],
                             ["Tags", (newPol.tags||[]).join(", ")||null],
