@@ -14331,11 +14331,16 @@ const ProfileView = ({onToast}) => {
   });
   const [tab, setTab] = useState("profile");
 
-  const myTasks  = STEWARDSHIP_TASKS.filter(t=>t.assigned===cfg.email?.split("@")[0]||t.assigned==="maya.chen");
-  const myAssets = ASSETS.filter(a=>a.owner===cfg.email?.split("@")[0]||a.owner==="maya.chen");
-  const openTasks = myTasks.filter(t=>t.status==="Open"||t.status==="In Progress");
-  const governedDomains = [...new Set(myAssets.map(a=>a.domain).filter(Boolean))];
+  const myAssets       = ASSETS.filter(a=>a.owner===cfg.email?.split("@")[0]||a.owner==="maya.chen");
+  const governedDomains= [...new Set(myAssets.map(a=>a.domain).filter(Boolean))];
   const moduleCount = (roleCfg?.nav||[]).length;
+
+  // Teams data — in a real app this would come from an API
+  const MY_TEAMS = [
+    {name:"Data Governance",      initials:"DG", color:"#6366f1", role:"Lead Steward",  members:8,  domains:["All Domains"]},
+    {name:"Commerce Stewards",    initials:"CS", color:"#d97706", role:"Member",         members:4,  domains:["Commerce"]},
+    {name:"Finance Stewards",     initials:"FS", color:"#0891b2", role:"Member",         members:3,  domains:["Finance"]},
+  ];
 
   const inpSt = {width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box"};
   const secHdr = {fontSize:11,fontWeight:700,color:T.textSub,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:14};
@@ -14370,7 +14375,7 @@ const ProfileView = ({onToast}) => {
           <div style={{display:"flex",gap:0,borderLeft:`1px solid ${T.border}`,paddingLeft:24,flexShrink:0}}>
             {[
               {label:"Assets Owned", value:String(myAssets.length), color:T.accent},
-              {label:"Open Tasks",   value:String(openTasks.length),  color:openTasks.length>0?T.amber:T.green},
+              {label:"Governed Domains", value:String(governedDomains.length), color:T.blue},
               {label:"Modules",      value:String(moduleCount||12),   color:T.blue},
             ].map((s,i)=>(
               <div key={i} style={{textAlign:"center",padding:"0 20px",borderRight:i<2?`1px solid ${T.border}`:"none"}}>
@@ -14383,7 +14388,6 @@ const ProfileView = ({onToast}) => {
 
         <Tabs2 tabs={[
           {key:"profile",  label:"Profile"},
-          {key:"tasks",    label:`Tasks${myTasks.length>0?` (${myTasks.length})`:""}`,   badge:openTasks.length||null},
           {key:"assets",   label:`Assets${myAssets.length>0?` (${myAssets.length})`:""}`, badge:null},
           {key:"activity", label:"Activity", badge:NOTIFS.filter(n=>n.unread).length||null},
         ]} active={tab} onChange={setTab}/>
@@ -14424,21 +14428,30 @@ const ProfileView = ({onToast}) => {
               </div></Card2>
             </div>
 
-            {/* RIGHT: Current Role + Switch Role */}
+            {/* RIGHT: Roles & Teams */}
             <div style={{display:"flex",flexDirection:"column",gap:16}}>
-              {/* Current Role card */}
+
+              {/* Roles card — assigned role + switch options */}
               <Card2><div style={{padding:18}}>
-                <div style={secHdr}>Current Role</div>
+                <div style={secHdr}>Roles</div>
+
+                {/* Assigned role */}
+                <div style={{fontSize:10.5,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Assigned</div>
                 <div style={{display:"flex",alignItems:"flex-start",gap:12,padding:"14px",background:cfg.badge,border:`1px solid ${cfg.color}33`,borderRadius:10,marginBottom:14}}>
                   <div style={{width:36,height:36,borderRadius:9,background:T.bgSurface,border:`1px solid ${cfg.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:cfg.color,flexShrink:0}}>{cfg.avatar}</div>
-                  <div>
-                    <div style={{fontSize:13,fontWeight:700,color:cfg.color,marginBottom:3}}>{cfg.label}</div>
-                    <div style={{fontSize:12,color:T.textSub,lineHeight:1.55}}>{roleCfg?.desc||cfg.desc}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}>
+                      <span style={{fontSize:13,fontWeight:700,color:cfg.color}}>{cfg.label}</span>
+                      <span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:99,background:T.bgSurface,color:cfg.color,border:`1px solid ${cfg.color}44`}}>Active</span>
+                    </div>
+                    <div style={{fontSize:12,color:T.textSub,lineHeight:1.5}}>{roleCfg?.desc||cfg.desc}</div>
                   </div>
                 </div>
+
+                {/* Governed domains */}
                 {governedDomains.length>0&&(
-                  <div style={{marginBottom:12}}>
-                    <div style={{fontSize:11,color:T.textMuted,marginBottom:7}}>Governed domains</div>
+                  <div style={{marginBottom:14}}>
+                    <div style={{fontSize:10.5,color:T.textMuted,marginBottom:7}}>Governed domains</div>
                     <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                       {governedDomains.map(d=>(
                         <span key={d} style={{padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:12,color:T.text,fontWeight:500}}>{d}</span>
@@ -14446,101 +14459,68 @@ const ProfileView = ({onToast}) => {
                     </div>
                   </div>
                 )}
-                <div>
-                  <div style={{fontSize:11,color:T.textMuted,marginBottom:7}}>Accessible modules</div>
+
+                {/* Accessible modules */}
+                <div style={{marginBottom:18}}>
+                  <div style={{fontSize:10.5,color:T.textMuted,marginBottom:7}}>Accessible modules</div>
                   <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
                     {(roleCfg?.nav||["home","catalog","glossary","policies"]).map(n=>(
                       <span key={n} style={{padding:"2px 8px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:10.5,color:T.textSub,textTransform:"capitalize"}}>{n.replace("policymanager","policies").replace("dataproducts","data products")}</span>
                     ))}
                   </div>
                 </div>
-              </div></Card2>
 
-              {/* Switch Role card */}
-              <Card2><div style={{padding:18}}>
-                <div style={secHdr}>Switch Role</div>
-                <div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>Try the prototype from a different role's perspective.</div>
-                <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                  {Object.entries(ROLES_CONFIG).map(([key,c])=>(
+                {/* Divider */}
+                <div style={{height:1,background:T.border,marginBottom:14}}/>
+
+                {/* Other roles — switch */}
+                <div style={{fontSize:10.5,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Switch Role</div>
+                <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                  {Object.entries(ROLES_CONFIG).filter(([key])=>key!==role).map(([key,c])=>(
                     <button key={key} onClick={()=>{onSwitch(key);onToast(`Switched to ${c.label}`,"success");}}
-                      style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:role===key?c.badge:T.bgElevated,border:`1.5px solid ${role===key?c.color+"55":T.border}`,borderRadius:9,cursor:"pointer",transition:"all .12s",textAlign:"left"}}
-                      onMouseEnter={e=>{if(role!==key){e.currentTarget.style.borderColor=c.color+"44";e.currentTarget.style.background=c.badge;}}}
-                      onMouseLeave={e=>{if(role!==key){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.bgElevated;}}}>
-                      <div style={{width:28,height:28,borderRadius:7,background:role===key?T.bgSurface:c.badge,border:`1px solid ${c.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:c.color,flexShrink:0}}>{c.avatar}</div>
+                      style={{display:"flex",alignItems:"center",gap:9,padding:"9px 11px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,cursor:"pointer",transition:"all .12s",textAlign:"left"}}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor=c.color+"55";e.currentTarget.style.background=c.badge;}}
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.bgElevated;}}>
+                      <div style={{width:26,height:26,borderRadius:7,background:c.badge,border:`1px solid ${c.color}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8.5,fontWeight:700,color:c.color,flexShrink:0}}>{c.avatar}</div>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:12.5,fontWeight:role===key?700:500,color:role===key?c.color:T.text}}>{c.label}</div>
-                        <div style={{fontSize:11,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.desc}</div>
+                        <div style={{fontSize:12,fontWeight:500,color:T.text}}>{c.label}</div>
+                        <div style={{fontSize:10.5,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.desc}</div>
                       </div>
-                      {role===key
-                        ? <span style={{fontSize:10,fontWeight:700,color:c.color,background:T.bgSurface,padding:"2px 7px",borderRadius:99,border:`1px solid ${c.color}44`,flexShrink:0}}>Active</span>
-                        : <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{color:T.textMuted,flexShrink:0}}><path d="M4.5 2.5l4 3.5-4 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      }
+                      <svg width="10" height="10" viewBox="0 0 12 12" fill="none" style={{color:T.textMuted,flexShrink:0}}><path d="M4.5 2.5l4 3.5-4 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </button>
                   ))}
                 </div>
               </div></Card2>
-            </div>
-          </div>
-        )}
 
-        {tab==="tasks"&&(()=>{
-          const pCol = p=>p==="Critical"?"#e11d48":p==="High"?T.amber:p==="Medium"?T.blue:"#6b7280";
-          const pBg  = p=>p==="Critical"?"rgba(225,29,72,.1)":p==="High"?"rgba(217,119,6,.1)":p==="Medium"?"rgba(37,99,235,.1)":"rgba(107,114,128,.1)";
-          const today = "2026-05-18";
-          const typeIcons = {conflict_resolution:"⚡",pii_audit:"🔒",term_review:"📋",access_review:"👤",orphan_assignment:"🔗",schema_documentation:"📄",certification_review:"✓",term_deprecation:"✕"};
-          const typeLabels = {conflict_resolution:"Conflict Resolution",pii_audit:"PII Audit",term_review:"Term Review",access_review:"Access Review",orphan_assignment:"Orphan Assignment",schema_documentation:"Schema Documentation",certification_review:"Certification Review",term_deprecation:"Term Deprecation"};
-          const open   = myTasks.filter(t=>t.status!=="Completed"&&t.status!=="Resolved");
-          const done   = myTasks.filter(t=>t.status==="Completed"||t.status==="Resolved");
-          if(myTasks.length===0) return <div style={{padding:"48px",textAlign:"center",color:T.textMuted,fontSize:13}}>No tasks assigned to you.</div>;
-          return (
-            <div>
-              {open.length===0&&<div style={{padding:"24px",textAlign:"center",color:T.green,fontSize:13,fontWeight:500,marginBottom:16}}>✓ All tasks completed</div>}
-              {open.map(task=>{
-                const pc=pCol(task.priority); const pb=pBg(task.priority);
-                const isOverdue=task.dueDate<today;
-                const isDueSoon=!isOverdue&&task.dueDate<="2026-05-25";
-                return (
-                  <div key={task.id} style={{display:"flex",gap:14,padding:"14px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${pc}`,borderRadius:9,marginBottom:8,transition:"background .1s"}}
-                    onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=T.bgSurface}>
-                    <div style={{fontSize:18,flexShrink:0,paddingTop:2}}>{typeIcons[task.type]||"📋"}</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:5}}>
-                        <span style={{fontSize:13,fontWeight:600,color:T.text,lineHeight:1.3}}>{task.label}</span>
-                        <span style={{fontSize:10.5,fontWeight:700,padding:"2px 9px",borderRadius:99,background:pb,color:pc,border:`1px solid ${pc}30`,flexShrink:0}}>{task.priority}</span>
+              {/* Teams card */}
+              <Card2><div style={{padding:18}}>
+                <div style={secHdr}>Teams</div>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {MY_TEAMS.map((team,i)=>(
+                    <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,transition:"border-color .12s"}}
+                      onMouseEnter={e=>e.currentTarget.style.borderColor=team.color+"55"}
+                      onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                      {/* Team avatar */}
+                      <div style={{width:38,height:38,borderRadius:10,background:`${team.color}18`,border:`1.5px solid ${team.color}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:team.color,flexShrink:0}}>{team.initials}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:2}}>{team.name}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{fontSize:10.5,color:T.textMuted}}>{team.members} members</span>
+                          <span style={{fontSize:10.5,color:T.textMuted}}>·</span>
+                          {team.domains.map(d=>(
+                            <span key={d} style={{fontSize:10.5,padding:"1px 7px",borderRadius:4,background:`${team.color}12`,color:team.color,border:`1px solid ${team.color}25`,fontWeight:500}}>{d}</span>
+                          ))}
+                        </div>
                       </div>
-                      <div style={{fontSize:11.5,color:T.textMuted,marginBottom:7,lineHeight:1.5}}>{task.description?.slice(0,100)}{task.description?.length>100?"…":""}</div>
-                      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                        <span style={{fontSize:10.5,padding:"1px 7px",borderRadius:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>{typeLabels[task.type]||task.type}</span>
-                        <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{task.asset}</span>
-                        <span style={{fontSize:10.5,color:isOverdue?"#e11d48":isDueSoon?T.amber:T.textMuted,fontWeight:isOverdue||isDueSoon?600:400}}>
-                          {isOverdue?"⚠ Overdue · ":""}Due {task.dueDate}
-                        </span>
-                        <span style={{display:"flex",alignItems:"center",gap:4,fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>
-                          <SDot status={task.status}/>{task.status}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-              {done.length>0&&(
-                <div style={{marginTop:20}}>
-                  <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10,padding:"0 4px"}}>Completed ({done.length})</div>
-                  {done.map(task=>(
-                    <div key={task.id} style={{display:"flex",gap:12,padding:"10px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.border}`,borderRadius:9,marginBottom:6,opacity:0.6}}>
-                      <span style={{fontSize:16,flexShrink:0}}>{typeIcons[task.type]||"📋"}</span>
-                      <div style={{flex:1}}>
-                        <div style={{fontSize:12.5,fontWeight:500,color:T.textSub}}>{task.label}</div>
-                        <div style={{fontSize:11,color:T.textMuted}}>{task.asset} · {task.domain}</div>
-                      </div>
-                      <span style={{fontSize:11,color:T.green,fontWeight:600,alignSelf:"center",flexShrink:0}}>✓ Done</span>
+                      <span style={{fontSize:10.5,padding:"2px 9px",borderRadius:99,background:team.role==="Lead Steward"?`${team.color}18`:T.bgSurface,color:team.role==="Lead Steward"?team.color:T.textSub,border:`1px solid ${team.role==="Lead Steward"?team.color+"33":T.border}`,fontWeight:600,flexShrink:0}}>{team.role}</span>
                     </div>
                   ))}
                 </div>
-              )}
+              </div></Card2>
+
             </div>
-          );
-        })()}
+          </div>
+        )}
 
         {tab==="assets"&&(()=>{
           if(myAssets.length===0) return <div style={{padding:"48px",textAlign:"center",color:T.textMuted,fontSize:13}}>No assets owned by you.</div>;
