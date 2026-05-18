@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect, useCallback, createContext, useContext } from "react";
-import PolicyMgmtPreview from "./policy-mgmt-preview.jsx";
 import { createPortal } from "react-dom";
 
 // ─────────────────────────────────────────────
@@ -5421,9 +5420,10 @@ const PolicyManagerView = ({onToast, onNav}) => {
 
   // ─── state ──────────────────────────────────────────────────────────
   const [policies, setPolicies] = useState([
-    {id:"pol-1",name:"Commerce PII Sensitivity",fqn:"policies.privacy.commerce_pii",version:2,
-     category:"Privacy",severity:"Critical",lifecycle:"Active",owner:"maya.chen",stewards:["dev.patel","sarah.kim"],tags:["PII","sensitive"],
+    {id:"pol-1",name:"Commerce PII Sensitivity",fqn:"policies.data.commerce_pii",version:2,
+     category:"Data",severity:"Critical",lifecycle:"Active",owner:"maya.chen",stewards:["dev.patel","sarah.kim"],tags:["PII","sensitive"],
      created:"2026-02-10",updated:"2026-05-01",regulations:["GDPR","CCPA"],
+     violations:2,compliancePct:78,lastEvaluated:"2026-05-17",assetsInScope:12,
      scope:{domains:["Commerce","Finance"]},
      criteria:["All assets in Commerce and Finance domains must carry a PII classification tag before promotion to any downstream system","Data subjects' right to erasure must be honoured within 30 days of request","Assets must hold Approved certification before being queryable by downstream analytics pipelines"],
      description:"All assets in the Commerce and Finance domains must carry an Approved certification and meet PII classification requirements. Non-compliant assets pose direct privacy and regulatory risk under GDPR and CCPA.",
@@ -5444,6 +5444,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
     {id:"pol-2",name:"Finance Data Integrity",fqn:"policies.quality.finance_integrity",version:1,
      category:"Quality",severity:"High",lifecycle:"Active",owner:"dev.patel",stewards:["sarah.kim"],tags:["financial","regulated"],
      created:"2026-01-15",updated:"2026-04-20",regulations:["SOC2","PCI DSS"],
+     violations:1,compliancePct:88,lastEvaluated:"2026-05-17",assetsInScope:8,
      scope:{domains:["Finance"]},
      criteria:["Financial datasets must maintain a quality score of 80 or above before use in any reporting pipeline","All financial tables must have a certified owner and a documented data contract","Assets with quality below 70 must have a steward review initiated within 24 hours"],
      description:"Financial datasets must maintain a minimum quality score of 80 to ensure accurate reporting and audit readiness. Assets below threshold are flagged for stewardship review.",
@@ -5460,6 +5461,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
     {id:"pol-3",name:"ML Feature Readiness",fqn:"policies.quality.ml_feature_readiness",version:1,
      category:"Quality",severity:"High",lifecycle:"In Review",owner:"sarah.kim",stewards:["alex.wu"],tags:["regulated"],
      created:"2026-03-20",updated:"2026-05-05",regulations:[],
+     violations:0,compliancePct:null,lastEvaluated:null,assetsInScope:5,
      scope:{domains:["ML","Engineering"]},
      criteria:["ML features must score above 85 on quality checks before promotion to the production feature store","Features must hold Approved certification to be eligible for production ML training pipelines","All features must have documented lineage tracing back to their source tables"],
      description:"Features used in ML pipelines must score above 85 on quality checks and hold an Approved certification before promotion to production. Prevents model degradation from poor-quality training data.",
@@ -5475,6 +5477,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
     {id:"pol-4",name:"HIPAA PHI Compliance",fqn:"policies.access.hipaa_phi",version:3,
      category:"Access",severity:"Critical",lifecycle:"Active",owner:"lisa.ray",stewards:["priya.nair","maya.chen"],tags:["PHI","healthcare","sensitive","regulated"],
      created:"2026-01-05",updated:"2026-04-01",regulations:["HIPAA"],
+     violations:3,compliancePct:65,lastEvaluated:"2026-05-17",assetsInScope:7,
      scope:{domains:["Finance","Commerce"]},
      criteria:["PHI-containing assets must hold Approved certification and maintain a quality score of 90 or above","Only roles with healthcare.phi_read scope may access PHI-tagged assets","All access to PHI-tagged assets must generate an immutable audit log entry retained for 7 years","Policy violations must be remediated within 72 hours of detection"],
      description:"Assets containing Protected Health Information must be Approved-certified and maintain quality at or above 90 to ensure data integrity in healthcare workflows.",
@@ -5494,6 +5497,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
     {id:"pol-5",name:"Product Catalog Completeness",fqn:"policies.quality.product_completeness",version:1,
      category:"Quality",severity:"Medium",lifecycle:"Draft",owner:"alex.wu",stewards:[],tags:["internal"],
      created:"2026-04-10",updated:"2026-05-10",regulations:[],
+     violations:0,compliancePct:null,lastEvaluated:null,assetsInScope:4,
      scope:{domains:["Product","Marketing"]},
      criteria:["Product and Marketing domain assets must meet a 70% quality threshold to be discoverable in the Data Catalog","All assets must have a description and at least one owner assigned","Assets in Draft lifecycle state must not appear in self-serve catalog search results"],
      description:"Product and Marketing domain assets must meet a 70% quality threshold to be discoverable in the Data Catalog. Ensures consumers can trust and find data without steward intervention.",
@@ -5504,9 +5508,10 @@ const PolicyManagerView = ({onToast, onNav}) => {
      history:[
        {when:"2026-05-10",who:"alex.wu",action:"Created draft v1"},
      ]},
-    {id:"pol-6",name:"Engineering Pipeline Governance",fqn:"policies.classification.engineering_pipeline",version:2,
-     category:"Classification",severity:"Medium",lifecycle:"Deprecated",owner:"priya.nair",stewards:[],tags:[],
+    {id:"pol-6",name:"Engineering Pipeline Governance",fqn:"policies.data.engineering_pipeline",version:2,
+     category:"Data",severity:"Medium",lifecycle:"Deprecated",owner:"priya.nair",stewards:[],tags:[],
      created:"2025-11-01",updated:"2026-02-15",regulations:["SOC2"],
+     violations:0,compliancePct:null,lastEvaluated:null,assetsInScope:3,
      scope:{domains:["Engineering"]},
      criteria:["Pipeline outputs must hold Approved certification before use in downstream production systems"],
      description:"Data pipeline outputs must be Approved-certified before promotion to production. Deprecated — scope has been consolidated under ML Feature Readiness.",
@@ -5558,13 +5563,21 @@ const PolicyManagerView = ({onToast, onNav}) => {
      ]},
   ]);
 
+  const [violations, setViolations] = useState([
+    {id:"viol-1",policyId:"pol-1",assetName:"orders",assetType:"Table",domain:"Commerce",rule:"PII classification required",severity:"Critical",status:"Open",detectedAt:"2026-05-15",description:"The orders table is missing a pii.customer tag required before promotion to downstream analytics."},
+    {id:"viol-2",policyId:"pol-1",assetName:"transactions",assetType:"Table",domain:"Finance",rule:"Certification gate",severity:"Critical",status:"Acknowledged",detectedAt:"2026-05-14",description:"transactions table does not hold Approved certification and is currently queryable by 3 downstream pipelines."},
+    {id:"viol-3",policyId:"pol-2",assetName:"payments",assetType:"Table",domain:"Finance",rule:"Quality threshold enforcement",severity:"High",status:"Open",detectedAt:"2026-05-16",description:"payments table quality score is 67, below the required threshold of 80 for use in financial reporting."},
+    {id:"viol-4",policyId:"pol-4",assetName:"patient_events",assetType:"Table",domain:"Commerce",rule:"PHI quality gate",severity:"Critical",status:"Open",detectedAt:"2026-05-13",description:"patient_events contains PHI but quality score is 84 — below the required 90 threshold."},
+    {id:"viol-5",policyId:"pol-4",assetName:"user_health_data",assetType:"Table",domain:"Finance",rule:"Access restriction",severity:"Critical",status:"Open",detectedAt:"2026-05-12",description:"user_health_data is accessible to roles without healthcare.phi_read scope. 2 roles in violation."},
+    {id:"viol-6",policyId:"pol-4",assetName:"audit_records",assetType:"Table",domain:"Commerce",rule:"Audit logging",severity:"High",status:"Open",detectedAt:"2026-05-10",description:"audit_records retention period is set to 3 years; HIPAA requires immutable audit logs retained for 7 years."},
+  ]);
+
   const [policyCategories, setPolicyCategories] = useState([
-    {id:"priv",name:"Privacy",       color:T.violet},
-    {id:"qual",name:"Quality",       color:T.green},
-    {id:"ret", name:"Retention",     color:T.amber},
-    {id:"acc", name:"Access",        color:T.rose},
-    {id:"cls", name:"Classification",color:T.blue},
-    {id:"sec", name:"Security",      color:T.rose},
+    {id:"data",name:"Data",      color:T.violet},
+    {id:"sec", name:"Security",  color:T.rose},
+    {id:"ret", name:"Retention", color:T.amber},
+    {id:"acc", name:"Access",    color:T.blue},
+    {id:"qual",name:"Quality",   color:T.green},
   ]);
   const [tab,           setTab]         = useState("policies");
   const [selPolicyId,   setSelPolicyId] = useState(null);
@@ -5599,7 +5612,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const [assetSearchQ,  setAssetSearchQ]= useState("");
   const [selAssetIds,   setSelAssetIds] = useState(new Set());
   const [assetRel,      setAssetRel]    = useState("governs");
-  const EMPTY_POL = {name:"",category:"Privacy",description:"",owner:"",stewards:[],tags:[],regulations:[],scope:{domains:[]},criteria:[],rules:[],links:[],history:[],fqn:"",version:1};
+  const EMPTY_POL = {name:"",category:"Data",description:"",owner:"",stewards:[],tags:[],regulations:[],scope:{domains:[]},criteria:[],rules:[],links:[],history:[],fqn:"",version:1,severity:"Medium",evalSchedule:"Daily"};
   const [newPol,         setNewPol]        = useState(EMPTY_POL);
   const [catFilter,      setCatFilter]     = useState([]);
   const [filterDropOpen, setFilterDropOpen]= useState(false);
@@ -5608,6 +5621,8 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const [polPlusMenuOpen, setPolPlusMenuOpen] = useState(false);
   const [polNewCatOpen,   setPolNewCatOpen]   = useState(false);
   const [polNewCatDraft,  setPolNewCatDraft]  = useState({name:"",description:"",color:"#6366f1",owners:[],stewards:[],domains:[],tags:[],frameworks:[]});
+  const [violTab,        setViolTab]         = useState("all");
+  const [violStatusFilter, setViolStatusFilter] = useState("Open");
   const [polEditCatOpen,  setPolEditCatOpen]  = useState(false);
   const [polEditCatDraft, setPolEditCatDraft] = useState(null);
   const filterDropRef  = useRef(null);
@@ -5678,6 +5693,15 @@ const PolicyManagerView = ({onToast, onNav}) => {
     const mc = catFilter.length===0 || catFilter.includes(p.category);
     return ms && ml && mc;
   });
+
+  // ─── violation helpers ────────────────────────────────────────────────
+  const openViolations     = violations.filter(v=>v.status==="Open");
+  const totalOpenViolations= openViolations.length;
+  const violsForPol        = (polId) => violations.filter(v=>v.policyId===polId);
+  const openViolsForPol    = (polId) => violations.filter(v=>v.policyId===polId&&v.status==="Open");
+  const SEV_COLOR = {Critical:T.rose, High:"#f97316", Medium:T.amber, Low:T.green};
+  const SEV_BG    = {Critical:`${T.rose}14`, High:"rgba(249,115,22,.12)", Medium:`${T.amber}14`, Low:`${T.green}14`};
+  const VIOL_STATUS_COLOR = {Open:T.rose, Acknowledged:T.amber, Resolved:T.green};
 
   // ─── handlers ────────────────────────────────────────────────────────
   const today = () => new Date().toISOString().slice(0,10);
@@ -5821,6 +5845,26 @@ const PolicyManagerView = ({onToast, onNav}) => {
             {POLICY_CATS.map(c=><option key={c}>{c}</option>)}
           </select>
         </div>
+        <div style={{display:"flex",gap:12}}>
+          <div style={{flex:1}}>
+            <label style={lbl}>Severity</label>
+            <div style={{display:"flex",gap:6}}>
+              {["Critical","High","Medium","Low"].map(sev=>{
+                const sel=(pol.severity||"Medium")===sev;
+                return <button key={sev} onClick={()=>set(p=>({...p,severity:sev}))} style={{...toggleBtn(sev,sel),borderColor:sel?SEV_COLOR[sev]:T.border,background:sel?SEV_BG[sev]:T.bgElevated,color:sel?SEV_COLOR[sev]:T.textSub}}>{sev}</button>;
+              })}
+            </div>
+          </div>
+          <div style={{flex:1}}>
+            <label style={lbl}>Evaluation</label>
+            <div style={{display:"flex",gap:6}}>
+              {["Real-time","Daily","Weekly","On-demand"].map(s=>{
+                const sel=(pol.evalSchedule||"Daily")===s;
+                return <button key={s} onClick={()=>set(p=>({...p,evalSchedule:s}))} style={toggleBtn(s,sel)}>{s}</button>;
+              })}
+            </div>
+          </div>
+        </div>
         <div>
           <label style={lbl}>Description</label>
           <textarea value={pol.description} onChange={e=>set(p=>({...p,description:e.target.value}))} rows={3} placeholder="What does this policy govern and why does it exist?"
@@ -5956,12 +6000,31 @@ const PolicyManagerView = ({onToast, onNav}) => {
         <Btn icon={Ic.plus(12)} variant="primary" onClick={()=>setCreateOpen(true)}>New Policy</Btn>
       </Topbar>
 
+      {/* ── Posture strip ── */}
+      <div style={{flexShrink:0,borderBottom:`1px solid ${T.border}`,background:T.bgSurface,padding:"10px 24px",display:"flex",gap:12,overflowX:"auto"}}>
+        {[
+          {label:"Active Policies",  value:activePols.length,         color:T.accent,    icon:<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><rect x="2" y="1" width="12" height="14" rx="1.5"/><line x1="5" y1="5.5" x2="11" y2="5.5"/><line x1="5" y1="8.5" x2="11" y2="8.5"/><line x1="5" y1="11.5" x2="9" y2="11.5"/></svg>,sub:"policies enforced"},
+          {label:"Open Violations",  value:totalOpenViolations,       color:totalOpenViolations>0?T.rose:T.green, icon:<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1L1 14h14L8 1z"/><line x1="8" y1="6" x2="8" y2="9"/><circle cx="8" cy="11.5" r=".6" fill="currentColor" stroke="none"/></svg>,sub:"need remediation"},
+          {label:"Assets Covered",   value:`${coveragePct}%`,         color:T.blue,      icon:<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1L2 4v4c0 3.5 2.7 5.5 6 6.5C11.3 13.5 14 11.5 14 8V4L8 1z"/></svg>,sub:"under active policy"},
+          {label:"Pending Review",   value:pendingReview,             color:T.amber,     icon:<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5l2 1.5"/></svg>,sub:"awaiting approval"},
+        ].map(m=>(
+          <div key={m.label} style={{flex:1,minWidth:120,display:"flex",alignItems:"center",gap:10,padding:"8px 14px",borderRadius:9,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+            <div style={{width:32,height:32,borderRadius:8,background:`${m.color}14`,display:"flex",alignItems:"center",justifyContent:"center",color:m.color,flexShrink:0}}>{m.icon}</div>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:18,fontWeight:700,color:m.color,lineHeight:1.2,fontFamily:"'Geist Mono',monospace"}}>{m.value}</div>
+              <div style={{fontSize:10,color:T.textMuted,marginTop:1}}>{m.label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* ── Tab bar at top ── */}
       <div style={{flexShrink:0,borderBottom:`1px solid ${T.border}`,background:T.bgBase}}>
         <div style={{display:"flex",paddingLeft:24,overflowX:"auto"}}>
           {[
             {key:"policies",    label:"Policies",    badge:policies.length},
             {key:"regulations", label:"Regulations", badge:regulations.length},
+            {key:"violations",  label:"Violations",  badge:totalOpenViolations||null},
           ].map(t=>{
             const isA = tab===t.key;
             return (
@@ -5971,9 +6034,10 @@ const PolicyManagerView = ({onToast, onNav}) => {
                 onMouseLeave={e=>{if(!isA){e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="transparent";}}}>
                 {t.key==="policies"&&<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" style={{flexShrink:0,opacity:isA?1:0.65}}><rect x="2" y="1" width="12" height="14" rx="1.5"/><line x1="5" y1="5.5" x2="11" y2="5.5"/><line x1="5" y1="8.5" x2="11" y2="8.5"/><line x1="5" y1="11.5" x2="9" y2="11.5"/></svg>}
                 {t.key==="regulations"&&<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,opacity:isA?1:0.65}}><path d="M8 1L2 4v4c0 3.5 2.7 5.5 6 6.5C11.3 13.5 14 11.5 14 8V4L8 1z"/></svg>}
+                {t.key==="violations"&&<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,opacity:isA?1:0.65,color:isA?T.accent:T.rose}}><path d="M8 1L1 14h14L8 1z"/><line x1="8" y1="6" x2="8" y2="9"/><circle cx="8" cy="11.5" r=".7" fill="currentColor" stroke="none"/></svg>}
                 <span>{t.label}</span>
                 {t.badge!=null&&(
-                  <span style={{display:"flex",alignItems:"center",justifyContent:"center",minWidth:18,height:18,borderRadius:9,padding:"0 5px",fontSize:10,fontWeight:700,fontFamily:"'Geist Mono',monospace",background:isA?T.accent:T.bgElevated,color:isA?"#fff":T.textMuted,transition:"all .15s",flexShrink:0}}>
+                  <span style={{display:"flex",alignItems:"center",justifyContent:"center",minWidth:18,height:18,borderRadius:9,padding:"0 5px",fontSize:10,fontWeight:700,fontFamily:"'Geist Mono',monospace",background:isA?T.accent:t.key==="violations"?`${T.rose}18`:T.bgElevated,color:isA?"#fff":t.key==="violations"?T.rose:T.textMuted,transition:"all .15s",flexShrink:0}}>
                     {t.badge}
                   </span>
                 )}
@@ -6187,6 +6251,12 @@ const PolicyManagerView = ({onToast, onNav}) => {
                             style={{flex:1,display:"flex",alignItems:"center",gap:7,padding:"5px 6px 5px 30px",background:"none",border:"none",cursor:"pointer",textAlign:"left",minWidth:0}}>
                             <span style={{width:8,height:8,borderRadius:"50%",background:catColor(p.category),flexShrink:0,display:"block"}}/>
                             <span style={{flex:1,fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+                            {openViolsForPol(p.id).length>0&&(
+                              <span title={`${openViolsForPol(p.id).length} open violation${openViolsForPol(p.id).length>1?"s":""}`}
+                                style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:8,background:T.rose,color:"#fff",flexShrink:0,fontFamily:"'Geist Mono',monospace"}}>
+                                {openViolsForPol(p.id).length}
+                              </span>
+                            )}
                           </button>
                           {/* Horizontal ··· menu — matches Tags */}
                           <div ref={dotMenuOpen===p.id?dotMenuRef:null} style={{position:"relative",flexShrink:0,paddingRight:6}}>
@@ -6246,6 +6316,17 @@ const PolicyManagerView = ({onToast, onNav}) => {
                         <div style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{p.fqn||"—"}</div>
                       </div>
                       <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                        {p.severity&&(
+                          <span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:5,background:SEV_BG[p.severity]||T.bgElevated,color:SEV_COLOR[p.severity]||T.textSub,border:`1px solid ${SEV_COLOR[p.severity]||T.border}33`}}>
+                            {p.severity}
+                          </span>
+                        )}
+                        {p.compliancePct!=null&&(
+                          <div title="Compliance score" style={{display:"flex",alignItems:"center",gap:5,padding:"2px 9px",borderRadius:5,background:p.compliancePct>=80?`${T.green}12`:`${T.rose}12`,border:`1px solid ${p.compliancePct>=80?T.green:T.rose}30`}}>
+                            <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M6 1L2 4v3c0 2.5 1.8 4 4 4.5C8.2 11 10 9.5 10 7V4L6 1z" stroke={p.compliancePct>=80?T.green:T.rose} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            <span style={{fontSize:11,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:p.compliancePct>=80?T.green:T.rose}}>{p.compliancePct}%</span>
+                          </div>
+                        )}
                         <span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>v{p.version||1}</span>
                         {!editing
                           ? <button onClick={()=>{setEditing(true);setDescDraft(p.description||"");}}
@@ -6273,16 +6354,17 @@ const PolicyManagerView = ({onToast, onNav}) => {
                   {/* Tab bar */}
                   <div style={{display:"flex",borderBottom:`1px solid ${T.border}`,flexShrink:0,padding:"0 16px",overflowX:"auto"}}>
                     {[
-                      {k:"overview", l:"Overview",        badge:null},
-                      {k:"rules",    l:"Rules",            badge:(p.rules||[]).length},
-                      {k:"assets",   l:"Governed assets",  badge:null},
-                      {k:"activity", l:"Activity",         badge:(p.history||[]).length},
-                    ].map(({k,l,badge})=>(
+                      {k:"overview",   l:"Overview",        badge:null},
+                      {k:"rules",      l:"Rules",            badge:(p.rules||[]).length},
+                      {k:"violations", l:"Violations",       badge:openViolsForPol(p.id).length||null, danger:true},
+                      {k:"assets",     l:"Governed assets",  badge:null},
+                      {k:"activity",   l:"Activity",         badge:(p.history||[]).length},
+                    ].map(({k,l,badge,danger})=>(
                       <button key={k} onClick={()=>setPdTab(k)}
                         style={{display:"flex",alignItems:"center",gap:5,padding:"9px 12px",background:"none",border:"none",borderBottom:`2px solid ${pdTab===k?T.accent:"transparent"}`,color:pdTab===k?T.accent:T.textMuted,fontSize:11.5,fontWeight:pdTab===k?600:400,cursor:"pointer",marginBottom:-1,whiteSpace:"nowrap",transition:"all .1s",flexShrink:0}}>
                         {l}
                         {badge!=null&&badge>0&&(
-                          <span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:8,background:pdTab===k?T.accent:T.bgElevated,color:pdTab===k?"#fff":T.textMuted,fontFamily:"'Geist Mono',monospace"}}>
+                          <span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:8,background:pdTab===k?T.accent:danger?`${T.rose}18`:T.bgElevated,color:pdTab===k?"#fff":danger?T.rose:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>
                             {badge}
                           </span>
                         )}
@@ -6395,8 +6477,35 @@ const PolicyManagerView = ({onToast, onNav}) => {
                           </SB>
 
                           <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
+                            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:9}}>Compliance</div>
+                            {p.compliancePct!=null
+                              ? <>
+                                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                                    <span style={{fontSize:12,color:T.textMuted}}>Score</span>
+                                    <span style={{fontSize:13,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:p.compliancePct>=80?T.green:T.rose}}>{p.compliancePct}%</span>
+                                  </div>
+                                  <div style={{height:5,borderRadius:3,background:T.bgBase,overflow:"hidden",marginBottom:8}}>
+                                    <div style={{height:"100%",width:`${p.compliancePct}%`,background:p.compliancePct>=80?T.green:p.compliancePct>=60?T.amber:T.rose,borderRadius:3,transition:"width .3s"}}/>
+                                  </div>
+                                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                                    <span style={{fontSize:11,color:T.textMuted}}>Assets in scope</span>
+                                    <span style={{fontSize:11,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{p.assetsInScope||"—"}</span>
+                                  </div>
+                                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+                                    <span style={{fontSize:11,color:T.textMuted}}>Open violations</span>
+                                    <span style={{fontSize:11,fontWeight:600,color:openViolsForPol(p.id).length>0?T.rose:T.green,fontFamily:"'Geist Mono',monospace"}}>{openViolsForPol(p.id).length}</span>
+                                  </div>
+                                  <div style={{display:"flex",justifyContent:"space-between"}}>
+                                    <span style={{fontSize:11,color:T.textMuted}}>Last evaluated</span>
+                                    <span style={{fontSize:11,fontWeight:500,color:T.textSub}}>{p.lastEvaluated||"—"}</span>
+                                  </div>
+                                </>
+                              : <div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>Not yet evaluated — activate policy to begin evaluation.</div>
+                            }
+                          </div>
+                          <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
                             <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:9}}>Details</div>
-                            {[{l:"Created",v:p.created},{l:"Updated",v:p.updated},{l:"Version",v:`v${p.version||1}`}].map(m=>(
+                            {[{l:"Created",v:p.created},{l:"Updated",v:p.updated},{l:"Version",v:`v${p.version||1}`},{l:"Evaluation",v:p.evalSchedule||"Daily"}].map(m=>(
                               <div key={m.l} style={{display:"flex",justifyContent:"space-between",marginBottom:7}}>
                                 <span style={{fontSize:12,color:T.textMuted}}>{m.l}</span>
                                 <span style={{fontSize:12,fontWeight:500,color:T.text,fontFamily:m.l==="Version"?"'Geist Mono',monospace":"inherit"}}>{m.v}</span>
@@ -6442,6 +6551,64 @@ const PolicyManagerView = ({onToast, onNav}) => {
                         ))}
                       </div>
                     )}
+
+                    {/* ── Violations ── */}
+                    {pdTab==="violations"&&(()=>{
+                      const polViols = violsForPol(p.id);
+                      const resolveViol = (id) => {
+                        setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"Resolved"}:v));
+                        onToast("Violation resolved","success");
+                      };
+                      const ackViol = (id) => {
+                        setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"Acknowledged"}:v));
+                        onToast("Violation acknowledged","info");
+                      };
+                      return (
+                        <div style={{padding:"20px 22px"}}>
+                          {polViols.length===0
+                            ? <div style={{textAlign:"center",padding:"40px 20px"}}>
+                                <div style={{width:40,height:40,borderRadius:10,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}>
+                                  <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M9 12l2 2 4-4" stroke={T.green} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="10" cy="10" r="8" stroke={T.green} strokeWidth="1.5"/></svg>
+                                </div>
+                                <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:4}}>No violations</div>
+                                <div style={{fontSize:12,color:T.textMuted}}>This policy has no open violations. All in-scope assets are compliant.</div>
+                              </div>
+                            : <>
+                                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                                  <div style={{fontSize:12,color:T.textMuted}}>{polViols.length} total · {openViolsForPol(p.id).length} open</div>
+                                  {p.lastEvaluated&&<div style={{fontSize:11,color:T.textMuted}}>Last evaluated: <span style={{color:T.textSub,fontWeight:500}}>{p.lastEvaluated}</span></div>}
+                                </div>
+                                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                                  {polViols.map(v=>(
+                                    <div key={v.id} style={{padding:"12px 14px",borderRadius:9,background:T.bgElevated,border:`1px solid ${v.status==="Open"?`${T.rose}30`:T.border}`}}>
+                                      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:6}}>
+                                        <div style={{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0}}>
+                                          <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:5,background:SEV_BG[v.severity],color:SEV_COLOR[v.severity],flexShrink:0}}>{v.severity}</span>
+                                          <span style={{fontSize:12,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.assetName}</span>
+                                          <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>{v.assetType} · {v.domain}</span>
+                                        </div>
+                                        <span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:5,background:v.status==="Open"?`${T.rose}14`:v.status==="Acknowledged"?`${T.amber}14`:`${T.green}14`,color:v.status==="Open"?T.rose:v.status==="Acknowledged"?T.amber:T.green,flexShrink:0}}>
+                                          {v.status}
+                                        </span>
+                                      </div>
+                                      <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.6,marginBottom:8}}>{v.description}</div>
+                                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                                        <span style={{fontSize:10.5,color:T.textMuted}}>Rule: <span style={{color:T.textSub,fontWeight:500}}>{v.rule}</span> · Detected {v.detectedAt}</span>
+                                        {v.status!=="Resolved"&&(
+                                          <div style={{display:"flex",gap:6}}>
+                                            {v.status==="Open"&&<button onClick={()=>ackViol(v.id)} style={{fontSize:10.5,padding:"3px 10px",borderRadius:5,background:"transparent",border:`1px solid ${T.amber}`,color:T.amber,cursor:"pointer",fontWeight:600}}>Acknowledge</button>}
+                                            <button onClick={()=>resolveViol(v.id)} style={{fontSize:10.5,padding:"3px 10px",borderRadius:5,background:T.green,border:"none",color:"#fff",cursor:"pointer",fontWeight:600}}>Resolve</button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
+                          }
+                        </div>
+                      );
+                    })()}
 
                     {/* ── Linked Assets ── */}
                     {pdTab==="assets"&&(
@@ -6504,6 +6671,97 @@ const PolicyManagerView = ({onToast, onNav}) => {
             );
           })()}
         </>}
+
+        {/* ══════ VIOLATIONS TAB ══════ */}
+        {tab==="violations"&&(()=>{
+          const displayViols = violStatusFilter==="All" ? violations : violations.filter(v=>v.status===violStatusFilter);
+          const critCount = violations.filter(v=>v.severity==="Critical"&&v.status==="Open").length;
+          const highCount = violations.filter(v=>v.severity==="High"&&v.status==="Open").length;
+          const resolveViol = (id) => { setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"Resolved"}:v)); onToast("Violation resolved","success"); };
+          const ackViol = (id) => { setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"Acknowledged"}:v)); onToast("Violation acknowledged","info"); };
+          return (
+            <div style={{flex:1,overflowY:"auto",padding:"20px 28px"}}>
+              {/* Summary banner */}
+              {totalOpenViolations>0&&(
+                <div style={{padding:"12px 16px",background:`${T.rose}0c`,border:`1px solid ${T.rose}25`,borderRadius:10,marginBottom:18,display:"flex",alignItems:"center",gap:14}}>
+                  <svg width="18" height="18" viewBox="0 0 20 20" fill="none" style={{color:T.rose,flexShrink:0}}><path d="M10 2L2 17h16L10 2z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><line x1="10" y1="8" x2="10" y2="12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="10" cy="14.5" r=".8" fill="currentColor" stroke="none"/></svg>
+                  <div style={{flex:1}}>
+                    <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{totalOpenViolations} open violation{totalOpenViolations!==1?"s":""}</span>
+                    <span style={{fontSize:12,color:T.textSub}}> — </span>
+                    {critCount>0&&<span style={{fontSize:12,color:T.rose,fontWeight:600}}>{critCount} Critical</span>}
+                    {critCount>0&&highCount>0&&<span style={{fontSize:12,color:T.textMuted}}>, </span>}
+                    {highCount>0&&<span style={{fontSize:12,color:"#f97316",fontWeight:600}}>{highCount} High</span>}
+                    <span style={{fontSize:12,color:T.textMuted}}> need immediate attention.</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Status filter */}
+              <div style={{display:"flex",gap:6,marginBottom:16,alignItems:"center"}}>
+                <span style={{fontSize:11,color:T.textMuted,marginRight:4}}>Filter:</span>
+                {["All","Open","Acknowledged","Resolved"].map(s=>(
+                  <button key={s} onClick={()=>setViolStatusFilter(s)}
+                    style={{padding:"4px 12px",borderRadius:6,fontSize:11.5,fontWeight:violStatusFilter===s?700:400,
+                      border:`1px solid ${violStatusFilter===s?(VIOL_STATUS_COLOR[s]||T.blue):T.border}`,
+                      background:violStatusFilter===s?`${VIOL_STATUS_COLOR[s]||T.blue}14`:"transparent",
+                      color:violStatusFilter===s?(VIOL_STATUS_COLOR[s]||T.blue):T.textSub,cursor:"pointer"}}>
+                    {s}
+                    <span style={{marginLeft:5,fontSize:10,opacity:.7}}>
+                      {s==="All"?violations.length:violations.filter(v=>v.status===s).length}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Violations table */}
+              {displayViols.length===0
+                ? <div style={{textAlign:"center",padding:"48px 24px"}}>
+                    <div style={{width:44,height:44,borderRadius:11,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 12l2 2 4-4" stroke={T.green} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="12" cy="12" r="9" stroke={T.green} strokeWidth="1.5"/></svg>
+                    </div>
+                    <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:4}}>No violations</div>
+                    <div style={{fontSize:12,color:T.textMuted}}>No {violStatusFilter!=="All"?violStatusFilter.toLowerCase()+" ":""} violations found across all active policies.</div>
+                  </div>
+                : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                    <div style={{display:"grid",gridTemplateColumns:"auto 1fr auto auto auto auto",gap:0,borderBottom:`1px solid ${T.border}`,padding:"8px 16px",background:T.bgElevated}}>
+                      {["Asset","Policy / Rule","Severity","Status","Detected","Actions"].map(h=>(
+                        <div key={h} style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",padding:"0 10px 0 0"}}>{h}</div>
+                      ))}
+                    </div>
+                    {displayViols.map((v,i)=>{
+                      const pol = policies.find(p=>p.id===v.policyId);
+                      return (
+                        <div key={v.id} style={{display:"grid",gridTemplateColumns:"auto 1fr auto auto auto auto",gap:0,padding:"10px 16px",borderBottom:i<displayViols.length-1?`1px solid ${T.border}`:"none",alignItems:"center"}}
+                          onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                          <div style={{paddingRight:10}}>
+                            <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{v.assetName}</div>
+                            <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{v.assetType} · {v.domain}</div>
+                          </div>
+                          <div style={{paddingRight:10,minWidth:0}}>
+                            <div style={{fontSize:11.5,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pol?.name||v.policyId}</div>
+                            <div style={{fontSize:10.5,color:T.textMuted,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.rule}</div>
+                          </div>
+                          <div style={{paddingRight:10}}>
+                            <span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:5,background:SEV_BG[v.severity],color:SEV_COLOR[v.severity]}}>{v.severity}</span>
+                          </div>
+                          <div style={{paddingRight:10}}>
+                            <span style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:5,background:v.status==="Open"?`${T.rose}14`:v.status==="Acknowledged"?`${T.amber}14`:`${T.green}14`,color:v.status==="Open"?T.rose:v.status==="Acknowledged"?T.amber:T.green}}>
+                              {v.status}
+                            </span>
+                          </div>
+                          <div style={{paddingRight:10,fontSize:11,color:T.textMuted,whiteSpace:"nowrap"}}>{v.detectedAt}</div>
+                          <div style={{display:"flex",gap:5}}>
+                            {v.status==="Open"&&<button onClick={()=>ackViol(v.id)} style={{fontSize:10.5,padding:"3px 9px",borderRadius:5,background:"transparent",border:`1px solid ${T.amber}`,color:T.amber,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>Ack</button>}
+                            {v.status!=="Resolved"&&<button onClick={()=>resolveViol(v.id)} style={{fontSize:10.5,padding:"3px 9px",borderRadius:5,background:T.green,border:"none",color:"#fff",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>Resolve</button>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+              }
+            </div>
+          );
+        })()}
 
         {/* ══════ REGULATIONS TAB ══════ */}
         {tab==="regulations"&&(()=>{
@@ -22444,8 +22702,7 @@ export default function App(){
       case "lineage":       return <LineageView/>;
       case "quality":       return <QualityView/>;
       case "contracts":     return <ContractsView onToast={showToast}/>;
-      case "policymanager": return <PolicyMgmtPreview/>;
-      case "policymanager-old": return <PolicyManagerView onToast={showToast} onNav={handleNav}/>;
+      case "policymanager": return <PolicyManagerView onToast={showToast} onNav={handleNav}/>;
       case "access":        return <AccessView onToast={showToast}/>;
       case "certifications":return <CertificationsView onToast={showToast}/>;
       case "stewardship":   return <InboxView onToast={showToast}/>;
