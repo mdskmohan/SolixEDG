@@ -2893,9 +2893,8 @@ const UserMenu = () => {
   const {role, roleCfg, onSwitch, onLogout} = useRole();
   const cfg = roleCfg || {label:"User",name:"User",avatar:"U",color:T.accent,badge:T.accentDim,email:""};
   const [open, setOpen] = useState(false);
-  const [tab,  setTab]  = useState("menu");
   const ref = useRef(null);
-  useEffect(()=>{const fn=e=>{if(ref.current&&!ref.current.contains(e.target)){setOpen(false);setTab("menu");}};document.addEventListener("mousedown",fn);return()=>document.removeEventListener("mousedown",fn);},[]);
+  useEffect(()=>{const fn=e=>{if(ref.current&&!ref.current.contains(e.target)){setOpen(false);}};document.addEventListener("mousedown",fn);return()=>document.removeEventListener("mousedown",fn);},[]);
   return (
     <div ref={ref} style={{position:"relative"}}>
       <button onClick={()=>setOpen(o=>!o)} title={cfg.name}
@@ -2921,12 +2920,7 @@ const UserMenu = () => {
               </div>
             </div>
           </div>
-          <div style={{display:"flex",borderBottom:`1px solid ${T.border}`}}>
-            {[{k:"menu",l:"Account"},{k:"roles",l:"Switch Role"}].map(t=>(
-              <button key={t.k} onClick={()=>setTab(t.k)} style={{flex:1,padding:"7px 0",background:"transparent",border:"none",borderBottom:`2px solid ${tab===t.k?T.accent:"transparent"}`,color:tab===t.k?T.text:T.textSub,fontSize:11.5,fontWeight:tab===t.k?600:400,cursor:"pointer",transition:"all .12s",marginBottom:-1}}>{t.l}</button>
-            ))}
-          </div>
-          {tab==="menu"&&<div style={{padding:"6px 0"}}>
+          <div style={{padding:"6px 0"}}>
             {[
               {label:"My Profile",   icon:Ic.access(13),   nav:"profile"},
               {label:"My Tasks",     icon:Ic.steward(13),  nav:"stewardship"},
@@ -2952,22 +2946,7 @@ const UserMenu = () => {
               <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9 2h3a1 1 0 011 1v8a1 1 0 01-1 1H9M6 10l4-3-4-3M10 7H2" stroke={T.rose} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
               <span style={{fontSize:12.5,color:T.rose}}>Sign out</span>
             </button>
-          </div>}
-          {tab==="roles"&&<div style={{padding:"8px 0"}}>
-            <div style={{padding:"4px 14px 8px",fontSize:11,color:T.textMuted}}>Switch role — same user, different permissions</div>
-            {Object.entries(ROLES_CONFIG).map(([key,c])=>(
-              <button key={key} onClick={()=>{onSwitch(key);setOpen(false);setTab("menu");}} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"8px 14px",background:role===key?c.badge:"transparent",border:"none",cursor:"pointer",borderLeft:`2.5px solid ${role===key?c.color:"transparent"}`,transition:"all .12s"}}
-                onMouseEnter={e=>{if(role!==key)e.currentTarget.style.background=T.bgHover;}}
-                onMouseLeave={e=>{if(role!==key)e.currentTarget.style.background="transparent";}}>
-                <div style={{width:28,height:28,borderRadius:7,background:c.badge,border:`1px solid ${c.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:c.color,flexShrink:0}}>{cfg.avatar}</div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:12,fontWeight:600,color:T.text}}>{c.label}</div>
-                  <div style={{fontSize:10,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cfg.email}</div>
-                </div>
-                {role===key&&<span style={{color:T.accent,flexShrink:0}}>{Ic.check(11)}</span>}
-              </button>
-            ))}
-          </div>}
+          </div>
         </div>
       )}
     </div>
@@ -14335,12 +14314,21 @@ const ProfileView = ({onToast}) => {
   const governedDomains= [...new Set(myAssets.map(a=>a.domain).filter(Boolean))];
   const moduleCount = (roleCfg?.nav||[]).length;
 
-  // Teams data — in a real app this would come from an API
-  const MY_TEAMS = [
-    {name:"Data Governance",      initials:"DG", color:"#6366f1", role:"Lead Steward",  members:8,  domains:["All Domains"]},
-    {name:"Commerce Stewards",    initials:"CS", color:"#d97706", role:"Member",         members:4,  domains:["Commerce"]},
-    {name:"Finance Stewards",     initials:"FS", color:"#0891b2", role:"Member",         members:3,  domains:["Finance"]},
-  ];
+  // Derive teams from the real teams/members data
+  const myMember   = MEMBERS_INIT.find(m => m.email === cfg.email) || MEMBERS_INIT[0];
+  const myTeamNames = myMember?.teams || [];
+  const MY_TEAMS = myTeamNames.map(teamName => {
+    const teamDef     = TEAMS_INIT.find(t => t.name === teamName);
+    const teamMembers = MEMBERS_INIT.filter(m => (m.teams||[]).includes(teamName) && m.status==="Active");
+    const initials    = teamName.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
+    return {
+      name:    teamName,
+      initials,
+      color:   teamDef?.color || T.accent,
+      desc:    teamDef?.desc  || "",
+      members: teamMembers,
+    };
+  });
 
   const inpSt = {width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box"};
   const secHdr = {fontSize:11,fontWeight:700,color:T.textSub,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:14};
@@ -14494,27 +14482,43 @@ const ProfileView = ({onToast}) => {
 
               {/* Teams card */}
               <Card2><div style={{padding:18}}>
-                <div style={secHdr}>Teams</div>
-                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                  <div style={secHdr}>Teams</div>
+                  <span style={{fontSize:11,color:T.textMuted}}>{myMember?.teams?.length||0} team{(myMember?.teams?.length||0)!==1?"s":""}</span>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:10}}>
                   {MY_TEAMS.map((team,i)=>(
-                    <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,transition:"border-color .12s"}}
+                    <div key={i} style={{padding:"13px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,transition:"border-color .12s"}}
                       onMouseEnter={e=>e.currentTarget.style.borderColor=team.color+"55"}
                       onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                      {/* Team avatar */}
-                      <div style={{width:38,height:38,borderRadius:10,background:`${team.color}18`,border:`1.5px solid ${team.color}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:team.color,flexShrink:0}}>{team.initials}</div>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:2}}>{team.name}</div>
-                        <div style={{display:"flex",alignItems:"center",gap:8}}>
-                          <span style={{fontSize:10.5,color:T.textMuted}}>{team.members} members</span>
-                          <span style={{fontSize:10.5,color:T.textMuted}}>·</span>
-                          {team.domains.map(d=>(
-                            <span key={d} style={{fontSize:10.5,padding:"1px 7px",borderRadius:4,background:`${team.color}12`,color:team.color,border:`1px solid ${team.color}25`,fontWeight:500}}>{d}</span>
-                          ))}
+                      {/* Top row: avatar + name + member count */}
+                      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                        <div style={{width:36,height:36,borderRadius:9,background:`${team.color}18`,border:`1.5px solid ${team.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10.5,fontWeight:700,color:team.color,flexShrink:0}}>{team.initials}</div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:13,fontWeight:600,color:T.text}}>{team.name}</div>
+                          <div style={{fontSize:11,color:T.textMuted,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{team.desc}</div>
                         </div>
+                        <span style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:`${team.color}15`,color:team.color,border:`1px solid ${team.color}33`,fontWeight:600,flexShrink:0,whiteSpace:"nowrap"}}>{team.members.length} members</span>
                       </div>
-                      <span style={{fontSize:10.5,padding:"2px 9px",borderRadius:99,background:team.role==="Lead Steward"?`${team.color}18`:T.bgSurface,color:team.role==="Lead Steward"?team.color:T.textSub,border:`1px solid ${team.role==="Lead Steward"?team.color+"33":T.border}`,fontWeight:600,flexShrink:0}}>{team.role}</span>
+                      {/* Member avatars row */}
+                      <div style={{display:"flex",alignItems:"center",gap:4}}>
+                        {team.members.slice(0,6).map((m,j)=>(
+                          <div key={m.id} title={m.name}
+                            style={{width:24,height:24,borderRadius:6,background:m.color+"22",border:`1.5px solid ${m.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8.5,fontWeight:700,color:m.color,flexShrink:0,marginLeft:j===0?0:-6,zIndex:team.members.length-j,position:"relative",cursor:"default"}}>
+                            {m.avatar}
+                          </div>
+                        ))}
+                        {team.members.length>6&&(
+                          <div style={{marginLeft:2,fontSize:10.5,color:T.textMuted}}>+{team.members.length-6}</div>
+                        )}
+                        {/* "You" indicator */}
+                        <span style={{marginLeft:"auto",fontSize:10,color:T.textMuted,fontStyle:"italic"}}>You're a member</span>
+                      </div>
                     </div>
                   ))}
+                  {MY_TEAMS.length===0&&(
+                    <div style={{padding:"24px 0",textAlign:"center",color:T.textMuted,fontSize:12}}>Not assigned to any teams yet.</div>
+                  )}
                 </div>
               </div></Card2>
 
@@ -17253,6 +17257,25 @@ const RoleChipPicker = ({values=[], defaultRole, colorMap={}, options=[], onRole
   );
 };
 
+// Module-level constants — used by both TeamsSection and ProfileView
+const MEMBERS_INIT = [
+  {id:"u1",name:"Maya Chen",    email:"maya.chen@jnj.com",    roles:["Data Steward","Data Analyst"],  defaultRole:"Data Steward",  teams:["Governance","Analytics"],       status:"Active",  joined:"Jan 2023",avatar:"MC",color:"#d97706"},
+  {id:"u2",name:"Dev Patel",    email:"dev.patel@jnj.com",    roles:["Data Analyst"],                 defaultRole:"Data Analyst",  teams:["Analytics"],                    status:"Active",  joined:"Mar 2023",avatar:"DP",color:"#0284c7"},
+  {id:"u3",name:"Sarah Kim",    email:"sarah.kim@jnj.com",    roles:["Viewer"],                       defaultRole:"Viewer",        teams:["Finance"],                      status:"Active",  joined:"Feb 2022",avatar:"SK",color:"#4b4b60"},
+  {id:"u4",name:"Alex Rivera",  email:"alex.rivera@jnj.com",  roles:["Admin"],                        defaultRole:"Admin",         teams:["Platform","Governance"],         status:"Active",  joined:"Jun 2022",avatar:"AR",color:"#ee2424"},
+  {id:"u5",name:"James Oh",     email:"james.oh@jnj.com",     roles:["Data Engineer","Data Analyst"], defaultRole:"Data Engineer", teams:["Data Engineering","Analytics"],  status:"Active",  joined:"Nov 2022",avatar:"JO",color:"#7c3aed"},
+  {id:"u6",name:"Priya Nair",   email:"priya.nair@jnj.com",   roles:["Data Engineer"],                defaultRole:"Data Engineer", teams:["Data Engineering"],              status:"Active",  joined:"Sep 2023",avatar:"PN",color:"#7c3aed"},
+  {id:"u7",name:"Lisa Ray",     email:"lisa.ray@jnj.com",     roles:["Data Analyst","Data Steward"],  defaultRole:"Data Analyst",  teams:["Analytics","Finance"],           status:"Active",  joined:"Jan 2024",avatar:"LR",color:"#0284c7"},
+  {id:"u8",name:"Tom Vance",    email:"tom.vance@jnj.com",    roles:["Data Steward"],                 defaultRole:"Data Steward",  teams:["Governance"],                   status:"Inactive",joined:"Mar 2022",avatar:"TV",color:"#d97706"},
+];
+const TEAMS_INIT = [
+  {id:"t1",name:"Data Engineering",desc:"Manages pipelines, ingestion, and data infrastructure.",  color:"#7c3aed",created:"Nov 2022"},
+  {id:"t2",name:"Analytics",        desc:"Builds dashboards, runs queries, and surfaces insights.", color:"#0284c7",created:"Jan 2023"},
+  {id:"t3",name:"Finance",          desc:"Owns financial reporting datasets and access policies.",  color:"#d97706",created:"Feb 2022"},
+  {id:"t4",name:"Governance",       desc:"Certifies data, manages glossary, enforces data policy.",color:"#16a34a",created:"Jan 2023"},
+  {id:"t5",name:"Platform",         desc:"Platform administration, integrations, and settings.",   color:"#ee2424",created:"Jun 2022"},
+];
+
 const TeamsSection = ({onToast}) => {
 
   const ROLE_LIST    = ["Admin","Data Steward","Data Analyst","Data Engineer","Viewer"];
@@ -17261,23 +17284,8 @@ const TeamsSection = ({onToast}) => {
 
   // ── Shared state ──
   const [activeTab,   setActiveTab]   = useState("teams");
-  const [members,     setMembers]     = useState([
-    {id:"u1",name:"Maya Chen",    email:"maya.chen@jnj.com",    roles:["Data Steward","Data Analyst"],  defaultRole:"Data Steward",  teams:["Governance","Analytics"],       status:"Active",  joined:"Jan 2023",avatar:"MC",color:"#d97706"},
-    {id:"u2",name:"Dev Patel",    email:"dev.patel@jnj.com",    roles:["Data Analyst"],                 defaultRole:"Data Analyst",  teams:["Analytics"],                    status:"Active",  joined:"Mar 2023",avatar:"DP",color:"#0284c7"},
-    {id:"u3",name:"Sarah Kim",    email:"sarah.kim@jnj.com",    roles:["Viewer"],                       defaultRole:"Viewer",        teams:["Finance"],                      status:"Active",  joined:"Feb 2022",avatar:"SK",color:"#4b4b60"},
-    {id:"u4",name:"Alex Rivera",  email:"alex.rivera@jnj.com",  roles:["Admin"],                        defaultRole:"Admin",         teams:["Platform","Governance"],         status:"Active",  joined:"Jun 2022",avatar:"AR",color:"#ee2424"},
-    {id:"u5",name:"James Oh",     email:"james.oh@jnj.com",     roles:["Data Engineer","Data Analyst"], defaultRole:"Data Engineer", teams:["Data Engineering","Analytics"],  status:"Active",  joined:"Nov 2022",avatar:"JO",color:"#7c3aed"},
-    {id:"u6",name:"Priya Nair",   email:"priya.nair@jnj.com",   roles:["Data Engineer"],                defaultRole:"Data Engineer", teams:["Data Engineering"],              status:"Active",  joined:"Sep 2023",avatar:"PN",color:"#7c3aed"},
-    {id:"u7",name:"Lisa Ray",     email:"lisa.ray@jnj.com",     roles:["Data Analyst","Data Steward"],  defaultRole:"Data Analyst",  teams:["Analytics","Finance"],           status:"Active",  joined:"Jan 2024",avatar:"LR",color:"#0284c7"},
-    {id:"u8",name:"Tom Vance",    email:"tom.vance@jnj.com",    roles:["Data Steward"],                 defaultRole:"Data Steward",  teams:["Governance"],                   status:"Inactive",joined:"Mar 2022",avatar:"TV",color:"#d97706"},
-  ]);
-  const [teams, setTeams] = useState([
-    {id:"t1",name:"Data Engineering",desc:"Manages pipelines, ingestion, and data infrastructure.",  color:"#7c3aed",created:"Nov 2022"},
-    {id:"t2",name:"Analytics",        desc:"Builds dashboards, runs queries, and surfaces insights.", color:"#0284c7",created:"Jan 2023"},
-    {id:"t3",name:"Finance",          desc:"Owns financial reporting datasets and access policies.",  color:"#d97706",created:"Feb 2022"},
-    {id:"t4",name:"Governance",       desc:"Certifies data, manages glossary, enforces data policy.",color:"#16a34a",created:"Jan 2023"},
-    {id:"t5",name:"Platform",         desc:"Platform administration, integrations, and settings.",   color:"#ee2424",created:"Jun 2022"},
-  ]);
+  const [members,     setMembers]     = useState(MEMBERS_INIT);
+  const [teams, setTeams] = useState(TEAMS_INIT);
 
   // ── Users tab state ──
   const [memberSearch,  setMemberSearch]  = useState("");
