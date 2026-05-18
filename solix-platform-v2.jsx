@@ -11695,6 +11695,15 @@ const DomainsView = () => {
   const [addAssetsOpen,     setAddAssetsOpen]     = useState(false);
   const [addAssetsSearch,   setAddAssetsSearch]   = useState("");
   const [addAssetsSelected, setAddAssetsSelected] = useState(new Set());
+  // domain/product list search icon state
+  const [domainSearch,      setDomainSearch]      = useState("");
+  const [domainSearchOpen,  setDomainSearchOpen]  = useState(false);
+  const [domainFilterOpen,  setDomainFilterOpen]  = useState(false);
+  const [domainTypeFilter,  setDomainTypeFilter]  = useState("");
+  // domain profile inline tag/glossary inputs
+  const [dmTagInput,        setDmTagInput]        = useState("");
+  const [dmGlInput,         setDmGlInput]         = useState("");
+  const [dmGlossaryTerms,   setDmGlossaryTerms]   = useState([]);
   // edit domain
   const [editDomainOpen,    setEditDomainOpen]    = useState(false);
   const [editDd,            setEditDd]            = useState(null);
@@ -11803,7 +11812,6 @@ const DomainsView = () => {
                   : <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:5,flexWrap:"wrap"}}>
                       <h1 style={{fontSize:20,fontWeight:800,color:T.text,margin:0}}>{pd.displayName}</h1>
                       <LifecycleBadge stage={pd.lifecycleStage}/>
-                      <SlaTierBadge tier={pd.sla.tier}/>
                     </div>
                 }
                 <div style={{fontSize:12,color:T.textMuted,marginBottom:6}}>{pd.domain} Domain · Created {pd.createdAt}</div>
@@ -11897,22 +11905,6 @@ const DomainsView = () => {
                     : <p style={{fontSize:13,color:T.textSub,lineHeight:1.7,marginBottom:24}}>{pd.description}</p>
                   }
 
-                  {/* SLA Details */}
-                  <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Service Level Agreement</div>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:24}}>
-                    {[
-                      {label:"SLA Tier",value:pd.sla.tier,color:SLA_COLORS[pd.sla.tier]},
-                      {label:"Availability",value:`${pd.sla.availability}%`,color:T.green},
-                      {label:"Data Freshness",value:`${pd.sla.dataFreshness>=60?`${pd.sla.dataFreshness/60}h`:`${pd.sla.dataFreshness}m`}`,color:T.blue},
-                      {label:"Min. Quality",value:`${pd.sla.dataQuality}%`,color:T.accent},
-                    ].map(m=>(
-                      <div key={m.label} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,padding:"12px 14px"}}>
-                        <div style={{fontSize:10,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>{m.label}</div>
-                        <div style={{fontSize:18,fontWeight:800,color:m.color,fontFamily:"'Geist Mono',monospace"}}>{m.value}</div>
-                      </div>
-                    ))}
-                  </div>
-
                   {/* Lineage mini */}
                   {(upstream.length>0||downstream.length>0)&&(
                     <>
@@ -11953,7 +11945,7 @@ const DomainsView = () => {
                 <div style={{display:"flex",flexDirection:"column",gap:12}}>
                   <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
                     <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:12}}>Details</div>
-                    {[["Domain",pd.domain],["Lifecycle",pd.lifecycleStage],["Created",pd.createdAt],["Assets",String(productAssets.length)]].map(([l,v])=>(
+                    {[["Domain",pd.domain],["Created",pd.createdAt],["Assets",String(productAssets.length)]].map(([l,v])=>(
                       <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${T.border}`}}>
                         <span style={{fontSize:11.5,color:T.textMuted}}>{l}</span>
                         <span style={{fontSize:11.5,color:T.text,fontWeight:500}}>{v}</span>
@@ -12281,6 +12273,12 @@ const DomainsView = () => {
                         <span style={{fontSize:15}}>🗂️</span> Add Sub Domain
                       </button>
                       <div style={{height:1,background:T.border}}/>
+                      <button onMouseDown={()=>{setAddHeaderDropdown(false);setAddAssetsSelected(new Set());setAddAssetsSearch("");setAddAssetsOpen(true);}}
+                        style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",fontSize:12,color:T.text}}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                        <span style={{fontSize:15}}>📊</span> Add Asset
+                      </button>
+                      <div style={{height:1,background:T.border}}/>
                       <button onMouseDown={()=>{setAddHeaderDropdown(false);setAddPanelType("dataproduct");setAddPanelOpen(true);}}
                         style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",fontSize:12,color:T.text}}
                         onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
@@ -12298,7 +12296,6 @@ const DomainsView = () => {
                       {[
                         {icon:"✏️",label:"Rename",sub:"Change the domain display name",action:()=>{setDmRenameValue(dm.displayName);setDmRenameMode(true);setDmMenuOpen(false);}},
                         {icon:"🎨",label:"Style",sub:"Change icon and color",action:()=>{setDmStyleOpen(true);setDmMenuOpen(false);}},
-                        {icon:"✏️",label:"Edit Details",sub:"Update description, type, owners",action:()=>{setEditDd({...dm});setEditDomainOpen(true);setDmMenuOpen(false);}},
                       ].map(item=>(
                         <button key={item.label} onClick={item.action}
                           style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",borderBottom:`1px solid ${T.border}`}}
@@ -12382,7 +12379,7 @@ const DomainsView = () => {
                       {label:"Total Assets",value:String(dm.assetCount),color:dm.color},
                       {label:"Data Products",value:String(domainProducts.length),color:"#8b5cf6"},
                     ].map(m=>(
-                      <div key={m.label} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,padding:"14px 16px"}}>
+                      <div key={m.label} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,padding:"14px 16px",borderLeft:`3px solid ${m.color}`}}>
                         <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>{m.label}</div>
                         <div style={{fontSize:22,fontWeight:800,color:m.color,fontFamily:"'Geist Mono',monospace"}}>{m.value}</div>
                       </div>
@@ -12393,7 +12390,7 @@ const DomainsView = () => {
                   <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
                     <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:12}}>Domain Info</div>
                     {[["Type",<DomainTypeBadge key="t" type={dm.domainType}/>],["Assets",dm.assetCount],["Data Products",domainProducts.length]].map(([l,v])=>(
-                      <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${T.border}`}}>
+                      <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 8px 8px 12px",borderBottom:`1px solid ${T.border}`,borderLeft:`4px solid ${dm.color}`,marginBottom:2,borderRadius:"0 0 0 0",background:`${dm.color}08`}}>
                         <span style={{fontSize:11.5,color:T.textMuted}}>{l}</span>
                         <span style={{fontSize:11.5,color:T.text,fontWeight:500}}>{v}</span>
                       </div>
@@ -12438,12 +12435,30 @@ const DomainsView = () => {
                       </div>}
                     </div>
                     {/* Tags */}
-                    <div style={{padding:"14px 16px"}}>
+                    <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
                       <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Tags</div>
-                      <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
                         {(dm.tags||[]).map(t=><span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"3px 9px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}>{t}<button onClick={()=>patchDomain(dm.id,{tags:(dm.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
-                        {(dm.tags||[]).length===0&&<span style={{fontSize:11.5,color:T.textMuted}}>No tags</span>}
+                        {(dm.tags||[]).length===0&&<span style={{fontSize:11.5,color:T.textMuted}}>No tags yet</span>}
                       </div>
+                      <input value={dmTagInput} onChange={e=>setDmTagInput(e.target.value)}
+                        onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&dmTagInput.trim()){patchDomain(dm.id,{tags:[...(dm.tags||[]),dmTagInput.trim()]});setDmTagInput("");}}}
+                        placeholder="Add tag…"
+                        style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box"}}
+                        onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                    </div>
+                    {/* Business Glossary */}
+                    <div style={{padding:"14px 16px"}}>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Business Glossary</div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
+                        {dmGlossaryTerms.map((t,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"3px 9px",borderRadius:6,background:"rgba(139,92,246,.1)",border:"1px solid rgba(139,92,246,.25)",color:"#8b5cf6",fontWeight:500}}>{t}<button onClick={()=>setDmGlossaryTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+                        {dmGlossaryTerms.length===0&&<span style={{fontSize:11.5,color:T.textMuted}}>No terms linked</span>}
+                      </div>
+                      <input value={dmGlInput} onChange={e=>setDmGlInput(e.target.value)}
+                        onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&dmGlInput.trim()){setDmGlossaryTerms(prev=>[...prev,dmGlInput.trim()]);setDmGlInput("");}}}
+                        placeholder="Link glossary term…"
+                        style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box"}}
+                        onFocus={e=>e.target.style.borderColor="#8b5cf6"} onBlur={e=>e.target.style.borderColor=T.border}/>
                     </div>
                   </div>
                 </div>
@@ -12900,9 +12915,7 @@ const DomainsView = () => {
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <Topbar breadcrumb={[{label:"Data Domains"}]} actions={
-        <Btn icon={Ic.plus(12)} onClick={()=>setCreateDomainOpen(true)}>New Domain</Btn>
-      }/>
+      <Topbar breadcrumb={[{label:"Data Domains"}]}/>
       <div style={{flex:1,overflowY:"auto",padding:28}}>
         {/* Summary stats */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12,marginBottom:24}}>
@@ -12913,21 +12926,53 @@ const DomainsView = () => {
         </div>
 
         {/* View toggle */}
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-          <div style={{fontSize:13,fontWeight:600,color:T.text}}>{domains.length} domain{domains.length!==1?"s":""}</div>
-          <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
-            {[["list","☰"],["grid","⊞"]].map(([v,ic])=>(
-              <button key={v} onClick={()=>setListView(v)} style={{padding:"4px 10px",borderRadius:5,border:"none",cursor:"pointer",fontSize:13,
-                background:listView===v?T.bgSurface:"transparent",color:listView===v?T.text:T.textMuted,
-                boxShadow:listView===v?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{ic}</button>
-            ))}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,gap:8}}>
+          <div style={{fontSize:13,fontWeight:600,color:T.text}}>{domains.filter(d=>(!domainSearch||d.displayName.toLowerCase().includes(domainSearch.toLowerCase()))&&(!domainTypeFilter||d.domainType===domainTypeFilter)).length} domain{domains.length!==1?"s":""}</div>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            {/* Search icon / expandable input */}
+            <div style={{display:"flex",alignItems:"center",gap:4,position:"relative"}}>
+              {domainSearchOpen
+                ? <input autoFocus value={domainSearch} onChange={e=>setDomainSearch(e.target.value)}
+                    onBlur={()=>{if(!domainSearch)setDomainSearchOpen(false);}}
+                    placeholder="Search domains…"
+                    style={{padding:"5px 10px",background:T.bgElevated,border:`1px solid ${T.accent}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",width:180}}/>
+                : <button onClick={()=>setDomainSearchOpen(true)}
+                    style={{width:30,height:30,borderRadius:7,background:domainSearch?T.accentDim:T.bgElevated,border:`1px solid ${domainSearch?T.accent:T.border}`,color:domainSearch?T.accent:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>🔍</button>
+              }
+              {domainSearch&&!domainSearchOpen&&(
+                <button onClick={()=>{setDomainSearch("");}} style={{position:"absolute",right:4,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex"}}>{Ic.x(9)}</button>
+              )}
+            </div>
+            {/* Filter icon / dropdown */}
+            <div style={{position:"relative"}}>
+              <button onClick={()=>setDomainFilterOpen(p=>!p)}
+                style={{width:30,height:30,borderRadius:7,background:domainTypeFilter?T.accentDim:T.bgElevated,border:`1px solid ${domainTypeFilter?T.accent:T.border}`,color:domainTypeFilter?T.accent:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>⊟</button>
+              {domainFilterOpen&&(
+                <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 8px 24px rgba(0,0,0,.18)",minWidth:160,overflow:"hidden"}}>
+                  {["","Source-aligned","Consumer-aligned","Aggregate"].map(opt=>(
+                    <button key={opt} onMouseDown={()=>{setDomainTypeFilter(opt);setDomainFilterOpen(false);}}
+                      style={{width:"100%",padding:"8px 12px",background:domainTypeFilter===opt?T.bgElevated:"none",border:"none",cursor:"pointer",textAlign:"left",fontSize:12,color:domainTypeFilter===opt?T.accent:T.text,fontWeight:domainTypeFilter===opt?600:400}}
+                      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=domainTypeFilter===opt?T.bgElevated:"none"}>
+                      {opt||"All Types"}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+              {[["list","☰"],["grid","⊞"]].map(([v,ic])=>(
+                <button key={v} onClick={()=>setListView(v)} style={{padding:"4px 10px",borderRadius:5,border:"none",cursor:"pointer",fontSize:13,
+                  background:listView===v?T.bgSurface:"transparent",color:listView===v?T.text:T.textMuted,
+                  boxShadow:listView===v?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{ic}</button>
+              ))}
+            </div>
           </div>
         </div>
 
         {/* Grid view */}
         {listView==="grid"&&(
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:16}}>
-            {domains.map(d=>{
+            {domains.filter(d=>(!domainSearch||d.displayName.toLowerCase().includes(domainSearch.toLowerCase()))&&(!domainTypeFilter||d.domainType===domainTypeFilter)).map(d=>{
               const dp = products.filter(p=>p.domain===d.name);
               const domTagCtxAssets = ASSETS.filter(a=>a.domain===d.name);
               const taggedCount = tagCtx ? domTagCtxAssets.filter(a=>tagCtx.getAssetAssignments(a.id).filter(x=>x.status!=='rejected').length>0).length : 0;
@@ -12988,11 +13033,11 @@ const DomainsView = () => {
                 <div key={h} style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",textAlign:align||"left"}}>{h}</div>
               ))}
             </div>
-            {domains.map((d,i)=>{
+            {domains.filter(d=>(!domainSearch||d.displayName.toLowerCase().includes(domainSearch.toLowerCase()))&&(!domainTypeFilter||d.domainType===domainTypeFilter)).map((d,i,arr)=>{
               const dp = products.filter(p=>p.domain===d.name);
               return (
                 <div key={d.id}
-                  style={{display:"grid",gridTemplateColumns:"minmax(200px,3fr) 130px 90px 110px 90px 36px",padding:"13px 20px",borderBottom:i<domains.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"all .1s",alignItems:"center",borderLeft:"3px solid transparent"}}
+                  style={{display:"grid",gridTemplateColumns:"minmax(200px,3fr) 130px 90px 110px 90px 36px",padding:"13px 20px",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"all .1s",alignItems:"center",borderLeft:"3px solid transparent"}}
                   onClick={()=>{setSelectedDomainId(d.id);setDomainTab("documentation");}}
                   onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;e.currentTarget.style.borderLeftColor=d.color;}}
                   onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderLeftColor="transparent";}}>
@@ -13525,7 +13570,6 @@ const DataProductsView = () => {
                 <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
                   <h1 style={{fontSize:20,fontWeight:800,color:T.text,margin:0}}>{pd.displayName}</h1>
                   <LifecycleBadge stage={pd.lifecycleStage}/>
-                  {pd.sla&&<SlaTierBadge tier={pd.sla.tier}/>}
                 </div>
                 <div style={{fontSize:12,color:T.textMuted,marginBottom:8}}>
                   <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 8px",borderRadius:4,fontSize:10.5,fontWeight:600,
@@ -13551,24 +13595,6 @@ const DataProductsView = () => {
                 <div>
                   <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:10}}>Description</div>
                   <p style={{fontSize:13,color:T.textSub,lineHeight:1.7,marginBottom:24}}>{pd.description}</p>
-                  {pd.sla&&(
-                    <>
-                      <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Service Level Agreement</div>
-                      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:24}}>
-                        {[
-                          {label:"SLA Tier",    value:pd.sla.tier,                                                        color:SLA_COLORS_DP[pd.sla.tier]},
-                          {label:"Availability",value:`${pd.sla.availability}%`,                                          color:T.green},
-                          {label:"Freshness",   value:pd.sla.dataFreshness>=60?`${pd.sla.dataFreshness/60}h`:`${pd.sla.dataFreshness}m`, color:T.blue},
-                          {label:"Min. Quality",value:`${pd.sla.dataQuality}%`,                                           color:T.accent},
-                        ].map(m=>(
-                          <div key={m.label} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,padding:"12px 14px"}}>
-                            <div style={{fontSize:10,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>{m.label}</div>
-                            <div style={{fontSize:18,fontWeight:800,color:m.color,fontFamily:"'Geist Mono',monospace"}}>{m.value}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
                   {(upstream.length>0||downstream.length>0)&&(
                     <>
                       <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Data Flow</div>
@@ -13599,7 +13625,7 @@ const DataProductsView = () => {
                 <div style={{display:"flex",flexDirection:"column",gap:12}}>
                   <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
                     <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:12}}>Details</div>
-                    {[["Domain",pd.domain],["Lifecycle",pd.lifecycleStage],["Created",pd.createdAt],["Assets",String(productAssets.length)]].map(([l,v])=>(
+                    {[["Domain",pd.domain],["Created",pd.createdAt],["Assets",String(productAssets.length)]].map(([l,v])=>(
                       <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${T.border}`}}>
                         <span style={{fontSize:11.5,color:T.textMuted}}>{l}</span>
                         <span style={{fontSize:11.5,color:T.text,fontWeight:500}}>{v}</span>
@@ -13692,17 +13718,13 @@ const DataProductsView = () => {
   // ── List view ──
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <Topbar breadcrumb={[{label:"Data Products"}]} actions={
-        <Btn icon={Ic.plus(12)} onClick={()=>setCreateOpen(true)}>New Data Product</Btn>
-      }/>
+      <Topbar breadcrumb={[{label:"Data Products"}]}/>
       <div style={{flex:1,overflowY:"auto",padding:28}}>
 
         {/* Stats bar */}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:12,marginBottom:24}}>
           <Metric label="Total Products" value={String(products.length)}  sub="registered"        color={T.accent}/>
           <Metric label="In Production"  value={String(inProd)}           sub="live products"     color="#16a34a"/>
-          <Metric label="Gold SLA"        value={String(goldSla)}          sub="tier 1 products"   color="#f59e0b"/>
-          <Metric label="Avg Quality"     value={`${avgQuality}%`}         sub="min quality score" color={avgQuality>=85?T.green:avgQuality>=70?T.amber:T.rose}/>
         </div>
 
         {/* Toolbar row: count left, controls right */}
@@ -13724,11 +13746,6 @@ const DataProductsView = () => {
             })}
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-            <select value={lifecycleFilter} onChange={e=>setLifecycleFilter(e.target.value)}
-              style={{padding:"6px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",cursor:"pointer"}}>
-              <option value="All">All Stages</option>
-              {LIFECYCLE_STAGES.map(s=><option key={s} value={s}>{s}</option>)}
-            </select>
             <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
               {[["list","☰"],["grid","⊞"]].map(([v,ic])=>(
                 <button key={v} onClick={()=>setListView(v)} style={{padding:"4px 10px",borderRadius:5,border:"none",cursor:"pointer",fontSize:13,
@@ -13765,10 +13782,6 @@ const DataProductsView = () => {
                       <div style={{width:40,height:40,borderRadius:10,background:`${p.color}15`,border:`1px solid ${p.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{p.icon}</div>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:13.5,fontWeight:700,color:T.text,marginBottom:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.displayName}</div>
-                        <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
-                          <LifecycleBadge stage={p.lifecycleStage}/>
-                          {p.sla&&<SlaTierBadge tier={p.sla.tier}/>}
-                        </div>
                       </div>
                     </div>
                     <p style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginBottom:12,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{p.description}</p>
@@ -13789,8 +13802,8 @@ const DataProductsView = () => {
         {listView==="list"&&filteredProducts.length>0&&(
           <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
             {/* Header */}
-            <div style={{display:"grid",gridTemplateColumns:"minmax(200px,3fr) 150px 130px 100px 80px 36px",padding:"10px 20px",borderBottom:`2px solid ${T.border}`,background:T.bgElevated,alignItems:"center"}}>
-              {[["Product","left"],["Domain","left"],["Lifecycle","left"],["SLA Tier","left"],["Quality","right"],["",""]].map(([h,align])=>(
+            <div style={{display:"grid",gridTemplateColumns:"minmax(200px,3fr) 180px 80px 36px",padding:"10px 20px",borderBottom:`2px solid ${T.border}`,background:T.bgElevated,alignItems:"center"}}>
+              {[["Product","left"],["Domain","left"],["Assets","right"],["",""]].map(([h,align])=>(
                 <div key={h} style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",textAlign:align||"left"}}>{h}</div>
               ))}
             </div>
@@ -13798,7 +13811,7 @@ const DataProductsView = () => {
               const dm = domains.find(d=>d.name===p.domain);
               return (
                 <div key={p.id}
-                  style={{display:"grid",gridTemplateColumns:"minmax(200px,3fr) 150px 130px 100px 80px 36px",padding:"13px 20px",borderBottom:i<filteredProducts.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"all .1s",alignItems:"center",borderLeft:"3px solid transparent"}}
+                  style={{display:"grid",gridTemplateColumns:"minmax(200px,3fr) 180px 80px 36px",padding:"13px 20px",borderBottom:i<filteredProducts.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"all .1s",alignItems:"center",borderLeft:"3px solid transparent"}}
                   onClick={()=>{setSelectedProductId(p.id);setProductTab("overview");}}
                   onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;e.currentTarget.style.borderLeftColor=p.color;}}
                   onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderLeftColor="transparent";}}>
@@ -13818,15 +13831,9 @@ const DataProductsView = () => {
                     <span style={{fontSize:13}}>{dm?.icon}</span>
                     <span style={{fontSize:12,fontWeight:500,color:dm?.color||T.textSub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.domain}</span>
                   </div>
-                  {/* Lifecycle */}
-                  <div><LifecycleBadge stage={p.lifecycleStage}/></div>
-                  {/* SLA Tier */}
-                  <div>{p.sla?<SlaTierBadge tier={p.sla.tier}/>:<span style={{fontSize:11,color:T.textMuted}}>—</span>}</div>
-                  {/* Quality */}
+                  {/* Assets */}
                   <div style={{textAlign:"right"}}>
-                    {p.sla
-                      ? <span style={{fontSize:13,fontWeight:700,color:p.sla.dataQuality>=85?T.green:p.sla.dataQuality>=70?T.amber:T.rose,fontFamily:"'Geist Mono',monospace"}}>{p.sla.dataQuality}%</span>
-                      : <span style={{color:T.textMuted}}>—</span>}
+                    <span style={{fontSize:13,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{p.assetIds?.length||0}</span>
                   </div>
                   {/* Chevron */}
                   <div style={{display:"flex",justifyContent:"center",color:T.textMuted,opacity:.5}}><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3.5 2l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
