@@ -14381,7 +14381,12 @@ const ProfileView = ({onToast}) => {
           </div>
         </div>
 
-        <Tabs2 tabs={["profile","tasks","assets","activity"]} active={tab} onChange={setTab}/>
+        <Tabs2 tabs={[
+          {key:"profile",  label:"Profile"},
+          {key:"tasks",    label:`Tasks${myTasks.length>0?` (${myTasks.length})`:""}`,   badge:openTasks.length||null},
+          {key:"assets",   label:`Assets${myAssets.length>0?` (${myAssets.length})`:""}`, badge:null},
+          {key:"activity", label:"Activity", badge:NOTIFS.filter(n=>n.unread).length||null},
+        ]} active={tab} onChange={setTab}/>
 
         {tab==="profile"&&(
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
@@ -14478,25 +14483,115 @@ const ProfileView = ({onToast}) => {
           </div>
         )}
 
-        {tab==="tasks"&&(
-          <DataTable cols={[
-            {key:"label",    label:"Task",      render:v=><span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{v}</span>},
-            {key:"asset",    label:"Asset",     render:v=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.accent}}>{v}</span>},
-            {key:"priority", label:"Priority",  render:v=><Badge color={v==="Critical"?T.rose:v==="High"?T.amber:T.textMuted}>{v}</Badge>},
-            {key:"status",   label:"Status",    render:v=><span style={{display:"flex",alignItems:"center",gap:5,fontSize:12}}><SDot status={v}/>{v}</span>},
-            {key:"dueDate",  label:"Due",       render:v=><span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{v}</span>},
-          ]} rows={myTasks} emptyMsg="No tasks assigned to you."/>
-        )}
+        {tab==="tasks"&&(()=>{
+          const pCol = p=>p==="Critical"?"#e11d48":p==="High"?T.amber:p==="Medium"?T.blue:"#6b7280";
+          const pBg  = p=>p==="Critical"?"rgba(225,29,72,.1)":p==="High"?"rgba(217,119,6,.1)":p==="Medium"?"rgba(37,99,235,.1)":"rgba(107,114,128,.1)";
+          const today = "2026-05-18";
+          const typeIcons = {conflict_resolution:"⚡",pii_audit:"🔒",term_review:"📋",access_review:"👤",orphan_assignment:"🔗",schema_documentation:"📄",certification_review:"✓",term_deprecation:"✕"};
+          const typeLabels = {conflict_resolution:"Conflict Resolution",pii_audit:"PII Audit",term_review:"Term Review",access_review:"Access Review",orphan_assignment:"Orphan Assignment",schema_documentation:"Schema Documentation",certification_review:"Certification Review",term_deprecation:"Term Deprecation"};
+          const open   = myTasks.filter(t=>t.status!=="Completed"&&t.status!=="Resolved");
+          const done   = myTasks.filter(t=>t.status==="Completed"||t.status==="Resolved");
+          if(myTasks.length===0) return <div style={{padding:"48px",textAlign:"center",color:T.textMuted,fontSize:13}}>No tasks assigned to you.</div>;
+          return (
+            <div>
+              {open.length===0&&<div style={{padding:"24px",textAlign:"center",color:T.green,fontSize:13,fontWeight:500,marginBottom:16}}>✓ All tasks completed</div>}
+              {open.map(task=>{
+                const pc=pCol(task.priority); const pb=pBg(task.priority);
+                const isOverdue=task.dueDate<today;
+                const isDueSoon=!isOverdue&&task.dueDate<="2026-05-25";
+                return (
+                  <div key={task.id} style={{display:"flex",gap:14,padding:"14px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${pc}`,borderRadius:9,marginBottom:8,transition:"background .1s"}}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=T.bgSurface}>
+                    <div style={{fontSize:18,flexShrink:0,paddingTop:2}}>{typeIcons[task.type]||"📋"}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:5}}>
+                        <span style={{fontSize:13,fontWeight:600,color:T.text,lineHeight:1.3}}>{task.label}</span>
+                        <span style={{fontSize:10.5,fontWeight:700,padding:"2px 9px",borderRadius:99,background:pb,color:pc,border:`1px solid ${pc}30`,flexShrink:0}}>{task.priority}</span>
+                      </div>
+                      <div style={{fontSize:11.5,color:T.textMuted,marginBottom:7,lineHeight:1.5}}>{task.description?.slice(0,100)}{task.description?.length>100?"…":""}</div>
+                      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                        <span style={{fontSize:10.5,padding:"1px 7px",borderRadius:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>{typeLabels[task.type]||task.type}</span>
+                        <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{task.asset}</span>
+                        <span style={{fontSize:10.5,color:isOverdue?"#e11d48":isDueSoon?T.amber:T.textMuted,fontWeight:isOverdue||isDueSoon?600:400}}>
+                          {isOverdue?"⚠ Overdue · ":""}Due {task.dueDate}
+                        </span>
+                        <span style={{display:"flex",alignItems:"center",gap:4,fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>
+                          <SDot status={task.status}/>{task.status}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {done.length>0&&(
+                <div style={{marginTop:20}}>
+                  <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10,padding:"0 4px"}}>Completed ({done.length})</div>
+                  {done.map(task=>(
+                    <div key={task.id} style={{display:"flex",gap:12,padding:"10px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.border}`,borderRadius:9,marginBottom:6,opacity:0.6}}>
+                      <span style={{fontSize:16,flexShrink:0}}>{typeIcons[task.type]||"📋"}</span>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:12.5,fontWeight:500,color:T.textSub}}>{task.label}</div>
+                        <div style={{fontSize:11,color:T.textMuted}}>{task.asset} · {task.domain}</div>
+                      </div>
+                      <span style={{fontSize:11,color:T.green,fontWeight:600,alignSelf:"center",flexShrink:0}}>✓ Done</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
-        {tab==="assets"&&(
-          <DataTable cols={[
-            {key:"name",    label:"Asset",         render:(v,r)=><div><div style={{fontSize:13,fontWeight:500,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{v}</div><div style={{fontSize:10,color:T.textMuted}}>{r.domain}</div></div>},
-            {key:"type",    label:"Type",          render:v=><TypeBadge type={v}/>},
-            {key:"cert",    label:"Certification", render:v=><CertBadge cert={v}/>},
-            {key:"quality", label:"Quality",       render:v=><QScore score={v}/>},
-            {key:"updated", label:"Updated",       render:v=><span style={{fontSize:11,color:T.textMuted}}>{v}</span>},
-          ]} rows={myAssets} emptyMsg="No assets owned by you."/>
-        )}
+        {tab==="assets"&&(()=>{
+          if(myAssets.length===0) return <div style={{padding:"48px",textAlign:"center",color:T.textMuted,fontSize:13}}>No assets owned by you.</div>;
+          const qColor = q=>q>=80?T.green:q>=60?T.amber:T.rose;
+          return (
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
+              {myAssets.map(a=>{
+                const qc=qColor(a.quality);
+                return (
+                  <div key={a.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px",display:"flex",flexDirection:"column",gap:10,transition:"border-color .12s,box-shadow .12s"}}
+                    onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent+"55";e.currentTarget.style.boxShadow=`0 4px 16px rgba(0,0,0,.12)`;}}
+                    onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
+                    {/* Header row */}
+                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:4}}>{a.name}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                          <TypeBadge type={a.type}/>
+                          <span style={{fontSize:10.5,color:T.textMuted}}>{a.domain}</span>
+                        </div>
+                      </div>
+                      <CertBadge cert={a.cert}/>
+                    </div>
+                    {/* Quality bar */}
+                    <div>
+                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                        <span style={{fontSize:10.5,color:T.textMuted}}>Quality score</span>
+                        <span style={{fontSize:11,fontWeight:700,color:qc,fontFamily:"'Geist Mono',monospace"}}>{a.quality}%</span>
+                      </div>
+                      <div style={{height:4,borderRadius:99,background:T.bgElevated,overflow:"hidden"}}>
+                        <div style={{height:"100%",width:`${a.quality}%`,background:qc,borderRadius:99,transition:"width .4s"}}/>
+                      </div>
+                    </div>
+                    {/* Footer */}
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",paddingTop:6,borderTop:`1px solid ${T.border}`}}>
+                      <span style={{fontSize:10.5,color:T.textMuted}}>Updated {a.updated}</span>
+                      {a.tags&&a.tags.length>0&&(
+                        <div style={{display:"flex",gap:4}}>
+                          {a.tags.slice(0,2).map(t=>(
+                            <span key={t} style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:`${T.accent}10`,color:T.accent,border:`1px solid ${T.accent}22`}}>{t}</span>
+                          ))}
+                          {a.tags.length>2&&<span style={{fontSize:10,color:T.textMuted}}>+{a.tags.length-2}</span>}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
 
         {tab==="activity"&&(
           <div style={{display:"flex",flexDirection:"column",gap:6}}>
