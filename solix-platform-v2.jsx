@@ -5348,7 +5348,7 @@ const QualityView = () => {
 };
 
 /* Reusable multi-select dropdown for Policy Category panels */
-const CatFieldDropdown = ({label, required, options, selected, onChange, placeholder="Select…", renderOpt, renderChip}) => {
+const CatFieldDropdown = ({label, required, options, selected, onChange, placeholder="Select…", renderOpt, renderChip, multi=true}) => {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const ref = React.useRef(null);
@@ -5358,8 +5358,20 @@ const CatFieldDropdown = ({label, required, options, selected, onChange, placeho
     document.addEventListener("mousedown",h);
     return()=>document.removeEventListener("mousedown",h);
   },[open]);
+  // normalise: internally always work with an array
+  const selArr = multi ? (selected||[]) : (selected ? [selected] : []);
   const filtered = options.filter(o=>!search||o.toLowerCase().includes(search.toLowerCase()));
-  const remove = (v,e)=>{ e.stopPropagation(); onChange(selected.filter(x=>x!==v)); };
+  const handleSelect = (o) => {
+    if(multi){
+      const isSel=selArr.includes(o);
+      onChange(isSel?selArr.filter(x=>x!==o):[...selArr,o]);
+    } else {
+      onChange(selected===o?"":o);
+      setOpen(false);
+      setSearch("");
+    }
+  };
+  const remove = (v,e)=>{ e.stopPropagation(); multi?onChange(selArr.filter(x=>x!==v)):onChange(""); };
   return (
     <div>
       <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>
@@ -5368,14 +5380,16 @@ const CatFieldDropdown = ({label, required, options, selected, onChange, placeho
       <div ref={ref} style={{position:"relative"}}>
         <div onClick={()=>setOpen(o=>!o)}
           style={{minHeight:38,padding:"5px 10px 5px 8px",background:T.bgElevated,border:`1.5px solid ${open?T.accent:T.border}`,borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",flexWrap:"wrap",gap:4,transition:"border .12s"}}>
-          {selected.length===0
+          {selArr.length===0
             ? <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic",padding:"2px 2px"}}>{placeholder}</span>
-            : selected.map(v=>(
-                <span key={v} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 6px 2px 7px",borderRadius:5,background:`${T.accent}14`,border:`1px solid ${T.accent}30`,fontSize:11.5,color:T.accent,fontWeight:500,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                  {renderChip?renderChip(v):v}
-                  <button onMouseDown={e=>remove(v,e)} style={{background:"none",border:"none",color:T.accent,cursor:"pointer",padding:"0 1px",fontSize:12,lineHeight:1,opacity:.7,flexShrink:0}}>×</button>
-                </span>
-              ))
+            : multi
+              ? selArr.map(v=>(
+                  <span key={v} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 6px 2px 7px",borderRadius:5,background:`${T.accent}14`,border:`1px solid ${T.accent}30`,fontSize:11.5,color:T.accent,fontWeight:500,maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    {renderChip?renderChip(v):v}
+                    <button onMouseDown={e=>remove(v,e)} style={{background:"none",border:"none",color:T.accent,cursor:"pointer",padding:"0 1px",fontSize:12,lineHeight:1,opacity:.7,flexShrink:0}}>×</button>
+                  </span>
+                ))
+              : <span style={{flex:1,fontSize:12.5,color:T.text,padding:"2px 2px"}}>{renderChip?renderChip(selected):selected}</span>
           }
           <svg width="9" height="6" viewBox="0 0 10 7" fill="none" style={{marginLeft:"auto",flexShrink:0,color:T.textMuted,transform:open?"rotate(180deg)":"none",transition:"transform .15s",opacity:.6}}><path d="M1 1.5l4 4 4-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </div>
@@ -5389,13 +5403,13 @@ const CatFieldDropdown = ({label, required, options, selected, onChange, placeho
             <div style={{maxHeight:200,overflowY:"auto"}}>
               {filtered.length===0&&<div style={{padding:"12px 14px",fontSize:12,color:T.textMuted,textAlign:"center",fontStyle:"italic"}}>No results</div>}
               {filtered.map(o=>{
-                const sel=selected.includes(o);
+                const isSel=selArr.includes(o);
                 return (
-                  <button key={o} onClick={()=>onChange(sel?selected.filter(x=>x!==o):[...selected,o])}
-                    style={{width:"100%",padding:"9px 12px",background:sel?T.bgElevated:"transparent",border:"none",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:9,transition:"background .1s"}}
-                    onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
-                    {renderOpt?renderOpt(o,sel):<span style={{flex:1,fontSize:12.5,color:T.text}}>{o}</span>}
-                    {sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{flexShrink:0}}><path d="M2.5 7.5l3 3 6-6" stroke={T.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  <button key={o} onClick={()=>handleSelect(o)}
+                    style={{width:"100%",padding:"9px 12px",background:isSel?T.bgElevated:"transparent",border:"none",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:9,transition:"background .1s"}}
+                    onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
+                    {renderOpt?renderOpt(o,isSel):<span style={{flex:1,fontSize:12.5,color:T.text}}>{o}</span>}
+                    {isSel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{flexShrink:0}}><path d="M2.5 7.5l3 3 6-6" stroke={T.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                   </button>
                 );
               })}
@@ -5733,9 +5747,10 @@ const PolicyManagerView = ({onToast, onNav}) => {
     const convertedRules = wizardRules.map((r,i)=>{
       const fl=W_FIELD_LABELS[r.field]||r.field;
       const valStr=r.value?` ${r.value}`:"";
-      return {id:`r${i+1}-${Date.now()}`,name:`${fl} ${r.operator}${valStr}`,criteria:`IF ${fl} ${r.operator}${valStr}, THEN ${r.action.replace(/_/g," ")}.`};
+      const actStr=(r.actions||[]).map(a=>a.replace(/_/g," ")).join(", ")||"flag violation";
+      return {id:`r${i+1}-${Date.now()}`,name:`${fl} ${r.operator}${valStr}`,criteria:`IF ${fl} ${r.operator}${valStr}, THEN ${actStr}.`};
     });
-    const autoText = wizardRules.map(r=>{const fl=W_FIELD_LABELS[r.field]||r.field;const valStr=r.value?` ${r.value}`:"";return `IF ${fl} ${r.operator}${valStr}, THEN ${r.action.replace(/_/g," ")}.`;});
+    const autoText = wizardRules.map(r=>{const fl=W_FIELD_LABELS[r.field]||r.field;const valStr=r.value?` ${r.value}`:"";const actStr=(r.actions||[]).map(a=>a.replace(/_/g," ")).join(", ")||"flag violation";return `IF ${fl} ${r.operator}${valStr}, THEN ${actStr}.`;});
     const scopeCount = (newPol.scope?.domains||[]).length?ASSETS.filter(a=>(newPol.scope.domains||[]).includes(a.domain)).length:ASSETS.length;
     const p = {...newPol,
       id:`pol-${Date.now()}`,fqn:`policies.${cat}.${nm}`,version:1,
@@ -6889,25 +6904,29 @@ const PolicyManagerView = ({onToast, onNav}) => {
                           placeholder="e.g. Commerce PII Sensitivity, HIPAA PHI Access Control…"
                           style={inp} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
                       </div>
-                      <div>
-                        <label style={lbl}>Category</label>
-                        <select value={newPol.category} onChange={e=>setNewPol(p=>({...p,category:e.target.value}))} style={inp}>
-                          {POLICY_CATS.map(c=><option key={c} value={c}>{c}</option>)}
-                        </select>
-                        <div style={{fontSize:10.5,color:T.textMuted,marginTop:5,lineHeight:1.5}}>
-                          {newPol.category==="Data"&&"Sensitivity tagging, classification, PII/PHI governance rules."}
-                          {newPol.category==="Security"&&"Encryption at rest, column masking, row-level security enforcement."}
-                          {newPol.category==="Retention"&&"Storage lifetime, archival triggers, deletion period enforcement."}
-                          {newPol.category==="Access"&&"Role-based access, least-privilege, authentication controls."}
-                          {newPol.category==="Quality"&&"Completeness scores, accuracy thresholds, certification gates."}
-                        </div>
-                      </div>
-                      <div>
-                        <label style={lbl}>Severity</label>
-                        <select value={newPol.severity||"Medium"} onChange={e=>setNewPol(p=>({...p,severity:e.target.value}))} style={inp}>
-                          {["Critical","High","Medium","Low"].map(s=><option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </div>
+                      <CatFieldDropdown
+                        label="Category"
+                        multi={false}
+                        placeholder="Search and select a category…"
+                        options={POLICY_CATS}
+                        selected={newPol.category||""}
+                        onChange={v=>setNewPol(p=>({...p,category:v||"Data"}))}
+                      />
+                      {newPol.category&&<div style={{fontSize:10.5,color:T.textMuted,marginTop:-10,lineHeight:1.5}}>
+                        {newPol.category==="Data"&&"Sensitivity tagging, classification, PII/PHI governance rules."}
+                        {newPol.category==="Security"&&"Encryption at rest, column masking, row-level security enforcement."}
+                        {newPol.category==="Retention"&&"Storage lifetime, archival triggers, deletion period enforcement."}
+                        {newPol.category==="Access"&&"Role-based access, least-privilege, authentication controls."}
+                        {newPol.category==="Quality"&&"Completeness scores, accuracy thresholds, certification gates."}
+                      </div>}
+                      <CatFieldDropdown
+                        label="Severity"
+                        multi={false}
+                        placeholder="Select severity…"
+                        options={["Critical","High","Medium","Low"]}
+                        selected={newPol.severity||"Medium"}
+                        onChange={v=>setNewPol(p=>({...p,severity:v||"Medium"}))}
+                      />
                       <div>
                         <label style={lbl}>Description</label>
                         <textarea value={newPol.description} onChange={e=>setNewPol(p=>({...p,description:e.target.value}))} rows={3}
@@ -6919,41 +6938,63 @@ const PolicyManagerView = ({onToast, onNav}) => {
 
                   /* ─── Step 2: Scope ─── */
                   if(createStep===2){
-                    const scopeDoms=(newPol.scope?.domains||[]);
+                    const scopeDoms =(newPol.scope?.domains||[]);
                     const scopeTypes=(newPol.scope?.assetTypes||[]);
-                    const scopeSrcs=(newPol.scope?.sources||[]);
+                    const scopeSrcs =(newPol.scope?.sources||[]);
+                    // asset types available depend on which sources are selected
+                    const SRC_TYPES = {
+                      "Snowflake":  ["Table","View","Schema","Database"],
+                      "Databricks": ["Table","View","Schema"],
+                      "PostgreSQL": ["Table","View","Schema","Database"],
+                      "Oracle":     ["Table","View","Schema","Database"],
+                      "BigQuery":   ["Table","View","Schema"],
+                      "S3":         ["Object","Folder","Bucket"],
+                      "Azure Blob": ["Object","Folder","Container"],
+                      "Redshift":   ["Table","View","Schema","Database"],
+                    };
+                    const ALL_TYPES = ["Table","View","Schema","Database","Container","Column","Materialized View","Pipeline","Object","Folder","Bucket"];
+                    const availTypes = scopeSrcs.length>0
+                      ? [...new Set(scopeSrcs.flatMap(s=>SRC_TYPES[s]||ALL_TYPES))]
+                      : ALL_TYPES;
+                    // reset invalid selected types when source changes
+                    const validTypes = scopeTypes.filter(t=>availTypes.includes(t));
                     const matchedAssets=scopeDoms.length?ASSETS.filter(a=>scopeDoms.includes(a.domain)):ASSETS;
-                    const filteredMatch=scopeTypes.length?matchedAssets.filter(a=>scopeTypes.includes(a.type||"Table")):matchedAssets;
+                    const filteredMatch=validTypes.length?matchedAssets.filter(a=>validTypes.includes(a.type||"Table")):matchedAssets;
                     return (
                       <div style={{display:"flex",flexDirection:"column",gap:20}}>
-                        {secHead("Policy Scope","Define which domains, asset types, and source systems this policy applies to.")}
+                        {secHead("Policy Scope","Select sources first — domain and asset type options will update accordingly.")}
+                        <CatFieldDropdown
+                          label="Source Systems"
+                          placeholder="Search and select sources…"
+                          options={["Snowflake","Databricks","PostgreSQL","Oracle","BigQuery","S3","Azure Blob","Redshift"]}
+                          selected={scopeSrcs}
+                          onChange={v=>{
+                            // recalculate valid types for the new source selection
+                            const newAvail=v.length>0?[...new Set(v.flatMap(s=>SRC_TYPES[s]||ALL_TYPES))]:ALL_TYPES;
+                            const keptTypes=scopeTypes.filter(t=>newAvail.includes(t));
+                            setNewPol(p=>({...p,scope:{...p.scope,sources:v,assetTypes:keptTypes}}));
+                          }}
+                        />
                         <CatFieldDropdown
                           label="Domains"
-                          placeholder="Search and select domains… (leave empty = all domains)"
+                          placeholder="Search and select domains… (empty = all domains)"
                           options={ALL_DOMAINS}
                           selected={scopeDoms}
                           onChange={v=>setNewPol(p=>({...p,scope:{...p.scope,domains:v}}))}
                         />
                         <CatFieldDropdown
                           label="Asset Types"
-                          placeholder="Search and select asset types… (leave empty = all types)"
-                          options={["Table","View","Schema","Database","Container","Column","Materialized View","Pipeline"]}
-                          selected={scopeTypes}
+                          placeholder={scopeSrcs.length>0?"Search and select asset types…":"Select sources first to filter asset types…"}
+                          options={availTypes}
+                          selected={validTypes}
                           onChange={v=>setNewPol(p=>({...p,scope:{...p.scope,assetTypes:v}}))}
-                        />
-                        <CatFieldDropdown
-                          label="Source Systems"
-                          placeholder="Search and select sources…"
-                          options={["Snowflake","Databricks","PostgreSQL","Oracle","BigQuery","S3","Azure Blob","Redshift"]}
-                          selected={scopeSrcs}
-                          onChange={v=>setNewPol(p=>({...p,scope:{...p.scope,sources:v}}))}
                         />
                         <div style={{padding:"12px 16px",borderRadius:9,background:T.accentDim,border:`1px solid ${T.accent}30`,display:"flex",alignItems:"center",gap:10}}>
                           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{color:T.accent,flexShrink:0}}><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/><line x1="8" y1="5.5" x2="8" y2="8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="10.5" r=".6" fill="currentColor" stroke="none"/></svg>
                           <span style={{fontSize:12,color:T.accent,lineHeight:1.6}}>
                             <strong>{filteredMatch.length}</strong> asset{filteredMatch.length!==1?"s":""} currently match this scope
                             {scopeDoms.length>0&&<> across <strong>{scopeDoms.length}</strong> domain{scopeDoms.length!==1?"s":""}</>}
-                            {scopeTypes.length>0&&<> · filtered to <strong>{scopeTypes.join(", ")}</strong></>}
+                            {validTypes.length>0&&<> · filtered to <strong>{validTypes.join(", ")}</strong></>}
                           </span>
                         </div>
                       </div>
@@ -6977,14 +7018,12 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       {id:"tag_count",           label:"Tag Count",                type:"number",  ops:["greater than","less than","equals"], vals:[], sources:null},
                     ];
                     const W_RULE_ACTIONS = [
-                      {id:"flag_violation",       label:"Flag as violation"},
-                      {id:"block_promotion",      label:"Block downstream promotion"},
-                      {id:"notify_owner",         label:"Notify asset owner"},
-                      {id:"escalate_steward",     label:"Escalate to steward"},
-                      {id:"require_certification",label:"Require certification"},
+                      {id:"flag_violation", label:"Flag as violation"},
+                      {id:"notify_owner",   label:"Notify owner"},
+                      {id:"notify_steward", label:"Notify steward"},
                     ];
                     const selSources = newPol.scope?.sources||[];
-                    const addRule = () => setWizardRules(prev=>[...prev,{id:`wr-${Date.now()}`,field:"sensitivity_tag",operator:"is not set",value:"",action:"flag_violation"}]);
+                    const addRule = () => setWizardRules(prev=>[...prev,{id:`wr-${Date.now()}`,field:"sensitivity_tag",operator:"is not set",value:"",actions:["flag_violation"]}]);
                     const removeRule = (id) => setWizardRules(prev=>prev.filter(r=>r.id!==id));
                     const updRule = (id,k,v) => setWizardRules(prev=>prev.map(r=>r.id===id?{...r,[k]:v}:r));
                     const sel_s={padding:"7px 9px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",cursor:"pointer",width:"100%",fontFamily:"inherit"};
@@ -7027,11 +7066,22 @@ const PolicyManagerView = ({onToast, onNav}) => {
                                           style={{...sel_s,flex:"0 0 80px",width:80,background:T.bgElevated}}/>
                                       )}
                                     </div>
-                                    <div style={{padding:"10px 12px",display:"flex",alignItems:"center",gap:6}}>
-                                      <span style={{fontSize:10,fontWeight:700,color:T.green,background:`${T.green}14`,padding:"2px 7px",borderRadius:4}}>THEN</span>
-                                      <select value={r.action} onChange={e=>updRule(r.id,"action",e.target.value)} style={{...sel_s,flex:1,background:T.bgSurface}}>
-                                        {W_RULE_ACTIONS.map(a=><option key={a.id} value={a.id}>{a.label}</option>)}
-                                      </select>
+                                    <div style={{padding:"10px 12px",display:"flex",alignItems:"flex-start",gap:6}}>
+                                      <span style={{fontSize:10,fontWeight:700,color:T.green,background:`${T.green}14`,padding:"2px 7px",borderRadius:4,marginTop:2,flexShrink:0}}>THEN</span>
+                                      <div style={{display:"flex",gap:6,flex:1,flexWrap:"wrap"}}>
+                                        {W_RULE_ACTIONS.map(a=>{
+                                          const checked=(r.actions||[]).includes(a.id);
+                                          return (
+                                            <button key={a.id} onClick={()=>{
+                                              const cur=r.actions||[];
+                                              updRule(r.id,"actions",checked?cur.filter(x=>x!==a.id):[...cur,a.id]);
+                                            }} style={{padding:"5px 11px",borderRadius:6,border:`1.5px solid ${checked?T.green:T.border}`,background:checked?`${T.green}14`:"transparent",color:checked?T.green:T.textSub,fontSize:11.5,fontWeight:checked?600:400,cursor:"pointer",display:"flex",alignItems:"center",gap:5,transition:"all .1s"}}>
+                                              {checked&&<svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6.5l2.5 2.5 5.5-5.5" stroke={T.green} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                              {a.label}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
                                       <button onClick={()=>removeRule(r.id)} title="Remove rule" style={{width:24,height:24,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:16,lineHeight:1}}
                                         onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
                                         onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>
@@ -7073,13 +7123,15 @@ const PolicyManagerView = ({onToast, onNav}) => {
                     return (
                       <div style={{display:"flex",flexDirection:"column",gap:18}}>
                         {secHead("Ownership & Classification","Assign who is responsible for this policy and link it to regulations and tags.")}
-                        <div>
-                          <label style={lbl}>Policy Owner</label>
-                          <select value={newPol.owner||""} onChange={e=>setNewPol(p=>({...p,owner:e.target.value}))} style={inp}>
-                            <option value="">— Select owner —</option>
-                            {PMV_USERS.map(u=><option key={u}>{u}</option>)}
-                          </select>
-                        </div>
+                        <CatFieldDropdown
+                          label="Policy Owner"
+                          multi={false}
+                          placeholder="Search and select owner…"
+                          options={PMV_USERS}
+                          selected={newPol.owner||""}
+                          onChange={v=>setNewPol(p=>({...p,owner:v}))}
+                          renderOpt={userRenderOpt}
+                        />
                         <CatFieldDropdown
                           label="Stewards"
                           placeholder="Search and select stewards…"
@@ -7140,7 +7192,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                             : wizardRules.map((r,i)=>{
                                 const fl=W_FIELD_LABELS[r.field]||r.field;
                                 const valStr=r.value?` "${r.value}"`:"";
-                                return [`Rule ${i+1}`, `IF ${fl} ${r.operator}${valStr} → ${r.action.replace(/_/g," ")}`];
+                                return [`Rule ${i+1}`, `IF ${fl} ${r.operator}${valStr} → ${(r.actions||[]).map(a=>a.replace(/_/g," ")).join(", ")||"flag violation"}`];
                               })
                           },
                           {title:"Ownership", rows:[
