@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, createContext, useContext } from "react";
+import PolicyMgmtPreview from "./policy-mgmt-preview.jsx";
 import { createPortal } from "react-dom";
 
 // ─────────────────────────────────────────────
@@ -22443,7 +22444,8 @@ export default function App(){
       case "lineage":       return <LineageView/>;
       case "quality":       return <QualityView/>;
       case "contracts":     return <ContractsView onToast={showToast}/>;
-      case "policymanager": return <PolicyManagerView onToast={showToast} onNav={handleNav}/>;
+      case "policymanager": return <PolicyMgmtPreview/>;
+      case "policymanager-old": return <PolicyManagerView onToast={showToast} onNav={handleNav}/>;
       case "access":        return <AccessView onToast={showToast}/>;
       case "certifications":return <CertificationsView onToast={showToast}/>;
       case "stewardship":   return <InboxView onToast={showToast}/>;
