@@ -3209,12 +3209,10 @@ const GROUPS = [
     {key:"catalog",        icon:"catalog",       label:"Data Catalog"},
     {key:"lineage",        icon:"lineage",       label:"Lineage"},
     {key:"quality",        icon:"quality",       label:"Data Quality"},
-    {key:"contracts",      icon:"contracts",     label:"Contracts"},
   ]},
   {section:"Governance",items:[
     {key:"policymanager",  icon:"policies",      label:"Policy Manager"},
     {key:"access",         icon:"access",        label:"Access Governance"},
-    {key:"certifications", icon:"cert",          label:"Certifications"},
     {key:"tags",           icon:"tag",           label:"Tag Management"},
   ]},
   {section:"Knowledge",items:[
