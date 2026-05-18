@@ -6904,12 +6904,9 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       </div>
                       <div>
                         <label style={lbl}>Severity</label>
-                        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                          {["Critical","High","Medium","Low"].map(sev=>{
-                            const sel=newPol.severity===sev;
-                            return <button key={sev} onClick={()=>setNewPol(p=>({...p,severity:sev}))} style={{...tBtn(sel),borderColor:sel?SEV_COLOR[sev]:T.border,background:sel?SEV_BG[sev]:T.bgElevated,color:sel?SEV_COLOR[sev]:T.textSub,fontWeight:sel?700:400}}>{sev}</button>;
-                          })}
-                        </div>
+                        <select value={newPol.severity||"Medium"} onChange={e=>setNewPol(p=>({...p,severity:e.target.value}))} style={inp}>
+                          {["Critical","High","Medium","Low"].map(s=><option key={s} value={s}>{s}</option>)}
+                        </select>
                       </div>
                       <div>
                         <label style={lbl}>Description</label>
@@ -6924,38 +6921,33 @@ const PolicyManagerView = ({onToast, onNav}) => {
                   if(createStep===2){
                     const scopeDoms=(newPol.scope?.domains||[]);
                     const scopeTypes=(newPol.scope?.assetTypes||[]);
+                    const scopeSrcs=(newPol.scope?.sources||[]);
                     const matchedAssets=scopeDoms.length?ASSETS.filter(a=>scopeDoms.includes(a.domain)):ASSETS;
                     const filteredMatch=scopeTypes.length?matchedAssets.filter(a=>scopeTypes.includes(a.type||"Table")):matchedAssets;
                     return (
                       <div style={{display:"flex",flexDirection:"column",gap:20}}>
                         {secHead("Policy Scope","Define which domains, asset types, and source systems this policy applies to.")}
-                        <div>
-                          <label style={lbl}>Domains <span style={{fontWeight:400,color:T.textMuted,fontSize:10}}>(no selection = all domains)</span></label>
-                          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:6}}>
-                            {ALL_DOMAINS.map(d=>{
-                              const sel=scopeDoms.includes(d);
-                              return <button key={d} onClick={()=>setNewPol(p=>{const ds=p.scope?.domains||[];return{...p,scope:{...p.scope,domains:sel?ds.filter(x=>x!==d):[...ds,d]}};})} style={tBtn(sel)}>{d}</button>;
-                            })}
-                          </div>
-                        </div>
-                        <div>
-                          <label style={lbl}>Asset Types <span style={{fontWeight:400,color:T.textMuted,fontSize:10}}>(no selection = all types)</span></label>
-                          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:6}}>
-                            {["Table","View","Schema","Database","Container","Column","Materialized View","Pipeline"].map(t=>{
-                              const sel=scopeTypes.includes(t);
-                              return <button key={t} onClick={()=>setNewPol(p=>{const ts=p.scope?.assetTypes||[];return{...p,scope:{...p.scope,assetTypes:sel?ts.filter(x=>x!==t):[...ts,t]}};})} style={tBtn(sel)}>{t}</button>;
-                            })}
-                          </div>
-                        </div>
-                        <div>
-                          <label style={lbl}>Source Systems <span style={{fontWeight:400,color:T.textMuted,fontSize:10}}>(affects which rules are available in Step 3)</span></label>
-                          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:6}}>
-                            {["Snowflake","Databricks","PostgreSQL","Oracle","BigQuery","S3","Azure Blob","Redshift"].map(s=>{
-                              const sel=(newPol.scope?.sources||[]).includes(s);
-                              return <button key={s} onClick={()=>setNewPol(p=>{const ss=p.scope?.sources||[];return{...p,scope:{...p.scope,sources:sel?ss.filter(x=>x!==s):[...ss,s]}};})} style={tBtn(sel)}>{s}</button>;
-                            })}
-                          </div>
-                        </div>
+                        <CatFieldDropdown
+                          label="Domains"
+                          placeholder="Search and select domains… (leave empty = all domains)"
+                          options={ALL_DOMAINS}
+                          selected={scopeDoms}
+                          onChange={v=>setNewPol(p=>({...p,scope:{...p.scope,domains:v}}))}
+                        />
+                        <CatFieldDropdown
+                          label="Asset Types"
+                          placeholder="Search and select asset types… (leave empty = all types)"
+                          options={["Table","View","Schema","Database","Container","Column","Materialized View","Pipeline"]}
+                          selected={scopeTypes}
+                          onChange={v=>setNewPol(p=>({...p,scope:{...p.scope,assetTypes:v}}))}
+                        />
+                        <CatFieldDropdown
+                          label="Source Systems"
+                          placeholder="Search and select sources…"
+                          options={["Snowflake","Databricks","PostgreSQL","Oracle","BigQuery","S3","Azure Blob","Redshift"]}
+                          selected={scopeSrcs}
+                          onChange={v=>setNewPol(p=>({...p,scope:{...p.scope,sources:v}}))}
+                        />
                         <div style={{padding:"12px 16px",borderRadius:9,background:T.accentDim,border:`1px solid ${T.accent}30`,display:"flex",alignItems:"center",gap:10}}>
                           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{color:T.accent,flexShrink:0}}><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/><line x1="8" y1="5.5" x2="8" y2="8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="10.5" r=".6" fill="currentColor" stroke="none"/></svg>
                           <span style={{fontSize:12,color:T.accent,lineHeight:1.6}}>
