@@ -12412,14 +12412,19 @@ const DomainsView = () => {
                   </div>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:12}}>
-                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
-                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:12}}>Domain Info</div>
-                    {[["Type",<DomainTypeBadge key="t" type={dm.domainType}/>],["Assets",dm.assetCount],["Data Products",domainProducts.length]].map(([l,v])=>(
-                      <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 8px 8px 12px",borderBottom:`1px solid ${T.border}`,borderLeft:`4px solid ${dm.color}`,marginBottom:2,borderRadius:"0 0 0 0",background:`${dm.color}08`}}>
-                        <span style={{fontSize:11.5,color:T.textMuted}}>{l}</span>
-                        <span style={{fontSize:11.5,color:T.text,fontWeight:500}}>{v}</span>
-                      </div>
-                    ))}
+                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${dm.color}`,borderRadius:10,overflow:"hidden"}}>
+                    <div style={{padding:"10px 16px",borderBottom:`1px solid ${T.border}`,background:`${dm.color}08`,display:"flex",alignItems:"center",gap:7}}>
+                      <div style={{width:7,height:7,borderRadius:"50%",background:dm.color,flexShrink:0}}/>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Domain Info</div>
+                    </div>
+                    <div style={{padding:"0 16px"}}>
+                      {[["Type",<DomainTypeBadge key="t" type={dm.domainType}/>],["Assets",dm.assetCount],["Data Products",domainProducts.length]].map(([l,v],i,arr)=>(
+                        <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
+                          <span style={{fontSize:11.5,color:T.textMuted}}>{l}</span>
+                          <span style={{fontSize:11.5,color:T.text,fontWeight:500}}>{v}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                   {/* Owners / Stewards / Tags card */}
                   <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
@@ -13587,16 +13592,19 @@ const DataProductsView = () => {
           {label:pd.displayName},
         ]}/>
         <div style={{flex:1,overflowY:"auto"}}>
-          {/* Header */}
-          <div style={{padding:"24px 28px 0"}}>
-            <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:18}}>
-              <div style={{width:52,height:52,borderRadius:14,background:`${pd.color}18`,border:`2px solid ${pd.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>{pd.icon}</div>
-              <div style={{flex:1}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
+          {/* Color banner */}
+          <div style={{height:100,background:`linear-gradient(135deg, ${pd.color}cc 0%, ${pd.color}66 60%, ${pd.color}22 100%)`,flexShrink:0}}/>
+          {/* Header content — overlaps banner */}
+          <div style={{padding:"0 28px",marginTop:-28,position:"relative",zIndex:10}}>
+            <div style={{display:"flex",alignItems:"flex-end",gap:14,marginBottom:16}}>
+              {/* Floating icon */}
+              <div style={{width:58,height:58,borderRadius:14,background:T.bgSurface,border:`2px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,flexShrink:0,boxShadow:`0 4px 20px ${pd.color}40`,zIndex:2}}>{pd.icon}</div>
+              <div style={{flex:1,minWidth:0,paddingBottom:4}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:5,flexWrap:"wrap"}}>
                   <h1 style={{fontSize:20,fontWeight:800,color:T.text,margin:0}}>{pd.displayName}</h1>
                   <LifecycleBadge stage={pd.lifecycleStage}/>
                 </div>
-                <div style={{fontSize:12,color:T.textMuted,marginBottom:8}}>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:6}}>
                   <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 8px",borderRadius:4,fontSize:10.5,fontWeight:600,
                     background:`${pdDomain?.color||"#6366f1"}15`,color:pdDomain?.color||"#6366f1",border:`1px solid ${pdDomain?.color||"#6366f1"}25`,marginRight:8}}>
                     {pdDomain?.icon} {pd.domain}
@@ -13607,8 +13615,10 @@ const DataProductsView = () => {
                   {(pd.owners||[]).map(o=><OwnerChip key={o} name={o}/>)}
                 </div>
               </div>
-              <div style={{display:"flex",gap:8,flexShrink:0}}>
-                <Btn onClick={()=>{}}>Edit</Btn>
+              <div style={{display:"flex",gap:8,flexShrink:0,paddingBottom:4}}>
+                <button onClick={()=>{}} style={{padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                  {Ic.plus(10)} Add Assets
+                </button>
               </div>
             </div>
             <Tabs2 tabs={[{key:"overview",label:"Overview"},{key:"assets",label:`Assets (${productAssets.length})`},{key:"lineage",label:"Lineage"}]} active={productTab} onChange={setProductTab}/>
