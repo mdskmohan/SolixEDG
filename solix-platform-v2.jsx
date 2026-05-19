@@ -3232,7 +3232,6 @@ const GROUPS = [
   ]},
   {section:"Catalog",items:[
     {key:"catalog",        icon:"catalog",       label:"Data Catalog"},
-    {key:"lineage",        icon:"lineage",       label:"Lineage"},
     {key:"quality",        icon:"quality",       label:"Data Quality"},
   ]},
   {section:"Governance",items:[
@@ -3254,7 +3253,7 @@ const GROUPS = [
 const Sidebar = ({active, onNav, exp, setExp}) => {
   const {roleCfg} = useRole();
   const inboxBadgeCount = INBOX_DATA.filter(i=>!i.readAt).length;
-  const allowedNav = roleCfg?.nav || ["home","search","catalog","lineage","quality","observability","contracts","policymanager","access","certifications","stewardship","glossary","domains","dataproducts","analytics","settings"];
+  const allowedNav = roleCfg?.nav || ["home","search","catalog","quality","observability","contracts","policymanager","access","certifications","stewardship","glossary","domains","dataproducts","analytics","settings"];
   return (
     <div style={{position:"fixed",top:0,left:0,height:"100vh",width:exp?EXPANDED_W:COLLAPSED_W,background:T.bgSurface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:100,transition:"width .2s ease",overflow:"hidden"}}>
       {/* Logo */}
@@ -3445,7 +3444,7 @@ const HomeView = ({onNav, onToast}) => {
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
               {[
                 {l:"Browse Catalog",  icon:Ic.catalog(13), nav:"catalog"},
-                {l:"View Lineage",    icon:Ic.lineage(13), nav:"lineage"},
+                {l:"View Lineage",    icon:Ic.lineage(13), nav:"catalog"},
                 {l:"Quality Rules",  icon:Ic.quality(13), nav:"quality"},
                 {l:"Policy Manager",  icon:Ic.policies(13),nav:"policymanager"},
                 {l:"Stewardship",    icon:Ic.steward(13), nav:"stewardship"},
@@ -10280,7 +10279,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
 
   const tabs=[
     {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},
-    {key:"quality",label:"Quality"},{key:"usage",label:"Usage"},
+    {key:"quality",label:"Quality"},{key:"usage",label:"Usage"},{key:"lineage",label:"Lineage"},
   ];
 
   const handleCertify=()=>{
@@ -10361,6 +10360,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
         {tab==="schema"    && <AssetSchema asset={asset} selCol={selCol} onColClick={c=>{ setSelCol(selCol?.name===c?.name?null:c); }} onToast={onToast}/>}
         {tab==="quality"   && <AssetQualityTab asset={data} onToast={onToast} onNav={onNav}/>}
         {tab==="usage"     && <AssetUsageTab/>}
+        {tab==="lineage"   && <AssetLineageFull asset={data}/>}
       </div>
 
       {/* ── Column detail panel (tabbed: Overview | Quality) ── */}
@@ -15919,7 +15919,7 @@ const ROLES_CONFIG = {
     badge: "rgba(238,36,36,0.15)",
     desc:  "Full platform access including settings, user management, and all configurations.",
     rbacRole: "admin",
-    nav: ["home","search","catalog","lineage","quality","contracts","policymanager","access","certifications","stewardship","glossary","domains","dataproducts","observability","analytics","settings","tags"],
+    nav: ["home","search","catalog","quality","contracts","policymanager","access","certifications","stewardship","glossary","domains","dataproducts","observability","analytics","settings","tags"],
     homeWidgets: ["metrics","tasks","quality","recentAssets","services","activity"],
   },
   steward: {
@@ -15932,7 +15932,7 @@ const ROLES_CONFIG = {
     desc:  "Govern assets in your domain: certify data, manage glossary terms, resolve conflicts.",
     rbacRole: "steward",
     domain: "Commerce",
-    nav: ["home","search","catalog","lineage","quality","policymanager","certifications","stewardship","glossary","domains","dataproducts","tags"],
+    nav: ["home","search","catalog","quality","policymanager","certifications","stewardship","glossary","domains","dataproducts","tags"],
     homeWidgets: ["tasks","certQueue","qualityAlerts","recentAssets","activity"],
   },
   analyst: {
@@ -15944,7 +15944,7 @@ const ROLES_CONFIG = {
     badge: "rgba(2,132,199,0.12)",
     desc:  "Browse the catalog, explore lineage, run quality checks, and access approved datasets.",
     rbacRole: "analyst",
-    nav: ["home","search","catalog","lineage","quality","glossary","domains","dataproducts","observability","analytics"],
+    nav: ["home","search","catalog","quality","glossary","domains","dataproducts","observability","analytics"],
     homeWidgets: ["metrics","recentAssets","quality","lineageSnippet","activity"],
   },
   engineer: {
@@ -15956,7 +15956,7 @@ const ROLES_CONFIG = {
     badge: "rgba(124,58,237,0.12)",
     desc:  "Manage pipelines, monitor ingestion health, trace lineage, and maintain data contracts.",
     rbacRole: "engineer",
-    nav: ["home","search","catalog","lineage","quality","contracts","observability","analytics","settings"],
+    nav: ["home","search","catalog","quality","contracts","observability","analytics","settings"],
     homeWidgets: ["services","metrics","quality","lineageSnippet","recentAssets","activity"],
   },
   viewer: {
@@ -23675,7 +23675,6 @@ export default function App(){
       case "home":          return <HomeView onNav={handleNav} onToast={showToast} role={role} roleCfg={roleCfg}/>;
       case "search":        return <SearchView onAsset={handleAsset}/>;
       case "catalog":       return <CatalogView onAsset={handleAsset}/>;
-      case "lineage":       return <LineageView/>;
       case "quality":       return <QualityView/>;
       case "contracts":     return <ContractsView onToast={showToast}/>;
       case "policymanager": return <PolicyManagerView onToast={showToast} onNav={handleNav}/>;
