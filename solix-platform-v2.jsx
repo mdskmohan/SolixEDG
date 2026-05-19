@@ -11626,20 +11626,28 @@ const OwnerChip = ({name}) => (
     {name}
   </span>
 );
-const AssetRowDP = ({asset, onAsset}) => (
+const AssetTableHeader = () => (
+  <div style={{display:"grid",gridTemplateColumns:"minmax(180px,2fr) 110px minmax(120px,1fr) 80px 28px",padding:"8px 12px",borderBottom:`2px solid ${T.border}`,background:T.bgElevated,borderRadius:"8px 8px 0 0"}}>
+    {[["Asset Name","left"],["Type","left"],["Source","left"],["Quality","right"],["",""]].map(([h,align])=>(
+      <div key={h} style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",textAlign:align||"left"}}>{h}</div>
+    ))}
+  </div>
+);
+const AssetRowDP = ({asset, onAsset, isLast}) => (
   <div onClick={()=>onAsset&&onAsset(asset)}
-    style={{display:"flex",alignItems:"center",gap:12,padding:"10px 4px",borderBottom:`1px solid ${T.border}`,cursor:onAsset?"pointer":"default",transition:"background .1s",borderRadius:6,margin:"0 -4px"}}
+    style={{display:"grid",gridTemplateColumns:"minmax(180px,2fr) 110px minmax(120px,1fr) 80px 28px",padding:"10px 12px",borderBottom:isLast?`none`:`1px solid ${T.border}`,cursor:onAsset?"pointer":"default",transition:"background .1s",alignItems:"center"}}
     onMouseEnter={e=>{if(onAsset)e.currentTarget.style.background=T.bgHover;}}
     onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-    <div style={{width:28,height:28,borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-      {Ic.tableIc(12)}
+    <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
+      <div style={{width:26,height:26,borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.tableIc(11)}</div>
+      <span style={{fontSize:12.5,fontWeight:600,color:onAsset?T.accent:T.text,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{asset.name}</span>
     </div>
-    <div style={{flex:1,minWidth:0}}>
-      <div style={{fontSize:12.5,fontWeight:600,color:onAsset?T.accent:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{asset.name}</div>
-      <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{asset.type} · {asset.connectionLabel}</div>
+    <div><TypeBadge type={asset.type}/></div>
+    <div style={{fontSize:12,color:T.textSub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{asset.connectionLabel||asset.connector||asset.db||"—"}</div>
+    <div style={{textAlign:"right"}}><QScore score={asset.quality}/></div>
+    <div style={{display:"flex",justifyContent:"center",color:T.textMuted,opacity:.5}}>
+      {onAsset&&<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3.5 2l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
     </div>
-    <QScore score={asset.quality}/>
-    {onAsset&&<svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,flexShrink:0}}><path d="M3.5 2l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
   </div>
 );
 
@@ -11903,7 +11911,6 @@ const DomainsView = ({onAsset, onNav}) => {
             <Tabs2 tabs={[
               {key:"overview",label:"Overview"},
               {key:"assets",label:`Assets (${productAssets.length})`},
-              {key:"lineage",label:"Lineage"},
               {key:"activity",label:"Activity"},
               {key:"ports",label:"Ports"},
               {key:"contract",label:"Contract"},
@@ -11938,41 +11945,6 @@ const DomainsView = ({onAsset, onNav}) => {
                     : <p style={{fontSize:13,color:T.textSub,lineHeight:1.7,marginBottom:24}}>{pd.description}</p>
                   }
 
-                  {/* Lineage mini */}
-                  {(upstream.length>0||downstream.length>0)&&(
-                    <>
-                      <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Data Flow</div>
-                      <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:24}}>
-                        {upstream.length>0&&<>
-                          <div style={{flex:1,minWidth:120}}>
-                            <div style={{fontSize:10,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Consumes from</div>
-                            {upstream.map(p=>(
-                              <button key={p.id} onClick={()=>setSelectedProductId(p.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,fontSize:12,cursor:"pointer",width:"100%",marginBottom:4,textAlign:"left",transition:"border-color .12s"}}
-                                onMouseEnter={e=>e.currentTarget.style.borderColor=p.color} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                                <span style={{fontSize:14}}>{p.icon}</span><span style={{fontWeight:500}}>{p.displayName}</span>
-                              </button>
-                            ))}
-                          </div>
-                          <div style={{color:T.textMuted,fontSize:20}}>→</div>
-                        </>}
-                        <div style={{padding:"10px 16px",borderRadius:10,background:`${pd.color}15`,border:`2px solid ${pd.color}40`,fontSize:12,fontWeight:700,color:T.text}}>
-                          {pd.icon} {pd.displayName}
-                        </div>
-                        {downstream.length>0&&<>
-                          <div style={{color:T.textMuted,fontSize:20}}>→</div>
-                          <div style={{flex:1,minWidth:120}}>
-                            <div style={{fontSize:10,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Provides to</div>
-                            {downstream.map(p=>(
-                              <button key={p.id} onClick={()=>setSelectedProductId(p.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,fontSize:12,cursor:"pointer",width:"100%",marginBottom:4,textAlign:"left",transition:"border-color .12s"}}
-                                onMouseEnter={e=>e.currentTarget.style.borderColor=p.color} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                                <span style={{fontSize:14}}>{p.icon}</span><span style={{fontWeight:500}}>{p.displayName}</span>
-                              </button>
-                            ))}
-                          </div>
-                        </>}
-                      </div>
-                    </>
-                  )}
                 </div>
                 {/* Metadata sidebar */}
                 <div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -12041,7 +12013,7 @@ const DomainsView = ({onAsset, onNav}) => {
               <div>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
                   <div style={{fontSize:13,color:T.textMuted}}>{productAssets.length} asset{productAssets.length!==1?"s":""} in this data product</div>
-                  <button style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                  <button onClick={()=>setAddPdAssetsOpen(true)} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>
                     {Ic.plus(10)} Add Assets
                   </button>
                 </div>
@@ -12052,23 +12024,14 @@ const DomainsView = ({onAsset, onNav}) => {
                       <div style={{fontSize:12,color:T.textMuted,marginBottom:16}}>Add tables, views, or pipelines to this data product</div>
                       <button style={{padding:"9px 20px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Add First Asset</button>
                     </div>
-                  : productAssets.map(a=><AssetRowDP key={a.id} asset={a} onAsset={onAsset}/>)
+                  : <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+                      <AssetTableHeader/>
+                      {productAssets.map((a,i,arr)=><AssetRowDP key={a.id} asset={a} onAsset={onAsset} isLast={i===arr.length-1}/>)}
+                    </div>
                 }
               </div>
             )}
 
-            {/* LINEAGE TAB */}
-            {productTab==="lineage"&&(
-              <div style={{textAlign:"center",padding:"80px 0"}}>
-                <div style={{fontSize:40,marginBottom:16}}>🔗</div>
-                <div style={{fontSize:15,fontWeight:600,color:T.text,marginBottom:8}}>Data Product Lineage</div>
-                <div style={{fontSize:13,color:T.textMuted,maxWidth:400,margin:"0 auto",lineHeight:1.6}}>
-                  {(upstream.length+downstream.length)===0
-                    ? "No upstream or downstream connections. Use consumesFrom / providesTo to wire this product into the data mesh."
-                    : `This product consumes from ${upstream.length} and provides to ${downstream.length} other data products.`}
-                </div>
-              </div>
-            )}
 
             {/* ACTIVITY TAB */}
             {productTab==="activity"&&(
@@ -12374,6 +12337,7 @@ const DomainsView = ({onAsset, onNav}) => {
               {key:"subdomains",label:`Sub Domains (${domains.filter(d=>d.parentDomain===dm.id).length})`},
               {key:"dataproducts",label:`Data Products (${domainProducts.length})`},
               {key:"assets",label:`Assets (${domainAssets.length})`},
+              {key:"ports",label:"Ports"},
             ]} active={domainTab} onChange={setDomainTab}/>
           </div>
 
@@ -12403,19 +12367,6 @@ const DomainsView = ({onAsset, onNav}) => {
                       </div>
                     : <p style={{fontSize:13,color:T.textSub,lineHeight:1.75,marginBottom:24}}>{dm.description}</p>
                   }
-                  <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Domain Health</div>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
-                    {[
-                      {label:"Quality Score",value:`${dm.quality}%`,color:dm.quality>=90?T.green:dm.quality>=70?T.amber:T.rose},
-                      {label:"Total Assets",value:String(dm.assetCount),color:dm.color},
-                      {label:"Data Products",value:String(domainProducts.length),color:"#8b5cf6"},
-                    ].map(m=>(
-                      <div key={m.label} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,padding:"14px 16px",borderLeft:`3px solid ${m.color}`}}>
-                        <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>{m.label}</div>
-                        <div style={{fontSize:22,fontWeight:800,color:m.color,fontFamily:"'Geist Mono',monospace"}}>{m.value}</div>
-                      </div>
-                    ))}
-                  </div>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:12}}>
                   <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${dm.color}`,borderRadius:10,overflow:"hidden"}}>
@@ -12424,7 +12375,7 @@ const DomainsView = ({onAsset, onNav}) => {
                       <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Domain Info</div>
                     </div>
                     <div style={{padding:"0 16px"}}>
-                      {[["Type",<DomainTypeBadge key="t" type={dm.domainType}/>],["Assets",dm.assetCount],["Data Products",domainProducts.length]].map(([l,v],i,arr)=>(
+                      {[["Type",<DomainTypeBadge key="t" type={dm.domainType}/>]].map(([l,v],i,arr)=>(
                         <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
                           <span style={{fontSize:11.5,color:T.textMuted}}>{l}</span>
                           <span style={{fontSize:11.5,color:T.text,fontWeight:500}}>{v}</span>
@@ -12693,8 +12644,55 @@ const DomainsView = ({onAsset, onNav}) => {
                 </div>
                 {domainAssets.length===0
                   ? <div style={{padding:"60px 0",textAlign:"center",color:T.textMuted,fontSize:13}}>No assets assigned to this domain</div>
-                  : domainAssets.map(a=><AssetRowDP key={a.id} asset={a} onAsset={onAsset}/>)
+                  : <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+                      <AssetTableHeader/>
+                      {domainAssets.map((a,i,arr)=><AssetRowDP key={a.id} asset={a} onAsset={onAsset} isLast={i===arr.length-1}/>)}
+                    </div>
                 }
+              </div>
+            )}
+
+            {/* PORTS TAB */}
+            {domainTab==="ports"&&(
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
+                {[
+                  {type:"Input",icon:"📥",color:T.blue,desc:"Assets consumed by this domain"},
+                  {type:"Output",icon:"📤",color:T.green,desc:"Assets produced or governed by this domain"},
+                ].map(col=>(
+                  <div key={col.type} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
+                    <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10,background:`${col.color}08`}}>
+                      <div style={{width:32,height:32,borderRadius:9,background:`${col.color}18`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>{col.icon}</div>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:700,color:T.text}}>{col.type} Ports</div>
+                        <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{col.desc}</div>
+                      </div>
+                    </div>
+                    <div style={{padding:"12px 16px"}}>
+                      {domainAssets.length===0
+                        ? <div style={{padding:"28px 0",textAlign:"center",color:T.textMuted,fontSize:12,border:`1px dashed ${T.border}`,borderRadius:8}}>No assets in this domain yet</div>
+                        : domainAssets.slice(0,col.type==="Input"?Math.ceil(domainAssets.length/2):Math.floor(domainAssets.length/2)).map(a=>(
+                          <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,marginBottom:6,cursor:"pointer",transition:"all .12s"}}
+                            onClick={()=>onAsset&&onAsset(a)}
+                            onMouseEnter={e=>{e.currentTarget.style.borderColor=col.color;e.currentTarget.style.boxShadow=`0 2px 8px ${col.color}20`;}}
+                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
+                            <TypeBadge type={a.type}/>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{a.name}</div>
+                              <div style={{fontSize:10.5,color:T.textMuted}}>{a.domain}</div>
+                            </div>
+                            <div style={{width:6,height:6,borderRadius:"50%",background:col.color,flexShrink:0}}/>
+                          </div>
+                        ))
+                      }
+                      <button style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:T.textMuted,background:"none",border:`1px dashed ${T.border}`,borderRadius:7,padding:"7px 12px",cursor:"pointer",width:"100%",justifyContent:"center",marginTop:4,transition:"all .12s"}}
+                        onClick={()=>{setAddHeaderDropdown(false);setAddAssetsSelected(new Set());setAddAssetsSearch("");setAddAssetsOpen(true);}}
+                        onMouseEnter={e=>{e.currentTarget.style.borderColor=col.color;e.currentTarget.style.color=col.color;}}
+                        onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
+                        {Ic.plus(9)} Add Asset Port
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -13135,30 +13133,30 @@ const DomainsView = ({onAsset, onNav}) => {
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,gap:8}}>
           <div style={{fontSize:13,fontWeight:600,color:T.text}}>{domains.filter(d=>(!domainSearch||d.displayName.toLowerCase().includes(domainSearch.toLowerCase()))&&(!domainTypeFilter||d.domainType===domainTypeFilter)).length} domain{domains.length!==1?"s":""}</div>
           <div style={{display:"flex",alignItems:"center",gap:6}}>
-            {/* Search icon / expandable input */}
-            <div style={{display:"flex",alignItems:"center",gap:4,position:"relative"}}>
-              {domainSearchOpen
-                ? <input autoFocus value={domainSearch} onChange={e=>setDomainSearch(e.target.value)}
-                    onBlur={()=>{if(!domainSearch)setDomainSearchOpen(false);}}
-                    placeholder="Search domains…"
-                    style={{padding:"5px 10px",background:T.bgElevated,border:`1px solid ${T.accent}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",width:180}}/>
-                : <button onClick={()=>setDomainSearchOpen(true)}
-                    style={{width:30,height:30,borderRadius:7,background:domainSearch?T.accentDim:T.bgElevated,border:`1px solid ${domainSearch?T.accent:T.border}`,color:domainSearch?T.accent:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>🔍</button>
-              }
-              {domainSearch&&!domainSearchOpen&&(
-                <button onClick={()=>{setDomainSearch("");}} style={{position:"absolute",right:4,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex"}}>{Ic.x(9)}</button>
-              )}
+            {/* Inline search */}
+            <div style={{position:"relative",minWidth:200}}>
+              <input value={domainSearch} onChange={e=>setDomainSearch(e.target.value)}
+                placeholder="Search domains…"
+                style={{padding:"7px 12px 7px 32px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",width:"100%",boxSizing:"border-box"}}
+                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+              <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none",fontSize:13}}>🔍</span>
+              {domainSearch&&<button onClick={()=>setDomainSearch("")} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex",lineHeight:1}}>{Ic.x(9)}</button>}
             </div>
-            {/* Filter icon / dropdown */}
+            {/* Filter — multi-select type filter */}
             <div style={{position:"relative"}}>
               <button onClick={()=>setDomainFilterOpen(p=>!p)}
-                style={{width:30,height:30,borderRadius:7,background:domainTypeFilter?T.accentDim:T.bgElevated,border:`1px solid ${domainTypeFilter?T.accent:T.border}`,color:domainTypeFilter?T.accent:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>⊟</button>
+                style={{height:32,padding:"0 12px",borderRadius:8,background:domainTypeFilter?T.accentDim:T.bgElevated,border:`1px solid ${domainTypeFilter?T.accent:T.border}`,color:domainTypeFilter?T.accent:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:domainTypeFilter?600:400,whiteSpace:"nowrap"}}>
+                <span style={{fontSize:13}}>⊟</span> {domainTypeFilter||"Type"}
+              </button>
               {domainFilterOpen&&(
-                <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 8px 24px rgba(0,0,0,.18)",minWidth:160,overflow:"hidden"}}>
+                <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 8px 24px rgba(0,0,0,.18)",minWidth:180,overflow:"hidden"}}>
                   {["","Source-aligned","Consumer-aligned","Aggregate"].map(opt=>(
                     <button key={opt} onMouseDown={()=>{setDomainTypeFilter(opt);setDomainFilterOpen(false);}}
-                      style={{width:"100%",padding:"8px 12px",background:domainTypeFilter===opt?T.bgElevated:"none",border:"none",cursor:"pointer",textAlign:"left",fontSize:12,color:domainTypeFilter===opt?T.accent:T.text,fontWeight:domainTypeFilter===opt?600:400}}
-                      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=domainTypeFilter===opt?T.bgElevated:"none"}>
+                      style={{width:"100%",padding:"8px 12px",background:"none",border:"none",cursor:"pointer",textAlign:"left",fontSize:12,display:"flex",alignItems:"center",gap:8,color:T.text}}
+                      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                      <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${domainTypeFilter===opt&&opt?T.accent:T.border}`,background:domainTypeFilter===opt&&opt?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        {domainTypeFilter===opt&&opt&&<svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2L7.5 2" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>}
+                      </div>
                       {opt||"All Types"}
                     </button>
                   ))}
@@ -13234,8 +13232,8 @@ const DomainsView = ({onAsset, onNav}) => {
           <div style={{overflowX:"auto"}}>
           <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden",minWidth:660}}>
             {/* Header */}
-            <div style={{display:"grid",gridTemplateColumns:"minmax(200px,3fr) 130px 90px 110px 90px 36px",padding:"10px 20px",borderBottom:`2px solid ${T.border}`,background:T.bgElevated,alignItems:"center"}}>
-              {[["Domain","left"],["Type","left"],["Assets","right"],["Products","right"],["Quality","right"],["",""]].map(([h,align])=>(
+            <div style={{display:"grid",gridTemplateColumns:"minmax(200px,3fr) 130px 90px 110px 36px",padding:"10px 20px",borderBottom:`2px solid ${T.border}`,background:T.bgElevated,alignItems:"center"}}>
+              {[["Domain","left"],["Type","left"],["Assets","right"],["Products","right"],["",""]].map(([h,align])=>(
                 <div key={h} style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",textAlign:align||"left"}}>{h}</div>
               ))}
             </div>
@@ -13243,7 +13241,7 @@ const DomainsView = ({onAsset, onNav}) => {
               const dp = products.filter(p=>p.domain===d.name);
               return (
                 <div key={d.id}
-                  style={{display:"grid",gridTemplateColumns:"minmax(200px,3fr) 130px 90px 110px 90px 36px",padding:"13px 20px",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"all .1s",alignItems:"center",borderLeft:"3px solid transparent"}}
+                  style={{display:"grid",gridTemplateColumns:"minmax(200px,3fr) 130px 90px 110px 36px",padding:"13px 20px",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"all .1s",alignItems:"center",borderLeft:"3px solid transparent"}}
                   onClick={()=>{setSelectedDomainId(d.id);setDomainTab("documentation");}}
                   onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;e.currentTarget.style.borderLeftColor=d.color;}}
                   onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderLeftColor="transparent";}}>
@@ -13269,8 +13267,6 @@ const DomainsView = ({onAsset, onNav}) => {
                     <span style={{fontSize:13,fontWeight:700,color:"#8b5cf6",fontFamily:"'Geist Mono',monospace"}}>{dp.length}</span>
                     <span style={{fontSize:10,color:T.textMuted,marginLeft:4}}>product{dp.length!==1?"s":""}</span>
                   </div>
-                  {/* Quality */}
-                  <div style={{display:"flex",justifyContent:"flex-end"}}><QScore score={d.quality}/></div>
                   {/* Chevron */}
                   <div style={{display:"flex",justifyContent:"center",color:T.textMuted,opacity:.5}}>{Ic.chevRight?.(10)||<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3.5 2l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}</div>
                 </div>
@@ -13824,7 +13820,7 @@ const DataProductsView = ({onAsset, onNav}) => {
                 </div>
               </div>
             </div>
-            <Tabs2 tabs={[{key:"overview",label:"Overview"},{key:"assets",label:`Assets (${productAssets.length})`},{key:"lineage",label:"Lineage"}]} active={productTab} onChange={setProductTab}/>
+            <Tabs2 tabs={[{key:"overview",label:"Overview"},{key:"assets",label:`Assets (${productAssets.length})`},{key:"ports",label:"Ports"}]} active={productTab} onChange={setProductTab}/>
           </div>
 
           <div style={{padding:28}}>
@@ -13833,32 +13829,6 @@ const DataProductsView = ({onAsset, onNav}) => {
                 <div>
                   <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:10}}>Description</div>
                   <p style={{fontSize:13,color:T.textSub,lineHeight:1.7,marginBottom:24}}>{pd.description}</p>
-                  {(upstream.length>0||downstream.length>0)&&(
-                    <>
-                      <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Data Flow</div>
-                      <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:24}}>
-                        {upstream.length>0&&<>
-                          <div style={{flex:1,minWidth:120}}>
-                            <div style={{fontSize:10,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Consumes from</div>
-                            {upstream.map(p=>(
-                              <button key={p.id} onClick={()=>setSelectedProductId(p.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,fontSize:12,cursor:"pointer",width:"100%",marginBottom:4,textAlign:"left"}}>{p.icon} {p.displayName}</button>
-                            ))}
-                          </div>
-                          <span style={{color:T.textMuted,fontSize:20}}>→</span>
-                        </>}
-                        <div style={{padding:"10px 16px",borderRadius:10,background:`${pd.color}15`,border:`2px solid ${pd.color}40`,fontSize:12,fontWeight:700,color:T.text}}>{pd.icon} {pd.displayName}</div>
-                        {downstream.length>0&&<>
-                          <span style={{color:T.textMuted,fontSize:20}}>→</span>
-                          <div style={{flex:1,minWidth:120}}>
-                            <div style={{fontSize:10,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>Provides to</div>
-                            {downstream.map(p=>(
-                              <button key={p.id} onClick={()=>setSelectedProductId(p.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,fontSize:12,cursor:"pointer",width:"100%",marginBottom:4,textAlign:"left"}}>{p.icon} {p.displayName}</button>
-                            ))}
-                          </div>
-                        </>}
-                      </div>
-                    </>
-                  )}
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:12}}>
                   <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
@@ -13924,7 +13894,7 @@ const DataProductsView = ({onAsset, onNav}) => {
               <div>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
                   <div style={{fontSize:13,color:T.textMuted}}>{productAssets.length} asset{productAssets.length!==1?"s":""}</div>
-                  <button style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>{Ic.plus(10)} Add Assets</button>
+                  <button onClick={()=>setDpAddAssetsOpen(true)} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>{Ic.plus(10)} Add Assets</button>
                 </div>
                 {productAssets.length===0
                   ? <div style={{padding:"60px 0",textAlign:"center"}}>
@@ -13932,19 +13902,53 @@ const DataProductsView = ({onAsset, onNav}) => {
                       <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>No assets yet</div>
                       <div style={{fontSize:12,color:T.textMuted}}>Add tables or views to this data product</div>
                     </div>
-                  : productAssets.map(a=><AssetRowDP key={a.id} asset={a} onAsset={onAsset}/>)
+                  : <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+                      <AssetTableHeader/>
+                      {productAssets.map((a,i,arr)=><AssetRowDP key={a.id} asset={a} onAsset={onAsset} isLast={i===arr.length-1}/>)}
+                    </div>
                 }
               </div>
             )}
-            {productTab==="lineage"&&(
-              <div style={{textAlign:"center",padding:"80px 0"}}>
-                <div style={{fontSize:40,marginBottom:16}}>🔗</div>
-                <div style={{fontSize:15,fontWeight:600,color:T.text,marginBottom:8}}>Data Product Lineage</div>
-                <div style={{fontSize:13,color:T.textMuted,maxWidth:400,margin:"0 auto",lineHeight:1.6}}>
-                  {(upstream.length+downstream.length)===0
-                    ? "No upstream or downstream connections defined."
-                    : `Consumes from ${upstream.length}, provides to ${downstream.length} other product${downstream.length!==1?"s":""}.`}
-                </div>
+            {productTab==="ports"&&(
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
+                {[
+                  {type:"Input",icon:"📥",color:T.blue,desc:"Assets that feed data into this product"},
+                  {type:"Output",icon:"📤",color:T.green,desc:"Assets this product produces or exposes"},
+                ].map(col=>(
+                  <div key={col.type} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
+                    <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10,background:`${col.color}08`}}>
+                      <div style={{width:32,height:32,borderRadius:9,background:`${col.color}18`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>{col.icon}</div>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:700,color:T.text}}>{col.type} Ports</div>
+                        <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{col.desc}</div>
+                      </div>
+                    </div>
+                    <div style={{padding:"12px 16px"}}>
+                      {productAssets.length===0
+                        ? <div style={{padding:"28px 0",textAlign:"center",color:T.textMuted,fontSize:12,border:`1px dashed ${T.border}`,borderRadius:8}}>No {col.type.toLowerCase()} ports — add assets first</div>
+                        : productAssets.slice(0,col.type==="Input"?Math.ceil(productAssets.length/2):Math.floor(productAssets.length/2)).map(a=>(
+                          <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,marginBottom:6,cursor:"pointer",transition:"all .12s"}}
+                            onClick={()=>onAsset&&onAsset(a)}
+                            onMouseEnter={e=>{e.currentTarget.style.borderColor=col.color;e.currentTarget.style.boxShadow=`0 2px 8px ${col.color}20`;}}
+                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
+                            <TypeBadge type={a.type}/>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{a.name}</div>
+                              <div style={{fontSize:10.5,color:T.textMuted}}>{a.db||a.connector||"—"}</div>
+                            </div>
+                            <div style={{width:6,height:6,borderRadius:"50%",background:col.color,flexShrink:0}}/>
+                          </div>
+                        ))
+                      }
+                      <button style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:T.textMuted,background:"none",border:`1px dashed ${T.border}`,borderRadius:7,padding:"7px 12px",cursor:"pointer",width:"100%",justifyContent:"center",marginTop:4,transition:"all .12s"}}
+                        onClick={()=>setDpAddAssetsOpen(true)}
+                        onMouseEnter={e=>{e.currentTarget.style.borderColor=col.color;e.currentTarget.style.color=col.color;}}
+                        onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
+                        {Ic.plus(9)} Add {col.type} Port
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
