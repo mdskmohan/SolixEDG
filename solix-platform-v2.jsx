@@ -11753,6 +11753,9 @@ const DomainsView = ({onAsset, onNav}) => {
   // edit domain
   const [editDomainOpen,    setEditDomainOpen]    = useState(false);
   const [editDd,            setEditDd]            = useState(null);
+  const [assignDpOpen,      setAssignDpOpen]      = useState(false);
+  const [assignDpSearch,    setAssignDpSearch]    = useState("");
+  const [assignDpSelected,  setAssignDpSelected]  = useState(new Set());
   const [editDdOwnerOpen,   setEditDdOwnerOpen]   = useState(false);
   const [editDdOwnerSearch, setEditDdOwnerSearch] = useState("");
   const [editDdExpertOpen,  setEditDdExpertOpen]  = useState(false);
@@ -12041,21 +12044,34 @@ const DomainsView = ({onAsset, onNav}) => {
                         <AssetTableHeader/>
                         {productAssets.map((a,i,arr)=><AssetRowDP key={a.id} asset={a} onAsset={onAsset} isLast={i===arr.length-1}/>)}
                       </div>
-                    : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12}}>
+                    : <div style={{display:"flex",flexDirection:"column",gap:8}}>
                         {productAssets.map(a=>(
-                          <div key={a.id} onClick={()=>onAsset&&onAsset(a)} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",cursor:onAsset?"pointer":"default",transition:"all .12s"}}
-                            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.boxShadow=`0 4px 16px ${T.accent}18`;}}
-                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
-                            <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:8}}>
-                              <div style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.tableIc(13)}</div>
-                              <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontSize:12.5,fontWeight:700,color:T.accent,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</div>
-                                <div style={{marginTop:4}}><TypeBadge type={a.type}/></div>
+                          <div key={a.id} onClick={()=>onAsset&&onAsset(a)} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,cursor:onAsset?"pointer":"default",transition:"all .15s",overflow:"hidden"}}
+                            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent+"55";e.currentTarget.style.background=T.bgHover;}}
+                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.bgSurface;}}>
+                            <div style={{display:"flex",alignItems:"center",gap:14,padding:"13px 16px"}}>
+                              <div style={{width:36,height:36,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.tableIc(15)}</div>
+                              <div style={{flex:"0 0 240px",minWidth:0}}>
+                                <div style={{fontSize:13,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</div>
+                                <div style={{fontSize:10.5,color:T.textMuted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.db||a.connectionLabel||"—"}</div>
                               </div>
-                            </div>
-                            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                              <span style={{fontSize:11,color:T.textMuted}}>{a.connectionLabel||a.connector||a.db||"—"}</span>
-                              <QScore score={a.quality}/>
+                              <div style={{flex:1,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",minWidth:0}}>
+                                <TypeBadge type={a.type}/>
+                              </div>
+                              <div style={{display:"flex",alignItems:"center",gap:16,flexShrink:0}}>
+                                <div style={{textAlign:"center",width:40}}>
+                                  <div style={{fontSize:15,fontWeight:700,color:a.quality>=90?T.accent:a.quality>=70?T.amber:T.rose,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{a.quality}</div>
+                                  <div style={{fontSize:9,color:T.textMuted,marginTop:2}}>quality</div>
+                                </div>
+                                <div style={{display:"flex",alignItems:"center"}}>
+                                  {(a.owners||[a.owner]).filter(Boolean).slice(0,3).map((o,i2)=>(
+                                    <div key={i2} title={o} style={{width:22,height:22,borderRadius:"50%",background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:T.accent,marginLeft:i2>0?-6:0,position:"relative",zIndex:3-i2,border:`2px solid ${T.bgSurface}`,boxSizing:"border-box",flexShrink:0}}>
+                                      {o.split(".").map(s=>s[0]?.toUpperCase()).join("")}
+                                    </div>
+                                  ))}
+                                </div>
+                                <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,opacity:.5}}><path d="M3.5 2l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -12261,7 +12277,7 @@ const DomainsView = ({onAsset, onNav}) => {
               <div style={{width:60,height:60,borderRadius:16,background:`${dm.color}18`,border:`2px solid ${dm.color}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}>{dm.icon}</div>
               {/* Title + meta */}
               <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,flexWrap:"wrap"}}>
                   {dmRenameMode
                     ? <input autoFocus value={dmRenameValue} onChange={e=>setDmRenameValue(e.target.value)}
                         onKeyDown={e=>{if(e.key==="Enter"){patchDomain(dm.id,{displayName:dmRenameValue.trim()||dm.displayName});setDmRenameMode(false);}if(e.key==="Escape")setDmRenameMode(false);}}
@@ -12269,19 +12285,9 @@ const DomainsView = ({onAsset, onNav}) => {
                         style={{fontSize:22,fontWeight:800,color:T.text,background:"transparent",border:`1.5px solid ${T.accent}`,borderRadius:6,outline:"none",padding:"2px 8px",minWidth:200}}/>
                     : <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:0,lineHeight:1.2}}>{dm.displayName}</h1>
                   }
-                  <DomainTypeBadge type={dm.domainType}/>
-                  {hasSensitive&&<span style={{padding:"3px 8px",borderRadius:4,fontSize:10,fontWeight:700,background:"rgba(239,68,68,.1)",color:"#ef4444",border:"1px solid rgba(239,68,68,.2)"}}>🔒 Sensitive</span>}
-                </div>
-                <div style={{display:"flex",gap:20,marginBottom:8}}>
-                  {[["Assets",dm.assetCount,dm.color],["Data Products",domainProducts.length,"#8b5cf6"],["Quality",`${dm.quality}%`,dm.quality>=90?T.green:dm.quality>=70?T.amber:T.rose]].map(([l,v,c])=>(
-                    <div key={l} style={{display:"flex",alignItems:"baseline",gap:5}}>
-                      <span style={{fontSize:18,fontWeight:800,color:c,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{v}</span>
-                      <span style={{fontSize:11,color:T.textMuted,fontWeight:500}}>{l}</span>
-                    </div>
-                  ))}
                 </div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                  {dm.owners.map(o=><OwnerChip key={o} name={o}/>)}
+                  {(dm.owners||[]).map(o=><OwnerChip key={o} name={o}/>)}
                 </div>
               </div>
               {/* Action buttons */}
@@ -12298,7 +12304,7 @@ const DomainsView = ({onAsset, onNav}) => {
                       {[
                         {icon:"🗂️",label:"Add Sub Domain",action:()=>{setAddHeaderDropdown(false);setAddPanelType("subdomain");setAddPanelOpen(true);}},
                         {icon:"📊",label:"Add Asset",action:()=>{setAddHeaderDropdown(false);setAddAssetsSelected(new Set());setAddAssetsSearch("");setAddAssetsOpen(true);}},
-                        {icon:"📦",label:"Add Data Product",action:()=>{setAddHeaderDropdown(false);setAddPanelType("dataproduct");setAddPanelOpen(true);}},
+                        {icon:"📦",label:"Assign Data Product",action:()=>{setAddHeaderDropdown(false);setAssignDpSearch("");setAssignDpSelected(new Set());setAssignDpOpen(true);}},
                       ].map((item,i,arr)=>(
                         <React.Fragment key={item.label}>
                           <button onMouseDown={item.action}
@@ -12407,10 +12413,16 @@ const DomainsView = ({onAsset, onNav}) => {
                       <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Domain Info</div>
                     </div>
                     <div style={{padding:"0 16px"}}>
-                      {[["Type",<DomainTypeBadge key="t" type={dm.domainType}/>]].map(([l,v],i,arr)=>(
+                      {[
+                        ["Type",<DomainTypeBadge key="t" type={dm.domainType}/>],
+                        ["Assets",<span key="a" style={{fontSize:13,fontWeight:700,color:dm.color,fontFamily:"'Geist Mono',monospace"}}>{dm.assetCount}</span>],
+                        ["Data Products",<span key="dp" style={{fontSize:13,fontWeight:700,color:"#8b5cf6",fontFamily:"'Geist Mono',monospace"}}>{domainProducts.length}</span>],
+                        ["Quality",<span key="q" style={{fontSize:13,fontWeight:700,color:dm.quality>=90?T.green:dm.quality>=70?T.amber:T.rose,fontFamily:"'Geist Mono',monospace"}}>{dm.quality}%</span>],
+                        ...(hasSensitive?[["Sensitivity",<span key="s" style={{padding:"2px 7px",borderRadius:4,fontSize:10.5,fontWeight:700,background:"rgba(239,68,68,.1)",color:"#ef4444",border:"1px solid rgba(239,68,68,.2)"}}>🔒 Sensitive</span>]]:[]),
+                      ].map(([l,v],i,arr)=>(
                         <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
                           <span style={{fontSize:11.5,color:T.textMuted}}>{l}</span>
-                          <span style={{fontSize:11.5,color:T.text,fontWeight:500}}>{v}</span>
+                          <span style={{fontSize:11.5,color:T.text,fontWeight:500,display:"flex",alignItems:"center"}}>{v}</span>
                         </div>
                       ))}
                     </div>
@@ -12421,11 +12433,12 @@ const DomainsView = ({onAsset, onNav}) => {
                     <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
                       <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Owners</div>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:(dm.owners||[]).length>0?8:0}}>
+                        {(dm.owners||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owners assigned</span>}
                         {(dm.owners||[]).map((o,i)=>(
-                          <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}>
-                            <div style={{width:20,height:20,borderRadius:"50%",background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(o)}</div>
-                            <span style={{fontSize:12,color:T.text,fontWeight:500}}>{o}</span>
-                            <button onClick={()=>patchDomain(dm.id,{owners:(dm.owners||[]).filter(x=>x!==o)})} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex",lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{Ic.x(8)}</button>
+                          <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
+                            <div style={{width:18,height:18,borderRadius:3,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(o)}</div>
+                            <span style={{fontSize:12,color:T.accent,fontWeight:500}}>{o}</span>
+                            <button onClick={()=>patchDomain(dm.id,{owners:(dm.owners||[]).filter(x=>x!==o)})} style={{background:"none",border:"none",cursor:"pointer",color:T.accent,padding:0,display:"flex",lineHeight:1,opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(8)}</button>
                           </div>
                         ))}
                       </div>
@@ -12439,11 +12452,12 @@ const DomainsView = ({onAsset, onNav}) => {
                     <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
                       <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Stewards</div>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:(dm.experts||[]).length>0?8:0}}>
+                        {(dm.experts||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards assigned</span>}
                         {(dm.experts||[]).map((s,i)=>(
-                          <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}>
-                            <div style={{width:20,height:20,borderRadius:"50%",background:"rgba(217,119,6,.12)",border:"1px solid rgba(217,119,6,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(s)}</div>
-                            <span style={{fontSize:12,color:T.text,fontWeight:500}}>{s}</span>
-                            <button onClick={()=>patchDomain(dm.id,{experts:(dm.experts||[]).filter(x=>x!==s)})} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex",lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{Ic.x(8)}</button>
+                          <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:"rgba(217,119,6,.08)",borderTop:"1px solid rgba(217,119,6,.2)",borderRight:"1px solid rgba(217,119,6,.2)",borderBottom:"1px solid rgba(217,119,6,.2)",borderLeft:"3px solid #d97706"}}>
+                            <div style={{width:18,height:18,borderRadius:"50%",background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(s)}</div>
+                            <span style={{fontSize:12,color:"#d97706",fontWeight:500}}>{s}</span>
+                            <button onClick={()=>patchDomain(dm.id,{experts:(dm.experts||[]).filter(x=>x!==s)})} style={{background:"none",border:"none",cursor:"pointer",color:"#d97706",padding:0,display:"flex",lineHeight:1,opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(8)}</button>
                           </div>
                         ))}
                       </div>
@@ -12457,8 +12471,8 @@ const DomainsView = ({onAsset, onNav}) => {
                     <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
                       <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Tags</div>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
-                        {(dm.tags||[]).map(t=><span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"3px 9px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}>{t}<button onClick={()=>patchDomain(dm.id,{tags:(dm.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
-                        {(dm.tags||[]).length===0&&<span style={{fontSize:11.5,color:T.textMuted}}>No tags yet</span>}
+                        {(dm.tags||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
+                        {(dm.tags||[]).map(t=><span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`,color:T.accent,fontWeight:600}}>{t}<button onClick={()=>patchDomain(dm.id,{tags:(dm.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
                       </div>
                       <input value={dmTagInput} onChange={e=>setDmTagInput(e.target.value)}
                         onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&dmTagInput.trim()){patchDomain(dm.id,{tags:[...(dm.tags||[]),dmTagInput.trim()]});setDmTagInput("");}}}
@@ -12470,8 +12484,8 @@ const DomainsView = ({onAsset, onNav}) => {
                     <div style={{padding:"14px 16px"}}>
                       <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Business Glossary</div>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
-                        {dmGlossaryTerms.map((t,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"3px 9px",borderRadius:6,background:"rgba(139,92,246,.1)",border:"1px solid rgba(139,92,246,.25)",color:"#8b5cf6",fontWeight:500}}>{t}<button onClick={()=>setDmGlossaryTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
-                        {dmGlossaryTerms.length===0&&<span style={{fontSize:11.5,color:T.textMuted}}>No terms linked</span>}
+                        {dmGlossaryTerms.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
+                        {dmGlossaryTerms.map((t,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t}<button onClick={()=>setDmGlossaryTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
                       </div>
                       <input value={dmGlInput} onChange={e=>setDmGlInput(e.target.value)}
                         onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&dmGlInput.trim()){setDmGlossaryTerms(prev=>[...prev,dmGlInput.trim()]);setDmGlInput("");}}}
@@ -12691,21 +12705,34 @@ const DomainsView = ({onAsset, onNav}) => {
                         <AssetTableHeader/>
                         {domainAssets.map((a,i,arr)=><AssetRowDP key={a.id} asset={a} onAsset={onAsset} isLast={i===arr.length-1}/>)}
                       </div>
-                    : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12}}>
+                    : <div style={{display:"flex",flexDirection:"column",gap:8}}>
                         {domainAssets.map(a=>(
-                          <div key={a.id} onClick={()=>onAsset&&onAsset(a)} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",cursor:onAsset?"pointer":"default",transition:"all .12s"}}
-                            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.boxShadow=`0 4px 16px ${T.accent}18`;}}
-                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
-                            <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:8}}>
-                              <div style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.tableIc(13)}</div>
-                              <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontSize:12.5,fontWeight:700,color:T.accent,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</div>
-                                <div style={{marginTop:4}}><TypeBadge type={a.type}/></div>
+                          <div key={a.id} onClick={()=>onAsset&&onAsset(a)} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,cursor:onAsset?"pointer":"default",transition:"all .15s",overflow:"hidden"}}
+                            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent+"55";e.currentTarget.style.background=T.bgHover;}}
+                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.bgSurface;}}>
+                            <div style={{display:"flex",alignItems:"center",gap:14,padding:"13px 16px"}}>
+                              <div style={{width:36,height:36,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.tableIc(15)}</div>
+                              <div style={{flex:"0 0 240px",minWidth:0}}>
+                                <div style={{fontSize:13,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</div>
+                                <div style={{fontSize:10.5,color:T.textMuted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.db||a.connectionLabel||"—"}</div>
                               </div>
-                            </div>
-                            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                              <span style={{fontSize:11,color:T.textMuted}}>{a.connectionLabel||a.connector||a.db||"—"}</span>
-                              <QScore score={a.quality}/>
+                              <div style={{flex:1,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",minWidth:0}}>
+                                <TypeBadge type={a.type}/>
+                              </div>
+                              <div style={{display:"flex",alignItems:"center",gap:16,flexShrink:0}}>
+                                <div style={{textAlign:"center",width:40}}>
+                                  <div style={{fontSize:15,fontWeight:700,color:a.quality>=90?T.accent:a.quality>=70?T.amber:T.rose,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{a.quality}</div>
+                                  <div style={{fontSize:9,color:T.textMuted,marginTop:2}}>quality</div>
+                                </div>
+                                <div style={{display:"flex",alignItems:"center"}}>
+                                  {(a.owners||[a.owner]).filter(Boolean).slice(0,3).map((o,i2)=>(
+                                    <div key={i2} title={o} style={{width:22,height:22,borderRadius:"50%",background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:T.accent,marginLeft:i2>0?-6:0,position:"relative",zIndex:3-i2,border:`2px solid ${T.bgSurface}`,boxSizing:"border-box",flexShrink:0}}>
+                                      {o.split(".").map(s=>s[0]?.toUpperCase()).join("")}
+                                    </div>
+                                  ))}
+                                </div>
+                                <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,opacity:.5}}><path d="M3.5 2l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -12759,6 +12786,128 @@ const DomainsView = ({onAsset, onNav}) => {
             )}
           </div>
         </div>
+
+        {/* Add Assets to Domain — slideInRight panel */}
+        {addAssetsOpen&&(
+          <>
+            <div onClick={()=>{setAddAssetsOpen(false);setAddAssetsSelected(new Set());setAddAssetsSearch("");}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:800}}/>
+            <div className="slideInRight" style={{position:"fixed",top:0,right:0,bottom:0,width:"min(480px,92vw)",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:801,display:"flex",flexDirection:"column",boxShadow:"-8px 0 32px rgba(0,0,0,.2)"}}>
+              <div style={{padding:"20px 22px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <div>
+                  <div style={{fontSize:15,fontWeight:700,color:T.text}}>Add Assets</div>
+                  <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Link assets to <span style={{fontWeight:600,color:T.text}}>{dm.displayName}</span></div>
+                </div>
+                <button onClick={()=>{setAddAssetsOpen(false);setAddAssetsSelected(new Set());setAddAssetsSearch("");}} style={{width:28,height:28,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+              </div>
+              <div style={{padding:"12px 22px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                <Input2 placeholder="Search assets by name or type…" value={addAssetsSearch} onChange={e=>setAddAssetsSearch(e.target.value)} icon={Ic.search(12)}/>
+              </div>
+              {addAssetsSelected.size>0&&(
+                <div style={{padding:"8px 22px",borderBottom:`1px solid ${T.border}`,background:T.accentDim,fontSize:12,color:T.accent,fontWeight:500,flexShrink:0}}>
+                  {addAssetsSelected.size} asset{addAssetsSelected.size!==1?"s":""} selected
+                </div>
+              )}
+              <div style={{flex:1,overflowY:"auto"}}>
+                {(()=>{
+                  const existingIds = new Set(
+                    (dm.extraAssetIds||[]).concat(ASSETS.filter(a=>a.domain===dm.name).map(a=>a.id))
+                  );
+                  const candidates = ASSETS.filter(a=>!existingIds.has(a.id)&&(!addAssetsSearch||a.name.toLowerCase().includes(addAssetsSearch.toLowerCase())||a.type.toLowerCase().includes(addAssetsSearch.toLowerCase())));
+                  if(candidates.length===0) return <div style={{padding:"60px 20px",textAlign:"center",color:T.textMuted,fontSize:13}}>No matching assets available</div>;
+                  return candidates.map(a=>{
+                    const sel=addAssetsSelected.has(a.id);
+                    return (
+                      <div key={a.id} onClick={()=>setAddAssetsSelected(p=>{const n=new Set(p);sel?n.delete(a.id):n.add(a.id);return n;})}
+                        style={{display:"flex",alignItems:"center",gap:12,padding:"11px 22px",background:sel?T.accentDim:"transparent",borderBottom:`1px solid ${T.border}`,cursor:"pointer",transition:"background .1s"}}
+                        onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
+                        <div style={{width:18,height:18,borderRadius:4,border:`1.5px solid ${sel?T.accent:T.border}`,background:sel?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                          {sel&&<svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 5l2.5 2.5L8 3" stroke="#fff" strokeWidth="1.8" fill="none" strokeLinecap="round"/></svg>}
+                        </div>
+                        <TypeBadge type={a.type}/>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:12.5,fontWeight:600,color:sel?T.accent:T.text,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{a.name}</div>
+                          <div style={{fontSize:10.5,color:T.textMuted,marginTop:2}}>{a.connector||a.db||"—"}</div>
+                        </div>
+                        {a.domain&&<span style={{fontSize:10,padding:"2px 6px",borderRadius:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,flexShrink:0}}>{a.domain}</span>}
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+              <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:T.bgElevated,flexShrink:0}}>
+                <span style={{fontSize:12,color:T.textMuted}}>{addAssetsSelected.size} selected</span>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>{setAddAssetsOpen(false);setAddAssetsSelected(new Set());setAddAssetsSearch("");}} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+                  <button onClick={()=>{handleAddAssets();}} disabled={addAssetsSelected.size===0} style={{padding:"8px 18px",borderRadius:8,background:addAssetsSelected.size>0?T.accent:"rgba(100,100,120,.35)",border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:addAssetsSelected.size>0?"pointer":"default"}}>
+                    Add {addAssetsSelected.size>0?`${addAssetsSelected.size} `:""}Asset{addAssetsSelected.size!==1?"s":""}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Assign Data Products to Domain — slideInRight panel */}
+        {assignDpOpen&&(
+          <>
+            <div onClick={()=>{setAssignDpOpen(false);setAssignDpSelected(new Set());setAssignDpSearch("");}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:800}}/>
+            <div className="slideInRight" style={{position:"fixed",top:0,right:0,bottom:0,width:"min(480px,92vw)",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:801,display:"flex",flexDirection:"column",boxShadow:"-8px 0 32px rgba(0,0,0,.2)"}}>
+              <div style={{padding:"20px 22px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <div>
+                  <div style={{fontSize:15,fontWeight:700,color:T.text}}>Assign Data Products</div>
+                  <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Link existing products to <span style={{fontWeight:600,color:T.text}}>{dm.displayName}</span></div>
+                </div>
+                <button onClick={()=>{setAssignDpOpen(false);setAssignDpSelected(new Set());setAssignDpSearch("");}} style={{width:28,height:28,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+              </div>
+              <div style={{padding:"12px 22px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                <Input2 placeholder="Search data products…" value={assignDpSearch} onChange={e=>setAssignDpSearch(e.target.value)} icon={Ic.search(12)}/>
+              </div>
+              {assignDpSelected.size>0&&(
+                <div style={{padding:"8px 22px",borderBottom:`1px solid ${T.border}`,background:"rgba(139,92,246,.1)",fontSize:12,color:"#8b5cf6",fontWeight:500,flexShrink:0}}>
+                  {assignDpSelected.size} product{assignDpSelected.size!==1?"s":""} selected
+                </div>
+              )}
+              <div style={{flex:1,overflowY:"auto"}}>
+                {(()=>{
+                  const candidates = products.filter(p=>p.domain!==dm.name&&(!assignDpSearch||p.displayName.toLowerCase().includes(assignDpSearch.toLowerCase())||p.description?.toLowerCase().includes(assignDpSearch.toLowerCase())));
+                  if(candidates.length===0) return <div style={{padding:"60px 20px",textAlign:"center",color:T.textMuted,fontSize:13}}>No products available to assign</div>;
+                  return candidates.map(p=>{
+                    const sel=assignDpSelected.has(p.id);
+                    return (
+                      <div key={p.id} onClick={()=>setAssignDpSelected(prev=>{const n=new Set(prev);sel?n.delete(p.id):n.add(p.id);return n;})}
+                        style={{display:"flex",alignItems:"center",gap:12,padding:"12px 22px",background:sel?"rgba(139,92,246,.08)":"transparent",borderBottom:`1px solid ${T.border}`,cursor:"pointer",transition:"background .1s"}}
+                        onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
+                        <div style={{width:18,height:18,borderRadius:4,border:`1.5px solid ${sel?"#8b5cf6":T.border}`,background:sel?"#8b5cf6":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                          {sel&&<svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 5l2.5 2.5L8 3" stroke="#fff" strokeWidth="1.8" fill="none" strokeLinecap="round"/></svg>}
+                        </div>
+                        <div style={{width:36,height:36,borderRadius:9,background:`${p.color}18`,border:`1.5px solid ${p.color}35`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,flexShrink:0}}>{p.icon}</div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:13,fontWeight:600,color:sel?"#8b5cf6":T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.displayName}</div>
+                          <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3}}>
+                            <LifecycleBadge stage={p.lifecycleStage}/>
+                            <span style={{fontSize:10.5,color:T.textMuted}}>{p.domain}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+              <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:T.bgElevated,flexShrink:0}}>
+                <span style={{fontSize:12,color:T.textMuted}}>{assignDpSelected.size} selected</span>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>{setAssignDpOpen(false);setAssignDpSelected(new Set());setAssignDpSearch("");}} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+                  <button disabled={assignDpSelected.size===0} onClick={()=>{
+                    [...assignDpSelected].forEach(pid=>patchProduct(pid,{domain:dm.name}));
+                    setAssignDpOpen(false);setAssignDpSelected(new Set());setAssignDpSearch("");
+                  }} style={{padding:"8px 18px",borderRadius:8,background:assignDpSelected.size>0?"#8b5cf6":"rgba(100,100,120,.35)",border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:assignDpSelected.size>0?"pointer":"default"}}>
+                    Assign {assignDpSelected.size>0?assignDpSelected.size:""} Product{assignDpSelected.size!==1?"s":""}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Add Side Panel — Data Product or Sub Domain */}
         {addPanelOpen&&(
@@ -13191,19 +13340,14 @@ const DomainsView = ({onAsset, onNav}) => {
           <Metric label="Avg Quality"   value={`${avgQuality}%`}          sub="quality score"          color={avgQuality>=85?T.green:avgQuality>=70?T.amber:T.rose}/>
         </div>
 
-        {/* View toggle */}
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,gap:8}}>
-          <div style={{fontSize:13,fontWeight:600,color:T.text}}>{domains.filter(d=>(!domainSearch||d.displayName.toLowerCase().includes(domainSearch.toLowerCase()))&&(domainTypeFilters.length===0||domainTypeFilters.includes(d.domainType))).length} domain{domains.length!==1?"s":""}</div>
+        {/* Toolbar */}
+        <div style={{marginBottom:16}}>
+          {/* Search — same as data products */}
+          <div style={{marginBottom:10}}>
+            <Input2 placeholder="Search data domains…" value={domainSearch} onChange={e=>setDomainSearch(e.target.value)} icon={Ic.search(12)}/>
+          </div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
           <div style={{display:"flex",alignItems:"center",gap:6}}>
-            {/* Inline search */}
-            <div style={{position:"relative",minWidth:200}}>
-              <input value={domainSearch} onChange={e=>setDomainSearch(e.target.value)}
-                placeholder="Search domains…"
-                style={{padding:"7px 12px 7px 32px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",width:"100%",boxSizing:"border-box"}}
-                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-              <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none",fontSize:13}}>🔍</span>
-              {domainSearch&&<button onClick={()=>setDomainSearch("")} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex",lineHeight:1}}>{Ic.x(9)}</button>}
-            </div>
             {/* Filter — multi-select type filter */}
             <div style={{position:"relative"}}>
               <button onClick={()=>setDomainFilterOpen(p=>!p)}
@@ -13240,6 +13384,7 @@ const DomainsView = ({onAsset, onNav}) => {
                   boxShadow:listView===v?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{ic}</button>
               ))}
             </div>
+          </div>
           </div>
         </div>
 
@@ -13551,66 +13696,6 @@ const DomainsView = ({onAsset, onNav}) => {
         </div>
       )}
 
-      {/* Add Assets Modal */}
-      {addAssetsOpen&&selectedDomain&&(()=>{
-        const existingIds = new Set(
-          (selectedDomain.extraAssetIds||[]).concat(ASSETS.filter(a=>a.domain===selectedDomain.name).map(a=>a.id))
-        );
-        const candidates = ASSETS.filter(a=>!existingIds.has(a.id)&&(!addAssetsSearch||a.name.toLowerCase().includes(addAssetsSearch.toLowerCase())||a.type.toLowerCase().includes(addAssetsSearch.toLowerCase())));
-        return (
-          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:900,backdropFilter:"blur(4px)"}}>
-            <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:16,width:560,maxHeight:"85vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 60px rgba(0,0,0,.35)"}}>
-              <div style={{padding:"20px 24px 16px",borderBottom:`1px solid ${T.border}`}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                  <div>
-                    <div style={{fontSize:15,fontWeight:700,color:T.text}}>Add Assets</div>
-                    <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>to {selectedDomain.displayName}</div>
-                  </div>
-                  <button onClick={()=>setAddAssetsOpen(false)} style={{width:28,height:28,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
-                </div>
-              </div>
-              <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`}}>
-                <input autoFocus value={addAssetsSearch} onChange={e=>setAddAssetsSearch(e.target.value)} placeholder="Search assets by name or type…"
-                  style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
-                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-              </div>
-              {addAssetsSelected.size>0&&(
-                <div style={{padding:"8px 16px",borderBottom:`1px solid ${T.border}`,background:T.accentDim,fontSize:12,color:T.accent,fontWeight:500}}>
-                  {addAssetsSelected.size} asset{addAssetsSelected.size!==1?"s":""} selected
-                </div>
-              )}
-              <div style={{flex:1,overflowY:"auto"}}>
-                {candidates.length===0
-                  ? <div style={{padding:"40px 0",textAlign:"center",color:T.textMuted,fontSize:13}}>No matching assets available</div>
-                  : candidates.map(a=>{
-                    const sel = addAssetsSelected.has(a.id);
-                    return (
-                      <button key={a.id} onClick={()=>setAddAssetsSelected(p=>{const n=new Set(p);sel?n.delete(a.id):n.add(a.id);return n;})}
-                        style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"10px 16px",background:sel?T.accentDim:"none",border:"none",borderBottom:`1px solid ${T.border}`,cursor:"pointer",textAlign:"left",transition:"background .1s"}}
-                        onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="none";}}>
-                        <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${sel?T.accent:T.border}`,background:sel?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                          {sel&&<svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 5l2.5 2.5L8 3" stroke="#fff" strokeWidth="1.8" fill="none" strokeLinecap="round"/>  </svg>}
-                        </div>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:1}}>{a.name}</div>
-                          <div style={{fontSize:11,color:T.textMuted}}>{a.type} · {a.connector}</div>
-                        </div>
-                        {a.domain&&<span style={{fontSize:10.5,padding:"2px 7px",borderRadius:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted}}>{a.domain}</span>}
-                      </button>
-                    );
-                  })
-                }
-              </div>
-              <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.bgElevated,borderRadius:"0 0 16px 16px"}}>
-                <button onClick={()=>setAddAssetsOpen(false)} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
-                <button onClick={handleAddAssets} disabled={addAssetsSelected.size===0} style={{padding:"8px 18px",borderRadius:8,background:addAssetsSelected.size>0?T.accent:"rgba(100,100,120,.35)",border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:addAssetsSelected.size>0?"pointer":"default",opacity:addAssetsSelected.size>0?1:.7}}>
-                  Add {addAssetsSelected.size>0?`${addAssetsSelected.size} `:""}Asset{addAssetsSelected.size!==1?"s":""}
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Edit Domain Modal — handled by slideInRight panel inside selectedDomain branch */}
       {false&&editDomainOpen&&editDd&&(()=>{
@@ -13998,21 +14083,34 @@ const DataProductsView = ({onAsset, onNav}) => {
                         <AssetTableHeader/>
                         {productAssets.map((a,i,arr)=><AssetRowDP key={a.id} asset={a} onAsset={onAsset} isLast={i===arr.length-1}/>)}
                       </div>
-                    : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12}}>
+                    : <div style={{display:"flex",flexDirection:"column",gap:8}}>
                         {productAssets.map(a=>(
-                          <div key={a.id} onClick={()=>onAsset&&onAsset(a)} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",cursor:onAsset?"pointer":"default",transition:"all .12s"}}
-                            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.boxShadow=`0 4px 16px ${T.accent}18`;}}
-                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
-                            <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:8}}>
-                              <div style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.tableIc(13)}</div>
-                              <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontSize:12.5,fontWeight:700,color:T.accent,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</div>
-                                <div style={{marginTop:4}}><TypeBadge type={a.type}/></div>
+                          <div key={a.id} onClick={()=>onAsset&&onAsset(a)} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,cursor:onAsset?"pointer":"default",transition:"all .15s",overflow:"hidden"}}
+                            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent+"55";e.currentTarget.style.background=T.bgHover;}}
+                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.bgSurface;}}>
+                            <div style={{display:"flex",alignItems:"center",gap:14,padding:"13px 16px"}}>
+                              <div style={{width:36,height:36,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.tableIc(15)}</div>
+                              <div style={{flex:"0 0 240px",minWidth:0}}>
+                                <div style={{fontSize:13,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</div>
+                                <div style={{fontSize:10.5,color:T.textMuted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.db||a.connectionLabel||"—"}</div>
                               </div>
-                            </div>
-                            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                              <span style={{fontSize:11,color:T.textMuted}}>{a.connectionLabel||a.connector||a.db||"—"}</span>
-                              <QScore score={a.quality}/>
+                              <div style={{flex:1,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",minWidth:0}}>
+                                <TypeBadge type={a.type}/>
+                              </div>
+                              <div style={{display:"flex",alignItems:"center",gap:16,flexShrink:0}}>
+                                <div style={{textAlign:"center",width:40}}>
+                                  <div style={{fontSize:15,fontWeight:700,color:a.quality>=90?T.accent:a.quality>=70?T.amber:T.rose,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{a.quality}</div>
+                                  <div style={{fontSize:9,color:T.textMuted,marginTop:2}}>quality</div>
+                                </div>
+                                <div style={{display:"flex",alignItems:"center"}}>
+                                  {(a.owners||[a.owner]).filter(Boolean).slice(0,3).map((o,i2)=>(
+                                    <div key={i2} title={o} style={{width:22,height:22,borderRadius:"50%",background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:T.accent,marginLeft:i2>0?-6:0,position:"relative",zIndex:3-i2,border:`2px solid ${T.bgSurface}`,boxSizing:"border-box",flexShrink:0}}>
+                                      {o.split(".").map(s=>s[0]?.toUpperCase()).join("")}
+                                    </div>
+                                  ))}
+                                </div>
+                                <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,opacity:.5}}><path d="M3.5 2l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                              </div>
                             </div>
                           </div>
                         ))}
