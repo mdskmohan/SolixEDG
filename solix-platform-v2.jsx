@@ -790,11 +790,13 @@ const ORPHANED_ASSETS_DATA = [
 ];
 
 const CERTIFICATIONS = [
-  {id:1,asset:"orders",         type:"Table",    certifier:"maya.chen", date:"2024-01-15",expires:"2024-07-15",status:"Approved",  score:94,notes:"Reviewed schema, lineage, PII handling, and quality rules."},
-  {id:2,asset:"customers",      type:"Table",    certifier:"dev.patel",  date:"2024-01-10",expires:"2024-07-10",status:"Approved",  score:91,notes:"All PII columns tagged. Retention policy applied."},
-  {id:3,asset:"ml_churn_model", type:"ML Model", certifier:"priya.nair", date:"2024-02-01",expires:"2024-08-01",status:"Approved",  score:88,notes:"Model card complete. Bias audit passed."},
-  {id:4,asset:"revenue_dashboard",type:"Dashboard",certifier:null,       date:null,        expires:null,        status:"In Review",score:87,notes:"Awaiting data steward review."},
-  {id:5,asset:"dim_products",   type:"Table",    certifier:"james.oh",   date:"2024-01-20",expires:"2024-07-20",status:"Approved",  score:98,notes:"Golden dataset — highest quality in warehouse."},
+  {id:1,asset:"orders",           type:"Table",    certifier:"maya.chen", date:"2024-01-15",expires:"2024-07-15",status:"Approved",  score:94,notes:"Reviewed schema, PII handling, and quality rules."},
+  {id:2,asset:"customers",        type:"Table",    certifier:"dev.patel",  date:"2024-01-10",expires:"2024-07-10",status:"Approved",  score:91,notes:"All PII columns tagged. Retention policy applied."},
+  {id:3,asset:"ml_churn_model",   type:"ML Model", certifier:"priya.nair", date:"2024-02-01",expires:"2024-08-01",status:"Approved",  score:88,notes:"Model card complete. Bias audit passed."},
+  {id:4,asset:"revenue_dashboard",type:"Dashboard",certifier:null,         date:null,        expires:null,        status:"In Review",score:87,notes:"Awaiting data steward review."},
+  {id:5,asset:"dim_products",     type:"Table",    certifier:"james.oh",   date:"2024-01-20",expires:"2024-07-20",status:"Approved",  score:98,notes:"Golden dataset — highest quality in warehouse."},
+  {id:6,asset:"fact_revenue",     type:"Table",    certifier:null,         date:null,        expires:null,        status:"Draft",    score:76,notes:"Owner needs to complete business glossary tags before submitting."},
+  {id:7,asset:"product_events",   type:"Table",    certifier:null,         date:null,        expires:null,        status:"Rejected", score:61,notes:"Quality score below threshold. Null rate on event_type exceeds 12%. Resubmit after fixing pipeline."},
 ];
 
 const TEAMS_DATA = [
@@ -3235,7 +3237,6 @@ const GROUPS = [
   ]},
   {section:"Governance",items:[
     {key:"policymanager",  icon:"policies",      label:"Policy Manager"},
-    {key:"access",         icon:"access",        label:"Access Governance"},
     {key:"tags",           icon:"tag",           label:"Tag Management"},
   ]},
   {section:"Knowledge",items:[
@@ -3243,16 +3244,12 @@ const GROUPS = [
     {key:"domains",        icon:"domains",       label:"Data Domains"},
     {key:"dataproducts",   icon:"dataproducts",  label:"Data Products"},
   ]},
-  {section:"Insights",items:[
-    {key:"observability",  icon:"obs",           label:"Observability"},
-    {key:"analytics",      icon:"analytics",     label:"Usage Analytics"},
-  ]},
 ];
 
 const Sidebar = ({active, onNav, exp, setExp}) => {
   const {roleCfg} = useRole();
   const inboxBadgeCount = INBOX_DATA.filter(i=>!i.readAt).length;
-  const allowedNav = roleCfg?.nav || ["home","search","catalog","quality","observability","contracts","policymanager","access","certifications","glossary","domains","dataproducts","analytics","settings"];
+  const allowedNav = roleCfg?.nav || ["home","search","catalog","quality","contracts","policymanager","certifications","glossary","domains","dataproducts","settings","tags"];
   return (
     <div style={{position:"fixed",top:0,left:0,height:"100vh",width:exp?EXPANDED_W:COLLAPSED_W,background:T.bgSurface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:100,transition:"width .2s ease",overflow:"hidden"}}>
       {/* Logo */}
@@ -7814,11 +7811,19 @@ const CertificationsView = ({onToast}) => {
 
   const filtered = filter==="All" ? certs : certs.filter(c=>c.status===filter);
 
-  const approve = (id) => {
-    setCerts(p=>p.map(c=>c.id===id?{...c,status:"Approved",certifier:"maya.chen",date:new Date().toISOString().slice(0,10)}:c));
-    onToast("Asset approved","success");
-    setSelected(null);
+  const CERT_CMETA = {
+    "Draft":      {color:"#6b7280",bg:"rgba(107,114,128,.1)", border:"rgba(107,114,128,.25)"},
+    "In Review":  {color:"#d97706",bg:"rgba(217,119,6,.12)",  border:"rgba(217,119,6,.3)"},
+    "Approved":   {color:"#16a34a",bg:"rgba(22,163,74,.12)",  border:"rgba(22,163,74,.3)"},
+    "Rejected":   {color:"#e11d48",bg:"rgba(225,29,72,.12)",  border:"rgba(225,29,72,.3)"},
+    "Deprecated": {color:"#7c3aed",bg:"rgba(124,58,237,.1)",  border:"rgba(124,58,237,.25)"},
   };
+  const patchCert = (id, patch) => { setCerts(p=>p.map(c=>c.id===id?{...c,...patch}:c)); setSelected(s=>s?{...s,...patch}:s); };
+  const submitForReview = (id) => { patchCert(id,{status:"In Review"}); onToast("Submitted for review","success"); };
+  const approve         = (id) => { patchCert(id,{status:"Approved",certifier:"maya.chen",date:new Date().toISOString().slice(0,10)}); onToast("Asset certified","success"); };
+  const rejectCert      = (id) => { patchCert(id,{status:"Rejected",certifier:null,date:null}); onToast("Certification rejected","error"); };
+  const returnToDraft   = (id) => { patchCert(id,{status:"Draft",certifier:null,date:null}); onToast("Returned to Draft","info"); };
+  const deprecateCert   = (id) => { patchCert(id,{status:"Deprecated"}); onToast("Asset deprecated","info"); };
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
@@ -7835,9 +7840,10 @@ const CertificationsView = ({onToast}) => {
           </div>
           <div style={{display:"flex",gap:6,marginBottom:16,alignItems:"center",justifyContent:"space-between"}}>
             <div style={{display:"flex",gap:6}}>
-              {["All","Approved","In Review","Rejected","Deprecated"].map(f=>(
-                <button key={f} onClick={()=>setFilter(f)} style={{padding:"5px 14px",borderRadius:99,fontSize:12,fontWeight:filter===f?600:400,border:`1px solid ${filter===f?T.accent:T.border}`,background:filter===f?T.accentDim:"transparent",color:filter===f?T.accent:T.textSub,cursor:"pointer",transition:"all .12s"}}>{f}</button>
-              ))}
+              {["All","Draft","In Review","Approved","Rejected","Deprecated"].map(f=>{
+                const mc = f!=="All"?CERT_CMETA[f]:null;
+                return <button key={f} onClick={()=>setFilter(f)} style={{padding:"5px 14px",borderRadius:99,fontSize:12,fontWeight:filter===f?600:400,border:`1px solid ${filter===f?(mc?.border||T.accent):T.border}`,background:filter===f?(mc?.bg||T.accentDim):"transparent",color:filter===f?(mc?.color||T.accent):T.textSub,cursor:"pointer",transition:"all .12s"}}>{f}</button>;
+              })}
             </div>
             <Btn icon={Ic.plus(12)} variant="primary" onClick={()=>onToast("Certification workflow opened","success")}>New Certification</Btn>
           </div>
@@ -7865,11 +7871,30 @@ const CertificationsView = ({onToast}) => {
               </div>
             ))}
             <div style={{padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,fontSize:12,color:T.textSub,marginBottom:14,lineHeight:1.5}}>{selected.notes}</div>
+            {/* Draft → submit for review */}
+            {selected.status==="Draft"&&(
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                <button onClick={()=>submitForReview(selected.id)} style={{padding:"8px",borderRadius:8,background:"rgba(217,119,6,.1)",border:"1px solid rgba(217,119,6,.3)",color:"#d97706",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>→ Submit for Review</button>
+              </div>
+            )}
+            {/* In Review → approve / reject / return to draft */}
             {selected.status==="In Review"&&(
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 <button onClick={()=>approve(selected.id)} style={{padding:"8px",borderRadius:8,background:"rgba(22,163,74,.1)",border:"1px solid rgba(22,163,74,.3)",color:"#16a34a",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>✓ Approve</button>
-                <Btn ghost small onClick={()=>onToast("Sent back to Draft","success")}>↩ Return to Draft</Btn>
-                <Btn ghost small onClick={()=>{setCerts(p=>p.map(c=>c.id===selected.id?{...c,status:"Rejected"}:c));onToast("Certification rejected","error");setSelected(null);}}>✕ Reject</Btn>
+                <button onClick={()=>rejectCert(selected.id)} style={{padding:"8px",borderRadius:8,background:"rgba(225,29,72,.08)",border:"1px solid rgba(225,29,72,.25)",color:"#e11d48",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>✕ Reject</button>
+                <button onClick={()=>returnToDraft(selected.id)} style={{padding:"8px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>↩ Return to Draft</button>
+              </div>
+            )}
+            {/* Rejected → return to draft to fix and resubmit */}
+            {selected.status==="Rejected"&&(
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                <button onClick={()=>returnToDraft(selected.id)} style={{padding:"8px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>↩ Return to Draft</button>
+              </div>
+            )}
+            {/* Approved → deprecate */}
+            {selected.status==="Approved"&&(
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                <button onClick={()=>deprecateCert(selected.id)} style={{padding:"8px",borderRadius:8,background:"rgba(124,58,237,.08)",border:"1px solid rgba(124,58,237,.25)",color:"#7c3aed",fontSize:12.5,fontWeight:600,cursor:"pointer"}}>— Deprecate</button>
               </div>
             )}
           </div>
@@ -15946,7 +15971,7 @@ const ROLES_CONFIG = {
     badge: "rgba(238,36,36,0.15)",
     desc:  "Full platform access including settings, user management, and all configurations.",
     rbacRole: "admin",
-    nav: ["home","search","catalog","quality","contracts","policymanager","access","certifications","glossary","domains","dataproducts","observability","analytics","settings","tags"],
+    nav: ["home","search","catalog","quality","contracts","policymanager","certifications","glossary","domains","dataproducts","settings","tags"],
     homeWidgets: ["metrics","tasks","quality","recentAssets","services","activity"],
   },
   steward: {
@@ -15971,7 +15996,7 @@ const ROLES_CONFIG = {
     badge: "rgba(2,132,199,0.12)",
     desc:  "Browse the catalog, explore lineage, run quality checks, and access approved datasets.",
     rbacRole: "analyst",
-    nav: ["home","search","catalog","quality","glossary","domains","dataproducts","observability","analytics"],
+    nav: ["home","search","catalog","quality","glossary","domains","dataproducts"],
     homeWidgets: ["metrics","recentAssets","quality","lineageSnippet","activity"],
   },
   engineer: {
@@ -15983,7 +16008,7 @@ const ROLES_CONFIG = {
     badge: "rgba(124,58,237,0.12)",
     desc:  "Manage pipelines, monitor ingestion health, trace lineage, and maintain data contracts.",
     rbacRole: "engineer",
-    nav: ["home","search","catalog","quality","contracts","observability","analytics","settings"],
+    nav: ["home","search","catalog","quality","contracts","settings"],
     homeWidgets: ["services","metrics","quality","lineageSnippet","recentAssets","activity"],
   },
   viewer: {
