@@ -11743,7 +11743,9 @@ const DomainsView = ({onAsset, onNav}) => {
   const [domainSearch,      setDomainSearch]      = useState("");
   const [domainSearchOpen,  setDomainSearchOpen]  = useState(false);
   const [domainFilterOpen,  setDomainFilterOpen]  = useState(false);
-  const [domainTypeFilter,  setDomainTypeFilter]  = useState("");
+  const [domainTypeFilters, setDomainTypeFilters] = useState([]);
+  const [domainAssetView,   setDomainAssetView]   = useState("table");
+  const [pdAssetView,       setPdAssetView]       = useState("table");
   // domain profile inline tag/glossary inputs
   const [dmTagInput,        setDmTagInput]        = useState("");
   const [dmGlInput,         setDmGlInput]         = useState("");
@@ -12011,8 +12013,18 @@ const DomainsView = ({onAsset, onNav}) => {
             {/* ASSETS TAB */}
             {productTab==="assets"&&(
               <div>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-                  <div style={{fontSize:13,color:T.textMuted}}>{productAssets.length} asset{productAssets.length!==1?"s":""} in this data product</div>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+                  <div style={{fontSize:13,color:T.textMuted,flex:1}}>{productAssets.length} asset{productAssets.length!==1?"s":""} in this data product</div>
+                  {/* Layout toggle */}
+                  <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7}}>
+                    {[["table",<svg key="t" width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="1" width="11" height="2.5" rx="1" fill="currentColor" opacity=".4"/><rect x="1" y="5" width="11" height="2.5" rx="1" fill="currentColor" opacity=".7"/><rect x="1" y="9.5" width="11" height="2.5" rx="1" fill="currentColor"/></svg>],
+                      ["card",<svg key="c" width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="1" width="4.5" height="4.5" rx="1.2" fill="currentColor"/><rect x="7.5" y="1" width="4.5" height="4.5" rx="1.2" fill="currentColor"/><rect x="1" y="7.5" width="4.5" height="4.5" rx="1.2" fill="currentColor"/><rect x="7.5" y="7.5" width="4.5" height="4.5" rx="1.2" fill="currentColor"/></svg>]
+                    ].map(([v,ic])=>(
+                      <button key={v} onClick={()=>setPdAssetView(v)} style={{padding:"4px 8px",borderRadius:5,border:"none",cursor:"pointer",display:"flex",alignItems:"center",
+                        background:pdAssetView===v?T.bgSurface:"transparent",color:pdAssetView===v?T.accent:T.textMuted,
+                        boxShadow:pdAssetView===v?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{ic}</button>
+                    ))}
+                  </div>
                   <button onClick={()=>setAddPdAssetsOpen(true)} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>
                     {Ic.plus(10)} Add Assets
                   </button>
@@ -12022,12 +12034,32 @@ const DomainsView = ({onAsset, onNav}) => {
                       <div style={{fontSize:32,marginBottom:12}}>📭</div>
                       <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>No assets yet</div>
                       <div style={{fontSize:12,color:T.textMuted,marginBottom:16}}>Add tables, views, or pipelines to this data product</div>
-                      <button style={{padding:"9px 20px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Add First Asset</button>
+                      <button onClick={()=>setAddPdAssetsOpen(true)} style={{padding:"9px 20px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Add First Asset</button>
                     </div>
-                  : <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
-                      <AssetTableHeader/>
-                      {productAssets.map((a,i,arr)=><AssetRowDP key={a.id} asset={a} onAsset={onAsset} isLast={i===arr.length-1}/>)}
-                    </div>
+                  : pdAssetView==="table"
+                    ? <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+                        <AssetTableHeader/>
+                        {productAssets.map((a,i,arr)=><AssetRowDP key={a.id} asset={a} onAsset={onAsset} isLast={i===arr.length-1}/>)}
+                      </div>
+                    : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12}}>
+                        {productAssets.map(a=>(
+                          <div key={a.id} onClick={()=>onAsset&&onAsset(a)} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",cursor:onAsset?"pointer":"default",transition:"all .12s"}}
+                            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.boxShadow=`0 4px 16px ${T.accent}18`;}}
+                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
+                            <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:8}}>
+                              <div style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.tableIc(13)}</div>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:12.5,fontWeight:700,color:T.accent,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</div>
+                                <div style={{marginTop:4}}><TypeBadge type={a.type}/></div>
+                              </div>
+                            </div>
+                            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                              <span style={{fontSize:11,color:T.textMuted}}>{a.connectionLabel||a.connector||a.db||"—"}</span>
+                              <QScore score={a.quality}/>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                 }
               </div>
             )}
@@ -12635,19 +12667,49 @@ const DomainsView = ({onAsset, onNav}) => {
             {/* ASSETS TAB */}
             {domainTab==="assets"&&(
               <div>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-                  <div style={{fontSize:13,color:T.textMuted}}>{domainAssets.length} assets in this domain</div>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+                  <div style={{fontSize:13,color:T.textMuted,flex:1}}>{domainAssets.length} assets in this domain</div>
+                  {/* Layout toggle */}
+                  <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7}}>
+                    {[["table",<svg key="t" width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="1" width="11" height="2.5" rx="1" fill="currentColor" opacity=".4"/><rect x="1" y="5" width="11" height="2.5" rx="1" fill="currentColor" opacity=".7"/><rect x="1" y="9.5" width="11" height="2.5" rx="1" fill="currentColor"/></svg>],
+                      ["card",<svg key="c" width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="1" width="4.5" height="4.5" rx="1.2" fill="currentColor"/><rect x="7.5" y="1" width="4.5" height="4.5" rx="1.2" fill="currentColor"/><rect x="1" y="7.5" width="4.5" height="4.5" rx="1.2" fill="currentColor"/><rect x="7.5" y="7.5" width="4.5" height="4.5" rx="1.2" fill="currentColor"/></svg>]
+                    ].map(([v,ic])=>(
+                      <button key={v} onClick={()=>setDomainAssetView(v)} style={{padding:"4px 8px",borderRadius:5,border:"none",cursor:"pointer",display:"flex",alignItems:"center",
+                        background:domainAssetView===v?T.bgSurface:"transparent",color:domainAssetView===v?T.accent:T.textMuted,
+                        boxShadow:domainAssetView===v?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{ic}</button>
+                    ))}
+                  </div>
                   <button onClick={()=>{setAddAssetsSelected(new Set());setAddAssetsSearch("");setAddAssetsOpen(true);}}
-                    style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",fontWeight:500}}>
+                    style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,cursor:"pointer",fontWeight:600}}>
                     {Ic.plus(10)} Add Assets
                   </button>
                 </div>
                 {domainAssets.length===0
                   ? <div style={{padding:"60px 0",textAlign:"center",color:T.textMuted,fontSize:13}}>No assets assigned to this domain</div>
-                  : <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
-                      <AssetTableHeader/>
-                      {domainAssets.map((a,i,arr)=><AssetRowDP key={a.id} asset={a} onAsset={onAsset} isLast={i===arr.length-1}/>)}
-                    </div>
+                  : domainAssetView==="table"
+                    ? <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+                        <AssetTableHeader/>
+                        {domainAssets.map((a,i,arr)=><AssetRowDP key={a.id} asset={a} onAsset={onAsset} isLast={i===arr.length-1}/>)}
+                      </div>
+                    : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12}}>
+                        {domainAssets.map(a=>(
+                          <div key={a.id} onClick={()=>onAsset&&onAsset(a)} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",cursor:onAsset?"pointer":"default",transition:"all .12s"}}
+                            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.boxShadow=`0 4px 16px ${T.accent}18`;}}
+                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
+                            <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:8}}>
+                              <div style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.tableIc(13)}</div>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:12.5,fontWeight:700,color:T.accent,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</div>
+                                <div style={{marginTop:4}}><TypeBadge type={a.type}/></div>
+                              </div>
+                            </div>
+                            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                              <span style={{fontSize:11,color:T.textMuted}}>{a.connectionLabel||a.connector||a.db||"—"}</span>
+                              <QScore score={a.quality}/>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                 }
               </div>
             )}
@@ -13131,7 +13193,7 @@ const DomainsView = ({onAsset, onNav}) => {
 
         {/* View toggle */}
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,gap:8}}>
-          <div style={{fontSize:13,fontWeight:600,color:T.text}}>{domains.filter(d=>(!domainSearch||d.displayName.toLowerCase().includes(domainSearch.toLowerCase()))&&(!domainTypeFilter||d.domainType===domainTypeFilter)).length} domain{domains.length!==1?"s":""}</div>
+          <div style={{fontSize:13,fontWeight:600,color:T.text}}>{domains.filter(d=>(!domainSearch||d.displayName.toLowerCase().includes(domainSearch.toLowerCase()))&&(domainTypeFilters.length===0||domainTypeFilters.includes(d.domainType))).length} domain{domains.length!==1?"s":""}</div>
           <div style={{display:"flex",alignItems:"center",gap:6}}>
             {/* Inline search */}
             <div style={{position:"relative",minWidth:200}}>
@@ -13145,21 +13207,29 @@ const DomainsView = ({onAsset, onNav}) => {
             {/* Filter — multi-select type filter */}
             <div style={{position:"relative"}}>
               <button onClick={()=>setDomainFilterOpen(p=>!p)}
-                style={{height:32,padding:"0 12px",borderRadius:8,background:domainTypeFilter?T.accentDim:T.bgElevated,border:`1px solid ${domainTypeFilter?T.accent:T.border}`,color:domainTypeFilter?T.accent:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:domainTypeFilter?600:400,whiteSpace:"nowrap"}}>
-                <span style={{fontSize:13}}>⊟</span> {domainTypeFilter||"Type"}
+                style={{height:32,padding:"0 12px",borderRadius:8,background:domainTypeFilters.length>0?T.accentDim:T.bgElevated,border:`1px solid ${domainTypeFilters.length>0?T.accent:T.border}`,color:domainTypeFilters.length>0?T.accent:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:domainTypeFilters.length>0?600:400,whiteSpace:"nowrap"}}>
+                {Ic.filter?Ic.filter(11):<span style={{fontSize:13}}>⊟</span>} {domainTypeFilters.length===0?"Type":domainTypeFilters.length===1?domainTypeFilters[0]:`${domainTypeFilters.length} Types`}
+                {domainTypeFilters.length>0&&<button onMouseDown={e=>{e.stopPropagation();setDomainTypeFilters([]);}} style={{background:"none",border:"none",cursor:"pointer",padding:0,display:"flex",color:T.accent,marginLeft:2,lineHeight:1}}>{Ic.x?.(8)||"×"}</button>}
               </button>
               {domainFilterOpen&&(
-                <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 8px 24px rgba(0,0,0,.18)",minWidth:180,overflow:"hidden"}}>
-                  {["","Source-aligned","Consumer-aligned","Aggregate"].map(opt=>(
-                    <button key={opt} onMouseDown={()=>{setDomainTypeFilter(opt);setDomainFilterOpen(false);}}
-                      style={{width:"100%",padding:"8px 12px",background:"none",border:"none",cursor:"pointer",textAlign:"left",fontSize:12,display:"flex",alignItems:"center",gap:8,color:T.text}}
-                      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                      <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${domainTypeFilter===opt&&opt?T.accent:T.border}`,background:domainTypeFilter===opt&&opt?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                        {domainTypeFilter===opt&&opt&&<svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2L7.5 2" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>}
-                      </div>
-                      {opt||"All Types"}
-                    </button>
-                  ))}
+                <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 8px 24px rgba(0,0,0,.18)",minWidth:200,overflow:"hidden"}}>
+                  <div style={{padding:"8px 12px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                    <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Domain Type</span>
+                    {domainTypeFilters.length>0&&<button onClick={()=>setDomainTypeFilters([])} style={{fontSize:10.5,color:T.textMuted,background:"none",border:"none",cursor:"pointer",padding:"2px 6px",borderRadius:4}} onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>Clear</button>}
+                  </div>
+                  {["Source-aligned","Consumer-aligned","Aggregate"].map(opt=>{
+                    const checked = domainTypeFilters.includes(opt);
+                    return (
+                      <button key={opt} onMouseDown={()=>setDomainTypeFilters(prev=>checked?prev.filter(x=>x!==opt):[...prev,opt])}
+                        style={{width:"100%",padding:"9px 12px",background:checked?T.accentDim:"none",border:"none",cursor:"pointer",textAlign:"left",fontSize:12,display:"flex",alignItems:"center",gap:8,color:checked?T.accent:T.text}}
+                        onMouseEnter={e=>{if(!checked)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!checked)e.currentTarget.style.background="none";}}>
+                        <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${checked?T.accent:T.border}`,background:checked?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                          {checked&&<svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2L7.5 2" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>}
+                        </div>
+                        {opt}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -13176,7 +13246,7 @@ const DomainsView = ({onAsset, onNav}) => {
         {/* Grid view */}
         {listView==="grid"&&(
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:16}}>
-            {domains.filter(d=>(!domainSearch||d.displayName.toLowerCase().includes(domainSearch.toLowerCase()))&&(!domainTypeFilter||d.domainType===domainTypeFilter)).map(d=>{
+            {domains.filter(d=>(!domainSearch||d.displayName.toLowerCase().includes(domainSearch.toLowerCase()))&&(domainTypeFilters.length===0||domainTypeFilters.includes(d.domainType))).map(d=>{
               const dp = products.filter(p=>p.domain===d.name);
               const domTagCtxAssets = ASSETS.filter(a=>a.domain===d.name);
               const taggedCount = tagCtx ? domTagCtxAssets.filter(a=>tagCtx.getAssetAssignments(a.id).filter(x=>x.status!=='rejected').length>0).length : 0;
@@ -13232,16 +13302,17 @@ const DomainsView = ({onAsset, onNav}) => {
           <div style={{overflowX:"auto"}}>
           <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden",minWidth:660}}>
             {/* Header */}
-            <div style={{display:"grid",gridTemplateColumns:"minmax(200px,3fr) 130px 90px 110px 36px",padding:"10px 20px",borderBottom:`2px solid ${T.border}`,background:T.bgElevated,alignItems:"center"}}>
-              {[["Domain","left"],["Type","left"],["Assets","right"],["Products","right"],["",""]].map(([h,align])=>(
+            <div style={{display:"grid",gridTemplateColumns:"minmax(200px,3fr) 110px 130px 80px 100px 36px",padding:"10px 20px",borderBottom:`2px solid ${T.border}`,background:T.bgElevated,alignItems:"center"}}>
+              {[["Domain","left"],["Owner","left"],["Type","left"],["Assets","right"],["Products","right"],["",""]].map(([h,align])=>(
                 <div key={h} style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",textAlign:align||"left"}}>{h}</div>
               ))}
             </div>
-            {domains.filter(d=>(!domainSearch||d.displayName.toLowerCase().includes(domainSearch.toLowerCase()))&&(!domainTypeFilter||d.domainType===domainTypeFilter)).map((d,i,arr)=>{
+            {domains.filter(d=>(!domainSearch||d.displayName.toLowerCase().includes(domainSearch.toLowerCase()))&&(domainTypeFilters.length===0||domainTypeFilters.includes(d.domainType))).map((d,i,arr)=>{
               const dp = products.filter(p=>p.domain===d.name);
+              const ol = d.owners||[];
               return (
                 <div key={d.id}
-                  style={{display:"grid",gridTemplateColumns:"minmax(200px,3fr) 130px 90px 110px 36px",padding:"13px 20px",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"all .1s",alignItems:"center",borderLeft:"3px solid transparent"}}
+                  style={{display:"grid",gridTemplateColumns:"minmax(200px,3fr) 110px 130px 80px 100px 36px",padding:"13px 20px",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"all .1s",alignItems:"center",borderLeft:"3px solid transparent"}}
                   onClick={()=>{setSelectedDomainId(d.id);setDomainTab("documentation");}}
                   onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;e.currentTarget.style.borderLeftColor=d.color;}}
                   onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderLeftColor="transparent";}}>
@@ -13250,11 +13321,17 @@ const DomainsView = ({onAsset, onNav}) => {
                     <div style={{width:34,height:34,borderRadius:9,background:`${d.color}18`,border:`1.5px solid ${d.color}35`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,flexShrink:0}}>{d.icon}</div>
                     <div style={{minWidth:0}}>
                       <div style={{fontSize:13,fontWeight:600,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{d.displayName}</div>
-                      <div style={{fontSize:11,color:T.textMuted,marginTop:2,display:"flex",alignItems:"center",gap:4}}>
-                        {d.owners[0]&&<><span style={{width:14,height:14,borderRadius:"50%",background:T.accentDim,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:T.accent}}>{(d.owners[0]).split(".").map(s=>s[0]?.toUpperCase()).join("")}</span>{d.owners[0]}</>}
-                        {!d.owners[0]&&<span style={{color:T.textMuted}}>No owner</span>}
-                      </div>
                     </div>
+                  </div>
+                  {/* Owner stacked avatars */}
+                  <div style={{display:"flex",alignItems:"center"}}>
+                    {ol.slice(0,3).map((o,i2)=>(
+                      <div key={i2} title={o} style={{width:24,height:24,borderRadius:"50%",background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:T.accent,marginLeft:i2>0?-7:0,position:"relative",zIndex:3-i2,border:`2px solid ${T.bgSurface}`,boxSizing:"border-box",flexShrink:0}}>
+                        {o.split(".").map(s=>s[0]?.toUpperCase()).join("")}
+                      </div>
+                    ))}
+                    {ol.length>3&&<div title={`+${ol.length-3} more`} style={{width:24,height:24,borderRadius:"50%",background:T.bgElevated,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:T.textMuted,marginLeft:-7,border:`2px solid ${T.bgSurface}`,boxSizing:"border-box",flexShrink:0}}>+{ol.length-3}</div>}
+                    {ol.length===0&&<span style={{fontSize:11,color:T.textMuted}}>—</span>}
                   </div>
                   {/* Type */}
                   <div><DomainTypeBadge type={d.domainType}/></div>
@@ -13268,7 +13345,7 @@ const DomainsView = ({onAsset, onNav}) => {
                     <span style={{fontSize:10,color:T.textMuted,marginLeft:4}}>product{dp.length!==1?"s":""}</span>
                   </div>
                   {/* Chevron */}
-                  <div style={{display:"flex",justifyContent:"center",color:T.textMuted,opacity:.5}}>{Ic.chevRight?.(10)||<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3.5 2l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}</div>
+                  <div style={{display:"flex",justifyContent:"center",color:T.textMuted,opacity:.5}}><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3.5 2l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
                 </div>
               );
             })}
@@ -13277,10 +13354,11 @@ const DomainsView = ({onAsset, onNav}) => {
         )}
       </div>
 
-      {/* Create Domain Modal */}
+      {/* Create Domain Panel */}
       {createDomainOpen&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:900,backdropFilter:"blur(4px)"}}>
-          <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:16,width:540,maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 60px rgba(0,0,0,.35)"}}>
+        <>
+          <div onClick={()=>setCreateDomainOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:899}}/>
+          <div className="slideInRight" style={{position:"fixed",top:0,right:0,bottom:0,width:"min(480px,92vw)",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:900,display:"flex",flexDirection:"column",boxShadow:"-8px 0 32px rgba(0,0,0,.22)"}}>
             <div style={{padding:"20px 24px 16px",borderBottom:`1px solid ${T.border}`}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                 <div>
@@ -13419,12 +13497,12 @@ const DomainsView = ({onAsset, onNav}) => {
                 </div>
               </div>
             </div>
-            <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.bgElevated,borderRadius:"0 0 16px 16px"}}>
+            <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.bgElevated,flexShrink:0}}>
               <button onClick={()=>setCreateDomainOpen(false)} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
               <button onClick={handleCreateDomain} disabled={!nd.name.trim()} style={{padding:"8px 18px",borderRadius:8,background:nd.name.trim()?T.accent:"rgba(100,100,120,.35)",border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:nd.name.trim()?"pointer":"default",opacity:nd.name.trim()?1:.7}}>Create Domain</button>
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Delete Confirmation Modal */}
@@ -13534,8 +13612,8 @@ const DomainsView = ({onAsset, onNav}) => {
         );
       })()}
 
-      {/* Edit Domain Modal */}
-      {editDomainOpen&&editDd&&(()=>{
+      {/* Edit Domain Modal — handled by slideInRight panel inside selectedDomain branch */}
+      {false&&editDomainOpen&&editDd&&(()=>{
         const ICON_OPTS = ["🗂️","🏪","💰","📦","📊","🎯","🔬","💼","⚡","🌐","📡","🧮"];
         const COL_PAL = ["#0ea5e9","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#06b6d4","#84cc16","#f97316","#6366f1"];
         const DOM_TYPES = ["Source-aligned","Consumer-aligned","Aggregate"];
@@ -13717,6 +13795,8 @@ const DataProductsView = ({onAsset, onNav}) => {
   const [dpAddSelected,    setDpAddSelected]    = useState(new Set());
   const [dpEditOpen,       setDpEditOpen]       = useState(false);
   const [dpEditData,       setDpEditData]       = useState(null);
+  const [dpAssetView,      setDpAssetView]      = useState("table");
+  const [dpSearch,         setDpSearch]         = useState("");
   const DP_USERS = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
   const dpAva = name => (name||"?").split(".").map(s=>s[0]?.toUpperCase()||"").join("");
   const patchDP = (id,patch) => setProducts(prev=>prev.map(p=>p.id===id?{...p,...patch}:p));
@@ -13727,7 +13807,8 @@ const DataProductsView = ({onAsset, onNav}) => {
   const filteredProducts = products.filter(p=>{
     const dm = domainFilter==="All" || p.domain===domainFilter;
     const lf = lifecycleFilter==="All" || p.lifecycleStage===lifecycleFilter;
-    return dm && lf;
+    const sq = !dpSearch || p.displayName.toLowerCase().includes(dpSearch.toLowerCase()) || p.description?.toLowerCase().includes(dpSearch.toLowerCase()) || (p.owners||[]).some(o=>o.toLowerCase().includes(dpSearch.toLowerCase()));
+    return dm && lf && sq;
   });
 
   const selectedProduct = products.find(p=>p.id===selectedProductId);
@@ -13892,8 +13973,18 @@ const DataProductsView = ({onAsset, onNav}) => {
             )}
             {productTab==="assets"&&(
               <div>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-                  <div style={{fontSize:13,color:T.textMuted}}>{productAssets.length} asset{productAssets.length!==1?"s":""}</div>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+                  <div style={{fontSize:13,color:T.textMuted,flex:1}}>{productAssets.length} asset{productAssets.length!==1?"s":""}</div>
+                  {/* Layout toggle */}
+                  <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7}}>
+                    {[["table",<svg key="t" width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="1" width="11" height="2.5" rx="1" fill="currentColor" opacity=".4"/><rect x="1" y="5" width="11" height="2.5" rx="1" fill="currentColor" opacity=".7"/><rect x="1" y="9.5" width="11" height="2.5" rx="1" fill="currentColor"/></svg>],
+                      ["card",<svg key="c" width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="1" width="4.5" height="4.5" rx="1.2" fill="currentColor"/><rect x="7.5" y="1" width="4.5" height="4.5" rx="1.2" fill="currentColor"/><rect x="1" y="7.5" width="4.5" height="4.5" rx="1.2" fill="currentColor"/><rect x="7.5" y="7.5" width="4.5" height="4.5" rx="1.2" fill="currentColor"/></svg>]
+                    ].map(([v,ic])=>(
+                      <button key={v} onClick={()=>setDpAssetView(v)} style={{padding:"4px 8px",borderRadius:5,border:"none",cursor:"pointer",display:"flex",alignItems:"center",
+                        background:dpAssetView===v?T.bgSurface:"transparent",color:dpAssetView===v?T.accent:T.textMuted,
+                        boxShadow:dpAssetView===v?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{ic}</button>
+                    ))}
+                  </div>
                   <button onClick={()=>setDpAddAssetsOpen(true)} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>{Ic.plus(10)} Add Assets</button>
                 </div>
                 {productAssets.length===0
@@ -13902,10 +13993,30 @@ const DataProductsView = ({onAsset, onNav}) => {
                       <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>No assets yet</div>
                       <div style={{fontSize:12,color:T.textMuted}}>Add tables or views to this data product</div>
                     </div>
-                  : <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
-                      <AssetTableHeader/>
-                      {productAssets.map((a,i,arr)=><AssetRowDP key={a.id} asset={a} onAsset={onAsset} isLast={i===arr.length-1}/>)}
-                    </div>
+                  : dpAssetView==="table"
+                    ? <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+                        <AssetTableHeader/>
+                        {productAssets.map((a,i,arr)=><AssetRowDP key={a.id} asset={a} onAsset={onAsset} isLast={i===arr.length-1}/>)}
+                      </div>
+                    : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12}}>
+                        {productAssets.map(a=>(
+                          <div key={a.id} onClick={()=>onAsset&&onAsset(a)} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",cursor:onAsset?"pointer":"default",transition:"all .12s"}}
+                            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.boxShadow=`0 4px 16px ${T.accent}18`;}}
+                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
+                            <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:8}}>
+                              <div style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.tableIc(13)}</div>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:12.5,fontWeight:700,color:T.accent,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</div>
+                                <div style={{marginTop:4}}><TypeBadge type={a.type}/></div>
+                              </div>
+                            </div>
+                            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                              <span style={{fontSize:11,color:T.textMuted}}>{a.connectionLabel||a.connector||a.db||"—"}</span>
+                              <QScore score={a.quality}/>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                 }
               </div>
             )}
@@ -14070,31 +14181,38 @@ const DataProductsView = ({onAsset, onNav}) => {
           <Metric label="In Production"  value={String(inProd)}           sub="live products"     color="#16a34a"/>
         </div>
 
-        {/* Toolbar row: count left, controls right */}
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-          <div style={{display:"flex",gap:5,flexWrap:"wrap",flex:1,marginRight:12}}>
-            {["All",...domains.map(d=>d.name)].map(d=>{
-              const dm = domains.find(x=>x.name===d);
-              const active = domainFilter===d;
-              return (
-                <button key={d} onClick={()=>setDomainFilter(d)} style={{
-                  display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:99,fontSize:11.5,fontWeight:active?700:500,cursor:"pointer",transition:"all .12s",
-                  background:active?(dm?`${dm.color}18`:T.accentDim):"transparent",
-                  border:`1.5px solid ${active?(dm?.color||T.accent):T.border}`,
-                  color:active?(dm?.color||T.accent):T.textSub,
-                }}>
-                  {dm&&<span style={{fontSize:12}}>{dm.icon}</span>} {d}
-                </button>
-              );
-            })}
+        {/* Search + toolbar row */}
+        <div style={{marginBottom:10}}>
+          {/* Search bar */}
+          <div style={{marginBottom:10}}>
+            <Input2 placeholder="Search data products, descriptions, owners…" value={dpSearch} onChange={e=>setDpSearch(e.target.value)} icon={Ic.search(12)}/>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-            <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
-              {[["list","☰"],["grid","⊞"]].map(([v,ic])=>(
-                <button key={v} onClick={()=>setListView(v)} style={{padding:"4px 10px",borderRadius:5,border:"none",cursor:"pointer",fontSize:13,
-                  background:listView===v?T.bgSurface:"transparent",color:listView===v?T.text:T.textMuted,
-                  boxShadow:listView===v?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{ic}</button>
-              ))}
+          {/* Domain chips + view toggle */}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
+            <div style={{display:"flex",gap:5,flexWrap:"wrap",flex:1,marginRight:8}}>
+              {["All",...domains.map(d=>d.name)].map(d=>{
+                const dm = domains.find(x=>x.name===d);
+                const active = domainFilter===d;
+                return (
+                  <button key={d} onClick={()=>setDomainFilter(d)} style={{
+                    display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:99,fontSize:11.5,fontWeight:active?700:500,cursor:"pointer",transition:"all .12s",
+                    background:active?(dm?`${dm.color}18`:T.accentDim):"transparent",
+                    border:`1.5px solid ${active?(dm?.color||T.accent):T.border}`,
+                    color:active?(dm?.color||T.accent):T.textSub,
+                  }}>
+                    {dm&&<span style={{fontSize:12}}>{dm.icon}</span>} {d}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+              <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+                {[["list","☰"],["grid","⊞"]].map(([v,ic])=>(
+                  <button key={v} onClick={()=>setListView(v)} style={{padding:"4px 10px",borderRadius:5,border:"none",cursor:"pointer",fontSize:13,
+                    background:listView===v?T.bgSurface:"transparent",color:listView===v?T.text:T.textMuted,
+                    boxShadow:listView===v?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{ic}</button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -14143,18 +14261,19 @@ const DataProductsView = ({onAsset, onNav}) => {
 
         {/* List */}
         {listView==="list"&&filteredProducts.length>0&&(
-          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
+          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden",overflowX:"auto"}}>
             {/* Header */}
-            <div style={{display:"grid",gridTemplateColumns:"minmax(200px,3fr) 180px 80px 36px",padding:"10px 20px",borderBottom:`2px solid ${T.border}`,background:T.bgElevated,alignItems:"center"}}>
-              {[["Product","left"],["Domain","left"],["Assets","right"],["",""]].map(([h,align])=>(
+            <div style={{display:"grid",gridTemplateColumns:"minmax(200px,3fr) 180px 110px 80px 36px",padding:"10px 20px",borderBottom:`2px solid ${T.border}`,background:T.bgElevated,alignItems:"center",minWidth:620}}>
+              {[["Product","left"],["Domain","left"],["Owner","left"],["Assets","right"],["",""]].map(([h,align])=>(
                 <div key={h} style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",textAlign:align||"left"}}>{h}</div>
               ))}
             </div>
             {filteredProducts.map((p,i)=>{
               const dm = domains.find(d=>d.name===p.domain);
+              const ol = p.owners||[];
               return (
                 <div key={p.id}
-                  style={{display:"grid",gridTemplateColumns:"minmax(200px,3fr) 180px 80px 36px",padding:"13px 20px",borderBottom:i<filteredProducts.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"all .1s",alignItems:"center",borderLeft:"3px solid transparent"}}
+                  style={{display:"grid",gridTemplateColumns:"minmax(200px,3fr) 180px 110px 80px 36px",padding:"13px 20px",borderBottom:i<filteredProducts.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"all .1s",alignItems:"center",borderLeft:"3px solid transparent",minWidth:620}}
                   onClick={()=>{setSelectedProductId(p.id);setProductTab("overview");}}
                   onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;e.currentTarget.style.borderLeftColor=p.color;}}
                   onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderLeftColor="transparent";}}>
@@ -14163,16 +14282,23 @@ const DataProductsView = ({onAsset, onNav}) => {
                     <div style={{width:34,height:34,borderRadius:9,background:`${p.color}18`,border:`1.5px solid ${p.color}35`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,flexShrink:0}}>{p.icon}</div>
                     <div style={{minWidth:0}}>
                       <div style={{fontSize:13,fontWeight:600,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.displayName}</div>
-                      <div style={{fontSize:11,color:T.textMuted,marginTop:2,display:"flex",alignItems:"center",gap:4}}>
-                        {p.owners?.[0]&&<><span style={{width:14,height:14,borderRadius:"50%",background:T.accentDim,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:T.accent}}>{(p.owners[0]).split(".").map(s=>s[0]?.toUpperCase()).join("")}</span>{p.owners[0]}</>}
-                        {!p.owners?.[0]&&<span>No owner</span>}
-                      </div>
+                      <div style={{marginTop:3}}><LifecycleBadge stage={p.lifecycleStage}/></div>
                     </div>
                   </div>
                   {/* Domain */}
                   <div style={{display:"flex",alignItems:"center",gap:5}}>
                     <span style={{fontSize:13}}>{dm?.icon}</span>
                     <span style={{fontSize:12,fontWeight:500,color:dm?.color||T.textSub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.domain}</span>
+                  </div>
+                  {/* Owner stacked avatars */}
+                  <div style={{display:"flex",alignItems:"center"}}>
+                    {ol.slice(0,3).map((o,i2)=>(
+                      <div key={i2} title={o} style={{width:24,height:24,borderRadius:"50%",background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:T.accent,marginLeft:i2>0?-7:0,position:"relative",zIndex:3-i2,border:`2px solid ${T.bgSurface}`,boxSizing:"border-box",flexShrink:0}}>
+                        {o.split(".").map(s=>s[0]?.toUpperCase()).join("")}
+                      </div>
+                    ))}
+                    {ol.length>3&&<div title={`+${ol.length-3} more`} style={{width:24,height:24,borderRadius:"50%",background:T.bgElevated,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:T.textMuted,marginLeft:-7,border:`2px solid ${T.bgSurface}`,boxSizing:"border-box",flexShrink:0}}>+{ol.length-3}</div>}
+                    {ol.length===0&&<span style={{fontSize:11,color:T.textMuted}}>—</span>}
                   </div>
                   {/* Assets */}
                   <div style={{textAlign:"right"}}>
@@ -14187,10 +14313,11 @@ const DataProductsView = ({onAsset, onNav}) => {
         )}
       </div>
 
-      {/* Create Data Product Modal */}
+      {/* Create Data Product Panel */}
       {createOpen&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:900,backdropFilter:"blur(4px)"}}>
-          <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:16,width:540,maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 60px rgba(0,0,0,.35)"}}>
+        <>
+          <div onClick={()=>setCreateOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:899}}/>
+          <div className="slideInRight" style={{position:"fixed",top:0,right:0,bottom:0,width:"min(480px,92vw)",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:900,display:"flex",flexDirection:"column",boxShadow:"-8px 0 32px rgba(0,0,0,.22)"}}>
             <div style={{padding:"20px 24px 16px",borderBottom:`1px solid ${T.border}`}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                 <div>
@@ -14251,7 +14378,7 @@ const DataProductsView = ({onAsset, onNav}) => {
                 </div>
               </div>
             </div>
-            <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.bgElevated,borderRadius:"0 0 16px 16px"}}>
+            <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.bgElevated,flexShrink:0}}>
               <button onClick={()=>setCreateOpen(false)} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
               <button onClick={handleCreateProduct} disabled={!np.name.trim()||!createDomain}
                 style={{padding:"8px 18px",borderRadius:8,background:(np.name.trim()&&createDomain)?T.accent:"rgba(100,100,120,.35)",border:"none",color:"#fff",fontSize:12,fontWeight:700,
@@ -14260,7 +14387,7 @@ const DataProductsView = ({onAsset, onNav}) => {
               </button>
             </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
