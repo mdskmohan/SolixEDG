@@ -11827,58 +11827,13 @@ const DomainsView = ({onAsset, onNav}) => {
           {label:pd.displayName}
         ]}/>
         <div style={{flex:1,overflowY:"auto",minHeight:0}} onClick={()=>{setPdMenuOpen(false);setPdStyleOpen(false);}}>
-          {/* ── Banner with floating actions ── */}
-          <div style={{height:140,background:`linear-gradient(135deg, ${pd.color}ee 0%, ${pd.color}99 45%, ${pd.color}33 100%)`,position:"relative",flexShrink:0}}>
-            <div style={{position:"absolute",inset:0,backgroundImage:`radial-gradient(circle at 70% 50%, rgba(255,255,255,0.07) 0%, transparent 60%)`,pointerEvents:"none"}}/>
-            <div style={{position:"absolute",top:16,right:24,display:"flex",gap:8,alignItems:"center",zIndex:20}} onClick={e=>e.stopPropagation()}>
-              <button onClick={()=>{setAddPdAssetsOpen(true);}} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:"rgba(255,255,255,0.18)",border:"1px solid rgba(255,255,255,0.35)",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
-                {Ic.plus(10)} Add Assets
-              </button>
-              <div style={{position:"relative"}}>
-                <button onClick={()=>{setPdMenuOpen(p=>!p);setPdStyleOpen(false);}}
-                  style={{width:34,height:34,borderRadius:8,background:"rgba(255,255,255,0.18)",border:"1px solid rgba(255,255,255,0.35)",color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>⋮</button>
-                {pdMenuOpen&&(
-                  <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,minWidth:200,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",zIndex:500,overflow:"hidden"}}>
-                    {[
-                      {label:"✏️ Rename",action:()=>{setPdRenameValue(pd.displayName);setPdRenameMode(true);setPdMenuOpen(false);}},
-                      {label:"🖊️ Edit Details",action:()=>{setPdEditOpen(true);setPdEditData({...pd});setPdMenuOpen(false);}},
-                      {label:"🎨 Style",action:()=>{setPdStyleOpen(p=>!p);setPdMenuOpen(false);}},
-                      {label:"🗑️ Delete",action:()=>{setDeleteConfirm({type:"product",id:pd.id,name:pd.displayName});setPdMenuOpen(false);},danger:true},
-                    ].map(item=>(
-                      <button key={item.label} onClick={e=>{e.stopPropagation();item.action();}}
-                        style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"transparent",border:"none",cursor:"pointer",fontSize:12.5,color:item.danger?T.rose:T.text,textAlign:"left"}}
-                        onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {pdStyleOpen&&(
-                  <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:"calc(100% + 6px)",right:0,width:240,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,boxShadow:"0 12px 36px rgba(0,0,0,.28)",zIndex:500,padding:14}}>
-                    <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Icon</div>
-                    <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:12}}>
-                      {["📦","📊","💹","📱","🧮","🎯","📋","🔬","💼","🗃️","📡","⚡","🔁","🌊","🏷️","🔑"].map(ic=>(
-                        <button key={ic} onClick={()=>patchProduct(pd.id,{icon:ic})}
-                          style={{width:30,height:30,borderRadius:7,background:pd.icon===ic?T.accentDim:T.bgElevated,border:`1.5px solid ${pd.icon===ic?T.accent:T.border}`,cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>{ic}</button>
-                      ))}
-                    </div>
-                    <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Color</div>
-                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                      {COLOR_PALETTE.map(c=>(
-                        <button key={c} onClick={()=>patchProduct(pd.id,{color:c})}
-                          style={{width:24,height:24,borderRadius:"50%",background:c,border:`2.5px solid ${pd.color===c?"#fff":c}`,outline:pd.color===c?`2px solid ${c}`:"none",cursor:"pointer"}}/>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-          {/* ── Header content ── */}
-          <div style={{padding:"0 28px",marginTop:-36,position:"relative",zIndex:10}}>
-            <div style={{display:"flex",alignItems:"flex-end",gap:18,marginBottom:20}}>
-              <div style={{width:72,height:72,borderRadius:20,background:T.bgSurface,border:`2.5px solid ${pd.color}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:34,flexShrink:0,boxShadow:`0 8px 32px ${pd.color}55`,zIndex:2}}>{pd.icon}</div>
-              <div style={{flex:1,minWidth:0,paddingBottom:6}}>
+          {/* ── Clean profile header ── */}
+          <div style={{padding:"24px 28px 0"}}>
+            <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:20}}>
+              {/* Icon */}
+              <div style={{width:60,height:60,borderRadius:16,background:`${pd.color}18`,border:`2px solid ${pd.color}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}>{pd.icon}</div>
+              {/* Title + meta */}
+              <div style={{flex:1,minWidth:0}}>
                 {pdRenameMode
                   ? <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
                       <input autoFocus value={pdRenameValue} onChange={e=>setPdRenameValue(e.target.value)}
@@ -11887,14 +11842,61 @@ const DomainsView = ({onAsset, onNav}) => {
                       <button onClick={()=>{patchProduct(pd.id,{displayName:pdRenameValue.trim()||pd.displayName});setPdRenameMode(false);}} style={{padding:"5px 12px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Save</button>
                       <button onClick={()=>setPdRenameMode(false)} style={{padding:"5px 10px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
                     </div>
-                  : <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:7,flexWrap:"wrap"}}>
-                      <h1 style={{fontSize:24,fontWeight:800,color:T.text,margin:0,lineHeight:1.15}}>{pd.displayName}</h1>
+                  : <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
+                      <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:0,lineHeight:1.2}}>{pd.displayName}</h1>
                       <LifecycleBadge stage={pd.lifecycleStage}/>
                     </div>
                 }
-                <div style={{fontSize:12,color:T.textMuted,marginBottom:7}}>{pd.domain} Domain · Created {pd.createdAt}</div>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:6}}>{pd.domain} Domain · Created {pd.createdAt}</div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                   {pd.owners.map(o=><OwnerChip key={o} name={o}/>)}
+                </div>
+              </div>
+              {/* Action buttons */}
+              <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0}} onClick={e=>e.stopPropagation()}>
+                <button onClick={()=>{setAddPdAssetsOpen(true);}}
+                  style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,fontSize:12,fontWeight:600,cursor:"pointer",transition:"all .15s"}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.text;}}>
+                  {Ic.plus(10)} Add Assets
+                </button>
+                <div style={{position:"relative"}}>
+                  <button onClick={()=>{setPdMenuOpen(p=>!p);setPdStyleOpen(false);}}
+                    style={{width:34,height:34,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,transition:"all .15s"}}
+                    onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>⋮</button>
+                  {pdMenuOpen&&(
+                    <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,minWidth:200,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",zIndex:500,overflow:"hidden"}}>
+                      {[
+                        {label:"✏️ Rename",action:()=>{setPdRenameValue(pd.displayName);setPdRenameMode(true);setPdMenuOpen(false);}},
+                        {label:"🖊️ Edit Details",action:()=>{setPdEditOpen(true);setPdEditData({...pd});setPdMenuOpen(false);}},
+                        {label:"🎨 Style",action:()=>{setPdStyleOpen(p=>!p);setPdMenuOpen(false);}},
+                        {label:"🗑️ Delete",action:()=>{setDeleteConfirm({type:"product",id:pd.id,name:pd.displayName});setPdMenuOpen(false);},danger:true},
+                      ].map(item=>(
+                        <button key={item.label} onClick={e=>{e.stopPropagation();item.action();}}
+                          style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"transparent",border:"none",cursor:"pointer",fontSize:12.5,color:item.danger?T.rose:T.text,textAlign:"left"}}
+                          onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {pdStyleOpen&&(
+                    <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:"calc(100% + 6px)",right:0,width:240,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,boxShadow:"0 12px 36px rgba(0,0,0,.28)",zIndex:500,padding:14}}>
+                      <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Icon</div>
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:12}}>
+                        {["📦","📊","💹","📱","🧮","🎯","📋","🔬","💼","🗃️","📡","⚡","🔁","🌊","🏷️","🔑"].map(ic=>(
+                          <button key={ic} onClick={()=>patchProduct(pd.id,{icon:ic})}
+                            style={{width:30,height:30,borderRadius:7,background:pd.icon===ic?T.accentDim:T.bgElevated,border:`1.5px solid ${pd.icon===ic?T.accent:T.border}`,cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>{ic}</button>
+                        ))}
+                      </div>
+                      <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Color</div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {COLOR_PALETTE.map(c=>(
+                          <button key={c} onClick={()=>patchProduct(pd.id,{color:c})}
+                            style={{width:24,height:24,borderRadius:"50%",background:c,border:`2.5px solid ${pd.color===c?"#fff":c}`,outline:pd.color===c?`2px solid ${c}`:"none",cursor:"pointer"}}/>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -12257,107 +12259,25 @@ const DomainsView = ({onAsset, onNav}) => {
           {label:dm.displayName}
         ]}/>
         <div style={{flex:1,overflowY:"auto",minHeight:0}} onClick={()=>{setDmMenuOpen(false);setAddHeaderDropdown(false);}}>
-          {/* ── Banner with floating actions ── */}
-          <div style={{height:140,background:`linear-gradient(135deg, ${dm.color}ee 0%, ${dm.color}99 45%, ${dm.color}33 100%)`,position:"relative",flexShrink:0}}>
-            {/* subtle texture overlay */}
-            <div style={{position:"absolute",inset:0,backgroundImage:`radial-gradient(circle at 70% 50%, rgba(255,255,255,0.07) 0%, transparent 60%)`,pointerEvents:"none"}}/>
-            {/* actions — float top-right inside banner */}
-            <div style={{position:"absolute",top:16,right:24,display:"flex",gap:8,alignItems:"center",zIndex:20}} onClick={e=>e.stopPropagation()}>
-              {/* Add ▾ */}
-              <div style={{position:"relative"}}>
-                <button onClick={()=>{setAddHeaderDropdown(p=>!p);setDmMenuOpen(false);}}
-                  style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:"rgba(255,255,255,0.18)",border:"1px solid rgba(255,255,255,0.35)",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
-                  {Ic.plus(10)} Add ▾
-                </button>
-                {addHeaderDropdown&&(
-                  <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",minWidth:190,overflow:"hidden"}}>
-                    {[
-                      {icon:"🗂️",label:"Add Sub Domain",action:()=>{setAddHeaderDropdown(false);setAddPanelType("subdomain");setAddPanelOpen(true);}},
-                      {icon:"📊",label:"Add Asset",action:()=>{setAddHeaderDropdown(false);setAddAssetsSelected(new Set());setAddAssetsSearch("");setAddAssetsOpen(true);}},
-                      {icon:"📦",label:"Add Data Product",action:()=>{setAddHeaderDropdown(false);setAddPanelType("dataproduct");setAddPanelOpen(true);}},
-                    ].map((item,i,arr)=>(
-                      <React.Fragment key={item.label}>
-                        <button onMouseDown={item.action}
-                          style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",fontSize:12,color:T.text}}
-                          onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                          <span style={{fontSize:15}}>{item.icon}</span> {item.label}
-                        </button>
-                        {i<arr.length-1&&<div style={{height:1,background:T.border}}/>}
-                      </React.Fragment>
-                    ))}
-                  </div>
-                )}
-              </div>
-              {/* ⋮ */}
-              <div style={{position:"relative"}}>
-                <button onClick={()=>{setDmMenuOpen(p=>!p);setAddHeaderDropdown(false);}}
-                  style={{width:34,height:34,borderRadius:8,background:"rgba(255,255,255,0.18)",border:"1px solid rgba(255,255,255,0.35)",color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>⋮</button>
-                {dmMenuOpen&&(
-                  <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",minWidth:220,overflow:"hidden"}}>
-                    {[
-                      {icon:"✏️",label:"Rename",sub:"Change the display name",action:()=>{setDmRenameValue(dm.displayName);setDmRenameMode(true);setDmMenuOpen(false);}},
-                      {icon:"🖊️",label:"Edit Details",sub:"Edit all domain fields",action:()=>{setEditDd({...dm});setEditDomainOpen(true);setDmMenuOpen(false);}},
-                      {icon:"🎨",label:"Style",sub:"Change icon and color",action:()=>{setDmStyleOpen(true);setDmMenuOpen(false);}},
-                    ].map(item=>(
-                      <button key={item.label} onClick={item.action}
-                        style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",borderBottom:`1px solid ${T.border}`}}
-                        onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                        <span style={{fontSize:15,marginTop:1}}>{item.icon}</span>
-                        <div><div style={{fontSize:12,fontWeight:600,color:T.text}}>{item.label}</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{item.sub}</div></div>
-                      </button>
-                    ))}
-                    <button onClick={()=>{setDeleteConfirm({type:"domain",id:dm.id,name:dm.displayName});setDmMenuOpen(false);}}
-                      style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}
-                      onMouseEnter={e=>e.currentTarget.style.background="rgba(239,68,68,.07)"} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                      <span style={{fontSize:15,marginTop:1}}>🗑️</span>
-                      <div><div style={{fontSize:12,fontWeight:600,color:T.rose}}>Delete Domain</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>Permanently remove this domain</div></div>
-                    </button>
-                  </div>
-                )}
-                {dmStyleOpen&&(
-                  <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:600,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,boxShadow:"0 12px 36px rgba(0,0,0,.28)",padding:16,minWidth:260}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-                      <div style={{fontSize:12,fontWeight:700,color:T.text}}>Style</div>
-                      <button onClick={()=>setDmStyleOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:14}}>{Ic.x(11)}</button>
-                    </div>
-                    <div style={{fontSize:11,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:7}}>Icon</div>
-                    <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:14}}>
-                      {ICON_OPTIONS.concat(["🏪","🌿","💎","🔮","🏆","🎪"]).map(ic=>(
-                        <button key={ic} onClick={()=>patchDomain(dm.id,{icon:ic})}
-                          style={{width:32,height:32,borderRadius:7,fontSize:15,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",background:dm.icon===ic?`${dm.color}20`:T.bgElevated,border:`1.5px solid ${dm.icon===ic?dm.color:T.border}`}}>{ic}</button>
-                      ))}
-                    </div>
-                    <div style={{fontSize:11,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:7}}>Color</div>
-                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                      {COLOR_PALETTE.map(c=>(
-                        <button key={c} onClick={()=>patchDomain(dm.id,{color:c})}
-                          style={{width:24,height:24,borderRadius:"50%",background:c,border:`2.5px solid ${dm.color===c?"#fff":c}`,outline:dm.color===c?`2px solid ${c}`:"none",cursor:"pointer"}}/>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* ── Header content — icon overlaps banner ── */}
-          <div style={{padding:"0 28px",marginTop:-36,position:"relative",zIndex:10}}>
-            <div style={{display:"flex",alignItems:"flex-end",gap:18,marginBottom:20}}>
-              {/* Elevated icon */}
-              <div style={{width:72,height:72,borderRadius:20,background:T.bgSurface,border:`2.5px solid ${dm.color}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:34,flexShrink:0,boxShadow:`0 8px 32px ${dm.color}55`,zIndex:2}}>{dm.icon}</div>
-              <div style={{flex:1,minWidth:0,paddingBottom:6}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:7,flexWrap:"wrap"}}>
+          {/* ── Clean domain profile header ── */}
+          <div style={{padding:"24px 28px 0"}}>
+            <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:20}}>
+              {/* Icon */}
+              <div style={{width:60,height:60,borderRadius:16,background:`${dm.color}18`,border:`2px solid ${dm.color}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}>{dm.icon}</div>
+              {/* Title + meta */}
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
                   {dmRenameMode
                     ? <input autoFocus value={dmRenameValue} onChange={e=>setDmRenameValue(e.target.value)}
                         onKeyDown={e=>{if(e.key==="Enter"){patchDomain(dm.id,{displayName:dmRenameValue.trim()||dm.displayName});setDmRenameMode(false);}if(e.key==="Escape")setDmRenameMode(false);}}
                         onBlur={()=>{patchDomain(dm.id,{displayName:dmRenameValue.trim()||dm.displayName});setDmRenameMode(false);}}
-                        style={{fontSize:24,fontWeight:800,color:T.text,background:"transparent",border:`1.5px solid ${T.accent}`,borderRadius:6,outline:"none",padding:"2px 8px",minWidth:200}}/>
-                    : <h1 style={{fontSize:24,fontWeight:800,color:T.text,margin:0,lineHeight:1.15}}>{dm.displayName}</h1>
+                        style={{fontSize:22,fontWeight:800,color:T.text,background:"transparent",border:`1.5px solid ${T.accent}`,borderRadius:6,outline:"none",padding:"2px 8px",minWidth:200}}/>
+                    : <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:0,lineHeight:1.2}}>{dm.displayName}</h1>
                   }
                   <DomainTypeBadge type={dm.domainType}/>
                   {hasSensitive&&<span style={{padding:"3px 8px",borderRadius:4,fontSize:10,fontWeight:700,background:"rgba(239,68,68,.1)",color:"#ef4444",border:"1px solid rgba(239,68,68,.2)"}}>🔒 Sensitive</span>}
                 </div>
-                <div style={{display:"flex",gap:20,marginBottom:9}}>
+                <div style={{display:"flex",gap:20,marginBottom:8}}>
                   {[["Assets",dm.assetCount,dm.color],["Data Products",domainProducts.length,"#8b5cf6"],["Quality",`${dm.quality}%`,dm.quality>=90?T.green:dm.quality>=70?T.amber:T.rose]].map(([l,v,c])=>(
                     <div key={l} style={{display:"flex",alignItems:"baseline",gap:5}}>
                       <span style={{fontSize:18,fontWeight:800,color:c,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{v}</span>
@@ -12367,6 +12287,85 @@ const DomainsView = ({onAsset, onNav}) => {
                 </div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                   {dm.owners.map(o=><OwnerChip key={o} name={o}/>)}
+                </div>
+              </div>
+              {/* Action buttons */}
+              <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0}} onClick={e=>e.stopPropagation()}>
+                {/* Add ▾ */}
+                <div style={{position:"relative"}}>
+                  <button onClick={()=>{setAddHeaderDropdown(p=>!p);setDmMenuOpen(false);}}
+                    style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,fontSize:12,fontWeight:600,cursor:"pointer",transition:"all .15s"}}
+                    onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.text;}}>
+                    {Ic.plus(10)} Add ▾
+                  </button>
+                  {addHeaderDropdown&&(
+                    <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",minWidth:190,overflow:"hidden"}}>
+                      {[
+                        {icon:"🗂️",label:"Add Sub Domain",action:()=>{setAddHeaderDropdown(false);setAddPanelType("subdomain");setAddPanelOpen(true);}},
+                        {icon:"📊",label:"Add Asset",action:()=>{setAddHeaderDropdown(false);setAddAssetsSelected(new Set());setAddAssetsSearch("");setAddAssetsOpen(true);}},
+                        {icon:"📦",label:"Add Data Product",action:()=>{setAddHeaderDropdown(false);setAddPanelType("dataproduct");setAddPanelOpen(true);}},
+                      ].map((item,i,arr)=>(
+                        <React.Fragment key={item.label}>
+                          <button onMouseDown={item.action}
+                            style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",fontSize:12,color:T.text}}
+                            onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                            <span style={{fontSize:15}}>{item.icon}</span> {item.label}
+                          </button>
+                          {i<arr.length-1&&<div style={{height:1,background:T.border}}/>}
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {/* ⋮ */}
+                <div style={{position:"relative"}}>
+                  <button onClick={()=>{setDmMenuOpen(p=>!p);setAddHeaderDropdown(false);}}
+                    style={{width:34,height:34,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,transition:"all .15s"}}
+                    onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>⋮</button>
+                  {dmMenuOpen&&(
+                    <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",minWidth:220,overflow:"hidden"}}>
+                      {[
+                        {icon:"✏️",label:"Rename",sub:"Change the display name",action:()=>{setDmRenameValue(dm.displayName);setDmRenameMode(true);setDmMenuOpen(false);}},
+                        {icon:"🖊️",label:"Edit Details",sub:"Edit all domain fields",action:()=>{setEditDd({...dm});setEditDomainOpen(true);setDmMenuOpen(false);}},
+                        {icon:"🎨",label:"Style",sub:"Change icon and color",action:()=>{setDmStyleOpen(true);setDmMenuOpen(false);}},
+                      ].map(item=>(
+                        <button key={item.label} onClick={item.action}
+                          style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",borderBottom:`1px solid ${T.border}`}}
+                          onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                          <span style={{fontSize:15,marginTop:1}}>{item.icon}</span>
+                          <div><div style={{fontSize:12,fontWeight:600,color:T.text}}>{item.label}</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{item.sub}</div></div>
+                        </button>
+                      ))}
+                      <button onClick={()=>{setDeleteConfirm({type:"domain",id:dm.id,name:dm.displayName});setDmMenuOpen(false);}}
+                        style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}
+                        onMouseEnter={e=>e.currentTarget.style.background="rgba(239,68,68,.07)"} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                        <span style={{fontSize:15,marginTop:1}}>🗑️</span>
+                        <div><div style={{fontSize:12,fontWeight:600,color:T.rose}}>Delete Domain</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>Permanently remove this domain</div></div>
+                      </button>
+                    </div>
+                  )}
+                  {dmStyleOpen&&(
+                    <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:600,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,boxShadow:"0 12px 36px rgba(0,0,0,.28)",padding:16,minWidth:260}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                        <div style={{fontSize:12,fontWeight:700,color:T.text}}>Style</div>
+                        <button onClick={()=>setDmStyleOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:14}}>{Ic.x(11)}</button>
+                      </div>
+                      <div style={{fontSize:11,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:7}}>Icon</div>
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:14}}>
+                        {ICON_OPTIONS.concat(["🏪","🌿","💎","🔮","🏆","🎪"]).map(ic=>(
+                          <button key={ic} onClick={()=>patchDomain(dm.id,{icon:ic})}
+                            style={{width:32,height:32,borderRadius:7,fontSize:15,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",background:dm.icon===ic?`${dm.color}20`:T.bgElevated,border:`1.5px solid ${dm.icon===ic?dm.color:T.border}`}}>{ic}</button>
+                        ))}
+                      </div>
+                      <div style={{fontSize:11,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:7}}>Color</div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {COLOR_PALETTE.map(c=>(
+                          <button key={c} onClick={()=>patchDomain(dm.id,{color:c})}
+                            style={{width:24,height:24,borderRadius:"50%",background:c,border:`2.5px solid ${dm.color===c?"#fff":c}`,outline:dm.color===c?`2px solid ${c}`:"none",cursor:"pointer"}}/>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -13776,43 +13775,18 @@ const DataProductsView = ({onAsset, onNav}) => {
           {label:pd.displayName},
         ]}/>
         <div style={{flex:1,overflowY:"auto"}}>
-          {/* ── Banner with floating actions ── */}
-          <div style={{height:140,background:`linear-gradient(135deg, ${pd.color}ee 0%, ${pd.color}99 45%, ${pd.color}33 100%)`,position:"relative",flexShrink:0}}>
-            <div style={{position:"absolute",inset:0,backgroundImage:`radial-gradient(circle at 70% 50%, rgba(255,255,255,0.07) 0%, transparent 60%)`,pointerEvents:"none"}}/>
-            <div style={{position:"absolute",top:16,right:24,display:"flex",gap:8,alignItems:"center",zIndex:20}}>
-              <button onClick={()=>setDpAddAssetsOpen(true)} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:"rgba(255,255,255,0.18)",border:"1px solid rgba(255,255,255,0.35)",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
-                {Ic.plus(10)} Add Assets
-              </button>
-              <div style={{position:"relative"}}>
-                <button onClick={()=>setDpMenuOpen(p=>!p)}
-                  style={{width:34,height:34,borderRadius:8,background:"rgba(255,255,255,0.18)",border:"1px solid rgba(255,255,255,0.35)",color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>⋮</button>
-                {dpMenuOpen&&(
-                  <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,minWidth:200,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",zIndex:500,overflow:"hidden"}}>
-                    {[
-                      {label:"🖊️ Edit Details",action:()=>{setDpEditOpen(true);setDpEditData({...pd});setDpMenuOpen(false);}},
-                      {label:"🗑️ Delete",action:()=>{setSelectedProductId(null);setDpMenuOpen(false);},danger:true},
-                    ].map(item=>(
-                      <button key={item.label} onClick={item.action}
-                        style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"transparent",border:"none",cursor:"pointer",fontSize:12.5,color:item.danger?T.rose:T.text,textAlign:"left"}}
-                        onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-          {/* ── Header content ── */}
-          <div style={{padding:"0 28px",marginTop:-36,position:"relative",zIndex:10}}>
-            <div style={{display:"flex",alignItems:"flex-end",gap:18,marginBottom:20}}>
-              <div style={{width:72,height:72,borderRadius:20,background:T.bgSurface,border:`2.5px solid ${pd.color}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:34,flexShrink:0,boxShadow:`0 8px 32px ${pd.color}55`,zIndex:2}}>{pd.icon}</div>
-              <div style={{flex:1,minWidth:0,paddingBottom:6}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:7,flexWrap:"wrap"}}>
-                  <h1 style={{fontSize:24,fontWeight:800,color:T.text,margin:0,lineHeight:1.15}}>{pd.displayName}</h1>
+          {/* ── Clean product profile header ── */}
+          <div style={{padding:"24px 28px 0"}}>
+            <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:20}}>
+              {/* Icon */}
+              <div style={{width:60,height:60,borderRadius:16,background:`${pd.color}18`,border:`2px solid ${pd.color}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}>{pd.icon}</div>
+              {/* Title + meta */}
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
+                  <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:0,lineHeight:1.2}}>{pd.displayName}</h1>
                   <LifecycleBadge stage={pd.lifecycleStage}/>
                 </div>
-                <div style={{fontSize:12,color:T.textMuted,marginBottom:7}}>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:6}}>
                   <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 8px",borderRadius:4,fontSize:10.5,fontWeight:600,background:`${pdDomain?.color||"#6366f1"}15`,color:pdDomain?.color||"#6366f1",border:`1px solid ${pdDomain?.color||"#6366f1"}25`,marginRight:8}}>
                     {pdDomain?.icon} {pd.domain}
                   </span>
@@ -13820,6 +13794,33 @@ const DataProductsView = ({onAsset, onNav}) => {
                 </div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                   {(pd.owners||[]).map(o=><OwnerChip key={o} name={o}/>)}
+                </div>
+              </div>
+              {/* Action buttons */}
+              <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0}} onClick={e=>e.stopPropagation()}>
+                <button onClick={()=>setDpAddAssetsOpen(true)}
+                  style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,fontSize:12,fontWeight:600,cursor:"pointer",transition:"all .15s"}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.text;}}>
+                  {Ic.plus(10)} Add Assets
+                </button>
+                <div style={{position:"relative"}}>
+                  <button onClick={()=>setDpMenuOpen(p=>!p)}
+                    style={{width:34,height:34,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,transition:"all .15s"}}
+                    onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>⋮</button>
+                  {dpMenuOpen&&(
+                    <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,minWidth:200,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",zIndex:500,overflow:"hidden"}}>
+                      {[
+                        {label:"🖊️ Edit Details",action:()=>{setDpEditOpen(true);setDpEditData({...pd});setDpMenuOpen(false);}},
+                        {label:"🗑️ Delete",action:()=>{setSelectedProductId(null);setDpMenuOpen(false);},danger:true},
+                      ].map(item=>(
+                        <button key={item.label} onClick={item.action}
+                          style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"transparent",border:"none",cursor:"pointer",fontSize:12.5,color:item.danger?T.rose:T.text,textAlign:"left"}}
+                          onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
