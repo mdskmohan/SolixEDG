@@ -11626,23 +11626,27 @@ const OwnerChip = ({name}) => (
     {name}
   </span>
 );
-const AssetRowDP = ({asset}) => (
-  <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:`1px solid ${T.border}`}}>
+const AssetRowDP = ({asset, onAsset}) => (
+  <div onClick={()=>onAsset&&onAsset(asset)}
+    style={{display:"flex",alignItems:"center",gap:12,padding:"10px 4px",borderBottom:`1px solid ${T.border}`,cursor:onAsset?"pointer":"default",transition:"background .1s",borderRadius:6,margin:"0 -4px"}}
+    onMouseEnter={e=>{if(onAsset)e.currentTarget.style.background=T.bgHover;}}
+    onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
     <div style={{width:28,height:28,borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
       {Ic.tableIc(12)}
     </div>
     <div style={{flex:1,minWidth:0}}>
-      <div style={{fontSize:12.5,fontWeight:600,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{asset.name}</div>
+      <div style={{fontSize:12.5,fontWeight:600,color:onAsset?T.accent:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{asset.name}</div>
       <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{asset.type} · {asset.connectionLabel}</div>
     </div>
     <QScore score={asset.quality}/>
+    {onAsset&&<svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,flexShrink:0}}><path d="M3.5 2l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
   </div>
 );
 
 // ─────────────────────────────────────────────
 // DOMAINS VIEW
 // ─────────────────────────────────────────────
-const DomainsView = () => {
+const DomainsView = ({onAsset, onNav}) => {
   const tagCtx = useTagCtx();
   const [domains, setDomains]     = useState(DOMAIN_LIST_DATA);
   const [products, setProducts]   = useState(DATA_PRODUCTS_DATA);
@@ -11718,6 +11722,13 @@ const DomainsView = () => {
   const [deleteConfirm,    setDeleteConfirm]    = useState(null);  // {type:'domain'|'product', id, name}
   // add assets to domain
   const [addAssetsOpen,     setAddAssetsOpen]     = useState(false);
+  // add assets to data product (domain view)
+  const [addPdAssetsOpen,   setAddPdAssetsOpen]   = useState(false);
+  const [addPdAssetsSearch, setAddPdAssetsSearch] = useState("");
+  const [addPdAssetsSelected, setAddPdAssetsSelected] = useState(new Set());
+  // edit data product panel (domain view)
+  const [pdEditOpen,   setPdEditOpen]   = useState(false);
+  const [pdEditData,   setPdEditData]   = useState(null);
   const [addAssetsSearch,   setAddAssetsSearch]   = useState("");
   const [addAssetsSelected, setAddAssetsSelected] = useState(new Set());
   // domain/product list search icon state
@@ -11816,79 +11827,74 @@ const DomainsView = () => {
           {label:pd.displayName}
         ]}/>
         <div style={{flex:1,overflowY:"auto",minHeight:0}} onClick={()=>{setPdMenuOpen(false);setPdStyleOpen(false);}}>
-          {/* Color banner */}
-          <div style={{height:110,background:`linear-gradient(135deg, ${pd.color}cc 0%, ${pd.color}66 60%, ${pd.color}22 100%)`,position:"relative",flexShrink:0}}/>
-          {/* Header content */}
-          <div style={{padding:"0 28px",marginTop:-32,position:"relative"}}>
-            <div style={{display:"flex",alignItems:"flex-end",gap:16,marginBottom:16}}>
-              {/* Floating icon */}
-              <div style={{width:64,height:64,borderRadius:16,background:T.bgSurface,border:`2px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,flexShrink:0,boxShadow:`0 4px 20px ${pd.color}40`,zIndex:2}}>
-                {pd.icon}
+          {/* ── Banner with floating actions ── */}
+          <div style={{height:140,background:`linear-gradient(135deg, ${pd.color}ee 0%, ${pd.color}99 45%, ${pd.color}33 100%)`,position:"relative",flexShrink:0}}>
+            <div style={{position:"absolute",inset:0,backgroundImage:`radial-gradient(circle at 70% 50%, rgba(255,255,255,0.07) 0%, transparent 60%)`,pointerEvents:"none"}}/>
+            <div style={{position:"absolute",top:16,right:24,display:"flex",gap:8,alignItems:"center",zIndex:20}} onClick={e=>e.stopPropagation()}>
+              <button onClick={()=>{setAddPdAssetsOpen(true);}} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:"rgba(255,255,255,0.18)",border:"1px solid rgba(255,255,255,0.35)",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
+                {Ic.plus(10)} Add Assets
+              </button>
+              <div style={{position:"relative"}}>
+                <button onClick={()=>{setPdMenuOpen(p=>!p);setPdStyleOpen(false);}}
+                  style={{width:34,height:34,borderRadius:8,background:"rgba(255,255,255,0.18)",border:"1px solid rgba(255,255,255,0.35)",color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>⋮</button>
+                {pdMenuOpen&&(
+                  <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,minWidth:200,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",zIndex:500,overflow:"hidden"}}>
+                    {[
+                      {label:"✏️ Rename",action:()=>{setPdRenameValue(pd.displayName);setPdRenameMode(true);setPdMenuOpen(false);}},
+                      {label:"🖊️ Edit Details",action:()=>{setPdEditOpen(true);setPdEditData({...pd});setPdMenuOpen(false);}},
+                      {label:"🎨 Style",action:()=>{setPdStyleOpen(p=>!p);setPdMenuOpen(false);}},
+                      {label:"🗑️ Delete",action:()=>{setDeleteConfirm({type:"product",id:pd.id,name:pd.displayName});setPdMenuOpen(false);},danger:true},
+                    ].map(item=>(
+                      <button key={item.label} onClick={e=>{e.stopPropagation();item.action();}}
+                        style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"transparent",border:"none",cursor:"pointer",fontSize:12.5,color:item.danger?T.rose:T.text,textAlign:"left"}}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {pdStyleOpen&&(
+                  <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:"calc(100% + 6px)",right:0,width:240,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,boxShadow:"0 12px 36px rgba(0,0,0,.28)",zIndex:500,padding:14}}>
+                    <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Icon</div>
+                    <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:12}}>
+                      {["📦","📊","💹","📱","🧮","🎯","📋","🔬","💼","🗃️","📡","⚡","🔁","🌊","🏷️","🔑"].map(ic=>(
+                        <button key={ic} onClick={()=>patchProduct(pd.id,{icon:ic})}
+                          style={{width:30,height:30,borderRadius:7,background:pd.icon===ic?T.accentDim:T.bgElevated,border:`1.5px solid ${pd.icon===ic?T.accent:T.border}`,cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>{ic}</button>
+                      ))}
+                    </div>
+                    <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Color</div>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                      {COLOR_PALETTE.map(c=>(
+                        <button key={c} onClick={()=>patchProduct(pd.id,{color:c})}
+                          style={{width:24,height:24,borderRadius:"50%",background:c,border:`2.5px solid ${pd.color===c?"#fff":c}`,outline:pd.color===c?`2px solid ${c}`:"none",cursor:"pointer"}}/>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-              <div style={{flex:1,minWidth:0,paddingBottom:4}}>
+            </div>
+          </div>
+          {/* ── Header content ── */}
+          <div style={{padding:"0 28px",marginTop:-36,position:"relative",zIndex:10}}>
+            <div style={{display:"flex",alignItems:"flex-end",gap:18,marginBottom:20}}>
+              <div style={{width:72,height:72,borderRadius:20,background:T.bgSurface,border:`2.5px solid ${pd.color}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:34,flexShrink:0,boxShadow:`0 8px 32px ${pd.color}55`,zIndex:2}}>{pd.icon}</div>
+              <div style={{flex:1,minWidth:0,paddingBottom:6}}>
                 {pdRenameMode
-                  ? <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}>
+                  ? <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
                       <input autoFocus value={pdRenameValue} onChange={e=>setPdRenameValue(e.target.value)}
                         onKeyDown={e=>{if(e.key==="Enter"){patchProduct(pd.id,{displayName:pdRenameValue.trim()||pd.displayName});setPdRenameMode(false);}if(e.key==="Escape")setPdRenameMode(false);}}
-                        style={{fontSize:18,fontWeight:800,padding:"4px 10px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,outline:"none",fontFamily:"inherit",width:260}}/>
+                        style={{fontSize:22,fontWeight:800,padding:"4px 10px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,outline:"none",fontFamily:"inherit",width:280}}/>
                       <button onClick={()=>{patchProduct(pd.id,{displayName:pdRenameValue.trim()||pd.displayName});setPdRenameMode(false);}} style={{padding:"5px 12px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Save</button>
                       <button onClick={()=>setPdRenameMode(false)} style={{padding:"5px 10px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
                     </div>
-                  : <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:5,flexWrap:"wrap"}}>
-                      <h1 style={{fontSize:20,fontWeight:800,color:T.text,margin:0}}>{pd.displayName}</h1>
+                  : <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:7,flexWrap:"wrap"}}>
+                      <h1 style={{fontSize:24,fontWeight:800,color:T.text,margin:0,lineHeight:1.15}}>{pd.displayName}</h1>
                       <LifecycleBadge stage={pd.lifecycleStage}/>
                     </div>
                 }
-                <div style={{fontSize:12,color:T.textMuted,marginBottom:6}}>{pd.domain} Domain · Created {pd.createdAt}</div>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:7}}>{pd.domain} Domain · Created {pd.createdAt}</div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                   {pd.owners.map(o=><OwnerChip key={o} name={o}/>)}
-                </div>
-              </div>
-              {/* Actions */}
-              <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0,paddingBottom:4}}>
-                <button onClick={e=>{e.stopPropagation();}} style={{padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                  {Ic.plus(10)} Add Assets
-                </button>
-                {/* ⋮ menu */}
-                <div style={{position:"relative"}}>
-                  <button onClick={e=>{e.stopPropagation();setPdMenuOpen(p=>!p);setPdStyleOpen(false);}}
-                    style={{width:34,height:34,borderRadius:9,background:pdMenuOpen?T.bgElevated:T.bgSurface,border:`1px solid ${pdMenuOpen?T.accent:T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,transition:"all .12s"}}>
-                    ⋮
-                  </button>
-                  {pdMenuOpen&&(
-                    <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,minWidth:170,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.22)",zIndex:400,overflow:"hidden"}}>
-                      {[
-                        {label:"✏️ Rename",action:()=>{setPdRenameValue(pd.displayName);setPdRenameMode(true);setPdMenuOpen(false);}},
-                        {label:"🎨 Style",action:()=>{setPdStyleOpen(p=>!p);setPdMenuOpen(false);}},
-                        {label:"⚙️ Edit Details",action:()=>{setPdMenuOpen(false);}},
-                        {label:"🗑️ Delete",action:()=>{setDeleteConfirm({type:"product",id:pd.id,name:pd.displayName});setPdMenuOpen(false);},danger:true},
-                      ].map(item=>(
-                        <button key={item.label} onClick={e=>{e.stopPropagation();item.action();}}
-                          style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"transparent",border:"none",cursor:"pointer",fontSize:12.5,color:item.danger?T.rose:T.text,textAlign:"left",transition:"background .1s"}}
-                          onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {pdStyleOpen&&(
-                    <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:"calc(100% + 4px)",right:0,width:240,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,boxShadow:"0 10px 32px rgba(0,0,0,.25)",zIndex:400,padding:14}}>
-                      <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Icon</div>
-                      <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:12}}>
-                        {["📦","📊","💹","📱","🧮","🎯","📋","🔬","💼","🗃️","📡","⚡","🔁","🌊","🏷️","🔑"].map(ic=>(
-                          <button key={ic} onClick={()=>patchProduct(pd.id,{icon:ic})}
-                            style={{width:30,height:30,borderRadius:7,background:pd.icon===ic?T.accentDim:T.bgElevated,border:`1.5px solid ${pd.icon===ic?T.accent:T.border}`,cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center"}}>{ic}</button>
-                        ))}
-                      </div>
-                      <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Color</div>
-                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                        {COLOR_PALETTE.map(c=>(
-                          <button key={c} onClick={()=>patchProduct(pd.id,{color:c})}
-                            style={{width:24,height:24,borderRadius:"50%",background:c,border:`2.5px solid ${pd.color===c?"#fff":c}`,outline:pd.color===c?`2px solid ${c}`:"none",cursor:"pointer"}}/>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
@@ -12044,7 +12050,7 @@ const DomainsView = () => {
                       <div style={{fontSize:12,color:T.textMuted,marginBottom:16}}>Add tables, views, or pipelines to this data product</div>
                       <button style={{padding:"9px 20px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Add First Asset</button>
                     </div>
-                  : productAssets.map(a=><AssetRowDP key={a.id} asset={a}/>)
+                  : productAssets.map(a=><AssetRowDP key={a.id} asset={a} onAsset={onAsset}/>)
                 }
               </div>
             )}
@@ -12251,96 +12257,65 @@ const DomainsView = () => {
           {label:dm.displayName}
         ]}/>
         <div style={{flex:1,overflowY:"auto",minHeight:0}} onClick={()=>{setDmMenuOpen(false);setAddHeaderDropdown(false);}}>
-          {/* Color banner */}
-          <div style={{height:110,background:`linear-gradient(135deg, ${dm.color}cc 0%, ${dm.color}66 60%, ${dm.color}22 100%)`,flexShrink:0}}/>
-          {/* Header content — overlaps banner */}
-          <div style={{padding:"0 28px",marginTop:-32,position:"relative",zIndex:10}}>
-            <div style={{display:"flex",alignItems:"flex-end",gap:16,marginBottom:16}}>
-              {/* Floating icon card */}
-              <div style={{width:64,height:64,borderRadius:18,background:T.bgSurface,border:`3px solid ${T.bgBase}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,flexShrink:0,boxShadow:`0 4px 20px ${dm.color}40`}}>{dm.icon}</div>
-              <div style={{flex:1,minWidth:0,paddingBottom:4}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:5,flexWrap:"wrap"}}>
-                  {dmRenameMode
-                    ? <input autoFocus value={dmRenameValue} onChange={e=>setDmRenameValue(e.target.value)}
-                        onKeyDown={e=>{if(e.key==="Enter"){patchDomain(dm.id,{displayName:dmRenameValue.trim()||dm.displayName});setDmRenameMode(false);}if(e.key==="Escape")setDmRenameMode(false);}}
-                        onBlur={()=>{patchDomain(dm.id,{displayName:dmRenameValue.trim()||dm.displayName});setDmRenameMode(false);}}
-                        style={{fontSize:22,fontWeight:800,color:T.text,background:"transparent",border:`1.5px solid ${T.accent}`,borderRadius:6,outline:"none",padding:"2px 8px",minWidth:200}}/>
-                    : <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:0}}>{dm.displayName}</h1>
-                  }
-                  <DomainTypeBadge type={dm.domainType}/>
-                  {hasSensitive&&<span style={{padding:"3px 8px",borderRadius:4,fontSize:10,fontWeight:700,background:"rgba(239,68,68,.1)",color:"#ef4444",border:"1px solid rgba(239,68,68,.2)"}}>🔒 Sensitive</span>}
-                </div>
-                <div style={{display:"flex",gap:16,marginBottom:8}}>
-                  {[["Assets",dm.assetCount,dm.color],["Data Products",domainProducts.length,"#8b5cf6"],["Quality",`${dm.quality}%`,dm.quality>=90?T.green:dm.quality>=70?T.amber:T.rose]].map(([l,v,c])=>(
-                    <div key={l} style={{display:"flex",alignItems:"center",gap:5}}>
-                      <span style={{fontSize:15,fontWeight:800,color:c,fontFamily:"'Geist Mono',monospace"}}>{v}</span>
-                      <span style={{fontSize:11,color:T.textMuted}}>{l}</span>
-                    </div>
-                  ))}
-                </div>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                  {dm.owners.map(o=><OwnerChip key={o} name={o}/>)}
-                </div>
-              </div>
-              {/* Action buttons */}
-              <div style={{display:"flex",gap:8,flexShrink:0,alignItems:"center",paddingBottom:4,position:"relative"}}>
-                {/* Add ▾ dropdown */}
-                <div style={{position:"relative"}}>
-                  <button onClick={e=>{e.stopPropagation();setAddHeaderDropdown(p=>!p);setDmMenuOpen(false);}}
-                    style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                    {Ic.plus(10)} Add ▾
-                  </button>
-                  {addHeaderDropdown&&(
-                    <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:400,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.22)",minWidth:180,overflow:"hidden"}}>
-                      <button onMouseDown={()=>{setAddHeaderDropdown(false);setAddPanelType("subdomain");setAddPanelOpen(true);}}
-                        style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",fontSize:12,color:T.text}}
-                        onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                        <span style={{fontSize:15}}>🗂️</span> Add Sub Domain
-                      </button>
-                      <div style={{height:1,background:T.border}}/>
-                      <button onMouseDown={()=>{setAddHeaderDropdown(false);setAddAssetsSelected(new Set());setAddAssetsSearch("");setAddAssetsOpen(true);}}
-                        style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",fontSize:12,color:T.text}}
-                        onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                        <span style={{fontSize:15}}>📊</span> Add Asset
-                      </button>
-                      <div style={{height:1,background:T.border}}/>
-                      <button onMouseDown={()=>{setAddHeaderDropdown(false);setAddPanelType("dataproduct");setAddPanelOpen(true);}}
-                        style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",fontSize:12,color:T.text}}
-                        onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                        <span style={{fontSize:15}}>📦</span> Add Data Product
-                      </button>
-                    </div>
-                  )}
-                </div>
-                {/* ⋮ management menu */}
-                <div style={{position:"relative"}}>
-                  <button onClick={e=>{e.stopPropagation();setDmMenuOpen(p=>!p);setAddHeaderDropdown(false);}}
-                    style={{width:34,height:34,borderRadius:8,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:700}}>⋮</button>
-                  {dmMenuOpen&&(
-                    <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:400,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.22)",minWidth:220,overflow:"hidden"}}>
-                      {[
-                        {icon:"✏️",label:"Rename",sub:"Change the domain display name",action:()=>{setDmRenameValue(dm.displayName);setDmRenameMode(true);setDmMenuOpen(false);}},
-                        {icon:"🎨",label:"Style",sub:"Change icon and color",action:()=>{setDmStyleOpen(true);setDmMenuOpen(false);}},
-                      ].map(item=>(
-                        <button key={item.label} onClick={item.action}
-                          style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",borderBottom:`1px solid ${T.border}`}}
+          {/* ── Banner with floating actions ── */}
+          <div style={{height:140,background:`linear-gradient(135deg, ${dm.color}ee 0%, ${dm.color}99 45%, ${dm.color}33 100%)`,position:"relative",flexShrink:0}}>
+            {/* subtle texture overlay */}
+            <div style={{position:"absolute",inset:0,backgroundImage:`radial-gradient(circle at 70% 50%, rgba(255,255,255,0.07) 0%, transparent 60%)`,pointerEvents:"none"}}/>
+            {/* actions — float top-right inside banner */}
+            <div style={{position:"absolute",top:16,right:24,display:"flex",gap:8,alignItems:"center",zIndex:20}} onClick={e=>e.stopPropagation()}>
+              {/* Add ▾ */}
+              <div style={{position:"relative"}}>
+                <button onClick={()=>{setAddHeaderDropdown(p=>!p);setDmMenuOpen(false);}}
+                  style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:"rgba(255,255,255,0.18)",border:"1px solid rgba(255,255,255,0.35)",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
+                  {Ic.plus(10)} Add ▾
+                </button>
+                {addHeaderDropdown&&(
+                  <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",minWidth:190,overflow:"hidden"}}>
+                    {[
+                      {icon:"🗂️",label:"Add Sub Domain",action:()=>{setAddHeaderDropdown(false);setAddPanelType("subdomain");setAddPanelOpen(true);}},
+                      {icon:"📊",label:"Add Asset",action:()=>{setAddHeaderDropdown(false);setAddAssetsSelected(new Set());setAddAssetsSearch("");setAddAssetsOpen(true);}},
+                      {icon:"📦",label:"Add Data Product",action:()=>{setAddHeaderDropdown(false);setAddPanelType("dataproduct");setAddPanelOpen(true);}},
+                    ].map((item,i,arr)=>(
+                      <React.Fragment key={item.label}>
+                        <button onMouseDown={item.action}
+                          style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",fontSize:12,color:T.text}}
                           onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                          <span style={{fontSize:15,marginTop:1}}>{item.icon}</span>
-                          <div><div style={{fontSize:12,fontWeight:600,color:T.text}}>{item.label}</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{item.sub}</div></div>
+                          <span style={{fontSize:15}}>{item.icon}</span> {item.label}
                         </button>
-                      ))}
-                      <button onClick={()=>{setDeleteConfirm({type:"domain",id:dm.id,name:dm.displayName});setDmMenuOpen(false);}}
-                        style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}
-                        onMouseEnter={e=>e.currentTarget.style.background="rgba(239,68,68,.07)"} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                        <span style={{fontSize:15,marginTop:1}}>🗑️</span>
-                        <div><div style={{fontSize:12,fontWeight:600,color:T.rose}}>Delete Domain</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>Permanently remove this domain</div></div>
+                        {i<arr.length-1&&<div style={{height:1,background:T.border}}/>}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {/* ⋮ */}
+              <div style={{position:"relative"}}>
+                <button onClick={()=>{setDmMenuOpen(p=>!p);setAddHeaderDropdown(false);}}
+                  style={{width:34,height:34,borderRadius:8,background:"rgba(255,255,255,0.18)",border:"1px solid rgba(255,255,255,0.35)",color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>⋮</button>
+                {dmMenuOpen&&(
+                  <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",minWidth:220,overflow:"hidden"}}>
+                    {[
+                      {icon:"✏️",label:"Rename",sub:"Change the display name",action:()=>{setDmRenameValue(dm.displayName);setDmRenameMode(true);setDmMenuOpen(false);}},
+                      {icon:"🖊️",label:"Edit Details",sub:"Edit all domain fields",action:()=>{setEditDd({...dm});setEditDomainOpen(true);setDmMenuOpen(false);}},
+                      {icon:"🎨",label:"Style",sub:"Change icon and color",action:()=>{setDmStyleOpen(true);setDmMenuOpen(false);}},
+                    ].map(item=>(
+                      <button key={item.label} onClick={item.action}
+                        style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",borderBottom:`1px solid ${T.border}`}}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                        <span style={{fontSize:15,marginTop:1}}>{item.icon}</span>
+                        <div><div style={{fontSize:12,fontWeight:600,color:T.text}}>{item.label}</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{item.sub}</div></div>
                       </button>
-                    </div>
-                  )}
-                </div>
-                {/* Style popover */}
+                    ))}
+                    <button onClick={()=>{setDeleteConfirm({type:"domain",id:dm.id,name:dm.displayName});setDmMenuOpen(false);}}
+                      style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}
+                      onMouseEnter={e=>e.currentTarget.style.background="rgba(239,68,68,.07)"} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                      <span style={{fontSize:15,marginTop:1}}>🗑️</span>
+                      <div><div style={{fontSize:12,fontWeight:600,color:T.rose}}>Delete Domain</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>Permanently remove this domain</div></div>
+                    </button>
+                  </div>
+                )}
                 {dmStyleOpen&&(
-                  <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,boxShadow:"0 8px 28px rgba(0,0,0,.22)",padding:16,minWidth:260}}>
+                  <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:600,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,boxShadow:"0 12px 36px rgba(0,0,0,.28)",padding:16,minWidth:260}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
                       <div style={{fontSize:12,fontWeight:700,color:T.text}}>Style</div>
                       <button onClick={()=>setDmStyleOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:14}}>{Ic.x(11)}</button>
@@ -12361,6 +12336,38 @@ const DomainsView = () => {
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Header content — icon overlaps banner ── */}
+          <div style={{padding:"0 28px",marginTop:-36,position:"relative",zIndex:10}}>
+            <div style={{display:"flex",alignItems:"flex-end",gap:18,marginBottom:20}}>
+              {/* Elevated icon */}
+              <div style={{width:72,height:72,borderRadius:20,background:T.bgSurface,border:`2.5px solid ${dm.color}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:34,flexShrink:0,boxShadow:`0 8px 32px ${dm.color}55`,zIndex:2}}>{dm.icon}</div>
+              <div style={{flex:1,minWidth:0,paddingBottom:6}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:7,flexWrap:"wrap"}}>
+                  {dmRenameMode
+                    ? <input autoFocus value={dmRenameValue} onChange={e=>setDmRenameValue(e.target.value)}
+                        onKeyDown={e=>{if(e.key==="Enter"){patchDomain(dm.id,{displayName:dmRenameValue.trim()||dm.displayName});setDmRenameMode(false);}if(e.key==="Escape")setDmRenameMode(false);}}
+                        onBlur={()=>{patchDomain(dm.id,{displayName:dmRenameValue.trim()||dm.displayName});setDmRenameMode(false);}}
+                        style={{fontSize:24,fontWeight:800,color:T.text,background:"transparent",border:`1.5px solid ${T.accent}`,borderRadius:6,outline:"none",padding:"2px 8px",minWidth:200}}/>
+                    : <h1 style={{fontSize:24,fontWeight:800,color:T.text,margin:0,lineHeight:1.15}}>{dm.displayName}</h1>
+                  }
+                  <DomainTypeBadge type={dm.domainType}/>
+                  {hasSensitive&&<span style={{padding:"3px 8px",borderRadius:4,fontSize:10,fontWeight:700,background:"rgba(239,68,68,.1)",color:"#ef4444",border:"1px solid rgba(239,68,68,.2)"}}>🔒 Sensitive</span>}
+                </div>
+                <div style={{display:"flex",gap:20,marginBottom:9}}>
+                  {[["Assets",dm.assetCount,dm.color],["Data Products",domainProducts.length,"#8b5cf6"],["Quality",`${dm.quality}%`,dm.quality>=90?T.green:dm.quality>=70?T.amber:T.rose]].map(([l,v,c])=>(
+                    <div key={l} style={{display:"flex",alignItems:"baseline",gap:5}}>
+                      <span style={{fontSize:18,fontWeight:800,color:c,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{v}</span>
+                      <span style={{fontSize:11,color:T.textMuted,fontWeight:500}}>{l}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {dm.owners.map(o=><OwnerChip key={o} name={o}/>)}
+                </div>
               </div>
             </div>
             <Tabs2 tabs={[
@@ -12505,11 +12512,6 @@ const DomainsView = () => {
                       onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
                     <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none",fontSize:13}}>🔍</span>
                   </div>
-                  <select value={sdTypeFilter} onChange={e=>setSdTypeFilter(e.target.value)}
-                    style={{padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:sdTypeFilter?T.text:T.textMuted,fontSize:12,cursor:"pointer",outline:"none"}}>
-                    <option value="">All Types</option>
-                    {["Source-aligned","Consumer-aligned","Aggregate"].map(t=><option key={t} value={t}>{t}</option>)}
-                  </select>
                   <button onClick={()=>{setAddPanelType("subdomain");setAddPanelOpen(true);}} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0}}>
                     {Ic.plus(10)} Add Sub Domain
                   </button>
@@ -12571,11 +12573,6 @@ const DomainsView = () => {
                       onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
                     <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none",fontSize:13}}>🔍</span>
                   </div>
-                  <select value={dpStageFilter} onChange={e=>setDpStageFilter(e.target.value)}
-                    style={{padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:dpStageFilter?T.text:T.textMuted,fontSize:12,cursor:"pointer",outline:"none",flexShrink:0}}>
-                    <option value="">All Stages</option>
-                    {["IDEATION","DEVELOPMENT","TESTING","PRODUCTION","DEPRECATED","RETIRED"].map(s=><option key={s} value={s}>{s}</option>)}
-                  </select>
                   <button onClick={()=>{setAddPanelType("dataproduct");setAddPanelOpen(true);}} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0}}>
                     {Ic.plus(10)} Add Data Product
                   </button>
@@ -12697,7 +12694,7 @@ const DomainsView = () => {
                 </div>
                 {domainAssets.length===0
                   ? <div style={{padding:"60px 0",textAlign:"center",color:T.textMuted,fontSize:13}}>No assets assigned to this domain</div>
-                  : domainAssets.map(a=><AssetRowDP key={a.id} asset={a}/>)
+                  : domainAssets.map(a=><AssetRowDP key={a.id} asset={a} onAsset={onAsset}/>)
                 }
               </div>
             )}
@@ -12745,28 +12742,6 @@ const DomainsView = () => {
                   const lblStyle = {display:"block",fontSize:11,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:7};
                   const glossaryOptions = GLOSSARY_TERMS.filter(t=>!glInput||t.term.toLowerCase().includes(glInput.toLowerCase())).slice(0,8);
                   return (<>
-                    {/* Icon + Color row */}
-                    <div>
-                      <label style={lblStyle}>Icon</label>
-                      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                        {icons.map(ic=>(
-                          <button key={ic} onClick={()=>setSt(p=>({...p,icon:ic}))}
-                            style={{width:34,height:34,borderRadius:8,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
-                              background:st.icon===ic?`${st.color}20`:T.bgElevated,
-                              border:`1.5px solid ${st.icon===ic?st.color:T.border}`}}>{ic}</button>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <label style={lblStyle}>Color</label>
-                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                        {COLOR_PALETTE.map(c=>(
-                          <button key={c} onClick={()=>setSt(p=>({...p,color:c}))}
-                            style={{width:24,height:24,borderRadius:"50%",background:c,border:`2.5px solid ${st.color===c?"#fff":c}`,outline:st.color===c?`2px solid ${c}`:"none",cursor:"pointer"}}/>
-                        ))}
-                      </div>
-                    </div>
-
                     {/* Name + Display Name */}
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                       <div>
@@ -12915,6 +12890,32 @@ const DomainsView = () => {
                         </div>
                       )}
                     </div>
+
+                    {/* Divider */}
+                    <div style={{height:1,background:T.border,margin:"4px 0"}}/>
+
+                    {/* Icon */}
+                    <div>
+                      <label style={lblStyle}>Icon</label>
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                        {icons.map(ic=>(
+                          <button key={ic} onClick={()=>setSt(p=>({...p,icon:ic}))}
+                            style={{width:34,height:34,borderRadius:8,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
+                              background:st.icon===ic?`${st.color}20`:T.bgElevated,
+                              border:`1.5px solid ${st.icon===ic?st.color:T.border}`}}>{ic}</button>
+                        ))}
+                      </div>
+                    </div>
+                    {/* Color */}
+                    <div>
+                      <label style={lblStyle}>Color</label>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {COLOR_PALETTE.map(c=>(
+                          <button key={c} onClick={()=>setSt(p=>({...p,color:c}))}
+                            style={{width:26,height:26,borderRadius:"50%",background:c,border:`2.5px solid ${st.color===c?"#fff":c}`,outline:st.color===c?`2px solid ${c}`:"none",cursor:"pointer"}}/>
+                        ))}
+                      </div>
+                    </div>
                   </>);
                 })()}
               </div>
@@ -12928,6 +12929,182 @@ const DomainsView = () => {
                   style={{padding:"8px 20px",borderRadius:8,background:(addPanelType==="dataproduct"?np.name.trim():ns.name.trim())?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:(addPanelType==="dataproduct"?np.name.trim():ns.name.trim())?"pointer":"default"}}>
                   {addPanelType==="dataproduct"?"Add Data Product":"Add Sub Domain"}
                 </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ── Add Assets to Data Product modal ── */}
+        {addPdAssetsOpen&&selectedProduct&&(
+          <>
+            <div onClick={()=>{setAddPdAssetsOpen(false);setAddPdAssetsSelected(new Set());setAddPdAssetsSearch("");}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:800}}/>
+            <div className="scaleIn" style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:540,maxHeight:"80vh",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 60px rgba(0,0,0,.35)",display:"flex",flexDirection:"column",zIndex:801}}>
+              <div style={{padding:"18px 22px 14px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:3}}>Add Assets to {selectedProduct.displayName}</div>
+                <div style={{fontSize:11.5,color:T.textMuted}}>Select assets from the catalog to link to this data product</div>
+              </div>
+              <div style={{padding:"12px 22px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                <div style={{position:"relative"}}>
+                  <input autoFocus placeholder="Search assets…" value={addPdAssetsSearch} onChange={e=>setAddPdAssetsSearch(e.target.value)}
+                    style={{width:"100%",padding:"8px 12px 8px 32px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                  <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,fontSize:13,pointerEvents:"none"}}>🔍</span>
+                </div>
+              </div>
+              <div style={{flex:1,overflowY:"auto",padding:"8px 22px"}}>
+                {ASSETS.filter(a=>!selectedProduct.assetIds.includes(a.id)&&(!addPdAssetsSearch||a.name.toLowerCase().includes(addPdAssetsSearch.toLowerCase())||a.domain.toLowerCase().includes(addPdAssetsSearch.toLowerCase()))).map(a=>{
+                  const sel=addPdAssetsSelected.has(a.id);
+                  return(
+                    <div key={a.id} onClick={()=>setAddPdAssetsSelected(prev=>{const n=new Set(prev);sel?n.delete(a.id):n.add(a.id);return n;})}
+                      style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:8,cursor:"pointer",background:sel?T.accentDim:"transparent",marginBottom:2,transition:"background .1s"}}
+                      onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
+                      <div style={{width:18,height:18,borderRadius:4,border:`1.5px solid ${sel?T.accent:T.border}`,background:sel?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .1s"}}>
+                        {sel&&<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      </div>
+                      <TypeBadge type={a.type}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12.5,fontWeight:600,color:sel?T.accent:T.text,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{a.name}</div>
+                        <div style={{fontSize:10.5,color:T.textMuted}}>{a.db} · {a.domain}</div>
+                      </div>
+                      <QScore score={a.quality}/>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{padding:"12px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:T.bgElevated,borderRadius:"0 0 14px 14px",flexShrink:0}}>
+                <span style={{fontSize:12,color:T.textMuted}}>{addPdAssetsSelected.size} selected</span>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>{setAddPdAssetsOpen(false);setAddPdAssetsSelected(new Set());setAddPdAssetsSearch("");}} style={{padding:"7px 14px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+                  <button disabled={addPdAssetsSelected.size===0} onClick={()=>{patchProduct(selectedProduct.id,{assetIds:[...selectedProduct.assetIds,...[...addPdAssetsSelected]]});setAddPdAssetsOpen(false);setAddPdAssetsSelected(new Set());setAddPdAssetsSearch("");}}
+                    style={{padding:"7px 16px",borderRadius:8,background:addPdAssetsSelected.size>0?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:addPdAssetsSelected.size>0?"pointer":"default"}}>
+                    Add {addPdAssetsSelected.size>0?addPdAssetsSelected.size:""} Asset{addPdAssetsSelected.size!==1?"s":""}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ── Edit Domain Side Panel ── */}
+        {editDomainOpen&&editDd&&(
+          <>
+            <div onClick={()=>{setEditDomainOpen(false);setEditDd(null);}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:800}}/>
+            <div className="slideInRight" style={{position:"fixed",top:0,right:0,bottom:0,width:"min(440px,92vw)",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:801,display:"flex",flexDirection:"column",boxShadow:"-8px 0 32px rgba(0,0,0,.2)"}}>
+              <div style={{padding:"20px 22px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <div>
+                  <div style={{fontSize:15,fontWeight:700,color:T.text}}>Edit Domain</div>
+                  <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{editDd.displayName}</div>
+                </div>
+                <button onClick={()=>{setEditDomainOpen(false);setEditDd(null);}} style={{width:28,height:28,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+              </div>
+              <div style={{flex:1,overflowY:"auto",padding:"18px 22px",display:"flex",flexDirection:"column",gap:16}}>
+                {(()=>{
+                  const fldStyle={width:"100%",padding:"8px 11px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
+                  const lblStyle={display:"block",fontSize:11,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:7};
+                  return(<>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                      <div>
+                        <label style={lblStyle}>Name</label>
+                        <input value={editDd.name} onChange={e=>setEditDd(p=>({...p,name:e.target.value}))} style={{...fldStyle,fontFamily:"'Geist Mono',monospace"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                      </div>
+                      <div>
+                        <label style={lblStyle}>Display Name</label>
+                        <input value={editDd.displayName} onChange={e=>setEditDd(p=>({...p,displayName:e.target.value}))} style={fldStyle} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                      </div>
+                    </div>
+                    <div>
+                      <label style={lblStyle}>Description</label>
+                      <textarea value={editDd.description} onChange={e=>setEditDd(p=>({...p,description:e.target.value}))} rows={4} style={{...fldStyle,resize:"vertical"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                    </div>
+                    <div>
+                      <label style={lblStyle}>Domain Type</label>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {["Source-aligned","Consumer-aligned","Aggregate"].map(t=>(
+                          <button key={t} onClick={()=>setEditDd(p=>({...p,domainType:t}))} style={{padding:"5px 12px",borderRadius:6,fontSize:11.5,fontWeight:600,cursor:"pointer",background:editDd.domainType===t?T.accentDim:T.bgElevated,border:`1.5px solid ${editDd.domainType===t?T.accent:T.border}`,color:editDd.domainType===t?T.accent:T.textMuted}}>{t}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label style={lblStyle}>Icon</label>
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                        {ICON_OPTIONS.concat(["🏪","🌿","💎","🔮","🏆","🎪"]).map(ic=>(
+                          <button key={ic} onClick={()=>setEditDd(p=>({...p,icon:ic}))} style={{width:34,height:34,borderRadius:8,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",background:editDd.icon===ic?`${editDd.color}20`:T.bgElevated,border:`1.5px solid ${editDd.icon===ic?editDd.color:T.border}`}}>{ic}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label style={lblStyle}>Color</label>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {COLOR_PALETTE.map(c=>(
+                          <button key={c} onClick={()=>setEditDd(p=>({...p,color:c}))} style={{width:26,height:26,borderRadius:"50%",background:c,border:`2.5px solid ${editDd.color===c?"#fff":c}`,outline:editDd.color===c?`2px solid ${c}`:"none",cursor:"pointer"}}/>
+                        ))}
+                      </div>
+                    </div>
+                  </>);
+                })()}
+              </div>
+              <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.bgElevated,flexShrink:0}}>
+                <button onClick={()=>{setEditDomainOpen(false);setEditDd(null);}} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+                <button onClick={()=>{handleEditDomain();}} style={{padding:"8px 20px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Save Changes</button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ── Edit Data Product Side Panel (domain view) ── */}
+        {pdEditOpen&&pdEditData&&(
+          <>
+            <div onClick={()=>{setPdEditOpen(false);setPdEditData(null);}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:800}}/>
+            <div className="slideInRight" style={{position:"fixed",top:0,right:0,bottom:0,width:"min(440px,92vw)",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:801,display:"flex",flexDirection:"column",boxShadow:"-8px 0 32px rgba(0,0,0,.2)"}}>
+              <div style={{padding:"20px 22px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <div>
+                  <div style={{fontSize:15,fontWeight:700,color:T.text}}>Edit Data Product</div>
+                  <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{pdEditData.displayName}</div>
+                </div>
+                <button onClick={()=>{setPdEditOpen(false);setPdEditData(null);}} style={{width:28,height:28,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+              </div>
+              <div style={{flex:1,overflowY:"auto",padding:"18px 22px",display:"flex",flexDirection:"column",gap:16}}>
+                {(()=>{
+                  const fldStyle={width:"100%",padding:"8px 11px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
+                  const lblStyle={display:"block",fontSize:11,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:7};
+                  return(<>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                      <div>
+                        <label style={lblStyle}>Name</label>
+                        <input value={pdEditData.name} onChange={e=>setPdEditData(p=>({...p,name:e.target.value}))} style={{...fldStyle,fontFamily:"'Geist Mono',monospace"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                      </div>
+                      <div>
+                        <label style={lblStyle}>Display Name</label>
+                        <input value={pdEditData.displayName} onChange={e=>setPdEditData(p=>({...p,displayName:e.target.value}))} style={fldStyle} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                      </div>
+                    </div>
+                    <div>
+                      <label style={lblStyle}>Description</label>
+                      <textarea value={pdEditData.description} onChange={e=>setPdEditData(p=>({...p,description:e.target.value}))} rows={4} style={{...fldStyle,resize:"vertical"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                    </div>
+                    <div>
+                      <label style={lblStyle}>Icon</label>
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                        {["📦","📊","💹","📱","🧮","🎯","📋","🔬","💼","🗃️","📡","⚡","🔁","🌊","🏷️","🔑"].map(ic=>(
+                          <button key={ic} onClick={()=>setPdEditData(p=>({...p,icon:ic}))} style={{width:34,height:34,borderRadius:8,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",background:pdEditData.icon===ic?`${pdEditData.color}20`:T.bgElevated,border:`1.5px solid ${pdEditData.icon===ic?pdEditData.color:T.border}`}}>{ic}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label style={lblStyle}>Color</label>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {COLOR_PALETTE.map(c=>(
+                          <button key={c} onClick={()=>setPdEditData(p=>({...p,color:c}))} style={{width:26,height:26,borderRadius:"50%",background:c,border:`2.5px solid ${pdEditData.color===c?"#fff":c}`,outline:pdEditData.color===c?`2px solid ${c}`:"none",cursor:"pointer"}}/>
+                        ))}
+                      </div>
+                    </div>
+                  </>);
+                })()}
+              </div>
+              <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.bgElevated,flexShrink:0}}>
+                <button onClick={()=>{setPdEditOpen(false);setPdEditData(null);}} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+                <button onClick={()=>{patchProduct(pdEditData.id,{name:pdEditData.name,displayName:pdEditData.displayName,description:pdEditData.description,icon:pdEditData.icon,color:pdEditData.color});setPdEditOpen(false);setPdEditData(null);}}
+                  style={{padding:"8px 20px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Save Changes</button>
               </div>
             </div>
           </>
@@ -13523,7 +13700,7 @@ const DomainsView = () => {
 // ─────────────────────────────────────────────
 // DATA PRODUCTS VIEW (standalone top-level page)
 // ─────────────────────────────────────────────
-const DataProductsView = () => {
+const DataProductsView = ({onAsset, onNav}) => {
   const [products, setProducts]         = useState(DATA_PRODUCTS_DATA);
   const [domains]                       = useState(DOMAIN_LIST_DATA);
   const [selectedProductId, setSelectedProductId] = useState(null);
@@ -13538,6 +13715,13 @@ const DataProductsView = () => {
   const [prodOwnerSearch, setProdOwnerSearch] = useState("");
   const [prodStewOpen, setProdStewOpen] = useState(false);
   const [prodStewSearch, setProdStewSearch] = useState("");
+  // standalone product profile extras
+  const [dpMenuOpen,       setDpMenuOpen]       = useState(false);
+  const [dpAddAssetsOpen,  setDpAddAssetsOpen]  = useState(false);
+  const [dpAddSearch,      setDpAddSearch]      = useState("");
+  const [dpAddSelected,    setDpAddSelected]    = useState(new Set());
+  const [dpEditOpen,       setDpEditOpen]       = useState(false);
+  const [dpEditData,       setDpEditData]       = useState(null);
   const DP_USERS = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
   const dpAva = name => (name||"?").split(".").map(s=>s[0]?.toUpperCase()||"").join("");
   const patchDP = (id,patch) => setProducts(prev=>prev.map(p=>p.id===id?{...p,...patch}:p));
@@ -13592,21 +13776,44 @@ const DataProductsView = () => {
           {label:pd.displayName},
         ]}/>
         <div style={{flex:1,overflowY:"auto"}}>
-          {/* Color banner */}
-          <div style={{height:100,background:`linear-gradient(135deg, ${pd.color}cc 0%, ${pd.color}66 60%, ${pd.color}22 100%)`,flexShrink:0}}/>
-          {/* Header content — overlaps banner */}
-          <div style={{padding:"0 28px",marginTop:-28,position:"relative",zIndex:10}}>
-            <div style={{display:"flex",alignItems:"flex-end",gap:14,marginBottom:16}}>
-              {/* Floating icon */}
-              <div style={{width:58,height:58,borderRadius:14,background:T.bgSurface,border:`2px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,flexShrink:0,boxShadow:`0 4px 20px ${pd.color}40`,zIndex:2}}>{pd.icon}</div>
-              <div style={{flex:1,minWidth:0,paddingBottom:4}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:5,flexWrap:"wrap"}}>
-                  <h1 style={{fontSize:20,fontWeight:800,color:T.text,margin:0}}>{pd.displayName}</h1>
+          {/* ── Banner with floating actions ── */}
+          <div style={{height:140,background:`linear-gradient(135deg, ${pd.color}ee 0%, ${pd.color}99 45%, ${pd.color}33 100%)`,position:"relative",flexShrink:0}}>
+            <div style={{position:"absolute",inset:0,backgroundImage:`radial-gradient(circle at 70% 50%, rgba(255,255,255,0.07) 0%, transparent 60%)`,pointerEvents:"none"}}/>
+            <div style={{position:"absolute",top:16,right:24,display:"flex",gap:8,alignItems:"center",zIndex:20}}>
+              <button onClick={()=>setDpAddAssetsOpen(true)} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:"rgba(255,255,255,0.18)",border:"1px solid rgba(255,255,255,0.35)",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>
+                {Ic.plus(10)} Add Assets
+              </button>
+              <div style={{position:"relative"}}>
+                <button onClick={()=>setDpMenuOpen(p=>!p)}
+                  style={{width:34,height:34,borderRadius:8,background:"rgba(255,255,255,0.18)",border:"1px solid rgba(255,255,255,0.35)",color:"#fff",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,backdropFilter:"blur(6px)",WebkitBackdropFilter:"blur(6px)"}}>⋮</button>
+                {dpMenuOpen&&(
+                  <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,minWidth:200,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",zIndex:500,overflow:"hidden"}}>
+                    {[
+                      {label:"🖊️ Edit Details",action:()=>{setDpEditOpen(true);setDpEditData({...pd});setDpMenuOpen(false);}},
+                      {label:"🗑️ Delete",action:()=>{setSelectedProductId(null);setDpMenuOpen(false);},danger:true},
+                    ].map(item=>(
+                      <button key={item.label} onClick={item.action}
+                        style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"transparent",border:"none",cursor:"pointer",fontSize:12.5,color:item.danger?T.rose:T.text,textAlign:"left"}}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          {/* ── Header content ── */}
+          <div style={{padding:"0 28px",marginTop:-36,position:"relative",zIndex:10}}>
+            <div style={{display:"flex",alignItems:"flex-end",gap:18,marginBottom:20}}>
+              <div style={{width:72,height:72,borderRadius:20,background:T.bgSurface,border:`2.5px solid ${pd.color}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:34,flexShrink:0,boxShadow:`0 8px 32px ${pd.color}55`,zIndex:2}}>{pd.icon}</div>
+              <div style={{flex:1,minWidth:0,paddingBottom:6}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:7,flexWrap:"wrap"}}>
+                  <h1 style={{fontSize:24,fontWeight:800,color:T.text,margin:0,lineHeight:1.15}}>{pd.displayName}</h1>
                   <LifecycleBadge stage={pd.lifecycleStage}/>
                 </div>
-                <div style={{fontSize:12,color:T.textMuted,marginBottom:6}}>
-                  <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 8px",borderRadius:4,fontSize:10.5,fontWeight:600,
-                    background:`${pdDomain?.color||"#6366f1"}15`,color:pdDomain?.color||"#6366f1",border:`1px solid ${pdDomain?.color||"#6366f1"}25`,marginRight:8}}>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:7}}>
+                  <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 8px",borderRadius:4,fontSize:10.5,fontWeight:600,background:`${pdDomain?.color||"#6366f1"}15`,color:pdDomain?.color||"#6366f1",border:`1px solid ${pdDomain?.color||"#6366f1"}25`,marginRight:8}}>
                     {pdDomain?.icon} {pd.domain}
                   </span>
                   Created {pd.createdAt}
@@ -13614,11 +13821,6 @@ const DataProductsView = () => {
                 <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                   {(pd.owners||[]).map(o=><OwnerChip key={o} name={o}/>)}
                 </div>
-              </div>
-              <div style={{display:"flex",gap:8,flexShrink:0,paddingBottom:4}}>
-                <button onClick={()=>{}} style={{padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                  {Ic.plus(10)} Add Assets
-                </button>
               </div>
             </div>
             <Tabs2 tabs={[{key:"overview",label:"Overview"},{key:"assets",label:`Assets (${productAssets.length})`},{key:"lineage",label:"Lineage"}]} active={productTab} onChange={setProductTab}/>
@@ -13729,7 +13931,7 @@ const DataProductsView = () => {
                       <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>No assets yet</div>
                       <div style={{fontSize:12,color:T.textMuted}}>Add tables or views to this data product</div>
                     </div>
-                  : productAssets.map(a=><AssetRowDP key={a.id} asset={a}/>)
+                  : productAssets.map(a=><AssetRowDP key={a.id} asset={a} onAsset={onAsset}/>)
                 }
               </div>
             )}
@@ -13746,6 +13948,107 @@ const DataProductsView = () => {
             )}
           </div>
         </div>
+
+        {/* ── Add Assets to Product (standalone) ── */}
+        {dpAddAssetsOpen&&selectedProduct&&(
+          <>
+            <div onClick={()=>{setDpAddAssetsOpen(false);setDpAddSelected(new Set());setDpAddSearch("");}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:800}}/>
+            <div className="scaleIn" style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:540,maxHeight:"80vh",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 60px rgba(0,0,0,.35)",display:"flex",flexDirection:"column",zIndex:801}}>
+              <div style={{padding:"18px 22px 14px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:3}}>Add Assets to {selectedProduct.displayName}</div>
+                <div style={{fontSize:11.5,color:T.textMuted}}>Select assets from the catalog to link to this data product</div>
+              </div>
+              <div style={{padding:"12px 22px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                <div style={{position:"relative"}}>
+                  <input autoFocus placeholder="Search assets…" value={dpAddSearch} onChange={e=>setDpAddSearch(e.target.value)}
+                    style={{width:"100%",padding:"8px 12px 8px 32px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                  <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,fontSize:13,pointerEvents:"none"}}>🔍</span>
+                </div>
+              </div>
+              <div style={{flex:1,overflowY:"auto",padding:"8px 22px"}}>
+                {ASSETS.filter(a=>!selectedProduct.assetIds.includes(a.id)&&(!dpAddSearch||a.name.toLowerCase().includes(dpAddSearch.toLowerCase())||a.domain.toLowerCase().includes(dpAddSearch.toLowerCase()))).map(a=>{
+                  const sel=dpAddSelected.has(a.id);
+                  return(
+                    <div key={a.id} onClick={()=>setDpAddSelected(prev=>{const n=new Set(prev);sel?n.delete(a.id):n.add(a.id);return n;})}
+                      style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:8,cursor:"pointer",background:sel?T.accentDim:"transparent",marginBottom:2,transition:"background .1s"}}
+                      onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
+                      <div style={{width:18,height:18,borderRadius:4,border:`1.5px solid ${sel?T.accent:T.border}`,background:sel?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        {sel&&<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      </div>
+                      <TypeBadge type={a.type}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12.5,fontWeight:600,color:sel?T.accent:T.text,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{a.name}</div>
+                        <div style={{fontSize:10.5,color:T.textMuted}}>{a.db} · {a.domain}</div>
+                      </div>
+                      <QScore score={a.quality}/>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{padding:"12px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:T.bgElevated,borderRadius:"0 0 14px 14px",flexShrink:0}}>
+                <span style={{fontSize:12,color:T.textMuted}}>{dpAddSelected.size} selected</span>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>{setDpAddAssetsOpen(false);setDpAddSelected(new Set());setDpAddSearch("");}} style={{padding:"7px 14px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+                  <button disabled={dpAddSelected.size===0} onClick={()=>{patchDP(selectedProduct.id,{assetIds:[...selectedProduct.assetIds,...[...dpAddSelected]]});setDpAddAssetsOpen(false);setDpAddSelected(new Set());setDpAddSearch("");}}
+                    style={{padding:"7px 16px",borderRadius:8,background:dpAddSelected.size>0?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:dpAddSelected.size>0?"pointer":"default"}}>
+                    Add {dpAddSelected.size>0?dpAddSelected.size:""} Asset{dpAddSelected.size!==1?"s":""}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ── Edit Data Product Side Panel (standalone) ── */}
+        {dpEditOpen&&dpEditData&&(
+          <>
+            <div onClick={()=>{setDpEditOpen(false);setDpEditData(null);}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:800}}/>
+            <div className="slideInRight" style={{position:"fixed",top:0,right:0,bottom:0,width:"min(440px,92vw)",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:801,display:"flex",flexDirection:"column",boxShadow:"-8px 0 32px rgba(0,0,0,.2)"}}>
+              <div style={{padding:"20px 22px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <div>
+                  <div style={{fontSize:15,fontWeight:700,color:T.text}}>Edit Data Product</div>
+                  <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{dpEditData.displayName}</div>
+                </div>
+                <button onClick={()=>{setDpEditOpen(false);setDpEditData(null);}} style={{width:28,height:28,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+              </div>
+              <div style={{flex:1,overflowY:"auto",padding:"18px 22px",display:"flex",flexDirection:"column",gap:16}}>
+                {(()=>{
+                  const fldStyle={width:"100%",padding:"8px 11px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
+                  const lblStyle={display:"block",fontSize:11,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:7};
+                  return(<>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                      <div><label style={lblStyle}>Name</label><input value={dpEditData.name} onChange={e=>setDpEditData(p=>({...p,name:e.target.value}))} style={{...fldStyle,fontFamily:"'Geist Mono',monospace"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/></div>
+                      <div><label style={lblStyle}>Display Name</label><input value={dpEditData.displayName} onChange={e=>setDpEditData(p=>({...p,displayName:e.target.value}))} style={fldStyle} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/></div>
+                    </div>
+                    <div><label style={lblStyle}>Description</label><textarea value={dpEditData.description} onChange={e=>setDpEditData(p=>({...p,description:e.target.value}))} rows={4} style={{...fldStyle,resize:"vertical"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/></div>
+                    <div>
+                      <label style={lblStyle}>Icon</label>
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                        {["📦","📊","💹","📱","🧮","🎯","📋","🔬","💼","🗃️","📡","⚡","🔁","🌊","🏷️","🔑"].map(ic=>(
+                          <button key={ic} onClick={()=>setDpEditData(p=>({...p,icon:ic}))} style={{width:34,height:34,borderRadius:8,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",background:dpEditData.icon===ic?`${dpEditData.color}20`:T.bgElevated,border:`1.5px solid ${dpEditData.icon===ic?dpEditData.color:T.border}`}}>{ic}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label style={lblStyle}>Color</label>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {COLOR_PALETTE.map(c=>(
+                          <button key={c} onClick={()=>setDpEditData(p=>({...p,color:c}))} style={{width:26,height:26,borderRadius:"50%",background:c,border:`2.5px solid ${dpEditData.color===c?"#fff":c}`,outline:dpEditData.color===c?`2px solid ${c}`:"none",cursor:"pointer"}}/>
+                        ))}
+                      </div>
+                    </div>
+                  </>);
+                })()}
+              </div>
+              <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.bgElevated,flexShrink:0}}>
+                <button onClick={()=>{setDpEditOpen(false);setDpEditData(null);}} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+                <button onClick={()=>{patchDP(dpEditData.id,{name:dpEditData.name,displayName:dpEditData.displayName,description:dpEditData.description,icon:dpEditData.icon,color:dpEditData.color});setDpEditOpen(false);setDpEditData(null);}}
+                  style={{padding:"8px 20px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Save Changes</button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
     );
   }
@@ -23152,8 +23455,8 @@ export default function App(){
       case "tags":          return <TagManagementView onToast={showToast}/>;
       case "steward-inbox": return <InboxView onToast={showToast}/>;
       case "glossary":      return <GlossaryView onToast={showToast}/>;
-      case "domains":       return <DomainsView/>;
-      case "dataproducts":  return <DataProductsView/>;
+      case "domains":       return <DomainsView onAsset={handleAsset} onNav={handleNav}/>;
+      case "dataproducts":  return <DataProductsView onAsset={handleAsset} onNav={handleNav}/>;
       case "observability": return <ObsView onToast={showToast}/>;
       case "analytics":     return <AnalyticsView/>;
       case "teams":         return <TeamsView onToast={showToast}/>;
