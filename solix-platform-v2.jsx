@@ -567,7 +567,7 @@ const DQ_TEST_CASES = [
 
 const DQ_INCIDENTS = [
   {
-    id:"inc1", title:"Invalid order status values", severity:"High", status:"New",
+    id:"inc1", title:"Invalid order status values", severity:"High", status:"Open",
     table:"commerce.orders", col:"status", tcId:"tc3", opened:"2d ago",
     assignee:null, rootCause:"", resolutionReason:"", resolved:null,
     affectedRows:847,
@@ -576,7 +576,7 @@ const DQ_INCIDENTS = [
     desc:"New status value 'refunded_pending' appeared in commerce.orders.status 2 days ago. This value is not in the allowed set. 847 rows affected across 3 batches.",
   },
   {
-    id:"inc2", title:"Critical row count drop — product_events", severity:"Critical", status:"Acknowledged",
+    id:"inc2", title:"Critical row count drop — product_events", severity:"Critical", status:"In Progress",
     table:"analytics.product_events", col:null, tcId:"tc7", opened:"15d ago",
     assignee:"arjun.sharma", rootCause:"", resolutionReason:"", resolved:null,
     affectedRows:null,
@@ -588,7 +588,7 @@ const DQ_INCIDENTS = [
     desc:"Row count fell from ~1.2M to ~1,200 rows. Likely a pipeline ingestion outage. All downstream dashboards are affected. Ingestion pipeline logs show failures starting 15 days ago.",
   },
   {
-    id:"inc3", title:"Orders row count near lower threshold", severity:"Medium", status:"Assigned",
+    id:"inc3", title:"Orders row count near lower threshold", severity:"Medium", status:"In Progress",
     table:"commerce.orders", col:null, tcId:"tc2", opened:"5d ago",
     assignee:"maya.chen", rootCause:"Seasonal traffic reduction following the holiday period. Order volumes typically drop ~20% in January.", resolutionReason:"", resolved:null,
     affectedRows:null,
@@ -3228,7 +3228,6 @@ const GROUPS = [
   {section:"Workspace",items:[
     {key:"home",           icon:"home",          label:"Home"},
     {key:"search",         icon:"search",        label:"Search"},
-    {key:"stewardship",    icon:"inbox",         label:"Inbox",         badge:true},
   ]},
   {section:"Catalog",items:[
     {key:"catalog",        icon:"catalog",       label:"Data Catalog"},
@@ -3253,7 +3252,7 @@ const GROUPS = [
 const Sidebar = ({active, onNav, exp, setExp}) => {
   const {roleCfg} = useRole();
   const inboxBadgeCount = INBOX_DATA.filter(i=>!i.readAt).length;
-  const allowedNav = roleCfg?.nav || ["home","search","catalog","quality","observability","contracts","policymanager","access","certifications","stewardship","glossary","domains","dataproducts","analytics","settings"];
+  const allowedNav = roleCfg?.nav || ["home","search","catalog","quality","observability","contracts","policymanager","access","certifications","glossary","domains","dataproducts","analytics","settings"];
   return (
     <div style={{position:"fixed",top:0,left:0,height:"100vh",width:exp?EXPANDED_W:COLLAPSED_W,background:T.bgSurface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:100,transition:"width .2s ease",overflow:"hidden"}}>
       {/* Logo */}
@@ -3766,8 +3765,7 @@ const QualityView = () => {
   const tcFailed     = testCases.filter(t=>t.status==="Failed").length;
   const tcAborted    = testCases.filter(t=>t.status==="Aborted").length;
   const successRate  = totalTests>0?Math.round(tcSuccess/totalTests*100):0;
-  const openIncCount = incidents.filter(i=>i.status!=="Resolved").length;
-  const newIncCount  = incidents.filter(i=>i.status==="New").length;
+  const openIncCount = incidents.filter(i=>i.status==="Open"||i.status==="In Progress").length;
   // unique tables covered
   const coveredTables = [...new Set(testCases.map(t=>t.table))];
   const healthyTables = coveredTables.filter(tbl=>testCases.filter(t=>t.table===tbl).every(t=>t.status==="Success"));
@@ -3841,9 +3839,9 @@ const QualityView = () => {
     },2200);
   };
 
-  const acknowledgeInc = (id,e)=>{e&&e.stopPropagation();setIncidents(prev=>prev.map(i=>i.id===id?{...i,status:"Acknowledged",timeline:[...(i.timeline||[]),{action:"Acknowledged",by:"dev.patel",at:"Just now"}]}:i));showT("Incident acknowledged");};
+  const acknowledgeInc = (id,e)=>{e&&e.stopPropagation();setIncidents(prev=>prev.map(i=>i.id===id?{...i,status:"In Progress",timeline:[...(i.timeline||[]),{action:"Acknowledged — moved to In Progress",by:"dev.patel",at:"Just now"}]}:i));showT("Incident acknowledged");};
+  const dismissInc     = (id,e)=>{e&&e.stopPropagation();setIncidents(prev=>prev.map(i=>i.id===id?{...i,status:"Dismissed",timeline:[...(i.timeline||[]),{action:"Dismissed",by:"dev.patel",at:"Just now"}]}:i));showT("Incident dismissed");};
   const openAssignModal  = (id,e)=>{e&&e.stopPropagation();setIncAssignId(id);setIncAssignee("");setIncAssignModal(true);};
-  const confirmAssign    = ()=>{if(!incAssignee)return;setIncidents(prev=>prev.map(i=>i.id===incAssignId?{...i,status:"Assigned",assignee:incAssignee,timeline:[...(i.timeline||[]),{action:`Assigned to ${incAssignee}`,by:"dev.patel",at:"Just now"}]}:i));setIncAssignModal(false);showT(`Assigned to ${incAssignee}`);};
   const openResolveModal = (id,e)=>{e&&e.stopPropagation();setIncResolveId(id);setIncResolveReason("");setIncResolveModal(true);};
   const confirmResolve   = ()=>{if(!incResolveReason.trim())return;setIncidents(prev=>prev.map(i=>i.id===incResolveId?{...i,status:"Resolved",resolved:"Just now",resolutionReason:incResolveReason,timeline:[...(i.timeline||[]),{action:"Resolved",by:"dev.patel",at:"Just now",note:incResolveReason}]}:i));setIncResolveModal(false);showT("Incident resolved");};
   const addIncComment    = (id)=>{const txt=(incCommentText[id]||"").trim();if(!txt)return;setIncidents(prev=>prev.map(i=>i.id===id?{...i,comments:[...(i.comments||[]),{text:txt,by:"dev.patel",at:"Just now"}]}:i));setIncCommentText(prev=>({...prev,[id]:""}));};
@@ -3883,14 +3881,14 @@ const QualityView = () => {
 
   // ── status config ──────────────────────────────────────────────────────────
   const INC_STATUS_CFG = {
-    New:         {color:T.rose,    bg:T.roseDim,   label:"New"},
-    Acknowledged:{color:T.amber,   bg:T.amberDim,  label:"Acknowledged"},
-    Assigned:    {color:T.accent,  bg:T.accentDim, label:"Assigned"},
-    Resolved:    {color:"#16a34a", bg:"#16a34a12",  label:"Resolved"},
+    "Open":        {color:T.rose,      bg:T.roseDim,      label:"Open"},
+    "In Progress": {color:T.amber,     bg:T.amberDim,     label:"In Progress"},
+    "Resolved":    {color:"#16a34a",   bg:"#16a34a12",    label:"Resolved"},
+    "Dismissed":   {color:T.textMuted, bg:T.bgElevated,   label:"Dismissed"},
   };
   const TABS = [
     {key:"testcases",  label:"Test Cases"},
-    {key:"incidents",  label:newIncCount>0?`Incident Manager (${newIncCount} new)`:openIncCount>0?`Incident Manager (${openIncCount} open)`:"Incident Manager"},
+    {key:"incidents",  label:openIncCount>0?`Incidents (${openIncCount} open)`:"Incidents"},
   ];
 
   const FPill = ({active,onClick,color,children})=>(
@@ -4590,7 +4588,7 @@ const QualityView = () => {
               <span style={{fontSize:12,color:T.textMuted,whiteSpace:"nowrap"}}>{filteredInc.length} result{filteredInc.length!==1?"s":""}</span>
             </div>
             <div style={{padding:"10px 16px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-              {["all","New","Acknowledged","Assigned","Resolved"].map(s=>{
+              {["all","Open","In Progress","Resolved","Dismissed"].map(s=>{
                 const cfg = s==="all"?null:INC_STATUS_CFG[s];
                 return (
                   <FPill
@@ -4655,7 +4653,7 @@ const QualityView = () => {
                         </td>
                         <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
                           <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                            {inc.status==="New"&&(
+                            {inc.status==="Open"&&(
                               <button
                                 onClick={e=>acknowledgeInc(inc.id,e)}
                                 style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:T.amberDim,border:`1px solid ${T.amber}30`,color:T.amber,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}
@@ -4663,22 +4661,20 @@ const QualityView = () => {
                                 onMouseLeave={e=>e.currentTarget.style.background=T.amberDim}
                               >Acknowledge</button>
                             )}
-                            {inc.status==="Acknowledged"&&(
-                              <button
-                                onClick={e=>openAssignModal(inc.id,e)}
-                                style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:T.accentDim,border:`1px solid ${T.accent}30`,color:T.accent,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}
-                                onMouseEnter={e=>e.currentTarget.style.background=`${T.accent}20`}
-                                onMouseLeave={e=>e.currentTarget.style.background=T.accentDim}
-                              >Assign →</button>
-                            )}
-                            {inc.status==="Assigned"&&(
+                            {inc.status==="In Progress"&&(<>
                               <button
                                 onClick={e=>openResolveModal(inc.id,e)}
                                 style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:"#16a34a12",border:"1px solid #16a34a28",color:"#16a34a",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}
                                 onMouseEnter={e=>e.currentTarget.style.background="#16a34a20"}
                                 onMouseLeave={e=>e.currentTarget.style.background="#16a34a12"}
-                              >Resolve ✓</button>
-                            )}
+                              >Resolve</button>
+                              <button
+                                onClick={e=>dismissInc(inc.id,e)}
+                                style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}
+                                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
+                                onMouseLeave={e=>e.currentTarget.style.background=T.bgElevated}
+                              >Dismiss</button>
+                            </>)}
                           </div>
                         </td>
                       </tr>
@@ -5603,7 +5599,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
 
   const [violations, setViolations] = useState([
     {id:"viol-1",policyId:"pol-1",assetName:"orders",assetType:"Table",domain:"Commerce",rule:"PII classification required",severity:"Critical",status:"Open",detectedAt:"2026-05-15",description:"The orders table is missing a pii.customer tag required before promotion to downstream analytics."},
-    {id:"viol-2",policyId:"pol-1",assetName:"transactions",assetType:"Table",domain:"Finance",rule:"Certification gate",severity:"Critical",status:"Acknowledged",detectedAt:"2026-05-14",description:"transactions table does not hold Approved certification and is currently queryable by 3 downstream pipelines."},
+    {id:"viol-2",policyId:"pol-1",assetName:"transactions",assetType:"Table",domain:"Finance",rule:"Certification gate",severity:"Critical",status:"In Progress",detectedAt:"2026-05-14",description:"transactions table does not hold Approved certification and is currently queryable by 3 downstream pipelines."},
     {id:"viol-3",policyId:"pol-2",assetName:"payments",assetType:"Table",domain:"Finance",rule:"Quality threshold enforcement",severity:"High",status:"Open",detectedAt:"2026-05-16",description:"payments table quality score is 67, below the required threshold of 80 for use in financial reporting."},
     {id:"viol-4",policyId:"pol-4",assetName:"patient_events",assetType:"Table",domain:"Commerce",rule:"PHI quality gate",severity:"Critical",status:"Open",detectedAt:"2026-05-13",description:"patient_events contains PHI but quality score is 84 — below the required 90 threshold."},
     {id:"viol-5",policyId:"pol-4",assetName:"user_health_data",assetType:"Table",domain:"Finance",rule:"Access restriction",severity:"Critical",status:"Open",detectedAt:"2026-05-12",description:"user_health_data is accessible to roles without healthcare.phi_read scope. 2 roles in violation."},
@@ -5752,7 +5748,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const openViolsForPol    = (polId) => violations.filter(v=>v.policyId===polId&&v.status==="Open");
   const SEV_COLOR = {Critical:T.rose, High:"#f97316", Medium:T.amber, Low:T.green};
   const SEV_BG    = {Critical:`${T.rose}14`, High:"rgba(249,115,22,.12)", Medium:`${T.amber}14`, Low:`${T.green}14`};
-  const VIOL_STATUS_COLOR = {Open:T.rose, Acknowledged:T.amber, Resolved:T.green};
+  const VIOL_STATUS_COLOR = {Open:T.rose, "In Progress":T.amber, Resolved:T.green, Dismissed:T.textMuted};
 
   // ─── handlers ────────────────────────────────────────────────────────
   const today = () => new Date().toISOString().slice(0,10);
@@ -6584,8 +6580,12 @@ const PolicyManagerView = ({onToast, onNav}) => {
                         setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"Resolved"}:v));
                         onToast("Violation resolved","success");
                       };
+                      const dismissViol = (id) => {
+                        setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"Dismissed"}:v));
+                        onToast("Violation dismissed","info");
+                      };
                       const ackViol = (id) => {
-                        setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"Acknowledged"}:v));
+                        setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"In Progress"}:v));
                         onToast("Violation acknowledged","info");
                       };
                       return (
@@ -6612,17 +6612,17 @@ const PolicyManagerView = ({onToast, onNav}) => {
                                           <span style={{fontSize:12,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.assetName}</span>
                                           <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>{v.assetType} · {v.domain}</span>
                                         </div>
-                                        <span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:5,background:v.status==="Open"?`${T.rose}14`:v.status==="Acknowledged"?`${T.amber}14`:`${T.green}14`,color:v.status==="Open"?T.rose:v.status==="Acknowledged"?T.amber:T.green,flexShrink:0}}>
+                                        <span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:5,background:v.status==="Open"?`${T.rose}14`:v.status==="In Progress"?`${T.amber}14`:v.status==="Resolved"?`${T.green}14`:T.bgElevated,color:v.status==="Open"?T.rose:v.status==="In Progress"?T.amber:v.status==="Resolved"?T.green:T.textMuted,flexShrink:0}}>
                                           {v.status}
                                         </span>
                                       </div>
                                       <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.6,marginBottom:8}}>{v.description}</div>
                                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                                         <span style={{fontSize:10.5,color:T.textMuted}}>Rule: <span style={{color:T.textSub,fontWeight:500}}>{v.rule}</span> · Detected {v.detectedAt}</span>
-                                        {v.status!=="Resolved"&&(
+                                        {(v.status==="Open"||v.status==="In Progress")&&(
                                           <div style={{display:"flex",gap:6}}>
                                             {v.status==="Open"&&<button onClick={()=>ackViol(v.id)} style={{fontSize:10.5,padding:"3px 10px",borderRadius:5,background:"transparent",border:`1px solid ${T.amber}`,color:T.amber,cursor:"pointer",fontWeight:600}}>Acknowledge</button>}
-                                            <button onClick={()=>resolveViol(v.id)} style={{fontSize:10.5,padding:"3px 10px",borderRadius:5,background:T.green,border:"none",color:"#fff",cursor:"pointer",fontWeight:600}}>Resolve</button>
+                                            {v.status==="In Progress"&&<><button onClick={()=>resolveViol(v.id)} style={{fontSize:10.5,padding:"3px 10px",borderRadius:5,background:T.green,border:"none",color:"#fff",cursor:"pointer",fontWeight:600}}>Resolve</button><button onClick={()=>dismissViol(v.id)} style={{fontSize:10.5,padding:"3px 10px",borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>Dismiss</button></>}
                                           </div>
                                         )}
                                       </div>
@@ -6702,8 +6702,9 @@ const PolicyManagerView = ({onToast, onNav}) => {
           const displayViols = violStatusFilter==="All" ? violations : violations.filter(v=>v.status===violStatusFilter);
           const critCount = violations.filter(v=>v.severity==="Critical"&&v.status==="Open").length;
           const highCount = violations.filter(v=>v.severity==="High"&&v.status==="Open").length;
-          const resolveViol = (id) => { setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"Resolved"}:v)); onToast("Violation resolved","success"); };
-          const ackViol = (id) => { setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"Acknowledged"}:v)); onToast("Violation acknowledged","info"); };
+          const resolveViol  = (id) => { setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"Resolved"}:v)); onToast("Violation resolved","success"); };
+          const dismissViol  = (id) => { setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"Dismissed"}:v)); onToast("Violation dismissed","info"); };
+          const ackViol      = (id) => { setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"In Progress"}:v)); onToast("Violation acknowledged","info"); };
           return (
             <div style={{flex:1,overflowY:"auto",padding:"20px 28px"}}>
               {/* Summary banner */}
@@ -6724,12 +6725,12 @@ const PolicyManagerView = ({onToast, onNav}) => {
               {/* Status filter */}
               <div style={{display:"flex",gap:6,marginBottom:16,alignItems:"center"}}>
                 <span style={{fontSize:11,color:T.textMuted,marginRight:4}}>Filter:</span>
-                {["All","Open","Acknowledged","Resolved"].map(s=>(
+                {["All","Open","In Progress","Resolved","Dismissed"].map(s=>(
                   <button key={s} onClick={()=>setViolStatusFilter(s)}
                     style={{padding:"4px 12px",borderRadius:6,fontSize:11.5,fontWeight:violStatusFilter===s?700:400,
-                      border:`1px solid ${violStatusFilter===s?(VIOL_STATUS_COLOR[s]||T.blue):T.border}`,
-                      background:violStatusFilter===s?`${VIOL_STATUS_COLOR[s]||T.blue}14`:"transparent",
-                      color:violStatusFilter===s?(VIOL_STATUS_COLOR[s]||T.blue):T.textSub,cursor:"pointer"}}>
+                      border:`1px solid ${violStatusFilter===s?(VIOL_STATUS_COLOR[s]||T.accent):T.border}`,
+                      background:violStatusFilter===s?`${VIOL_STATUS_COLOR[s]||T.accent}14`:"transparent",
+                      color:violStatusFilter===s?(VIOL_STATUS_COLOR[s]||T.accent):T.textSub,cursor:"pointer"}}>
                     {s}
                     <span style={{marginLeft:5,fontSize:10,opacity:.7}}>
                       {s==="All"?violations.length:violations.filter(v=>v.status===s).length}
@@ -6770,14 +6771,14 @@ const PolicyManagerView = ({onToast, onNav}) => {
                             <span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:5,background:SEV_BG[v.severity],color:SEV_COLOR[v.severity]}}>{v.severity}</span>
                           </div>
                           <div style={{paddingRight:10}}>
-                            <span style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:5,background:v.status==="Open"?`${T.rose}14`:v.status==="Acknowledged"?`${T.amber}14`:`${T.green}14`,color:v.status==="Open"?T.rose:v.status==="Acknowledged"?T.amber:T.green}}>
+                            <span style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:5,background:v.status==="Open"?`${T.rose}14`:v.status==="In Progress"?`${T.amber}14`:v.status==="Resolved"?`${T.green}14`:T.bgElevated,color:v.status==="Open"?T.rose:v.status==="In Progress"?T.amber:v.status==="Resolved"?T.green:T.textMuted}}>
                               {v.status}
                             </span>
                           </div>
                           <div style={{paddingRight:10,fontSize:11,color:T.textMuted,whiteSpace:"nowrap"}}>{v.detectedAt}</div>
                           <div style={{display:"flex",gap:5}}>
-                            {v.status==="Open"&&<button onClick={()=>ackViol(v.id)} style={{fontSize:10.5,padding:"3px 9px",borderRadius:5,background:"transparent",border:`1px solid ${T.amber}`,color:T.amber,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>Ack</button>}
-                            {v.status!=="Resolved"&&<button onClick={()=>resolveViol(v.id)} style={{fontSize:10.5,padding:"3px 9px",borderRadius:5,background:T.green,border:"none",color:"#fff",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>Resolve</button>}
+                            {v.status==="Open"&&<button onClick={()=>ackViol(v.id)} style={{fontSize:10.5,padding:"3px 9px",borderRadius:5,background:"transparent",border:`1px solid ${T.amber}`,color:T.amber,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>Acknowledge</button>}
+                            {v.status==="In Progress"&&<><button onClick={()=>resolveViol(v.id)} style={{fontSize:10.5,padding:"3px 9px",borderRadius:5,background:T.green,border:"none",color:"#fff",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>Resolve</button><button onClick={()=>dismissViol(v.id)} style={{fontSize:10.5,padding:"3px 9px",borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>Dismiss</button></>}
                           </div>
                         </div>
                       );
@@ -15945,7 +15946,7 @@ const ROLES_CONFIG = {
     badge: "rgba(238,36,36,0.15)",
     desc:  "Full platform access including settings, user management, and all configurations.",
     rbacRole: "admin",
-    nav: ["home","search","catalog","quality","contracts","policymanager","access","certifications","stewardship","glossary","domains","dataproducts","observability","analytics","settings","tags"],
+    nav: ["home","search","catalog","quality","contracts","policymanager","access","certifications","glossary","domains","dataproducts","observability","analytics","settings","tags"],
     homeWidgets: ["metrics","tasks","quality","recentAssets","services","activity"],
   },
   steward: {
@@ -15958,7 +15959,7 @@ const ROLES_CONFIG = {
     desc:  "Govern assets in your domain: certify data, manage glossary terms, resolve conflicts.",
     rbacRole: "steward",
     domain: "Commerce",
-    nav: ["home","search","catalog","quality","policymanager","certifications","stewardship","glossary","domains","dataproducts","tags"],
+    nav: ["home","search","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","tags"],
     homeWidgets: ["tasks","certQueue","qualityAlerts","recentAssets","activity"],
   },
   analyst: {
