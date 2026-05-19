@@ -13340,51 +13340,52 @@ const DomainsView = ({onAsset, onNav}) => {
           <Metric label="Avg Quality"   value={`${avgQuality}%`}          sub="quality score"          color={avgQuality>=85?T.green:avgQuality>=70?T.amber:T.rose}/>
         </div>
 
-        {/* Toolbar */}
-        <div style={{marginBottom:16}}>
-          {/* Search — same as data products */}
-          <div style={{marginBottom:10}}>
+        {/* Toolbar — single row */}
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
+          {/* Search */}
+          <div style={{flex:1}}>
             <Input2 placeholder="Search data domains…" value={domainSearch} onChange={e=>setDomainSearch(e.target.value)} icon={Ic.search(12)}/>
           </div>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-          <div style={{display:"flex",alignItems:"center",gap:6}}>
-            {/* Filter — multi-select type filter */}
-            <div style={{position:"relative"}}>
-              <button onClick={()=>setDomainFilterOpen(p=>!p)}
-                style={{height:32,padding:"0 12px",borderRadius:8,background:domainTypeFilters.length>0?T.accentDim:T.bgElevated,border:`1px solid ${domainTypeFilters.length>0?T.accent:T.border}`,color:domainTypeFilters.length>0?T.accent:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontSize:12,fontWeight:domainTypeFilters.length>0?600:400,whiteSpace:"nowrap"}}>
-                {Ic.filter?Ic.filter(11):<span style={{fontSize:13}}>⊟</span>} {domainTypeFilters.length===0?"Type":domainTypeFilters.length===1?domainTypeFilters[0]:`${domainTypeFilters.length} Types`}
-                {domainTypeFilters.length>0&&<button onMouseDown={e=>{e.stopPropagation();setDomainTypeFilters([]);}} style={{background:"none",border:"none",cursor:"pointer",padding:0,display:"flex",color:T.accent,marginLeft:2,lineHeight:1}}>{Ic.x?.(8)||"×"}</button>}
-              </button>
-              {domainFilterOpen&&(
-                <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 8px 24px rgba(0,0,0,.18)",minWidth:200,overflow:"hidden"}}>
-                  <div style={{padding:"8px 12px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                    <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Domain Type</span>
-                    {domainTypeFilters.length>0&&<button onClick={()=>setDomainTypeFilters([])} style={{fontSize:10.5,color:T.textMuted,background:"none",border:"none",cursor:"pointer",padding:"2px 6px",borderRadius:4}} onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>Clear</button>}
-                  </div>
-                  {["Source-aligned","Consumer-aligned","Aggregate"].map(opt=>{
-                    const checked = domainTypeFilters.includes(opt);
-                    return (
-                      <button key={opt} onMouseDown={()=>setDomainTypeFilters(prev=>checked?prev.filter(x=>x!==opt):[...prev,opt])}
-                        style={{width:"100%",padding:"9px 12px",background:checked?T.accentDim:"none",border:"none",cursor:"pointer",textAlign:"left",fontSize:12,display:"flex",alignItems:"center",gap:8,color:checked?T.accent:T.text}}
-                        onMouseEnter={e=>{if(!checked)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!checked)e.currentTarget.style.background="none";}}>
-                        <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${checked?T.accent:T.border}`,background:checked?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                          {checked&&<svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2L7.5 2" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>}
-                        </div>
-                        {opt}
-                      </button>
-                    );
-                  })}
+          {/* Type multi-select filter */}
+          <div style={{position:"relative",flexShrink:0}}>
+            <button onClick={()=>setDomainFilterOpen(p=>!p)}
+              style={{height:34,padding:"0 12px",borderRadius:8,background:domainTypeFilters.length>0?T.accentDim:T.bgElevated,border:`1px solid ${domainTypeFilters.length>0?T.accent:T.border}`,color:domainTypeFilters.length>0?T.accent:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:domainTypeFilters.length>0?600:400,whiteSpace:"nowrap"}}>
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M1 3h12M3 7h8M5 11h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              {domainTypeFilters.length===0?"Type":domainTypeFilters.length===1?domainTypeFilters[0]:`${domainTypeFilters.length} Types`}
+              {domainTypeFilters.length>0
+                ? <span onMouseDown={e=>{e.stopPropagation();setDomainTypeFilters([]);}} style={{display:"flex",alignItems:"center",cursor:"pointer",marginLeft:2,opacity:.7}}>{Ic.x?.(8)||"×"}</span>
+                : <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{opacity:.5}}><path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              }
+            </button>
+            {domainFilterOpen&&(
+              <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 8px 24px rgba(0,0,0,.18)",minWidth:200,overflow:"hidden"}}>
+                <div style={{padding:"8px 12px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Domain Type</span>
+                  {domainTypeFilters.length>0&&<button onClick={()=>setDomainTypeFilters([])} style={{fontSize:10.5,color:T.textMuted,background:"none",border:"none",cursor:"pointer",padding:"2px 6px",borderRadius:4}} onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>Clear</button>}
                 </div>
-              )}
-            </div>
-            <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
-              {[["list","☰"],["grid","⊞"]].map(([v,ic])=>(
-                <button key={v} onClick={()=>setListView(v)} style={{padding:"4px 10px",borderRadius:5,border:"none",cursor:"pointer",fontSize:13,
-                  background:listView===v?T.bgSurface:"transparent",color:listView===v?T.text:T.textMuted,
-                  boxShadow:listView===v?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{ic}</button>
-              ))}
-            </div>
+                {["Source-aligned","Consumer-aligned","Aggregate"].map(opt=>{
+                  const checked = domainTypeFilters.includes(opt);
+                  return (
+                    <button key={opt} onMouseDown={()=>setDomainTypeFilters(prev=>checked?prev.filter(x=>x!==opt):[...prev,opt])}
+                      style={{width:"100%",padding:"9px 12px",background:checked?T.accentDim:"none",border:"none",cursor:"pointer",textAlign:"left",fontSize:12,display:"flex",alignItems:"center",gap:8,color:checked?T.accent:T.text}}
+                      onMouseEnter={e=>{if(!checked)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!checked)e.currentTarget.style.background="none";}}>
+                      <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${checked?T.accent:T.border}`,background:checked?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        {checked&&<svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2L7.5 2" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>}
+                      </div>
+                      {opt}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
+          {/* Layout toggle */}
+          <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,flexShrink:0}}>
+            {[["list","☰"],["grid","⊞"]].map(([v,ic])=>(
+              <button key={v} onClick={()=>setListView(v)} style={{padding:"4px 10px",borderRadius:5,border:"none",cursor:"pointer",fontSize:13,
+                background:listView===v?T.bgSurface:"transparent",color:listView===v?T.text:T.textMuted,
+                boxShadow:listView===v?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{ic}</button>
+            ))}
           </div>
         </div>
 
@@ -13864,6 +13865,9 @@ const DataProductsView = ({onAsset, onNav}) => {
   const [selectedProductId, setSelectedProductId] = useState(null);
   const [productTab, setProductTab]     = useState("overview");
   const [domainFilter, setDomainFilter] = useState("All");
+  const [dpDomainFilters, setDpDomainFilters] = useState([]);
+  const [dpDomainFilterOpen, setDpDomainFilterOpen] = useState(false);
+  const [dpDomainSearch, setDpDomainSearch] = useState("");
   const [lifecycleFilter, setLifecycleFilter] = useState("All");
   const [listView, setListView]         = useState("list");
   const [createOpen, setCreateOpen]     = useState(false);
@@ -13890,7 +13894,7 @@ const DataProductsView = ({onAsset, onNav}) => {
   const PRODUCT_ICONS = ["📦","📊","💹","📱","🧮","🎯","📋","🔬","💼","🗃️","📡","⚡"];
 
   const filteredProducts = products.filter(p=>{
-    const dm = domainFilter==="All" || p.domain===domainFilter;
+    const dm = dpDomainFilters.length===0 || dpDomainFilters.includes(p.domain);
     const lf = lifecycleFilter==="All" || p.lifecycleStage===lifecycleFilter;
     const sq = !dpSearch || p.displayName.toLowerCase().includes(dpSearch.toLowerCase()) || p.description?.toLowerCase().includes(dpSearch.toLowerCase()) || (p.owners||[]).some(o=>o.toLowerCase().includes(dpSearch.toLowerCase()));
     return dm && lf && sq;
@@ -14279,39 +14283,61 @@ const DataProductsView = ({onAsset, onNav}) => {
           <Metric label="In Production"  value={String(inProd)}           sub="live products"     color="#16a34a"/>
         </div>
 
-        {/* Search + toolbar row */}
-        <div style={{marginBottom:10}}>
-          {/* Search bar */}
-          <div style={{marginBottom:10}}>
+        {/* Search + toolbar row — single row */}
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+          {/* Search */}
+          <div style={{flex:1}}>
             <Input2 placeholder="Search data products, descriptions, owners…" value={dpSearch} onChange={e=>setDpSearch(e.target.value)} icon={Ic.search(12)}/>
           </div>
-          {/* Domain chips + view toggle */}
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
-            <div style={{display:"flex",gap:5,flexWrap:"wrap",flex:1,marginRight:8}}>
-              {["All",...domains.map(d=>d.name)].map(d=>{
-                const dm = domains.find(x=>x.name===d);
-                const active = domainFilter===d;
-                return (
-                  <button key={d} onClick={()=>setDomainFilter(d)} style={{
-                    display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:99,fontSize:11.5,fontWeight:active?700:500,cursor:"pointer",transition:"all .12s",
-                    background:active?(dm?`${dm.color}18`:T.accentDim):"transparent",
-                    border:`1.5px solid ${active?(dm?.color||T.accent):T.border}`,
-                    color:active?(dm?.color||T.accent):T.textSub,
-                  }}>
-                    {dm&&<span style={{fontSize:12}}>{dm.icon}</span>} {d}
-                  </button>
-                );
-              })}
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-              <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
-                {[["list","☰"],["grid","⊞"]].map(([v,ic])=>(
-                  <button key={v} onClick={()=>setListView(v)} style={{padding:"4px 10px",borderRadius:5,border:"none",cursor:"pointer",fontSize:13,
-                    background:listView===v?T.bgSurface:"transparent",color:listView===v?T.text:T.textMuted,
-                    boxShadow:listView===v?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{ic}</button>
-                ))}
+          {/* Domain multi-select dropdown */}
+          <div style={{position:"relative",flexShrink:0}}>
+            <button onClick={()=>setDpDomainFilterOpen(p=>!p)}
+              style={{height:34,padding:"0 12px",borderRadius:8,background:dpDomainFilters.length>0?T.accentDim:T.bgElevated,border:`1px solid ${dpDomainFilters.length>0?T.accent:T.border}`,color:dpDomainFilters.length>0?T.accent:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:dpDomainFilters.length>0?600:400,whiteSpace:"nowrap"}}>
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M1 3h12M3 7h8M5 11h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              {dpDomainFilters.length===0?"Domain":dpDomainFilters.length===1?dpDomainFilters[0]:`${dpDomainFilters.length} Domains`}
+              {dpDomainFilters.length>0
+                ? <span onMouseDown={e=>{e.stopPropagation();setDpDomainFilters([]);}} style={{display:"flex",alignItems:"center",cursor:"pointer",marginLeft:2,opacity:.7}}>{Ic.x?.(8)||"×"}</span>
+                : <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{opacity:.5}}><path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              }
+            </button>
+            {dpDomainFilterOpen&&(
+              <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 8px 24px rgba(0,0,0,.18)",minWidth:220,overflow:"hidden"}}>
+                <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}>
+                  <input value={dpDomainSearch} onChange={e=>setDpDomainSearch(e.target.value)} placeholder="Search domains…"
+                    style={{width:"100%",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,padding:"5px 9px",fontSize:12,color:T.text,outline:"none"}}
+                    autoFocus/>
+                </div>
+                <div style={{padding:"4px 0"}}>
+                  <div style={{padding:"4px 10px 2px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                    <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Domains</span>
+                    {dpDomainFilters.length>0&&<button onClick={()=>setDpDomainFilters([])} style={{fontSize:10.5,color:T.textMuted,background:"none",border:"none",cursor:"pointer",padding:"2px 6px",borderRadius:4}} onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>Clear</button>}
+                  </div>
+                  {domains.filter(d=>!dpDomainSearch||d.name.toLowerCase().includes(dpDomainSearch.toLowerCase())).map(d=>{
+                    const checked = dpDomainFilters.includes(d.name);
+                    return (
+                      <button key={d.name} onMouseDown={()=>setDpDomainFilters(prev=>checked?prev.filter(x=>x!==d.name):[...prev,d.name])}
+                        style={{width:"100%",padding:"8px 10px",background:checked?T.accentDim:"none",border:"none",cursor:"pointer",textAlign:"left",fontSize:12,display:"flex",alignItems:"center",gap:8,color:checked?T.accent:T.text}}
+                        onMouseEnter={e=>{if(!checked)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!checked)e.currentTarget.style.background="none";}}>
+                        <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${checked?T.accent:T.border}`,background:checked?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                          {checked&&<svg width="9" height="9" viewBox="0 0 9 9"><path d="M1.5 4.5l2 2L7.5 2" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round"/></svg>}
+                        </div>
+                        <span style={{fontSize:14,lineHeight:1}}>{d.icon}</span>
+                        <span style={{flex:1}}>{d.name}</span>
+                        <span style={{fontSize:10,color:T.textMuted}}>{products.filter(p=>p.domain===d.name).length}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
+          </div>
+          {/* Layout toggle */}
+          <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,flexShrink:0}}>
+            {[["list","☰"],["grid","⊞"]].map(([v,ic])=>(
+              <button key={v} onClick={()=>setListView(v)} style={{padding:"4px 10px",borderRadius:5,border:"none",cursor:"pointer",fontSize:13,
+                background:listView===v?T.bgSurface:"transparent",color:listView===v?T.text:T.textMuted,
+                boxShadow:listView===v?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{ic}</button>
+            ))}
           </div>
         </div>
 
