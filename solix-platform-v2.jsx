@@ -1,5 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback, createContext, useContext } from "react";
 import { createPortal } from "react-dom";
+import {
+  ReactFlow, Background, Controls, MiniMap,
+  Handle, Position,
+  useNodesState, useEdgesState,
+  MarkerType, getBezierPath,
+  useReactFlow, ReactFlowProvider,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 
 // ─────────────────────────────────────────────
 // THEME SYSTEM
@@ -9003,63 +9011,299 @@ const AssetSchema = ({asset,selCol,onColClick,onToast})=>{
     </Card2>
   </div>;
 }
+// ─── React Flow custom node (must be defined at module level) ───────────────
+const LINEAGE_TYPE_COLOR = {
+  Database:"#7dd3fc", Pipeline:"#fbbf24", Table:"#ee2424",
+  Dashboard:"#c4b5fd", "ML Model":"#fda4af", "Feature Store":"#34d399",
+};
+
+const LineageAssetNode = ({data})=>{
+  const {label,assetType,active,columns,mode}=data;
+  const typeColor=LINEAGE_TYPE_COLOR[assetType]||"#a1a1aa";
+  const Th=data.T||DARK;
+
+  const cardStyle={
+    background: active?"rgba(238,36,36,0.06)":Th.bgElevated,
+    border:`1.5px solid ${active?Th.accent:Th.border}`,
+    borderRadius:10,
+    minWidth:160,
+    maxWidth:200,
+    fontFamily:"'Geist Sans','Inter',sans-serif",
+    boxShadow: active?"0 0 0 3px rgba(238,36,36,0.18)":"0 2px 8px rgba(0,0,0,0.35)",
+    overflow:"hidden",
+  };
+
+  return (
+    <div style={cardStyle}>
+      {/* incoming handle */}
+      <Handle type="target" position={Position.Left}
+        style={{background:Th.border,border:`2px solid ${typeColor}`,width:10,height:10}}/>
+
+      {/* header */}
+      <div style={{padding:"8px 12px 6px",borderBottom:`1px solid ${Th.border}`,display:"flex",alignItems:"center",gap:6}}>
+        <span style={{width:7,height:7,borderRadius:2,background:typeColor,flexShrink:0,display:"inline-block"}}/>
+        <span style={{fontSize:9,fontWeight:700,color:typeColor,textTransform:"uppercase",letterSpacing:"0.07em",lineHeight:1.2}}>
+          {assetType}
+        </span>
+        {active&&<span style={{marginLeft:"auto",fontSize:9,background:"rgba(238,36,36,0.18)",color:"#ee2424",borderRadius:4,padding:"1px 5px",fontWeight:700}}>CURRENT</span>}
+      </div>
+
+      {/* label */}
+      <div style={{padding:"6px 12px 8px"}}>
+        <div style={{fontSize:12,fontWeight:600,color:active?"#ee2424":Th.text,
+          fontFamily:"'Geist Mono','Fira Code',monospace",
+          whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:170}}>
+          {label}
+        </div>
+      </div>
+
+      {/* column rows — only in column mode */}
+      {mode==="column"&&columns&&columns.length>0&&(
+        <div style={{borderTop:`1px solid ${Th.border}`}}>
+          {columns.map((col,i)=>(
+            <div key={col.name} style={{
+              padding:"4px 12px",
+              fontSize:11,
+              color:col.highlighted?typeColor:Th.textSub,
+              background:col.highlighted?"rgba(255,255,255,0.04)":"transparent",
+              fontFamily:"'Geist Mono',monospace",
+              borderBottom:i<columns.length-1?`1px solid ${Th.border}`:undefined,
+              display:"flex",alignItems:"center",gap:5,
+            }}>
+              {/* per-column handles */}
+              <Handle
+                type="target"
+                position={Position.Left}
+                id={`t-${col.name}`}
+                style={{top:`${44+34*i+17}px`,background:"transparent",border:"none",width:1,height:1,left:-1}}
+              />
+              <span style={{width:5,height:5,borderRadius:"50%",
+                background:col.highlighted?typeColor:Th.borderLight,flexShrink:0,display:"inline-block"}}/>
+              {col.name}
+              <Handle
+                type="source"
+                position={Position.Right}
+                id={`s-${col.name}`}
+                style={{top:`${44+34*i+17}px`,background:"transparent",border:"none",width:1,height:1,right:-1}}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* outgoing handle */}
+      <Handle type="source" position={Position.Right}
+        style={{background:Th.border,border:`2px solid ${typeColor}`,width:10,height:10}}/>
+    </div>
+  );
+};
+
+const lineageNodeTypes={assetNode:LineageAssetNode};
+
+// ─── Inner component that uses useReactFlow hook ─────────────────────────────
+const LineageFlowInner=({initNodes,initEdges,mode,assetName})=>{
+  const [nodes,,onNodesChange]=useNodesState(initNodes);
+  const [edges,,onEdgesChange]=useEdgesState(initEdges);
+  const {fitView}=useReactFlow();
+  const Th=DARK;
+
+  useEffect(()=>{ setTimeout(()=>fitView({padding:0.18,duration:400}),80); },[fitView,mode,assetName]);
+
+  return (
+    <ReactFlow
+      nodes={nodes}
+      edges={edges}
+      onNodesChange={onNodesChange}
+      onEdgesChange={onEdgesChange}
+      nodeTypes={lineageNodeTypes}
+      fitView
+      fitViewOptions={{padding:0.18}}
+      minZoom={0.25}
+      maxZoom={2.5}
+      proOptions={{hideAttribution:true}}
+      style={{background:Th.bg}}
+    >
+      <Background color={Th.borderLight} gap={20} size={1} variant="dots"/>
+      <Controls
+        style={{background:Th.bgElevated,border:`1px solid ${Th.border}`,borderRadius:8,overflow:"hidden"}}
+        showInteractive={false}
+      />
+      <MiniMap
+        style={{background:Th.bgSurface,border:`1px solid ${Th.border}`,borderRadius:8}}
+        nodeColor={(n)=>LINEAGE_TYPE_COLOR[n.data?.assetType]||"#555"}
+        maskColor="rgba(0,0,0,0.55)"
+      />
+    </ReactFlow>
+  );
+};
+
+// ─── Main AssetLineageFull component ─────────────────────────────────────────
 const AssetLineageFull = ({asset})=>{
   const [mode,setMode]=useState("table");
-  const nodes=[
-    {id:"pg",label:"postgresql_prod",type:"Database",x:30,y:140},
-    {id:"pipe",label:"etl_pipeline",type:"Pipeline",x:200,y:140},
-    {id:"self",label:asset.name,type:"Table",x:380,y:140,active:true},
-    {id:"dash1",label:"revenue_dashboard",type:"Dashboard",x:560,y:80},
-    {id:"ml",label:"ml_churn_model",type:"ML Model",x:560,y:200},
-    {id:"dash2",label:"finance_summary",type:"Dashboard",x:740,y:80},
-    {id:"api",label:"reporting_api",type:"Pipeline",x:740,y:200},
-  ];
-  const edges=[{f:"pg",t:"pipe"},{f:"pipe",t:"self"},{f:"self",t:"dash1"},{f:"self",t:"ml"},{f:"dash1",t:"dash2"},{f:"ml",t:"api"}];
-  const nm=Object.fromEntries(nodes.map(n=>[n.id,n]));
-  const tc={Database:T.blue,Pipeline:T.amber,Table:T.accent,Dashboard:T.violet,"ML Model":T.rose};
+  const Th=DARK;
 
-  return <div className="fadeIn">
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-      <div style={{display:"flex",gap:10,alignItems:"center"}}>
-        {Object.entries(tc).map(([tp,c])=><span key={tp} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:T.textSub}}><span style={{width:8,height:8,borderRadius:2,background:c,display:"inline-block"}}/>{tp}</span>)}
+  // ── TABLE-LEVEL nodes ────────────────────────────────────────────────────
+  const buildTableNodes=(assetName)=>[
+    {id:"pg",    type:"assetNode",position:{x:20,  y:160},data:{label:"postgresql_prod", assetType:"Database",   active:false,mode:"table",T:Th}},
+    {id:"pipe",  type:"assetNode",position:{x:230, y:160},data:{label:"etl_pipeline",    assetType:"Pipeline",   active:false,mode:"table",T:Th}},
+    {id:"self",  type:"assetNode",position:{x:440, y:160},data:{label:assetName,          assetType:"Table",      active:true, mode:"table",T:Th}},
+    {id:"dash1", type:"assetNode",position:{x:660, y:60}, data:{label:"revenue_dashboard",assetType:"Dashboard",  active:false,mode:"table",T:Th}},
+    {id:"ml",    type:"assetNode",position:{x:660, y:270},data:{label:"ml_churn_model",   assetType:"ML Model",   active:false,mode:"table",T:Th}},
+    {id:"dash2", type:"assetNode",position:{x:890, y:60}, data:{label:"finance_summary",  assetType:"Dashboard",  active:false,mode:"table",T:Th}},
+    {id:"api",   type:"assetNode",position:{x:890, y:270},data:{label:"reporting_api",    assetType:"Pipeline",   active:false,mode:"table",T:Th}},
+  ];
+
+  const TABLE_EDGES=[
+    {id:"e1",source:"pg",   target:"pipe", animated:false},
+    {id:"e2",source:"pipe", target:"self", animated:false},
+    {id:"e3",source:"self", target:"dash1",animated:false},
+    {id:"e4",source:"self", target:"ml",   animated:false},
+    {id:"e5",source:"dash1",target:"dash2",animated:false},
+    {id:"e6",source:"ml",   target:"api",  animated:false},
+  ].map(e=>({...e,type:"smoothstep",
+    markerEnd:{type:MarkerType.ArrowClosed,color:Th.borderLight,width:14,height:14},
+    style:{stroke:Th.borderLight,strokeWidth:1.8},
+  }));
+
+  // ── COLUMN-LEVEL nodes (nodes with column lists) ─────────────────────────
+  const buildColumnNodes=(assetName)=>[
+    {id:"pg", type:"assetNode",position:{x:20,y:80},
+      data:{label:"postgresql_prod",assetType:"Database",active:false,mode:"column",T:Th,
+        columns:[
+          {name:"order_id",  highlighted:true},
+          {name:"customer_id",highlighted:true},
+          {name:"amount",    highlighted:true},
+          {name:"status",    highlighted:false},
+        ]}},
+    {id:"pipe",type:"assetNode",position:{x:270,y:80},
+      data:{label:"etl_pipeline",assetType:"Pipeline",active:false,mode:"column",T:Th,
+        columns:[
+          {name:"order_id",   highlighted:true},
+          {name:"cust_id",    highlighted:true},
+          {name:"amount_usd", highlighted:true},
+        ]}},
+    {id:"self",type:"assetNode",position:{x:520,y:80},
+      data:{label:assetName,assetType:"Table",active:true,mode:"column",T:Th,
+        columns:[
+          {name:"order_id",   highlighted:true},
+          {name:"customer_id",highlighted:true},
+          {name:"revenue",    highlighted:true},
+          {name:"churn_score",highlighted:true},
+        ]}},
+    {id:"dash1",type:"assetNode",position:{x:800,y:20},
+      data:{label:"revenue_dashboard",assetType:"Dashboard",active:false,mode:"column",T:Th,
+        columns:[
+          {name:"total_revenue",highlighted:true},
+          {name:"order_count", highlighted:false},
+        ]}},
+    {id:"ml",type:"assetNode",position:{x:800,y:240},
+      data:{label:"ml_churn_model",assetType:"ML Model",active:false,mode:"column",T:Th,
+        columns:[
+          {name:"cust_id_feat",  highlighted:true},
+          {name:"churn_prob",    highlighted:true},
+        ]}},
+  ];
+
+  const TRANSFORM_COLORS={
+    "Direct":    "#7dd3fc",
+    "CAST":      "#fbbf24",
+    "SUM":       "#4ade80",
+    "Feature":   "#c4b5fd",
+    "Filter":    "#fda4af",
+  };
+
+  const COL_EDGES=[
+    {id:"c1",source:"pg",   sourceHandle:"s-order_id",   target:"pipe",  targetHandle:"t-order_id",   label:"Direct",   color:"Direct"},
+    {id:"c2",source:"pg",   sourceHandle:"s-customer_id",target:"pipe",  targetHandle:"t-cust_id",    label:"Direct",   color:"Direct"},
+    {id:"c3",source:"pg",   sourceHandle:"s-amount",     target:"pipe",  targetHandle:"t-amount_usd", label:"CAST→USD", color:"CAST"},
+    {id:"c4",source:"pipe", sourceHandle:"s-order_id",   target:"self",  targetHandle:"t-order_id",   label:"Direct",   color:"Direct"},
+    {id:"c5",source:"pipe", sourceHandle:"s-cust_id",    target:"self",  targetHandle:"t-customer_id",label:"Direct",   color:"Direct"},
+    {id:"c6",source:"pipe", sourceHandle:"s-amount_usd", target:"self",  targetHandle:"t-revenue",    label:"SUM()",    color:"SUM"},
+    {id:"c7",source:"self", sourceHandle:"s-revenue",    target:"dash1", targetHandle:"t-total_revenue",label:"SUM()",  color:"SUM"},
+    {id:"c8",source:"self", sourceHandle:"s-customer_id",target:"ml",    targetHandle:"t-cust_id_feat",label:"Feature", color:"Feature"},
+    {id:"c9",source:"self", sourceHandle:"s-churn_score",target:"ml",    targetHandle:"t-churn_prob",  label:"Direct",  color:"Direct"},
+  ].map(e=>({
+    ...e,type:"smoothstep",
+    markerEnd:{type:MarkerType.ArrowClosed,color:TRANSFORM_COLORS[e.color]||Th.borderLight,width:12,height:12},
+    style:{stroke:TRANSFORM_COLORS[e.color]||Th.borderLight,strokeWidth:1.6},
+    labelStyle:{fill:TRANSFORM_COLORS[e.color]||Th.textMuted,fontSize:9,fontFamily:"'Geist Mono',monospace",fontWeight:600},
+    labelBgStyle:{fill:Th.bgElevated,fillOpacity:0.92},
+    labelBgPadding:[4,3],
+    labelBgBorderRadius:3,
+  }));
+
+  const tableNodes=buildTableNodes(asset.name);
+  const colNodes  =buildColumnNodes(asset.name);
+
+  const legendItems=Object.entries(LINEAGE_TYPE_COLOR).slice(0,5);
+
+  // transform legend for column mode
+  const transformLegend=Object.entries(TRANSFORM_COLORS);
+
+  return (
+    <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:12}}>
+      {/* toolbar */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+        {/* legend */}
+        <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+          {mode==="table"
+            ? legendItems.map(([tp,c])=>(
+                <span key={tp} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:Th.textSub}}>
+                  <span style={{width:8,height:8,borderRadius:2,background:c,display:"inline-block"}}/>
+                  {tp}
+                </span>
+              ))
+            : transformLegend.map(([label,c])=>(
+                <span key={label} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:Th.textSub}}>
+                  <span style={{width:14,height:2,background:c,display:"inline-block",borderRadius:1}}/>
+                  {label}
+                </span>
+              ))
+          }
+        </div>
+        {/* controls */}
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <Tabs2
+            tabs={[{key:"table",label:"Table Level"},{key:"column",label:"Column Level"}]}
+            active={mode}
+            onChange={setMode}
+            pill
+          />
+          <Btn small ghost onClick={()=>{
+            /* Export: open print dialog or just show a toast */
+            if(typeof window!=="undefined"){
+              const el=document.querySelector(".react-flow__renderer");
+              if(el){const c=document.createElement("canvas");const ctx=c.getContext("2d");}
+            }
+          }}>
+            Export
+          </Btn>
+        </div>
       </div>
-      <div style={{display:"flex",gap:8}}>
-        <Tabs2 tabs={[{key:"table",label:"Table Level"},{key:"column",label:"Column Level"}]} active={mode} onChange={setMode} pill/>
-        <Btn small ghost>Export</Btn>
-      </div>
+
+      {/* flow canvas */}
+      <Card2 style={{padding:0,overflow:"hidden",height:520}}>
+        <ReactFlowProvider>
+          <LineageFlowInner
+            key={`${mode}-${asset.name}`}
+            initNodes={mode==="table"?tableNodes:colNodes}
+            initEdges={mode==="table"?TABLE_EDGES:COL_EDGES}
+            mode={mode}
+            assetName={asset.name}
+          />
+        </ReactFlowProvider>
+      </Card2>
+
+      {/* column-mode helper text */}
+      {mode==="column"&&(
+        <div style={{fontSize:11.5,color:Th.textSub,display:"flex",alignItems:"center",gap:6}}>
+          <span style={{fontSize:13}}>ℹ️</span>
+          Column-level lineage traces individual fields through transformations.
+          Edge labels show the transformation applied (CAST, SUM, Feature extraction, etc.).
+        </div>
+      )}
     </div>
-    <Card2 style={{overflow:"hidden",padding:0}}>
-      <div style={{padding:24,overflowX:"auto",minHeight:280}}>
-        {mode==="table"
-          ? <svg width="900" height="280" style={{display:"block",minWidth:880}}>
-              <defs><marker id="arr2" markerWidth="7" markerHeight="7" refX="5.5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 Z" fill={T.borderLight}/></marker></defs>
-              {edges.map((e,i)=>{
-                const f=nm[e.f],t=nm[e.t];if(!f||!t)return null;
-                const fx=f.x+130,fy=f.y+22,tx=t.x,ty=t.y+22;
-                return <path key={i} d={`M${fx},${fy} C${(fx+tx)/2},${fy} ${(fx+tx)/2},${ty} ${tx},${ty}`} stroke={T.borderLight} strokeWidth="1.5" fill="none" markerEnd="url(#arr2)"/>;
-              })}
-              {nodes.map(n=>(
-                <g key={n.id} style={{cursor:"pointer"}}>
-                  <rect x={n.x} y={n.y} width={130} height={44} rx={9} fill={n.active?"rgba(238,36,36,0.08)":T.bgElevated} stroke={n.active?T.accent:T.border} strokeWidth={n.active?1.5:1}/>
-                  <text x={n.x+10} y={n.y+14} fontSize="9" fill={tc[n.type]} fontFamily="Geist Sans" fontWeight="600">{n.type.toUpperCase()}</text>
-                  <text x={n.x+10} y={n.y+31} fontSize="11" fill={n.active?T.accent:T.text} fontFamily="Geist Mono">{n.label.length>16?n.label.slice(0,15)+"…":n.label}</text>
-                </g>
-              ))}
-            </svg>
-          : <div style={{padding:20}}>
-              <p style={{fontSize:12,color:T.textSub,marginBottom:16}}>Column-level lineage shows how individual columns flow between assets.</p>
-              {[{from:"postgresql_prod.order_id",to:"orders.order_id",transform:"direct"},{from:"postgresql_prod.amount",to:"orders.amount",transform:"CAST(amount AS DECIMAL)"},{from:"orders.customer_id",to:"ml_churn_model.customer_id_feat",transform:"feature extraction"},{from:"orders.amount",to:"revenue_dashboard.total_revenue",transform:"SUM(amount)"}].map((c,i)=>(
-                <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6}}>
-                  <span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.blue}}>{c.from}</span>
-                  {Ic.chevRight(12)}
-                  <span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.accent}}>{c.to}</span>
-                  <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted,fontStyle:"italic"}}>{c.transform}</span>
-                </div>
-              ))}
-            </div>}
-      </div>
-    </Card2>
-  </div>;
+  );
 };
 
 const AssetQualityTab = ({asset,onToast,onNav})=>{
