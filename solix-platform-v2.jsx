@@ -6934,15 +6934,17 @@ const PolicyManagerView = ({onToast, onNav}) => {
                     "Redshift":   ["Table","View","Schema","Database"],
                   };
                   const ALL_TYPES=["Table","View","Schema","Database","Container","Column","Materialized View","Pipeline","Object","Folder","Bucket","Dashboard","ML Model"];
-                  // Asset Type options are driven by Source selection
-                  const availTypes=scopeSrcs.length>0?[...new Set(scopeSrcs.flatMap(s=>SRC_TYPES[s]||ALL_TYPES))]:[];
+                  // Map picker labels → service values in ASSETS
+                  const SRC_SERVICE = {"Snowflake":["snowflake"],"Databricks":["databricks"],"PostgreSQL":["postgres","postgresql"],"Oracle":["oracle"],"BigQuery":["bigquery"],"S3":["s3"],"Azure Blob":["azure","blob"],"Redshift":["redshift"]};
+                  // Asset Type options narrow based on Source; if no source selected show all
+                  const availTypes=scopeSrcs.length>0?[...new Set(scopeSrcs.flatMap(s=>SRC_TYPES[s]||ALL_TYPES))]:ALL_TYPES;
                   const validScopeTypes=scopeTypes.filter(t=>availTypes.includes(t));
-                  // Assets filtered by domain → source → asset type (cascade)
+                  // Cascade filter: domain → source → asset type → asset list
                   let matchedAssets=[...ASSETS];
                   if(scopeDoms.length>0)       matchedAssets=matchedAssets.filter(a=>scopeDoms.includes(a.domain));
-                  if(scopeSrcs.length>0)       matchedAssets=matchedAssets.filter(a=>scopeSrcs.some(s=>(a.source||a.connectionType||a.platform||"").toLowerCase().includes(s.toLowerCase())));
+                  if(scopeSrcs.length>0)       matchedAssets=matchedAssets.filter(a=>scopeSrcs.some(s=>(SRC_SERVICE[s]||[s.toLowerCase()]).includes((a.service||"").toLowerCase())));
                   if(validScopeTypes.length>0) matchedAssets=matchedAssets.filter(a=>validScopeTypes.includes(a.type||"Table"));
-                  const assetOpts=matchedAssets.map(a=>a.name||a.id);
+                  const assetOpts=matchedAssets.map(a=>a.name||String(a.id));
                   return (
                     <div style={{display:"flex",flexDirection:"column",gap:20}}>
                       {secHead("Policy Scope","Define which assets this policy governs. Asset selection is required — conditions will be evaluated against these assets.")}
@@ -6954,28 +6956,26 @@ const PolicyManagerView = ({onToast, onNav}) => {
                         selected={scopeDoms}
                         onChange={v=>setNewPol(p=>({...p,scope:{...p.scope,domains:v,assetIds:[]}}))}
                       />
-                      {/* 2. Source — drives Asset Type options */}
+                      {/* 2. Source */}
                       <CatFieldDropdown
                         label="Source"
                         placeholder="Search and select sources…"
                         options={["Snowflake","Databricks","PostgreSQL","Oracle","BigQuery","S3","Azure Blob","Redshift"]}
                         selected={scopeSrcs}
                         onChange={v=>{
-                          const newAvail=v.length>0?[...new Set(v.flatMap(s=>SRC_TYPES[s]||ALL_TYPES))]:[];
+                          const newAvail=v.length>0?[...new Set(v.flatMap(s=>SRC_TYPES[s]||ALL_TYPES))]:ALL_TYPES;
                           const keptTypes=scopeTypes.filter(t=>newAvail.includes(t));
                           setNewPol(p=>({...p,scope:{...p.scope,sources:v,assetTypes:keptTypes,assetIds:[]}}));
                         }}
                       />
-                      {/* 3. Asset Type — shown only when source is selected, options filtered by source */}
-                      {scopeSrcs.length>0&&(
-                        <CatFieldDropdown
-                          label="Asset Type"
-                          placeholder="Search and select asset types…"
-                          options={availTypes}
-                          selected={validScopeTypes}
-                          onChange={v=>setNewPol(p=>({...p,scope:{...p.scope,assetTypes:v,assetIds:[]}}))}
-                        />
-                      )}
+                      {/* 3. Asset Type — always visible; values narrow based on Source */}
+                      <CatFieldDropdown
+                        label="Asset Type"
+                        placeholder={scopeSrcs.length>0?"Search and select asset types…":"Select a source to narrow asset types…"}
+                        options={availTypes}
+                        selected={validScopeTypes}
+                        onChange={v=>setNewPol(p=>({...p,scope:{...p.scope,assetTypes:v,assetIds:[]}}))}
+                      />
                       <div>
                         <CatFieldDropdown
                           label={<>Asset <span style={{color:T.rose,marginLeft:2}}>*</span></>}
