@@ -5697,11 +5697,12 @@ const PolicyManagerView = ({onToast, onNav}) => {
 
   // ─── wizard constants ────────────────────────────────────────────────
   const W_STEPS = [
-    {id:"scope",  label:"Scope",          sub:"Domain, asset type, source & asset"},
-    {id:"policy", label:"Policy & Rules", sub:"Type, conditions & consequence"},
-    {id:"review", label:"Review",         sub:"Confirm & create"},
+    {id:"scope",     label:"Scope",          sub:"Domain, asset type, source & asset"},
+    {id:"policy",    label:"Policy & Rules", sub:"Type, conditions & consequence"},
+    {id:"ownership", label:"Ownership",      sub:"Owner, stewards & frameworks"},
+    {id:"review",    label:"Review",         sub:"Confirm & create"},
   ];
-  const W_FIELD_LABELS = {certification:"Certification Status",quality_score:"Quality Score",asset_type:"Asset Type",domain:"Domain",tag:"Tag",glossary_term:"Glossary Term",owner:"Owner",steward:"Steward",has_open_incident:"Has Open Incident",has_active_violation:"Has Active Violation",is_in_data_product:"Is in Data Product"};
+  const W_FIELD_LABELS = {certification:"Certification Status",quality_score:"Quality Score",asset_type:"Asset Type",domain:"Domain",tag:"Tag",glossary_term:"Glossary Term",owner:"Owner",steward:"Steward",has_open_incident:"Has Open Incident",has_active_violation:"Has Active Violation",is_in_data_product:"Is in Data Product",encryption_at_rest:"Encryption at Rest",has_column_masking:"Has Column Masking",row_level_security:"Row-Level Security",retention_period_days:"Retention Period (days)",access_role_count:"Access Role Count",custom_sql:"Custom SQL"};
   const closeWizard = () => { setCreateOpen(false); setNewPol(EMPTY_POL); setCreateStep(1); setWizardRules([]); };
 
   // ─── computed ────────────────────────────────────────────────────────
@@ -7019,36 +7020,29 @@ const PolicyManagerView = ({onToast, onNav}) => {
                     Custom:     {color:T.textSub,icon:"⚙️", desc:"Custom SQL rule evaluated directly on the asset"},
                   };
                   const W_RULE_FIELDS = [
-                    {id:"certification",        label:"Certification Status",  type:"select",  ops:["is","is not"],               vals:["Draft","In Review","Approved","Rejected","Deprecated"]},
-                    {id:"quality_score",        label:"Quality Score",         type:"number",  ops:["greater than","less than","equals"]},
-                    {id:"asset_type",           label:"Asset Type",            type:"select",  ops:["is","is not","is one of"],    vals:["Table","View","Dashboard","ML Model","Pipeline","Schema","Database"]},
-                    {id:"domain",               label:"Domain",                type:"select",  ops:["is","is not","is one of"],    vals:ALL_DOMAINS},
-                    {id:"tag",                  label:"Tag",                   type:"select",  ops:["includes","does not include"],vals:POLICY_TAGS},
-                    {id:"glossary_term",        label:"Glossary Term",         type:"text",    ops:["includes","does not include"]},
-                    {id:"owner",                label:"Owner",                 type:"bool",    ops:["is assigned","is not assigned"]},
-                    {id:"steward",              label:"Steward",               type:"bool",    ops:["is assigned","is not assigned"]},
-                    {id:"has_open_incident",    label:"Has Open Incident",     type:"bool_yn", ops:["is"],                         vals:["Yes","No"]},
-                    {id:"has_active_violation", label:"Has Active Violation",  type:"bool_yn", ops:["is"],                         vals:["Yes","No"]},
-                    {id:"is_in_data_product",   label:"Is in Data Product",    type:"bool_yn", ops:["is"],                         vals:["Yes","No"]},
+                    {id:"certification",         label:"Certification Status",    type:"select",   ops:["is","is not"],               vals:["Draft","In Review","Approved","Rejected","Deprecated"]},
+                    {id:"quality_score",         label:"Quality Score",           type:"number",   ops:["greater than","less than","equals"]},
+                    {id:"asset_type",            label:"Asset Type",              type:"select",   ops:["is","is not","is one of"],    vals:["Table","View","Dashboard","ML Model","Pipeline","Schema","Database"]},
+                    {id:"domain",                label:"Domain",                  type:"select",   ops:["is","is not","is one of"],    vals:ALL_DOMAINS},
+                    {id:"tag",                   label:"Tag",                     type:"select",   ops:["includes","does not include"],vals:POLICY_TAGS},
+                    {id:"glossary_term",         label:"Glossary Term",           type:"text",     ops:["includes","does not include"]},
+                    {id:"owner",                 label:"Owner",                   type:"bool",     ops:["is assigned","is not assigned"]},
+                    {id:"steward",               label:"Steward",                 type:"bool",     ops:["is assigned","is not assigned"]},
+                    {id:"has_open_incident",     label:"Has Open Incident",       type:"bool_yn",  ops:["is"],                         vals:["Yes","No"]},
+                    {id:"has_active_violation",  label:"Has Active Violation",    type:"bool_yn",  ops:["is"],                         vals:["Yes","No"]},
+                    {id:"is_in_data_product",    label:"Is in Data Product",      type:"bool_yn",  ops:["is"],                         vals:["Yes","No"]},
+                    {id:"encryption_at_rest",    label:"Encryption at Rest",      type:"select",   ops:["is"],                         vals:["Enabled","Disabled"]},
+                    {id:"has_column_masking",    label:"Has Column Masking",      type:"bool_yn",  ops:["is"],                         vals:["Yes","No"]},
+                    {id:"row_level_security",    label:"Row-Level Security",      type:"bool_yn",  ops:["is"],                         vals:["Yes","No"]},
+                    {id:"retention_period_days", label:"Retention Period (days)", type:"number",   ops:["greater than","less than","equals"]},
+                    {id:"access_role_count",     label:"Access Role Count",       type:"number",   ops:["greater than","less than","equals"]},
+                    {id:"custom_sql",            label:"Custom SQL",              type:"custom_sql",ops:["passes","fails"]},
                   ];
-                  const addRule = () => setWizardRules(prev=>[...prev,{id:`wr-${Date.now()}`,field:"certification",operator:"is",value:""}]);
+                  const addRule = () => setWizardRules(prev=>[...prev,{id:`wr-${Date.now()}`,field:"certification",operator:"is",value:"",sqlConnection:"",sqlBody:"",sqlPassCondition:"count_is_zero",sqlDescription:""}]);
                   const removeRule = id => setWizardRules(prev=>prev.filter(r=>r.id!==id));
                   const updRule = (id,k,v) => setWizardRules(prev=>prev.map(r=>r.id===id?{...r,[k]:v}:r));
                   const sel_s={padding:"7px 9px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",cursor:"pointer",fontFamily:"inherit"};
-                  const hasCustom    = selPTypes.includes("Custom");
-                  const hasRetention = selPTypes.includes("Retention");
-                  const hasProtection= selPTypes.includes("Protection");
-                  const hasAccess    = selPTypes.includes("Access");
-                  const hasQuality   = selPTypes.includes("Quality");
                   const cq = newPol.consequence||{severity:"Medium",onViolation:"Warn",notify:"Both"};
-                  const cs = newPol.customSql||{connection:"",sql:"",passCondition:"count_is_zero",description:""};
-                  const ava = u=>u.split(".").map(s=>s[0]?.toUpperCase()).join("");
-                  const userRenderOpt = u=>(
-                    <>
-                      <div style={{width:22,height:22,borderRadius:5,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(u)}</div>
-                      <span style={{flex:1,fontSize:12,color:T.text}}>{u}</span>
-                    </>
-                  );
                   return (
                     <div style={{display:"flex",flexDirection:"column",gap:0}}>
 
@@ -7102,10 +7096,68 @@ const PolicyManagerView = ({onToast, onNav}) => {
                           : <>
                               {wizardRules.map((r)=>{
                                 const fd=W_RULE_FIELDS.find(f=>f.id===r.field)||W_RULE_FIELDS[0];
+                                const isSql    = fd.type==="custom_sql";
                                 const isBool   = fd.type==="bool";
                                 const needsVal = (fd.type==="select"||fd.type==="bool_yn");
                                 const needsNum = fd.type==="number";
                                 const needsTxt = fd.type==="text";
+                                const rmBtn = (
+                                  <button onClick={()=>removeRule(r.id)} title="Remove"
+                                    style={{width:24,height:24,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15,lineHeight:1}}
+                                    onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
+                                    onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>×</button>
+                                );
+                                if(isSql) return (
+                                  <div key={r.id} style={{background:T.bgElevated,borderRadius:9,border:`1.5px solid ${T.border}`,overflow:"hidden"}}>
+                                    <div style={{padding:"10px 12px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",borderBottom:`1px solid ${T.border}`,background:T.bgBase}}>
+                                      <span style={{fontSize:10,fontWeight:700,color:T.accent,background:T.accentDim,padding:"2px 7px",borderRadius:4,flexShrink:0}}>IF</span>
+                                      <select value={r.field} onChange={e=>{const nfd=W_RULE_FIELDS.find(f=>f.id===e.target.value)||W_RULE_FIELDS[0];updRule(r.id,"field",e.target.value);updRule(r.id,"operator",nfd.ops[0]);updRule(r.id,"value","");}} style={{...sel_s,flex:"1 1 140px",minWidth:110}}>
+                                        {W_RULE_FIELDS.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}
+                                      </select>
+                                      <select value={r.operator||"passes"} onChange={e=>updRule(r.id,"operator",e.target.value)} style={{...sel_s,flex:"0 0 auto",minWidth:80}}>
+                                        {fd.ops.map(op=><option key={op} value={op}>{op}</option>)}
+                                      </select>
+                                      <select value={r.sqlConnection||""} onChange={e=>updRule(r.id,"sqlConnection",e.target.value)} style={{...sel_s,flex:"1 1 120px",minWidth:100}}>
+                                        <option value="">— connection —</option>
+                                        {["Snowflake","Databricks","PostgreSQL","Oracle","BigQuery","Redshift"].map(c=><option key={c} value={c}>{c}</option>)}
+                                      </select>
+                                      <span style={{marginLeft:"auto",fontSize:10,color:T.amber,background:T.amberDim,padding:"2px 6px",borderRadius:4,fontWeight:600,flexShrink:0}}>Admin only</span>
+                                      {rmBtn}
+                                    </div>
+                                    <div style={{padding:"12px 12px",display:"flex",flexDirection:"column",gap:10}}>
+                                      <div>
+                                        <label style={{...{display:"block",fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:4},textTransform:"uppercase",letterSpacing:"0.05em"}}>SQL Rule — use {"{{schema}}"} and {"{{table}}"}</label>
+                                        <textarea value={r.sqlBody||""} onChange={e=>updRule(r.id,"sqlBody",e.target.value)} rows={4}
+                                          placeholder={"SELECT COUNT(*)\nFROM {{schema}}.{{table}}\nWHERE pii_flag IS NOT NULL\n  AND masking_policy IS NULL"}
+                                          style={{width:"100%",padding:"8px 10px",background:T.bgBase,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11,fontFamily:"'Geist Mono','Courier New',monospace",lineHeight:1.7,outline:"none",resize:"vertical",boxSizing:"border-box"}}
+                                          onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                                      </div>
+                                      <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
+                                        <div style={{flex:1}}>
+                                          <label style={{display:"block",fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:4,textTransform:"uppercase",letterSpacing:"0.05em"}}>Pass when</label>
+                                          <select value={r.sqlPassCondition||"count_is_zero"} onChange={e=>updRule(r.id,"sqlPassCondition",e.target.value)} style={{...sel_s,width:"100%"}}>
+                                            <option value="count_is_zero">Count = 0 (no violations found)</option>
+                                            <option value="count_gt_zero">Count &gt; 0 (matches found = pass)</option>
+                                            <option value="returns_true">Returns true</option>
+                                            <option value="returns_false">Returns false</option>
+                                          </select>
+                                        </div>
+                                        <button style={{padding:"7px 12px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgBase,color:T.textSub,fontSize:11.5,cursor:"pointer",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:5,flexShrink:0}}
+                                          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                                          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+                                          ▶ Run Test
+                                        </button>
+                                      </div>
+                                      <div>
+                                        <label style={{display:"block",fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:4,textTransform:"uppercase",letterSpacing:"0.05em"}}>Description <span style={{color:T.rose}}>*</span></label>
+                                        <input value={r.sqlDescription||""} onChange={e=>updRule(r.id,"sqlDescription",e.target.value)}
+                                          placeholder="Describe what this SQL rule checks and why…"
+                                          style={{width:"100%",padding:"7px 10px",background:T.bgBase,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box"}}
+                                          onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
                                 return (
                                   <div key={r.id} style={{background:T.bgElevated,borderRadius:9,border:`1.5px solid ${T.border}`,padding:"10px 12px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                                     <span style={{fontSize:10,fontWeight:700,color:T.accent,background:T.accentDim,padding:"2px 7px",borderRadius:4,flexShrink:0}}>IF</span>
@@ -7117,7 +7169,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                                     }} style={{...sel_s,flex:"1 1 140px",minWidth:110}}>
                                       {W_RULE_FIELDS.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}
                                     </select>
-                                    <select value={r.operator} onChange={e=>updRule(r.id,"operator",e.target.value)} style={{...sel_s,flex:"0 0 auto",minWidth:isBool?140:100}}>
+                                    <select value={r.operator} onChange={e=>updRule(r.id,"operator",e.target.value)} style={{...sel_s,flex:"0 0 auto",minWidth:isBool?148:100}}>
                                       {fd.ops.map(op=><option key={op} value={op}>{op}</option>)}
                                     </select>
                                     {needsVal&&!isBool&&(
@@ -7134,10 +7186,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                                       <input type="text" value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} placeholder="enter value…"
                                         style={{...sel_s,flex:"1 1 110px"}}/>
                                     )}
-                                    <button onClick={()=>removeRule(r.id)} title="Remove"
-                                      style={{width:24,height:24,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15,lineHeight:1}}
-                                      onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
-                                      onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>×</button>
+                                    {rmBtn}
                                   </div>
                                 );
                               })}
@@ -7151,191 +7200,6 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       </div>
                       {divider}
 
-                      {/* ── Policy-specific config ── */}
-                      {selPTypes.length>0&&(<>
-                        {secHead("Policy Configuration","Additional settings based on selected policy types.")}
-                        <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:4}}>
-
-                          {hasRetention&&(
-                            <div style={{borderRadius:10,border:`1.5px solid ${T.amber}30`,overflow:"hidden"}}>
-                              <div style={{padding:"9px 14px",borderBottom:`1px solid ${T.amber}20`,background:`${T.amber}0a`,display:"flex",alignItems:"center",gap:6}}>
-                                <span>🕒</span><span style={{fontSize:11.5,fontWeight:700,color:T.amber}}>Retention Settings</span>
-                              </div>
-                              <div style={{padding:"14px",display:"flex",flexDirection:"column",gap:12,background:T.bgElevated}}>
-                                <div style={{display:"flex",gap:8}}>
-                                  <div style={{flex:2}}><label style={lbl}>Retention Period</label><input type="number" placeholder="90" value={newPol.retentionPeriod||""} onChange={e=>setNewPol(p=>({...p,retentionPeriod:e.target.value}))} style={inp}/></div>
-                                  <div style={{flex:1}}><label style={lbl}>Unit</label>
-                                    <select value={newPol.retentionUnit||"days"} onChange={e=>setNewPol(p=>({...p,retentionUnit:e.target.value}))} style={{...inp,padding:"8px 9px"}}>
-                                      <option value="days">Days</option><option value="months">Months</option><option value="years">Years</option>
-                                    </select>
-                                  </div>
-                                </div>
-                                <div><label style={lbl}>Clock Starts From</label>
-                                  <select value={newPol.retentionClockFrom||"created_date"} onChange={e=>setNewPol(p=>({...p,retentionClockFrom:e.target.value}))} style={{...inp,padding:"8px 9px"}}>
-                                    <option value="created_date">Created Date</option>
-                                    <option value="last_modified">Last Modified Date</option>
-                                    <option value="last_accessed">Last Accessed Date</option>
-                                    <option value="event_date">Event / Transaction Date</option>
-                                  </select>
-                                </div>
-                                <div><label style={lbl}>On Expiry</label>
-                                  <select value={newPol.retentionOnExpiry||"archive"} onChange={e=>setNewPol(p=>({...p,retentionOnExpiry:e.target.value}))} style={{...inp,padding:"8px 9px"}}>
-                                    <option value="archive">Archive</option>
-                                    <option value="delete">Delete</option>
-                                    <option value="flag">Flag for review</option>
-                                    <option value="notify">Notify owner only</option>
-                                  </select>
-                                </div>
-                                <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:12,color:T.textSub}}>
-                                  <input type="checkbox" checked={!!newPol.legalHold} onChange={e=>setNewPol(p=>({...p,legalHold:e.target.checked}))} style={{width:14,height:14}}/>
-                                  Enable Legal Hold override (Compliance Admin only)
-                                </label>
-                              </div>
-                            </div>
-                          )}
-
-                          {hasProtection&&(
-                            <div style={{borderRadius:10,border:`1.5px solid ${T.rose}30`,overflow:"hidden"}}>
-                              <div style={{padding:"9px 14px",borderBottom:`1px solid ${T.rose}20`,background:`${T.rose}0a`,display:"flex",alignItems:"center",gap:6}}>
-                                <span>🔒</span><span style={{fontSize:11.5,fontWeight:700,color:T.rose}}>Protection Settings</span>
-                              </div>
-                              <div style={{padding:"14px",display:"flex",flexDirection:"column",gap:12,background:T.bgElevated}}>
-                                <div><label style={lbl}>Applies to columns with Tag</label>
-                                  <select value={newPol.protectionTag||""} onChange={e=>setNewPol(p=>({...p,protectionTag:e.target.value}))} style={{...inp,padding:"8px 9px"}}>
-                                    <option value="">All columns</option>
-                                    {POLICY_TAGS.map(t=><option key={t} value={t}>{t}</option>)}
-                                  </select>
-                                </div>
-                                <div><label style={lbl}>Masking Type</label>
-                                  <select value={newPol.maskingType||"none"} onChange={e=>setNewPol(p=>({...p,maskingType:e.target.value}))} style={{...inp,padding:"8px 9px"}}>
-                                    <option value="none">None</option>
-                                    <option value="full">Full Mask (***)</option>
-                                    <option value="partial">Partial Mask (last 4 digits)</option>
-                                    <option value="hash">Hash (SHA-256)</option>
-                                    <option value="tokenize">Tokenize</option>
-                                    <option value="null">Null out</option>
-                                  </select>
-                                </div>
-                                <div><label style={lbl}>Exempt Roles</label>
-                                  <input value={newPol.exemptRoles||""} onChange={e=>setNewPol(p=>({...p,exemptRoles:e.target.value}))} placeholder="e.g. ANALYST_ADMIN, DATA_SCIENCE_LEAD" style={inp} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                                </div>
-                                <div style={{display:"flex",gap:20}}>
-                                  <label style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",fontSize:12,color:T.textSub}}>
-                                    <input type="checkbox" checked={!!newPol.encryptionAtRest} onChange={e=>setNewPol(p=>({...p,encryptionAtRest:e.target.checked}))} style={{width:13,height:13}}/>
-                                    Encryption at rest
-                                  </label>
-                                  <label style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",fontSize:12,color:T.textSub}}>
-                                    <input type="checkbox" checked={!!newPol.encryptionInTransit} onChange={e=>setNewPol(p=>({...p,encryptionInTransit:e.target.checked}))} style={{width:13,height:13}}/>
-                                    Encryption in transit
-                                  </label>
-                                </div>
-                                <div><label style={lbl}>Declaration Note</label>
-                                  <textarea value={newPol.protectionNote||""} onChange={e=>setNewPol(p=>({...p,protectionNote:e.target.value}))} rows={2} placeholder="Describe the protection requirement and business reason…" style={{...inp,resize:"vertical"}}/>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {hasAccess&&(
-                            <div style={{borderRadius:10,border:`1.5px solid ${T.blue}30`,overflow:"hidden"}}>
-                              <div style={{padding:"9px 14px",borderBottom:`1px solid ${T.blue}20`,background:`${T.blue}0a`,display:"flex",alignItems:"center",gap:6}}>
-                                <span>🔑</span><span style={{fontSize:11.5,fontWeight:700,color:T.blue}}>Access Settings</span>
-                              </div>
-                              <div style={{padding:"14px",display:"flex",flexDirection:"column",gap:12,background:T.bgElevated}}>
-                                <div><label style={lbl}>Allowed Roles</label>
-                                  <input value={newPol.allowedRoles||""} onChange={e=>setNewPol(p=>({...p,allowedRoles:e.target.value}))} placeholder="e.g. DATA_ANALYST, BI_VIEWER, FINANCE_ADMIN" style={inp} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                                </div>
-                                <div><label style={lbl}>Purpose of Use</label>
-                                  <select value={newPol.purposeOfUse||""} onChange={e=>setNewPol(p=>({...p,purposeOfUse:e.target.value}))} style={{...inp,padding:"8px 9px"}}>
-                                    <option value="">Not specified</option>
-                                    <option value="analytics">Analytics & Reporting</option>
-                                    <option value="ml_training">ML / Model Training</option>
-                                    <option value="auditing">Auditing & Compliance</option>
-                                    <option value="operations">Operational Processing</option>
-                                    <option value="research">Research</option>
-                                  </select>
-                                </div>
-                                <div style={{display:"flex",gap:20}}>
-                                  <label style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",fontSize:12,color:T.textSub}}>
-                                    <input type="checkbox" checked={!!newPol.exportRestricted} onChange={e=>setNewPol(p=>({...p,exportRestricted:e.target.checked}))} style={{width:13,height:13}}/>
-                                    Export restricted
-                                  </label>
-                                  <label style={{display:"flex",alignItems:"center",gap:7,cursor:"pointer",fontSize:12,color:T.textSub}}>
-                                    <input type="checkbox" checked={!!newPol.requiresApproval} onChange={e=>setNewPol(p=>({...p,requiresApproval:e.target.checked}))} style={{width:13,height:13}}/>
-                                    Requires approval to access
-                                  </label>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {hasQuality&&(
-                            <div style={{borderRadius:10,border:`1.5px solid ${T.green}30`,overflow:"hidden"}}>
-                              <div style={{padding:"9px 14px",borderBottom:`1px solid ${T.green}20`,background:`${T.green}0a`,display:"flex",alignItems:"center",gap:6}}>
-                                <span>✅</span><span style={{fontSize:11.5,fontWeight:700,color:T.green}}>Quality Settings</span>
-                              </div>
-                              <div style={{padding:"14px",display:"flex",gap:12,background:T.bgElevated}}>
-                                <div style={{flex:1}}><label style={lbl}>Min Quality Score</label>
-                                  <input type="number" min="0" max="100" placeholder="80" value={newPol.minQualityScore||""} onChange={e=>setNewPol(p=>({...p,minQualityScore:e.target.value}))} style={inp}/>
-                                </div>
-                                <div style={{flex:1}}><label style={lbl}>Freshness Window</label>
-                                  <select value={newPol.freshnessWindow||"24h"} onChange={e=>setNewPol(p=>({...p,freshnessWindow:e.target.value}))} style={{...inp,padding:"8px 9px"}}>
-                                    <option value="1h">1 hour</option><option value="6h">6 hours</option><option value="12h">12 hours</option>
-                                    <option value="24h">24 hours</option><option value="48h">48 hours</option>
-                                    <option value="7d">7 days</option><option value="30d">30 days</option>
-                                  </select>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {hasCustom&&(
-                            <div style={{borderRadius:10,border:`1.5px solid ${T.border}`,overflow:"hidden"}}>
-                              <div style={{padding:"9px 14px",borderBottom:`1px solid ${T.border}`,background:T.bgBase,display:"flex",alignItems:"center",gap:6}}>
-                                <span>⚙️</span>
-                                <span style={{fontSize:11.5,fontWeight:700,color:T.textSub}}>Custom SQL Rule</span>
-                                <span style={{marginLeft:"auto",fontSize:10,color:T.amber,background:T.amberDim,padding:"2px 7px",borderRadius:4,fontWeight:600}}>Admin / Connection Admin only</span>
-                              </div>
-                              <div style={{padding:"14px",display:"flex",flexDirection:"column",gap:12,background:T.bgElevated}}>
-                                <div><label style={lbl}>Connection</label>
-                                  <select value={cs.connection} onChange={e=>setNewPol(p=>({...p,customSql:{...p.customSql,connection:e.target.value}}))} style={{...inp,padding:"8px 9px"}}>
-                                    <option value="">— select connection —</option>
-                                    {["Snowflake","Databricks","PostgreSQL","Oracle","BigQuery","Redshift"].map(c=><option key={c} value={c}>{c}</option>)}
-                                  </select>
-                                </div>
-                                <div>
-                                  <label style={lbl}>SQL Rule <span style={{fontSize:10,color:T.textMuted,fontWeight:400}}>— use {"{{schema}}"} and {"{{table}}"} as placeholders</span></label>
-                                  <textarea value={cs.sql} onChange={e=>setNewPol(p=>({...p,customSql:{...p.customSql,sql:e.target.value}}))} rows={5}
-                                    placeholder={"SELECT COUNT(*)\nFROM {{schema}}.{{table}}\nWHERE pii_flag IS NOT NULL\n  AND masking_policy IS NULL"}
-                                    style={{...inp,resize:"vertical",fontFamily:"'Geist Mono','Courier New',monospace",fontSize:11,lineHeight:1.7}}
-                                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                                </div>
-                                <div><label style={lbl}>Pass Condition</label>
-                                  <select value={cs.passCondition||"count_is_zero"} onChange={e=>setNewPol(p=>({...p,customSql:{...p.customSql,passCondition:e.target.value}}))} style={{...inp,padding:"8px 9px"}}>
-                                    <option value="count_is_zero">Count = 0 (no violations found)</option>
-                                    <option value="count_gt_zero">Count &gt; 0 (matches found = pass)</option>
-                                    <option value="returns_true">Returns true</option>
-                                    <option value="returns_false">Returns false</option>
-                                  </select>
-                                </div>
-                                <div>
-                                  <label style={lbl}>Description <span style={{color:T.rose}}>*</span></label>
-                                  <textarea value={cs.description} onChange={e=>setNewPol(p=>({...p,customSql:{...p.customSql,description:e.target.value}}))} rows={2}
-                                    placeholder="Describe what this SQL rule checks and why…"
-                                    style={{...inp,resize:"vertical"}}
-                                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                                </div>
-                                <button style={{padding:"7px 14px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgBase,color:T.textSub,fontSize:12,cursor:"pointer",alignSelf:"flex-start",display:"flex",alignItems:"center",gap:6}}
-                                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
-                                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
-                                  ▶ Run Test
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        {divider}
-                      </>)}
 
                       {/* ── Consequence ── */}
                       {secHead("Consequence","What happens when a violation is detected?")}
@@ -7373,20 +7237,35 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       </div>
                       {divider}
 
-                      {/* ── Ownership ── */}
-                      {secHead("Ownership","Assign responsibility and link to regulatory frameworks.")}
-                      <div style={{display:"flex",flexDirection:"column",gap:16}}>
-                        <CatFieldDropdown label="Policy Owner" placeholder="Search and select owners…" options={PMV_USERS} selected={newPol.owner||[]} onChange={v=>setNewPol(p=>({...p,owner:v}))} renderOpt={userRenderOpt}/>
-                        <CatFieldDropdown label="Stewards" placeholder="Search and select stewards…" options={PMV_USERS} selected={newPol.stewards||[]} onChange={v=>setNewPol(p=>({...p,stewards:v}))} renderOpt={userRenderOpt}/>
-                        <CatFieldDropdown label="Regulatory Frameworks" placeholder="Search and select frameworks…" options={["GDPR","CCPA","HIPAA","SOC2","PCI DSS","ISO 27001","NIST","LGPD","PDPA","FERPA"]} selected={newPol.regulations||[]} onChange={v=>setNewPol(p=>({...p,regulations:v}))}/>
-                        <CatFieldDropdown label="Tags" placeholder="Search and select tags…" options={POLICY_TAGS} selected={newPol.tags||[]} onChange={v=>setNewPol(p=>({...p,tags:v}))}/>
+                    </div>
+                  );
+                }
+
+                /* ─── Step 3: Ownership ─── */
+                if(createStep===3){
+                  const ava=u=>u.split(".").map(s=>s[0]?.toUpperCase()).join("");
+                  const userRenderOpt=u=>(
+                    <>
+                      <div style={{width:22,height:22,borderRadius:5,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(u)}</div>
+                      <span style={{flex:1,fontSize:12,color:T.text}}>{u}</span>
+                    </>
+                  );
+                  return (
+                    <div style={{display:"flex",flexDirection:"column",gap:18}}>
+                      {secHead("Ownership & Classification","Assign who is responsible for this policy and link it to regulations and tags.")}
+                      <CatFieldDropdown label="Policy Owner" placeholder="Search and select owners…" options={PMV_USERS} selected={newPol.owner||[]} onChange={v=>setNewPol(p=>({...p,owner:v}))} renderOpt={userRenderOpt}/>
+                      <CatFieldDropdown label="Stewards" placeholder="Search and select stewards…" options={PMV_USERS} selected={newPol.stewards||[]} onChange={v=>setNewPol(p=>({...p,stewards:v}))} renderOpt={userRenderOpt}/>
+                      <CatFieldDropdown label="Regulatory Frameworks" placeholder="Search and select frameworks…" options={["GDPR","CCPA","HIPAA","SOC2","PCI DSS","ISO 27001","NIST","LGPD","PDPA","FERPA"]} selected={newPol.regulations||[]} onChange={v=>setNewPol(p=>({...p,regulations:v}))}/>
+                      <CatFieldDropdown label="Tags" placeholder="Search and select tags…" options={POLICY_TAGS} selected={newPol.tags||[]} onChange={v=>setNewPol(p=>({...p,tags:v}))}/>
+                      <div style={{padding:"10px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textMuted,lineHeight:1.7}}>
+                        <strong style={{color:T.textSub}}>Evaluation:</strong> Policy conditions run automatically on every workflow run. Violations are created immediately when a condition fails on an asset.
                       </div>
                     </div>
                   );
                 }
 
-                /* ─── Step 3: Review ─── */
-                if(createStep===3){
+                /* ─── Step 4: Review ─── */
+                if(createStep===4){
                   const cq=newPol.consequence||{severity:"Medium",onViolation:"Warn",notify:"Both"};
                   const scopeAssetCount=(newPol.scope?.assetIds||[]).length;
                   return (
@@ -7458,6 +7337,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       const step1ok=(newPol.scope?.assetIds||[]).length>0;
                       const step2ok=newPol.name.trim().length>0;
                       const canContinue=createStep===1?step1ok:createStep===2?step2ok:true;
+                      // step 3 (ownership) always continuable; step 4 is review/create
                       return (
                         <button onClick={()=>{if(!canContinue)return;setCreateStep(s=>s+1);}}
                           style={{padding:"7px 22px",borderRadius:7,background:canContinue?T.accent:T.bgElevated,border:`1px solid ${canContinue?T.accent:T.border}`,color:canContinue?"#fff":T.textMuted,fontSize:12,fontWeight:700,cursor:canContinue?"pointer":"not-allowed",transition:"all .1s"}}>
