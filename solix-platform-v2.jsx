@@ -5658,7 +5658,6 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const [wizardRules,    setWizardRules]    = useState([]);
   const [sevOpen,        setSevOpen]        = useState(null);
   const [selRegId,       setSelRegId]       = useState(null);
-  const [regFilterMode,  setRegFilterMode]  = useState("active");
   const [polEditCatOpen,  setPolEditCatOpen]  = useState(false);
   const [polEditCatDraft, setPolEditCatDraft] = useState(null);
   const filterDropRef  = useRef(null);
@@ -6946,37 +6945,38 @@ const PolicyManagerView = ({onToast, onNav}) => {
           }
 
           // ─── List view ───
-          const activeRegs = regulations.filter(r=>r.enabled);
-          const shownRegs  = regFilterMode==="active" ? activeRegs : regulations;
+          const enabledRegs = regulations.filter(r=>r.enabled);
+          const [regSearch, setRegSearch] = React.useState("");
+          const searchedRegs = regSearch ? enabledRegs.filter(r=>r.name.toLowerCase().includes(regSearch.toLowerCase())||r.fullName.toLowerCase().includes(regSearch.toLowerCase())||r.jurisdiction.toLowerCase().includes(regSearch.toLowerCase())) : enabledRegs;
           const REG_GROUPS = [
-            {label:"Privacy",   regs: shownRegs.filter(r=>r.type==="Privacy")},
-            {label:"Healthcare",regs: shownRegs.filter(r=>r.type==="Healthcare")},
-            {label:"Financial", regs: shownRegs.filter(r=>r.type==="Financial")},
-            {label:"Security",  regs: shownRegs.filter(r=>r.type==="Security")},
+            {label:"Privacy",   regs: searchedRegs.filter(r=>r.type==="Privacy")},
+            {label:"Healthcare",regs: searchedRegs.filter(r=>r.type==="Healthcare")},
+            {label:"Financial", regs: searchedRegs.filter(r=>r.type==="Financial")},
+            {label:"Security",  regs: searchedRegs.filter(r=>r.type==="Security")},
           ];
           return (
             <div style={{flex:1,overflowY:"auto",padding:"20px 28px"}}>
-              {/* Filter toggle + Summary */}
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,gap:12,flexWrap:"wrap"}}>
-                <div style={{display:"flex",gap:0,background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`,padding:2}}>
-                  {[{k:"active",l:`Active (${activeRegs.length})`},{k:"all",l:`All Frameworks (${regulations.length})`}].map(f=>(
-                    <button key={f.k} onClick={()=>setRegFilterMode(f.k)}
-                      style={{padding:"5px 14px",borderRadius:6,border:"none",background:regFilterMode===f.k?T.bgSurface:"transparent",color:regFilterMode===f.k?T.text:T.textMuted,fontSize:12,fontWeight:regFilterMode===f.k?600:400,cursor:"pointer",transition:"all .15s",boxShadow:regFilterMode===f.k?"0 1px 4px rgba(0,0,0,.12)":"none"}}>
-                      {f.l}
-                    </button>
-                  ))}
+              {/* Header row: search + summary */}
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18,flexWrap:"wrap"}}>
+                <div style={{position:"relative",flex:1,maxWidth:340}}>
+                  <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                  <input value={regSearch} onChange={e=>setRegSearch(e.target.value)} placeholder="Search frameworks…"
+                    style={{width:"100%",padding:"7px 10px 7px 28px",background:T.bgElevated,border:`1.5px solid ${regSearch?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=regSearch?T.accent:T.border}/>
+                  {regSearch&&<button onClick={()=>setRegSearch("")} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:16,lineHeight:1}}>×</button>}
                 </div>
-                <span style={{fontSize:11.5,color:T.textMuted}}>{activeRegs.length} of {regulations.length} frameworks active for this org</span>
+                <span style={{fontSize:11.5,color:T.textMuted}}>{enabledRegs.length} active frameworks · <span style={{color:T.textMuted}}>manage in Settings → Regulatory Frameworks</span></span>
               </div>
               {/* Summary banner */}
               <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap"}}>
-                {[{label:"Passing",count:passing,color:T.green},{label:"Partial",count:partial,color:T.amber},{label:"Not Started",count:notStart,color:T.textMuted},{label:"Coverage Gaps",count:totalGaps,color:T.rose}].map(s=>(
+                {[{label:"Passing",count:enabledRegs.filter(r=>r.status==="Passing").length,color:T.green},{label:"Partial",count:enabledRegs.filter(r=>r.status==="Partial").length,color:T.amber},{label:"Not Started",count:enabledRegs.filter(r=>r.status==="Not Started").length,color:T.textMuted},{label:"Coverage Gaps",count:enabledRegs.reduce((s,r)=>s+r.requirements.filter(req=>!(req.linkedPolicies||[]).length).length,0),color:T.rose}].map(s=>(
                   <div key={s.label} style={{flex:1,minWidth:120,padding:"12px 16px",background:T.bgSurface,border:`1.5px solid ${s.color}30`,borderRadius:10,textAlign:"center"}}>
                     <div style={{fontSize:22,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:s.color,marginBottom:3}}>{s.count}</div>
                     <div style={{fontSize:10.5,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{s.label}</div>
                   </div>
                 ))}
               </div>
+              {searchedRegs.length===0&&<div style={{textAlign:"center",padding:"48px 0",color:T.textMuted,fontSize:13}}>No active frameworks match "{regSearch}". <button onClick={()=>setRegSearch("")} style={{background:"none",border:"none",color:T.accent,cursor:"pointer",fontSize:13,fontFamily:"inherit"}}>Clear</button></div>}
               {/* Grouped regulation cards */}
               {REG_GROUPS.map(group=>{
                 if(!group.regs.length) return null;
@@ -7010,16 +7010,10 @@ const PolicyManagerView = ({onToast, onNav}) => {
                               <div style={{flex:1,height:4,borderRadius:2,background:T.bgElevated,overflow:"hidden"}}><div style={{width:`${reg.score}%`,height:"100%",background:sc,borderRadius:2}}/></div>
                               <span style={{fontSize:11,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:sc,flexShrink:0}}>{reg.score}%</span>
                             </div>
-                            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-                              <div style={{display:"flex",alignItems:"center",gap:10,fontSize:10.5,color:T.textMuted}}>
-                                <span>{reg.requirements.length} requirements</span>
-                                {gaps>0&&<span style={{color:T.amber,fontWeight:600}}>· {gaps} gaps</span>}
-                                {linkedCt>0&&<span style={{color:T.green,fontWeight:600}}>· {linkedCt} {linkedCt===1?"policy":"policies"}</span>}
-                              </div>
-                              <button onClick={e=>{e.stopPropagation();setRegulations(prev=>prev.map(r=>r.id===reg.id?{...r,enabled:!r.enabled}:r));}}
-                                style={{fontSize:10,padding:"3px 9px",borderRadius:5,border:`1px solid ${reg.enabled?T.green+"50":T.border}`,background:reg.enabled?`${T.green}12`:"transparent",color:reg.enabled?T.green:T.textMuted,cursor:"pointer",fontWeight:600,flexShrink:0,transition:"all .15s",whiteSpace:"nowrap"}}>
-                                {reg.enabled?"✓ Active":"+ Enable"}
-                              </button>
+                            <div style={{display:"flex",alignItems:"center",gap:10,fontSize:10.5,color:T.textMuted}}>
+                              <span>{reg.requirements.length} requirements</span>
+                              {gaps>0&&<span style={{color:T.amber,fontWeight:600}}>· {gaps} gaps</span>}
+                              {linkedCt>0&&<span style={{color:T.green,fontWeight:600}}>· {linkedCt} {linkedCt===1?"policy":"policies"}</span>}
                             </div>
                           </div>
                         );
@@ -12371,7 +12365,6 @@ const DomainsView = ({onAsset, onNav}) => {
               {key:"overview",label:"Overview"},
               {key:"assets",label:`Assets (${productAssets.length})`},
               {key:"activity",label:"Activity"},
-              {key:"ports",label:"Ports"},
               {key:"contract",label:"Contract"},
               {key:"customprops",label:"Custom Properties"},
             ]} active={productTab} onChange={setProductTab}/>
@@ -12570,43 +12563,6 @@ const DomainsView = ({onAsset, onNav}) => {
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-
-            {/* PORTS TAB */}
-            {productTab==="ports"&&(
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
-                {[
-                  {type:"Input",icon:"📥",color:T.blue,items:upstream.length>0?upstream:[{displayName:"No upstream connections",icon:"—",id:"empty"}]},
-                  {type:"Output",icon:"📤",color:T.green,items:downstream.length>0?downstream:[{displayName:"No downstream connections",icon:"—",id:"empty"}]},
-                ].map(col=>(
-                  <div key={col.type}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
-                      <div style={{width:28,height:28,borderRadius:8,background:`${col.color}18`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>{col.icon}</div>
-                      <div style={{fontSize:13,fontWeight:700,color:T.text}}>{col.type} Ports</div>
-                    </div>
-                    {col.items.map(item=>(
-                      item.id==="empty"
-                        ? <div key="empty" style={{padding:"20px 0",textAlign:"center",color:T.textMuted,fontSize:12,border:`1px dashed ${T.border}`,borderRadius:9}}>No {col.type.toLowerCase()} ports configured</div>
-                        : <div key={item.id} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,marginBottom:8,cursor:"pointer",transition:"all .12s"}}
-                            onClick={()=>setSelectedProductId(item.id)}
-                            onMouseEnter={e=>{e.currentTarget.style.borderColor=col.color;e.currentTarget.style.boxShadow=`0 2px 12px ${col.color}20`;}}
-                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
-                            <span style={{fontSize:18}}>{item.icon}</span>
-                            <div style={{flex:1}}>
-                              <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{item.displayName}</div>
-                              <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{item.domain||"—"} Domain</div>
-                            </div>
-                            <div style={{fontSize:11,color:col.color,fontWeight:600}}>→</div>
-                          </div>
-                    ))}
-                    {col.items[0]?.id!=="empty"&&(
-                      <button style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:T.textMuted,background:"none",border:`1px dashed ${T.border}`,borderRadius:7,padding:"7px 12px",cursor:"pointer",width:"100%",justifyContent:"center",marginTop:4}}>
-                        {Ic.plus(9)} Add {col.type} Port
-                      </button>
-                    )}
-                  </div>
-                ))}
               </div>
             )}
 
@@ -12829,7 +12785,6 @@ const DomainsView = ({onAsset, onNav}) => {
               {key:"subdomains",label:`Sub Domains (${domains.filter(d=>d.parentDomain===dm.id).length})`},
               {key:"dataproducts",label:`Data Products (${domainProducts.length})`},
               {key:"assets",label:`Assets (${domainAssets.length})`},
-              {key:"ports",label:"Ports"},
             ]} active={domainTab} onChange={setDomainTab}/>
           </div>
 
@@ -13195,49 +13150,6 @@ const DomainsView = ({onAsset, onNav}) => {
               </div>
             )}
 
-            {/* PORTS TAB */}
-            {domainTab==="ports"&&(
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
-                {[
-                  {type:"Input",icon:"📥",color:T.blue,desc:"Assets consumed by this domain"},
-                  {type:"Output",icon:"📤",color:T.green,desc:"Assets produced or governed by this domain"},
-                ].map(col=>(
-                  <div key={col.type} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
-                    <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10,background:`${col.color}08`}}>
-                      <div style={{width:32,height:32,borderRadius:9,background:`${col.color}18`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>{col.icon}</div>
-                      <div>
-                        <div style={{fontSize:13,fontWeight:700,color:T.text}}>{col.type} Ports</div>
-                        <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{col.desc}</div>
-                      </div>
-                    </div>
-                    <div style={{padding:"12px 16px"}}>
-                      {domainAssets.length===0
-                        ? <div style={{padding:"28px 0",textAlign:"center",color:T.textMuted,fontSize:12,border:`1px dashed ${T.border}`,borderRadius:8}}>No assets in this domain yet</div>
-                        : domainAssets.slice(0,col.type==="Input"?Math.ceil(domainAssets.length/2):Math.floor(domainAssets.length/2)).map(a=>(
-                          <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,marginBottom:6,cursor:"pointer",transition:"all .12s"}}
-                            onClick={()=>onAsset&&onAsset(a)}
-                            onMouseEnter={e=>{e.currentTarget.style.borderColor=col.color;e.currentTarget.style.boxShadow=`0 2px 8px ${col.color}20`;}}
-                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
-                            <TypeBadge type={a.type}/>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{a.name}</div>
-                              <div style={{fontSize:10.5,color:T.textMuted}}>{a.domain}</div>
-                            </div>
-                            <div style={{width:6,height:6,borderRadius:"50%",background:col.color,flexShrink:0}}/>
-                          </div>
-                        ))
-                      }
-                      <button style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:T.textMuted,background:"none",border:`1px dashed ${T.border}`,borderRadius:7,padding:"7px 12px",cursor:"pointer",width:"100%",justifyContent:"center",marginTop:4,transition:"all .12s"}}
-                        onClick={()=>{setAddHeaderDropdown(false);setAddAssetsSelected(new Set());setAddAssetsSearch("");setAddAssetsOpen(true);}}
-                        onMouseEnter={e=>{e.currentTarget.style.borderColor=col.color;e.currentTarget.style.color=col.color;}}
-                        onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
-                        {Ic.plus(9)} Add Asset Port
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
 
@@ -14444,7 +14356,7 @@ const DataProductsView = ({onAsset, onNav}) => {
                 </div>
               </div>
             </div>
-            <Tabs2 tabs={[{key:"overview",label:"Overview"},{key:"assets",label:`Assets (${productAssets.length})`},{key:"ports",label:"Ports"}]} active={productTab} onChange={setProductTab}/>
+            <Tabs2 tabs={[{key:"overview",label:"Overview"},{key:"assets",label:`Assets (${productAssets.length})`}]} active={productTab} onChange={setProductTab}/>
           </div>
 
           <div style={{padding:28}}>
@@ -14574,48 +14486,6 @@ const DataProductsView = ({onAsset, onNav}) => {
                         ))}
                       </div>
                 }
-              </div>
-            )}
-            {productTab==="ports"&&(
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
-                {[
-                  {type:"Input",icon:"📥",color:T.blue,desc:"Assets that feed data into this product"},
-                  {type:"Output",icon:"📤",color:T.green,desc:"Assets this product produces or exposes"},
-                ].map(col=>(
-                  <div key={col.type} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
-                    <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10,background:`${col.color}08`}}>
-                      <div style={{width:32,height:32,borderRadius:9,background:`${col.color}18`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>{col.icon}</div>
-                      <div>
-                        <div style={{fontSize:13,fontWeight:700,color:T.text}}>{col.type} Ports</div>
-                        <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{col.desc}</div>
-                      </div>
-                    </div>
-                    <div style={{padding:"12px 16px"}}>
-                      {productAssets.length===0
-                        ? <div style={{padding:"28px 0",textAlign:"center",color:T.textMuted,fontSize:12,border:`1px dashed ${T.border}`,borderRadius:8}}>No {col.type.toLowerCase()} ports — add assets first</div>
-                        : productAssets.slice(0,col.type==="Input"?Math.ceil(productAssets.length/2):Math.floor(productAssets.length/2)).map(a=>(
-                          <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,marginBottom:6,cursor:"pointer",transition:"all .12s"}}
-                            onClick={()=>onAsset&&onAsset(a)}
-                            onMouseEnter={e=>{e.currentTarget.style.borderColor=col.color;e.currentTarget.style.boxShadow=`0 2px 8px ${col.color}20`;}}
-                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
-                            <TypeBadge type={a.type}/>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{a.name}</div>
-                              <div style={{fontSize:10.5,color:T.textMuted}}>{a.db||a.connector||"—"}</div>
-                            </div>
-                            <div style={{width:6,height:6,borderRadius:"50%",background:col.color,flexShrink:0}}/>
-                          </div>
-                        ))
-                      }
-                      <button style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:T.textMuted,background:"none",border:`1px dashed ${T.border}`,borderRadius:7,padding:"7px 12px",cursor:"pointer",width:"100%",justifyContent:"center",marginTop:4,transition:"all .12s"}}
-                        onClick={()=>setDpAddAssetsOpen(true)}
-                        onMouseEnter={e=>{e.currentTarget.style.borderColor=col.color;e.currentTarget.style.color=col.color;}}
-                        onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
-                        {Ic.plus(9)} Add {col.type} Port
-                      </button>
-                    </div>
-                  </div>
-                ))}
               </div>
             )}
           </div>
@@ -21600,6 +21470,9 @@ const SettingsView = ({onToast})=>{
       {key:"personas",     icon:"persona", label:"Personas",             desc:"UX role customization"},
       {key:"sso",          icon:"sso",     label:"SSO",                  desc:"Identity providers"},
     ]},
+    {label:"Compliance", items:[
+      {key:"frameworks",   icon:"shield",  label:"Regulatory Frameworks", desc:"Enable applicable compliance frameworks"},
+    ]},
     {label:"Platform", items:[
       {key:"notifications",icon:"notif",   label:"Notifications",        desc:"Alerts & channels"},
       {key:"preferences",  icon:"palette", label:"Preferences",          desc:"Theme & display"},
@@ -22606,6 +22479,76 @@ const SettingsView = ({onToast})=>{
                 ))}
               </div>
             </>}
+
+            {section==="frameworks"&&(()=>{
+              const [fwSearch, setFwSearch] = React.useState("");
+              const TYPE_COLOR = {Privacy:T.violet,Healthcare:T.rose,Financial:T.amber,Security:T.blue};
+              const STATUS_COLOR = {Passing:T.green,Partial:T.amber,"Not Started":T.textMuted};
+              const filtered = REGS_META.filter(r=>!fwSearch||r.name.toLowerCase().includes(fwSearch.toLowerCase())||r.fullName.toLowerCase().includes(fwSearch.toLowerCase())||r.jurisdiction.toLowerCase().includes(fwSearch.toLowerCase())||r.type.toLowerCase().includes(fwSearch.toLowerCase()));
+              const [localEnabled, setLocalEnabled] = React.useState(()=>Object.fromEntries(REGS_META.map(r=>[r.id,r.enabled])));
+              const activeCount = Object.values(localEnabled).filter(Boolean).length;
+              const groups = ["Privacy","Healthcare","Financial","Security"];
+              return (
+                <>
+                  <SettSH icon={Ic.shield(16)} title="Regulatory Frameworks" desc="Configure which compliance frameworks apply to your organisation. Active frameworks appear in Policy Manager and asset governance panels."/>
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
+                    <div style={{position:"relative",flex:1,maxWidth:400}}>
+                      <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                      <input value={fwSearch} onChange={e=>setFwSearch(e.target.value)} placeholder="Search by name, jurisdiction, type…"
+                        style={{width:"100%",padding:"8px 10px 8px 30px",background:T.bgElevated,border:`1.5px solid ${fwSearch?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+                        onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=fwSearch?T.accent:T.border}/>
+                      {fwSearch&&<button onClick={()=>setFwSearch("")} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:16,lineHeight:1}}>×</button>}
+                    </div>
+                    <span style={{fontSize:12,color:T.textMuted,whiteSpace:"nowrap"}}><strong style={{color:T.text}}>{activeCount}</strong> of {REGS_META.length} active</span>
+                    <button onClick={()=>setLocalEnabled(Object.fromEntries(REGS_META.map(r=>[r.id,true])))}
+                      style={{fontSize:11.5,padding:"5px 12px",borderRadius:7,border:`1px solid ${T.border}`,background:"transparent",color:T.textMuted,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit"}}>Enable All</button>
+                    <button onClick={()=>setLocalEnabled(Object.fromEntries(REGS_META.map(r=>[r.id,false])))}
+                      style={{fontSize:11.5,padding:"5px 12px",borderRadius:7,border:`1px solid ${T.border}`,background:"transparent",color:T.textMuted,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit"}}>Disable All</button>
+                  </div>
+                  {groups.map(grp=>{
+                    const grpRegs = filtered.filter(r=>r.type===grp);
+                    if(!grpRegs.length) return null;
+                    const tc = TYPE_COLOR[grp]||T.accent;
+                    return (
+                      <div key={grp} style={{marginBottom:22}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                          <div style={{width:3,height:14,borderRadius:2,background:tc}}/>
+                          <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>{grp}</span>
+                          <span style={{fontSize:10.5,color:T.textMuted}}>({grpRegs.length})</span>
+                        </div>
+                        <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                          {grpRegs.map((reg,i)=>{
+                            const isOn = localEnabled[reg.id]||false;
+                            const stc = STATUS_COLOR[reg.status]||T.textMuted;
+                            return (
+                              <div key={reg.id} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 16px",borderBottom:i<grpRegs.length-1?`1px solid ${T.border}`:"none",transition:"background .12s"}}
+                                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
+                                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3,flexWrap:"wrap"}}>
+                                    <span style={{fontSize:13,fontWeight:700,color:isOn?T.text:T.textMuted}}>{reg.name}</span>
+                                    <span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:`${tc}15`,color:tc,fontWeight:600,border:`1px solid ${tc}25`}}>{reg.jurisdiction}</span>
+                                    {reg.status&&<span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:`${stc}12`,color:stc,fontWeight:600}}>{reg.status}</span>}
+                                  </div>
+                                  <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.5}}>{reg.fullName}</div>
+                                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:3}}>Max penalty: {reg.penalty} · {reg.requirements.length} requirements</div>
+                                </div>
+                                {/* Toggle switch */}
+                                <div onClick={()=>setLocalEnabled(p=>({...p,[reg.id]:!p[reg.id]}))}
+                                  style={{position:"relative",width:40,height:22,borderRadius:11,background:isOn?T.green:"rgba(100,100,120,.2)",border:`1.5px solid ${isOn?T.green:T.border}`,cursor:"pointer",transition:"all .2s",flexShrink:0}}>
+                                  <div style={{position:"absolute",top:2,left:isOn?20:2,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.3)"}}/>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {filtered.length===0&&<div style={{textAlign:"center",padding:"48px 0",color:T.textMuted,fontSize:13}}>No frameworks match "{fwSearch}"</div>}
+                </>
+              );
+            })()}
 
             {/* ══ AUDIT ══ */}
             {section==="audit"&&<>
