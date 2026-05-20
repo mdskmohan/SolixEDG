@@ -5656,6 +5656,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const [violStatusFilter, setViolStatusFilter] = useState("Open");
   const [createStep,     setCreateStep]     = useState(1);
   const [wizardRules,    setWizardRules]    = useState([]);
+  const [sevOpen,        setSevOpen]        = useState(null);
   const [polEditCatOpen,  setPolEditCatOpen]  = useState(false);
   const [polEditCatDraft, setPolEditCatDraft] = useState(null);
   const filterDropRef  = useRef(null);
@@ -5702,7 +5703,24 @@ const PolicyManagerView = ({onToast, onNav}) => {
     {id:"ownership", label:"Ownership",      sub:"Owner, stewards & frameworks"},
     {id:"review",    label:"Review",         sub:"Confirm & create"},
   ];
-  const W_FIELD_LABELS = {certification:"Certification Status",quality_score:"Quality Score",asset_type:"Asset Type",domain:"Domain",tag:"Tag",glossary_term:"Glossary Term",owner:"Owner",steward:"Steward",has_open_incident:"Has Open Incident",has_active_violation:"Has Active Violation",is_in_data_product:"Is in Data Product",encryption_at_rest:"Encryption at Rest",has_column_masking:"Has Column Masking",row_level_security:"Row-Level Security",retention_period_days:"Retention Period (days)",access_role_count:"Access Role Count",custom_sql:"Custom SQL"};
+  const W_FIELD_LABELS = {
+    // Governance
+    certification:"Certification Status", domain:"Domain", tag:"Tag", glossary_term:"Glossary Term",
+    owner:"Owner", steward:"Steward", data_product:"Data Product", asset_type:"Asset Type",
+    description:"Description", business_term:"Business Term",
+    // Quality
+    quality_score:"Quality Score", last_updated:"Last Updated (days ago)", null_rate:"Null Rate (%)",
+    completeness:"Completeness (%)", row_count:"Row Count", duplicate_rate:"Duplicate Rate (%)",
+    // Retention
+    retention_period:"Retention Period (days)", last_accessed:"Last Accessed (days ago)",
+    archive_status:"Archive Status", data_classification:"Data Classification",
+    // Protection
+    encryption_at_rest:"Encryption at Rest", column_masking:"Column Masking",
+    row_level_security:"Row-Level Security", sensitivity_level:"Sensitivity Level",
+    access_role_count:"Access Role Count",
+    // Custom
+    custom_sql:"Custom SQL",
+  };
   const closeWizard = () => { setCreateOpen(false); setNewPol(EMPTY_POL); setCreateStep(1); setWizardRules([]); };
 
   // ─── computed ────────────────────────────────────────────────────────
@@ -7029,24 +7047,42 @@ const PolicyManagerView = ({onToast, onNav}) => {
                     Custom:     {color:T.textSub,icon:"⚙️", desc:"Custom SQL rule evaluated directly on the asset"},
                   };
                   const W_RULE_FIELDS = [
-                    {id:"certification",         label:"Certification Status",    type:"select",   ops:["is","is not"],               vals:["Draft","In Review","Approved","Rejected","Deprecated"]},
-                    {id:"quality_score",         label:"Quality Score",           type:"number",   ops:["greater than","less than","equals"]},
-                    {id:"asset_type",            label:"Asset Type",              type:"select",   ops:["is","is not","is one of"],    vals:["Table","View","Dashboard","ML Model","Pipeline","Schema","Database"]},
-                    {id:"domain",                label:"Domain",                  type:"select",   ops:["is","is not","is one of"],    vals:ALL_DOMAINS},
-                    {id:"tag",                   label:"Tag",                     type:"select",   ops:["includes","does not include"],vals:POLICY_TAGS},
-                    {id:"glossary_term",         label:"Glossary Term",           type:"text",     ops:["includes","does not include"]},
-                    {id:"owner",                 label:"Owner",                   type:"bool",     ops:["is assigned","is not assigned"]},
-                    {id:"steward",               label:"Steward",                 type:"bool",     ops:["is assigned","is not assigned"]},
-                    {id:"has_open_incident",     label:"Has Open Incident",       type:"bool_yn",  ops:["is"],                         vals:["Yes","No"]},
-                    {id:"has_active_violation",  label:"Has Active Violation",    type:"bool_yn",  ops:["is"],                         vals:["Yes","No"]},
-                    {id:"is_in_data_product",    label:"Is in Data Product",      type:"bool_yn",  ops:["is"],                         vals:["Yes","No"]},
-                    {id:"encryption_at_rest",    label:"Encryption at Rest",      type:"select",   ops:["is"],                         vals:["Enabled","Disabled"]},
-                    {id:"has_column_masking",    label:"Has Column Masking",      type:"bool_yn",  ops:["is"],                         vals:["Yes","No"]},
-                    {id:"row_level_security",    label:"Row-Level Security",      type:"bool_yn",  ops:["is"],                         vals:["Yes","No"]},
-                    {id:"retention_period_days", label:"Retention Period (days)", type:"number",   ops:["greater than","less than","equals"]},
-                    {id:"access_role_count",     label:"Access Role Count",       type:"number",   ops:["greater than","less than","equals"]},
+                    // ── Governance ──
+                    {id:"certification",      label:"Certification Status",    type:"enum",       ops:["is","is not"],                                vals:["Draft","In Review","Approved","Rejected","Deprecated"],                   types:["Governance","Quality","Access"]},
+                    {id:"domain",             label:"Domain",                  type:"enum_multi", ops:["is","is not","is one of","is not one of"],    vals:ALL_DOMAINS,                                                                types:["Governance","Retention"]},
+                    {id:"tag",                label:"Tag",                     type:"list",       ops:["contains","does not contain"],                vals:POLICY_TAGS,                                                                types:["Governance","Retention","Protection","Access"]},
+                    {id:"glossary_term",      label:"Glossary Term",           type:"list",       ops:["contains","does not contain"],                vals:[],                                                                         types:["Governance"]},
+                    {id:"owner",              label:"Owner",                   type:"presence",   ops:["is set","is not set"],                        vals:[],                                                                         types:["Governance","Access"]},
+                    {id:"steward",            label:"Steward",                 type:"presence",   ops:["is set","is not set"],                        vals:[],                                                                         types:["Governance","Access"]},
+                    {id:"data_product",       label:"Data Product",            type:"presence",   ops:["is set","is not set"],                        vals:[],                                                                         types:["Governance"]},
+                    {id:"asset_type",         label:"Asset Type",              type:"enum_multi", ops:["is","is not","is one of","is not one of"],    vals:["Table","View","Schema","Database","Dashboard","ML Model","Pipeline","Container","Object","Folder","Bucket"], types:["Governance","Retention"]},
+                    {id:"description",        label:"Description",             type:"presence",   ops:["is set","is not set"],                        vals:[],                                                                         types:["Governance"]},
+                    {id:"business_term",      label:"Business Term",           type:"presence",   ops:["is set","is not set"],                        vals:[],                                                                         types:["Governance"]},
+                    // ── Quality ──
+                    {id:"quality_score",      label:"Quality Score",           type:"number",     ops:["greater than","less than","equals"],           vals:[],                                                                         types:["Quality"]},
+                    {id:"last_updated",       label:"Last Updated (days ago)", type:"number",     ops:["greater than","less than","equals"],           vals:[],                                                                         types:["Quality"]},
+                    {id:"null_rate",          label:"Null Rate (%)",           type:"number",     ops:["greater than","less than","equals"],           vals:[],                                                                         types:["Quality"]},
+                    {id:"completeness",       label:"Completeness (%)",        type:"number",     ops:["greater than","less than","equals"],           vals:[],                                                                         types:["Quality"]},
+                    {id:"row_count",          label:"Row Count",               type:"number",     ops:["greater than","less than","equals"],           vals:[],                                                                         types:["Quality"]},
+                    {id:"duplicate_rate",     label:"Duplicate Rate (%)",      type:"number",     ops:["greater than","less than","equals"],           vals:[],                                                                         types:["Quality"]},
+                    // ── Retention ──
+                    {id:"retention_period",   label:"Retention Period (days)", type:"number",     ops:["greater than","less than","equals"],           vals:[],                                                                         types:["Retention"]},
+                    {id:"last_accessed",      label:"Last Accessed (days ago)",type:"number",     ops:["greater than","less than","equals"],           vals:[],                                                                         types:["Retention"]},
+                    {id:"archive_status",     label:"Archive Status",          type:"enum",       ops:["is","is not"],                                vals:["Archived","Active","Pending Archival"],                                   types:["Retention"]},
+                    {id:"data_classification",label:"Data Classification",     type:"enum",       ops:["is","is not"],                                vals:["Public","Internal","Confidential","Restricted"],                          types:["Retention"]},
+                    // ── Protection ──
+                    {id:"encryption_at_rest", label:"Encryption at Rest",      type:"enum",       ops:["is","is not"],                                vals:["Enabled","Disabled"],                                                     types:["Protection"]},
+                    {id:"column_masking",     label:"Column Masking",          type:"enum",       ops:["is","is not"],                                vals:["Enabled","Disabled"],                                                     types:["Protection"]},
+                    {id:"row_level_security", label:"Row-Level Security",      type:"enum",       ops:["is","is not"],                                vals:["Enabled","Disabled"],                                                     types:["Protection"]},
+                    {id:"sensitivity_level",  label:"Sensitivity Level",       type:"enum",       ops:["is","is not"],                                vals:["High","Medium","Low"],                                                    types:["Protection"]},
+                    {id:"access_role_count",  label:"Access Role Count",       type:"number",     ops:["greater than","less than","equals"],           vals:[],                                                                         types:["Protection","Access"]},
                   ];
-                  const addPresetRule = () => setWizardRules(prev=>[...prev,{id:`wr-${Date.now()}`,field:"certification",operator:"is",value:"",severity:"Medium"}]);
+                  // Filter fields by selected policy types — shows all when no type selected
+                  const filteredRuleFields = selPTypes.length>0
+                    ? W_RULE_FIELDS.filter(f=>f.types.some(t=>selPTypes.includes(t)))
+                    : W_RULE_FIELDS;
+                  const defaultField = filteredRuleFields[0]||W_RULE_FIELDS[0];
+                  const addPresetRule = () => setWizardRules(prev=>[...prev,{id:`wr-${Date.now()}`,field:defaultField.id,operator:defaultField.ops[0],value:"",severity:"Medium"}]);
                   const addSqlRule   = () => setWizardRules(prev=>[...prev,{id:`wr-${Date.now()}`,field:"custom_sql",operator:"passes",value:"",sqlConnection:"",sqlBody:"",sqlPassCondition:"count_is_zero",sqlDescription:"",severity:"Medium"}]);
                   const removeRule = id => setWizardRules(prev=>prev.filter(r=>r.id!==id));
                   const updRule = (id,k,v) => setWizardRules(prev=>prev.map(r=>r.id===id?{...r,[k]:v}:r));
@@ -7055,7 +7091,37 @@ const PolicyManagerView = ({onToast, onNav}) => {
                   const activeRuleTab = newPol.ruleTab||"preset";
                   const presetRules = wizardRules.filter(r=>r.field!=="custom_sql");
                   const sqlRules    = wizardRules.filter(r=>r.field==="custom_sql");
-                  const sevSel_s = (sev) => ({padding:"3px 7px",borderRadius:6,border:`1.5px solid ${SEV_COLOR[sev]||T.border}40`,background:`${SEV_COLOR[sev]||T.textMuted}12`,color:SEV_COLOR[sev]||T.textMuted,fontSize:10.5,fontWeight:600,cursor:"pointer",outline:"none",flexShrink:0,fontFamily:"inherit"});
+                  // ── Severity badge dropdown (Option B) ──
+                  const SevBadge = ({ruleId, sev}) => {
+                    const isOpen = sevOpen===ruleId;
+                    const color  = SEV_COLOR[sev]||T.textMuted;
+                    return (
+                      <div style={{position:"relative",flexShrink:0}} onClick={e=>e.stopPropagation()}>
+                        <button onClick={()=>setSevOpen(isOpen?null:ruleId)}
+                          style={{display:"flex",alignItems:"center",gap:5,padding:"4px 9px 4px 7px",borderRadius:20,border:`1.5px solid ${color}55`,background:`${color}15`,color,fontSize:11,fontWeight:700,cursor:"pointer",outline:"none",fontFamily:"inherit",whiteSpace:"nowrap",lineHeight:1.2}}>
+                          <span style={{width:7,height:7,borderRadius:"50%",background:color,display:"inline-block",flexShrink:0}}/>
+                          {sev}
+                          <span style={{fontSize:8,opacity:0.55,marginLeft:1}}>▾</span>
+                        </button>
+                        {isOpen&&(
+                          <div style={{position:"absolute",top:"calc(100% + 5px)",right:0,zIndex:300,background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:10,padding:5,display:"flex",flexDirection:"column",gap:2,minWidth:118,boxShadow:"0 6px 22px rgba(0,0,0,.22)"}}>
+                            {["Critical","High","Medium","Low"].map(sv=>{
+                              const sc=SEV_COLOR[sv];
+                              const active=sev===sv;
+                              return (
+                                <button key={sv} onClick={()=>{updRule(ruleId,"severity",sv);setSevOpen(null);}}
+                                  style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:7,border:`1px solid ${active?sc+"55":"transparent"}`,background:active?`${sc}18`:"transparent",color:active?sc:T.textSub,fontSize:12,fontWeight:active?700:400,cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
+                                  <span style={{width:8,height:8,borderRadius:"50%",background:sc,flexShrink:0,display:"inline-block"}}/>
+                                  {sv}
+                                  {active&&<span style={{marginLeft:"auto",fontSize:11,color:sc}}>✓</span>}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  };
                   return (
                     <div style={{display:"flex",flexDirection:"column",gap:0}}>
 
@@ -7117,37 +7183,34 @@ const PolicyManagerView = ({onToast, onNav}) => {
                               </div>
                             : <>
                                 {presetRules.map((r)=>{
-                                  const fd=W_RULE_FIELDS.find(f=>f.id===r.field)||W_RULE_FIELDS[0];
-                                  const isBool   = fd.type==="bool";
-                                  const needsVal = (fd.type==="select"||fd.type==="bool_yn");
-                                  const needsNum = fd.type==="number";
-                                  const needsTxt = fd.type==="text";
+                                  const fd=W_RULE_FIELDS.find(f=>f.id===r.field)||filteredRuleFields[0]||W_RULE_FIELDS[0];
+                                  const isPresence = fd.type==="presence";
+                                  const needsVal   = (fd.type==="enum"||fd.type==="enum_multi"||fd.type==="list");
+                                  const needsNum   = fd.type==="number";
                                   const sev = r.severity||"Medium";
                                   return (
                                     <div key={r.id} style={{background:T.bgElevated,borderRadius:9,border:`1.5px solid ${T.border}`,padding:"9px 11px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                                       <select value={r.field} onChange={e=>{
-                                        const nfd=W_RULE_FIELDS.find(f=>f.id===e.target.value)||W_RULE_FIELDS[0];
+                                        const nfd=W_RULE_FIELDS.find(f=>f.id===e.target.value)||filteredRuleFields[0]||W_RULE_FIELDS[0];
                                         updRule(r.id,"field",e.target.value);
                                         updRule(r.id,"operator",nfd.ops[0]);
                                         updRule(r.id,"value","");
-                                      }} style={{...sel_s,flex:"1 1 140px",minWidth:110}}>
-                                        {W_RULE_FIELDS.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}
+                                      }} style={{...sel_s,flex:"1 1 155px",minWidth:120}}>
+                                        {filteredRuleFields.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}
                                       </select>
-                                      <select value={r.operator} onChange={e=>updRule(r.id,"operator",e.target.value)} style={{...sel_s,flex:"0 0 auto",minWidth:isBool?148:100}}>
+                                      <select value={r.operator} onChange={e=>updRule(r.id,"operator",e.target.value)} style={{...sel_s,flex:"0 0 auto",minWidth:isPresence?100:105}}>
                                         {fd.ops.map(op=><option key={op} value={op}>{op}</option>)}
                                       </select>
-                                      {needsVal&&!isBool&&(
-                                        <select value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} style={{...sel_s,flex:"1 1 100px",minWidth:90}}>
+                                      {needsVal&&(fd.vals||[]).length>0&&(
+                                        <select value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} style={{...sel_s,flex:"1 1 110px",minWidth:90}}>
                                           <option value="">— select —</option>
-                                          {(fd.vals||[]).map(v=><option key={v} value={v}>{v}</option>)}
+                                          {fd.vals.map(v=><option key={v} value={v}>{v}</option>)}
                                         </select>
                                       )}
-                                      {needsNum&&<input type="number" value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} placeholder="value" style={{...sel_s,flex:"0 0 72px",width:72}}/>}
-                                      {needsTxt&&<input type="text" value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} placeholder="value…" style={{...sel_s,flex:"1 1 100px"}}/>}
-                                      {/* Per-rule severity */}
-                                      <select value={sev} onChange={e=>updRule(r.id,"severity",e.target.value)} style={sevSel_s(sev)}>
-                                        {["Critical","High","Medium","Low"].map(sv=><option key={sv} value={sv}>{sv}</option>)}
-                                      </select>
+                                      {needsVal&&(fd.vals||[]).length===0&&<input type="text" value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} placeholder="value…" style={{...sel_s,flex:"1 1 110px"}}/>}
+                                      {needsNum&&<input type="number" value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} placeholder="value" style={{...sel_s,flex:"0 0 80px",width:80}}/>}
+                                      {/* Per-rule severity badge */}
+                                      <SevBadge ruleId={r.id} sev={sev}/>
                                       <button onClick={()=>removeRule(r.id)} title="Remove"
                                         style={{width:24,height:24,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15,lineHeight:1}}
                                         onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
@@ -7188,12 +7251,10 @@ const PolicyManagerView = ({onToast, onNav}) => {
                                           <option value="">— select connection —</option>
                                           {["Snowflake","Databricks","PostgreSQL","Oracle","BigQuery","Redshift"].map(c=><option key={c} value={c}>{c}</option>)}
                                         </select>
-                                        <select value={r.operator||"passes"} onChange={e=>updRule(r.id,"operator",e.target.value)} style={{...sel_s,flex:"0 0 auto",minWidth:80}}>
-                                          <option value="passes">passes</option><option value="fails">fails</option>
+                                        <select value={r.operator||"passes"} onChange={e=>updRule(r.id,"operator",e.target.value)} style={{...sel_s,flex:"0 0 auto",minWidth:100}}>
+                                          <option value="passes">passes</option><option value="does not pass">does not pass</option>
                                         </select>
-                                        <select value={sev} onChange={e=>updRule(r.id,"severity",e.target.value)} style={sevSel_s(sev)}>
-                                          {["Critical","High","Medium","Low"].map(sv=><option key={sv} value={sv}>{sv}</option>)}
-                                        </select>
+                                        <SevBadge ruleId={r.id} sev={sev}/>
                                         <button onClick={()=>removeRule(r.id)} title="Remove"
                                           style={{width:24,height:24,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15,lineHeight:1,marginLeft:"auto"}}
                                           onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
