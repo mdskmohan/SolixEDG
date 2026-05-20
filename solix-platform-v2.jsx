@@ -6735,17 +6735,30 @@ const PolicyManagerView = ({onToast, onNav}) => {
                     {/* ── Activity ── */}
                     {pdTab==="activity"&&(
                       <div style={{padding:"20px 22px"}}>
-                        <div style={{fontSize:12.5,color:T.textSub,marginBottom:18}}>Every state change and edit is recorded here — this is the policy audit trail.</div>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+                          <div style={{fontSize:12.5,color:T.textSub}}>Complete audit trail for this policy — every state change, edit and evaluation.</div>
+                          <button style={{fontSize:11,padding:"4px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"transparent",color:T.textMuted,cursor:"pointer",fontFamily:"inherit"}}>↓ Export</button>
+                        </div>
                         {(p.history||[]).length===0&&<div style={{padding:"32px",textAlign:"center",fontSize:12,color:T.textMuted}}>No activity recorded yet.</div>}
-                        <div style={{position:"relative",paddingLeft:20}}>
-                          {(p.history||[]).map((h,i,arr)=>{
-                            const dot = h.action.toLowerCase().includes("deprecat")?T.rose:h.action.toLowerCase().includes("activat")||h.action.toLowerCase().includes("publish")?T.blue:h.action.toLowerCase().includes("approv")?T.green:h.action.toLowerCase().includes("submit")||h.action.toLowerCase().includes("review")?T.amber:T.textMuted;
+                        <div style={{position:"relative",paddingLeft:22}}>
+                          {/* Synthetic runtime events + history */}
+                          {[
+                            ...(p.lastEvaluated?[{when:p.lastEvaluated+" 14:32",who:"system",action:"Policy evaluated — "+p.compliancePct+"% compliance score",type:"eval"}]:[]),
+                            ...(p.schedule?[{when:"2026-05-19 08:00",who:"system",action:"Scheduled evaluation completed — "+p.violations+" violation"+(p.violations!==1?"s":"")+" detected",type:"eval"}]:[]),
+                            ...(p.history||[]).map(h=>({...h,type:"history"})),
+                          ].map((h,i,arr)=>{
+                            const dot = h.type==="eval"?T.blue:h.action.toLowerCase().includes("deprecat")?T.rose:h.action.toLowerCase().includes("activat")||h.action.toLowerCase().includes("publish")?T.blue:h.action.toLowerCase().includes("approv")?T.green:h.action.toLowerCase().includes("submit")||h.action.toLowerCase().includes("review")?T.amber:T.textMuted;
                             return (
-                              <div key={i} style={{position:"relative",paddingBottom:16}}>
-                                <div style={{position:"absolute",left:-16,top:4,width:9,height:9,borderRadius:"50%",background:dot,border:`2px solid ${T.bgSurface}`}}/>
-                                {i<arr.length-1&&<div style={{position:"absolute",left:-12,top:14,bottom:0,width:1,background:T.border}}/>}
-                                <div style={{fontSize:13,fontWeight:500,color:T.text}}>{h.action}</div>
-                                <div style={{fontSize:11.5,color:T.textMuted,marginTop:3}}>{h.when} · <span style={{fontFamily:"'Geist Mono',monospace"}}>{h.who}</span></div>
+                              <div key={i} style={{position:"relative",paddingBottom:18}}>
+                                <div style={{position:"absolute",left:-18,top:4,width:10,height:10,borderRadius:"50%",background:dot,border:`2px solid ${T.bgSurface}`}}/>
+                                {i<arr.length-1&&<div style={{position:"absolute",left:-14,top:15,bottom:0,width:1.5,background:T.border}}/>}
+                                <div style={{fontSize:13,fontWeight:500,color:T.text,marginBottom:3}}>{h.action}</div>
+                                <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11}}>
+                                  <span style={{color:T.textMuted}}>{h.when}</span>
+                                  <span style={{color:T.border}}>·</span>
+                                  <span style={{fontFamily:"'Geist Mono',monospace",color:h.who==="system"?T.amber:T.textMuted}}>{h.who}</span>
+                                  {h.type==="eval"&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:4,background:`${T.blue}15`,color:T.blue,border:`1px solid ${T.blue}25`}}>SYSTEM</span>}
+                                </div>
                               </div>
                             );
                           })}
@@ -8926,6 +8939,29 @@ const AssetOverview = ({asset,data,setData,onToast})=>{
               style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",resize:"vertical",lineHeight:1.75,fontFamily:"'Geist Mono',monospace",boxSizing:"border-box"}}/>
           : <div style={{fontSize:13,color:T.textSub,lineHeight:1.9,whiteSpace:"pre-wrap"}}>{notesVal}</div>
         }
+      </div>
+    </Card2>
+    {/* Activity */}
+    <Card2>
+      <div style={{padding:"14px 16px"}}>
+        <SH title="Activity"/>
+        <div style={{position:"relative",paddingLeft:18}}>
+          {[
+            {ts:"2026-05-20",who:"maya.chen",  action:"Certification status changed to Approved",          color:T.green},
+            {ts:"2026-05-17",who:"dev.patel",  action:"Tag 'PII' added",                                   color:T.accent},
+            {ts:"2026-05-15",who:"ai-bot",     action:"Ingestion run — schema updated (2 columns added)",   color:T.amber},
+            {ts:"2026-05-10",who:"maya.chen",  action:"Description updated",                               color:T.textMuted},
+            {ts:"2026-04-28",who:"dev.patel",  action:"Owner assigned: maya.chen",                         color:T.blue},
+            {ts:"2026-04-15",who:"ai-bot",     action:"Asset first ingested from Snowflake DWH",           color:T.textMuted},
+          ].map((h,i,arr)=>(
+            <div key={i} style={{position:"relative",paddingBottom:14}}>
+              <div style={{position:"absolute",left:-14,top:4,width:8,height:8,borderRadius:"50%",background:h.color,border:`2px solid ${T.bgSurface}`,flexShrink:0}}/>
+              {i<arr.length-1&&<div style={{position:"absolute",left:-11,top:13,bottom:0,width:1,background:T.border}}/>}
+              <div style={{fontSize:12.5,color:T.text,marginBottom:2}}>{h.action}</div>
+              <div style={{fontSize:11,color:T.textMuted}}>{h.ts} · <span style={{fontFamily:"'Geist Mono',monospace"}}>{h.who}</span></div>
+            </div>
+          ))}
+        </div>
       </div>
     </Card2>
   </div>
@@ -22808,24 +22844,123 @@ const SettingsView = ({onToast})=>{
             })()}
 
             {/* ══ AUDIT ══ */}
-            {section==="audit"&&<>
-              <SettSH icon={Ic.audit(16)} title="Audit Logs" desc="Track all user actions and system events across your Solix workspace."/>
-              <div style={{display:"flex",gap:8,marginBottom:16}}><Input2 placeholder="Search audit logs…" icon={Ic.search(12)} style={{flex:1}}/><Btn small ghost>Filter</Btn><Btn small ghost>Export CSV</Btn></div>
-              <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                <table style={{width:"100%",borderCollapse:"collapse"}}>
-                  <thead><tr style={{borderBottom:`1px solid ${T.border}`,background:T.bgElevated}}>{["Timestamp","User","Action","Resource","IP"].map(h=><th key={h} style={{padding:"9px 14px",textAlign:"left",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</th>)}</tr></thead>
-                  <tbody>{[{ts:"2025-06-10 14:32",u:"maya.chen",a:"CERTIFIED",r:"orders table",ip:"10.0.1.4"},{ts:"2025-06-10 14:18",u:"dev.patel",a:"POLICY_APPLIED",r:"customer PII policy",ip:"10.0.1.8"},{ts:"2025-06-10 13:55",u:"james.oh",a:"LINEAGE_EDIT",r:"etl_orders pipeline",ip:"10.0.2.1"},{ts:"2025-06-10 13:40",u:"ai-team-bot",a:"INGESTION_RUN",r:"Snowflake DWH",ip:"10.0.3.5"},{ts:"2025-06-10 13:12",u:"admin",a:"USER_INVITED",r:"priya.sharma@jnj.com",ip:"10.0.1.1"}].map((r,i,a)=>(
-                    <tr key={i} className="row-hover" style={{borderBottom:i<a.length-1?`1px solid ${T.border}`:"none"}}>
-                      <td style={{padding:"10px 14px"}}><span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{r.ts}</span></td>
-                      <td style={{padding:"10px 14px"}}><span style={{fontSize:12,color:T.text}}>{r.u}</span></td>
-                      <td style={{padding:"10px 14px"}}><Badge color={T.blue} bg={T.blueDim} border="transparent">{r.a}</Badge></td>
-                      <td style={{padding:"10px 14px"}}><span style={{fontSize:12,color:T.textSub}}>{r.r}</span></td>
-                      <td style={{padding:"10px 14px"}}><span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{r.ip}</span></td>
-                    </tr>
-                  ))}</tbody>
-                </table>
-              </div>
-            </>}
+            {section==="audit"&&(()=>{
+              const ALL_AUDIT = [
+                {ts:"2026-05-20 16:44",u:"maya.chen",   cat:"Policy",   a:"POLICY_EVALUATED",   r:"Commerce PII Sensitivity",  detail:"Compliance score updated: 78% → 81%",     ip:"10.0.1.4"},
+                {ts:"2026-05-20 16:12",u:"dev.patel",   cat:"Asset",    a:"TAG_ADDED",           r:"orders",                    detail:"Tag 'PII' applied",                         ip:"10.0.1.8"},
+                {ts:"2026-05-20 15:58",u:"maya.chen",   cat:"Asset",    a:"CERTIFIED",           r:"customers",                 detail:"Certification status: Draft → Approved",    ip:"10.0.1.4"},
+                {ts:"2026-05-20 15:30",u:"ai-bot",      cat:"Ingestion",a:"INGESTION_RUN",        r:"Snowflake DWH",             detail:"12,840 assets synced, 3 schema changes",   ip:"10.0.3.5"},
+                {ts:"2026-05-20 14:55",u:"sarah.kim",   cat:"Policy",   a:"VIOLATION_RESOLVED",  r:"Finance Data Integrity",    detail:"Violation viol-3 marked resolved",          ip:"10.0.1.9"},
+                {ts:"2026-05-20 14:32",u:"priya.nair",  cat:"Glossary", a:"TERM_CREATED",         r:"Churn Rate",                detail:"New business term added to Analytics glossary",ip:"10.0.1.6"},
+                {ts:"2026-05-20 14:18",u:"dev.patel",   cat:"Policy",   a:"POLICY_UPDATED",      r:"Commerce PII Sensitivity",  detail:"Description updated",                       ip:"10.0.1.8"},
+                {ts:"2026-05-20 13:50",u:"james.oh",    cat:"Lineage",  a:"LINEAGE_UPDATED",     r:"etl_orders_pipeline",       detail:"Upstream source added: postgresql_prod",    ip:"10.0.2.1"},
+                {ts:"2026-05-20 13:22",u:"alex.wu",     cat:"Asset",    a:"OWNER_CHANGED",       r:"dim_products",              detail:"Owner: james.oh → alex.wu",                ip:"10.0.1.3"},
+                {ts:"2026-05-20 12:44",u:"lisa.ray",    cat:"Access",   a:"ROLE_ASSIGNED",       r:"priya.nair",                detail:"Role 'Data Steward' assigned",              ip:"10.0.1.5"},
+                {ts:"2026-05-20 12:15",u:"ai-bot",      cat:"Quality",  a:"DQ_TEST_FAILED",      r:"payments",                  detail:"null_rate check failed: 4.2% > 2% threshold",ip:"10.0.3.5"},
+                {ts:"2026-05-20 11:48",u:"maya.chen",   cat:"Policy",   a:"POLICY_ACTIVATED",    r:"HIPAA PHI Compliance",      detail:"Lifecycle: Approved → Active",              ip:"10.0.1.4"},
+                {ts:"2026-05-20 11:20",u:"sarah.kim",   cat:"Domain",   a:"DOMAIN_UPDATED",      r:"Finance",                   detail:"Steward list updated",                      ip:"10.0.1.9"},
+                {ts:"2026-05-20 10:55",u:"dev.patel",   cat:"Contract", a:"CONTRACT_VALIDATED",  r:"Commerce Orders Product",   detail:"3 quality checks passed, 1 failed",        ip:"10.0.1.8"},
+                {ts:"2026-05-20 10:30",u:"admin",       cat:"Settings", a:"USER_INVITED",         r:"anita.rao@company.com",     detail:"Invitation sent with Viewer role",          ip:"10.0.1.1"},
+                {ts:"2026-05-20 09:58",u:"priya.nair",  cat:"Tag",      a:"TAG_UPDATED",          r:"PII",                       detail:"Propagation mode changed: both",           ip:"10.0.1.6"},
+                {ts:"2026-05-20 09:30",u:"ai-bot",      cat:"Ingestion",a:"INGESTION_RUN",        r:"PostgreSQL Prod",           detail:"2,341 assets synced, 0 schema changes",    ip:"10.0.3.5"},
+                {ts:"2026-05-19 18:15",u:"james.oh",    cat:"Asset",    a:"DESCRIPTION_UPDATED", r:"transactions",              detail:"Documentation updated",                     ip:"10.0.2.1"},
+                {ts:"2026-05-19 17:40",u:"maya.chen",   cat:"Policy",   a:"RULE_ADDED",           r:"Commerce PII Sensitivity",  detail:"New rule: PII classification required",    ip:"10.0.1.4"},
+                {ts:"2026-05-19 16:58",u:"dev.patel",   cat:"Quality",  a:"DQ_SUITE_CREATED",    r:"orders_suite",              detail:"8 test cases configured",                  ip:"10.0.1.8"},
+                {ts:"2026-05-19 16:20",u:"sarah.kim",   cat:"Glossary", a:"TERM_APPROVED",        r:"Net Revenue Retention",     detail:"Status: Draft → Approved",                 ip:"10.0.1.9"},
+                {ts:"2026-05-19 15:45",u:"admin",       cat:"Settings", a:"FRAMEWORK_ENABLED",   r:"DORA",                      detail:"Regulatory framework enabled for org",      ip:"10.0.1.1"},
+                {ts:"2026-05-19 15:10",u:"lisa.ray",    cat:"Policy",   a:"VIOLATION_DETECTED",  r:"HIPAA PHI Compliance",      detail:"3 new violations detected in evaluation",   ip:"10.0.1.5"},
+                {ts:"2026-05-19 14:30",u:"alex.wu",     cat:"Asset",    a:"CERT_REVOKED",        r:"ml_churn_model",            detail:"Certification revoked: quality score below threshold",ip:"10.0.1.3"},
+                {ts:"2026-05-19 13:55",u:"ai-bot",      cat:"Ingestion",a:"SCHEMA_CHANGE",        r:"COMMERCE.orders",           detail:"Column 'discount_code' added (VARCHAR 64)",ip:"10.0.3.5"},
+              ];
+              const CAT_COLOR = {Policy:T.violet,Asset:T.blue,Ingestion:T.amber,Quality:T.rose,Glossary:T.green,Access:"#0891b2",Domain:T.accent,Contract:"#7c3aed",Settings:T.textMuted,Tag:"#f97316",Lineage:"#06b6d4"};
+              const [auditSearch,   setAuditSearch]   = React.useState("");
+              const [auditCatFilter,setAuditCatFilter]= React.useState("All");
+              const [auditPage,     setAuditPage]     = React.useState(0);
+              const PAGE_SIZE = 10;
+              const cats = ["All","Policy","Asset","Ingestion","Quality","Glossary","Access","Domain","Contract","Settings"];
+              const filtered = ALL_AUDIT.filter(r=>{
+                const matchSearch = !auditSearch || r.u.includes(auditSearch.toLowerCase()) || r.a.toLowerCase().includes(auditSearch.toLowerCase()) || r.r.toLowerCase().includes(auditSearch.toLowerCase()) || r.detail.toLowerCase().includes(auditSearch.toLowerCase());
+                const matchCat = auditCatFilter==="All" || r.cat===auditCatFilter;
+                return matchSearch && matchCat;
+              });
+              const paged = filtered.slice(auditPage*PAGE_SIZE, (auditPage+1)*PAGE_SIZE);
+              const totalPages = Math.ceil(filtered.length/PAGE_SIZE);
+              return (
+                <>
+                  <SettSH icon={Ic.audit(16)} title="Audit Logs" desc="Complete immutable record of all user actions and system events across the workspace."/>
+                  {/* Toolbar */}
+                  <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+                    <div style={{position:"relative",flex:1,minWidth:200}}>
+                      <svg width="12" height="12" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                      <input value={auditSearch} onChange={e=>{setAuditSearch(e.target.value);setAuditPage(0);}} placeholder="Search user, action, resource…"
+                        style={{width:"100%",padding:"7px 10px 7px 28px",background:T.bgElevated,border:`1.5px solid ${auditSearch?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                    </div>
+                    <select value={auditCatFilter} onChange={e=>{setAuditCatFilter(e.target.value);setAuditPage(0);}}
+                      style={{padding:"7px 10px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
+                      {cats.map(c=><option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <button style={{padding:"7px 14px",borderRadius:8,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,fontSize:12,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>↓ Export CSV</button>
+                  </div>
+                  {/* Stats row */}
+                  <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+                    {[{l:"Today",v:ALL_AUDIT.filter(r=>r.ts.startsWith("2026-05-20")).length},{l:"This week",v:ALL_AUDIT.length},{l:"Policy events",v:ALL_AUDIT.filter(r=>r.cat==="Policy").length},{l:"Ingestion runs",v:ALL_AUDIT.filter(r=>r.cat==="Ingestion").length}].map(s=>(
+                      <div key={s.l} style={{padding:"8px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,textAlign:"center",flex:1}}>
+                        <div style={{fontSize:16,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text}}>{s.v}</div>
+                        <div style={{fontSize:10.5,color:T.textMuted,marginTop:2}}>{s.l}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Table */}
+                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",marginBottom:12}}>
+                    <table style={{width:"100%",borderCollapse:"collapse"}}>
+                      <thead>
+                        <tr style={{borderBottom:`1px solid ${T.border}`,background:T.bgElevated}}>
+                          {["Timestamp","User","Category","Action","Resource","Detail"].map(h=>(
+                            <th key={h} style={{padding:"9px 12px",textAlign:"left",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",whiteSpace:"nowrap"}}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paged.length===0&&(
+                          <tr><td colSpan={6} style={{padding:"32px",textAlign:"center",color:T.textMuted,fontSize:13}}>No events match your filters</td></tr>
+                        )}
+                        {paged.map((r,i)=>{
+                          const cc = CAT_COLOR[r.cat]||T.textMuted;
+                          return (
+                            <tr key={i} className="row-hover" style={{borderBottom:i<paged.length-1?`1px solid ${T.border}`:"none"}}>
+                              <td style={{padding:"10px 12px",whiteSpace:"nowrap"}}><span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{r.ts}</span></td>
+                              <td style={{padding:"10px 12px"}}><span style={{fontSize:12,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{r.u}</span></td>
+                              <td style={{padding:"10px 12px"}}><span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:4,background:`${cc}15`,color:cc,border:`1px solid ${cc}25`}}>{r.cat}</span></td>
+                              <td style={{padding:"10px 12px",whiteSpace:"nowrap"}}><span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:T.bgElevated,color:T.textSub,fontFamily:"'Geist Mono',monospace",border:`1px solid ${T.border}`}}>{r.a}</span></td>
+                              <td style={{padding:"10px 12px"}}><span style={{fontSize:12,color:T.text,fontWeight:500}}>{r.r}</span></td>
+                              <td style={{padding:"10px 12px"}}><span style={{fontSize:11.5,color:T.textMuted,lineHeight:1.4}}>{r.detail}</span></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* Pagination */}
+                  {totalPages>1&&(
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,color:T.textMuted}}>
+                      <span>Showing {auditPage*PAGE_SIZE+1}–{Math.min((auditPage+1)*PAGE_SIZE,filtered.length)} of {filtered.length} events</span>
+                      <div style={{display:"flex",gap:4}}>
+                        <button onClick={()=>setAuditPage(p=>Math.max(0,p-1))} disabled={auditPage===0}
+                          style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"transparent",color:auditPage===0?T.textMuted:T.text,cursor:auditPage===0?"not-allowed":"pointer",fontFamily:"inherit",fontSize:12}}>‹ Prev</button>
+                        {Array.from({length:totalPages},(_,i)=>(
+                          <button key={i} onClick={()=>setAuditPage(i)}
+                            style={{padding:"5px 9px",borderRadius:6,border:`1.5px solid ${i===auditPage?T.accent:T.border}`,background:i===auditPage?T.accentDim:"transparent",color:i===auditPage?T.accent:T.text,cursor:"pointer",fontFamily:"inherit",fontSize:12,fontWeight:i===auditPage?600:400}}>
+                            {i+1}
+                          </button>
+                        ))}
+                        <button onClick={()=>setAuditPage(p=>Math.min(totalPages-1,p+1))} disabled={auditPage===totalPages-1}
+                          style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"transparent",color:auditPage===totalPages-1?T.textMuted:T.text,cursor:auditPage===totalPages-1?"not-allowed":"pointer",fontFamily:"inherit",fontSize:12}}>Next ›</button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
 
             {/* ══ BILLING ══ */}
             {section==="billing"&&<>
