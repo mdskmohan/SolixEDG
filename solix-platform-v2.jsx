@@ -5446,6 +5446,16 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const PMV_USERS  = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
   const REL_TYPES  = ["governs","enforces","complies_with","monitors"];
   const POLICY_TAGS= ["PII","PHI","financial","sensitive","regulated","internal","public","confidential","customer-data","healthcare"];
+  const REGULATION_FRAMEWORKS = [
+    // Global Privacy
+    "GDPR","UK GDPR","CCPA / CPRA","LGPD","PIPL","PIPEDA","PDPA (Singapore)","APPI","POPIA","DPDP Act",
+    // Healthcare
+    "HIPAA","HITECH",
+    // Financial
+    "PCI DSS","SOX","GLBA","DORA",
+    // Security & IT Standards
+    "SOC 2","ISO 27001","ISO 27701","NIST CSF","NIS2","FedRAMP",
+  ];
   const lcColor = lc => LC_COLORS[lc]||T.textMuted;
   const lcIdx   = lc => LC_STEPS.indexOf(lc);
 
@@ -5962,7 +5972,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
         <div>
           <label style={lbl}>Regulatory Frameworks</label>
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-            {["GDPR","SOC2","CCPA","HIPAA","PCI DSS"].map(r=>{
+            {REGULATION_FRAMEWORKS.slice(0,10).map(r=>{
               const sel=(pol.regulations||[]).includes(r);
               return <button key={r} onClick={()=>set(p=>{const rs=p.regulations||[];return{...p,regulations:sel?rs.filter(x=>x!==r):[...rs,r]};})} style={toggleBtn(r,sel)}>{r}</button>;
             })}
@@ -7337,7 +7347,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       {secHead("Ownership & Classification","Assign who is responsible for this policy and link it to regulations and tags.")}
                       <CatFieldDropdown label="Owner" placeholder="Search and select owners…" options={PMV_USERS} selected={newPol.owner||[]} onChange={v=>setNewPol(p=>({...p,owner:v}))} renderOpt={userRenderOpt}/>
                       <CatFieldDropdown label="Stewards" placeholder="Search and select stewards…" options={PMV_USERS} selected={newPol.stewards||[]} onChange={v=>setNewPol(p=>({...p,stewards:v}))} renderOpt={userRenderOpt}/>
-                      <CatFieldDropdown label="Regulatory Frameworks" placeholder="Search and select frameworks…" options={["GDPR","CCPA","HIPAA","SOC2","PCI DSS","ISO 27001","NIST","LGPD","PDPA","FERPA"]} selected={newPol.regulations||[]} onChange={v=>setNewPol(p=>({...p,regulations:v}))}/>
+                      <CatFieldDropdown label="Regulatory Frameworks" placeholder="Search and select frameworks…" options={REGULATION_FRAMEWORKS} selected={newPol.regulations||[]} onChange={v=>setNewPol(p=>({...p,regulations:v}))}/>
                       <CatFieldDropdown label="Tags" placeholder="Search and select tags…" options={POLICY_TAGS} selected={newPol.tags||[]} onChange={v=>setNewPol(p=>({...p,tags:v}))}/>
                       <div style={{padding:"10px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textMuted,lineHeight:1.7}}>
                         <strong style={{color:T.textSub}}>Evaluation:</strong> Policy conditions run automatically on every workflow run. Violations are created immediately when a condition fails on an asset.
@@ -7519,7 +7529,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
             {mHead("Edit Frameworks & Regulations")}
             <div style={{padding:"20px 24px",display:"flex",flexDirection:"column",gap:12}}>
               <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                {["GDPR","CCPA","HIPAA","SOC2","PCI DSS","ISO 27001","NIST","LGPD","PDPA","FERPA"].map(f=>{const sel=polDraftFrameworks.includes(f);return <button key={f} onClick={()=>setPolDraftFrameworks(prev=>sel?prev.filter(x=>x!==f):[...prev,f])} style={tBtn(sel)}>{f}</button>;})}
+                {REGULATION_FRAMEWORKS.map(f=>{const sel=polDraftFrameworks.includes(f);return <button key={f} onClick={()=>setPolDraftFrameworks(prev=>sel?prev.filter(x=>x!==f):[...prev,f])} style={tBtn(sel)}>{f}</button>;})}
               </div>
               {polDraftFrameworks.length>0&&<div style={{fontSize:11,color:T.textMuted}}>Selected: {polDraftFrameworks.join(", ")}</div>}
             </div>
@@ -7664,7 +7674,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
       {/* New / Edit Policy Category slide-in panels */}
       {(()=>{
         const CAT_COLORS_LIST=["#ee2424","#d97706","#16a34a","#2563eb","#7c3aed","#6366f1","#0891b2","#6b7280"];
-        const FRAMEWORKS=["GDPR","SOC2","CCPA","HIPAA","PCI DSS","ISO 27001","NIST","FedRAMP"];
+        const FRAMEWORKS=REGULATION_FRAMEWORKS;
         const ava=u=>u.split(".").map(s=>s[0]?.toUpperCase()).join("");
         const userRenderOpt=(u,sel)=>(
           <>
