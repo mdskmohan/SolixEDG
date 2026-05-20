@@ -7335,7 +7335,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                   return (
                     <div style={{display:"flex",flexDirection:"column",gap:18}}>
                       {secHead("Ownership & Classification","Assign who is responsible for this policy and link it to regulations and tags.")}
-                      <CatFieldDropdown label="Policy Owner" placeholder="Search and select owners…" options={PMV_USERS} selected={newPol.owner||[]} onChange={v=>setNewPol(p=>({...p,owner:v}))} renderOpt={userRenderOpt}/>
+                      <CatFieldDropdown label="Owner" placeholder="Search and select owners…" options={PMV_USERS} selected={newPol.owner||[]} onChange={v=>setNewPol(p=>({...p,owner:v}))} renderOpt={userRenderOpt}/>
                       <CatFieldDropdown label="Stewards" placeholder="Search and select stewards…" options={PMV_USERS} selected={newPol.stewards||[]} onChange={v=>setNewPol(p=>({...p,stewards:v}))} renderOpt={userRenderOpt}/>
                       <CatFieldDropdown label="Regulatory Frameworks" placeholder="Search and select frameworks…" options={["GDPR","CCPA","HIPAA","SOC2","PCI DSS","ISO 27001","NIST","LGPD","PDPA","FERPA"]} selected={newPol.regulations||[]} onChange={v=>setNewPol(p=>({...p,regulations:v}))}/>
                       <CatFieldDropdown label="Tags" placeholder="Search and select tags…" options={POLICY_TAGS} selected={newPol.tags||[]} onChange={v=>setNewPol(p=>({...p,tags:v}))}/>
