@@ -5489,7 +5489,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
     {id:"pol-1",name:"Commerce PII Sensitivity",fqn:"policies.data.commerce_pii",version:2,
      category:"Data",severity:"Critical",lifecycle:"Active",owner:"maya.chen",stewards:["dev.patel","sarah.kim"],tags:["PII","sensitive"],
      created:"2026-02-10",updated:"2026-05-01",regulations:["GDPR","CCPA"],
-     violations:2,compliancePct:78,lastEvaluated:"2026-05-17",assetsInScope:12,
+     violations:2,compliancePct:78,lastEvaluated:"2026-05-17",assetsInScope:12,schedule:"0 */6 * * *",nextRun:"2026-05-20 20:00",
      scope:{domains:["Commerce","Finance"]},
      criteria:["All assets in Commerce and Finance domains must carry a PII classification tag before promotion to any downstream system","Data subjects' right to erasure must be honoured within 30 days of request","Assets must hold Approved certification before being queryable by downstream analytics pipelines"],
      description:"All assets in the Commerce and Finance domains must carry an Approved certification and meet PII classification requirements. Non-compliant assets pose direct privacy and regulatory risk under GDPR and CCPA.",
@@ -5510,7 +5510,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
     {id:"pol-2",name:"Finance Data Integrity",fqn:"policies.quality.finance_integrity",version:1,
      category:"Quality",severity:"High",lifecycle:"Active",owner:"dev.patel",stewards:["sarah.kim"],tags:["financial","regulated"],
      created:"2026-01-15",updated:"2026-04-20",regulations:["SOC2","PCI DSS"],
-     violations:1,compliancePct:88,lastEvaluated:"2026-05-17",assetsInScope:8,
+     violations:1,compliancePct:88,lastEvaluated:"2026-05-17",assetsInScope:8,schedule:"0 8 * * *",nextRun:"2026-05-21 08:00",
      scope:{domains:["Finance"]},
      criteria:["Financial datasets must maintain a quality score of 80 or above before use in any reporting pipeline","All financial tables must have a certified owner and a documented data contract","Assets with quality below 70 must have a steward review initiated within 24 hours"],
      description:"Financial datasets must maintain a minimum quality score of 80 to ensure accurate reporting and audit readiness. Assets below threshold are flagged for stewardship review.",
@@ -5543,7 +5543,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
     {id:"pol-4",name:"HIPAA PHI Compliance",fqn:"policies.access.hipaa_phi",version:3,
      category:"Access",severity:"Critical",lifecycle:"Active",owner:"lisa.ray",stewards:["priya.nair","maya.chen"],tags:["PHI","healthcare","sensitive","regulated"],
      created:"2026-01-05",updated:"2026-04-01",regulations:["HIPAA"],
-     violations:3,compliancePct:65,lastEvaluated:"2026-05-17",assetsInScope:7,
+     violations:3,compliancePct:65,lastEvaluated:"2026-05-17",assetsInScope:7,schedule:"0 */4 * * *",nextRun:"2026-05-20 22:00",
      scope:{domains:["Finance","Commerce"]},
      criteria:["PHI-containing assets must hold Approved certification and maintain a quality score of 90 or above","Only roles with healthcare.phi_read scope may access PHI-tagged assets","All access to PHI-tagged assets must generate an immutable audit log entry retained for 7 years","Policy violations must be remediated within 72 hours of detection"],
      description:"Assets containing Protected Health Information must be Approved-certified and maintain quality at or above 90 to ensure data integrity in healthcare workflows.",
@@ -5657,6 +5657,12 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const [createStep,     setCreateStep]     = useState(1);
   const [wizardRules,    setWizardRules]    = useState([]);
   const [sevOpen,        setSevOpen]        = useState(null);
+  const [runningPolId,   setRunningPolId]   = useState(null);
+  const [scheduleModal,  setScheduleModal]  = useState(null);
+  const [schedFreq,      setSchedFreq]      = useState("daily");
+  const [schedTime,      setSchedTime]      = useState("08:00");
+  const [schedDay,       setSchedDay]       = useState("monday");
+  const [schedCron,      setSchedCron]      = useState("");
   const [selRegId,       setSelRegId]       = useState(null);
   const [polEditCatOpen,  setPolEditCatOpen]  = useState(false);
   const [polEditCatDraft, setPolEditCatDraft] = useState(null);
@@ -6549,6 +6555,47 @@ const PolicyManagerView = ({onToast, onNav}) => {
                             ))}
                           </div>
 
+                          {/* ─ Evaluation ─ */}
+                          <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
+                            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>Evaluation</div>
+                            {/* Run Now button */}
+                            <button
+                              disabled={runningPolId===p.id}
+                              onClick={()=>{
+                                setRunningPolId(p.id);
+                                setTimeout(()=>{
+                                  setPolicies(prev=>prev.map(pp=>pp.id===p.id?{...pp,lastEvaluated:new Date().toISOString().slice(0,10),compliancePct:Math.floor(70+Math.random()*25)}:pp));
+                                  setRunningPolId(null);
+                                  onToast("Policy evaluation complete","success");
+                                },2200);
+                              }}
+                              style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"8px 12px",borderRadius:8,background:runningPolId===p.id?T.bgElevated:T.accentDim,border:`1.5px solid ${runningPolId===p.id?T.border:T.accent+"44"}`,color:runningPolId===p.id?T.textMuted:T.accent,fontSize:12.5,fontWeight:600,cursor:runningPolId===p.id?"not-allowed":"pointer",marginBottom:8,transition:"all .15s",fontFamily:"inherit"}}>
+                              {runningPolId===p.id
+                                ? <><span style={{display:"inline-block",width:12,height:12,borderRadius:"50%",border:`1.5px solid ${T.accent}`,borderTopColor:"transparent",animation:"spin 0.7s linear infinite"}}/>Evaluating…</>
+                                : <><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><polygon points="5,3 14,8 5,13" fill="currentColor" stroke="none"/></svg>Run Now</>}
+                            </button>
+                            {/* Schedule button */}
+                            <button
+                              onClick={()=>{
+                                setSchedFreq(p.schedule?.startsWith("0 */")?"hourly":p.schedule?.includes("* * 1")?"weekly":p.schedule?"daily":"daily");
+                                setSchedTime("08:00");
+                                setScheduleModal(p.id);
+                              }}
+                              style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"8px 12px",borderRadius:8,background:"transparent",border:`1.5px solid ${T.border}`,color:T.textSub,fontSize:12.5,fontWeight:500,cursor:"pointer",transition:"all .15s",fontFamily:"inherit"}}
+                              onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                              onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+                              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>
+                              {p.schedule?"Edit Schedule":"Set Schedule"}
+                            </button>
+                            {p.schedule&&(
+                              <div style={{marginTop:8,padding:"7px 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                                <div style={{fontSize:10.5,color:T.textMuted,marginBottom:2}}>Next run</div>
+                                <div style={{fontSize:11.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{p.nextRun||"—"}</div>
+                                <div style={{fontSize:10,color:T.textMuted,marginTop:3,fontFamily:"'Geist Mono',monospace"}}>{p.schedule}</div>
+                              </div>
+                            )}
+                          </div>
+
                           <div style={{padding:"16px"}}>
                             <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:9}}>Actions</div>
                             {[{l:"View Linked Assets",action:()=>setPdTab("assets")},{l:"Copy Link",action:()=>onToast("Link copied","success")},{l:"View Activity",action:()=>setPdTab("activity")}].map((a,i)=>(
@@ -7028,6 +7075,97 @@ const PolicyManagerView = ({onToast, onNav}) => {
 
 
       </div>
+
+      {/* ══ Schedule Modal ══ */}
+      {scheduleModal&&(()=>{
+        const sp = policies.find(pp=>pp.id===scheduleModal);
+        const FREQS = [{k:"hourly",l:"Hourly"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"custom",l:"Custom Cron"}];
+        const buildCron = ()=>{
+          if(schedFreq==="hourly") return "0 * * * *";
+          if(schedFreq==="daily"){const[h,m]=schedTime.split(":");return `${m||"0"} ${h||"8"} * * *`;}
+          if(schedFreq==="weekly"){const days={monday:1,tuesday:2,wednesday:3,thursday:4,friday:5,saturday:6,sunday:0};const[h,m]=schedTime.split(":");return `${m||"0"} ${h||"8"} * * ${days[schedDay]||1}`;}
+          return schedCron||"0 8 * * *";
+        };
+        const nextRunLabel = ()=>{
+          const now=new Date();
+          if(schedFreq==="hourly") return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")} ${String(now.getHours()+1).padStart(2,"0")}:00`;
+          return `2026-05-21 ${schedTime||"08:00"}`;
+        };
+        const saveSchedule = ()=>{
+          const cron=buildCron();
+          setPolicies(prev=>prev.map(pp=>pp.id===scheduleModal?{...pp,schedule:cron,nextRun:nextRunLabel()}:pp));
+          setScheduleModal(null);
+          onToast("Schedule saved","success");
+        };
+        return (
+          <>
+            <div onClick={()=>setScheduleModal(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:1300}}/>
+            <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:440,background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:14,zIndex:1301,boxShadow:"0 20px 60px rgba(0,0,0,.4)",padding:"24px 24px 20px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
+                <div>
+                  <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:4}}>Evaluation Schedule</div>
+                  <div style={{fontSize:12,color:T.textMuted}}>{sp?.name}</div>
+                </div>
+                <button onClick={()=>setScheduleModal(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:18,lineHeight:1,padding:2}}>×</button>
+              </div>
+              {/* Frequency selector */}
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Frequency</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
+                  {FREQS.map(f=>(
+                    <button key={f.k} onClick={()=>setSchedFreq(f.k)}
+                      style={{padding:"8px 6px",borderRadius:8,border:`1.5px solid ${schedFreq===f.k?T.accent:T.border}`,background:schedFreq===f.k?T.accentDim:"transparent",color:schedFreq===f.k?T.accent:T.textSub,fontSize:12,fontWeight:schedFreq===f.k?600:400,cursor:"pointer",fontFamily:"inherit",transition:"all .12s"}}>
+                      {f.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* Time picker — daily/weekly */}
+              {(schedFreq==="daily"||schedFreq==="weekly")&&(
+                <div style={{marginBottom:16}}>
+                  <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Run At</div>
+                  <input type="time" value={schedTime} onChange={e=>setSchedTime(e.target.value)}
+                    style={{padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",fontFamily:"'Geist Mono',monospace",width:"100%",boxSizing:"border-box"}}/>
+                </div>
+              )}
+              {/* Day picker — weekly */}
+              {schedFreq==="weekly"&&(
+                <div style={{marginBottom:16}}>
+                  <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Day of Week</div>
+                  <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                    {["monday","tuesday","wednesday","thursday","friday","saturday","sunday"].map(d=>(
+                      <button key={d} onClick={()=>setSchedDay(d)}
+                        style={{padding:"5px 10px",borderRadius:6,border:`1.5px solid ${schedDay===d?T.accent:T.border}`,background:schedDay===d?T.accentDim:"transparent",color:schedDay===d?T.accent:T.textSub,fontSize:11,fontWeight:schedDay===d?600:400,cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize"}}>
+                        {d.slice(0,3)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* Custom cron */}
+              {schedFreq==="custom"&&(
+                <div style={{marginBottom:16}}>
+                  <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Cron Expression</div>
+                  <input value={schedCron} onChange={e=>setSchedCron(e.target.value)} placeholder="0 8 * * 1-5"
+                    style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box"}}/>
+                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>Standard 5-field cron: minute hour day month weekday</div>
+                </div>
+              )}
+              {/* Preview */}
+              <div style={{padding:"10px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,marginBottom:20}}>
+                <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Cron preview</div>
+                <div style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.accent,marginBottom:4}}>{buildCron()}</div>
+                <div style={{fontSize:11,color:T.textMuted}}>Next run: <strong style={{color:T.text}}>{nextRunLabel()}</strong></div>
+              </div>
+              <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                {sp?.schedule&&<button onClick={()=>{setPolicies(prev=>prev.map(pp=>pp.id===scheduleModal?{...pp,schedule:null,nextRun:null}:pp));setScheduleModal(null);onToast("Schedule removed","info");}} style={{padding:"8px 14px",borderRadius:8,border:`1px solid ${T.rose}40`,background:"transparent",color:T.rose,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Remove</button>}
+                <button onClick={()=>setScheduleModal(null)} style={{padding:"8px 16px",borderRadius:8,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+                <button onClick={saveSchedule} style={{padding:"8px 20px",borderRadius:8,border:"none",background:T.accent,color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Save Schedule</button>
+              </div>
+            </div>
+          </>
+        );
+      })()}
 
       {/* ════ PANELS & MODALS ════ */}
 
@@ -12567,57 +12705,176 @@ const DomainsView = ({onAsset, onNav}) => {
             )}
 
             {/* CONTRACT TAB */}
-            {productTab==="contract"&&(
-              <div style={{maxWidth:680}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
-                  <div>
-                    <div style={{fontSize:13,fontWeight:700,color:T.text}}>Data Contract</div>
-                    <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Formal agreement on quality, schema, and delivery commitments</div>
-                  </div>
-                  <button onClick={()=>setPdContractOpen(p=>!p)} style={{padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                    {pdContractOpen?"Close":"Edit Contract"}
-                  </button>
-                </div>
-                <div style={{display:"flex",flexDirection:"column",gap:12}}>
-                  {[
-                    {section:"SLA Commitments",items:[
-                      {label:"Tier",value:pd.sla.tier,badge:true},
-                      {label:"Availability",value:`${pd.sla.availability}%`},
-                      {label:"Freshness",value:`${pd.sla.dataFreshness>=60?`${pd.sla.dataFreshness/60}h`:`${pd.sla.dataFreshness}m`}`},
-                      {label:"Min. Quality Score",value:`${pd.sla.dataQuality}%`},
-                    ]},
-                    {section:"Ownership",items:[
-                      {label:"Owners",value:pd.owners.join(", ")||"—"},
-                      {label:"Stewards",value:(pd.experts||[]).join(", ")||"—"},
-                    ]},
-                    {section:"Data Classification",items:[
-                      {label:"Sensitivity",value:"Internal"},
-                      {label:"PII",value:"No"},
-                      {label:"Retention",value:"2 years"},
-                    ]},
-                  ].map(sec=>(
-                    <div key={sec.section} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                      <div style={{padding:"10px 16px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{sec.section}</div>
-                      {sec.items.map(item=>(
-                        <div key={item.label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 16px",borderBottom:`1px solid ${T.border}`}}>
-                          <span style={{fontSize:12,color:T.textMuted}}>{item.label}</span>
-                          {item.badge
-                            ? <SlaTierBadge tier={item.value}/>
-                            : <span style={{fontSize:12,color:T.text,fontWeight:500}}>{item.value}</span>
-                          }
+            {productTab==="contract"&&(()=>{
+              const [contractState, setContractState] = React.useState(()=>({
+                status: pd.contract?.status||"Active",
+                version: pd.contract?.version||"1.2.0",
+                validFrom: pd.contract?.validFrom||"2026-01-01",
+                validUntil: pd.contract?.validUntil||"2026-12-31",
+                schemaTerms:{
+                  expectedColumns: pd.contract?.schemaTerms?.expectedColumns||12,
+                  allowSchemaEvolution: pd.contract?.schemaTerms?.allowSchemaEvolution||true,
+                  breakingChangePolicy: pd.contract?.schemaTerms?.breakingChangePolicy||"Notify 7 days prior",
+                },
+                freshnessTerms:{
+                  maxLatency: pd.sla?.dataFreshness||120,
+                  unit: "minutes",
+                  availability: pd.sla?.availability||99.5,
+                },
+                qualityTerms:[
+                  {id:"qc1",rule:"Null rate on primary key",operator:"<",threshold:0.1,unit:"%",status:"passing"},
+                  {id:"qc2",rule:"Row count",operator:">",threshold:1000,unit:"rows",status:"passing"},
+                  {id:"qc3",rule:"Completeness score",operator:">=",threshold:95,unit:"%",status:"passing"},
+                  {id:"qc4",rule:"Duplicate rate",operator:"<",threshold:0.5,unit:"%",status:"failing"},
+                ],
+                ownershipTerms:{
+                  owner: (pd.owners||[])[0]||"—",
+                  responseTime: "24 hours",
+                  escalation: "data-platform-team@company.com",
+                },
+                consumerTerms: pd.contract?.consumerTerms||"Consumers agree to: (1) not redistribute raw data outside approved use cases, (2) report issues within 24 hours, (3) not use this product for purposes inconsistent with the domain's data governance policy.",
+              }));
+              const [validating, setValidating] = React.useState(false);
+              const [lastValidated, setLastValidated] = React.useState("2026-05-17 14:32");
+              const STATUS_CFG = {
+                Active:{color:T.green,bg:`${T.green}12`,label:"Active"},
+                Draft:{color:T.textMuted,bg:T.bgElevated,label:"Draft"},
+                Breached:{color:T.rose,bg:`${T.rose}12`,label:"Breached"},
+                "Under Review":{color:T.amber,bg:`${T.amber}12`,label:"Under Review"},
+              };
+              const sc = STATUS_CFG[contractState.status]||STATUS_CFG.Active;
+              const runValidation = ()=>{
+                setValidating(true);
+                setTimeout(()=>{
+                  setContractState(p=>({...p,qualityTerms:p.qualityTerms.map(q=>({...q,status:Math.random()>0.2?"passing":"failing"}))}));
+                  setLastValidated(new Date().toLocaleString("en-US",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}));
+                  setValidating(false);
+                },1800);
+              };
+              const passingCount = contractState.qualityTerms.filter(q=>q.status==="passing").length;
+              const failingCount = contractState.qualityTerms.filter(q=>q.status==="failing").length;
+              return (
+                <div style={{maxWidth:720}}>
+                  {/* Header */}
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20,flexWrap:"wrap",gap:12}}>
+                    <div style={{display:"flex",alignItems:"center",gap:12}}>
+                      <div>
+                        <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:4,display:"flex",alignItems:"center",gap:10}}>
+                          Data Contract
+                          <span style={{fontSize:10.5,fontWeight:700,padding:"2px 9px",borderRadius:99,background:sc.bg,color:sc.color,border:`1px solid ${sc.color}30`}}>{sc.label}</span>
+                          <span style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>v{contractState.version}</span>
                         </div>
-                      ))}
+                        <div style={{fontSize:11.5,color:T.textMuted}}>Valid {contractState.validFrom} → {contractState.validUntil}</div>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:8}}>
+                      <button onClick={runValidation} disabled={validating}
+                        style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:validating?T.bgElevated:T.accentDim,border:`1px solid ${validating?T.border:T.accent+"44"}`,color:validating?T.textMuted:T.accent,fontSize:12,fontWeight:600,cursor:validating?"not-allowed":"pointer",fontFamily:"inherit",transition:"all .15s"}}>
+                        {validating?<><span style={{display:"inline-block",width:11,height:11,borderRadius:"50%",border:`1.5px solid ${T.accent}`,borderTopColor:"transparent",animation:"spin 0.7s linear infinite"}}/>Validating…</>:<>▶ Validate Now</>}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Validation summary */}
+                  <div style={{display:"flex",gap:10,marginBottom:20}}>
+                    {[{l:"Quality checks passing",v:passingCount,c:T.green},{l:"Failing",v:failingCount,c:failingCount>0?T.rose:T.textMuted},{l:"Last validated",v:lastValidated,c:T.textMuted,small:true}].map(s=>(
+                      <div key={s.l} style={{flex:s.small?2:1,padding:"10px 14px",background:T.bgSurface,border:`1px solid ${s.c}25`,borderRadius:9}}>
+                        <div style={{fontSize:s.small?12:20,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:s.c,marginBottom:2}}>{s.v}</div>
+                        <div style={{fontSize:10.5,color:T.textMuted}}>{s.l}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Sections */}
+                  {[
+                    {
+                      key:"schema", title:"Schema Terms", icon:"📐",
+                      content:(
+                        <div style={{display:"flex",flexDirection:"column",gap:0}}>
+                          {[
+                            {l:"Expected Columns",v:`${contractState.schemaTerms.expectedColumns} columns`},
+                            {l:"Schema Evolution",v:contractState.schemaTerms.allowSchemaEvolution?"Allowed":"Frozen"},
+                            {l:"Breaking Changes",v:contractState.schemaTerms.breakingChangePolicy},
+                          ].map((m,i,a)=>(
+                            <div key={m.l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:i<a.length-1?`1px solid ${T.border}`:"none"}}>
+                              <span style={{fontSize:12,color:T.textMuted}}>{m.l}</span>
+                              <span style={{fontSize:12,color:T.text,fontWeight:500}}>{m.v}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    },
+                    {
+                      key:"freshness", title:"Freshness & SLA", icon:"⏱️",
+                      content:(
+                        <div style={{display:"flex",flexDirection:"column",gap:0}}>
+                          {[
+                            {l:"Max Latency",v:`${contractState.freshnessTerms.maxLatency} ${contractState.freshnessTerms.unit}`},
+                            {l:"Availability Target",v:`${contractState.freshnessTerms.availability}%`},
+                            {l:"SLA Tier",v:pd.sla?.tier||"Gold"},
+                          ].map((m,i,a)=>(
+                            <div key={m.l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:i<a.length-1?`1px solid ${T.border}`:"none"}}>
+                              <span style={{fontSize:12,color:T.textMuted}}>{m.l}</span>
+                              <span style={{fontSize:12,color:T.text,fontWeight:500}}>{m.v}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    },
+                    {
+                      key:"quality", title:"Quality Terms", icon:"✅",
+                      content:(
+                        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                          {contractState.qualityTerms.map(q=>{
+                            const pass = q.status==="passing";
+                            return (
+                              <div key={q.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:T.bgElevated,borderRadius:8,border:`1px solid ${pass?T.green+"25":T.rose+"30"}`}}>
+                                <div style={{width:18,height:18,borderRadius:"50%",background:pass?`${T.green}15`:`${T.rose}15`,border:`1.5px solid ${pass?T.green:T.rose}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                                  {pass
+                                    ? <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M2 4.5l2 2L7 2.5" stroke={T.green} strokeWidth="1.4" strokeLinecap="round"/></svg>
+                                    : <span style={{fontSize:9,color:T.rose,fontWeight:700}}>✕</span>}
+                                </div>
+                                <span style={{flex:1,fontSize:12,color:T.text}}>{q.rule}</span>
+                                <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:pass?T.green:T.rose,fontWeight:600}}>{q.operator} {q.threshold}{q.unit}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )
+                    },
+                    {
+                      key:"ownership", title:"Ownership Terms", icon:"👤",
+                      content:(
+                        <div style={{display:"flex",flexDirection:"column",gap:0}}>
+                          {[
+                            {l:"Owner",v:contractState.ownershipTerms.owner},
+                            {l:"Response SLA",v:contractState.ownershipTerms.responseTime},
+                            {l:"Escalation",v:contractState.ownershipTerms.escalation},
+                          ].map((m,i,a)=>(
+                            <div key={m.l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:i<a.length-1?`1px solid ${T.border}`:"none"}}>
+                              <span style={{fontSize:12,color:T.textMuted}}>{m.l}</span>
+                              <span style={{fontSize:12,color:T.text,fontWeight:500}}>{m.v}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    },
+                    {
+                      key:"consumer", title:"Consumer Terms", icon:"📋",
+                      content:<div style={{fontSize:12.5,color:T.textSub,lineHeight:1.8}}>{contractState.consumerTerms}</div>
+                    },
+                  ].map(sec=>(
+                    <div key={sec.key} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",marginBottom:12}}>
+                      <div style={{padding:"11px 16px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:13}}>{sec.icon}</span>
+                        <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{sec.title}</span>
+                      </div>
+                      <div style={{padding:"12px 16px"}}>{sec.content}</div>
                     </div>
                   ))}
-                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                    <div style={{padding:"10px 16px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Consumer Terms</div>
-                    <div style={{padding:"14px 16px",fontSize:12.5,color:T.textSub,lineHeight:1.75}}>
-                      Consumers of this data product agree to: (1) not redistribute raw data outside approved use cases, (2) report data quality issues within 24 hours of discovery, (3) not use this product for purposes inconsistent with the domain's data governance policy.
-                    </div>
-                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* CUSTOM PROPERTIES TAB */}
             {productTab==="customprops"&&(
