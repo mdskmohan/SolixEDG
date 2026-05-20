@@ -7036,13 +7036,17 @@ const PolicyManagerView = ({onToast, onNav}) => {
                     {id:"row_level_security",    label:"Row-Level Security",      type:"bool_yn",  ops:["is"],                         vals:["Yes","No"]},
                     {id:"retention_period_days", label:"Retention Period (days)", type:"number",   ops:["greater than","less than","equals"]},
                     {id:"access_role_count",     label:"Access Role Count",       type:"number",   ops:["greater than","less than","equals"]},
-                    {id:"custom_sql",            label:"Custom SQL",              type:"custom_sql",ops:["passes","fails"]},
                   ];
-                  const addRule = () => setWizardRules(prev=>[...prev,{id:`wr-${Date.now()}`,field:"certification",operator:"is",value:"",sqlConnection:"",sqlBody:"",sqlPassCondition:"count_is_zero",sqlDescription:""}]);
+                  const addPresetRule = () => setWizardRules(prev=>[...prev,{id:`wr-${Date.now()}`,field:"certification",operator:"is",value:"",severity:"Medium"}]);
+                  const addSqlRule   = () => setWizardRules(prev=>[...prev,{id:`wr-${Date.now()}`,field:"custom_sql",operator:"passes",value:"",sqlConnection:"",sqlBody:"",sqlPassCondition:"count_is_zero",sqlDescription:"",severity:"Medium"}]);
                   const removeRule = id => setWizardRules(prev=>prev.filter(r=>r.id!==id));
                   const updRule = (id,k,v) => setWizardRules(prev=>prev.map(r=>r.id===id?{...r,[k]:v}:r));
                   const sel_s={padding:"7px 9px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",cursor:"pointer",fontFamily:"inherit"};
-                  const cq = newPol.consequence||{severity:"Medium",onViolation:"Warn",notify:"Both"};
+                  const cq = newPol.consequence||{notify:"Both"};
+                  const activeRuleTab = newPol.ruleTab||"preset";
+                  const presetRules = wizardRules.filter(r=>r.field!=="custom_sql");
+                  const sqlRules    = wizardRules.filter(r=>r.field==="custom_sql");
+                  const sevSel_s = (sev) => ({padding:"3px 7px",borderRadius:6,border:`1.5px solid ${SEV_COLOR[sev]||T.border}40`,background:`${SEV_COLOR[sev]||T.textMuted}12`,color:SEV_COLOR[sev]||T.textMuted,fontSize:10.5,fontWeight:600,cursor:"pointer",outline:"none",flexShrink:0,fontFamily:"inherit"});
                   return (
                     <div style={{display:"flex",flexDirection:"column",gap:0}}>
 
@@ -7065,174 +7069,182 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       {divider}
 
                       {/* ── Policy Type ── */}
-                      {secHead("Policy Type","Select one or more types. Fields below update based on your selection.")}
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:4}}>
-                        {availPTypes.map(pt=>{
-                          const m=PTYPE_META[pt];
-                          const sel=selPTypes.includes(pt);
+                      {secHead("Policy Type","Select the type(s) this policy governs.")}
+                      <div style={{marginBottom:4}}>
+                        <CatFieldDropdown
+                          label="Policy Type"
+                          placeholder="Search and select policy types…"
+                          options={availPTypes}
+                          selected={selPTypes}
+                          onChange={v=>setNewPol(p=>({...p,policyTypes:v}))}
+                        />
+                      </div>
+                      {divider}
+
+                      {/* ── Rules ── */}
+                      {secHead("Rules","Conditions evaluated on each in-scope asset. A violation is raised when a rule fails.")}
+                      {/* Tab bar */}
+                      <div style={{display:"flex",gap:0,borderBottom:`1px solid ${T.border}`,marginBottom:14}}>
+                        {[["preset","Preset"],["custom","Custom SQL"]].map(([key,label])=>{
+                          const active=activeRuleTab===key;
+                          const count=key==="preset"?presetRules.length:sqlRules.length;
                           return (
-                            <button key={pt} onClick={()=>setNewPol(p=>({...p,policyTypes:sel?selPTypes.filter(x=>x!==pt):[...selPTypes,pt]}))}
-                              style={{padding:"10px 12px",borderRadius:9,border:`1.5px solid ${sel?m.color:T.border}`,background:sel?`${m.color}14`:T.bgElevated,textAlign:"left",cursor:"pointer",transition:"all .15s"}}>
-                              <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}>
-                                <span style={{fontSize:14}}>{m.icon}</span>
-                                <span style={{fontSize:12,fontWeight:sel?700:500,color:sel?m.color:T.textSub}}>{pt}</span>
-                                {sel&&<svg width="12" height="12" viewBox="0 0 14 14" fill="none" style={{marginLeft:"auto"}}><circle cx="7" cy="7" r="6" fill={m.color}/><path d="M4 7l2 2 4-4" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                              </div>
-                              <div style={{fontSize:10.5,color:T.textMuted,lineHeight:1.5}}>{m.desc}</div>
+                            <button key={key} onClick={()=>setNewPol(p=>({...p,ruleTab:key}))}
+                              style={{padding:"8px 18px",fontSize:12,fontWeight:active?600:400,color:active?T.accent:T.textMuted,border:"none",borderBottom:`2px solid ${active?T.accent:"transparent"}`,background:"transparent",cursor:"pointer",transition:"all .15s",marginBottom:-1,display:"flex",alignItems:"center",gap:6}}>
+                              {label}
+                              {count>0&&<span style={{fontSize:10,background:active?T.accentDim:T.bgElevated,color:active?T.accent:T.textMuted,padding:"1px 6px",borderRadius:10,fontWeight:600}}>{count}</span>}
                             </button>
                           );
                         })}
                       </div>
-                      {divider}
 
-                      {/* ── IF Conditions ── */}
-                      {secHead("IF Conditions","Evaluated on each asset. A violation is raised when any condition fails.")}
-                      <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:4}}>
-                        {wizardRules.length===0
-                          ? <div style={{padding:"24px 20px",textAlign:"center",background:T.bgElevated,borderRadius:10,border:`1.5px dashed ${T.border}`}}>
-                              <div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>No conditions yet. Add your first IF condition.</div>
-                              <button onClick={addRule} style={{padding:"7px 18px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>+ Add Condition</button>
-                            </div>
-                          : <>
-                              {wizardRules.map((r)=>{
-                                const fd=W_RULE_FIELDS.find(f=>f.id===r.field)||W_RULE_FIELDS[0];
-                                const isSql    = fd.type==="custom_sql";
-                                const isBool   = fd.type==="bool";
-                                const needsVal = (fd.type==="select"||fd.type==="bool_yn");
-                                const needsNum = fd.type==="number";
-                                const needsTxt = fd.type==="text";
-                                const rmBtn = (
-                                  <button onClick={()=>removeRule(r.id)} title="Remove"
-                                    style={{width:24,height:24,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15,lineHeight:1}}
-                                    onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
-                                    onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>×</button>
-                                );
-                                if(isSql) return (
-                                  <div key={r.id} style={{background:T.bgElevated,borderRadius:9,border:`1.5px solid ${T.border}`,overflow:"hidden"}}>
-                                    <div style={{padding:"10px 12px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",borderBottom:`1px solid ${T.border}`,background:T.bgBase}}>
-                                      <span style={{fontSize:10,fontWeight:700,color:T.accent,background:T.accentDim,padding:"2px 7px",borderRadius:4,flexShrink:0}}>IF</span>
-                                      <select value={r.field} onChange={e=>{const nfd=W_RULE_FIELDS.find(f=>f.id===e.target.value)||W_RULE_FIELDS[0];updRule(r.id,"field",e.target.value);updRule(r.id,"operator",nfd.ops[0]);updRule(r.id,"value","");}} style={{...sel_s,flex:"1 1 140px",minWidth:110}}>
+                      {/* Preset tab */}
+                      {activeRuleTab==="preset"&&(
+                        <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:4}}>
+                          {presetRules.length===0
+                            ? <div style={{padding:"24px 20px",textAlign:"center",background:T.bgElevated,borderRadius:10,border:`1.5px dashed ${T.border}`}}>
+                                <div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>No rules yet. Add your first rule.</div>
+                                <button onClick={addPresetRule} style={{padding:"7px 18px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>+ Add Rule</button>
+                              </div>
+                            : <>
+                                {presetRules.map((r)=>{
+                                  const fd=W_RULE_FIELDS.find(f=>f.id===r.field)||W_RULE_FIELDS[0];
+                                  const isBool   = fd.type==="bool";
+                                  const needsVal = (fd.type==="select"||fd.type==="bool_yn");
+                                  const needsNum = fd.type==="number";
+                                  const needsTxt = fd.type==="text";
+                                  const sev = r.severity||"Medium";
+                                  return (
+                                    <div key={r.id} style={{background:T.bgElevated,borderRadius:9,border:`1.5px solid ${T.border}`,padding:"9px 11px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                                      <select value={r.field} onChange={e=>{
+                                        const nfd=W_RULE_FIELDS.find(f=>f.id===e.target.value)||W_RULE_FIELDS[0];
+                                        updRule(r.id,"field",e.target.value);
+                                        updRule(r.id,"operator",nfd.ops[0]);
+                                        updRule(r.id,"value","");
+                                      }} style={{...sel_s,flex:"1 1 140px",minWidth:110}}>
                                         {W_RULE_FIELDS.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}
                                       </select>
-                                      <select value={r.operator||"passes"} onChange={e=>updRule(r.id,"operator",e.target.value)} style={{...sel_s,flex:"0 0 auto",minWidth:80}}>
+                                      <select value={r.operator} onChange={e=>updRule(r.id,"operator",e.target.value)} style={{...sel_s,flex:"0 0 auto",minWidth:isBool?148:100}}>
                                         {fd.ops.map(op=><option key={op} value={op}>{op}</option>)}
                                       </select>
-                                      <select value={r.sqlConnection||""} onChange={e=>updRule(r.id,"sqlConnection",e.target.value)} style={{...sel_s,flex:"1 1 120px",minWidth:100}}>
-                                        <option value="">— connection —</option>
-                                        {["Snowflake","Databricks","PostgreSQL","Oracle","BigQuery","Redshift"].map(c=><option key={c} value={c}>{c}</option>)}
+                                      {needsVal&&!isBool&&(
+                                        <select value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} style={{...sel_s,flex:"1 1 100px",minWidth:90}}>
+                                          <option value="">— select —</option>
+                                          {(fd.vals||[]).map(v=><option key={v} value={v}>{v}</option>)}
+                                        </select>
+                                      )}
+                                      {needsNum&&<input type="number" value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} placeholder="value" style={{...sel_s,flex:"0 0 72px",width:72}}/>}
+                                      {needsTxt&&<input type="text" value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} placeholder="value…" style={{...sel_s,flex:"1 1 100px"}}/>}
+                                      {/* Per-rule severity */}
+                                      <select value={sev} onChange={e=>updRule(r.id,"severity",e.target.value)} style={sevSel_s(sev)}>
+                                        {["Critical","High","Medium","Low"].map(sv=><option key={sv} value={sv}>{sv}</option>)}
                                       </select>
-                                      <span style={{marginLeft:"auto",fontSize:10,color:T.amber,background:T.amberDim,padding:"2px 6px",borderRadius:4,fontWeight:600,flexShrink:0}}>Admin only</span>
-                                      {rmBtn}
+                                      <button onClick={()=>removeRule(r.id)} title="Remove"
+                                        style={{width:24,height:24,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15,lineHeight:1}}
+                                        onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
+                                        onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>×</button>
                                     </div>
-                                    <div style={{padding:"12px 12px",display:"flex",flexDirection:"column",gap:10}}>
-                                      <div>
-                                        <label style={{...{display:"block",fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:4},textTransform:"uppercase",letterSpacing:"0.05em"}}>SQL Rule — use {"{{schema}}"} and {"{{table}}"}</label>
-                                        <textarea value={r.sqlBody||""} onChange={e=>updRule(r.id,"sqlBody",e.target.value)} rows={4}
-                                          placeholder={"SELECT COUNT(*)\nFROM {{schema}}.{{table}}\nWHERE pii_flag IS NOT NULL\n  AND masking_policy IS NULL"}
-                                          style={{width:"100%",padding:"8px 10px",background:T.bgBase,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11,fontFamily:"'Geist Mono','Courier New',monospace",lineHeight:1.7,outline:"none",resize:"vertical",boxSizing:"border-box"}}
-                                          onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                                  );
+                                })}
+                                <button onClick={addPresetRule} style={{padding:"9px",borderRadius:8,background:"transparent",border:`1.5px dashed ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",fontWeight:500,display:"flex",alignItems:"center",gap:6,justifyContent:"center",transition:"all .1s"}}
+                                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
+                                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;e.currentTarget.style.background="transparent";}}>
+                                  {Ic.plus(11)} Add Rule
+                                </button>
+                              </>
+                          }
+                        </div>
+                      )}
+
+                      {/* Custom SQL tab */}
+                      {activeRuleTab==="custom"&&(
+                        <div style={{display:"flex",flexDirection:"column",gap:12,marginBottom:4}}>
+                          <div style={{padding:"10px 14px",background:T.amberDim,border:`1px solid ${T.amber}30`,borderRadius:8,fontSize:11.5,color:T.textSub,display:"flex",alignItems:"center",gap:8}}>
+                            <span style={{fontSize:14}}>⚙️</span>
+                            Custom SQL rules run a query on the asset and pass or fail based on the result. Restricted to Admin and Connection Admin roles.
+                          </div>
+                          {sqlRules.length===0
+                            ? <div style={{padding:"24px 20px",textAlign:"center",background:T.bgElevated,borderRadius:10,border:`1.5px dashed ${T.border}`}}>
+                                <div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>No custom SQL rules yet.</div>
+                                <button onClick={addSqlRule} style={{padding:"7px 18px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>+ Add Custom SQL Rule</button>
+                              </div>
+                            : <>
+                                {sqlRules.map((r,ri)=>{
+                                  const sev=r.severity||"Medium";
+                                  return (
+                                    <div key={r.id} style={{background:T.bgElevated,borderRadius:9,border:`1.5px solid ${T.border}`,overflow:"hidden"}}>
+                                      <div style={{padding:"9px 12px",display:"flex",alignItems:"center",gap:8,borderBottom:`1px solid ${T.border}`,background:T.bgBase}}>
+                                        <span style={{fontSize:11,fontWeight:600,color:T.textSub}}>Rule {ri+1}</span>
+                                        <select value={r.sqlConnection||""} onChange={e=>updRule(r.id,"sqlConnection",e.target.value)} style={{...sel_s,flex:"1 1 130px",minWidth:110}}>
+                                          <option value="">— select connection —</option>
+                                          {["Snowflake","Databricks","PostgreSQL","Oracle","BigQuery","Redshift"].map(c=><option key={c} value={c}>{c}</option>)}
+                                        </select>
+                                        <select value={r.operator||"passes"} onChange={e=>updRule(r.id,"operator",e.target.value)} style={{...sel_s,flex:"0 0 auto",minWidth:80}}>
+                                          <option value="passes">passes</option><option value="fails">fails</option>
+                                        </select>
+                                        <select value={sev} onChange={e=>updRule(r.id,"severity",e.target.value)} style={sevSel_s(sev)}>
+                                          {["Critical","High","Medium","Low"].map(sv=><option key={sv} value={sv}>{sv}</option>)}
+                                        </select>
+                                        <button onClick={()=>removeRule(r.id)} title="Remove"
+                                          style={{width:24,height:24,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15,lineHeight:1,marginLeft:"auto"}}
+                                          onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
+                                          onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>×</button>
                                       </div>
-                                      <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
-                                        <div style={{flex:1}}>
-                                          <label style={{display:"block",fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:4,textTransform:"uppercase",letterSpacing:"0.05em"}}>Pass when</label>
-                                          <select value={r.sqlPassCondition||"count_is_zero"} onChange={e=>updRule(r.id,"sqlPassCondition",e.target.value)} style={{...sel_s,width:"100%"}}>
-                                            <option value="count_is_zero">Count = 0 (no violations found)</option>
-                                            <option value="count_gt_zero">Count &gt; 0 (matches found = pass)</option>
-                                            <option value="returns_true">Returns true</option>
-                                            <option value="returns_false">Returns false</option>
-                                          </select>
+                                      <div style={{padding:"12px",display:"flex",flexDirection:"column",gap:10}}>
+                                        <div>
+                                          <label style={{display:"block",fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em"}}>SQL — use {"{{schema}}"} and {"{{table}}"} as placeholders</label>
+                                          <textarea value={r.sqlBody||""} onChange={e=>updRule(r.id,"sqlBody",e.target.value)} rows={4}
+                                            placeholder={"SELECT COUNT(*)\nFROM {{schema}}.{{table}}\nWHERE pii_flag IS NOT NULL\n  AND masking_policy IS NULL"}
+                                            style={{width:"100%",padding:"8px 10px",background:T.bgBase,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11,fontFamily:"'Geist Mono','Courier New',monospace",lineHeight:1.7,outline:"none",resize:"vertical",boxSizing:"border-box"}}
+                                            onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
                                         </div>
-                                        <button style={{padding:"7px 12px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgBase,color:T.textSub,fontSize:11.5,cursor:"pointer",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:5,flexShrink:0}}
-                                          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
-                                          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
-                                          ▶ Run Test
-                                        </button>
-                                      </div>
-                                      <div>
-                                        <label style={{display:"block",fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:4,textTransform:"uppercase",letterSpacing:"0.05em"}}>Description <span style={{color:T.rose}}>*</span></label>
-                                        <input value={r.sqlDescription||""} onChange={e=>updRule(r.id,"sqlDescription",e.target.value)}
-                                          placeholder="Describe what this SQL rule checks and why…"
-                                          style={{width:"100%",padding:"7px 10px",background:T.bgBase,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box"}}
-                                          onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                                        <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
+                                          <div style={{flex:1}}>
+                                            <label style={{display:"block",fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em"}}>Pass when</label>
+                                            <select value={r.sqlPassCondition||"count_is_zero"} onChange={e=>updRule(r.id,"sqlPassCondition",e.target.value)} style={{...sel_s,width:"100%"}}>
+                                              <option value="count_is_zero">Count = 0 (no violations found)</option>
+                                              <option value="count_gt_zero">Count &gt; 0 (matches found = pass)</option>
+                                              <option value="returns_true">Returns true</option>
+                                              <option value="returns_false">Returns false</option>
+                                            </select>
+                                          </div>
+                                          <button style={{padding:"7px 12px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgBase,color:T.textSub,fontSize:11.5,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}
+                                            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+                                            ▶ Run Test
+                                          </button>
+                                        </div>
+                                        <div>
+                                          <label style={{display:"block",fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em"}}>Description <span style={{color:T.rose}}>*</span></label>
+                                          <input value={r.sqlDescription||""} onChange={e=>updRule(r.id,"sqlDescription",e.target.value)}
+                                            placeholder="Describe what this SQL rule checks and why…"
+                                            style={{width:"100%",padding:"7px 10px",background:T.bgBase,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box"}}
+                                            onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                                        </div>
                                       </div>
                                     </div>
-                                  </div>
-                                );
-                                return (
-                                  <div key={r.id} style={{background:T.bgElevated,borderRadius:9,border:`1.5px solid ${T.border}`,padding:"10px 12px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                                    <span style={{fontSize:10,fontWeight:700,color:T.accent,background:T.accentDim,padding:"2px 7px",borderRadius:4,flexShrink:0}}>IF</span>
-                                    <select value={r.field} onChange={e=>{
-                                      const nfd=W_RULE_FIELDS.find(f=>f.id===e.target.value)||W_RULE_FIELDS[0];
-                                      updRule(r.id,"field",e.target.value);
-                                      updRule(r.id,"operator",nfd.ops[0]);
-                                      updRule(r.id,"value","");
-                                    }} style={{...sel_s,flex:"1 1 140px",minWidth:110}}>
-                                      {W_RULE_FIELDS.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}
-                                    </select>
-                                    <select value={r.operator} onChange={e=>updRule(r.id,"operator",e.target.value)} style={{...sel_s,flex:"0 0 auto",minWidth:isBool?148:100}}>
-                                      {fd.ops.map(op=><option key={op} value={op}>{op}</option>)}
-                                    </select>
-                                    {needsVal&&!isBool&&(
-                                      <select value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} style={{...sel_s,flex:"1 1 110px",minWidth:90}}>
-                                        <option value="">— select —</option>
-                                        {(fd.vals||[]).map(v=><option key={v} value={v}>{v}</option>)}
-                                      </select>
-                                    )}
-                                    {needsNum&&(
-                                      <input type="number" value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} placeholder="value"
-                                        style={{...sel_s,flex:"0 0 80px",width:80}}/>
-                                    )}
-                                    {needsTxt&&(
-                                      <input type="text" value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} placeholder="enter value…"
-                                        style={{...sel_s,flex:"1 1 110px"}}/>
-                                    )}
-                                    {rmBtn}
-                                  </div>
-                                );
-                              })}
-                              <button onClick={addRule} style={{padding:"9px",borderRadius:8,background:"transparent",border:`1.5px dashed ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",fontWeight:500,display:"flex",alignItems:"center",gap:6,justifyContent:"center",transition:"all .1s"}}
-                                onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
-                                onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;e.currentTarget.style.background="transparent";}}>
-                                {Ic.plus(11)} Add Condition
-                              </button>
-                            </>
-                        }
-                      </div>
+                                  );
+                                })}
+                                <button onClick={addSqlRule} style={{padding:"9px",borderRadius:8,background:"transparent",border:`1.5px dashed ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",fontWeight:500,display:"flex",alignItems:"center",gap:6,justifyContent:"center",transition:"all .1s"}}
+                                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
+                                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;e.currentTarget.style.background="transparent";}}>
+                                  {Ic.plus(11)} Add Custom SQL Rule
+                                </button>
+                              </>
+                          }
+                        </div>
+                      )}
                       {divider}
 
-
-                      {/* ── Consequence ── */}
-                      {secHead("Consequence","What happens when a violation is detected?")}
-                      <div style={{display:"flex",flexDirection:"column",gap:14,marginBottom:4}}>
-                        <div>
-                          <label style={lbl}>On Violation</label>
-                          <div style={{display:"flex",gap:8}}>
-                            {[["Block","Block the operation",T.rose],["Warn","Log & warn the user",T.amber],["Log only","Log silently",T.textMuted]].map(([v,tip,c])=>{
-                              const sel=(cq.onViolation||"Warn")===v;
-                              return <button key={v} onClick={()=>setNewPol(p=>({...p,consequence:{...cq,onViolation:v}}))} title={tip}
-                                style={{flex:1,padding:"8px 6px",borderRadius:8,border:`1.5px solid ${sel?c:T.border}`,background:sel?`${c}14`:T.bgElevated,color:sel?c:T.textSub,fontSize:11.5,fontWeight:sel?700:400,cursor:"pointer",transition:"all .1s"}}>{v}</button>;
-                            })}
-                          </div>
-                        </div>
-                        <div>
-                          <label style={lbl}>Severity</label>
-                          <div style={{display:"flex",gap:8}}>
-                            {["Critical","High","Medium","Low"].map(v=>{
-                              const sel=(cq.severity||"Medium")===v;
-                              return <button key={v} onClick={()=>setNewPol(p=>({...p,consequence:{...cq,severity:v}}))}
-                                style={{flex:1,padding:"7px 4px",borderRadius:8,border:`1.5px solid ${sel?SEV_COLOR[v]:T.border}`,background:sel?SEV_BG[v]:T.bgElevated,color:sel?SEV_COLOR[v]:T.textSub,fontSize:11,fontWeight:sel?700:400,cursor:"pointer",transition:"all .1s"}}>{v}</button>;
-                            })}
-                          </div>
-                        </div>
-                        <div>
-                          <label style={lbl}>Notify</label>
-                          <div style={{display:"flex",gap:8}}>
-                            {["Owner","Steward","Both","None"].map(v=>{
-                              const sel=(cq.notify||"Both")===v;
-                              return <button key={v} onClick={()=>setNewPol(p=>({...p,consequence:{...cq,notify:v}}))}
-                                style={{flex:1,padding:"7px 4px",borderRadius:8,border:`1.5px solid ${sel?T.accent:T.border}`,background:sel?T.accentDim:T.bgElevated,color:sel?T.accent:T.textSub,fontSize:11,fontWeight:sel?700:400,cursor:"pointer",transition:"all .1s"}}>{v}</button>;
-                            })}
-                          </div>
+                      {/* ── Notify on violation ── */}
+                      {secHead("Notify on Violation","Who gets notified when a rule fails?")}
+                      <div style={{marginBottom:4}}>
+                        <div style={{display:"flex",gap:8}}>
+                          {["Owner","Steward","Both","None"].map(v=>{
+                            const sel=(cq.notify||"Both")===v;
+                            return <button key={v} onClick={()=>setNewPol(p=>({...p,consequence:{...cq,notify:v}}))}
+                              style={{flex:1,padding:"8px 4px",borderRadius:8,border:`1.5px solid ${sel?T.accent:T.border}`,background:sel?T.accentDim:T.bgElevated,color:sel?T.accent:T.textSub,fontSize:12,fontWeight:sel?700:400,cursor:"pointer",transition:"all .1s"}}>{v}</button>;
+                          })}
                         </div>
                       </div>
                       {divider}
