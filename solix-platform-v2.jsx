@@ -5438,6 +5438,40 @@ const CatFieldDropdown = ({label, required, options, selected, onChange, placeho
   );
 };
 
+const REGS_META = [
+  {id:"gdpr",name:"GDPR",fullName:"General Data Protection Regulation",jurisdiction:"EU",type:"Privacy",industry:"All",effective:"2018-05-25",penalty:"€20M or 4% global revenue",covers:["Personal data","Special categories","Behavioral data"],score:68,status:"Partial",lastAudit:"2026-03-01",requirements:[{id:"gdpr-art5",ref:"Art. 5",title:"Data minimisation — collect only what is necessary",linkedPolicies:[]},{id:"gdpr-art5b",ref:"Art. 5(b)",title:"Purpose limitation — data used only as declared",linkedPolicies:[]},{id:"gdpr-art5e",ref:"Art. 5(e)",title:"Storage limitation — enforce retention periods",linkedPolicies:[]},{id:"gdpr-art17",ref:"Art. 17",title:"Right to erasure — honour deletion requests within 30 days",linkedPolicies:[]},{id:"gdpr-art32",ref:"Art. 32",title:"Security of processing — technical controls documented",linkedPolicies:[]},{id:"gdpr-art30",ref:"Art. 30",title:"Records of processing activities maintained",linkedPolicies:[]}]},
+  {id:"ukgdpr",name:"UK GDPR",fullName:"UK General Data Protection Regulation",jurisdiction:"UK",type:"Privacy",industry:"All",effective:"2021-01-01",penalty:"£17.5M or 4% global revenue",covers:["Personal data","Special categories"],score:70,status:"Partial",lastAudit:"2026-03-15",requirements:[{id:"ukgdpr-1",ref:"Art. 5",title:"Lawful basis for processing — documented and maintained",linkedPolicies:[]},{id:"ukgdpr-2",ref:"Art. 13-14",title:"Transparency — privacy notices provided to data subjects",linkedPolicies:[]},{id:"ukgdpr-3",ref:"Art. 25",title:"Data protection by design and by default",linkedPolicies:[]},{id:"ukgdpr-4",ref:"Art. 35",title:"Data Protection Impact Assessment for high-risk processing",linkedPolicies:[]},{id:"ukgdpr-5",ref:"Art. 33",title:"Breach notification — 72-hour reporting to ICO",linkedPolicies:[]}]},
+  {id:"ccpa",name:"CCPA / CPRA",fullName:"California Consumer Privacy Act / Privacy Rights Act",jurisdiction:"US-CA",type:"Privacy",industry:"All",effective:"2020-01-01",penalty:"$7,500 per intentional violation",covers:["Personal information","Sensitive personal information","Consumer data"],score:74,status:"Partial",lastAudit:"2026-01-20",requirements:[{id:"ccpa-1",ref:"§1798.100",title:"Right to know — disclose personal data collected",linkedPolicies:[]},{id:"ccpa-2",ref:"§1798.105",title:"Right to delete — honour deletion requests",linkedPolicies:[]},{id:"ccpa-3",ref:"§1798.120",title:"Right to opt-out — do not sell or share personal information",linkedPolicies:[]},{id:"ccpa-4",ref:"§1798.150",title:"Data breach liability — reasonable security measures required",linkedPolicies:[]},{id:"ccpa-5",ref:"§1798.100(d)",title:"Sensitive personal information — limit use and disclosure",linkedPolicies:[]}]},
+  {id:"lgpd",name:"LGPD",fullName:"Lei Geral de Proteção de Dados (Brazil)",jurisdiction:"Brazil",type:"Privacy",industry:"All",effective:"2020-09-18",penalty:"R$50M or 2% Brazil revenue",covers:["Personal data","Sensitive data","Children's data"],score:45,status:"Not Started",lastAudit:null,requirements:[{id:"lgpd-1",ref:"Art. 6",title:"Legal basis for processing — one of 10 bases required",linkedPolicies:[]},{id:"lgpd-2",ref:"Art. 18",title:"Data subject rights — access, correction, deletion",linkedPolicies:[]},{id:"lgpd-3",ref:"Art. 46",title:"Security measures — technical controls to protect personal data",linkedPolicies:[]},{id:"lgpd-4",ref:"Art. 48",title:"Breach notification — ANPD and affected parties notified",linkedPolicies:[]}]},
+  {id:"pipl",name:"PIPL",fullName:"Personal Information Protection Law (China)",jurisdiction:"China",type:"Privacy",industry:"All",effective:"2021-11-01",penalty:"¥50M or 5% prior year revenue",covers:["Personal information","Sensitive personal information","Biometric data"],score:40,status:"Not Started",lastAudit:null,requirements:[{id:"pipl-1",ref:"Art. 13",title:"Legal basis — consent or other lawful basis required",linkedPolicies:[]},{id:"pipl-2",ref:"Art. 17",title:"Notice — inform individuals of processing purpose and method",linkedPolicies:[]},{id:"pipl-3",ref:"Art. 28",title:"Sensitive data — heightened consent for biometric, health, financial data",linkedPolicies:[]},{id:"pipl-4",ref:"Art. 38",title:"Cross-border transfer — security assessment required",linkedPolicies:[]},{id:"pipl-5",ref:"Art. 51",title:"Organisational measures — DPO designated for large-scale processing",linkedPolicies:[]}]},
+  {id:"pipeda",name:"PIPEDA",fullName:"Personal Information Protection and Electronic Documents Act",jurisdiction:"Canada",type:"Privacy",industry:"All",effective:"2001-01-01",penalty:"CAD $100,000 per violation",covers:["Personal information","Employee data","Health information"],score:60,status:"Partial",lastAudit:null,requirements:[{id:"pipeda-1",ref:"Sched 1 §4.1",title:"Accountability — designated person responsible for compliance",linkedPolicies:[]},{id:"pipeda-2",ref:"Sched 1 §4.3",title:"Consent — meaningful consent obtained for collection and use",linkedPolicies:[]},{id:"pipeda-3",ref:"Sched 1 §4.5",title:"Limiting use — data used only for stated purpose",linkedPolicies:[]},{id:"pipeda-4",ref:"Sched 1 §4.7",title:"Safeguards — security appropriate to sensitivity of information",linkedPolicies:[]}]},
+  {id:"pdpa_sg",name:"PDPA (Singapore)",fullName:"Personal Data Protection Act (Singapore)",jurisdiction:"Singapore",type:"Privacy",industry:"All",effective:"2012-10-15",penalty:"SGD $1M",covers:["Personal data","Contact data"],score:55,status:"Partial",lastAudit:null,requirements:[{id:"pdpa_sg-1",ref:"Part III",title:"Consent obligation — collect with knowledge and consent",linkedPolicies:[]},{id:"pdpa_sg-2",ref:"Part IV",title:"Purpose limitation — data used only for disclosed purpose",linkedPolicies:[]},{id:"pdpa_sg-3",ref:"Part V",title:"Access and correction — respond to requests within 30 days",linkedPolicies:[]},{id:"pdpa_sg-4",ref:"Part VI",title:"Protection obligation — reasonable security arrangements",linkedPolicies:[]},{id:"pdpa_sg-5",ref:"Part VIA",title:"Data breach notification — PDPC within 3 business days",linkedPolicies:[]}]},
+  {id:"appi",name:"APPI",fullName:"Act on the Protection of Personal Information (Japan)",jurisdiction:"Japan",type:"Privacy",industry:"All",effective:"2003-05-30",penalty:"JPY 100M (entity)",covers:["Personal information","Sensitive personal information","Anonymised data"],score:50,status:"Not Started",lastAudit:null,requirements:[{id:"appi-1",ref:"Art. 17",title:"Purpose specification — specific purpose of use defined",linkedPolicies:[]},{id:"appi-2",ref:"Art. 20",title:"Appropriate acquisition — no false or deceptive means",linkedPolicies:[]},{id:"appi-3",ref:"Art. 27",title:"Restriction on third-party provision without consent",linkedPolicies:[]},{id:"appi-4",ref:"Art. 23",title:"Security control measures — prevent leakage and loss",linkedPolicies:[]}]},
+  {id:"popia",name:"POPIA",fullName:"Protection of Personal Information Act (South Africa)",jurisdiction:"South Africa",type:"Privacy",industry:"All",effective:"2021-07-01",penalty:"ZAR 10M or imprisonment",covers:["Personal information","Special personal information","Children's data"],score:42,status:"Not Started",lastAudit:null,requirements:[{id:"popia-1",ref:"Condition 1",title:"Accountability — responsible party accountable for conditions",linkedPolicies:[]},{id:"popia-2",ref:"Condition 2",title:"Processing limitation — lawful and minimal processing",linkedPolicies:[]},{id:"popia-3",ref:"Condition 6",title:"Security safeguards — integrity and confidentiality of data",linkedPolicies:[]},{id:"popia-4",ref:"Condition 8",title:"Data subject participation — access and correction rights",linkedPolicies:[]}]},
+  {id:"dpdp",name:"DPDP Act",fullName:"Digital Personal Data Protection Act (India)",jurisdiction:"India",type:"Privacy",industry:"All",effective:"2023-08-11",penalty:"₹250 crore per breach",covers:["Digital personal data","Children's data","Cross-border data"],score:35,status:"Not Started",lastAudit:null,requirements:[{id:"dpdp-1",ref:"§6",title:"Consent — free, specific, informed, unconditional consent required",linkedPolicies:[]},{id:"dpdp-2",ref:"§8",title:"General obligations of data fiduciary — accuracy and security",linkedPolicies:[]},{id:"dpdp-3",ref:"§11",title:"Right to information — data principal's right to access data",linkedPolicies:[]},{id:"dpdp-4",ref:"§9",title:"Processing of children's data — verifiable parental consent",linkedPolicies:[]},{id:"dpdp-5",ref:"§8(6)",title:"Data breach notification — Board and data principal notified",linkedPolicies:[]}]},
+  {id:"hipaa",name:"HIPAA",fullName:"Health Insurance Portability and Accountability Act",jurisdiction:"US",type:"Healthcare",industry:"Healthcare",effective:"1996-08-21",penalty:"$100–$50,000 per violation, max $1.9M/year",covers:["Protected Health Information","Electronic PHI","Medical records"],score:91,status:"Passing",lastAudit:"2026-04-10",requirements:[{id:"hipaa-1",ref:"§164.308",title:"Administrative safeguards — policies and procedures for PHI",linkedPolicies:[]},{id:"hipaa-2",ref:"§164.310",title:"Physical safeguards — facility and workstation controls",linkedPolicies:[]},{id:"hipaa-3",ref:"§164.312",title:"Technical safeguards — access controls and audit controls",linkedPolicies:[]},{id:"hipaa-4",ref:"§164.502",title:"Use and disclosure limitations — minimum necessary standard",linkedPolicies:[]},{id:"hipaa-5",ref:"§164.524",title:"Right of access — patients can request copies of PHI",linkedPolicies:[]}]},
+  {id:"hitech",name:"HITECH",fullName:"Health Information Technology for Economic and Clinical Health Act",jurisdiction:"US",type:"Healthcare",industry:"Healthcare",effective:"2009-02-17",penalty:"Up to $1.9M per violation category",covers:["Electronic PHI","EHR data","Business associate data"],score:84,status:"Passing",lastAudit:"2026-04-10",requirements:[{id:"hitech-1",ref:"§13402",title:"Breach notification — notify affected individuals and HHS",linkedPolicies:[]},{id:"hitech-2",ref:"§13401",title:"Business associate liability — direct HIPAA obligations apply",linkedPolicies:[]},{id:"hitech-3",ref:"§13405",title:"Restrictions on disclosures — honour patient restrictions",linkedPolicies:[]},{id:"hitech-4",ref:"§13408",title:"Audit controls — EHR audit logging requirements",linkedPolicies:[]}]},
+  {id:"pci_dss",name:"PCI DSS",fullName:"Payment Card Industry Data Security Standard",jurisdiction:"Global",type:"Financial",industry:"Financial Services",effective:"2022-03-31",penalty:"$5,000–$100,000/month by card networks",covers:["Cardholder data","Sensitive auth data","Payment records"],score:79,status:"Partial",lastAudit:"2026-03-25",requirements:[{id:"pci-1",ref:"Req. 3",title:"Protect stored cardholder data — encryption required",linkedPolicies:[]},{id:"pci-2",ref:"Req. 7",title:"Restrict access to cardholder data by business need-to-know",linkedPolicies:[]},{id:"pci-3",ref:"Req. 8",title:"Identify users and authenticate access to system components",linkedPolicies:[]},{id:"pci-4",ref:"Req. 10",title:"Log and monitor all access to network resources and cardholder data",linkedPolicies:[]},{id:"pci-5",ref:"Req. 12",title:"Support information security with organisational policies",linkedPolicies:[]}]},
+  {id:"sox",name:"SOX",fullName:"Sarbanes-Oxley Act",jurisdiction:"US",type:"Financial",industry:"Public Companies",effective:"2002-07-30",penalty:"Fines and up to 20 years imprisonment",covers:["Financial records","Audit data","Internal controls"],score:76,status:"Partial",lastAudit:"2026-02-28",requirements:[{id:"sox-1",ref:"§302",title:"CEO/CFO certification of financial statement accuracy",linkedPolicies:[]},{id:"sox-2",ref:"§404",title:"Internal control assessment — ICFR documented annually",linkedPolicies:[]},{id:"sox-3",ref:"§802",title:"Records retention — audit records retained 7 years",linkedPolicies:[]},{id:"sox-4",ref:"§409",title:"Real-time disclosure of material changes to financial condition",linkedPolicies:[]}]},
+  {id:"glba",name:"GLBA",fullName:"Gramm-Leach-Bliley Act",jurisdiction:"US",type:"Financial",industry:"Financial Services",effective:"1999-11-12",penalty:"Up to $100,000 per violation (institution)",covers:["Non-public personal information","Consumer financial data"],score:65,status:"Partial",lastAudit:null,requirements:[{id:"glba-1",ref:"§6801",title:"Financial privacy rule — notice and opt-out requirements",linkedPolicies:[]},{id:"glba-2",ref:"§6805",title:"Safeguards rule — written information security program required",linkedPolicies:[]},{id:"glba-3",ref:"§6821",title:"Pretexting protection — prohibit false pretenses for customer data",linkedPolicies:[]},{id:"glba-4",ref:"16 CFR §314",title:"Safeguards — designate qualified individual to oversee program",linkedPolicies:[]}]},
+  {id:"dora",name:"DORA",fullName:"Digital Operational Resilience Act",jurisdiction:"EU",type:"Financial",industry:"Financial Services",effective:"2025-01-17",penalty:"1% daily average global turnover for up to 6 months",covers:["ICT risk data","Incident data","Third-party risk data"],score:52,status:"Partial",lastAudit:null,requirements:[{id:"dora-1",ref:"Art. 6",title:"ICT risk management framework — documented and maintained",linkedPolicies:[]},{id:"dora-2",ref:"Art. 17",title:"ICT incident classification and reporting to competent authority",linkedPolicies:[]},{id:"dora-3",ref:"Art. 28",title:"Third-party risk management — contractual arrangements",linkedPolicies:[]},{id:"dora-4",ref:"Art. 24",title:"Digital operational resilience testing — TLPT for critical entities",linkedPolicies:[]},{id:"dora-5",ref:"Art. 45",title:"Information sharing — voluntary cyber threat intelligence exchange",linkedPolicies:[]}]},
+  {id:"soc2",name:"SOC 2",fullName:"Service Organisation Control 2",jurisdiction:"Global",type:"Security",industry:"Technology / SaaS",effective:"Ongoing",penalty:"Loss of certification / customer trust",covers:["Customer data","System logs","Access records"],score:82,status:"Passing",lastAudit:"2026-02-15",requirements:[{id:"soc2-1",ref:"CC6.1",title:"Logical access security measures — RBAC and MFA enforced",linkedPolicies:[]},{id:"soc2-2",ref:"CC7.1",title:"System monitoring — anomaly detection and alerting",linkedPolicies:[]},{id:"soc2-3",ref:"CC8.1",title:"Change management — authorised change process documented",linkedPolicies:[]},{id:"soc2-4",ref:"A1.1",title:"Data backup and recovery — tested RTO/RPO targets",linkedPolicies:[]},{id:"soc2-5",ref:"CC9.2",title:"Vendor risk management — third-party assessments conducted",linkedPolicies:[]}]},
+  {id:"iso27001",name:"ISO 27001",fullName:"ISO/IEC 27001 — Information Security Management",jurisdiction:"Global",type:"Security",industry:"All",effective:"2022-10-25",penalty:"Loss of certification",covers:["Information assets","ICT systems","Supplier data"],score:77,status:"Partial",lastAudit:"2026-01-30",requirements:[{id:"iso27001-1",ref:"Clause 6.1",title:"Information security risk assessment and treatment",linkedPolicies:[]},{id:"iso27001-2",ref:"Annex A 8.2",title:"Information classification — asset classification scheme",linkedPolicies:[]},{id:"iso27001-3",ref:"Annex A 9.1",title:"Access control policy — documented and implemented",linkedPolicies:[]},{id:"iso27001-4",ref:"Annex A 12.4",title:"Logging and monitoring — event logs retained and reviewed",linkedPolicies:[]},{id:"iso27001-5",ref:"Annex A 17.1",title:"Information security continuity — BCP/DR aligned",linkedPolicies:[]}]},
+  {id:"iso27701",name:"ISO 27701",fullName:"ISO/IEC 27701 — Privacy Information Management",jurisdiction:"Global",type:"Privacy",industry:"All",effective:"2019-08-06",penalty:"Loss of certification",covers:["Personally identifiable information","Processing records"],score:58,status:"Partial",lastAudit:null,requirements:[{id:"iso27701-1",ref:"§6.2.1",title:"Understand organisation and its context for privacy",linkedPolicies:[]},{id:"iso27701-2",ref:"§7.2.1",title:"PII controller — define and document processing purposes",linkedPolicies:[]},{id:"iso27701-3",ref:"§7.3.1",title:"Privacy by design — PII considerations during development",linkedPolicies:[]},{id:"iso27701-4",ref:"§8.2.1",title:"PII processor — processing under controller instructions only",linkedPolicies:[]}]},
+  {id:"nistcsf",name:"NIST CSF",fullName:"NIST Cybersecurity Framework",jurisdiction:"US (Global Adoption)",type:"Security",industry:"All",effective:"2014-02-12",penalty:"Voluntary framework — no direct penalty",covers:["Cyber assets","System data","Threat data"],score:80,status:"Passing",lastAudit:"2026-03-20",requirements:[{id:"nistcsf-1",ref:"ID.AM",title:"Asset management — catalogue of data assets maintained",linkedPolicies:[]},{id:"nistcsf-2",ref:"PR.AC",title:"Identity management and access control implemented",linkedPolicies:[]},{id:"nistcsf-3",ref:"PR.DS",title:"Data security — data-at-rest and in-transit protection",linkedPolicies:[]},{id:"nistcsf-4",ref:"DE.CM",title:"Continuous monitoring — security events detected",linkedPolicies:[]},{id:"nistcsf-5",ref:"RS.RP",title:"Response planning — incident response plan executed",linkedPolicies:[]}]},
+  {id:"nis2",name:"NIS2",fullName:"Network and Information Security Directive 2",jurisdiction:"EU",type:"Security",industry:"Critical Infrastructure",effective:"2024-10-17",penalty:"€10M or 2% global revenue (essential entities)",covers:["Network systems","ICT infrastructure","Incident data"],score:48,status:"Not Started",lastAudit:null,requirements:[{id:"nis2-1",ref:"Art. 21",title:"Cybersecurity risk management measures — policies documented",linkedPolicies:[]},{id:"nis2-2",ref:"Art. 23",title:"Incident reporting — significant incidents reported within 24h",linkedPolicies:[]},{id:"nis2-3",ref:"Art. 21(2)(d)",title:"Supply chain security — third-party risk measures",linkedPolicies:[]},{id:"nis2-4",ref:"Art. 21(2)(j)",title:"Business continuity — backup, disaster recovery, crisis management",linkedPolicies:[]}]},
+  {id:"fedramp",name:"FedRAMP",fullName:"Federal Risk and Authorization Management Program",jurisdiction:"US Federal",type:"Security",industry:"Government / Cloud",effective:"2011-12-08",penalty:"Loss of ATO / contract termination",covers:["Federal data","Cloud system data","CUI"],score:62,status:"Partial",lastAudit:null,requirements:[{id:"fedramp-1",ref:"AC-2",title:"Account management — authorised users and access tracked",linkedPolicies:[]},{id:"fedramp-2",ref:"AU-2",title:"Audit events — defined set of events logged continuously",linkedPolicies:[]},{id:"fedramp-3",ref:"SC-28",title:"Protection of information at rest — encryption required",linkedPolicies:[]},{id:"fedramp-4",ref:"IR-4",title:"Incident handling — federal incident response procedures",linkedPolicies:[]},{id:"fedramp-5",ref:"CA-7",title:"Continuous monitoring — ongoing authorisation program",linkedPolicies:[]}]},
+];
+
+const DEMO_POLICIES_GLOBAL = [
+  {id:"pol-1",name:"Commerce PII Sensitivity",category:"Data",severity:"Critical",lifecycle:"Active",regulations:["GDPR","CCPA"],scope:{domains:["Commerce","Finance"]},links:[{target:"orders"},{target:"customers"},{target:"transactions"}]},
+  {id:"pol-2",name:"Finance Data Integrity",category:"Quality",severity:"High",lifecycle:"Active",regulations:["SOC2","PCI DSS"],scope:{domains:["Finance"]},links:[{target:"payments"},{target:"revenue"}]},
+  {id:"pol-3",name:"ML Feature Readiness",category:"Quality",severity:"High",lifecycle:"In Review",regulations:[],scope:{domains:["ML","Engineering"]},links:[]},
+  {id:"pol-4",name:"HIPAA PHI Compliance",category:"Access",severity:"Critical",lifecycle:"Active",regulations:["HIPAA","HITECH"],scope:{domains:["Finance","Commerce"]},links:[{target:"customers"},{target:"patient_events"},{target:"user_health_data"}]},
+  {id:"pol-5",name:"Product Catalog Completeness",category:"Quality",severity:"Medium",lifecycle:"Draft",regulations:[],scope:{domains:["Product","Marketing"]},links:[]},
+  {id:"pol-6",name:"Engineering Pipeline Governance",category:"Data",severity:"Medium",lifecycle:"Deprecated",regulations:["SOC2"],scope:{domains:["Engineering"]},links:[]},
+];
+
 const PolicyManagerView = ({onToast, onNav}) => {
   // ─── palette & constants ──────────────────────────────────────────────
   const LC_COLORS  = {"Draft":T.textMuted,"In Review":T.amber,"Approved":T.green,"Active":T.blue,"Deprecated":T.rose};
@@ -5446,16 +5480,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const PMV_USERS  = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
   const REL_TYPES  = ["governs","enforces","complies_with","monitors"];
   const POLICY_TAGS= ["PII","PHI","financial","sensitive","regulated","internal","public","confidential","customer-data","healthcare"];
-  const REGULATION_FRAMEWORKS = [
-    // Global Privacy
-    "GDPR","UK GDPR","CCPA / CPRA","LGPD","PIPL","PIPEDA","PDPA (Singapore)","APPI","POPIA","DPDP Act",
-    // Healthcare
-    "HIPAA","HITECH",
-    // Financial
-    "PCI DSS","SOX","GLBA","DORA",
-    // Security & IT Standards
-    "SOC 2","ISO 27001","ISO 27701","NIST CSF","NIS2","FedRAMP",
-  ];
+  const REGULATION_FRAMEWORKS = REGS_META.map(r=>r.name);
   const lcColor = lc => LC_COLORS[lc]||T.textMuted;
   const lcIdx   = lc => LC_STEPS.indexOf(lc);
 
@@ -5567,42 +5592,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
      ]},
   ]);
 
-  const [regulations, setRegulations] = useState([
-    {id:"gdpr",name:"GDPR",fullName:"General Data Protection Regulation",region:"EU",score:68,status:"Partial",lastAudit:"2026-03-01",
-     requirements:[
-       {id:"gdpr-1",title:"Data minimisation — collect only what is necessary",linkedPolicies:[]},
-       {id:"gdpr-2",title:"Purpose limitation — data used only as declared",linkedPolicies:[]},
-       {id:"gdpr-3",title:"Storage limitation — enforce retention periods",linkedPolicies:[]},
-       {id:"gdpr-4",title:"Data subject rights — erasure and portability",linkedPolicies:[]},
-       {id:"gdpr-5",title:"Security of processing — technical controls documented",linkedPolicies:[]},
-     ]},
-    {id:"soc2",name:"SOC 2",fullName:"Service Organisation Control 2",region:"Global",score:82,status:"Passing",lastAudit:"2026-02-15",
-     requirements:[
-       {id:"soc2-1",title:"CC6.1 — Logical access security measures",linkedPolicies:[]},
-       {id:"soc2-2",title:"CC7.1 — System monitoring and alerting",linkedPolicies:[]},
-       {id:"soc2-3",title:"CC8.1 — Change management controls",linkedPolicies:[]},
-       {id:"soc2-4",title:"A1.1 — Data backup and recovery",linkedPolicies:[]},
-     ]},
-    {id:"ccpa",name:"CCPA",fullName:"California Consumer Privacy Act",region:"US-CA",score:74,status:"Partial",lastAudit:"2026-01-20",
-     requirements:[
-       {id:"ccpa-1",title:"Right to know — disclose personal data collected",linkedPolicies:[]},
-       {id:"ccpa-2",title:"Right to delete — honour deletion requests",linkedPolicies:[]},
-       {id:"ccpa-3",title:"Right to opt-out — do not sell personal data",linkedPolicies:[]},
-     ]},
-    {id:"hipaa",name:"HIPAA",fullName:"Health Insurance Portability and Accountability Act",region:"US",score:91,status:"Passing",lastAudit:"2026-04-10",
-     requirements:[
-       {id:"hipaa-1",title:"164.308 — Administrative safeguards for PHI",linkedPolicies:[]},
-       {id:"hipaa-2",title:"164.310 — Physical safeguards for electronic PHI",linkedPolicies:[]},
-       {id:"hipaa-3",title:"164.312 — Technical safeguards and access controls",linkedPolicies:[]},
-     ]},
-    {id:"pci",name:"PCI DSS",fullName:"Payment Card Industry Data Security Standard",region:"Global",score:79,status:"Partial",lastAudit:"2026-03-25",
-     requirements:[
-       {id:"pci-1",title:"Req 3 — Protect stored cardholder data",linkedPolicies:[]},
-       {id:"pci-2",title:"Req 7 — Restrict access to need-to-know basis",linkedPolicies:[]},
-       {id:"pci-3",title:"Req 10 — Track and monitor all network resource access",linkedPolicies:[]},
-       {id:"pci-4",title:"Req 12 — Maintain an information security policy",linkedPolicies:[]},
-     ]},
-  ]);
+  const [regulations, setRegulations] = useState(REGS_META);
 
   const [violations, setViolations] = useState([
     {id:"viol-1",policyId:"pol-1",assetName:"orders",assetType:"Table",domain:"Commerce",rule:"PII classification required",severity:"Critical",status:"Open",detectedAt:"2026-05-15",description:"The orders table is missing a pii.customer tag required before promotion to downstream analytics."},
@@ -5667,6 +5657,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const [createStep,     setCreateStep]     = useState(1);
   const [wizardRules,    setWizardRules]    = useState([]);
   const [sevOpen,        setSevOpen]        = useState(null);
+  const [selRegId,       setSelRegId]       = useState(null);
   const [polEditCatOpen,  setPolEditCatOpen]  = useState(false);
   const [polEditCatDraft, setPolEditCatDraft] = useState(null);
   const filterDropRef  = useRef(null);
@@ -6815,72 +6806,204 @@ const PolicyManagerView = ({onToast, onNav}) => {
 
         {/* ══════ REGULATIONS TAB ══════ */}
         {tab==="regulations"&&(()=>{
+          const TYPE_COLOR = {Privacy:T.violet,Healthcare:T.rose,Financial:T.amber,Security:T.blue};
+          const STATUS_COLOR = {Passing:T.green,Partial:T.amber,"Not Started":T.textMuted};
+          const selReg = selRegId ? regulations.find(r=>r.id===selRegId) : null;
+          // Summary counts
+          const passing = regulations.filter(r=>r.status==="Passing").length;
+          const partial  = regulations.filter(r=>r.status==="Partial").length;
+          const notStart = regulations.filter(r=>r.status==="Not Started").length;
           const totalGaps = regulations.reduce((s,r)=>s+r.requirements.filter(req=>!(req.linkedPolicies||[]).length).length,0);
-          return (
-            <div style={{flex:1,overflowY:"auto",padding:"20px 28px"}}>
-              {totalGaps>0&&(
-                <div style={{padding:"10px 14px",background:T.amberDim,border:`1px solid ${T.amber}30`,borderRadius:9,marginBottom:18,display:"flex",alignItems:"center",gap:10}}>
-                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{color:T.amber,flexShrink:0}}><path d="M8 2.5L14.5 13.5H1.5L8 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M8 7v3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/><circle cx="8" cy="12" r=".6" fill="currentColor"/></svg>
-                  <span style={{fontSize:12.5,color:T.text}}><strong>{totalGaps} requirements</strong> have no linked policy — coverage gaps exist</span>
+
+          if(selReg){
+            // ─── Drill-in view ───
+            const sc = selReg.score>=90?T.green:selReg.score>=75?T.amber:T.rose;
+            const tc = TYPE_COLOR[selReg.type]||T.accent;
+            const linkedPolsForReg = policies.filter(p=>(p.regulations||[]).some(r=>r===selReg.name||selReg.name.includes(r)||r.includes(selReg.id.toUpperCase())));
+            return (
+              <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+                {/* Back bar */}
+                <div style={{flexShrink:0,padding:"12px 24px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10,background:T.bgSurface}}>
+                  <button onClick={()=>setSelRegId(null)} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:12,padding:"4px 8px",borderRadius:6,transition:"all .12s"}}
+                    onMouseEnter={e=>{e.currentTarget.style.color=T.text;e.currentTarget.style.background=T.bgHover;}}
+                    onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M8 2L4 6l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                    All Regulations
+                  </button>
+                  <span style={{color:T.border}}>›</span>
+                  <span style={{fontSize:12,fontWeight:600,color:T.text}}>{selReg.name}</span>
                 </div>
-              )}
-              {regulations.map(reg=>{
-                const isExp = expandedReg===reg.id;
-                const sc = reg.score>=90?T.green:reg.score>=75?T.amber:T.rose;
-                const gaps = reg.requirements.filter(r=>!(r.linkedPolicies||[]).length).length;
-                return (
-                  <div key={reg.id} style={{background:T.bgSurface,border:`1.5px solid ${isExp?T.blue:T.border}`,borderRadius:10,marginBottom:10,overflow:"hidden",transition:"border-color .15s"}}>
-                    <div onClick={()=>setExpandedReg(isExp?null:reg.id)} style={{padding:"14px 18px",cursor:"pointer",display:"flex",alignItems:"center",gap:14}}>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                          <span style={{fontSize:16,fontWeight:800,letterSpacing:"-0.5px",color:T.text}}>{reg.name}</span>
-                          <span style={{fontSize:10.5,color:T.textMuted}}>{reg.region}</span>
-                          <span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${sc}18`,color:sc,border:`1px solid ${sc}33`}}>{reg.status}</span>
-                          {gaps>0&&<span style={{fontSize:10.5,fontWeight:600,color:T.amber}}>{gaps} gap{gaps>1?"s":""}</span>}
-                        </div>
-                        <div style={{display:"flex",alignItems:"center",gap:8}}>
-                          <div style={{width:140,height:4,borderRadius:2,background:T.bgElevated,overflow:"hidden"}}><div style={{width:`${reg.score}%`,height:"100%",background:sc,borderRadius:2}}/></div>
-                          <span style={{fontSize:12,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:sc}}>{reg.score}%</span>
-                          <span style={{fontSize:11,color:T.textMuted}}>{reg.requirements.filter(r=>r.linked).length}/{reg.requirements.length} covered</span>
-                        </div>
+                <div style={{flex:1,overflowY:"auto",padding:"24px 28px"}}>
+                  {/* Reg header */}
+                  <div style={{background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:12,padding:"20px 22px",marginBottom:20}}>
+                    <div style={{display:"flex",alignItems:"flex-start",gap:16}}>
+                      <div style={{width:48,height:48,borderRadius:11,background:`${tc}15`,border:`1.5px solid ${tc}30`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke={tc} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1L2 4v4c0 3.5 2.7 5.5 6 6.5C11.3 13.5 14 11.5 14 8V4L8 1z"/></svg>
                       </div>
-                      <div style={{fontSize:11,color:T.textMuted,flexShrink:0,userSelect:"none"}}>{isExp?"▲":"▼"}</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:6}}>
+                          <span style={{fontSize:20,fontWeight:800,letterSpacing:"-0.5px",color:T.text}}>{selReg.name}</span>
+                          <span style={{fontSize:10.5,fontWeight:700,padding:"2px 9px",borderRadius:99,background:`${tc}15`,color:tc,border:`1px solid ${tc}30`}}>{selReg.type}</span>
+                          <span style={{fontSize:10.5,fontWeight:700,padding:"2px 9px",borderRadius:99,background:`${STATUS_COLOR[selReg.status]||T.textMuted}15`,color:STATUS_COLOR[selReg.status]||T.textMuted,border:`1px solid ${STATUS_COLOR[selReg.status]||T.textMuted}30`}}>{selReg.status}</span>
+                        </div>
+                        <div style={{fontSize:13,color:T.textSub,lineHeight:1.5,marginBottom:14}}>{selReg.fullName}</div>
+                        {/* Score bar */}
+                        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+                          <div style={{flex:1,height:6,borderRadius:3,background:T.bgElevated,overflow:"hidden"}}><div style={{width:`${selReg.score}%`,height:"100%",background:sc,borderRadius:3,transition:"width .4s"}}/></div>
+                          <span style={{fontSize:13,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:sc,flexShrink:0}}>{selReg.score}% compliance</span>
+                        </div>
+                        {/* Meta grid */}
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:10}}>
+                          {[
+                            {label:"Jurisdiction", value:selReg.jurisdiction},
+                            {label:"Industry", value:selReg.industry},
+                            {label:"Effective Date", value:selReg.effective},
+                            {label:"Max Penalty", value:selReg.penalty},
+                            ...(selReg.lastAudit?[{label:"Last Audit", value:selReg.lastAudit}]:[]),
+                          ].map(m=>(
+                            <div key={m.label} style={{padding:"8px 12px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>
+                              <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>{m.label}</div>
+                              <div style={{fontSize:12,color:T.text,fontWeight:500}}>{m.value}</div>
+                            </div>
+                          ))}
+                        </div>
+                        {/* Data types covered */}
+                        {selReg.covers&&selReg.covers.length>0&&(
+                          <div style={{marginTop:12}}>
+                            <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Data Types Covered</div>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                              {selReg.covers.map(c=>(
+                                <span key={c} style={{fontSize:11,padding:"2px 9px",borderRadius:5,background:`${tc}10`,color:tc,border:`1px solid ${tc}25`,fontWeight:500}}>{c}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    {isExp&&(
-                      <div style={{borderTop:`1px solid ${T.border}`,padding:"0 18px 14px"}}>
-                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",padding:"12px 0 8px"}}>Requirements</div>
-                        {reg.requirements.map(req=>{
-                          const lps=(req.linkedPolicies||[]).map(id=>policies.find(p=>p.id===id)).filter(Boolean);
-                          const hasLinks=lps.length>0;
+                  </div>
+                  {/* Linked policies */}
+                  {linkedPolsForReg.length>0&&(
+                    <div style={{marginBottom:20}}>
+                      <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Governing Policies ({linkedPolsForReg.length})</div>
+                      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                        {linkedPolsForReg.map(p=>{
+                          const lc=p.lifecycle||"Draft";const lcc={Active:T.green,"In Review":T.amber,Draft:T.textMuted,Approved:T.blue,Deprecated:T.rose}[lc]||T.textMuted;
                           return (
-                            <div key={req.id} style={{padding:"10px 0",borderBottom:`1px solid ${T.border}`}}>
-                              <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
-                                <div style={{width:18,height:18,borderRadius:"50%",background:hasLinks?`${T.green}18`:`${T.amber}15`,border:`1.5px solid ${hasLinks?T.green:T.amber}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:2}}>
-                                  {hasLinks?<svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M2 4.5l2 2L7 2.5" stroke={T.green} strokeWidth="1.4" strokeLinecap="round"/></svg>:<span style={{fontSize:9,color:T.amber,fontWeight:700}}>!</span>}
-                                </div>
-                                <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,flexShrink:0,width:64,marginTop:2}}>{req.id}</span>
-                                <div style={{flex:1,minWidth:0}}>
-                                  <div style={{fontSize:12,color:T.text,lineHeight:1.5,marginBottom:hasLinks?6:0}}>{req.title}</div>
-                                  {hasLinks&&(
-                                    <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                                      {lps.map(lp=>(
-                                        <span key={lp.id} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,padding:"2px 8px 2px 6px",borderRadius:5,background:`${T.green}12`,borderTop:`1px solid ${T.green}25`,borderRight:`1px solid ${T.green}25`,borderBottom:`1px solid ${T.green}25`,borderLeft:`3px solid ${T.green}`,color:T.green,fontWeight:600}}>
-                                          {lp.name}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                                <button onClick={e=>{e.stopPropagation();setLinkPolOpen({regId:reg.id,reqId:req.id});}}
-                                  style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:hasLinks?"transparent":T.amberDim,border:`1px solid ${hasLinks?T.border:T.amber+"50"}`,color:hasLinks?T.textMuted:T.amber,cursor:"pointer",flexShrink:0,fontWeight:hasLinks?400:600,whiteSpace:"nowrap"}}>
-                                  {hasLinks?"+ Add":"Link Policy"}
-                                </button>
+                            <div key={p.id} onClick={()=>{setTab("policies");setSelPolicyId(p.id);setPdTab("overview");}}
+                              style={{padding:"10px 14px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:12,transition:"border-color .12s"}}
+                              onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent}
+                              onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:12.5,fontWeight:600,color:T.text,marginBottom:3}}>{p.name}</div>
+                                <div style={{fontSize:11,color:T.textMuted}}>{p.category} · {p.severity} severity</div>
                               </div>
+                              <span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${lcc}15`,color:lcc,border:`1px solid ${lcc}30`,flexShrink:0}}>{lc}</span>
+                              {Ic.chevRight(12)}
                             </div>
                           );
                         })}
                       </div>
-                    )}
+                    </div>
+                  )}
+                  {/* Requirements */}
+                  <div>
+                    <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Key Requirements ({selReg.requirements.length})</div>
+                    {selReg.requirements.map(req=>{
+                      const lps=(req.linkedPolicies||[]).map(id=>policies.find(p=>p.id===id)).filter(Boolean);
+                      const hasLinks=lps.length>0;
+                      return (
+                        <div key={req.id} style={{padding:"12px 16px",background:T.bgSurface,border:`1.5px solid ${hasLinks?T.green+"30":T.border}`,borderRadius:9,marginBottom:8}}>
+                          <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
+                            <div style={{width:20,height:20,borderRadius:"50%",background:hasLinks?`${T.green}18`:`${T.amber}15`,border:`1.5px solid ${hasLinks?T.green:T.amber}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>
+                              {hasLinks?<svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M2 4.5l2 2L7 2.5" stroke={T.green} strokeWidth="1.4" strokeLinecap="round"/></svg>:<span style={{fontSize:9,color:T.amber,fontWeight:700}}>!</span>}
+                            </div>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
+                                <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",fontWeight:700,color:tc,background:`${tc}10`,padding:"1px 7px",borderRadius:4,border:`1px solid ${tc}20`,flexShrink:0}}>{req.ref}</span>
+                                <span style={{fontSize:12.5,color:T.text,lineHeight:1.5}}>{req.title}</span>
+                              </div>
+                              {hasLinks&&(
+                                <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:4}}>
+                                  {lps.map(lp=>(
+                                    <span key={lp.id} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,padding:"2px 8px 2px 6px",borderRadius:5,background:`${T.green}12`,borderLeft:`3px solid ${T.green}`,color:T.green,fontWeight:600}}>{lp.name}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            <button onClick={()=>setLinkPolOpen({regId:selReg.id,reqId:req.id})}
+                              style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:hasLinks?"transparent":T.amberDim,border:`1px solid ${hasLinks?T.border:T.amber+"50"}`,color:hasLinks?T.textMuted:T.amber,cursor:"pointer",flexShrink:0,fontWeight:hasLinks?400:600,whiteSpace:"nowrap"}}>
+                              {hasLinks?"+ Add":"Link Policy"}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          // ─── List view ───
+          const REG_GROUPS = [
+            {label:"Privacy",   regs: regulations.filter(r=>r.type==="Privacy")},
+            {label:"Healthcare",regs: regulations.filter(r=>r.type==="Healthcare")},
+            {label:"Financial", regs: regulations.filter(r=>r.type==="Financial")},
+            {label:"Security",  regs: regulations.filter(r=>r.type==="Security")},
+          ];
+          return (
+            <div style={{flex:1,overflowY:"auto",padding:"20px 28px"}}>
+              {/* Summary banner */}
+              <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap"}}>
+                {[{label:"Passing",count:passing,color:T.green},{label:"Partial",count:partial,color:T.amber},{label:"Not Started",count:notStart,color:T.textMuted},{label:"Coverage Gaps",count:totalGaps,color:T.rose}].map(s=>(
+                  <div key={s.label} style={{flex:1,minWidth:120,padding:"12px 16px",background:T.bgSurface,border:`1.5px solid ${s.color}30`,borderRadius:10,textAlign:"center"}}>
+                    <div style={{fontSize:22,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:s.color,marginBottom:3}}>{s.count}</div>
+                    <div style={{fontSize:10.5,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+              {/* Grouped regulation cards */}
+              {REG_GROUPS.map(group=>{
+                if(!group.regs.length) return null;
+                const tc = TYPE_COLOR[group.label]||T.accent;
+                return (
+                  <div key={group.label} style={{marginBottom:22}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                      <div style={{width:3,height:14,borderRadius:2,background:tc}}/>
+                      <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>{group.label}</span>
+                      <span style={{fontSize:10.5,color:T.textMuted}}>({group.regs.length})</span>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:8}}>
+                      {group.regs.map(reg=>{
+                        const sc = reg.score>=90?T.green:reg.score>=75?T.amber:T.rose;
+                        const stc = STATUS_COLOR[reg.status]||T.textMuted;
+                        const gaps = reg.requirements.filter(r=>!(r.linkedPolicies||[]).length).length;
+                        const linkedCt = policies.filter(p=>(p.regulations||[]).some(r=>r===reg.name||reg.name.includes(r))).length;
+                        return (
+                          <div key={reg.id} onClick={()=>setSelRegId(reg.id)}
+                            style={{background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:10,padding:"14px 16px",cursor:"pointer",transition:"all .15s"}}
+                            onMouseEnter={e=>{e.currentTarget.style.borderColor=tc;e.currentTarget.style.boxShadow=`0 4px 16px rgba(0,0,0,.12)`;}}
+                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
+                            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:10}}>
+                              <div>
+                                <div style={{fontSize:15,fontWeight:800,color:T.text,marginBottom:2,letterSpacing:"-0.3px"}}>{reg.name}</div>
+                                <div style={{fontSize:10.5,color:T.textMuted,lineHeight:1.4}}>{reg.jurisdiction} · {reg.industry}</div>
+                              </div>
+                              <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:99,background:`${stc}15`,color:stc,border:`1px solid ${stc}25`,flexShrink:0,whiteSpace:"nowrap"}}>{reg.status}</span>
+                            </div>
+                            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                              <div style={{flex:1,height:4,borderRadius:2,background:T.bgElevated,overflow:"hidden"}}><div style={{width:`${reg.score}%`,height:"100%",background:sc,borderRadius:2}}/></div>
+                              <span style={{fontSize:11,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:sc,flexShrink:0}}>{reg.score}%</span>
+                            </div>
+                            <div style={{display:"flex",alignItems:"center",gap:10,fontSize:10.5,color:T.textMuted}}>
+                              <span>{reg.requirements.length} requirements</span>
+                              {gaps>0&&<span style={{color:T.amber,fontWeight:600}}>· {gaps} gaps</span>}
+                              {linkedCt>0&&<span style={{color:T.green,fontWeight:600}}>· {linkedCt} {linkedCt===1?"policy":"policies"}</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 );
               })}
@@ -8577,6 +8700,63 @@ const AssetOverview = ({asset,data,setData,onToast})=>{
         ))}
       </div>
     </Card2>
+    {/* Governance */}
+    {(()=>{
+      const govPols = DEMO_POLICIES_GLOBAL.filter(p=>{
+        const domainMatch = (p.scope?.domains||[]).includes(asset.domain);
+        const linkMatch   = (p.links||[]).some(l=>l.target===asset.name);
+        return domainMatch||linkMatch;
+      });
+      if(!govPols.length) return null;
+      const LC_COLOR = {Active:T.green,"In Review":T.amber,Draft:T.textMuted,Approved:T.blue,Deprecated:T.rose};
+      const CAT_COLOR = {Data:T.violet,Quality:T.green,Access:T.blue,Security:T.rose,Retention:T.amber};
+      // Collect all unique regulations from governing policies
+      const govRegs = [...new Set(govPols.flatMap(p=>p.regulations||[]))];
+      const regMeta = r => REGS_META.find(rm=>rm.name===r||rm.name.startsWith(r)||r.toLowerCase().includes(rm.id));
+      const REG_TYPE_COLOR = {Privacy:T.violet,Healthcare:T.rose,Financial:T.amber,Security:T.blue};
+      return (
+        <Card2>
+          <div style={{padding:"14px 16px"}}>
+            <SH title="Governance"/>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Governing Policies</div>
+              {govPols.map(p=>{
+                const lcc = LC_COLOR[p.lifecycle]||T.textMuted;
+                const cc  = CAT_COLOR[p.category]||T.accent;
+                return (
+                  <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6}}>
+                    <div style={{width:7,height:7,borderRadius:"50%",background:lcc,flexShrink:0}}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:600,color:T.text,lineHeight:1.4}}>{p.name}</div>
+                      <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{p.category} · {p.severity} severity</div>
+                    </div>
+                    <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:99,background:`${lcc}15`,color:lcc,border:`1px solid ${lcc}25`,flexShrink:0,whiteSpace:"nowrap"}}>{p.lifecycle}</span>
+                  </div>
+                );
+              })}
+            </div>
+            {govRegs.length>0&&(
+              <div>
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Applicable Regulations</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                  {govRegs.map(r=>{
+                    const rm = regMeta(r);
+                    const rc = rm ? REG_TYPE_COLOR[rm.type]||T.accent : T.accent;
+                    return (
+                      <span key={r} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"4px 10px",borderRadius:6,background:`${rc}12`,color:rc,border:`1px solid ${rc}25`,fontWeight:600}}>
+                        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><path d="M8 1L2 4v4c0 3.5 2.7 5.5 6 6.5C11.3 13.5 14 11.5 14 8V4L8 1z"/></svg>
+                        {r}
+                        {rm&&<span style={{fontSize:9.5,color:`${rc}99`,fontWeight:400,marginLeft:1}}>· {rm.jurisdiction}</span>}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </Card2>
+      );
+    })()}
     {/* Notes / Wiki */}
     <Card2>
       <div style={{padding:"14px 16px"}}>
