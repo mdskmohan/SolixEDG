@@ -9013,39 +9013,29 @@ const AssetSchema = ({asset,selCol,onColClick,onToast})=>{
 }
 // ─── Lineage colour map ───────────────────────────────────────────────────────
 const LINEAGE_TYPE_COLOR={
-  Database:"#7dd3fc",Pipeline:"#fbbf24",Table:"#ee2424",
-  Dashboard:"#c4b5fd","ML Model":"#fda4af",
+  Database:"#7dd3fc", Table:"#ee2424", Dashboard:"#c4b5fd",
 };
 
 // ─── Per-node metadata (for info panel) ──────────────────────────────────────
 const LINEAGE_NODE_META={
-  pg:  {assetType:"Database", service:"PostgreSQL", db:"postgresql_prod",          description:"Production PostgreSQL database serving Commerce orders and customer data.",                owner:"dev.patel",  quality:92,cert:"Approved",   tags:["PII","finance"],cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"amount",t:"decimal"},{n:"status",t:"varchar"},{n:"created_at",t:"timestamp"}]},
-  pipe:{assetType:"Pipeline", service:"Airflow",    db:"etl_pipeline",            description:"Nightly ETL pipeline transforming raw orders to analytics-ready format. Runs at 02:00 UTC.", owner:"sarah.kim", quality:87,cert:"In Review",tags:["etl"],          cols:[{n:"order_id",t:"bigint"},{n:"cust_id",t:"bigint"},{n:"amount_usd",t:"decimal"},{n:"loaded_at",t:"timestamp"}]},
-  self:{assetType:"Table",    service:"Snowflake",  db:"COMMERCE / orders_fact",   description:"Fact table tracking all commerce orders enriched with ML-predicted churn scores.",        owner:"maya.chen", quality:95,cert:"Approved",   tags:["PII","KPI"],    cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"revenue",t:"decimal"},{n:"churn_score",t:"float"},{n:"created_at",t:"date"}]},
-  d1:  {assetType:"Dashboard",service:"Tableau",    db:"Revenue Dashboard",        description:"Executive revenue dashboard consuming enriched order data for Finance stakeholders.",       owner:"alex.wu",   quality:88,cert:"Approved",   tags:["KPI"],          cols:[{n:"total_revenue",t:"decimal"},{n:"order_count",t:"bigint"},{n:"avg_order",t:"decimal"}]},
-  ml:  {assetType:"ML Model", service:"SageMaker",  db:"ml_churn_model",           description:"XGBoost churn model trained on historical order patterns. Deployed to SageMaker.",        owner:"lisa.ray",  quality:91,cert:"In Review",tags:["model"],        cols:[{n:"cust_id_feat",t:"bigint"},{n:"churn_prob",t:"float"},{n:"risk_tier",t:"varchar"}]},
-  d2:  {assetType:"Dashboard",service:"Tableau",    db:"Finance Summary",          description:"Finance summary dashboard aggregating revenue across all domains. Updated daily.",        owner:"james.oh",  quality:84,cert:"Draft",      tags:["finance"],      cols:[{n:"domain",t:"varchar"},{n:"total_rev",t:"decimal"},{n:"growth_pct",t:"float"}]},
-  api: {assetType:"Pipeline", service:"FastAPI",    db:"reporting_api",            description:"REST API exposing ML predictions and churn scores to alerting and CRM systems.",           owner:"dev.patel",  quality:89,cert:"Draft",      tags:["model","etl"],  cols:[{n:"cust_id",t:"bigint"},{n:"churn_risk",t:"float"},{n:"updated_at",t:"timestamp"}]},
+  pg:  {assetType:"Database", service:"PostgreSQL", db:"postgresql_prod",        description:"Production PostgreSQL database serving Commerce orders and customer data.",                owner:"dev.patel",  quality:92,cert:"Approved",tags:["PII","finance"],cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"amount",t:"decimal"},{n:"status",t:"varchar"},{n:"created_at",t:"timestamp"}]},
+  self:{assetType:"Table",    service:"Snowflake",  db:"COMMERCE / orders_fact", description:"Fact table tracking all commerce orders. Source of truth for revenue, retention and growth reporting.", owner:"maya.chen", quality:95,cert:"Approved",tags:["PII","KPI"],    cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"revenue",t:"decimal"},{n:"order_status",t:"varchar"},{n:"created_at",t:"date"}]},
+  d1:  {assetType:"Dashboard",service:"Tableau",    db:"Revenue Dashboard",      description:"Executive revenue dashboard consuming enriched order data for Finance stakeholders.",       owner:"alex.wu",   quality:88,cert:"Approved",tags:["KPI"],          cols:[{n:"total_revenue",t:"decimal"},{n:"order_count",t:"bigint"},{n:"avg_order",t:"decimal"}]},
+  d2:  {assetType:"Dashboard",service:"Tableau",    db:"Finance Summary",        description:"Finance summary dashboard aggregating revenue across all domains. Updated daily.",        owner:"james.oh",  quality:84,cert:"Draft",   tags:["finance"],      cols:[{n:"domain",t:"varchar"},{n:"total_rev",t:"decimal"},{n:"growth_pct",t:"float"}]},
 };
 
 // ─── Fixed topology (positions + connections) ─────────────────────────────────
 const LINEAGE_TOPO={
-  pg:  {x:0,   y:160, label:"postgresql_prod",   upstream:[],       downstream:["pipe"], active:false},
-  pipe:{x:250, y:160, label:"etl_pipeline",      upstream:["pg"],   downstream:["self"], active:false},
-  self:{x:500, y:160, label:"",                  upstream:["pipe"], downstream:["d1","ml"], active:true},
-  d1:  {x:780, y:50,  label:"revenue_dashboard", upstream:["self"], downstream:["d2"],   active:false},
-  ml:  {x:780, y:270, label:"ml_churn_model",    upstream:["self"], downstream:["api"],  active:false},
-  d2:  {x:1040,y:50,  label:"finance_summary",   upstream:["d1"],   downstream:[],       active:false},
-  api: {x:1040,y:270, label:"reporting_api",     upstream:["ml"],   downstream:[],       active:false},
+  pg:  {x:0,   y:160, label:"postgresql_prod",   upstream:[],      downstream:["self"], active:false},
+  self:{x:310, y:160, label:"",                  upstream:["pg"],  downstream:["d1"],  active:true},
+  d1:  {x:620, y:160, label:"revenue_dashboard", upstream:["self"],downstream:["d2"],  active:false},
+  d2:  {x:930, y:160, label:"finance_summary",   upstream:["d1"],  downstream:[],      active:false},
 };
 
 const LINEAGE_EDGES_DEF=[
-  {id:"le1",s:"pg",  t:"pipe",tk:"Direct"},
-  {id:"le2",s:"pipe",t:"self",tk:"Direct"},
-  {id:"le3",s:"self",t:"d1",  tk:"Direct"},
-  {id:"le4",s:"self",t:"ml",  tk:"Direct"},
-  {id:"le5",s:"d1",  t:"d2",  tk:"Direct"},
-  {id:"le6",s:"ml",  t:"api", tk:"Direct"},
+  {id:"le1",s:"pg",  t:"self",tk:"Direct"},
+  {id:"le2",s:"self",t:"d1",  tk:"Direct"},
+  {id:"le3",s:"d1",  t:"d2",  tk:"Direct"},
 ];
 
 // ─── Helper: get all ancestors / descendants recursively ──────────────────────
@@ -9071,7 +9061,7 @@ const LineageAssetNode=({data})=>{
     <button className="nodrag nopan" onClick={e=>{e.stopPropagation();onToggleUpstream();}}
       title={upstreamOpen?"Hide upstream":"Expand upstream"}
       style={{position:"absolute",left:-22,top:"50%",transform:"translateY(-50%)",
-        width:22,height:22,borderRadius:"50%",
+        width:22,height:22,borderRadius:4,
         background:upstreamOpen?"#3b82f6":"#fff",
         border:"1.5px solid #3b82f6",color:upstreamOpen?"#fff":"#3b82f6",
         cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
@@ -9084,7 +9074,7 @@ const LineageAssetNode=({data})=>{
     <button className="nodrag nopan" onClick={e=>{e.stopPropagation();onToggleDownstream();}}
       title={downstreamOpen?"Hide downstream":"Expand downstream"}
       style={{position:"absolute",right:-22,top:"50%",transform:"translateY(-50%)",
-        width:22,height:22,borderRadius:"50%",
+        width:22,height:22,borderRadius:4,
         background:downstreamOpen?"#8b5cf6":"#fff",
         border:"1.5px solid #8b5cf6",color:downstreamOpen?"#fff":"#8b5cf6",
         cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
@@ -9264,9 +9254,9 @@ const AssetLineageFull=({asset})=>{
         </div>
         {/* Hint */}
         <span style={{fontSize:10.5,color:"#94a3b8",display:"flex",alignItems:"center",gap:4}}>
-          <span style={{width:14,height:14,borderRadius:"50%",background:"#fff",border:"1.5px solid #3b82f6",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#3b82f6",fontWeight:700,lineHeight:1}}>+</span>
+          <span style={{width:14,height:14,borderRadius:3,background:"#fff",border:"1.5px solid #3b82f6",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#3b82f6",fontWeight:700,lineHeight:1}}>+</span>
           upstream&nbsp;
-          <span style={{width:14,height:14,borderRadius:"50%",background:"#fff",border:"1.5px solid #8b5cf6",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#8b5cf6",fontWeight:700,lineHeight:1}}>+</span>
+          <span style={{width:14,height:14,borderRadius:3,background:"#fff",border:"1.5px solid #8b5cf6",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#8b5cf6",fontWeight:700,lineHeight:1}}>+</span>
           downstream&nbsp;·&nbsp;click node for details
         </span>
         <button onClick={()=>rf?.fitView({padding:0.15,duration:400})}
@@ -9300,90 +9290,109 @@ const AssetLineageFull=({asset})=>{
         </div>
 
         {/* Info panel — slides in when a node is selected */}
-        {selectedId&&selMeta&&(
-          <div className="slideInRight" style={{width:300,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,
-            display:"flex",flexDirection:"column",overflow:"hidden"}}>
-            {/* Panel header */}
-            <div style={{padding:"16px 18px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"flex-start",gap:10,flexShrink:0}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:6,flexWrap:"wrap"}}>
-                  <TypeBadge type={selMeta.assetType}/>
-                  {LINEAGE_TOPO[selectedId].active&&<span style={{fontSize:9,fontWeight:700,color:"#ee2424",background:"rgba(238,36,36,0.1)",padding:"2px 6px",borderRadius:4,letterSpacing:"0.05em"}}>CURRENT</span>}
+        {selectedId&&selMeta&&(()=>{
+          const CMETA_L={"Draft":{color:"#6b7280",bg:"rgba(107,114,128,.1)",border:"rgba(107,114,128,.25)"},"In Review":{color:"#d97706",bg:"rgba(217,119,6,.12)",border:"rgba(217,119,6,.3)"},"Approved":{color:"#16a34a",bg:"rgba(22,163,74,.12)",border:"rgba(22,163,74,.3)"}};
+          const TAG_C_L={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},finance:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},KPI:{bg:"rgba(22,163,74,.08)",color:"#16a34a",border:"rgba(22,163,74,.2)"},etl:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},model:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"}};
+          const cm=CMETA_L[selMeta.cert]||CMETA_L["Draft"];
+          const tagC=t=>TAG_C_L[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};
+          const SLabel=({children})=><div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>{children}</div>;
+          return (
+            <div className="slideInRight" style={{width:280,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,
+              display:"flex",flexDirection:"column",overflow:"hidden"}}>
+              {/* Header */}
+              <div style={{padding:"14px 16px 12px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"flex-start",gap:10,flexShrink:0}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:5,flexWrap:"wrap"}}>
+                    <TypeBadge type={selMeta.assetType}/>
+                    {LINEAGE_TOPO[selectedId].active&&<span style={{fontSize:9,fontWeight:700,color:"#ee2424",background:"rgba(238,36,36,0.1)",padding:"2px 6px",borderRadius:4,letterSpacing:"0.05em"}}>CURRENT</span>}
+                  </div>
+                  <div style={{fontSize:13,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",wordBreak:"break-all",lineHeight:1.35}}>{selLabel}</div>
+                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:2,fontFamily:"'Geist Mono',monospace"}}>{selMeta.db}</div>
                 </div>
-                <div style={{fontSize:13.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",wordBreak:"break-all",lineHeight:1.3}}>{selLabel}</div>
-                <div style={{fontSize:10.5,color:T.textMuted,marginTop:3,fontFamily:"'Geist Mono',monospace"}}>{selMeta.db}</div>
+                <button onClick={()=>setSelectedId(null)}
+                  style={{width:26,height:26,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted,flexShrink:0,padding:0}}>
+                  {Ic.x(10)}
+                </button>
               </div>
-              <button onClick={()=>setSelectedId(null)}
-                style={{width:26,height:26,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted,flexShrink:0,padding:0}}>
-                {Ic.x(10)}
-              </button>
-            </div>
 
-            {/* Service row */}
-            <div style={{padding:"10px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10,flexShrink:0,background:T.bgElevated}}>
-              <ServiceIcon service={selMeta.service} size={26}/>
-              <div>
-                <div style={{fontSize:9.5,color:T.textMuted,textTransform:"uppercase",fontWeight:700,letterSpacing:"0.06em"}}>Service</div>
-                <div style={{fontSize:12,fontWeight:600,color:T.text}}>{selMeta.service}</div>
-              </div>
-            </div>
+              {/* Scrollable body — mirrors asset profile right sidebar */}
+              <div style={{flex:1,overflowY:"auto"}}>
 
-            <div style={{flex:1,padding:"16px 18px",display:"flex",flexDirection:"column",gap:16,overflowY:"auto"}}>
-              {/* Description */}
-              <div>
-                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:5}}>Description</div>
-                <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.65}}>{selMeta.description}</div>
-              </div>
-              {/* Metrics row */}
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                <div style={{padding:"9px 11px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>
-                  <div style={{fontSize:9.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Quality</div>
-                  <div style={{fontSize:17,fontWeight:700,color:qualC(selMeta.quality),fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{selMeta.quality}</div>
-                  <div style={{marginTop:5,height:3,background:T.border,borderRadius:2,overflow:"hidden"}}>
-                    <div style={{width:`${selMeta.quality}%`,height:"100%",background:qualC(selMeta.quality),borderRadius:2}}/>
-                  </div>
-                </div>
-                <div style={{padding:"9px 11px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>
-                  <div style={{fontSize:9.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Certification</div>
-                  <div style={{fontSize:12,fontWeight:700,color:certC(selMeta.cert),lineHeight:1.3}}>{selMeta.cert}</div>
-                </div>
-              </div>
-              {/* Owner */}
-              <div>
-                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Owner</div>
-                <div style={{display:"inline-flex",alignItems:"center",gap:7,padding:"5px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}>
-                  <div style={{width:22,height:22,borderRadius:"50%",background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:T.accent}}>
-                    {selMeta.owner.split(".").map(s=>s[0]?.toUpperCase()||"").join("")}
-                  </div>
-                  <span style={{fontSize:12,color:T.text,fontWeight:500}}>{selMeta.owner}</span>
-                </div>
-              </div>
-              {/* Tags */}
-              {selMeta.tags&&selMeta.tags.length>0&&(
-                <div>
-                  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Tags</div>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                    {selMeta.tags.map(t=><span key={t} style={{fontSize:10.5,padding:"2px 9px",borderRadius:4,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`,fontWeight:500}}>{t}</span>)}
-                  </div>
-                </div>
-              )}
-              {/* Columns */}
-              <div>
-                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>
-                  Columns <span style={{fontWeight:400}}>({selMeta.cols.length})</span>
-                </div>
-                <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
-                  {selMeta.cols.map((c,i)=>(
-                    <div key={c.n} style={{display:"flex",alignItems:"center",padding:"7px 11px",borderBottom:i<selMeta.cols.length-1?`1px solid ${T.border}`:undefined,gap:8}}>
-                      <span style={{flex:1,fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:500}}>{c.n}</span>
-                      <span style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{c.t}</span>
+                {/* DETAILS */}
+                <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
+                  <SLabel>Details</SLabel>
+                  {[
+                    {l:"Quality", v:<div style={{display:"flex",alignItems:"center",gap:7}}>
+                      <span style={{fontSize:13,fontWeight:700,color:qualC(selMeta.quality),fontFamily:"'Geist Mono',monospace"}}>{selMeta.quality}</span>
+                      <div style={{width:44,height:4,background:T.border,borderRadius:2,overflow:"hidden"}}>
+                        <div style={{width:`${selMeta.quality}%`,height:"100%",background:qualC(selMeta.quality),borderRadius:2}}/>
+                      </div>
+                    </div>},
+                    {l:"Service", v:<div style={{display:"flex",alignItems:"center",gap:5}}>
+                      <ServiceIcon service={selMeta.service} size={14}/>
+                      <span style={{fontSize:12,color:T.textSub}}>{selMeta.service}</span>
+                    </div>},
+                  ].map(m=>(
+                    <div key={m.l} style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,fontSize:12}}>
+                      <span style={{color:T.textMuted}}>{m.l}</span>{m.v}
                     </div>
                   ))}
                 </div>
+
+                {/* CERTIFICATE */}
+                <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
+                  <SLabel>Certificate</SLabel>
+                  <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px 4px 9px",borderRadius:5,background:cm.bg,borderTop:`1px solid ${cm.border}`,borderRight:`1px solid ${cm.border}`,borderBottom:`1px solid ${cm.border}`,borderLeft:`3px solid ${cm.color}`}}>
+                    <span style={{fontSize:12,color:cm.color,fontWeight:600}}>{selMeta.cert}</span>
+                  </div>
+                </div>
+
+                {/* DESCRIPTION */}
+                <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
+                  <SLabel>Description</SLabel>
+                  <p style={{fontSize:12,color:T.textSub,lineHeight:1.7,margin:0}}>{selMeta.description}</p>
+                </div>
+
+                {/* OWNER */}
+                <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
+                  <SLabel>Owner</SLabel>
+                  <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
+                    <div style={{width:18,height:18,borderRadius:3,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:T.accent,flexShrink:0}}>
+                      {selMeta.owner.split(".").map(s=>s[0]?.toUpperCase()||"").join("")}
+                    </div>
+                    <span style={{fontSize:12,color:T.accent,fontWeight:500}}>{selMeta.owner}</span>
+                  </div>
+                </div>
+
+                {/* TAGS */}
+                {selMeta.tags&&selMeta.tags.length>0&&(
+                  <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
+                    <SLabel>Tags</SLabel>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                      {selMeta.tags.map(t=>{const c=tagC(t);return(
+                        <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}</span>
+                      );})}
+                    </div>
+                  </div>
+                )}
+
+                {/* SCHEMA */}
+                <div style={{padding:"14px 16px"}}>
+                  <SLabel>Schema <span style={{fontWeight:400,textTransform:"none",letterSpacing:0}}>({selMeta.cols.length} cols)</span></SLabel>
+                  <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+                    {selMeta.cols.map((c,i)=>(
+                      <div key={c.n} style={{display:"flex",alignItems:"center",padding:"7px 10px",borderBottom:i<selMeta.cols.length-1?`1px solid ${T.border}`:undefined,gap:8,background:i%2===0?T.bgElevated:T.bgSurface}}>
+                        <span style={{flex:1,fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:500}}>{c.n}</span>
+                        <span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:`${T.blue}15`,color:T.blue,border:`1px solid ${T.blue}30`,fontFamily:"'Geist Mono',monospace"}}>{c.t}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );
