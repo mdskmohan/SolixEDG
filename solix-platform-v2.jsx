@@ -9038,6 +9038,22 @@ const LINEAGE_EDGES_DEF=[
   {id:"le3",s:"d1",  t:"d2",  tk:"Direct"},
 ];
 
+// ─── Column-level mappings between nodes ──────────────────────────────────────
+const LINEAGE_COL_MAPS=[
+  {s:"pg",  t:"self",cols:[{sc:"order_id",tc:"order_id"},{sc:"customer_id",tc:"customer_id"},{sc:"amount",tc:"revenue"},{sc:"status",tc:"order_status"},{sc:"created_at",tc:"created_at"}]},
+  {s:"self",t:"d1",  cols:[{sc:"revenue",tc:"total_revenue"},{sc:"order_id",tc:"order_count"},{sc:"revenue",tc:"avg_order"}]},
+  {s:"d1",  t:"d2",  cols:[{sc:"total_revenue",tc:"total_rev"},{sc:"order_count",tc:"total_rev"}]},
+];
+
+// Recursively trace all col-level edges upstream + downstream from a start column
+function colPathEdges(startNodeId,startColName){
+  const result=[];const visited=new Set();
+  const traceDown=(nodeId,colName)=>{const key=`d.${nodeId}.${colName}`;if(visited.has(key))return;visited.add(key);LINEAGE_COL_MAPS.forEach(m=>{if(m.s===nodeId)m.cols.forEach(c=>{if(c.sc===colName){result.push({s:nodeId,t:m.t,sc:c.sc,tc:c.tc});traceDown(m.t,c.tc);}});});};
+  const traceUp=(nodeId,colName)=>{const key=`u.${nodeId}.${colName}`;if(visited.has(key))return;visited.add(key);LINEAGE_COL_MAPS.forEach(m=>{if(m.t===nodeId)m.cols.forEach(c=>{if(c.tc===colName){result.push({s:m.s,t:nodeId,sc:c.sc,tc:c.tc});traceUp(m.s,c.sc);}});});};
+  traceDown(startNodeId,startColName);traceUp(startNodeId,startColName);
+  const seen=new Set();return result.filter(e=>{const k=`${e.s}.${e.sc}->${e.t}.${e.tc}`;if(seen.has(k))return false;seen.add(k);return true;});
+}
+
 // ─── Helper: get all ancestors / descendants recursively ──────────────────────
 function linAncestors(nodeId){
   const out=new Set();
@@ -9054,7 +9070,8 @@ function linDescendants(nodeId){
 const LineageAssetNode=({data})=>{
   const{label,assetType,active,cols,expanded,
         hasUpstream,upstreamOpen,hasDownstream,downstreamOpen,
-        onToggleExpand,onToggleUpstream,onToggleDownstream}=data;
+        onToggleExpand,onToggleUpstream,onToggleDownstream,
+        highlightedCols,onColClick}=data;
   const tc=LINEAGE_TYPE_COLOR[assetType]||"#a1a1aa";
   const ROW=28;
   const BtnUp=()=>(
@@ -9121,22 +9138,30 @@ const LineageAssetNode=({data})=>{
         {/* Column rows */}
         {expanded&&cols&&cols.length>0&&(
           <div style={{borderTop:"1px solid #f0f4f8"}}>
-            {cols.map((c,i)=>(
-              <div key={c.n} style={{
-                height:ROW,display:"flex",alignItems:"center",padding:"0 10px",gap:6,
-                fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:"#475569",
-                borderBottom:i<cols.length-1?"1px solid #f8fafc":undefined,
-                position:"relative",
-              }}>
-                <Handle type="target" id={`ti-${c.n}`} position={Position.Left}
-                  style={{top:ROW/2,width:6,height:6,background:"#d1d5db",border:"none",left:-3,borderRadius:"50%"}}/>
-                <span style={{width:4,height:4,borderRadius:"50%",background:"#cbd5e1",display:"inline-block",flexShrink:0}}/>
-                <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.n}</span>
-                <span style={{fontSize:9,color:"#94a3b8"}}>{c.t}</span>
-                <Handle type="source" id={`so-${c.n}`} position={Position.Right}
-                  style={{top:ROW/2,width:6,height:6,background:"#d1d5db",border:"none",right:-3,borderRadius:"50%"}}/>
-              </div>
-            ))}
+            {cols.map((c,i)=>{
+              const hl=highlightedCols?.has(c.n);
+              return(
+                <div key={c.n} className="nodrag nopan"
+                  onClick={e=>{e.stopPropagation();onColClick&&onColClick(c.n);}}
+                  style={{
+                    height:ROW,display:"flex",alignItems:"center",padding:"0 10px 0 8px",gap:6,
+                    fontSize:10.5,fontFamily:"'Geist Mono',monospace",
+                    color:hl?"#2563eb":"#475569",
+                    background:hl?"rgba(37,99,235,0.07)":"transparent",
+                    borderBottom:i<cols.length-1?"1px solid #f8fafc":undefined,
+                    borderLeft:hl?"2px solid #2563eb":"2px solid transparent",
+                    cursor:"pointer",position:"relative",transition:"background .1s",
+                  }}>
+                  <Handle type="target" id={`ti-${c.n}`} position={Position.Left}
+                    style={{top:ROW/2,width:6,height:6,background:hl?"#93c5fd":"#d1d5db",border:"none",left:-3,borderRadius:"50%"}}/>
+                  <span style={{width:4,height:4,borderRadius:"50%",background:hl?"#2563eb":"#cbd5e1",display:"inline-block",flexShrink:0}}/>
+                  <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.n}</span>
+                  <span style={{fontSize:9,color:hl?"#2563eb":"#94a3b8"}}>{c.t}</span>
+                  <Handle type="source" id={`so-${c.n}`} position={Position.Right}
+                    style={{top:ROW/2,width:6,height:6,background:hl?"#93c5fd":"#d1d5db",border:"none",right:-3,borderRadius:"50%"}}/>
+                </div>
+              );
+            })}
           </div>
         )}
         <Handle type="source" position={Position.Right}
@@ -9149,7 +9174,7 @@ const LineageAssetNode=({data})=>{
 const LIN_NODE_TYPES={assetNode:LineageAssetNode};
 
 // ─── Build RF nodes + edges from visible set ──────────────────────────────────
-function buildLinNodes(aName,hiddenNodes,expandedCols,callbacks){
+function buildLinNodes(aName,hiddenNodes,expandedCols,colHighlights,callbacks){
   return Object.entries(LINEAGE_TOPO)
     .filter(([id])=>!hiddenNodes.has(id))
     .map(([id,topo])=>{
@@ -9168,9 +9193,11 @@ function buildLinNodes(aName,hiddenNodes,expandedCols,callbacks){
           id,label,assetType:meta.assetType,active:topo.active||false,
           cols:meta.cols,expanded,
           hasUpstream,upstreamOpen,hasDownstream,downstreamOpen,
+          highlightedCols:colHighlights[id]||null,
           onToggleExpand:()=>callbacks.toggleExpand(id),
           onToggleUpstream:()=>callbacks.toggleUpstream(id,upParents,upstreamOpen),
           onToggleDownstream:()=>callbacks.toggleDownstream(id,downChildren,downstreamOpen),
+          onColClick:(colName)=>callbacks.colClick(id,colName),
         },
       };
     });
@@ -9194,6 +9221,7 @@ const AssetLineageFull=({asset})=>{
   const [hiddenNodes, setHiddenNodes]=useState(new Set());
   const [expandedCols,setExpandedCols]=useState(new Set());
   const [selectedId,  setSelectedId] =useState(null);
+  const [selectedCol, setSelectedCol]=useState(null); // {nodeId, colName}
   const [rf,          setRf]         =useState(null);
 
   const callbacks=useMemo(()=>({
@@ -9219,16 +9247,66 @@ const AssetLineageFull=({asset})=>{
       });
       setTimeout(()=>rf?.fitView({padding:0.15,duration:350}),60);
     },
+    colClick:(nodeId,colName)=>{
+      setSelectedId(null);
+      setSelectedCol(p=>p?.nodeId===nodeId&&p?.colName===colName?null:{nodeId,colName});
+    },
   }),[rf]);
 
-  const nodes=useMemo(()=>buildLinNodes(aName,hiddenNodes,expandedCols,callbacks),[aName,hiddenNodes,expandedCols,callbacks]);
-  const edges=useMemo(()=>buildLinEdges(hiddenNodes),[hiddenNodes]);
+  // Compute which columns to highlight across all nodes when a column is selected
+  const colHighlights=useMemo(()=>{
+    if(!selectedCol)return{};
+    const paths=colPathEdges(selectedCol.nodeId,selectedCol.colName);
+    const r={};
+    r[selectedCol.nodeId]=new Set([selectedCol.colName]);
+    paths.forEach(p=>{
+      if(!r[p.s])r[p.s]=new Set();r[p.s].add(p.sc);
+      if(!r[p.t])r[p.t]=new Set();r[p.t].add(p.tc);
+    });
+    return r;
+  },[selectedCol]);
+
+  const nodes=useMemo(()=>buildLinNodes(aName,hiddenNodes,expandedCols,colHighlights,callbacks),[aName,hiddenNodes,expandedCols,colHighlights,callbacks]);
+
+  // When a column is selected: show dimmed node-edges + animated column-level edges
+  const edges=useMemo(()=>{
+    if(selectedCol){
+      const base=buildLinEdges(hiddenNodes).map(e=>({...e,
+        style:{stroke:"#e2e8f0",strokeWidth:1.2,strokeDasharray:"5 4"},
+        markerEnd:{type:MarkerType.ArrowClosed,color:"#e2e8f0",width:10,height:10},
+        animated:false,
+      }));
+      const colPaths=colPathEdges(selectedCol.nodeId,selectedCol.colName);
+      const colEdges=colPaths
+        .filter(p=>!hiddenNodes.has(p.s)&&!hiddenNodes.has(p.t))
+        .map(p=>({
+          id:`ce-${p.s}.${p.sc}-${p.t}.${p.tc}`,
+          source:p.s,target:p.t,
+          sourceHandle:`so-${p.sc}`,targetHandle:`ti-${p.tc}`,
+          type:"smoothstep",animated:true,
+          markerEnd:{type:MarkerType.ArrowClosed,color:"#2563eb",width:12,height:12},
+          style:{stroke:"#2563eb",strokeWidth:2},
+        }));
+      return[...base,...colEdges];
+    }
+    return buildLinEdges(hiddenNodes);
+  },[hiddenNodes,selectedCol]);
 
   const [rfNodes,setRfNodes,onNodesChange]=useNodesState(nodes);
   const [rfEdges,setRfEdges,onEdgesChange]=useEdgesState(edges);
 
   useEffect(()=>{setRfNodes(nodes);},[nodes]);
   useEffect(()=>{setRfEdges(edges);},[edges]);
+
+  // Auto-expand nodes that are part of the selected column's path
+  useEffect(()=>{
+    if(!selectedCol)return;
+    const paths=colPathEdges(selectedCol.nodeId,selectedCol.colName);
+    const toExpand=new Set([selectedCol.nodeId]);
+    paths.forEach(p=>{toExpand.add(p.s);toExpand.add(p.t);});
+    setExpandedCols(p=>{const n=new Set(p);toExpand.forEach(id=>n.add(id));return n;});
+    setTimeout(()=>rf?.fitView({padding:0.15,duration:350}),80);
+  },[selectedCol]);
 
   const selMeta=selectedId?LINEAGE_NODE_META[selectedId]:null;
   const selLabel=selectedId?(LINEAGE_TOPO[selectedId].active?aName:LINEAGE_TOPO[selectedId].label):null;
@@ -9274,7 +9352,7 @@ const AssetLineageFull=({asset})=>{
             onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
             nodeTypes={LIN_NODE_TYPES}
             onInit={inst=>{setRf(inst);inst.fitView({padding:0.18});}}
-            onNodeClick={(_e,node)=>setSelectedId(p=>p===node.id?null:node.id)}
+            onNodeClick={(_e,node)=>{setSelectedCol(null);setSelectedId(p=>p===node.id?null:node.id);}}
             minZoom={0.15} maxZoom={3}
             proOptions={{hideAttribution:true}}
             colorMode="light"
@@ -9289,13 +9367,89 @@ const AssetLineageFull=({asset})=>{
           </ReactFlow>
         </div>
 
-        {/* Info panel — slides in when a node is selected */}
-        {selectedId&&selMeta&&(()=>{
+        {/* Info panel — node panel OR column lineage panel */}
+        {(selectedCol||(selectedId&&selMeta))&&(()=>{
           const CMETA_L={"Draft":{color:"#6b7280",bg:"rgba(107,114,128,.1)",border:"rgba(107,114,128,.25)"},"In Review":{color:"#d97706",bg:"rgba(217,119,6,.12)",border:"rgba(217,119,6,.3)"},"Approved":{color:"#16a34a",bg:"rgba(22,163,74,.12)",border:"rgba(22,163,74,.3)"}};
           const TAG_C_L={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},finance:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},KPI:{bg:"rgba(22,163,74,.08)",color:"#16a34a",border:"rgba(22,163,74,.2)"},etl:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},model:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"}};
+          const SLabel=({children})=><div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>{children}</div>;
+
+          // ── COLUMN LINEAGE PANEL ──
+          if(selectedCol){
+            const cMeta=LINEAGE_NODE_META[selectedCol.nodeId];
+            const colDef=cMeta?.cols.find(c=>c.n===selectedCol.colName);
+            const nodeTopo=LINEAGE_TOPO[selectedCol.nodeId];
+            const nodeLabel=nodeTopo?.active?aName:nodeTopo?.label;
+            const upConns=LINEAGE_COL_MAPS.filter(m=>m.t===selectedCol.nodeId)
+              .flatMap(m=>m.cols.filter(c=>c.tc===selectedCol.colName).map(c=>({nodeId:m.s,colName:c.sc})));
+            const downConns=LINEAGE_COL_MAPS.filter(m=>m.s===selectedCol.nodeId)
+              .flatMap(m=>m.cols.filter(c=>c.sc===selectedCol.colName).map(c=>({nodeId:m.t,colName:c.tc})));
+            const ConnRow=({nodeId,colName})=>{
+              const nm=LINEAGE_NODE_META[nodeId];
+              const nt=LINEAGE_TOPO[nodeId];
+              const nl=nt?.active?aName:nt?.label;
+              return(
+                <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,marginBottom:5}}>
+                  <TypeBadge type={nm?.assetType}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{colName}</div>
+                    <div style={{fontSize:10,color:T.textMuted,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nl}</div>
+                  </div>
+                </div>
+              );
+            };
+            return(
+              <div className="slideInRight" style={{width:280,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+                {/* Column header */}
+                <div style={{padding:"14px 16px 12px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"flex-start",gap:10,flexShrink:0}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Column Lineage</div>
+                    <div style={{fontSize:14,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{selectedCol.colName}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginTop:5}}>
+                      <TypeBadge type={cMeta?.assetType}/>
+                      <span style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nodeLabel}</span>
+                    </div>
+                  </div>
+                  <button onClick={()=>setSelectedCol(null)} style={{width:26,height:26,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted,flexShrink:0,padding:0}}>{Ic.x(10)}</button>
+                </div>
+                {/* Data type row */}
+                <div style={{padding:"10px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,background:T.bgElevated}}>
+                  <span style={{fontSize:11,color:T.textMuted,fontWeight:600}}>Data Type</span>
+                  <span style={{fontSize:11,padding:"2px 8px",borderRadius:4,background:`${T.blue}15`,color:T.blue,border:`1px solid ${T.blue}30`,fontFamily:"'Geist Mono',monospace",fontWeight:600}}>{colDef?.t||"—"}</span>
+                </div>
+                {/* Connections */}
+                <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
+                  {upConns.length>0&&(
+                    <div style={{marginBottom:16}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                        <span style={{width:8,height:8,borderRadius:2,background:"#3b82f6",display:"inline-block",flexShrink:0}}/>
+                        <SLabel>Upstream</SLabel>
+                      </div>
+                      {upConns.map((u,i)=><ConnRow key={i} nodeId={u.nodeId} colName={u.colName}/>)}
+                    </div>
+                  )}
+                  {downConns.length>0&&(
+                    <div>
+                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                        <span style={{width:8,height:8,borderRadius:2,background:"#8b5cf6",display:"inline-block",flexShrink:0}}/>
+                        <SLabel>Downstream</SLabel>
+                      </div>
+                      {downConns.map((d,i)=><ConnRow key={i} nodeId={d.nodeId} colName={d.colName}/>)}
+                    </div>
+                  )}
+                  {upConns.length===0&&downConns.length===0&&(
+                    <div style={{textAlign:"center",padding:"36px 16px"}}>
+                      <div style={{fontSize:28,marginBottom:8}}>🔗</div>
+                      <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6}}>No column-level mappings defined for <span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{selectedCol.colName}</span></div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          }
+
+          // ── NODE INFO PANEL ──
           const cm=CMETA_L[selMeta.cert]||CMETA_L["Draft"];
           const tagC=t=>TAG_C_L[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};
-          const SLabel=({children})=><div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>{children}</div>;
           return (
             <div className="slideInRight" style={{width:280,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,
               display:"flex",flexDirection:"column",overflow:"hidden"}}>
@@ -9314,21 +9468,19 @@ const AssetLineageFull=({asset})=>{
                   {Ic.x(10)}
                 </button>
               </div>
-
-              {/* Scrollable body — mirrors asset profile right sidebar */}
+              {/* Scrollable body */}
               <div style={{flex:1,overflowY:"auto"}}>
-
                 {/* DETAILS */}
                 <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
                   <SLabel>Details</SLabel>
                   {[
-                    {l:"Quality", v:<div style={{display:"flex",alignItems:"center",gap:7}}>
+                    {l:"Quality",v:<div style={{display:"flex",alignItems:"center",gap:7}}>
                       <span style={{fontSize:13,fontWeight:700,color:qualC(selMeta.quality),fontFamily:"'Geist Mono',monospace"}}>{selMeta.quality}</span>
                       <div style={{width:44,height:4,background:T.border,borderRadius:2,overflow:"hidden"}}>
                         <div style={{width:`${selMeta.quality}%`,height:"100%",background:qualC(selMeta.quality),borderRadius:2}}/>
                       </div>
                     </div>},
-                    {l:"Service", v:<div style={{display:"flex",alignItems:"center",gap:5}}>
+                    {l:"Service",v:<div style={{display:"flex",alignItems:"center",gap:5}}>
                       <ServiceIcon service={selMeta.service} size={14}/>
                       <span style={{fontSize:12,color:T.textSub}}>{selMeta.service}</span>
                     </div>},
@@ -9338,13 +9490,11 @@ const AssetLineageFull=({asset})=>{
                     </div>
                   ))}
                 </div>
-
                 {/* DESCRIPTION */}
                 <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
                   <SLabel>Description</SLabel>
                   <p style={{fontSize:12,color:T.textSub,lineHeight:1.7,margin:0}}>{selMeta.description}</p>
                 </div>
-
                 {/* CERTIFICATE */}
                 <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
                   <SLabel>Certificate</SLabel>
@@ -9352,7 +9502,6 @@ const AssetLineageFull=({asset})=>{
                     <span style={{fontSize:12,color:cm.color,fontWeight:600}}>{selMeta.cert}</span>
                   </div>
                 </div>
-
                 {/* DOMAIN */}
                 {selMeta.domain&&(
                   <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
@@ -9362,7 +9511,6 @@ const AssetLineageFull=({asset})=>{
                     </div>
                   </div>
                 )}
-
                 {/* OWNER */}
                 <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
                   <SLabel>Owner</SLabel>
@@ -9373,7 +9521,6 @@ const AssetLineageFull=({asset})=>{
                     <span style={{fontSize:12,color:T.accent,fontWeight:500}}>{selMeta.owner}</span>
                   </div>
                 </div>
-
                 {/* STEWARD */}
                 {selMeta.steward&&(
                   <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
@@ -9386,10 +9533,9 @@ const AssetLineageFull=({asset})=>{
                     </div>
                   </div>
                 )}
-
                 {/* TAGS */}
                 {selMeta.tags&&selMeta.tags.length>0&&(
-                  <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
+                  <div style={{padding:"14px 16px"}}>
                     <SLabel>Tags</SLabel>
                     <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                       {selMeta.tags.map(t=>{const c=tagC(t);return(
@@ -9398,20 +9544,6 @@ const AssetLineageFull=({asset})=>{
                     </div>
                   </div>
                 )}
-
-                {/* SCHEMA */}
-                <div style={{padding:"14px 16px"}}>
-                  <SLabel>Schema <span style={{fontWeight:400,textTransform:"none",letterSpacing:0}}>({selMeta.cols.length} cols)</span></SLabel>
-                  <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
-                    {selMeta.cols.map((c,i)=>(
-                      <div key={c.n} style={{display:"flex",alignItems:"center",padding:"7px 10px",borderBottom:i<selMeta.cols.length-1?`1px solid ${T.border}`:undefined,gap:8,background:i%2===0?T.bgElevated:T.bgSurface}}>
-                        <span style={{flex:1,fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:500}}>{c.n}</span>
-                        <span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:`${T.blue}15`,color:T.blue,border:`1px solid ${T.blue}30`,fontFamily:"'Geist Mono',monospace"}}>{c.t}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
               </div>
             </div>
           );
