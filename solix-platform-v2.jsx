@@ -9301,72 +9301,82 @@ const AssetLineageFull=({asset})=>{
 
         {/* Info panel — slides in when a node is selected */}
         {selectedId&&selMeta&&(
-          <div style={{width:280,flexShrink:0,borderLeft:"1px solid #e2e8f0",background:"#fff",
-            display:"flex",flexDirection:"column",overflowY:"auto",animation:"slideInRight .18s ease"}}>
+          <div className="slideInRight" style={{width:300,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,
+            display:"flex",flexDirection:"column",overflow:"hidden"}}>
             {/* Panel header */}
-            <div style={{padding:"14px 16px 12px",borderBottom:"1px solid #f1f5f9",display:"flex",alignItems:"flex-start",gap:10}}>
+            <div style={{padding:"16px 18px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"flex-start",gap:10,flexShrink:0}}>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4,flexWrap:"wrap"}}>
-                  <span style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",padding:"2px 7px",borderRadius:4,background:`${LINEAGE_TYPE_COLOR[selMeta.assetType]||"#a1a1aa"}15`,color:LINEAGE_TYPE_COLOR[selMeta.assetType]||"#a1a1aa",border:`1px solid ${LINEAGE_TYPE_COLOR[selMeta.assetType]||"#a1a1aa"}30`}}>{selMeta.assetType}</span>
-                  {LINEAGE_TOPO[selectedId].active&&<span style={{fontSize:9,fontWeight:700,color:"#ee2424",background:"rgba(238,36,36,0.1)",padding:"2px 6px",borderRadius:4}}>CURRENT</span>}
+                <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:6,flexWrap:"wrap"}}>
+                  <TypeBadge type={selMeta.assetType}/>
+                  {LINEAGE_TOPO[selectedId].active&&<span style={{fontSize:9,fontWeight:700,color:"#ee2424",background:"rgba(238,36,36,0.1)",padding:"2px 6px",borderRadius:4,letterSpacing:"0.05em"}}>CURRENT</span>}
                 </div>
-                <div style={{fontSize:13,fontWeight:700,color:"#0f172a",fontFamily:"'Geist Mono',monospace",wordBreak:"break-all",lineHeight:1.3}}>{selLabel}</div>
-                <div style={{fontSize:10.5,color:"#64748b",marginTop:3,fontFamily:"'Geist Mono',monospace"}}>{selMeta.db}</div>
+                <div style={{fontSize:13.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",wordBreak:"break-all",lineHeight:1.3}}>{selLabel}</div>
+                <div style={{fontSize:10.5,color:T.textMuted,marginTop:3,fontFamily:"'Geist Mono',monospace"}}>{selMeta.db}</div>
               </div>
               <button onClick={()=>setSelectedId(null)}
-                style={{width:22,height:22,borderRadius:6,background:"#f1f5f9",border:"1px solid #e2e8f0",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:"#64748b",flexShrink:0,padding:0}}>
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                style={{width:26,height:26,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted,flexShrink:0,padding:0}}>
+                {Ic.x(10)}
               </button>
             </div>
 
-            <div style={{flex:1,padding:"14px 16px",display:"flex",flexDirection:"column",gap:14}}>
+            {/* Service row */}
+            <div style={{padding:"10px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10,flexShrink:0,background:T.bgElevated}}>
+              <ServiceIcon service={selMeta.service} size={26}/>
+              <div>
+                <div style={{fontSize:9.5,color:T.textMuted,textTransform:"uppercase",fontWeight:700,letterSpacing:"0.06em"}}>Service</div>
+                <div style={{fontSize:12,fontWeight:600,color:T.text}}>{selMeta.service}</div>
+              </div>
+            </div>
+
+            <div style={{flex:1,padding:"16px 18px",display:"flex",flexDirection:"column",gap:16,overflowY:"auto"}}>
               {/* Description */}
               <div>
-                <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:5}}>Description</div>
-                <div style={{fontSize:11.5,color:"#475569",lineHeight:1.6}}>{selMeta.description}</div>
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:5}}>Description</div>
+                <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.65}}>{selMeta.description}</div>
               </div>
               {/* Metrics row */}
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                <div style={{padding:"8px 10px",background:"#f8fafc",borderRadius:7,border:"1px solid #f1f5f9"}}>
-                  <div style={{fontSize:9.5,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Quality</div>
-                  <div style={{fontSize:16,fontWeight:700,color:qualC(selMeta.quality),fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{selMeta.quality}</div>
-                  <div style={{marginTop:4,height:3,background:"#e2e8f0",borderRadius:2,overflow:"hidden"}}>
+                <div style={{padding:"9px 11px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>
+                  <div style={{fontSize:9.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Quality</div>
+                  <div style={{fontSize:17,fontWeight:700,color:qualC(selMeta.quality),fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{selMeta.quality}</div>
+                  <div style={{marginTop:5,height:3,background:T.border,borderRadius:2,overflow:"hidden"}}>
                     <div style={{width:`${selMeta.quality}%`,height:"100%",background:qualC(selMeta.quality),borderRadius:2}}/>
                   </div>
                 </div>
-                <div style={{padding:"8px 10px",background:"#f8fafc",borderRadius:7,border:"1px solid #f1f5f9"}}>
-                  <div style={{fontSize:9.5,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Cert</div>
-                  <div style={{fontSize:12,fontWeight:700,color:certC(selMeta.cert)}}>{selMeta.cert}</div>
-                  <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>{selMeta.service}</div>
+                <div style={{padding:"9px 11px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>
+                  <div style={{fontSize:9.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Certification</div>
+                  <div style={{fontSize:12,fontWeight:700,color:certC(selMeta.cert),lineHeight:1.3}}>{selMeta.cert}</div>
                 </div>
               </div>
               {/* Owner */}
               <div>
-                <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:5}}>Owner</div>
-                <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 8px",borderRadius:99,background:"#f1f5f9",border:"1px solid #e2e8f0"}}>
-                  <div style={{width:20,height:20,borderRadius:"50%",background:"#dbeafe",border:"1px solid #bfdbfe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:"#2563eb"}}>
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Owner</div>
+                <div style={{display:"inline-flex",alignItems:"center",gap:7,padding:"5px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                  <div style={{width:22,height:22,borderRadius:"50%",background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:T.accent}}>
                     {selMeta.owner.split(".").map(s=>s[0]?.toUpperCase()||"").join("")}
                   </div>
-                  <span style={{fontSize:11.5,color:"#0f172a",fontWeight:500}}>{selMeta.owner}</span>
+                  <span style={{fontSize:12,color:T.text,fontWeight:500}}>{selMeta.owner}</span>
                 </div>
               </div>
               {/* Tags */}
               {selMeta.tags&&selMeta.tags.length>0&&(
                 <div>
-                  <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:5}}>Tags</div>
+                  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Tags</div>
                   <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                    {selMeta.tags.map(t=><span key={t} style={{fontSize:10.5,padding:"2px 8px",borderRadius:4,background:"#f1f5f9",color:"#475569",border:"1px solid #e2e8f0",fontWeight:500}}>{t}</span>)}
+                    {selMeta.tags.map(t=><span key={t} style={{fontSize:10.5,padding:"2px 9px",borderRadius:4,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`,fontWeight:500}}>{t}</span>)}
                   </div>
                 </div>
               )}
               {/* Columns */}
               <div>
-                <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:5}}>Columns ({selMeta.cols.length})</div>
-                <div style={{border:"1px solid #f1f5f9",borderRadius:7,overflow:"hidden"}}>
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>
+                  Columns <span style={{fontWeight:400}}>({selMeta.cols.length})</span>
+                </div>
+                <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
                   {selMeta.cols.map((c,i)=>(
-                    <div key={c.n} style={{display:"flex",alignItems:"center",padding:"6px 10px",borderBottom:i<selMeta.cols.length-1?"1px solid #f8fafc":undefined,gap:8}}>
-                      <span style={{flex:1,fontSize:11,fontFamily:"'Geist Mono',monospace",color:"#0f172a",fontWeight:500}}>{c.n}</span>
-                      <span style={{fontSize:10,color:"#94a3b8",fontFamily:"'Geist Mono',monospace"}}>{c.t}</span>
+                    <div key={c.n} style={{display:"flex",alignItems:"center",padding:"7px 11px",borderBottom:i<selMeta.cols.length-1?`1px solid ${T.border}`:undefined,gap:8}}>
+                      <span style={{flex:1,fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:500}}>{c.n}</span>
+                      <span style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{c.t}</span>
                     </div>
                   ))}
                 </div>
