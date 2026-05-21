@@ -13472,7 +13472,6 @@ const DomainsView = ({onAsset, onNav}) => {
               {key:"ports",label:"Ports"},
               {key:"contract",label:"Contract"},
               {key:"activity",label:"Activity"},
-              {key:"customprops",label:"Custom Properties"},
             ]} active={productTab} onChange={setProductTab}/>
           </div>
 
@@ -13637,123 +13636,84 @@ const DomainsView = ({onAsset, onNav}) => {
             {/* PORTS TAB */}
             {productTab==="ports"&&(()=>{
               const inputPorts=[
-                {id:"ip1",name:"Commerce Orders Source",type:"Table",source:"postgresql_prod / COMMERCE / orders",schema:"order_id, customer_id, amount, status, created_at",format:"SQL",sla:"< 2h latency",owner:pd.owners[0]||"maya.chen",status:"active"},
-                {id:"ip2",name:"Customer Dimension Feed",type:"Table",source:"snowflake_prod / COMMERCE / customers",schema:"customer_id, name, email, tier, region",format:"SQL",sla:"< 4h latency",owner:pd.owners[0]||"maya.chen",status:"active"},
-                {id:"ip3",name:"Product Catalog Input",type:"Table",source:"snowflake_prod / PRODUCT / products",schema:"product_id, name, category, price",format:"SQL",sla:"< 8h latency",owner:(pd.owners||[])[1]||"dev.patel",status:"active"},
+                {id:"ip1",name:"orders",path:"Database Services / postgresql_prod / COMMERCE / orders",desc:"Core orders table with transactional data",domain:"Commerce",owner:"maya.chen",type:"Table"},
+                {id:"ip2",name:"customers",path:"Database Services / snowflake_prod / COMMERCE / customers",desc:"No description",domain:"Commerce",owner:"maya.chen",type:"Table"},
+                {id:"ip3",name:"products",path:"Database Services / snowflake_prod / PRODUCT / products",desc:"No description",domain:"Product",owner:"dev.patel",type:"Table"},
               ];
               const outputPorts=[
-                {id:"op1",name:"Commerce Analytics API",type:"REST API",endpoint:"https://api.company.com/data/commerce/v2/analytics",format:"JSON",consumers:["BI Team","ML Platform"],sla:"99.5% uptime · < 200ms p95",auth:"OAuth2",status:"active"},
-                {id:"op2",name:"Orders Fact Table",type:"Table",endpoint:"snowflake_prod / COMMERCE_PROD / orders_fact",format:"Parquet",consumers:["Revenue Dashboard","Finance Reports"],sla:"99% uptime · < 6h freshness",auth:"Snowflake RBAC",status:"active"},
-                {id:"op3",name:"Real-time Order Events",type:"Stream",endpoint:"kafka://analytics-cluster/commerce.orders.events",format:"Avro",consumers:["ML Feature Store","Alerting"],sla:"99.9% uptime · < 5min latency",auth:"SASL/SCRAM",status:"active"},
+                {id:"op1",name:"orders_fact",path:"Database Services / snowflake_prod / COMMERCE_PROD / orders_fact",desc:"Aggregated orders fact table for analytics",domain:"Commerce",owner:"sarah.kim",type:"Table"},
+                {id:"op2",name:"commerce_api",path:"API Services / api.company.com / commerce / v2 / analytics",desc:"REST API for commerce analytics",domain:"Commerce",owner:"maya.chen",type:"API"},
               ];
-              const PortBadge=({status})=>(
-                <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:99,
-                  background:status==="active"?`${T.green}18`:`${T.amber}18`,
-                  color:status==="active"?T.green:T.amber,
-                  border:`1px solid ${status==="active"?T.green:T.amber}30`}}>
-                  {status==="active"?"Active":"Inactive"}
-                </span>
+              const PortCard=({port,color})=>(
+                <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",transition:"all .15s",cursor:"pointer"}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor=color;e.currentTarget.style.boxShadow=`0 2px 12px ${color}18`;}}
+                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
+                  <div style={{fontSize:10,color:T.textMuted,marginBottom:6,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{port.path}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                    <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:`${color}12`,color,border:`1px solid ${color}20`}}>{port.type}</span>
+                    <span style={{fontSize:14,fontWeight:700,color:T.accent}}>{port.name}</span>
+                  </div>
+                  <div style={{fontSize:12,color:T.textMuted,marginBottom:10}}>{port.desc}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:12,fontSize:11,color:T.textMuted}}>
+                    <span>No Domains · No Owners</span>
+                  </div>
+                </div>
               );
               return (
                 <div>
-                  {/* Input Ports */}
-                  <div style={{marginBottom:32}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,paddingBottom:12,borderBottom:`2px solid ${T.border}`}}>
-                      <div style={{width:7,height:7,borderRadius:"50%",background:T.blue}}/>
-                      <span style={{fontSize:12,fontWeight:700,color:T.text,textTransform:"uppercase",letterSpacing:"0.06em"}}>Input Ports</span>
-                      <span style={{fontSize:11,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,padding:"1px 8px"}}>{inputPorts.length}</span>
-                      <span style={{fontSize:11,color:T.textMuted,marginLeft:4}}>Source datasets flowing into this product</span>
-                    </div>
-                    <div style={{display:"flex",flexDirection:"column",gap:1,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                      {inputPorts.map((p,i)=>(
-                        <div key={p.id} style={{background:i%2===0?T.bgSurface:T.bgElevated,borderBottom:i<inputPorts.length-1?`1px solid ${T.border}`:"none"}}>
-                          <div style={{display:"flex",alignItems:"center",gap:12,padding:"13px 16px"}}>
-                            <div style={{width:36,height:36,borderRadius:8,background:`${T.blue}12`,border:`1px solid ${T.blue}25`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="3" width="14" height="10" rx="2" stroke={T.blue} strokeWidth="1.3"/><path d="M1 6h14" stroke={T.blue} strokeWidth="1.3"/><path d="M5 6v7" stroke={T.blue} strokeWidth="1.3"/></svg>
-                            </div>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
-                                <span style={{fontSize:13,fontWeight:600,color:T.text}}>{p.name}</span>
-                                <PortBadge status={p.status}/>
-                                <span style={{fontSize:10.5,padding:"1px 7px",borderRadius:4,background:`${T.blue}12`,color:T.blue,border:`1px solid ${T.blue}20`,fontWeight:600}}>{p.type}</span>
-                                <span style={{fontSize:10.5,padding:"1px 7px",borderRadius:4,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`}}>{p.format}</span>
-                              </div>
-                              <div style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{p.source}</div>
-                            </div>
-                            <div style={{display:"flex",gap:16,flexShrink:0,alignItems:"center"}}>
-                              <div style={{textAlign:"right"}}>
-                                <div style={{fontSize:9.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>SLA</div>
-                                <div style={{fontSize:11.5,color:T.text,fontWeight:500,whiteSpace:"nowrap"}}>{p.sla}</div>
-                              </div>
-                              <div style={{textAlign:"right"}}>
-                                <div style={{fontSize:9.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Owner</div>
-                                <div style={{fontSize:11.5,color:T.text,fontWeight:500}}>{p.owner}</div>
-                              </div>
-                            </div>
+                  {/* Ports Lineage */}
+                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px 20px",marginBottom:24}}>
+                    <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:14}}>Ports Lineage</div>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:0,padding:"16px 0",overflowX:"auto"}}>
+                      <div style={{display:"flex",flexDirection:"column",gap:8,minWidth:160}}>
+                        {inputPorts.map(p=>(
+                          <div key={p.id} style={{padding:"8px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,display:"flex",alignItems:"center",gap:8}}>
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="10" rx="1.5" stroke={T.blue} strokeWidth="1.2"/><path d="M1 5h12" stroke={T.blue} strokeWidth="1.2"/><path d="M4 5v7" stroke={T.blue} strokeWidth="1.2"/></svg>
+                            <span style={{fontSize:11.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{p.name}</span>
                           </div>
-                          {p.schema&&(
-                            <div style={{padding:"6px 16px 10px 64px",display:"flex",flexWrap:"wrap",gap:5}}>
-                              <span style={{fontSize:10,color:T.textMuted,marginRight:4,alignSelf:"center",textTransform:"uppercase",letterSpacing:"0.05em",fontWeight:600}}>Columns:</span>
-                              {p.schema.split(", ").map(col=>(
-                                <span key={col} style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",padding:"2px 7px",borderRadius:4,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`}}>{col}</span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                        ))}
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",padding:"0 8px",flexShrink:0}}>
+                        <svg width="40" height="2" viewBox="0 0 40 2" fill="none"><path d="M0 1h36" stroke={T.border} strokeWidth="1.5"/><path d="M34 -2l4 3-4 3" stroke={T.border} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+                      </div>
+                      <div style={{padding:"12px 16px",background:`${pd.color}15`,border:`2px solid ${pd.color}`,borderRadius:10,display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:120,flexShrink:0}}>
+                        <div style={{fontSize:22}}>{pd.icon}</div>
+                        <span style={{fontSize:11,fontWeight:700,color:pd.color,fontFamily:"'Geist Mono',monospace"}}>{pd.name}</span>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",padding:"0 8px",flexShrink:0}}>
+                        <svg width="40" height="2" viewBox="0 0 40 2" fill="none"><path d="M0 1h36" stroke={T.border} strokeWidth="1.5"/><path d="M34 -2l4 3-4 3" stroke={T.border} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+                      </div>
+                      <div style={{display:"flex",flexDirection:"column",gap:8,minWidth:160}}>
+                        {outputPorts.map(p=>(
+                          <div key={p.id} style={{padding:"8px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,display:"flex",alignItems:"center",gap:8}}>
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="10" rx="1.5" stroke={T.violet} strokeWidth="1.2"/><path d="M1 5h12" stroke={T.violet} strokeWidth="1.2"/><path d="M4 5v7" stroke={T.violet} strokeWidth="1.2"/></svg>
+                            <span style={{fontSize:11.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{p.name}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
-
-                  {/* Output Ports */}
-                  <div>
-                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,paddingBottom:12,borderBottom:`2px solid ${T.border}`}}>
-                      <div style={{width:7,height:7,borderRadius:"50%",background:T.violet}}/>
-                      <span style={{fontSize:12,fontWeight:700,color:T.text,textTransform:"uppercase",letterSpacing:"0.06em"}}>Output Ports</span>
-                      <span style={{fontSize:11,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,padding:"1px 8px"}}>{outputPorts.length}</span>
-                      <span style={{fontSize:11,color:T.textMuted,marginLeft:4}}>Interfaces exposed to downstream consumers</span>
+                  {/* Input + Output columns */}
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+                    <div>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+                        <span style={{fontSize:13,fontWeight:700,color:T.text}}>Input Ports</span>
+                        <span style={{fontSize:11,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,padding:"1px 8px"}}>{inputPorts.length}</span>
+                        <button style={{marginLeft:"auto",height:28,padding:"0 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>{Ic.plus(9)} Add</button>
+                      </div>
+                      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                        {inputPorts.map(p=><PortCard key={p.id} port={p} color={T.blue}/>)}
+                      </div>
                     </div>
-                    <div style={{display:"flex",flexDirection:"column",gap:1,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                      {outputPorts.map((p,i)=>{
-                        const typeIcon = p.type==="REST API"
-                          ? <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2v12" stroke={T.violet} strokeWidth="1.4" strokeLinecap="round"/><circle cx="8" cy="8" r="6" stroke={T.violet} strokeWidth="1.3"/></svg>
-                          : p.type==="Stream"
-                          ? <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1 5h4l2 2 2-4 2 6 2-4h2" stroke={T.violet} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/><path d="M1 11h14" stroke={T.violet} strokeWidth="1.2" strokeLinecap="round" strokeDasharray="2 2"/></svg>
-                          : <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="3" width="14" height="10" rx="2" stroke={T.violet} strokeWidth="1.3"/><path d="M1 6h14" stroke={T.violet} strokeWidth="1.3"/><path d="M5 6v7" stroke={T.violet} strokeWidth="1.3"/></svg>;
-                        return (
-                        <div key={p.id} style={{background:i%2===0?T.bgSurface:T.bgElevated,borderBottom:i<outputPorts.length-1?`1px solid ${T.border}`:"none"}}>
-                          <div style={{display:"flex",alignItems:"center",gap:12,padding:"13px 16px"}}>
-                            <div style={{width:36,height:36,borderRadius:8,background:`${T.violet}12`,border:`1px solid ${T.violet}25`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                              {typeIcon}
-                            </div>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
-                                <span style={{fontSize:13,fontWeight:600,color:T.text}}>{p.name}</span>
-                                <PortBadge status={p.status}/>
-                                <span style={{fontSize:10.5,padding:"1px 7px",borderRadius:4,background:`${T.violet}12`,color:T.violet,border:`1px solid ${T.violet}20`,fontWeight:600}}>{p.type}</span>
-                                <span style={{fontSize:10.5,padding:"1px 7px",borderRadius:4,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`}}>{p.format}</span>
-                              </div>
-                              <div style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted,wordBreak:"break-all"}}>{p.endpoint}</div>
-                            </div>
-                            <div style={{display:"flex",gap:16,flexShrink:0,alignItems:"center"}}>
-                              <div style={{textAlign:"right"}}>
-                                <div style={{fontSize:9.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Auth</div>
-                                <div style={{fontSize:11.5,color:T.text,fontWeight:500,whiteSpace:"nowrap"}}>{p.auth}</div>
-                              </div>
-                              <div style={{textAlign:"right"}}>
-                                <div style={{fontSize:9.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>SLA</div>
-                                <div style={{fontSize:11.5,color:T.text,fontWeight:500,whiteSpace:"nowrap",maxWidth:140,overflow:"hidden",textOverflow:"ellipsis"}}>{p.sla}</div>
-                              </div>
-                            </div>
-                          </div>
-                          <div style={{padding:"6px 16px 10px 64px",display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}>
-                            <span style={{fontSize:10,color:T.textMuted,marginRight:4,textTransform:"uppercase",letterSpacing:"0.05em",fontWeight:600}}>Consumers:</span>
-                            {p.consumers.map(c=>(
-                              <span key={c} style={{fontSize:11,padding:"2px 8px",borderRadius:4,background:`${T.violet}10`,color:T.violet,border:`1px solid ${T.violet}20`,fontWeight:500}}>{c}</span>
-                            ))}
-                          </div>
-                        </div>
-                        );
-                      })}
+                    <div>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+                        <span style={{fontSize:13,fontWeight:700,color:T.text}}>Output Ports</span>
+                        <span style={{fontSize:11,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,padding:"1px 8px"}}>{outputPorts.length}</span>
+                        <button style={{marginLeft:"auto",height:28,padding:"0 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>{Ic.plus(9)} Add</button>
+                      </div>
+                      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                        {outputPorts.map(p=><PortCard key={p.id} port={p} color={T.violet}/>)}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -13762,39 +13722,8 @@ const DomainsView = ({onAsset, onNav}) => {
 
             {/* ACTIVITY TAB */}
             {productTab==="activity"&&(
-              <div style={{maxWidth:680}}>
-                <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:16}}>Recent Activity</div>
-                {[
-                  {type:"status",icon:"🔄",text:`Lifecycle stage changed from DEVELOPMENT to PRODUCTION`,user:"maya.chen",time:"2 days ago"},
-                  {type:"asset",icon:"📥",text:"3 new assets added: orders_fact, customer_dim, product_dim",user:"sarah.kim",time:"4 days ago"},
-                  {type:"owner",icon:"👤",text:"Ownership transferred to maya.chen",user:"alex.wu",time:"1 week ago"},
-                  {type:"sla",icon:"📋",text:"SLA tier upgraded from BRONZE to SILVER — availability target set to 99%",user:"dev.patel",time:"2 weeks ago"},
-                  {type:"created",icon:"✨",text:`Data product created in ${pd.domain} domain`,user:pd.owners[0]||"system",time:pd.createdAt},
-                ].map((ev,i)=>(
-                  <div key={i} style={{display:"flex",gap:12,paddingBottom:20,position:"relative"}}>
-                    {i<4&&<div style={{position:"absolute",left:15,top:30,bottom:0,width:1,background:T.border}}/>}
-                    <div style={{width:30,height:30,borderRadius:"50%",background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0,zIndex:1}}>{ev.icon}</div>
-                    <div style={{flex:1,paddingTop:4}}>
-                      <div style={{fontSize:12.5,color:T.text,lineHeight:1.5,marginBottom:4}}>{ev.text}</div>
-                      <div style={{fontSize:11,color:T.textMuted}}>by <span style={{color:T.textSub,fontWeight:500}}>{ev.user}</span> · {ev.time}</div>
-                    </div>
-                  </div>
-                ))}
-                <div style={{marginTop:8,paddingTop:20,borderTop:`1px solid ${T.border}`}}>
-                  <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Open Tasks</div>
-                  {[
-                    {label:"Add data quality checks for orders_fact",priority:"high",assignee:"maya.chen",due:"May 20"},
-                    {label:"Document column-level lineage for customer_dim",priority:"medium",assignee:"sarah.kim",due:"May 30"},
-                    {label:"Review SLA thresholds with consumers",priority:"low",assignee:"dev.patel",due:"Jun 5"},
-                  ].map((task,i)=>(
-                    <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,marginBottom:8}}>
-                      <div style={{width:8,height:8,borderRadius:"50%",background:task.priority==="high"?T.rose:task.priority==="medium"?T.amber:T.green,flexShrink:0}}/>
-                      <div style={{flex:1,fontSize:12.5,color:T.text}}>{task.label}</div>
-                      <div style={{fontSize:11,color:T.textMuted}}>{task.assignee}</div>
-                      <div style={{fontSize:11,color:T.textMuted,background:T.bgElevated,padding:"2px 7px",borderRadius:5,border:`1px solid ${T.border}`}}>Due {task.due}</div>
-                    </div>
-                  ))}
-                </div>
+              <div>
+                <AuditLogTable entries={policyHistToEntries(pd.history||[],pd)}/>
               </div>
             )}
 
@@ -13954,48 +13883,6 @@ const DomainsView = ({onAsset, onNav}) => {
               );
             })()}
 
-            {/* CUSTOM PROPERTIES TAB */}
-            {productTab==="customprops"&&(
-              <div style={{maxWidth:680}}>
-                <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:16}}>Custom Properties</div>
-                <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",marginBottom:16}}>
-                  {pdCustomProps.length===0
-                    ? <div style={{padding:"32px 0",textAlign:"center",color:T.textMuted,fontSize:12.5}}>No custom properties yet. Add key-value pairs to enrich this data product's metadata.</div>
-                    : pdCustomProps.map((cp,i)=>(
-                        <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 16px",borderBottom:i<pdCustomProps.length-1?`1px solid ${T.border}`:"none"}}>
-                          <div>
-                            <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:2}}>{cp.key}</div>
-                            <div style={{fontSize:12,color:T.textSub}}>{cp.value}</div>
-                          </div>
-                          <button onClick={()=>setPdCustomProps(prev=>prev.filter((_,j)=>j!==i))}
-                            style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex",padding:4}}
-                            onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
-                            {Ic.x(10)}
-                          </button>
-                        </div>
-                      ))
-                  }
-                </div>
-                <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
-                  <div style={{flex:1}}>
-                    <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Key</label>
-                    <input value={pdCpKey} onChange={e=>setPdCpKey(e.target.value)} placeholder="e.g. team_slack"
-                      style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
-                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                  </div>
-                  <div style={{flex:2}}>
-                    <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Value</label>
-                    <input value={pdCpVal} onChange={e=>setPdCpVal(e.target.value)} placeholder="e.g. #data-commerce"
-                      style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
-                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                  </div>
-                  <button onClick={()=>{if(!pdCpKey.trim()||!pdCpVal.trim())return;setPdCustomProps(prev=>[...prev,{key:pdCpKey.trim(),value:pdCpVal.trim()}]);setPdCpKey("");setPdCpVal("");}}
-                    style={{padding:"8px 16px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0}}>
-                    Add
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -14047,7 +13934,6 @@ const DomainsView = ({onAsset, onNav}) => {
                   {addHeaderDropdown&&(
                     <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",minWidth:190,overflow:"hidden"}}>
                       {[
-                        {icon:"🗂️",label:"Add Sub Domain",action:()=>{setAddHeaderDropdown(false);setAddPanelType("subdomain");setAddPanelOpen(true);}},
                         {icon:"📊",label:"Add Asset",action:()=>{setAddHeaderDropdown(false);setAddAssetsSelected(new Set());setAddAssetsSearch("");setAddAssetsOpen(true);}},
                         {icon:"📦",label:"Assign Data Product",action:()=>{setAddHeaderDropdown(false);setAssignDpSearch("");setAssignDpSelected(new Set());setAssignDpOpen(true);}},
                       ].map((item,i,arr)=>(
@@ -14117,7 +14003,6 @@ const DomainsView = ({onAsset, onNav}) => {
             </div>
             <Tabs2 tabs={[
               {key:"documentation",label:"Documentation"},
-              {key:"subdomains",label:`Sub Domains (${domains.filter(d=>d.parentDomain===dm.id).length})`},
               {key:"dataproducts",label:`Data Products (${domainProducts.length})`},
               {key:"assets",label:`Assets (${domainAssets.length})`},
             ]} active={domainTab} onChange={setDomainTab}/>
@@ -14239,66 +14124,6 @@ const DomainsView = ({onAsset, onNav}) => {
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
-
-            {/* SUB DOMAINS TAB */}
-            {domainTab==="subdomains"&&(
-              <div>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-                  <div style={{flex:1,position:"relative"}}>
-                    <input placeholder="Search sub domains…" value={sdSearch} onChange={e=>setSdSearch(e.target.value)}
-                      style={{width:"100%",padding:"7px 12px 7px 32px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
-                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                    <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none",fontSize:13}}>🔍</span>
-                  </div>
-                  <button onClick={()=>{setAddPanelType("subdomain");setAddPanelOpen(true);}} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0}}>
-                    {Ic.plus(10)} Add Sub Domain
-                  </button>
-                </div>
-                {(() => {
-                  const allSubDomains = domains.filter(d=>d.parentDomain===dm.id);
-                  const subDomains = allSubDomains.filter(d=>
-                    (!sdSearch||d.displayName.toLowerCase().includes(sdSearch.toLowerCase())||d.description.toLowerCase().includes(sdSearch.toLowerCase())) &&
-                    (!sdTypeFilter||d.domainType===sdTypeFilter)
-                  );
-                  if(allSubDomains.length===0) return (
-                    <div style={{padding:"64px 0",textAlign:"center"}}>
-                      <div style={{fontSize:40,marginBottom:14}}>🗂️</div>
-                      <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:6}}>No sub domains yet</div>
-                      <div style={{fontSize:12.5,color:T.textMuted,maxWidth:380,margin:"0 auto 20px",lineHeight:1.65}}>
-                        Sub domains help segment large domains by ownership area. For example, "Commerce" → "Order Management" and "Customer Data".
-                      </div>
-                      <button onClick={()=>{setAddPanelType("subdomain");setAddPanelOpen(true);}}
-                        style={{padding:"9px 22px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
-                        {Ic.plus(11)} Add First Sub Domain
-                      </button>
-                    </div>
-                  );
-                  return subDomains.length===0
-                    ? <div style={{padding:"40px 0",textAlign:"center",color:T.textMuted,fontSize:13}}>No sub domains match your filter</div>
-                    : <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:14}}>
-                        {subDomains.map(sd=>(
-                          <div key={sd.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden",cursor:"pointer",transition:"all .15s"}}
-                            onClick={()=>{setSelectedDomainId(sd.id);setDomainTab("documentation");}}
-                            onMouseEnter={e=>{e.currentTarget.style.borderColor=sd.color;e.currentTarget.style.boxShadow=`0 4px 20px ${sd.color}20`;}}
-                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
-                            <div style={{height:4,background:sd.color}}/>
-                            <div style={{padding:"14px 16px"}}>
-                              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-                                <div style={{width:36,height:36,borderRadius:10,background:`${sd.color}18`,border:`1.5px solid ${sd.color}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{sd.icon}</div>
-                                <div>
-                                  <div style={{fontSize:13,fontWeight:700,color:T.text}}>{sd.displayName}</div>
-                                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:2}}>{sd.domainType}</div>
-                                </div>
-                              </div>
-                              <p style={{fontSize:11.5,color:T.textSub,lineHeight:1.6,marginBottom:8,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{sd.description}</p>
-                              <div style={{fontSize:11,color:T.textMuted}}>{sd.assetCount} assets · Owner: {sd.owners[0]||"—"}</div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                })()}
               </div>
             )}
 
@@ -14619,7 +14444,7 @@ const DomainsView = ({onAsset, onNav}) => {
               <div style={{padding:"20px 22px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                   <div>
-                    <div style={{fontSize:15,fontWeight:700,color:T.text}}>{addPanelType==="dataproduct"?"Add Data Product":"Add Sub Domain"}</div>
+                    <div style={{fontSize:15,fontWeight:700,color:T.text}}>Add Data Product</div>
                     <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>in <span style={{color:T.text,fontWeight:600}}>{dm.displayName}</span></div>
                   </div>
                   <button onClick={resetAddPanel} style={{width:28,height:28,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
@@ -14836,7 +14661,7 @@ const DomainsView = ({onAsset, onNav}) => {
                   onClick={addPanelType==="dataproduct"?handleCreateProduct:handleCreateSubdomain}
                   disabled={addPanelType==="dataproduct"?!np.name.trim():!ns.name.trim()}
                   style={{padding:"8px 20px",borderRadius:8,background:(addPanelType==="dataproduct"?np.name.trim():ns.name.trim())?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:(addPanelType==="dataproduct"?np.name.trim():ns.name.trim())?"pointer":"default"}}>
-                  {addPanelType==="dataproduct"?"Add Data Product":"Add Sub Domain"}
+                  Add Data Product
                 </button>
               </div>
             </div>
@@ -15702,7 +15527,6 @@ const DataProductsView = ({onAsset, onNav}) => {
               {key:"ports",      label:"Ports"},
               {key:"contract",   label:"Contract"},
               {key:"activity",   label:"Activity"},
-              {key:"customprops",label:"Custom Properties"},
             ]} active={productTab} onChange={setProductTab}/>
           </div>
 
@@ -15839,123 +15663,84 @@ const DataProductsView = ({onAsset, onNav}) => {
             {/* ── PORTS TAB ── */}
             {productTab==="ports"&&(()=>{
               const inputPorts=[
-                {id:"ip1",name:"Commerce Orders Source",type:"Table",source:"postgresql_prod / COMMERCE / orders",schema:"order_id, customer_id, amount, status, created_at",format:"SQL",sla:"< 2h latency",owner:(pd.owners||[])[0]||"maya.chen",status:"active"},
-                {id:"ip2",name:"Customer Dimension Feed",type:"Table",source:"snowflake_prod / COMMERCE / customers",schema:"customer_id, name, email, tier, region",format:"SQL",sla:"< 4h latency",owner:(pd.owners||[])[0]||"maya.chen",status:"active"},
-                {id:"ip3",name:"Product Catalog Input",type:"Table",source:"snowflake_prod / PRODUCT / products",schema:"product_id, name, category, price",format:"SQL",sla:"< 8h latency",owner:(pd.owners||[])[1]||"dev.patel",status:"active"},
+                {id:"ip1",name:"orders",path:"Database Services / postgresql_prod / COMMERCE / orders",desc:"Core orders table with transactional data",domain:"Commerce",owner:"maya.chen",type:"Table"},
+                {id:"ip2",name:"customers",path:"Database Services / snowflake_prod / COMMERCE / customers",desc:"No description",domain:"Commerce",owner:"maya.chen",type:"Table"},
+                {id:"ip3",name:"products",path:"Database Services / snowflake_prod / PRODUCT / products",desc:"No description",domain:"Product",owner:"dev.patel",type:"Table"},
               ];
               const outputPorts=[
-                {id:"op1",name:"Commerce Analytics API",type:"REST API",endpoint:"https://api.company.com/data/commerce/v2/analytics",format:"JSON",consumers:["BI Team","ML Platform"],sla:"99.5% uptime · < 200ms p95",auth:"OAuth2",status:"active"},
-                {id:"op2",name:"Orders Fact Table",type:"Table",endpoint:"snowflake_prod / COMMERCE_PROD / orders_fact",format:"Parquet",consumers:["Revenue Dashboard","Finance Reports"],sla:"99% uptime · < 6h freshness",auth:"Snowflake RBAC",status:"active"},
-                {id:"op3",name:"Real-time Order Events",type:"Stream",endpoint:"kafka://analytics-cluster/commerce.orders.events",format:"Avro",consumers:["ML Feature Store","Alerting"],sla:"99.9% uptime · < 5min latency",auth:"SASL/SCRAM",status:"active"},
+                {id:"op1",name:"orders_fact",path:"Database Services / snowflake_prod / COMMERCE_PROD / orders_fact",desc:"Aggregated orders fact table for analytics",domain:"Commerce",owner:"sarah.kim",type:"Table"},
+                {id:"op2",name:"commerce_api",path:"API Services / api.company.com / commerce / v2 / analytics",desc:"REST API for commerce analytics",domain:"Commerce",owner:"maya.chen",type:"API"},
               ];
-              const PortBadge=({status})=>(
-                <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:99,
-                  background:status==="active"?`${T.green}18`:`${T.amber}18`,
-                  color:status==="active"?T.green:T.amber,
-                  border:`1px solid ${status==="active"?T.green:T.amber}30`}}>
-                  {status==="active"?"Active":"Inactive"}
-                </span>
+              const PortCard=({port,color})=>(
+                <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",transition:"all .15s",cursor:"pointer"}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor=color;e.currentTarget.style.boxShadow=`0 2px 12px ${color}18`;}}
+                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
+                  <div style={{fontSize:10,color:T.textMuted,marginBottom:6,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{port.path}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                    <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:`${color}12`,color,border:`1px solid ${color}20`}}>{port.type}</span>
+                    <span style={{fontSize:14,fontWeight:700,color:T.accent}}>{port.name}</span>
+                  </div>
+                  <div style={{fontSize:12,color:T.textMuted,marginBottom:10}}>{port.desc}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:12,fontSize:11,color:T.textMuted}}>
+                    <span>No Domains · No Owners</span>
+                  </div>
+                </div>
               );
               return (
                 <div>
-                  {/* Input Ports */}
-                  <div style={{marginBottom:32}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,paddingBottom:12,borderBottom:`2px solid ${T.border}`}}>
-                      <div style={{width:7,height:7,borderRadius:"50%",background:T.blue}}/>
-                      <span style={{fontSize:12,fontWeight:700,color:T.text,textTransform:"uppercase",letterSpacing:"0.06em"}}>Input Ports</span>
-                      <span style={{fontSize:11,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,padding:"1px 8px"}}>{inputPorts.length}</span>
-                      <span style={{fontSize:11,color:T.textMuted,marginLeft:4}}>Source datasets flowing into this product</span>
-                    </div>
-                    <div style={{display:"flex",flexDirection:"column",gap:1,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                      {inputPorts.map((p,i)=>(
-                        <div key={p.id} style={{background:i%2===0?T.bgSurface:T.bgElevated,borderBottom:i<inputPorts.length-1?`1px solid ${T.border}`:"none"}}>
-                          <div style={{display:"flex",alignItems:"center",gap:12,padding:"13px 16px"}}>
-                            <div style={{width:36,height:36,borderRadius:8,background:`${T.blue}12`,border:`1px solid ${T.blue}25`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="3" width="14" height="10" rx="2" stroke={T.blue} strokeWidth="1.3"/><path d="M1 6h14" stroke={T.blue} strokeWidth="1.3"/><path d="M5 6v7" stroke={T.blue} strokeWidth="1.3"/></svg>
-                            </div>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
-                                <span style={{fontSize:13,fontWeight:600,color:T.text}}>{p.name}</span>
-                                <PortBadge status={p.status}/>
-                                <span style={{fontSize:10.5,padding:"1px 7px",borderRadius:4,background:`${T.blue}12`,color:T.blue,border:`1px solid ${T.blue}20`,fontWeight:600}}>{p.type}</span>
-                                <span style={{fontSize:10.5,padding:"1px 7px",borderRadius:4,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`}}>{p.format}</span>
-                              </div>
-                              <div style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{p.source}</div>
-                            </div>
-                            <div style={{display:"flex",gap:16,flexShrink:0,alignItems:"center"}}>
-                              <div style={{textAlign:"right"}}>
-                                <div style={{fontSize:9.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>SLA</div>
-                                <div style={{fontSize:11.5,color:T.text,fontWeight:500,whiteSpace:"nowrap"}}>{p.sla}</div>
-                              </div>
-                              <div style={{textAlign:"right"}}>
-                                <div style={{fontSize:9.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Owner</div>
-                                <div style={{fontSize:11.5,color:T.text,fontWeight:500}}>{p.owner}</div>
-                              </div>
-                            </div>
+                  {/* Ports Lineage */}
+                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px 20px",marginBottom:24}}>
+                    <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:14}}>Ports Lineage</div>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:0,padding:"16px 0",overflowX:"auto"}}>
+                      <div style={{display:"flex",flexDirection:"column",gap:8,minWidth:160}}>
+                        {inputPorts.map(p=>(
+                          <div key={p.id} style={{padding:"8px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,display:"flex",alignItems:"center",gap:8}}>
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="10" rx="1.5" stroke={T.blue} strokeWidth="1.2"/><path d="M1 5h12" stroke={T.blue} strokeWidth="1.2"/><path d="M4 5v7" stroke={T.blue} strokeWidth="1.2"/></svg>
+                            <span style={{fontSize:11.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{p.name}</span>
                           </div>
-                          {p.schema&&(
-                            <div style={{padding:"6px 16px 10px 64px",display:"flex",flexWrap:"wrap",gap:5}}>
-                              <span style={{fontSize:10,color:T.textMuted,marginRight:4,alignSelf:"center",textTransform:"uppercase",letterSpacing:"0.05em",fontWeight:600}}>Columns:</span>
-                              {p.schema.split(", ").map(col=>(
-                                <span key={col} style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",padding:"2px 7px",borderRadius:4,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`}}>{col}</span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                        ))}
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",padding:"0 8px",flexShrink:0}}>
+                        <svg width="40" height="2" viewBox="0 0 40 2" fill="none"><path d="M0 1h36" stroke={T.border} strokeWidth="1.5"/><path d="M34 -2l4 3-4 3" stroke={T.border} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+                      </div>
+                      <div style={{padding:"12px 16px",background:`${pd.color}15`,border:`2px solid ${pd.color}`,borderRadius:10,display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:120,flexShrink:0}}>
+                        <div style={{fontSize:22}}>{pd.icon}</div>
+                        <span style={{fontSize:11,fontWeight:700,color:pd.color,fontFamily:"'Geist Mono',monospace"}}>{pd.name}</span>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",padding:"0 8px",flexShrink:0}}>
+                        <svg width="40" height="2" viewBox="0 0 40 2" fill="none"><path d="M0 1h36" stroke={T.border} strokeWidth="1.5"/><path d="M34 -2l4 3-4 3" stroke={T.border} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+                      </div>
+                      <div style={{display:"flex",flexDirection:"column",gap:8,minWidth:160}}>
+                        {outputPorts.map(p=>(
+                          <div key={p.id} style={{padding:"8px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,display:"flex",alignItems:"center",gap:8}}>
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="10" rx="1.5" stroke={T.violet} strokeWidth="1.2"/><path d="M1 5h12" stroke={T.violet} strokeWidth="1.2"/><path d="M4 5v7" stroke={T.violet} strokeWidth="1.2"/></svg>
+                            <span style={{fontSize:11.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{p.name}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
-
-                  {/* Output Ports */}
-                  <div>
-                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,paddingBottom:12,borderBottom:`2px solid ${T.border}`}}>
-                      <div style={{width:7,height:7,borderRadius:"50%",background:T.violet}}/>
-                      <span style={{fontSize:12,fontWeight:700,color:T.text,textTransform:"uppercase",letterSpacing:"0.06em"}}>Output Ports</span>
-                      <span style={{fontSize:11,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,padding:"1px 8px"}}>{outputPorts.length}</span>
-                      <span style={{fontSize:11,color:T.textMuted,marginLeft:4}}>Interfaces exposed to downstream consumers</span>
+                  {/* Input + Output columns */}
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+                    <div>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+                        <span style={{fontSize:13,fontWeight:700,color:T.text}}>Input Ports</span>
+                        <span style={{fontSize:11,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,padding:"1px 8px"}}>{inputPorts.length}</span>
+                        <button style={{marginLeft:"auto",height:28,padding:"0 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>{Ic.plus(9)} Add</button>
+                      </div>
+                      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                        {inputPorts.map(p=><PortCard key={p.id} port={p} color={T.blue}/>)}
+                      </div>
                     </div>
-                    <div style={{display:"flex",flexDirection:"column",gap:1,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                      {outputPorts.map((p,i)=>{
-                        const typeIcon = p.type==="REST API"
-                          ? <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2v12" stroke={T.violet} strokeWidth="1.4" strokeLinecap="round"/><circle cx="8" cy="8" r="6" stroke={T.violet} strokeWidth="1.3"/></svg>
-                          : p.type==="Stream"
-                          ? <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M1 5h4l2 2 2-4 2 6 2-4h2" stroke={T.violet} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/><path d="M1 11h14" stroke={T.violet} strokeWidth="1.2" strokeLinecap="round" strokeDasharray="2 2"/></svg>
-                          : <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="3" width="14" height="10" rx="2" stroke={T.violet} strokeWidth="1.3"/><path d="M1 6h14" stroke={T.violet} strokeWidth="1.3"/><path d="M5 6v7" stroke={T.violet} strokeWidth="1.3"/></svg>;
-                        return (
-                        <div key={p.id} style={{background:i%2===0?T.bgSurface:T.bgElevated,borderBottom:i<outputPorts.length-1?`1px solid ${T.border}`:"none"}}>
-                          <div style={{display:"flex",alignItems:"center",gap:12,padding:"13px 16px"}}>
-                            <div style={{width:36,height:36,borderRadius:8,background:`${T.violet}12`,border:`1px solid ${T.violet}25`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                              {typeIcon}
-                            </div>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
-                                <span style={{fontSize:13,fontWeight:600,color:T.text}}>{p.name}</span>
-                                <PortBadge status={p.status}/>
-                                <span style={{fontSize:10.5,padding:"1px 7px",borderRadius:4,background:`${T.violet}12`,color:T.violet,border:`1px solid ${T.violet}20`,fontWeight:600}}>{p.type}</span>
-                                <span style={{fontSize:10.5,padding:"1px 7px",borderRadius:4,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`}}>{p.format}</span>
-                              </div>
-                              <div style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted,wordBreak:"break-all"}}>{p.endpoint}</div>
-                            </div>
-                            <div style={{display:"flex",gap:16,flexShrink:0,alignItems:"center"}}>
-                              <div style={{textAlign:"right"}}>
-                                <div style={{fontSize:9.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Auth</div>
-                                <div style={{fontSize:11.5,color:T.text,fontWeight:500,whiteSpace:"nowrap"}}>{p.auth}</div>
-                              </div>
-                              <div style={{textAlign:"right"}}>
-                                <div style={{fontSize:9.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>SLA</div>
-                                <div style={{fontSize:11.5,color:T.text,fontWeight:500,whiteSpace:"nowrap",maxWidth:140,overflow:"hidden",textOverflow:"ellipsis"}}>{p.sla}</div>
-                              </div>
-                            </div>
-                          </div>
-                          <div style={{padding:"6px 16px 10px 64px",display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}>
-                            <span style={{fontSize:10,color:T.textMuted,marginRight:4,textTransform:"uppercase",letterSpacing:"0.05em",fontWeight:600}}>Consumers:</span>
-                            {p.consumers.map(c=>(
-                              <span key={c} style={{fontSize:11,padding:"2px 8px",borderRadius:4,background:`${T.violet}10`,color:T.violet,border:`1px solid ${T.violet}20`,fontWeight:500}}>{c}</span>
-                            ))}
-                          </div>
-                        </div>
-                        );
-                      })}
+                    <div>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+                        <span style={{fontSize:13,fontWeight:700,color:T.text}}>Output Ports</span>
+                        <span style={{fontSize:11,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,padding:"1px 8px"}}>{outputPorts.length}</span>
+                        <button style={{marginLeft:"auto",height:28,padding:"0 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>{Ic.plus(9)} Add</button>
+                      </div>
+                      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                        {outputPorts.map(p=><PortCard key={p.id} port={p} color={T.violet}/>)}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -15964,39 +15749,8 @@ const DataProductsView = ({onAsset, onNav}) => {
 
             {/* ── ACTIVITY TAB ── */}
             {productTab==="activity"&&(
-              <div style={{maxWidth:680}}>
-                <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:16}}>Recent Activity</div>
-                {[
-                  {icon:"🔄",text:`Lifecycle stage changed from DEVELOPMENT to PRODUCTION`,user:"maya.chen",time:"2 days ago"},
-                  {icon:"📥",text:"3 new assets added: orders_fact, customer_dim, product_dim",user:"sarah.kim",time:"4 days ago"},
-                  {icon:"👤",text:"Ownership transferred to maya.chen",user:"alex.wu",time:"1 week ago"},
-                  {icon:"📋",text:"SLA tier upgraded from BRONZE to SILVER — availability target set to 99%",user:"dev.patel",time:"2 weeks ago"},
-                  {icon:"✨",text:`Data product created in ${pd.domain} domain`,user:(pd.owners||[])[0]||"system",time:pd.createdAt},
-                ].map((ev,i,a)=>(
-                  <div key={i} style={{display:"flex",gap:12,paddingBottom:20,position:"relative"}}>
-                    {i<a.length-1&&<div style={{position:"absolute",left:15,top:30,bottom:0,width:1,background:T.border}}/>}
-                    <div style={{width:30,height:30,borderRadius:"50%",background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0,zIndex:1}}>{ev.icon}</div>
-                    <div style={{flex:1,paddingTop:4}}>
-                      <div style={{fontSize:12.5,color:T.text,lineHeight:1.5,marginBottom:4}}>{ev.text}</div>
-                      <div style={{fontSize:11,color:T.textMuted}}>by <span style={{color:T.textSub,fontWeight:500}}>{ev.user}</span> · {ev.time}</div>
-                    </div>
-                  </div>
-                ))}
-                <div style={{marginTop:8,paddingTop:20,borderTop:`1px solid ${T.border}`}}>
-                  <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Open Tasks</div>
-                  {[
-                    {label:"Add data quality checks for orders_fact",priority:"high",  assignee:"maya.chen",due:"May 20"},
-                    {label:"Document column-level lineage for customer_dim",priority:"medium",assignee:"sarah.kim",due:"May 30"},
-                    {label:"Review SLA thresholds with consumers",priority:"low",assignee:"dev.patel",due:"Jun 5"},
-                  ].map((task,i)=>(
-                    <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,marginBottom:8}}>
-                      <div style={{width:8,height:8,borderRadius:"50%",background:task.priority==="high"?T.rose:task.priority==="medium"?T.amber:T.green,flexShrink:0}}/>
-                      <div style={{flex:1,fontSize:12.5,color:T.text}}>{task.label}</div>
-                      <div style={{fontSize:11,color:T.textMuted}}>{task.assignee}</div>
-                      <div style={{fontSize:11,color:T.textMuted,background:T.bgElevated,padding:"2px 7px",borderRadius:5,border:`1px solid ${T.border}`}}>Due {task.due}</div>
-                    </div>
-                  ))}
-                </div>
+              <div>
+                <AuditLogTable entries={policyHistToEntries(pd.history||[],pd)}/>
               </div>
             )}
 
@@ -16144,43 +15898,6 @@ const DataProductsView = ({onAsset, onNav}) => {
               );
             })()}
 
-            {/* ── CUSTOM PROPERTIES TAB ── */}
-            {productTab==="customprops"&&(
-              <div style={{maxWidth:680}}>
-                <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:16}}>Custom Properties</div>
-                <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",marginBottom:16}}>
-                  {dpCustomProps.length===0
-                    ? <div style={{padding:"32px 0",textAlign:"center",color:T.textMuted,fontSize:12.5}}>No custom properties yet. Add key-value pairs to enrich this data product's metadata.</div>
-                    : dpCustomProps.map((cp,i)=>(
-                        <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 16px",borderBottom:i<dpCustomProps.length-1?`1px solid ${T.border}`:"none"}}>
-                          <div style={{display:"flex",gap:12,flex:1,minWidth:0}}>
-                            <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",minWidth:140,flexShrink:0}}>{cp.key}</span>
-                            <span style={{fontSize:12.5,color:T.text}}>{cp.value}</span>
-                          </div>
-                          <button onClick={()=>setDpCustomProps(p=>p.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex",lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{Ic.x(11)}</button>
-                        </div>
-                      ))
-                  }
-                </div>
-                <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
-                  <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:12}}>Add Property</div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:8,alignItems:"center"}}>
-                    <input placeholder="Key (e.g. team)" value={dpNewCpKey} onChange={e=>setDpNewCpKey(e.target.value)}
-                      style={{padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none"}}
-                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                    <input placeholder="Value" value={dpNewCpVal} onChange={e=>setDpNewCpVal(e.target.value)}
-                      style={{padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none"}}
-                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}
-                      onKeyDown={e=>{if(e.key==="Enter"&&dpNewCpKey.trim()&&dpNewCpVal.trim()){setDpCustomProps(p=>[...p,{key:dpNewCpKey.trim(),value:dpNewCpVal.trim()}]);setDpNewCpKey("");setDpNewCpVal("");}}}/>
-                    <button disabled={!dpNewCpKey.trim()||!dpNewCpVal.trim()}
-                      onClick={()=>{if(dpNewCpKey.trim()&&dpNewCpVal.trim()){setDpCustomProps(p=>[...p,{key:dpNewCpKey.trim(),value:dpNewCpVal.trim()}]);setDpNewCpKey("");setDpNewCpVal("");}}}
-                      style={{padding:"7px 14px",borderRadius:7,background:dpNewCpKey.trim()&&dpNewCpVal.trim()?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:dpNewCpKey.trim()&&dpNewCpVal.trim()?"pointer":"default",whiteSpace:"nowrap"}}>
-                      Add
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
@@ -16356,6 +16073,10 @@ const DataProductsView = ({onAsset, onNav}) => {
                 boxShadow:listView===v?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{ic}</button>
             ))}
           </div>
+          <button onClick={()=>setCreateOpen(true)}
+            style={{height:34,padding:"0 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap",flexShrink:0}}>
+            {Ic.plus(10)} New Data Product
+          </button>
         </div>
 
         <div style={{fontSize:12,color:T.textMuted,marginBottom:14}}>{filteredProducts.length} product{filteredProducts.length!==1?"s":""}</div>
