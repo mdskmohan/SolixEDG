@@ -1917,38 +1917,8 @@ const GlossaryView = ({onToast}) => {
             {termTab==="assets"&&(<div><div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>{["All",...new Set(term.linkedAssets.map(a=>a.type))].map(type=>(<span key={type} style={{fontSize:12,padding:"4px 12px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer"}}>{type}{type==="All"?` (${term.linkedAssets.length})`:""}</span>))}</div>{term.linkedAssets.length===0?<div style={{padding:"40px 0",textAlign:"center",color:T.textMuted,fontSize:13}}>No linked assets yet.</div>:(<div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>{term.linkedAssets.map((a,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderBottom:i<term.linkedAssets.length-1?`1px solid ${T.border}`:"none",transition:"background .1s"}} onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><div style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:T.accent,flexShrink:0}}>{{"Table":"⊞","Dashboard":"⊟","Pipeline":"⇢","ML Model":"◈"}[a.type]||"○"}</div><div style={{flex:1}}><div style={{fontSize:13.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{a.name}</div><div style={{fontSize:11.5,color:T.textMuted,marginTop:1}}>{a.type}</div></div><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke={T.textMuted} strokeWidth="1.3" strokeLinecap="round"/></svg></div>))}</div>)}<button onClick={()=>onToast("Open catalog to link assets","success")} style={{marginTop:12,display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}><IcPlus/> Link Asset</button></div>)}
             {termTab==="activity"&&(<div style={{maxWidth:680}}><div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px",marginBottom:16}}><div style={{fontSize:12.5,fontWeight:600,color:T.textSub,marginBottom:8}}>Add a comment</div><textarea value={commentText} onChange={e=>setCommentText(e.target.value)} placeholder="Use @mention to tag teammates…" rows={3} style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12.5,resize:"none",outline:"none",fontFamily:"inherit",lineHeight:1.55,boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/><div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}><button onClick={()=>addComment(term.id)} disabled={!commentText.trim()} style={{padding:"6px 16px",borderRadius:7,background:commentText.trim()?T.accent:"rgba(238,36,36,.2)",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:commentText.trim()?"pointer":"default"}}>Post</button></div></div><div style={{display:"flex",flexDirection:"column",gap:8}}>{term.activity.map((act,i)=>(<div key={i} style={{display:"flex",gap:12,padding:"12px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}><div style={{width:30,height:30,borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9.5,fontWeight:700,color:T.accent,flexShrink:0}}>{act.avatar}</div><div style={{flex:1}}><div style={{display:"flex",alignItems:"baseline",gap:6}}><span style={{fontSize:13,fontWeight:600,color:T.text}}>{act.user}</span><span style={{fontSize:11,color:T.textMuted}}>{act.time}</span></div><div style={{fontSize:13,color:act.isComment?T.text:T.textSub,marginTop:3,lineHeight:1.55}}>{act.action}</div></div></div>))}{term.activity.length===0&&<div style={{textAlign:"center",padding:"32px 0",color:T.textMuted,fontSize:13}}>No activity yet.</div>}</div></div>)}
             {termTab==="auditlog"&&(
-              <div style={{maxWidth:680}}>
-                <div style={{marginBottom:16,padding:"10px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,fontSize:12.5,color:T.textSub,display:"flex",alignItems:"center",gap:8}}>
-                  <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M7 1v4l2.5 2.5" stroke={T.textMuted} strokeWidth="1.3" strokeLinecap="round"/><circle cx="7" cy="7" r="5.5" stroke={T.textMuted} strokeWidth="1.2"/></svg>
-                  Immutable audit trail — all lifecycle transitions are recorded automatically.
-                </div>
-                <div style={{display:"flex",flexDirection:"column",gap:0,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                  {(term.auditLog||[]).length===0&&<div style={{padding:"32px",textAlign:"center",color:T.textMuted,fontSize:13}}>No lifecycle events recorded yet.</div>}
-                  {(term.auditLog||[]).map((entry,i)=>{
-                    const isFirst=i===0;
-                    const actionColors={
-                      "Approved":"#16a34a","Submitted for Review":"#d97706","Returned to Draft":"#6b7280",
-                      "Deprecated":"#e11d48","Conflict Flagged":"#7c3aed","Conflict Resolved — this term retained":"#16a34a",
-                      "Conflict Cleared — both terms retained":"#16a34a","Conflict Cleared":"#6b7280","Created":"#6b7280",
-                    };
-                    const col=actionColors[entry.action]||T.textSub;
-                    return (
-                      <div key={i} style={{display:"flex",gap:14,padding:"14px 18px",borderBottom:i<(term.auditLog||[]).length-1?`1px solid ${T.border}`:"none",background:isFirst?T.bgElevated:"transparent"}}>
-                        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:0,flexShrink:0}}>
-                          <div style={{width:8,height:8,borderRadius:"50%",background:col,marginTop:4}}/>
-                          {i<(term.auditLog||[]).length-1&&<div style={{width:1,flex:1,background:T.border,marginTop:4,minHeight:16}}/>}
-                        </div>
-                        <div style={{flex:1}}>
-                          <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:3}}>
-                            <span style={{fontSize:13,fontWeight:700,color:col}}>{entry.action}</span>
-                            <span style={{fontSize:11,color:T.textMuted}}>{entry.at}</span>
-                          </div>
-                          <div style={{fontSize:12.5,color:T.textSub}}>by <strong>{entry.by}</strong>{entry.note&&<span style={{color:T.textMuted}}> · {entry.note}</span>}</div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+              <div style={{maxWidth:900}}>
+                <AuditLogTable entries={glossAuditToEntries(term.auditLog)}/>
               </div>
             )}
           </div>
@@ -6743,34 +6713,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                     {/* ── Activity ── */}
                     {pdTab==="activity"&&(
                       <div style={{padding:"20px 22px"}}>
-                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-                          <div style={{fontSize:12.5,color:T.textSub}}>Complete audit trail for this policy — every state change, edit and evaluation.</div>
-                          <button style={{fontSize:11,padding:"4px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"transparent",color:T.textMuted,cursor:"pointer",fontFamily:"inherit"}}>↓ Export</button>
-                        </div>
-                        {(p.history||[]).length===0&&<div style={{padding:"32px",textAlign:"center",fontSize:12,color:T.textMuted}}>No activity recorded yet.</div>}
-                        <div style={{position:"relative",paddingLeft:22}}>
-                          {/* Synthetic runtime events + history */}
-                          {[
-                            ...(p.lastEvaluated?[{when:p.lastEvaluated+" 14:32",who:"system",action:`"${p.name}" evaluated — ${p.compliancePct}% compliance score`,type:"eval"}]:[]),
-                            ...(p.schedule?[{when:"2026-05-19 08:00",who:"system",action:`Scheduled evaluation of "${p.name}" — ${p.violations} violation${p.violations!==1?"s":""} detected`,type:"eval"}]:[]),
-                            ...(p.history||[]).map(h=>({...h,type:"history"})),
-                          ].map((h,i,arr)=>{
-                            const dot = h.type==="eval"?T.blue:h.action.toLowerCase().includes("deprecat")?T.rose:h.action.toLowerCase().includes("activat")||h.action.toLowerCase().includes("publish")?T.blue:h.action.toLowerCase().includes("approv")?T.green:h.action.toLowerCase().includes("submit")||h.action.toLowerCase().includes("review")?T.amber:T.textMuted;
-                            return (
-                              <div key={i} style={{position:"relative",paddingBottom:18}}>
-                                <div style={{position:"absolute",left:-18,top:4,width:10,height:10,borderRadius:"50%",background:dot,border:`2px solid ${T.bgSurface}`}}/>
-                                {i<arr.length-1&&<div style={{position:"absolute",left:-14,top:15,bottom:0,width:1.5,background:T.border}}/>}
-                                <div style={{fontSize:13,fontWeight:500,color:T.text,marginBottom:3}}>{h.action}</div>
-                                <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11}}>
-                                  <span style={{color:T.textMuted}}>{h.when}</span>
-                                  <span style={{color:T.border}}>·</span>
-                                  <span style={{fontFamily:"'Geist Mono',monospace",color:h.who==="system"?T.amber:T.textMuted}}>{h.who}</span>
-                                  {h.type==="eval"&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:4,background:`${T.blue}15`,color:T.blue,border:`1px solid ${T.blue}25`}}>SYSTEM</span>}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+                        <AuditLogTable entries={policyHistToEntries(p.history,p)}/>
                       </div>
                     )}
                   </div>
@@ -10661,25 +10604,272 @@ const AssetDocsTab = ({asset,onToast})=>{
   </Card2>;
 };
 
+// ─────────────────────────────────────────────
+// AUDIT LOG — shared component + data
+// ─────────────────────────────────────────────
+const AUDIT_CAT_META={
+  EDIT:   {color:"#2563eb",bg:"rgba(37,99,235,.08)", border:"rgba(37,99,235,.2)"},
+  CERT:   {color:"#16a34a",bg:"rgba(22,163,74,.08)", border:"rgba(22,163,74,.2)"},
+  ACCESS: {color:"#d97706",bg:"rgba(217,119,6,.08)", border:"rgba(217,119,6,.2)"},
+  SCHEMA: {color:"#7c3aed",bg:"rgba(124,58,237,.08)",border:"rgba(124,58,237,.2)"},
+  SYSTEM: {color:"#6b7280",bg:"rgba(107,114,128,.08)",border:"rgba(107,114,128,.2)"},
+  LINEAGE:{color:"#0891b2",bg:"rgba(8,145,178,.08)", border:"rgba(8,145,178,.2)"},
+  TAG:    {color:"#e11d48",bg:"rgba(225,29,72,.08)", border:"rgba(225,29,72,.2)"},
+};
+
+const ASSET_AUDIT_ENTRIES=[
+  {id:"aa1", timestamp:"May 21, 2026 · 14:32", category:"CERT",   action:"Certified as Approved",           details:"Certification status changed from In Review → Approved",       actor:"maya.chen",  isSystem:false, note:"Annual data quality review completed. All threshold checks passed."},
+  {id:"aa2", timestamp:"May 20, 2026 · 09:14", category:"SCHEMA", action:"Schema drift detected",            details:"Column 'amount' type changed: float → decimal(18,4)",          actor:"system",     isSystem:true,  diff:{before:"float",after:"decimal(18,4)"}},
+  {id:"aa3", timestamp:"May 18, 2026 · 16:47", category:"TAG",    action:"PII tag added",                    details:"Tag 'PII' added to column 'email'",                           actor:"dev.patel",  isSystem:false},
+  {id:"aa4", timestamp:"May 17, 2026 · 11:30", category:"EDIT",   action:"Quality rule updated",             details:"Freshness threshold updated",                                 actor:"james.oh",   isSystem:false, diff:{before:"Freshness threshold: 24 hours",after:"Freshness threshold: 12 hours"}},
+  {id:"aa5", timestamp:"May 14, 2026 · 13:05", category:"ACCESS", action:"Access granted",                   details:"analytics_team granted read access",                          actor:"maya.chen",  isSystem:false},
+  {id:"aa6", timestamp:"May 13, 2026 · 10:00", category:"SYSTEM", action:"Quality scan completed",           details:"Overall quality score: 95 (↑3 from previous scan)",           actor:"system",     isSystem:true},
+  {id:"aa7", timestamp:"May 07, 2026 · 10:22", category:"LINEAGE","action":"Data contract linked",           details:"Contract 'orders-v2' linked to this asset",                   actor:"james.oh",   isSystem:false},
+  {id:"aa8", timestamp:"Apr 30, 2026 · 08:55", category:"EDIT",   action:"Description updated",              details:"Asset description was edited",                                actor:"dev.patel",  isSystem:false, diff:{before:"Order transactions table.",after:"Fact table tracking all commerce orders. Source of truth for revenue, retention and growth reporting."}},
+  {id:"aa9", timestamp:"Apr 28, 2026 · 15:41", category:"SYSTEM", action:"Ingestion run completed",          details:"Schema refreshed — 2 new columns detected",                   actor:"system",     isSystem:true},
+  {id:"aa10",timestamp:"Apr 25, 2026 · 09:10", category:"CERT",   action:"Submitted for Review",             details:"Certification request submitted for Q2 cycle",                actor:"dev.patel",  isSystem:false, note:"Ready for Q2 certification cycle. Owner has reviewed all columns."},
+  {id:"aa11",timestamp:"Apr 22, 2026 · 14:00", category:"SCHEMA", action:"Column added",                     details:"Column 'discount_pct' (decimal) added to schema",             actor:"system",     isSystem:true},
+  {id:"aa12",timestamp:"Apr 18, 2026 · 11:15", category:"ACCESS", action:"Access revoked",                   details:"Role 'finance_analyst' read access removed",                  actor:"maya.chen",  isSystem:false},
+  {id:"aa13",timestamp:"Apr 15, 2026 · 07:30", category:"SYSTEM", action:"Quality scan completed",           details:"Overall quality score: 92 (no change from previous scan)",   actor:"system",     isSystem:true},
+  {id:"aa14",timestamp:"Apr 10, 2026 · 16:00", category:"TAG",    action:"Tag updated",                      details:"Tag 'finance' replaced with 'KPI'",                           actor:"james.oh",   isSystem:false, diff:{before:"Tags: PII, finance",after:"Tags: PII, KPI"}},
+  {id:"aa15",timestamp:"Apr 05, 2026 · 10:44", category:"EDIT",   action:"Owner updated",                    details:"Asset owner changed",                                         actor:"maya.chen",  isSystem:false, diff:{before:"Owner: john.doe",after:"Owner: maya.chen"}},
+  {id:"aa16",timestamp:"Mar 28, 2026 · 09:00", category:"LINEAGE","action":"Upstream asset linked",          details:"Upstream link to 'postgresql_prod' established",              actor:"system",     isSystem:true},
+  {id:"aa17",timestamp:"Mar 20, 2026 · 14:22", category:"CERT",   action:"Returned to Draft",                details:"Certification reverted — quality score dropped below threshold",actor:"maya.chen", isSystem:false, note:"Quality score fell to 78. Requires remediation before recertification."},
+  {id:"aa18",timestamp:"Mar 15, 2026 · 08:00", category:"SYSTEM", action:"First ingestion completed",        details:"Asset first ingested from Snowflake COMMERCE schema",          actor:"system",     isSystem:true},
+];
+
+function glossAuditToEntries(auditLog){
+  const CAT={
+    "Approved":"CERT","Submitted for Review":"CERT","Returned to Draft":"CERT",
+    "Deprecated":"CERT","Conflict Flagged":"EDIT","Conflict Resolved — this term retained":"CERT",
+    "Conflict Cleared — both terms retained":"CERT","Conflict Cleared":"CERT","Created":"EDIT",
+  };
+  return(auditLog||[]).map((e,i)=>({
+    id:`g${i}`,timestamp:e.at,
+    category:CAT[e.action]||"EDIT",
+    action:e.action,details:"",
+    actor:e.by,isSystem:e.by==="system",
+    note:e.note||null,diff:null,
+  }));
+}
+
+function policyHistToEntries(history,p){
+  const all=[
+    ...(p.lastEvaluated?[{when:p.lastEvaluated+" · 14:32",who:"system",action:`Policy evaluated — ${p.compliancePct}% compliance`,type:"eval"}]:[]),
+    ...(p.schedule?[{when:"2026-05-19 · 08:00",who:"system",action:`Scheduled evaluation — ${p.violations} violation${p.violations!==1?"s":""} detected`,type:"eval"}]:[]),
+    ...(history||[]).map(h=>({...h,type:"history"})),
+  ];
+  return all.map((h,i)=>{
+    const a=h.action.toLowerCase();
+    const cat=h.type==="eval"?"SYSTEM":
+      a.includes("deprecat")||a.includes("activat")||a.includes("publish")||a.includes("approv")||a.includes("submit")||a.includes("review")?"CERT":
+      a.includes("rule")?"SCHEMA":a.includes("link")||a.includes("asset")?"LINEAGE":"EDIT";
+    return{id:`p${i}`,timestamp:h.when,category:cat,action:h.action,
+      details:h.type==="eval"?`Compliance: ${p.compliancePct}%  ·  Violations: ${p.violations}`:"",
+      actor:h.who,isSystem:h.who==="system"||h.type==="eval",note:null,diff:null};
+  });
+}
+
+// ─────────────────────────────────────────────
+// AuditLogTable — universal audit log component
+// ─────────────────────────────────────────────
+const AuditLogTable=({entries=[],pageSize=20})=>{
+  const [search,    setSearch]    =useState("");
+  const [catFilter, setCatFilter] =useState("All");
+  const [actFilter, setActFilter] =useState("All");
+  const [page,      setPage]      =useState(1);
+  const [expanded,  setExpanded]  =useState(null);
+
+  useEffect(()=>setPage(1),[search,catFilter,actFilter]);
+
+  const cats=useMemo(()=>["All",...[...new Set(entries.map(e=>e.category))]]  ,[entries]);
+
+  const filtered=useMemo(()=>{
+    const q=search.toLowerCase();
+    return entries.filter(e=>{
+      if(q&&!e.action.toLowerCase().includes(q)&&!(e.details||"").toLowerCase().includes(q)&&!e.actor.toLowerCase().includes(q))return false;
+      if(catFilter!=="All"&&e.category!==catFilter)return false;
+      if(actFilter==="Users"&&e.isSystem)return false;
+      if(actFilter==="System"&&!e.isSystem)return false;
+      return true;
+    });
+  },[entries,search,catFilter,actFilter]);
+
+  const totalPages=Math.max(1,Math.ceil(filtered.length/pageSize));
+  const paged=filtered.slice((page-1)*pageSize,page*pageSize);
+
+  const exportCsv=()=>{
+    const rows=[["Timestamp","Category","Action","Details","Actor"],
+      ...filtered.map(e=>[e.timestamp,e.category,e.action,e.details||"",e.actor])];
+    const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
+    const blob=new Blob([csv],{type:"text/csv"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");a.href=url;a.download="audit-log.csv";a.click();URL.revokeObjectURL(url);
+  };
+
+  const initials=actor=>actor==="system"?"SYS":actor.split(".").map(p=>p[0]?.toUpperCase()||"").join("").slice(0,2);
+
+  return(
+    <div className="fadeIn">
+      {/* ── Toolbar ── */}
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+        {/* Search */}
+        <div style={{position:"relative",flex:"1 1 200px",minWidth:180}}>
+          <div style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none",display:"flex"}}>{Ic.search(13)}</div>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search action, details, actor…"
+            style={{width:"100%",paddingLeft:32,paddingRight:search?28:10,height:34,borderRadius:8,border:`1px solid ${search?T.accent:T.border}`,background:T.bgElevated,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",transition:"border-color .15s"}}
+            onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=search?T.accent:T.border}/>
+          {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:15,lineHeight:1}}>×</button>}
+        </div>
+        {/* Category filter pills */}
+        <div style={{display:"flex",gap:5,flexWrap:"wrap",flex:"0 0 auto"}}>
+          {cats.map(c=>{
+            const m=AUDIT_CAT_META[c];const active=catFilter===c;
+            return(
+              <button key={c} onClick={()=>setCatFilter(c)}
+                style={{padding:"4px 11px",borderRadius:6,fontSize:11,fontWeight:active?700:400,cursor:"pointer",transition:"all .1s",fontFamily:"inherit",
+                  border:`1px solid ${active&&m?m.border:T.border}`,
+                  background:active&&m?m.bg:active?"transparent":"transparent",
+                  color:active&&m?m.color:active?T.accent:T.textSub}}>
+                {c}
+              </button>
+            );
+          })}
+        </div>
+        {/* Actor filter */}
+        <div style={{display:"flex",gap:4,flex:"0 0 auto"}}>
+          {["All","Users","System"].map(a=>(
+            <button key={a} onClick={()=>setActFilter(a)}
+              style={{padding:"4px 10px",borderRadius:6,fontSize:11,fontWeight:actFilter===a?700:400,cursor:"pointer",transition:"all .1s",fontFamily:"inherit",
+                border:`1px solid ${actFilter===a?T.accent:T.border}`,
+                background:actFilter===a?T.accentDim:"transparent",
+                color:actFilter===a?T.accent:T.textSub}}>
+              {a}
+            </button>
+          ))}
+        </div>
+        {/* Export */}
+        <button onClick={exportCsv}
+          style={{padding:"5px 12px",borderRadius:6,fontSize:11.5,border:`1px solid ${T.border}`,background:"transparent",color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit",whiteSpace:"nowrap",marginLeft:"auto"}}>
+          <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M7 2v7M4 6l3 3 3-3M2 11h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          Export CSV
+        </button>
+      </div>
+
+      {/* ── Table ── */}
+      <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+        {/* Header row */}
+        <div style={{display:"grid",gridTemplateColumns:"190px 86px 1fr 1fr 150px 28px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,padding:"0 16px"}}>
+          {["Timestamp","Category","Action","Details","Actor",""].map((h,i)=>(
+            <div key={i} style={{padding:"9px 0",paddingRight:i<5?12:0,fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</div>
+          ))}
+        </div>
+
+        {paged.length===0&&(
+          <div style={{padding:"36px",textAlign:"center",fontSize:12.5,color:T.textMuted}}>No audit entries match your filters.</div>
+        )}
+
+        {paged.map((entry,i)=>{
+          const m=AUDIT_CAT_META[entry.category]||AUDIT_CAT_META.EDIT;
+          const isExp=expanded===entry.id;
+          const hasExp=!!(entry.note||entry.diff);
+          const isLast=i===paged.length-1;
+          return(
+            <React.Fragment key={entry.id}>
+              <div
+                onClick={()=>hasExp&&setExpanded(isExp?null:entry.id)}
+                style={{display:"grid",gridTemplateColumns:"190px 86px 1fr 1fr 150px 28px",padding:"0 16px",
+                  borderBottom:isLast&&!isExp?"none":`1px solid ${T.border}`,
+                  background:isExp?T.bgElevated:"transparent",
+                  cursor:hasExp?"pointer":"default",transition:"background .1s"}}
+                onMouseEnter={e=>{if(!isExp)e.currentTarget.style.background=T.bgHover;}}
+                onMouseLeave={e=>{if(!isExp)e.currentTarget.style.background=isExp?T.bgElevated:"transparent";}}>
+                {/* Timestamp */}
+                <div style={{padding:"12px 12px 12px 0",display:"flex",alignItems:"center"}}>
+                  <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11,color:T.textSub,whiteSpace:"nowrap"}}>{entry.timestamp}</span>
+                </div>
+                {/* Category badge */}
+                <div style={{padding:"12px 12px 12px 0",display:"flex",alignItems:"center"}}>
+                  <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:m.bg,color:m.color,border:`1px solid ${m.border}`,letterSpacing:"0.06em",whiteSpace:"nowrap"}}>{entry.category}</span>
+                </div>
+                {/* Action */}
+                <div style={{padding:"12px 12px 12px 0",display:"flex",alignItems:"center"}}>
+                  <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{entry.action}</span>
+                </div>
+                {/* Details */}
+                <div style={{padding:"12px 12px 12px 0",display:"flex",alignItems:"center",minWidth:0}}>
+                  <span style={{fontSize:12,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.details||"—"}</span>
+                </div>
+                {/* Actor */}
+                <div style={{padding:"12px 0",display:"flex",alignItems:"center",gap:7,minWidth:0}}>
+                  <div style={{width:22,height:22,borderRadius:6,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,
+                    background:entry.isSystem?"rgba(107,114,128,.15)":T.accentDim,
+                    color:entry.isSystem?"#6b7280":T.accent}}>
+                    {initials(entry.actor)}
+                  </div>
+                  <span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:entry.isSystem?"#6b7280":T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.actor}</span>
+                </div>
+                {/* Expand chevron */}
+                <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {hasExp&&<svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{color:T.textMuted,transition:"transform .15s",transform:isExp?"rotate(180deg)":"rotate(0deg)"}}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </div>
+              </div>
+
+              {/* Expanded row */}
+              {isExp&&(
+                <div style={{padding:"12px 16px 14px 16px",background:T.bgElevated,borderBottom:isLast?"none":`1px solid ${T.border}`}}>
+                  {entry.diff&&(
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:entry.note?10:0}}>
+                      <div>
+                        <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:5}}>Before</div>
+                        <div style={{padding:"8px 12px",background:"rgba(225,29,72,.06)",border:"1px solid rgba(225,29,72,.2)",borderRadius:7,fontSize:12,color:T.textSub,fontFamily:"'Geist Mono',monospace",lineHeight:1.5,wordBreak:"break-all"}}>{entry.diff.before}</div>
+                      </div>
+                      <div>
+                        <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:5}}>After</div>
+                        <div style={{padding:"8px 12px",background:"rgba(22,163,74,.06)",border:"1px solid rgba(22,163,74,.2)",borderRadius:7,fontSize:12,color:T.textSub,fontFamily:"'Geist Mono',monospace",lineHeight:1.5,wordBreak:"break-all"}}>{entry.diff.after}</div>
+                      </div>
+                    </div>
+                  )}
+                  {entry.note&&<div style={{fontSize:12,color:T.textSub,padding:"8px 12px",background:T.bgSurface,borderRadius:7,border:`1px solid ${T.border}`}}><span style={{fontWeight:600,color:T.textMuted,marginRight:6}}>Note:</span>{entry.note}</div>}
+                </div>
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+
+      {/* ── Pagination ── */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:14,padding:"0 2px"}}>
+        <span style={{fontSize:11.5,color:T.textMuted}}>{filtered.length} {filtered.length===1?"entry":"entries"}{page>1||totalPages>1?` · page ${page} of ${totalPages}`:""}</span>
+        {totalPages>1&&(
+          <div style={{display:"flex",gap:4,alignItems:"center"}}>
+            <button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}
+              style={{padding:"4px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"transparent",color:page===1?T.border:T.textSub,cursor:page===1?"not-allowed":"pointer",fontSize:12,fontFamily:"inherit"}}>← Prev</button>
+            {(()=>{
+              const start=Math.max(1,Math.min(page-2,totalPages-4));
+              const end=Math.min(totalPages,start+4);
+              return Array.from({length:end-start+1},(_,i)=>start+i).map(pg=>(
+                <button key={pg} onClick={()=>setPage(pg)}
+                  style={{width:30,height:28,borderRadius:6,border:`1px solid ${pg===page?T.accent:T.border}`,
+                    background:pg===page?T.accentDim:"transparent",color:pg===page?T.accent:T.textSub,
+                    cursor:"pointer",fontSize:12,fontFamily:"inherit",fontWeight:pg===page?700:400}}>
+                  {pg}
+                </button>
+              ));
+            })()}
+            <button onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages}
+              style={{padding:"4px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"transparent",color:page===totalPages?T.border:T.textSub,cursor:page===totalPages?"not-allowed":"pointer",fontSize:12,fontFamily:"inherit"}}>Next →</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const AssetActivityTab = ()=>(
   <Card2 className="fadeIn">
     <div style={{padding:16}}>
-      <SH title="Activity Log"/>
-      {[
-        {action:"Certified as Trusted",user:"maya.chen",time:"2h ago"},
-        {action:"Schema drift detected in column amount",user:"System",time:"1d ago"},
-        {action:"PII tag added to email column",user:"dev.patel",time:"3d ago"},
-        {action:"Quality rule updated: Freshness",user:"james.oh",time:"5d ago"},
-        {action:"Access granted to analytics_team",user:"maya.chen",time:"1w ago"},
-        {action:"Data contract orders-v2 linked",user:"james.oh",time:"2w ago"},
-        {action:"Description updated",user:"dev.patel",time:"3w ago"},
-      ].map((a,i)=>(
-        <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:`1px solid ${T.border}`}}>
-          <div style={{width:6,height:6,borderRadius:"50%",background:T.blue,flexShrink:0}}/>
-          <div style={{flex:1}}><span style={{fontSize:12,color:T.text}}>{a.action}</span><span style={{fontSize:11,color:T.textMuted,marginLeft:8}}>by {a.user}</span></div>
-          <span style={{fontSize:11,color:T.textMuted}}>{a.time}</span>
-        </div>
-      ))}
+      <AuditLogTable entries={ASSET_AUDIT_ENTRIES}/>
     </div>
   </Card2>
 );
@@ -11672,34 +11862,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
         {tab==="quality"   && <AssetQualityTab asset={data} onToast={onToast} onNav={onNav}/>}
         {tab==="usage"     && <AssetUsageTab/>}
         {tab==="lineage"   && <AssetLineageFull asset={data}/>}
-        {tab==="activity"  && (
-          <div style={{maxWidth:700}}>
-            <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:18}}>Activity</div>
-            <div style={{display:"flex",flexDirection:"column",gap:0}}>
-              {[
-                {ts:"2026-05-20",who:"maya.chen",  action:"Certification status → Approved",           icon:"✓", color:T.green},
-                {ts:"2026-05-17",who:"dev.patel",  action:"Tag 'PII' added",                           icon:"🏷", color:T.accent},
-                {ts:"2026-05-15",who:"ai-bot",     action:`Ingestion run — schema refreshed`,           icon:"⟳", color:T.amber},
-                {ts:"2026-05-10",who:(data.owners||[])[0]||"maya.chen", action:"Description updated",  icon:"✎", color:T.textMuted},
-                {ts:"2026-04-28",who:"dev.patel",  action:`Owner assigned: ${(data.owners||[])[0]||"maya.chen"}`, icon:"👤", color:T.blue},
-                {ts:"2026-04-15",who:"ai-bot",     action:`${data.name} first ingested from ${data.service||"Snowflake"}`, icon:"📥", color:T.textMuted},
-              ].map((ev,i,arr)=>(
-                <div key={i} style={{display:"flex",gap:14,paddingBottom:20,position:"relative"}}>
-                  {i<arr.length-1&&<div style={{position:"absolute",left:15,top:32,bottom:0,width:1,background:T.border}}/>}
-                  <div style={{width:30,height:30,borderRadius:"50%",background:T.bgElevated,border:`1px solid ${ev.color}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,flexShrink:0,zIndex:1,color:ev.color}}>{ev.icon}</div>
-                  <div style={{flex:1,paddingTop:4}}>
-                    <div style={{fontSize:12.5,color:T.text,lineHeight:1.5,marginBottom:3}}>{ev.action}</div>
-                    <div style={{fontSize:11,color:T.textMuted,display:"flex",gap:10}}>
-                      <span style={{color:T.textSub,fontWeight:500}}>{ev.who}</span>
-                      <span>·</span>
-                      <span>{ev.ts}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {tab==="activity"  && <AuditLogTable entries={ASSET_AUDIT_ENTRIES}/>}
       </div>
 
       {/* ── Column detail panel (tabbed: Overview | Quality) ── */}
