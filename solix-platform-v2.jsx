@@ -9018,10 +9018,10 @@ const LINEAGE_TYPE_COLOR={
 
 // ─── Per-node metadata (for info panel) ──────────────────────────────────────
 const LINEAGE_NODE_META={
-  pg:  {assetType:"Database", service:"PostgreSQL", db:"postgresql_prod",        description:"Production PostgreSQL database serving Commerce orders and customer data.",                owner:"dev.patel",  quality:92,cert:"Approved",tags:["PII","finance"],cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"amount",t:"decimal"},{n:"status",t:"varchar"},{n:"created_at",t:"timestamp"}]},
-  self:{assetType:"Table",    service:"Snowflake",  db:"COMMERCE / orders_fact", description:"Fact table tracking all commerce orders. Source of truth for revenue, retention and growth reporting.", owner:"maya.chen", quality:95,cert:"Approved",tags:["PII","KPI"],    cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"revenue",t:"decimal"},{n:"order_status",t:"varchar"},{n:"created_at",t:"date"}]},
-  d1:  {assetType:"Dashboard",service:"Tableau",    db:"Revenue Dashboard",      description:"Executive revenue dashboard consuming enriched order data for Finance stakeholders.",       owner:"alex.wu",   quality:88,cert:"Approved",tags:["KPI"],          cols:[{n:"total_revenue",t:"decimal"},{n:"order_count",t:"bigint"},{n:"avg_order",t:"decimal"}]},
-  d2:  {assetType:"Dashboard",service:"Tableau",    db:"Finance Summary",        description:"Finance summary dashboard aggregating revenue across all domains. Updated daily.",        owner:"james.oh",  quality:84,cert:"Draft",   tags:["finance"],      cols:[{n:"domain",t:"varchar"},{n:"total_rev",t:"decimal"},{n:"growth_pct",t:"float"}]},
+  pg:  {assetType:"Database", service:"PostgreSQL", db:"postgresql_prod",        domain:"Commerce",  owner:"dev.patel",  steward:"priya.nair", quality:92,cert:"Approved",   tags:["PII","finance"],description:"Production PostgreSQL database serving Commerce orders and customer data.",                cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"amount",t:"decimal"},{n:"status",t:"varchar"},{n:"created_at",t:"timestamp"}]},
+  self:{assetType:"Table",    service:"Snowflake",  db:"COMMERCE / orders_fact", domain:"Commerce",  owner:"maya.chen", steward:"sarah.kim",  quality:95,cert:"Approved",   tags:["PII","KPI"],    description:"Fact table tracking all commerce orders. Source of truth for revenue, retention and growth reporting.", cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"revenue",t:"decimal"},{n:"order_status",t:"varchar"},{n:"created_at",t:"date"}]},
+  d1:  {assetType:"Dashboard",service:"Tableau",    db:"Revenue Dashboard",      domain:"Finance",   owner:"alex.wu",   steward:"james.oh",   quality:88,cert:"Approved",   tags:["KPI"],          description:"Executive revenue dashboard consuming enriched order data for Finance stakeholders.",       cols:[{n:"total_revenue",t:"decimal"},{n:"order_count",t:"bigint"},{n:"avg_order",t:"decimal"}]},
+  d2:  {assetType:"Dashboard",service:"Tableau",    db:"Finance Summary",        domain:"Finance",   owner:"james.oh",  steward:"alex.wu",    quality:84,cert:"Draft",      tags:["finance"],      description:"Finance summary dashboard aggregating revenue across all domains. Updated daily.",        cols:[{n:"domain",t:"varchar"},{n:"total_rev",t:"decimal"},{n:"growth_pct",t:"float"}]},
 };
 
 // ─── Fixed topology (positions + connections) ─────────────────────────────────
@@ -9339,6 +9339,12 @@ const AssetLineageFull=({asset})=>{
                   ))}
                 </div>
 
+                {/* DESCRIPTION */}
+                <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
+                  <SLabel>Description</SLabel>
+                  <p style={{fontSize:12,color:T.textSub,lineHeight:1.7,margin:0}}>{selMeta.description}</p>
+                </div>
+
                 {/* CERTIFICATE */}
                 <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
                   <SLabel>Certificate</SLabel>
@@ -9347,11 +9353,15 @@ const AssetLineageFull=({asset})=>{
                   </div>
                 </div>
 
-                {/* DESCRIPTION */}
-                <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
-                  <SLabel>Description</SLabel>
-                  <p style={{fontSize:12,color:T.textSub,lineHeight:1.7,margin:0}}>{selMeta.description}</p>
-                </div>
+                {/* DOMAIN */}
+                {selMeta.domain&&(
+                  <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
+                    <SLabel>Domain</SLabel>
+                    <div style={{display:"inline-flex",alignItems:"center",padding:"4px 12px 4px 9px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
+                      <span style={{fontSize:12,color:T.accent,fontWeight:600}}>{selMeta.domain}</span>
+                    </div>
+                  </div>
+                )}
 
                 {/* OWNER */}
                 <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
@@ -9363,6 +9373,19 @@ const AssetLineageFull=({asset})=>{
                     <span style={{fontSize:12,color:T.accent,fontWeight:500}}>{selMeta.owner}</span>
                   </div>
                 </div>
+
+                {/* STEWARD */}
+                {selMeta.steward&&(
+                  <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
+                    <SLabel>Steward</SLabel>
+                    <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:"rgba(217,119,6,.08)",borderTop:"1px solid rgba(217,119,6,.2)",borderRight:"1px solid rgba(217,119,6,.2)",borderBottom:"1px solid rgba(217,119,6,.2)",borderLeft:"3px solid #d97706"}}>
+                      <div style={{width:18,height:18,borderRadius:"50%",background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#d97706",flexShrink:0}}>
+                        {selMeta.steward.split(".").map(s=>s[0]?.toUpperCase()||"").join("")}
+                      </div>
+                      <span style={{fontSize:12,color:"#d97706",fontWeight:500}}>{selMeta.steward}</span>
+                    </div>
+                  </div>
+                )}
 
                 {/* TAGS */}
                 {selMeta.tags&&selMeta.tags.length>0&&(
