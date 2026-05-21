@@ -9198,15 +9198,15 @@ const AssetLineageFull=({asset})=>{
           onInit={inst=>{setRf(inst);inst.fitView({padding:0.15});}}
           minZoom={0.18} maxZoom={3}
           proOptions={{hideAttribution:true}}
-          colorMode="dark"
-          style={{background:"#0e0e14"}}
+          colorMode="light"
+          style={{background:"#f8fafc"}}
         >
-          <Background color="#252530" gap={20} size={1.3} variant="dots"/>
+          <Background color="#cbd5e1" gap={20} size={1.3} variant="dots"/>
           <Controls showInteractive={false}
-            style={{background:"#1a1a22",border:"1px solid #2e2e38",borderRadius:8,overflow:"hidden"}}/>
-          <MiniMap nodeColor={n=>LINEAGE_TYPE_COLOR[n.data?.assetType]||"#444"}
-            style={{background:"#111118",border:"1px solid #2e2e38",borderRadius:8}}
-            maskColor="rgba(0,0,0,0.65)" position="bottom-right"/>
+            style={{background:"#ffffff",border:"1px solid #e2e8f0",borderRadius:8,overflow:"hidden"}}/>
+          <MiniMap nodeColor={n=>LINEAGE_TYPE_COLOR[n.data?.assetType]||"#94a3b8"}
+            style={{background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:8}}
+            maskColor="rgba(248,250,252,0.7)" position="bottom-right"/>
         </ReactFlow>
       </div>
 
@@ -14814,6 +14814,9 @@ const DataProductsView = ({onAsset, onNav}) => {
   const [dpEditData,       setDpEditData]       = useState(null);
   const [dpAssetView,      setDpAssetView]      = useState("table");
   const [dpSearch,         setDpSearch]         = useState("");
+  const [dpCustomProps,    setDpCustomProps]    = useState([]);
+  const [dpNewCpKey,       setDpNewCpKey]       = useState("");
+  const [dpNewCpVal,       setDpNewCpVal]       = useState("");
   const DP_USERS = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
   const dpAva = name => (name||"?").split(".").map(s=>s[0]?.toUpperCase()||"").join("");
   const patchDP = (id,patch) => setProducts(prev=>prev.map(p=>p.id===id?{...p,...patch}:p));
@@ -14917,7 +14920,14 @@ const DataProductsView = ({onAsset, onNav}) => {
                 </div>
               </div>
             </div>
-            <Tabs2 tabs={[{key:"overview",label:"Overview"},{key:"assets",label:`Assets (${productAssets.length})`}]} active={productTab} onChange={setProductTab}/>
+            <Tabs2 tabs={[
+              {key:"overview",   label:"Overview"},
+              {key:"assets",     label:`Assets (${productAssets.length})`},
+              {key:"ports",      label:"Ports"},
+              {key:"contract",   label:"Contract"},
+              {key:"activity",   label:"Activity"},
+              {key:"customprops",label:"Custom Properties"},
+            ]} active={productTab} onChange={setProductTab}/>
           </div>
 
           <div style={{padding:28}}>
@@ -15047,6 +15057,253 @@ const DataProductsView = ({onAsset, onNav}) => {
                         ))}
                       </div>
                 }
+              </div>
+            )}
+
+            {/* ── PORTS TAB ── */}
+            {productTab==="ports"&&(()=>{
+              const inputPorts=[
+                {id:"ip1",name:"Commerce Orders Source",type:"Table",source:"postgresql_prod / COMMERCE / orders",schema:"order_id, customer_id, amount, status, created_at",format:"SQL",sla:"< 2h latency",owner:(pd.owners||[])[0]||"maya.chen",status:"active"},
+                {id:"ip2",name:"Customer Dimension Feed",type:"Table",source:"snowflake_prod / COMMERCE / customers",schema:"customer_id, name, email, tier, region",format:"SQL",sla:"< 4h latency",owner:(pd.owners||[])[0]||"maya.chen",status:"active"},
+                {id:"ip3",name:"Product Catalog Input",type:"Table",source:"snowflake_prod / PRODUCT / products",schema:"product_id, name, category, price",format:"SQL",sla:"< 8h latency",owner:(pd.owners||[])[1]||"dev.patel",status:"active"},
+              ];
+              const outputPorts=[
+                {id:"op1",name:"Commerce Analytics API",type:"REST API",endpoint:"https://api.company.com/data/commerce/v2/analytics",format:"JSON",consumers:["BI Team","ML Platform"],sla:"99.5% uptime · < 200ms p95",auth:"OAuth2",status:"active"},
+                {id:"op2",name:"Orders Fact Table",type:"Table",endpoint:"snowflake_prod / COMMERCE_PROD / orders_fact",format:"Parquet",consumers:["Revenue Dashboard","Finance Reports"],sla:"99% uptime · < 6h freshness",auth:"Snowflake RBAC",status:"active"},
+                {id:"op3",name:"Real-time Order Events",type:"Stream",endpoint:"kafka://analytics-cluster/commerce.orders.events",format:"Avro",consumers:["ML Feature Store","Alerting"],sla:"99.9% uptime · < 5min latency",auth:"SASL/SCRAM",status:"active"},
+              ];
+              const PortBadge=({status})=>(
+                <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:99,
+                  background:status==="active"?`${T.green}18`:`${T.amber}18`,
+                  color:status==="active"?T.green:T.amber,
+                  border:`1px solid ${status==="active"?T.green:T.amber}30`}}>
+                  {status==="active"?"Active":"Inactive"}
+                </span>
+              );
+              return (
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:28}}>
+                  <div>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                      <div style={{width:28,height:28,borderRadius:7,background:`${T.blue}18`,border:`1.5px solid ${T.blue}30`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke={T.blue} strokeWidth="1.5" strokeLinecap="round"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+                      </div>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:700,color:T.text}}>Input Ports</div>
+                        <div style={{fontSize:11,color:T.textMuted}}>Source data flowing into this product</div>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                      {inputPorts.map(p=>(
+                        <div key={p.id} style={{background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:10,padding:"14px 16px",transition:"border-color .15s"}}
+                          onMouseEnter={e=>e.currentTarget.style.borderColor=T.blue}
+                          onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:8}}>
+                            <div>
+                              <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:3}}>{p.name}</div>
+                              <div style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,lineHeight:1.5}}>{p.source}</div>
+                            </div>
+                            <PortBadge status={p.status}/>
+                          </div>
+                          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+                            <span style={{fontSize:10.5,padding:"2px 8px",borderRadius:5,background:`${T.blue}12`,color:T.blue,border:`1px solid ${T.blue}25`}}>{p.type}</span>
+                            <span style={{fontSize:10.5,padding:"2px 8px",borderRadius:5,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`}}>{p.format}</span>
+                          </div>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                            {[{l:"SLA",v:p.sla},{l:"Owner",v:p.owner}].map(m=>(
+                              <div key={m.l} style={{padding:"5px 8px",background:T.bgElevated,borderRadius:6}}>
+                                <div style={{fontSize:9.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>{m.l}</div>
+                                <div style={{fontSize:11,color:T.text,fontWeight:500}}>{m.v}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                      <div style={{width:28,height:28,borderRadius:7,background:`${T.violet}18`,border:`1.5px solid ${T.violet}30`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke={T.violet} strokeWidth="1.5" strokeLinecap="round"><path d="M13 8H3M7 4L3 8l4 4"/></svg>
+                      </div>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:700,color:T.text}}>Output Ports</div>
+                        <div style={{fontSize:11,color:T.textMuted}}>Interfaces exposed to consumers</div>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                      {outputPorts.map(p=>(
+                        <div key={p.id} style={{background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:10,padding:"14px 16px",transition:"border-color .15s"}}
+                          onMouseEnter={e=>e.currentTarget.style.borderColor=T.violet}
+                          onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:8}}>
+                            <div>
+                              <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:3}}>{p.name}</div>
+                              <div style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,lineHeight:1.5,wordBreak:"break-all"}}>{p.endpoint}</div>
+                            </div>
+                            <PortBadge status={p.status}/>
+                          </div>
+                          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+                            <span style={{fontSize:10.5,padding:"2px 8px",borderRadius:5,background:`${T.violet}12`,color:T.violet,border:`1px solid ${T.violet}25`}}>{p.type}</span>
+                            <span style={{fontSize:10.5,padding:"2px 8px",borderRadius:5,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`}}>{p.format}</span>
+                          </div>
+                          <div style={{fontSize:11,color:T.textSub,marginBottom:7}}>
+                            <span style={{fontWeight:600,color:T.textMuted,fontSize:9.5,textTransform:"uppercase",letterSpacing:"0.06em"}}>Consumers: </span>
+                            {p.consumers.join(" · ")}
+                          </div>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                            {[{l:"SLA",v:p.sla},{l:"Auth",v:p.auth}].map(m=>(
+                              <div key={m.l} style={{padding:"5px 8px",background:T.bgElevated,borderRadius:6}}>
+                                <div style={{fontSize:9.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>{m.l}</div>
+                                <div style={{fontSize:11,color:T.text,fontWeight:500}}>{m.v}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* ── ACTIVITY TAB ── */}
+            {productTab==="activity"&&(
+              <div style={{maxWidth:680}}>
+                <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:16}}>Recent Activity</div>
+                {[
+                  {icon:"🔄",text:`Lifecycle stage changed from DEVELOPMENT to PRODUCTION`,user:"maya.chen",time:"2 days ago"},
+                  {icon:"📥",text:"3 new assets added: orders_fact, customer_dim, product_dim",user:"sarah.kim",time:"4 days ago"},
+                  {icon:"👤",text:"Ownership transferred to maya.chen",user:"alex.wu",time:"1 week ago"},
+                  {icon:"📋",text:"SLA tier upgraded from BRONZE to SILVER — availability target set to 99%",user:"dev.patel",time:"2 weeks ago"},
+                  {icon:"✨",text:`Data product created in ${pd.domain} domain`,user:(pd.owners||[])[0]||"system",time:pd.createdAt},
+                ].map((ev,i,a)=>(
+                  <div key={i} style={{display:"flex",gap:12,paddingBottom:20,position:"relative"}}>
+                    {i<a.length-1&&<div style={{position:"absolute",left:15,top:30,bottom:0,width:1,background:T.border}}/>}
+                    <div style={{width:30,height:30,borderRadius:"50%",background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0,zIndex:1}}>{ev.icon}</div>
+                    <div style={{flex:1,paddingTop:4}}>
+                      <div style={{fontSize:12.5,color:T.text,lineHeight:1.5,marginBottom:4}}>{ev.text}</div>
+                      <div style={{fontSize:11,color:T.textMuted}}>by <span style={{color:T.textSub,fontWeight:500}}>{ev.user}</span> · {ev.time}</div>
+                    </div>
+                  </div>
+                ))}
+                <div style={{marginTop:8,paddingTop:20,borderTop:`1px solid ${T.border}`}}>
+                  <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Open Tasks</div>
+                  {[
+                    {label:"Add data quality checks for orders_fact",priority:"high",  assignee:"maya.chen",due:"May 20"},
+                    {label:"Document column-level lineage for customer_dim",priority:"medium",assignee:"sarah.kim",due:"May 30"},
+                    {label:"Review SLA thresholds with consumers",priority:"low",assignee:"dev.patel",due:"Jun 5"},
+                  ].map((task,i)=>(
+                    <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,marginBottom:8}}>
+                      <div style={{width:8,height:8,borderRadius:"50%",background:task.priority==="high"?T.rose:task.priority==="medium"?T.amber:T.green,flexShrink:0}}/>
+                      <div style={{flex:1,fontSize:12.5,color:T.text}}>{task.label}</div>
+                      <div style={{fontSize:11,color:T.textMuted}}>{task.assignee}</div>
+                      <div style={{fontSize:11,color:T.textMuted,background:T.bgElevated,padding:"2px 7px",borderRadius:5,border:`1px solid ${T.border}`}}>Due {task.due}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── CONTRACT TAB ── */}
+            {productTab==="contract"&&(()=>{
+              const [contractState, setContractState] = React.useState(()=>({
+                status:"Active", version:"1.2.0", validFrom:"2026-01-01", validUntil:"2026-12-31",
+                schemaTerms:{expectedColumns:12,allowSchemaEvolution:true,breakingChangePolicy:"Notify 7 days prior"},
+                freshnessTerms:{maxLatency:120,unit:"minutes",availability:99.5},
+                qualityTerms:[
+                  {id:"qc1",rule:"Null rate on primary key",operator:"<",threshold:0.1,unit:"%",status:"passing"},
+                  {id:"qc2",rule:"Row count",operator:">",threshold:1000,unit:"rows",status:"passing"},
+                  {id:"qc3",rule:"Completeness score",operator:">=",threshold:95,unit:"%",status:"passing"},
+                  {id:"qc4",rule:"Duplicate rate",operator:"<",threshold:0.5,unit:"%",status:"failing"},
+                ],
+                ownershipTerms:{owner:(pd.owners||[])[0]||"—",responseTime:"24 hours",escalation:"data-platform-team@company.com"},
+                consumerTerms:"Consumers agree to: (1) not redistribute raw data outside approved use cases, (2) report issues within 24 hours, (3) not use this product for purposes inconsistent with the domain's data governance policy.",
+              }));
+              const [validating,setValidating]=React.useState(false);
+              const [lastValidated,setLastValidated]=React.useState("2026-05-17 14:32");
+              const STATUS_CFG={Active:{color:T.green,bg:`${T.green}12`,label:"Active"},Draft:{color:T.textMuted,bg:T.bgElevated,label:"Draft"},Breached:{color:T.rose,bg:`${T.rose}12`,label:"Breached"},"Under Review":{color:T.amber,bg:`${T.amber}12`,label:"Under Review"}};
+              const sc=STATUS_CFG[contractState.status]||STATUS_CFG.Active;
+              const runValidation=()=>{setValidating(true);setTimeout(()=>{setContractState(p=>({...p,qualityTerms:p.qualityTerms.map(q=>({...q,status:Math.random()>0.2?"passing":"failing"}))}));setLastValidated(new Date().toLocaleString("en-US",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}));setValidating(false);},1800);};
+              const passingCount=contractState.qualityTerms.filter(q=>q.status==="passing").length;
+              const failingCount=contractState.qualityTerms.filter(q=>q.status==="failing").length;
+              return (
+                <div style={{maxWidth:720}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20,flexWrap:"wrap",gap:12}}>
+                    <div>
+                      <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:4,display:"flex",alignItems:"center",gap:10}}>
+                        Data Contract
+                        <span style={{fontSize:10.5,fontWeight:700,padding:"2px 9px",borderRadius:99,background:sc.bg,color:sc.color,border:`1px solid ${sc.color}30`}}>{sc.label}</span>
+                        <span style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>v{contractState.version}</span>
+                      </div>
+                      <div style={{fontSize:11.5,color:T.textMuted}}>Valid {contractState.validFrom} → {contractState.validUntil}</div>
+                    </div>
+                    <button onClick={runValidation} disabled={validating}
+                      style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:validating?T.bgElevated:T.accentDim,border:`1px solid ${validating?T.border:T.accent+"44"}`,color:validating?T.textMuted:T.accent,fontSize:12,fontWeight:600,cursor:validating?"not-allowed":"pointer",fontFamily:"inherit"}}>
+                      {validating?<><span style={{display:"inline-block",width:11,height:11,borderRadius:"50%",border:`1.5px solid ${T.accent}`,borderTopColor:"transparent",animation:"spin 0.7s linear infinite"}}/>Validating…</>:<>▶ Validate Now</>}
+                    </button>
+                  </div>
+                  <div style={{display:"flex",gap:10,marginBottom:20}}>
+                    {[{l:"Quality checks passing",v:passingCount,c:T.green},{l:"Failing",v:failingCount,c:failingCount>0?T.rose:T.textMuted},{l:"Last validated",v:lastValidated,c:T.textMuted,small:true}].map(s=>(
+                      <div key={s.l} style={{flex:s.small?2:1,padding:"10px 14px",background:T.bgSurface,border:`1px solid ${s.c}25`,borderRadius:9}}>
+                        <div style={{fontSize:s.small?12:20,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:s.c,marginBottom:2}}>{s.v}</div>
+                        <div style={{fontSize:10.5,color:T.textMuted}}>{s.l}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {[
+                    {key:"schema",title:"Schema Terms",icon:"📐",content:<div>{[{l:"Expected Columns",v:`${contractState.schemaTerms.expectedColumns} columns`},{l:"Schema Evolution",v:contractState.schemaTerms.allowSchemaEvolution?"Allowed":"Frozen"},{l:"Breaking Changes",v:contractState.schemaTerms.breakingChangePolicy}].map((m,i,a)=><div key={m.l} style={{display:"flex",justifyContent:"space-between",padding:"9px 0",borderBottom:i<a.length-1?`1px solid ${T.border}`:"none"}}><span style={{fontSize:12,color:T.textMuted}}>{m.l}</span><span style={{fontSize:12,color:T.text,fontWeight:500}}>{m.v}</span></div>)}</div>},
+                    {key:"freshness",title:"Freshness & SLA",icon:"⏱️",content:<div>{[{l:"Max Latency",v:`${contractState.freshnessTerms.maxLatency} ${contractState.freshnessTerms.unit}`},{l:"Availability Target",v:`${contractState.freshnessTerms.availability}%`},{l:"SLA Tier",v:pd.sla?.tier||"Gold"}].map((m,i,a)=><div key={m.l} style={{display:"flex",justifyContent:"space-between",padding:"9px 0",borderBottom:i<a.length-1?`1px solid ${T.border}`:"none"}}><span style={{fontSize:12,color:T.textMuted}}>{m.l}</span><span style={{fontSize:12,color:T.text,fontWeight:500}}>{m.v}</span></div>)}</div>},
+                    {key:"quality",title:"Quality Terms",icon:"✅",content:<div style={{display:"flex",flexDirection:"column",gap:6}}>{contractState.qualityTerms.map(q=>{const pass=q.status==="passing";return(<div key={q.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:T.bgElevated,borderRadius:8,border:`1px solid ${pass?T.green+"25":T.rose+"30"}`}}><div style={{width:18,height:18,borderRadius:"50%",background:pass?`${T.green}15`:`${T.rose}15`,border:`1.5px solid ${pass?T.green:T.rose}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{pass?<svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M2 4.5l2 2L7 2.5" stroke={T.green} strokeWidth="1.4" strokeLinecap="round"/></svg>:<span style={{fontSize:9,color:T.rose,fontWeight:700}}>✕</span>}</div><span style={{flex:1,fontSize:12,color:T.text}}>{q.rule}</span><span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:pass?T.green:T.rose,fontWeight:600}}>{q.operator} {q.threshold}{q.unit}</span></div>);})}</div>},
+                    {key:"ownership",title:"Ownership Terms",icon:"👤",content:<div>{[{l:"Owner",v:contractState.ownershipTerms.owner},{l:"Response SLA",v:contractState.ownershipTerms.responseTime},{l:"Escalation",v:contractState.ownershipTerms.escalation}].map((m,i,a)=><div key={m.l} style={{display:"flex",justifyContent:"space-between",padding:"9px 0",borderBottom:i<a.length-1?`1px solid ${T.border}`:"none"}}><span style={{fontSize:12,color:T.textMuted}}>{m.l}</span><span style={{fontSize:12,color:T.text,fontWeight:500}}>{m.v}</span></div>)}</div>},
+                    {key:"consumer",title:"Consumer Terms",icon:"📋",content:<div style={{fontSize:12.5,color:T.textSub,lineHeight:1.8}}>{contractState.consumerTerms}</div>},
+                  ].map(sec=>(
+                    <div key={sec.key} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",marginBottom:12}}>
+                      <div style={{padding:"11px 16px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:13}}>{sec.icon}</span>
+                        <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{sec.title}</span>
+                      </div>
+                      <div style={{padding:"12px 16px"}}>{sec.content}</div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
+            {/* ── CUSTOM PROPERTIES TAB ── */}
+            {productTab==="customprops"&&(
+              <div style={{maxWidth:680}}>
+                <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:16}}>Custom Properties</div>
+                <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",marginBottom:16}}>
+                  {dpCustomProps.length===0
+                    ? <div style={{padding:"32px 0",textAlign:"center",color:T.textMuted,fontSize:12.5}}>No custom properties yet. Add key-value pairs to enrich this data product's metadata.</div>
+                    : dpCustomProps.map((cp,i)=>(
+                        <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 16px",borderBottom:i<dpCustomProps.length-1?`1px solid ${T.border}`:"none"}}>
+                          <div style={{display:"flex",gap:12,flex:1,minWidth:0}}>
+                            <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",minWidth:140,flexShrink:0}}>{cp.key}</span>
+                            <span style={{fontSize:12.5,color:T.text}}>{cp.value}</span>
+                          </div>
+                          <button onClick={()=>setDpCustomProps(p=>p.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex",lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{Ic.x(11)}</button>
+                        </div>
+                      ))
+                  }
+                </div>
+                <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
+                  <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:12}}>Add Property</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:8,alignItems:"center"}}>
+                    <input placeholder="Key (e.g. team)" value={dpNewCpKey} onChange={e=>setDpNewCpKey(e.target.value)}
+                      style={{padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none"}}
+                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                    <input placeholder="Value" value={dpNewCpVal} onChange={e=>setDpNewCpVal(e.target.value)}
+                      style={{padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none"}}
+                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}
+                      onKeyDown={e=>{if(e.key==="Enter"&&dpNewCpKey.trim()&&dpNewCpVal.trim()){setDpCustomProps(p=>[...p,{key:dpNewCpKey.trim(),value:dpNewCpVal.trim()}]);setDpNewCpKey("");setDpNewCpVal("");}}}/>
+                    <button disabled={!dpNewCpKey.trim()||!dpNewCpVal.trim()}
+                      onClick={()=>{if(dpNewCpKey.trim()&&dpNewCpVal.trim()){setDpCustomProps(p=>[...p,{key:dpNewCpKey.trim(),value:dpNewCpVal.trim()}]);setDpNewCpKey("");setDpNewCpVal("");}}}
+                      style={{padding:"7px 14px",borderRadius:7,background:dpNewCpKey.trim()&&dpNewCpVal.trim()?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:dpNewCpKey.trim()&&dpNewCpVal.trim()?"pointer":"default",whiteSpace:"nowrap"}}>
+                      Add
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>
