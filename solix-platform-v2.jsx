@@ -1531,14 +1531,9 @@ const GlossaryView = ({onToast}) => {
               <Btn small variant="primary" onClick={()=>openModal("newTerm",{category:selCat||""})}>+ Term</Btn>
             </div>
           </div>
-          <div style={{display:"flex",gap:0,marginBottom:-1}}>
-            {[{id:"overview",l:"Overview"},{id:"terms",l:`Terms & Categories (${allTermsInGlossary.length})`}].map(tab=>(
-              <button key={tab.id} onClick={()=>setGTab(tab.id)} style={{padding:"8px 18px",background:"transparent",border:"none",borderBottom:`2px solid ${gTab===tab.id?T.accent:"transparent"}`,color:gTab===tab.id?T.text:T.textMuted,fontSize:13,fontWeight:gTab===tab.id?600:400,cursor:"pointer",transition:"all .12s"}}>{tab.l}</button>
-            ))}
-          </div>
         </div>
         <div style={{flex:1,overflowY:"auto"}}>
-          {gTab==="overview"&&(()=>{
+          {(()=>{
             const allT=allTermsInGlossary;
             const totalTerms=allT.length;
             const approved=allT.filter(t=>t.status==="Approved").length;
@@ -1662,10 +1657,10 @@ const GlossaryView = ({onToast}) => {
               </div>
             );
           })()}
-          {gTab==="terms"&&(allTermsInGlossary.length===0?(
-            <div style={{textAlign:"center",padding:"64px 20px",color:T.textMuted}}><div style={{fontSize:15,fontWeight:600,color:T.textSub,marginBottom:8}}>No terms yet</div><Btn small variant="primary" onClick={()=>openModal("newTerm",{})}>+ New Term</Btn></div>
+          {allTermsInGlossary.length===0?(
+            <div style={{textAlign:"center",padding:"32px 20px",color:T.textMuted}}><div style={{fontSize:15,fontWeight:600,color:T.textSub,marginBottom:8}}>No terms yet</div><Btn small variant="primary" onClick={()=>openModal("newTerm",{})}>+ New Term</Btn></div>
           ):(
-            <div style={{padding:"20px 28px",display:"flex",flexDirection:"column",gap:16}}>
+            <div style={{padding:"0 28px 28px",display:"flex",flexDirection:"column",gap:16}}>
               {glossary.categories.map(cat=>{
                 const cts=allTermsInGlossary.filter(t=>t.category===cat.id);
                 if(cts.length===0) return null;
@@ -1734,7 +1729,7 @@ const GlossaryView = ({onToast}) => {
                 </div>
               );})()}
             </div>
-          ))}
+          )}
         </div>
       </div>
     );
@@ -24487,6 +24482,7 @@ const TagManagementView = ({onToast}) => {
 
   // ── Right panel state ──
   const [detailTab,    setDetailTab]    = useState('overview');
+  const [catDetailTab, setCatDetailTab] = useState('overview');
   const [editing,      setEditing]      = useState(false);
   const [editDraft,    setEditDraft]    = useState(null);
   const [aliasInput,   setAliasInput]   = useState('');
@@ -24520,6 +24516,9 @@ const TagManagementView = ({onToast}) => {
     document.addEventListener('mousedown',handler);
     return ()=>document.removeEventListener('mousedown',handler);
   },[]);
+
+  // Reset category tab when selection changes
+  useEffect(()=>{ setCatDetailTab('overview'); },[selCatId]);
 
   // Sync tagOwners/tagStewards when selected tag changes
   useEffect(()=>{
@@ -24880,52 +24879,73 @@ const TagManagementView = ({onToast}) => {
           {selCatId&&!selTag&&(()=>{
             const catTags = tagDefs.filter(td=>td.category===selCatId);
             const cc = getCatStyle(selCatId);
+            const catAuditEntries=[
+              {id:"tca1",timestamp:"May 21, 2026 · 11:15",category:"EDIT",  action:"Category description updated", details:`Description updated for '${selCatId}' category`,             actor:"sarah.kim", isSystem:false},
+              {id:"tca2",timestamp:"May 18, 2026 · 09:30",category:"TAG",   action:"Tag added to category",        details:`A new tag was added to '${selCatId}'`,                        actor:"maya.chen", isSystem:false},
+              {id:"tca3",timestamp:"May 14, 2026 · 14:00",category:"SYSTEM",action:"Tag sync completed",           details:`${catTags.length} tag${catTags.length!==1?'s':''} synced with Snowflake`, actor:"system",    isSystem:true},
+              {id:"tca4",timestamp:"May 10, 2026 · 10:22",category:"EDIT",  action:"Tag moved to category",        details:`Tag re-categorised into '${selCatId}'`,                       actor:"dev.patel",  isSystem:false},
+              {id:"tca5",timestamp:"May 05, 2026 · 08:00",category:"EDIT",  action:"Category created",             details:`Category '${selCatId}' created`,                             actor:"admin",     isSystem:false},
+            ];
             return (
               <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
                 {/* Header */}
-                <div style={{padding:'16px 24px',borderBottom:`1px solid ${T.border}`,background:T.bgSurface,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:10}}>
-                    <span style={{width:13,height:13,borderRadius:'50%',background:cc.color||T.accent,display:'block',flexShrink:0,boxShadow:`0 0 0 3px ${(cc.color||T.accent)}33`}}/>
-                    <div>
-                      <div style={{fontSize:17,fontWeight:700,color:T.text,textTransform:'capitalize'}}>{selCatId}</div>
-                      <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{catTags.length} tag{catTags.length!==1?'s':''} in this category</div>
-                    </div>
-                  </div>
-                  <button onClick={()=>{setNewCatPanelOpen(true);setNewCatDraft({name:selCatId,description:'',color:'#6366f1'});}}
-                    style={{padding:'6px 14px',borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:'pointer',fontWeight:500}}
-                    onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
-                    Edit
-                  </button>
-                </div>
-                {/* Body */}
-                <div style={{flex:1,overflowY:'auto',padding:'20px 24px'}}>
-                  <div style={{maxWidth:680,display:'flex',flexDirection:'column',gap:16}}>
-                    {/* Tags in this category */}
-                    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
-                      <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                        <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Tags</span>
-                        <button onClick={()=>{setNewPanelOpen(true);setNewDraft(d=>({...d,category:selCatId}));setSelCatId(null);}}
-                          style={{fontSize:11,padding:'3px 10px',borderRadius:6,background:T.accent,border:'none',color:'#fff',cursor:'pointer',fontWeight:600}}>+ New Tag</button>
+                <div style={{padding:'16px 24px 0',borderBottom:`1px solid ${T.border}`,background:T.bgSurface,flexShrink:0}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+                    <div style={{display:'flex',alignItems:'center',gap:10}}>
+                      <span style={{width:13,height:13,borderRadius:'50%',background:cc.color||T.accent,display:'block',flexShrink:0,boxShadow:`0 0 0 3px ${(cc.color||T.accent)}33`}}/>
+                      <div>
+                        <div style={{fontSize:17,fontWeight:700,color:T.text,textTransform:'capitalize'}}>{selCatId}</div>
+                        <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{catTags.length} tag{catTags.length!==1?'s':''} in this category</div>
                       </div>
-                      {catTags.length===0
-                        ? <div style={{padding:'32px 16px',textAlign:'center',fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No tags in this category yet</div>
-                        : catTags.map((td,i)=>{
-                            const cnt=assetCount(td.id);
-                            return (
-                              <div key={td.id} onClick={()=>{setSelTagId(td.id);setSelCatId(null);setDetailTab('overview');}}
-                                style={{display:'flex',alignItems:'center',gap:10,padding:'11px 16px',borderBottom:i<catTags.length-1?`1px solid ${T.border}`:'none',cursor:'pointer',transition:'background .1s'}}
-                                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                                <span style={{width:9,height:9,borderRadius:'50%',background:td.color,flexShrink:0,display:'block'}}/>
-                                <span style={{flex:1,fontSize:13,color:T.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
-                                {td.propagationMode&&td.propagationMode!=='none'&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:99,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`,fontWeight:500,textTransform:'capitalize',flexShrink:0}}>{PROP_LABELS[td.propagationMode]}</span>}
-                                <span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace",flexShrink:0}}>{cnt} asset{cnt!==1?'s':''}</span>
-                                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,flexShrink:0}}><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                              </div>
-                            );
-                          })
-                      }
                     </div>
+                    <button onClick={()=>{setNewCatPanelOpen(true);setNewCatDraft({name:selCatId,description:'',color:'#6366f1'});}}
+                      style={{padding:'6px 14px',borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:'pointer',fontWeight:500}}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+                      Edit
+                    </button>
                   </div>
+                  {/* Tabs */}
+                  <div style={{display:'flex',gap:0}}>
+                    {[{k:'overview',l:'Overview'},{k:'activity',l:`Activity (${catAuditEntries.length})`}].map(t=>(
+                      <button key={t.k} onClick={()=>setCatDetailTab(t.k)}
+                        style={{padding:'8px 16px',background:'none',border:'none',borderBottom:`2px solid ${catDetailTab===t.k?T.accent:'transparent'}`,
+                          color:catDetailTab===t.k?T.accent:T.textMuted,fontSize:12.5,fontWeight:catDetailTab===t.k?600:400,cursor:'pointer',transition:'all .12s',whiteSpace:'nowrap'}}>
+                        {t.l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* Tab body */}
+                <div style={{flex:1,overflowY:'auto',padding:'20px 24px'}}>
+                  {catDetailTab==='overview'&&(
+                    <div style={{maxWidth:680,display:'flex',flexDirection:'column',gap:16}}>
+                      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
+                        <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                          <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Tags</span>
+                          <button onClick={()=>{setNewPanelOpen(true);setNewDraft(d=>({...d,category:selCatId}));setSelCatId(null);}}
+                            style={{fontSize:11,padding:'3px 10px',borderRadius:6,background:T.accent,border:'none',color:'#fff',cursor:'pointer',fontWeight:600}}>+ New Tag</button>
+                        </div>
+                        {catTags.length===0
+                          ? <div style={{padding:'32px 16px',textAlign:'center',fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No tags in this category yet</div>
+                          : catTags.map((td,i)=>{
+                              const cnt=assetCount(td.id);
+                              return (
+                                <div key={td.id} onClick={()=>{setSelTagId(td.id);setSelCatId(null);setDetailTab('overview');}}
+                                  style={{display:'flex',alignItems:'center',gap:10,padding:'11px 16px',borderBottom:i<catTags.length-1?`1px solid ${T.border}`:'none',cursor:'pointer',transition:'background .1s'}}
+                                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                  <span style={{width:9,height:9,borderRadius:'50%',background:td.color,flexShrink:0,display:'block'}}/>
+                                  <span style={{flex:1,fontSize:13,color:T.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
+                                  {td.propagationMode&&td.propagationMode!=='none'&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:99,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`,fontWeight:500,textTransform:'capitalize',flexShrink:0}}>{PROP_LABELS[td.propagationMode]}</span>}
+                                  <span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace",flexShrink:0}}>{cnt} asset{cnt!==1?'s':''}</span>
+                                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,flexShrink:0}}><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                </div>
+                              );
+                            })
+                        }
+                      </div>
+                    </div>
+                  )}
+                  {catDetailTab==='activity'&&<AuditLogTable entries={catAuditEntries}/>}
                 </div>
               </div>
             );
@@ -25279,28 +25299,21 @@ const TagManagementView = ({onToast}) => {
                   )}
 
                   {/* ── ACTIVITY TAB ── */}
-                  {detailTab==='activity'&&(
-                    <div style={{maxWidth:680}}>
-                      {tagActivity.length===0
-                        ? <div style={{padding:'48px 0',textAlign:'center',color:T.textMuted,fontSize:13}}>No activity recorded for this tag.</div>
-                        : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
-                            {tagActivity.map((entry,i)=>(
-                              <div key={i} style={{display:'flex',alignItems:'flex-start',gap:12,padding:'12px 16px',borderBottom:i<tagActivity.length-1?`1px solid ${T.border}`:'none'}}>
-                                <span style={{width:6,height:6,borderRadius:'50%',background:entry.resolved?T.textMuted:T.accent,marginTop:5,flexShrink:0,display:'block'}}/>
-                                <div style={{flex:1}}>
-                                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8}}>
-                                    <span style={{fontSize:12.5,fontWeight:500,color:T.text}}>{entry.action}</span>
-                                    <span style={{fontSize:11,color:T.textMuted,flexShrink:0,fontFamily:"'Geist Mono',monospace"}}>{entry.date}</span>
-                                  </div>
-                                  {entry.detail&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{entry.detail}</div>}
-                                  <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>by {entry.by}</div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                      }
-                    </div>
-                  )}
+                  {detailTab==='activity'&&(()=>{
+                    const tagAuditEntries=tagActivity.map((e,idx)=>({
+                      id:`ta${idx}`,
+                      timestamp:e.date+' · 00:00',
+                      category:e.by==='System'||e.by==='system'?'SYSTEM':
+                        e.action.toLowerCase().includes('conflict')?'ACCESS':
+                        e.action.toLowerCase().includes('approv')||e.action.toLowerCase().includes('creat')?'EDIT':'TAG',
+                      action:e.action,
+                      details:e.detail||'',
+                      actor:(e.by||'').toLowerCase(),
+                      isSystem:e.by==='System'||e.by==='system',
+                      note:null,diff:null,
+                    }));
+                    return <div style={{maxWidth:900}}><AuditLogTable entries={tagAuditEntries}/></div>;
+                  })()}
 
                   </div>
                 )}
