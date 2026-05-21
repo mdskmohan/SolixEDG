@@ -9011,210 +9011,370 @@ const AssetSchema = ({asset,selCol,onColClick,onToast})=>{
     </Card2>
   </div>;
 }
-// ─── React Flow lineage ───────────────────────────────────────────────────────
+// ─── Lineage colour map ───────────────────────────────────────────────────────
 const LINEAGE_TYPE_COLOR={
   Database:"#7dd3fc",Pipeline:"#fbbf24",Table:"#ee2424",
   Dashboard:"#c4b5fd","ML Model":"#fda4af",
 };
-const LINEAGE_XFORM_COLOR={
-  Direct:"#7dd3fc",CAST:"#fbbf24",SUM:"#4ade80",Feature:"#c4b5fd",
+
+// ─── Per-node metadata (for info panel) ──────────────────────────────────────
+const LINEAGE_NODE_META={
+  pg:  {assetType:"Database", service:"PostgreSQL", db:"postgresql_prod",          description:"Production PostgreSQL database serving Commerce orders and customer data.",                owner:"dev.patel",  quality:92,cert:"Approved",   tags:["PII","finance"],cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"amount",t:"decimal"},{n:"status",t:"varchar"},{n:"created_at",t:"timestamp"}]},
+  pipe:{assetType:"Pipeline", service:"Airflow",    db:"etl_pipeline",            description:"Nightly ETL pipeline transforming raw orders to analytics-ready format. Runs at 02:00 UTC.", owner:"sarah.kim", quality:87,cert:"In Review",tags:["etl"],          cols:[{n:"order_id",t:"bigint"},{n:"cust_id",t:"bigint"},{n:"amount_usd",t:"decimal"},{n:"loaded_at",t:"timestamp"}]},
+  self:{assetType:"Table",    service:"Snowflake",  db:"COMMERCE / orders_fact",   description:"Fact table tracking all commerce orders enriched with ML-predicted churn scores.",        owner:"maya.chen", quality:95,cert:"Approved",   tags:["PII","KPI"],    cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"revenue",t:"decimal"},{n:"churn_score",t:"float"},{n:"created_at",t:"date"}]},
+  d1:  {assetType:"Dashboard",service:"Tableau",    db:"Revenue Dashboard",        description:"Executive revenue dashboard consuming enriched order data for Finance stakeholders.",       owner:"alex.wu",   quality:88,cert:"Approved",   tags:["KPI"],          cols:[{n:"total_revenue",t:"decimal"},{n:"order_count",t:"bigint"},{n:"avg_order",t:"decimal"}]},
+  ml:  {assetType:"ML Model", service:"SageMaker",  db:"ml_churn_model",           description:"XGBoost churn model trained on historical order patterns. Deployed to SageMaker.",        owner:"lisa.ray",  quality:91,cert:"In Review",tags:["model"],        cols:[{n:"cust_id_feat",t:"bigint"},{n:"churn_prob",t:"float"},{n:"risk_tier",t:"varchar"}]},
+  d2:  {assetType:"Dashboard",service:"Tableau",    db:"Finance Summary",          description:"Finance summary dashboard aggregating revenue across all domains. Updated daily.",        owner:"james.oh",  quality:84,cert:"Draft",      tags:["finance"],      cols:[{n:"domain",t:"varchar"},{n:"total_rev",t:"decimal"},{n:"growth_pct",t:"float"}]},
+  api: {assetType:"Pipeline", service:"FastAPI",    db:"reporting_api",            description:"REST API exposing ML predictions and churn scores to alerting and CRM systems.",           owner:"dev.patel",  quality:89,cert:"Draft",      tags:["model","etl"],  cols:[{n:"cust_id",t:"bigint"},{n:"churn_risk",t:"float"},{n:"updated_at",t:"timestamp"}]},
 };
 
-// ─── LineageAssetNode — custom React Flow node (module-level, never recreated) ─
+// ─── Fixed topology (positions + connections) ─────────────────────────────────
+const LINEAGE_TOPO={
+  pg:  {x:0,   y:160, label:"postgresql_prod",   upstream:[],       downstream:["pipe"], active:false},
+  pipe:{x:250, y:160, label:"etl_pipeline",      upstream:["pg"],   downstream:["self"], active:false},
+  self:{x:500, y:160, label:"",                  upstream:["pipe"], downstream:["d1","ml"], active:true},
+  d1:  {x:780, y:50,  label:"revenue_dashboard", upstream:["self"], downstream:["d2"],   active:false},
+  ml:  {x:780, y:270, label:"ml_churn_model",    upstream:["self"], downstream:["api"],  active:false},
+  d2:  {x:1040,y:50,  label:"finance_summary",   upstream:["d1"],   downstream:[],       active:false},
+  api: {x:1040,y:270, label:"reporting_api",     upstream:["ml"],   downstream:[],       active:false},
+};
+
+const LINEAGE_EDGES_DEF=[
+  {id:"le1",s:"pg",  t:"pipe",tk:"Direct"},
+  {id:"le2",s:"pipe",t:"self",tk:"Direct"},
+  {id:"le3",s:"self",t:"d1",  tk:"Direct"},
+  {id:"le4",s:"self",t:"ml",  tk:"Direct"},
+  {id:"le5",s:"d1",  t:"d2",  tk:"Direct"},
+  {id:"le6",s:"ml",  t:"api", tk:"Direct"},
+];
+
+// ─── Helper: get all ancestors / descendants recursively ──────────────────────
+function linAncestors(nodeId){
+  const out=new Set();
+  const visit=id=>{LINEAGE_TOPO[id].upstream.forEach(u=>{out.add(u);visit(u);});};
+  visit(nodeId); return out;
+}
+function linDescendants(nodeId){
+  const out=new Set();
+  const visit=id=>{LINEAGE_TOPO[id].downstream.forEach(d=>{out.add(d);visit(d);});};
+  visit(nodeId); return out;
+}
+
+// ─── LineageAssetNode — module-level custom node ──────────────────────────────
 const LineageAssetNode=({data})=>{
-  const {label,assetType,active,cols,showCols}=data;
+  const{label,assetType,active,cols,expanded,
+        hasUpstream,upstreamOpen,hasDownstream,downstreamOpen,
+        onToggleExpand,onToggleUpstream,onToggleDownstream}=data;
   const tc=LINEAGE_TYPE_COLOR[assetType]||"#a1a1aa";
   const ROW=28;
-  return (
-    <div style={{
-      background:active?"rgba(238,36,36,0.05)":"#ffffff",
-      border:`1.5px solid ${active?"#ee2424":tc+"40"}`,
-      borderRadius:9,minWidth:172,
-      fontFamily:"'Geist Sans','Inter',sans-serif",
-      boxShadow:active?"0 0 0 3px rgba(238,36,36,0.15)":"0 2px 8px rgba(0,0,0,0.10)",
-      overflow:"hidden",
-    }}>
-      <Handle type="target" position={Position.Left}
-        style={{width:9,height:9,background:"#ffffff",border:`2px solid ${tc}`,left:-5}}/>
-      {/* type badge + name */}
-      <div style={{padding:"8px 11px 4px",borderBottom:`1px solid ${tc}20`,display:"flex",alignItems:"center",gap:6}}>
-        <span style={{width:7,height:7,borderRadius:2,background:tc,display:"inline-block",flexShrink:0}}/>
-        <span style={{fontSize:9,fontWeight:700,color:tc,textTransform:"uppercase",letterSpacing:"0.08em"}}>{assetType}</span>
-        {active&&<span style={{marginLeft:"auto",fontSize:8,background:"rgba(238,36,36,0.22)",color:"#ff6b6b",borderRadius:4,padding:"1px 5px",fontWeight:700}}>CURRENT</span>}
-      </div>
-      <div style={{padding:"5px 11px 8px"}}>
-        <div style={{fontSize:12,fontWeight:600,color:active?"#ee2424":T.text,fontFamily:"'Geist Mono',monospace",
-          whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:160}}>{label}</div>
-      </div>
-      {/* per-column rows — only in column mode */}
-      {showCols&&cols&&cols.length>0&&(
-        <div style={{borderTop:"1px solid #e2e8f0"}}>
-          {cols.map((c,i)=>(
-            <div key={c.n} style={{
-              height:ROW,display:"flex",alignItems:"center",padding:"0 11px",gap:6,
-              fontSize:11,fontFamily:"'Geist Mono',monospace",
-              color:c.hi?tc:T.textMuted,
-              background:c.hi?`${tc}08`:"transparent",
-              borderBottom:i<cols.length-1?"1px solid #f1f5f9":undefined,
-              position:"relative",
-            }}>
-              <Handle type="target" id={`ti-${c.n}`} position={Position.Left}
-                style={{top:ROW/2,width:6,height:6,background:c.hi?tc:"#d1d5db",border:"none",left:-3,borderRadius:"50%"}}/>
-              <span style={{width:4,height:4,borderRadius:"50%",background:c.hi?tc:"#3f3f46",display:"inline-block",flexShrink:0}}/>
-              {c.n}
-              <Handle type="source" id={`so-${c.n}`} position={Position.Right}
-                style={{top:ROW/2,width:6,height:6,background:c.hi?tc:"#d1d5db",border:"none",right:-3,borderRadius:"50%"}}/>
-            </div>
-          ))}
+  const BtnUp=()=>(
+    <button className="nodrag nopan" onClick={e=>{e.stopPropagation();onToggleUpstream();}}
+      title={upstreamOpen?"Hide upstream":"Expand upstream"}
+      style={{position:"absolute",left:-22,top:"50%",transform:"translateY(-50%)",
+        width:22,height:22,borderRadius:"50%",
+        background:upstreamOpen?"#3b82f6":"#fff",
+        border:"1.5px solid #3b82f6",color:upstreamOpen?"#fff":"#3b82f6",
+        cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
+        fontSize:15,fontWeight:700,lineHeight:1,zIndex:10,
+        boxShadow:"0 1px 4px rgba(59,130,246,0.3)",padding:0}}>
+      {upstreamOpen?"−":"+"}
+    </button>
+  );
+  const BtnDown=()=>(
+    <button className="nodrag nopan" onClick={e=>{e.stopPropagation();onToggleDownstream();}}
+      title={downstreamOpen?"Hide downstream":"Expand downstream"}
+      style={{position:"absolute",right:-22,top:"50%",transform:"translateY(-50%)",
+        width:22,height:22,borderRadius:"50%",
+        background:downstreamOpen?"#8b5cf6":"#fff",
+        border:"1.5px solid #8b5cf6",color:downstreamOpen?"#fff":"#8b5cf6",
+        cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
+        fontSize:15,fontWeight:700,lineHeight:1,zIndex:10,
+        boxShadow:"0 1px 4px rgba(139,92,246,0.3)",padding:0}}>
+      {downstreamOpen?"−":"+"}
+    </button>
+  );
+  return(
+    <div style={{position:"relative",fontFamily:"'Geist Sans','Inter',sans-serif"}}>
+      {hasUpstream&&<BtnUp/>}
+      {/* Main card */}
+      <div style={{
+        background:active?"rgba(238,36,36,0.04)":"#ffffff",
+        border:`1.5px solid ${active?"#ee2424":tc+"55"}`,
+        borderRadius:9,minWidth:190,
+        boxShadow:active?"0 0 0 3px rgba(238,36,36,0.12)":"0 2px 10px rgba(0,0,0,0.09)",
+        overflow:"hidden",
+      }}>
+        <Handle type="target" position={Position.Left}
+          style={{width:9,height:9,background:"#fff",border:`2px solid ${tc}`,left:-5}}/>
+        {/* Type header */}
+        <div style={{padding:"7px 10px 4px",borderBottom:`1px solid ${tc}22`,display:"flex",alignItems:"center",gap:6,background:"#fafafa"}}>
+          <span style={{width:7,height:7,borderRadius:2,background:tc,display:"inline-block",flexShrink:0}}/>
+          <span style={{fontSize:9,fontWeight:700,color:tc,textTransform:"uppercase",letterSpacing:"0.08em",flex:1}}>{assetType}</span>
+          {active&&<span style={{fontSize:8,background:"rgba(238,36,36,0.12)",color:"#ee2424",borderRadius:4,padding:"1px 5px",fontWeight:700,letterSpacing:"0.05em"}}>CURRENT</span>}
         </div>
-      )}
-      <Handle type="source" position={Position.Right}
-        style={{width:9,height:9,background:"#ffffff",border:`2px solid ${tc}`,right:-5}}/>
+        {/* Name + expand toggle */}
+        <div style={{padding:"6px 10px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
+          <div style={{fontSize:12,fontWeight:600,color:active?"#ee2424":"#0f172a",fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:140,flex:1}}>{label}</div>
+          <button className="nodrag nopan"
+            onClick={e=>{e.stopPropagation();onToggleExpand();}}
+            title={expanded?"Collapse columns":"Expand columns"}
+            style={{flexShrink:0,width:20,height:20,borderRadius:5,
+              background:expanded?`${tc}15`:"#f1f5f9",
+              border:`1.5px solid ${expanded?tc+"60":"#e2e8f0"}`,
+              cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
+              color:expanded?tc:"#64748b",padding:0}}>
+            {expanded
+              ?<svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 5l3-4 3 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              :<svg width="8" height="6" viewBox="0 0 8 6" fill="none"><path d="M1 1l3 4 3-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+          </button>
+        </div>
+        {/* Column rows */}
+        {expanded&&cols&&cols.length>0&&(
+          <div style={{borderTop:"1px solid #f0f4f8"}}>
+            {cols.map((c,i)=>(
+              <div key={c.n} style={{
+                height:ROW,display:"flex",alignItems:"center",padding:"0 10px",gap:6,
+                fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:"#475569",
+                borderBottom:i<cols.length-1?"1px solid #f8fafc":undefined,
+                position:"relative",
+              }}>
+                <Handle type="target" id={`ti-${c.n}`} position={Position.Left}
+                  style={{top:ROW/2,width:6,height:6,background:"#d1d5db",border:"none",left:-3,borderRadius:"50%"}}/>
+                <span style={{width:4,height:4,borderRadius:"50%",background:"#cbd5e1",display:"inline-block",flexShrink:0}}/>
+                <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.n}</span>
+                <span style={{fontSize:9,color:"#94a3b8"}}>{c.t}</span>
+                <Handle type="source" id={`so-${c.n}`} position={Position.Right}
+                  style={{top:ROW/2,width:6,height:6,background:"#d1d5db",border:"none",right:-3,borderRadius:"50%"}}/>
+              </div>
+            ))}
+          </div>
+        )}
+        <Handle type="source" position={Position.Right}
+          style={{width:9,height:9,background:"#fff",border:`2px solid ${tc}`,right:-5}}/>
+      </div>
+      {hasDownstream&&<BtnDown/>}
     </div>
   );
 };
-// MUST be module-level — never recreated inside a component
 const LIN_NODE_TYPES={assetNode:LineageAssetNode};
 
-// Build nodes + edges for table or column view
-function mkLineageGraph(assetName,mode){
-  const sc=mode==="column";
-  const mk=(id,x,y,label,assetType,active,cols)=>({
-    id,type:"assetNode",position:{x,y},
-    data:{label,assetType,active,showCols:sc,cols:sc?cols:[]},
-  });
-  const COLS={
-    pg:  [{n:"order_id",hi:1},{n:"customer_id",hi:1},{n:"amount",hi:1},{n:"status",hi:0}],
-    pipe:[{n:"order_id",hi:1},{n:"cust_id",hi:1},{n:"amount_usd",hi:1}],
-    self:[{n:"order_id",hi:1},{n:"customer_id",hi:1},{n:"revenue",hi:1},{n:"churn_score",hi:1}],
-    d1:  [{n:"total_revenue",hi:1},{n:"order_count",hi:0}],
-    ml:  [{n:"cust_id_feat",hi:1},{n:"churn_prob",hi:1}],
-  };
-  const nodes=sc
-    ?[mk("pg",  0,  40,"postgresql_prod","Database",false,COLS.pg),
-      mk("pipe",250,40,"etl_pipeline",   "Pipeline",false,COLS.pipe),
-      mk("self",500,40,assetName,         "Table",   true, COLS.self),
-      mk("d1",  770, 0,"revenue_dashboard","Dashboard",false,COLS.d1),
-      mk("ml",  770,220,"ml_churn_model", "ML Model",false,COLS.ml)]
-    :[mk("pg",  0, 130,"postgresql_prod","Database",false,[]),
-      mk("pipe",220,130,"etl_pipeline",  "Pipeline",false,[]),
-      mk("self",440,130,assetName,        "Table",   true, []),
-      mk("d1",  660, 40,"revenue_dashboard","Dashboard",false,[]),
-      mk("ml",  660,220,"ml_churn_model","ML Model",false,[]),
-      mk("d2",  880, 40,"finance_summary","Dashboard",false,[]),
-      mk("api", 880,220,"reporting_api", "Pipeline",false,[])];
-
-  const mkE=(id,s,t,sh,th,lbl,tk)=>{
-    const c=LINEAGE_XFORM_COLOR[tk]||"#38383f";
-    return {id,source:s,target:t,
-      ...(sh?{sourceHandle:sh,targetHandle:th}:{}),
-      type:"smoothstep",label:lbl||undefined,
-      markerEnd:{type:MarkerType.ArrowClosed,color:c,width:13,height:13},
-      style:{stroke:c,strokeWidth:1.7},
-      ...(lbl?{
-        labelStyle:{fill:c,fontSize:9,fontFamily:"'Geist Mono',monospace",fontWeight:600},
-        labelBgStyle:{fill:"#ffffff",fillOpacity:0.92},
-        labelBgPadding:[4,3],labelBgBorderRadius:3,
-      }:{}),
-    };
-  };
-  const edges=sc
-    ?[mkE("c1","pg",  "pipe","so-order_id",  "ti-order_id",  "Direct","Direct"),
-      mkE("c2","pg",  "pipe","so-customer_id","ti-cust_id",   "Direct","Direct"),
-      mkE("c3","pg",  "pipe","so-amount",     "ti-amount_usd","CAST",  "CAST"),
-      mkE("c4","pipe","self","so-order_id",   "ti-order_id",  "Direct","Direct"),
-      mkE("c5","pipe","self","so-cust_id",    "ti-customer_id","Direct","Direct"),
-      mkE("c6","pipe","self","so-amount_usd", "ti-revenue",   "SUM()", "SUM"),
-      mkE("c7","self","d1",  "so-revenue",    "ti-total_revenue","SUM()","SUM"),
-      mkE("c8","self","ml",  "so-customer_id","ti-cust_id_feat","Feature","Feature"),
-      mkE("c9","self","ml",  "so-churn_score","ti-churn_prob","Direct","Direct")]
-    :[mkE("e1","pg",  "pipe",null,null,"","Direct"),
-      mkE("e2","pipe","self",null,null,"","Direct"),
-      mkE("e3","self","d1",  null,null,"","Direct"),
-      mkE("e4","self","ml",  null,null,"","Direct"),
-      mkE("e5","d1",  "d2",  null,null,"","Direct"),
-      mkE("e6","ml",  "api", null,null,"","Direct")];
-  return {nodes,edges};
+// ─── Build RF nodes + edges from visible set ──────────────────────────────────
+function buildLinNodes(aName,hiddenNodes,expandedCols,callbacks){
+  return Object.entries(LINEAGE_TOPO)
+    .filter(([id])=>!hiddenNodes.has(id))
+    .map(([id,topo])=>{
+      const meta=LINEAGE_NODE_META[id];
+      const label=topo.active?aName:topo.label;
+      const expanded=expandedCols.has(id);
+      const upParents=topo.upstream;
+      const downChildren=topo.downstream;
+      const hasUpstream=upParents.length>0;
+      const upstreamOpen=hasUpstream&&upParents.some(u=>!hiddenNodes.has(u));
+      const hasDownstream=downChildren.length>0;
+      const downstreamOpen=hasDownstream&&downChildren.some(d=>!hiddenNodes.has(d));
+      return{
+        id,type:"assetNode",position:{x:topo.x,y:topo.y},
+        data:{
+          id,label,assetType:meta.assetType,active:topo.active||false,
+          cols:meta.cols,expanded,
+          hasUpstream,upstreamOpen,hasDownstream,downstreamOpen,
+          onToggleExpand:()=>callbacks.toggleExpand(id),
+          onToggleUpstream:()=>callbacks.toggleUpstream(id,upParents,upstreamOpen),
+          onToggleDownstream:()=>callbacks.toggleDownstream(id,downChildren,downstreamOpen),
+        },
+      };
+    });
+}
+function buildLinEdges(hiddenNodes){
+  return LINEAGE_EDGES_DEF
+    .filter(e=>!hiddenNodes.has(e.s)&&!hiddenNodes.has(e.t))
+    .map(e=>{
+      const c="#94a3b8";
+      return{
+        id:e.id,source:e.s,target:e.t,type:"smoothstep",
+        markerEnd:{type:MarkerType.ArrowClosed,color:c,width:12,height:12},
+        style:{stroke:c,strokeWidth:1.6},
+      };
+    });
 }
 
-// ─── AssetLineageFull — ReactFlow direct child of sized container ─────────────
+// ─── AssetLineageFull ─────────────────────────────────────────────────────────
 const AssetLineageFull=({asset})=>{
-  const aName=asset?.name||"orders";
-  const [mode,setMode]=useState("table");
-  const initG=useMemo(()=>mkLineageGraph(aName,"table"),[aName]);
-  const [nodes,setNodes,onNodesChange]=useNodesState(initG.nodes);
-  const [edges,setEdges,onEdgesChange]=useEdgesState(initG.edges);
-  const [rf,setRf]=useState(null);
+  const aName=asset?.name||"orders_fact";
+  const [hiddenNodes, setHiddenNodes]=useState(new Set());
+  const [expandedCols,setExpandedCols]=useState(new Set());
+  const [selectedId,  setSelectedId] =useState(null);
+  const [rf,          setRf]         =useState(null);
 
-  // Swap graph in-place when mode or asset changes — no remount, same canvas
-  useEffect(()=>{
-    const g=mkLineageGraph(aName,mode);
-    setNodes(g.nodes);
-    setEdges(g.edges);
-    setTimeout(()=>rf?.fitView({padding:0.15,duration:480}),100);
-  },[mode,aName]);
+  const callbacks=useMemo(()=>({
+    toggleExpand:(id)=>{
+      setExpandedCols(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});
+      setTimeout(()=>rf?.fitView({padding:0.15,duration:350}),60);
+    },
+    toggleUpstream:(id,parents,open)=>{
+      setHiddenNodes(p=>{
+        const n=new Set(p);
+        if(open){linAncestors(id).forEach(a=>n.add(a));}
+        else{linAncestors(id).forEach(a=>n.delete(a));}
+        return n;
+      });
+      setTimeout(()=>rf?.fitView({padding:0.15,duration:350}),60);
+    },
+    toggleDownstream:(id,children,open)=>{
+      setHiddenNodes(p=>{
+        const n=new Set(p);
+        if(open){linDescendants(id).forEach(d=>n.add(d));}
+        else{linDescendants(id).forEach(d=>n.delete(d));}
+        return n;
+      });
+      setTimeout(()=>rf?.fitView({padding:0.15,duration:350}),60);
+    },
+  }),[rf]);
 
-  const typeLegend=Object.entries(LINEAGE_TYPE_COLOR);
-  const xformLegend=Object.entries(LINEAGE_XFORM_COLOR);
+  const nodes=useMemo(()=>buildLinNodes(aName,hiddenNodes,expandedCols,callbacks),[aName,hiddenNodes,expandedCols,callbacks]);
+  const edges=useMemo(()=>buildLinEdges(hiddenNodes),[hiddenNodes]);
 
-  return (
-    <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:0}}>
-      {/* visible toolbar card */}
-      <div style={{
-        display:"flex",justifyContent:"space-between",alignItems:"center",
-        flexWrap:"wrap",gap:10,
-        padding:"12px 16px",
-        background:T.bgSurface,
-        border:`1px solid ${T.border}`,
-        borderRadius:"10px 10px 0 0",
-        borderBottom:"none",
-      }}>
-        <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
-          {(mode==="table"?typeLegend:xformLegend).map(([lbl,c])=>(
-            <span key={lbl} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:T.textSub}}>
-              {mode==="table"
-                ?<span style={{width:8,height:8,borderRadius:2,background:c,display:"inline-block"}}/>
-                :<span style={{width:16,height:2,background:c,display:"inline-block",borderRadius:1}}/>}
-              {lbl}
+  const [rfNodes,setRfNodes,onNodesChange]=useNodesState(nodes);
+  const [rfEdges,setRfEdges,onEdgesChange]=useEdgesState(edges);
+
+  useEffect(()=>{setRfNodes(nodes);},[nodes]);
+  useEffect(()=>{setRfEdges(edges);},[edges]);
+
+  const selMeta=selectedId?LINEAGE_NODE_META[selectedId]:null;
+  const selLabel=selectedId?(LINEAGE_TOPO[selectedId].active?aName:LINEAGE_TOPO[selectedId].label):null;
+
+  // cert colour helper (hardcoded, no T)
+  const certC=(c)=>c==="Approved"?"#16a34a":c==="In Review"?"#d97706":"#6b7280";
+  const qualC=(q)=>q>=90?"#16a34a":q>=75?"#d97706":"#e11d48";
+
+  return(
+    <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:0,height:520}}>
+      {/* Toolbar */}
+      <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 16px",
+        background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:"10px 10px 0 0",
+        borderBottom:"none",flexShrink:0,flexWrap:"wrap"}}>
+        {/* Legend */}
+        <div style={{display:"flex",gap:10,flexWrap:"wrap",flex:1}}>
+          {Object.entries(LINEAGE_TYPE_COLOR).map(([type,color])=>(
+            <span key={type} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:"#64748b"}}>
+              <span style={{width:8,height:8,borderRadius:2,background:color,display:"inline-block"}}/>
+              {type}
             </span>
           ))}
         </div>
-        <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          <Tabs2 tabs={[{key:"table",label:"Table Level"},{key:"column",label:"Column Level"}]}
-            active={mode} onChange={setMode} pill/>
-          <Btn small ghost onClick={()=>rf?.fitView({padding:0.14,duration:400})}>Fit</Btn>
-          <Btn small ghost>Export</Btn>
-        </div>
+        {/* Hint */}
+        <span style={{fontSize:10.5,color:"#94a3b8",display:"flex",alignItems:"center",gap:4}}>
+          <span style={{width:14,height:14,borderRadius:"50%",background:"#fff",border:"1.5px solid #3b82f6",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#3b82f6",fontWeight:700,lineHeight:1}}>+</span>
+          upstream&nbsp;
+          <span style={{width:14,height:14,borderRadius:"50%",background:"#fff",border:"1.5px solid #8b5cf6",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#8b5cf6",fontWeight:700,lineHeight:1}}>+</span>
+          downstream&nbsp;·&nbsp;click node for details
+        </span>
+        <button onClick={()=>rf?.fitView({padding:0.15,duration:400})}
+          style={{padding:"4px 12px",borderRadius:6,background:"#fff",border:"1px solid #e2e8f0",color:"#64748b",fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>
+          Fit
+        </button>
       </div>
 
-      {/* canvas - directly connected to toolbar card above */}
-      <div style={{height:490,borderRadius:"0 0 10px 10px",overflow:"hidden",border:`1px solid ${T.border}`,position:"relative"}}>
-        <ReactFlow
-          nodes={nodes} edges={edges}
-          onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
-          nodeTypes={LIN_NODE_TYPES}
-          onInit={inst=>{setRf(inst);inst.fitView({padding:0.15});}}
-          minZoom={0.18} maxZoom={3}
-          proOptions={{hideAttribution:true}}
-          colorMode="light"
-          style={{background:"#f8fafc"}}
-        >
-          <Background color="#cbd5e1" gap={20} size={1.3} variant="dots"/>
-          <Controls showInteractive={false}
-            style={{background:"#ffffff",border:"1px solid #e2e8f0",borderRadius:8,overflow:"hidden"}}/>
-          <MiniMap nodeColor={n=>LINEAGE_TYPE_COLOR[n.data?.assetType]||"#94a3b8"}
-            style={{background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:8}}
-            maskColor="rgba(248,250,252,0.7)" position="bottom-right"/>
-        </ReactFlow>
-      </div>
-
-      {mode==="column"&&(
-        <div style={{fontSize:11.5,color:T.textMuted,display:"flex",alignItems:"center",gap:6,marginTop:8}}>
-          <span>ℹ️</span>
-          Column-level lineage traces individual fields. Edge labels show the transformation.
-          Use <strong style={{color:T.textSub}}>Fit</strong> to reset the view.
+      {/* Canvas + info panel row */}
+      <div style={{display:"flex",flex:1,minHeight:0,border:"1px solid #e2e8f0",borderRadius:"0 0 10px 10px",overflow:"hidden"}}>
+        {/* ReactFlow */}
+        <div style={{flex:1,minWidth:0,position:"relative",background:"#f8fafc"}}>
+          <ReactFlow
+            nodes={rfNodes} edges={rfEdges}
+            onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+            nodeTypes={LIN_NODE_TYPES}
+            onInit={inst=>{setRf(inst);inst.fitView({padding:0.18});}}
+            onNodeClick={(_e,node)=>setSelectedId(p=>p===node.id?null:node.id)}
+            minZoom={0.15} maxZoom={3}
+            proOptions={{hideAttribution:true}}
+            colorMode="light"
+            style={{background:"#f8fafc"}}
+          >
+            <Background color="#cbd5e1" gap={22} size={1.2} variant="dots"/>
+            <Controls showInteractive={false}
+              style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:8,overflow:"hidden"}}/>
+            <MiniMap nodeColor={n=>LINEAGE_TYPE_COLOR[n.data?.assetType]||"#94a3b8"}
+              style={{background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:8}}
+              maskColor="rgba(248,250,252,0.7)" position="bottom-right"/>
+          </ReactFlow>
         </div>
-      )}
+
+        {/* Info panel — slides in when a node is selected */}
+        {selectedId&&selMeta&&(
+          <div style={{width:280,flexShrink:0,borderLeft:"1px solid #e2e8f0",background:"#fff",
+            display:"flex",flexDirection:"column",overflowY:"auto",animation:"slideInRight .18s ease"}}>
+            {/* Panel header */}
+            <div style={{padding:"14px 16px 12px",borderBottom:"1px solid #f1f5f9",display:"flex",alignItems:"flex-start",gap:10}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4,flexWrap:"wrap"}}>
+                  <span style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.08em",padding:"2px 7px",borderRadius:4,background:`${LINEAGE_TYPE_COLOR[selMeta.assetType]||"#a1a1aa"}15`,color:LINEAGE_TYPE_COLOR[selMeta.assetType]||"#a1a1aa",border:`1px solid ${LINEAGE_TYPE_COLOR[selMeta.assetType]||"#a1a1aa"}30`}}>{selMeta.assetType}</span>
+                  {LINEAGE_TOPO[selectedId].active&&<span style={{fontSize:9,fontWeight:700,color:"#ee2424",background:"rgba(238,36,36,0.1)",padding:"2px 6px",borderRadius:4}}>CURRENT</span>}
+                </div>
+                <div style={{fontSize:13,fontWeight:700,color:"#0f172a",fontFamily:"'Geist Mono',monospace",wordBreak:"break-all",lineHeight:1.3}}>{selLabel}</div>
+                <div style={{fontSize:10.5,color:"#64748b",marginTop:3,fontFamily:"'Geist Mono',monospace"}}>{selMeta.db}</div>
+              </div>
+              <button onClick={()=>setSelectedId(null)}
+                style={{width:22,height:22,borderRadius:6,background:"#f1f5f9",border:"1px solid #e2e8f0",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:"#64748b",flexShrink:0,padding:0}}>
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+
+            <div style={{flex:1,padding:"14px 16px",display:"flex",flexDirection:"column",gap:14}}>
+              {/* Description */}
+              <div>
+                <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:5}}>Description</div>
+                <div style={{fontSize:11.5,color:"#475569",lineHeight:1.6}}>{selMeta.description}</div>
+              </div>
+              {/* Metrics row */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                <div style={{padding:"8px 10px",background:"#f8fafc",borderRadius:7,border:"1px solid #f1f5f9"}}>
+                  <div style={{fontSize:9.5,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Quality</div>
+                  <div style={{fontSize:16,fontWeight:700,color:qualC(selMeta.quality),fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{selMeta.quality}</div>
+                  <div style={{marginTop:4,height:3,background:"#e2e8f0",borderRadius:2,overflow:"hidden"}}>
+                    <div style={{width:`${selMeta.quality}%`,height:"100%",background:qualC(selMeta.quality),borderRadius:2}}/>
+                  </div>
+                </div>
+                <div style={{padding:"8px 10px",background:"#f8fafc",borderRadius:7,border:"1px solid #f1f5f9"}}>
+                  <div style={{fontSize:9.5,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>Cert</div>
+                  <div style={{fontSize:12,fontWeight:700,color:certC(selMeta.cert)}}>{selMeta.cert}</div>
+                  <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>{selMeta.service}</div>
+                </div>
+              </div>
+              {/* Owner */}
+              <div>
+                <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:5}}>Owner</div>
+                <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 8px",borderRadius:99,background:"#f1f5f9",border:"1px solid #e2e8f0"}}>
+                  <div style={{width:20,height:20,borderRadius:"50%",background:"#dbeafe",border:"1px solid #bfdbfe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7.5,fontWeight:700,color:"#2563eb"}}>
+                    {selMeta.owner.split(".").map(s=>s[0]?.toUpperCase()||"").join("")}
+                  </div>
+                  <span style={{fontSize:11.5,color:"#0f172a",fontWeight:500}}>{selMeta.owner}</span>
+                </div>
+              </div>
+              {/* Tags */}
+              {selMeta.tags&&selMeta.tags.length>0&&(
+                <div>
+                  <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:5}}>Tags</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                    {selMeta.tags.map(t=><span key={t} style={{fontSize:10.5,padding:"2px 8px",borderRadius:4,background:"#f1f5f9",color:"#475569",border:"1px solid #e2e8f0",fontWeight:500}}>{t}</span>)}
+                  </div>
+                </div>
+              )}
+              {/* Columns */}
+              <div>
+                <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:5}}>Columns ({selMeta.cols.length})</div>
+                <div style={{border:"1px solid #f1f5f9",borderRadius:7,overflow:"hidden"}}>
+                  {selMeta.cols.map((c,i)=>(
+                    <div key={c.n} style={{display:"flex",alignItems:"center",padding:"6px 10px",borderBottom:i<selMeta.cols.length-1?"1px solid #f8fafc":undefined,gap:8}}>
+                      <span style={{flex:1,fontSize:11,fontFamily:"'Geist Mono',monospace",color:"#0f172a",fontWeight:500}}>{c.n}</span>
+                      <span style={{fontSize:10,color:"#94a3b8",fontFamily:"'Geist Mono',monospace"}}>{c.t}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
