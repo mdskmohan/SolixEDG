@@ -14852,7 +14852,6 @@ const DataProductsView = ({onAsset, onNav}) => {
   };
 
   // ── Stats ──
-  const inProd      = products.filter(p=>p.lifecycleStage==="PRODUCTION").length;
   const goldSla     = products.filter(p=>p.sla?.tier==="GOLD").length;
   const avgQuality  = Math.round(products.reduce((a,p)=>a+(p.sla?.dataQuality||0),0)/Math.max(products.length,1));
 
@@ -15166,7 +15165,7 @@ const DataProductsView = ({onAsset, onNav}) => {
         {/* Stats bar */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:12,marginBottom:24}}>
           <Metric label="Total Products" value={String(products.length)}  sub="registered"        color={T.accent}/>
-          <Metric label="In Production"  value={String(inProd)}           sub="live products"     color="#16a34a"/>
+          <Metric label="Domains"        value={String(domains.length)}   sub="covered"           color={T.blue}/>
         </div>
 
         {/* Search + toolbar row — single row */}
@@ -15292,7 +15291,6 @@ const DataProductsView = ({onAsset, onNav}) => {
                     <div style={{width:34,height:34,borderRadius:9,background:`${p.color}18`,border:`1.5px solid ${p.color}35`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:17,flexShrink:0}}>{p.icon}</div>
                     <div style={{minWidth:0}}>
                       <div style={{fontSize:13,fontWeight:600,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.displayName}</div>
-                      <div style={{marginTop:3}}><LifecycleBadge stage={p.lifecycleStage}/></div>
                     </div>
                   </div>
                   {/* Domain */}
