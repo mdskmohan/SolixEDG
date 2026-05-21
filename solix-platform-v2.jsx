@@ -1,11 +1,10 @@
-import React, { useState, useRef, useEffect, useCallback, createContext, useContext } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo, createContext, useContext } from "react";
 import { createPortal } from "react-dom";
 import {
   ReactFlow, Background, Controls, MiniMap,
   Handle, Position,
   useNodesState, useEdgesState,
-  MarkerType, getBezierPath,
-  useReactFlow, ReactFlowProvider,
+  MarkerType,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -9011,255 +9010,200 @@ const AssetSchema = ({asset,selCol,onColClick,onToast})=>{
     </Card2>
   </div>;
 }
-// ─── React Flow lineage — module-level constants ─────────────────────────────
+// ─── React Flow lineage ───────────────────────────────────────────────────────
 const LINEAGE_TYPE_COLOR={
   Database:"#7dd3fc",Pipeline:"#fbbf24",Table:"#ee2424",
-  Dashboard:"#c4b5fd","ML Model":"#fda4af","Feature Store":"#34d399",
+  Dashboard:"#c4b5fd","ML Model":"#fda4af",
 };
-const LINEAGE_TRANSFORM_COLORS={
-  Direct:"#7dd3fc",CAST:"#fbbf24",SUM:"#4ade80",Feature:"#c4b5fd",Filter:"#fda4af",
+const LINEAGE_XFORM_COLOR={
+  Direct:"#7dd3fc",CAST:"#fbbf24",SUM:"#4ade80",Feature:"#c4b5fd",
 };
 
-// Custom node — renders both table-level (compact) and column-level (expanded) card
+// ─── LineageAssetNode — custom React Flow node (module-level, never recreated) ─
 const LineageAssetNode=({data})=>{
-  const {label,assetType,active,columns,showCols}=data;
-  const typeColor=LINEAGE_TYPE_COLOR[assetType]||"#a1a1aa";
-  const ROW_H=30;
+  const {label,assetType,active,cols,showCols}=data;
+  const tc=LINEAGE_TYPE_COLOR[assetType]||"#a1a1aa";
+  const ROW=28;
   return (
     <div style={{
-      background:active?"rgba(238,36,36,0.08)":"#18181d",
-      border:`1.5px solid ${active?"#ee2424":"#27272e"}`,
-      borderRadius:9,
-      minWidth:168,
+      background:active?"rgba(238,36,36,0.07)":"#1a1a22",
+      border:`1.5px solid ${active?"#ee2424":"#2e2e38"}`,
+      borderRadius:9,minWidth:172,
       fontFamily:"'Geist Sans','Inter',sans-serif",
-      boxShadow:active?"0 0 0 3px rgba(238,36,36,0.2)":"0 2px 12px rgba(0,0,0,0.5)",
+      boxShadow:active?"0 0 0 3px rgba(238,36,36,0.18)":"0 3px 14px rgba(0,0,0,0.6)",
       overflow:"hidden",
-      position:"relative",
     }}>
-      {/* target (left) */}
       <Handle type="target" position={Position.Left}
-        style={{background:"#27272e",border:`2px solid ${typeColor}`,width:10,height:10,left:-5}}/>
-
-      {/* header */}
-      <div style={{padding:"7px 10px 6px",borderBottom:"1px solid #27272e",display:"flex",alignItems:"center",gap:6}}>
-        <span style={{width:7,height:7,borderRadius:2,background:typeColor,display:"inline-block",flexShrink:0}}/>
-        <span style={{fontSize:9,fontWeight:700,color:typeColor,textTransform:"uppercase",letterSpacing:"0.08em"}}>{assetType}</span>
-        {active&&<span style={{marginLeft:"auto",fontSize:8,background:"rgba(238,36,36,0.2)",color:"#ee2424",borderRadius:4,padding:"1px 5px",fontWeight:700,letterSpacing:"0.05em"}}>CURRENT</span>}
+        style={{width:9,height:9,background:"#1a1a22",border:`2px solid ${tc}`,left:-5}}/>
+      {/* type badge + name */}
+      <div style={{padding:"8px 11px 4px",borderBottom:"1px solid #2e2e38",display:"flex",alignItems:"center",gap:6}}>
+        <span style={{width:7,height:7,borderRadius:2,background:tc,display:"inline-block",flexShrink:0}}/>
+        <span style={{fontSize:9,fontWeight:700,color:tc,textTransform:"uppercase",letterSpacing:"0.08em"}}>{assetType}</span>
+        {active&&<span style={{marginLeft:"auto",fontSize:8,background:"rgba(238,36,36,0.22)",color:"#ff6b6b",borderRadius:4,padding:"1px 5px",fontWeight:700}}>CURRENT</span>}
       </div>
-
-      {/* asset name */}
-      <div style={{padding:"6px 10px 7px"}}>
-        <div style={{fontSize:12,fontWeight:600,color:active?"#ee2424":"#f4f4f5",
-          fontFamily:"'Geist Mono',monospace",
-          whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:170}}>
-          {label}
-        </div>
+      <div style={{padding:"5px 11px 8px"}}>
+        <div style={{fontSize:12,fontWeight:600,color:active?"#ee2424":"#f4f4f5",fontFamily:"'Geist Mono',monospace",
+          whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:160}}>{label}</div>
       </div>
-
-      {/* column rows — visible only in column mode */}
-      {showCols&&columns&&columns.length>0&&(
-        <div style={{borderTop:"1px solid #27272e"}}>
-          {columns.map((col,i)=>(
-            <div key={col.name} style={{
+      {/* per-column rows — only in column mode */}
+      {showCols&&cols&&cols.length>0&&(
+        <div style={{borderTop:"1px solid #2e2e38"}}>
+          {cols.map((c,i)=>(
+            <div key={c.n} style={{
+              height:ROW,display:"flex",alignItems:"center",padding:"0 11px",gap:6,
+              fontSize:11,fontFamily:"'Geist Mono',monospace",
+              color:c.hi?tc:"#71717a",
+              background:c.hi?"rgba(255,255,255,0.03)":"transparent",
+              borderBottom:i<cols.length-1?"1px solid #2e2e38":undefined,
               position:"relative",
-              height:ROW_H,
-              display:"flex",alignItems:"center",
-              padding:"0 10px",gap:6,
-              fontSize:11,
-              color:col.hi?typeColor:"#a1a1aa",
-              background:col.hi?"rgba(255,255,255,0.03)":"transparent",
-              borderBottom:i<columns.length-1?"1px solid #27272e":undefined,
-              fontFamily:"'Geist Mono',monospace",
             }}>
-              <Handle type="target" id={`ti-${col.name}`} position={Position.Left}
-                style={{top:`${44+ROW_H*i+ROW_H/2}px`,width:1,height:1,background:"transparent",border:"none",left:0,transform:"none"}}/>
-              <span style={{width:5,height:5,borderRadius:"50%",background:col.hi?typeColor:"#38383f",display:"inline-block",flexShrink:0}}/>
-              <span>{col.name}</span>
-              <Handle type="source" id={`so-${col.name}`} position={Position.Right}
-                style={{top:`${44+ROW_H*i+ROW_H/2}px`,width:1,height:1,background:"transparent",border:"none",right:0,transform:"none"}}/>
+              <Handle type="target" id={`ti-${c.n}`} position={Position.Left}
+                style={{top:ROW/2,width:6,height:6,background:c.hi?tc:"#2e2e38",border:"none",left:-3,borderRadius:"50%"}}/>
+              <span style={{width:4,height:4,borderRadius:"50%",background:c.hi?tc:"#3f3f46",display:"inline-block",flexShrink:0}}/>
+              {c.n}
+              <Handle type="source" id={`so-${c.n}`} position={Position.Right}
+                style={{top:ROW/2,width:6,height:6,background:c.hi?tc:"#2e2e38",border:"none",right:-3,borderRadius:"50%"}}/>
             </div>
           ))}
         </div>
       )}
-
-      {/* source (right) */}
       <Handle type="source" position={Position.Right}
-        style={{background:"#27272e",border:`2px solid ${typeColor}`,width:10,height:10,right:-5}}/>
+        style={{width:9,height:9,background:"#1a1a22",border:`2px solid ${tc}`,right:-5}}/>
     </div>
   );
 };
-const lineageNodeTypes={assetNode:LineageAssetNode};
+// MUST be module-level — never recreated inside a component
+const LIN_NODE_TYPES={assetNode:LineageAssetNode};
 
-// Build nodes/edges for a given mode
-function buildLineageGraph(assetName,mode){
-  const showCols=mode==="column";
-
-  const tblNodes=[
-    {id:"pg",   type:"assetNode",position:{x:0,  y:140},data:{label:"postgresql_prod", assetType:"Database", active:false,showCols:false}},
-    {id:"pipe", type:"assetNode",position:{x:220,y:140},data:{label:"etl_pipeline",    assetType:"Pipeline", active:false,showCols:false}},
-    {id:"self", type:"assetNode",position:{x:440,y:140},data:{label:assetName,           assetType:"Table",   active:true, showCols:false}},
-    {id:"dash1",type:"assetNode",position:{x:660,y:40}, data:{label:"revenue_dashboard",assetType:"Dashboard",active:false,showCols:false}},
-    {id:"ml",   type:"assetNode",position:{x:660,y:240},data:{label:"ml_churn_model",  assetType:"ML Model", active:false,showCols:false}},
-    {id:"dash2",type:"assetNode",position:{x:880,y:40}, data:{label:"finance_summary", assetType:"Dashboard",active:false,showCols:false}},
-    {id:"api",  type:"assetNode",position:{x:880,y:240},data:{label:"reporting_api",   assetType:"Pipeline", active:false,showCols:false}},
-  ];
-  const tblEdges=[
-    {id:"e1",source:"pg",   target:"pipe"},
-    {id:"e2",source:"pipe", target:"self"},
-    {id:"e3",source:"self", target:"dash1"},
-    {id:"e4",source:"self", target:"ml"},
-    {id:"e5",source:"dash1",target:"dash2"},
-    {id:"e6",source:"ml",   target:"api"},
-  ].map(e=>({...e,type:"smoothstep",
-    markerEnd:{type:MarkerType.ArrowClosed,color:"#38383f",width:14,height:14},
-    style:{stroke:"#38383f",strokeWidth:1.8},
-  }));
-
-  const COLS={
-    pg:   [{name:"order_id",hi:true},{name:"customer_id",hi:true},{name:"amount",hi:true},{name:"status",hi:false}],
-    pipe: [{name:"order_id",hi:true},{name:"cust_id",hi:true},{name:"amount_usd",hi:true}],
-    self: [{name:"order_id",hi:true},{name:"customer_id",hi:true},{name:"revenue",hi:true},{name:"churn_score",hi:true}],
-    dash1:[{name:"total_revenue",hi:true},{name:"order_count",hi:false}],
-    ml:   [{name:"cust_id_feat",hi:true},{name:"churn_prob",hi:true}],
-  };
-  const colNodes=[
-    {id:"pg",   type:"assetNode",position:{x:0,  y:60}, data:{label:"postgresql_prod", assetType:"Database",  active:false,showCols,columns:COLS.pg}},
-    {id:"pipe", type:"assetNode",position:{x:240,y:60}, data:{label:"etl_pipeline",    assetType:"Pipeline",  active:false,showCols,columns:COLS.pipe}},
-    {id:"self", type:"assetNode",position:{x:490,y:60}, data:{label:assetName,           assetType:"Table",    active:true, showCols,columns:COLS.self}},
-    {id:"dash1",type:"assetNode",position:{x:760,y:0},  data:{label:"revenue_dashboard",assetType:"Dashboard", active:false,showCols,columns:COLS.dash1}},
-    {id:"ml",   type:"assetNode",position:{x:760,y:220},data:{label:"ml_churn_model",  assetType:"ML Model",  active:false,showCols,columns:COLS.ml}},
-  ];
-  const ROW_H=30;
-  const HEAD_H=44; // header + name rows height
-  const colY=(nodeId,colName)=>{
-    const idx=(COLS[nodeId]||[]).findIndex(c=>c.name===colName);
-    return HEAD_H+ROW_H*idx+ROW_H/2;
-  };
-  const colEdgesRaw=[
-    {id:"c1",source:"pg",   sCol:"order_id",   target:"pipe",  tCol:"order_id",      label:"Direct",   tk:"Direct"},
-    {id:"c2",source:"pg",   sCol:"customer_id",target:"pipe",  tCol:"cust_id",       label:"Direct",   tk:"Direct"},
-    {id:"c3",source:"pg",   sCol:"amount",     target:"pipe",  tCol:"amount_usd",    label:"CAST→USD", tk:"CAST"},
-    {id:"c4",source:"pipe", sCol:"order_id",   target:"self",  tCol:"order_id",      label:"Direct",   tk:"Direct"},
-    {id:"c5",source:"pipe", sCol:"cust_id",    target:"self",  tCol:"customer_id",   label:"Direct",   tk:"Direct"},
-    {id:"c6",source:"pipe", sCol:"amount_usd", target:"self",  tCol:"revenue",       label:"SUM()",    tk:"SUM"},
-    {id:"c7",source:"self", sCol:"revenue",    target:"dash1", tCol:"total_revenue", label:"SUM()",    tk:"SUM"},
-    {id:"c8",source:"self", sCol:"customer_id",target:"ml",    tCol:"cust_id_feat",  label:"Feature",  tk:"Feature"},
-    {id:"c9",source:"self", sCol:"churn_score",target:"ml",    tCol:"churn_prob",    label:"Direct",   tk:"Direct"},
-  ].map(e=>{
-    const c=LINEAGE_TRANSFORM_COLORS[e.tk]||"#38383f";
-    return {
-      id:e.id,source:e.source,target:e.target,
-      sourceHandle:`so-${e.sCol}`,targetHandle:`ti-${e.tCol}`,
-      type:"smoothstep",label:e.label,
-      markerEnd:{type:MarkerType.ArrowClosed,color:c,width:12,height:12},
-      style:{stroke:c,strokeWidth:1.5},
-      labelStyle:{fill:c,fontSize:9,fontFamily:"'Geist Mono',monospace",fontWeight:600},
-      labelBgStyle:{fill:"#18181d",fillOpacity:0.95},
-      labelBgPadding:[4,3],
-      labelBgBorderRadius:3,
-    };
+// Build nodes + edges for table or column view
+function mkLineageGraph(assetName,mode){
+  const sc=mode==="column";
+  const mk=(id,x,y,label,assetType,active,cols)=>({
+    id,type:"assetNode",position:{x,y},
+    data:{label,assetType,active,showCols:sc,cols:sc?cols:[]},
   });
+  const COLS={
+    pg:  [{n:"order_id",hi:1},{n:"customer_id",hi:1},{n:"amount",hi:1},{n:"status",hi:0}],
+    pipe:[{n:"order_id",hi:1},{n:"cust_id",hi:1},{n:"amount_usd",hi:1}],
+    self:[{n:"order_id",hi:1},{n:"customer_id",hi:1},{n:"revenue",hi:1},{n:"churn_score",hi:1}],
+    d1:  [{n:"total_revenue",hi:1},{n:"order_count",hi:0}],
+    ml:  [{n:"cust_id_feat",hi:1},{n:"churn_prob",hi:1}],
+  };
+  const nodes=sc
+    ?[mk("pg",  0,  40,"postgresql_prod","Database",false,COLS.pg),
+      mk("pipe",250,40,"etl_pipeline",   "Pipeline",false,COLS.pipe),
+      mk("self",500,40,assetName,         "Table",   true, COLS.self),
+      mk("d1",  770, 0,"revenue_dashboard","Dashboard",false,COLS.d1),
+      mk("ml",  770,220,"ml_churn_model", "ML Model",false,COLS.ml)]
+    :[mk("pg",  0, 130,"postgresql_prod","Database",false,[]),
+      mk("pipe",220,130,"etl_pipeline",  "Pipeline",false,[]),
+      mk("self",440,130,assetName,        "Table",   true, []),
+      mk("d1",  660, 40,"revenue_dashboard","Dashboard",false,[]),
+      mk("ml",  660,220,"ml_churn_model","ML Model",false,[]),
+      mk("d2",  880, 40,"finance_summary","Dashboard",false,[]),
+      mk("api", 880,220,"reporting_api", "Pipeline",false,[])];
 
-  return showCols
-    ?{nodes:colNodes,edges:colEdgesRaw}
-    :{nodes:tblNodes,edges:tblEdges};
+  const mkE=(id,s,t,sh,th,lbl,tk)=>{
+    const c=LINEAGE_XFORM_COLOR[tk]||"#38383f";
+    return {id,source:s,target:t,
+      ...(sh?{sourceHandle:sh,targetHandle:th}:{}),
+      type:"smoothstep",label:lbl||undefined,
+      markerEnd:{type:MarkerType.ArrowClosed,color:c,width:13,height:13},
+      style:{stroke:c,strokeWidth:1.7},
+      ...(lbl?{
+        labelStyle:{fill:c,fontSize:9,fontFamily:"'Geist Mono',monospace",fontWeight:600},
+        labelBgStyle:{fill:"#111118",fillOpacity:0.95},
+        labelBgPadding:[4,3],labelBgBorderRadius:3,
+      }:{}),
+    };
+  };
+  const edges=sc
+    ?[mkE("c1","pg",  "pipe","so-order_id",  "ti-order_id",  "Direct","Direct"),
+      mkE("c2","pg",  "pipe","so-customer_id","ti-cust_id",   "Direct","Direct"),
+      mkE("c3","pg",  "pipe","so-amount",     "ti-amount_usd","CAST",  "CAST"),
+      mkE("c4","pipe","self","so-order_id",   "ti-order_id",  "Direct","Direct"),
+      mkE("c5","pipe","self","so-cust_id",    "ti-customer_id","Direct","Direct"),
+      mkE("c6","pipe","self","so-amount_usd", "ti-revenue",   "SUM()", "SUM"),
+      mkE("c7","self","d1",  "so-revenue",    "ti-total_revenue","SUM()","SUM"),
+      mkE("c8","self","ml",  "so-customer_id","ti-cust_id_feat","Feature","Feature"),
+      mkE("c9","self","ml",  "so-churn_score","ti-churn_prob","Direct","Direct")]
+    :[mkE("e1","pg",  "pipe",null,null,"","Direct"),
+      mkE("e2","pipe","self",null,null,"","Direct"),
+      mkE("e3","self","d1",  null,null,"","Direct"),
+      mkE("e4","self","ml",  null,null,"","Direct"),
+      mkE("e5","d1",  "d2",  null,null,"","Direct"),
+      mkE("e6","ml",  "api", null,null,"","Direct")];
+  return {nodes,edges};
 }
 
-// Inner canvas — uses useReactFlow, must be inside ReactFlowProvider
-const LineageCanvas=({mode,assetName})=>{
-  const {fitView}=useReactFlow();
-  const init=buildLineageGraph(assetName,mode);
-  const [nodes,setNodes,onNodesChange]=useNodesState(init.nodes);
-  const [edges,setEdges,onEdgesChange]=useEdgesState(init.edges);
+// ─── AssetLineageFull — ReactFlow direct child of sized container ─────────────
+const AssetLineageFull=({asset})=>{
+  const aName=asset?.name||"orders";
+  const [mode,setMode]=useState("table");
+  const initG=useMemo(()=>mkLineageGraph(aName,"table"),[aName]);
+  const [nodes,setNodes,onNodesChange]=useNodesState(initG.nodes);
+  const [edges,setEdges,onEdgesChange]=useEdgesState(initG.edges);
+  const [rf,setRf]=useState(null);
 
-  // Swap nodes/edges in-place when mode or asset changes (no remount → same canvas)
+  // Swap graph in-place when mode or asset changes — no remount, same canvas
   useEffect(()=>{
-    const g=buildLineageGraph(assetName,mode);
+    const g=mkLineageGraph(aName,mode);
     setNodes(g.nodes);
     setEdges(g.edges);
-    setTimeout(()=>fitView({padding:0.14,duration:500}),120);
-  },[mode,assetName]);
+    setTimeout(()=>rf?.fitView({padding:0.15,duration:480}),100);
+  },[mode,aName]);
 
-  return (
-    <ReactFlow
-      nodes={nodes} edges={edges}
-      onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
-      nodeTypes={lineageNodeTypes}
-      fitView fitViewOptions={{padding:0.14}}
-      minZoom={0.2} maxZoom={3}
-      proOptions={{hideAttribution:true}}
-      style={{width:"100%",height:"100%",background:"#111115"}}
-    >
-      <Background color="#2a2a32" gap={18} size={1.2} variant="dots"/>
-      <Controls
-        style={{background:"#18181d",border:"1px solid #27272e",borderRadius:8,overflow:"hidden",bottom:16,left:16}}
-        showInteractive={false}
-      />
-      <MiniMap
-        style={{background:"#111115",border:"1px solid #27272e",borderRadius:8}}
-        nodeColor={n=>LINEAGE_TYPE_COLOR[n.data?.assetType]||"#444"}
-        maskColor="rgba(0,0,0,0.6)"
-        position="bottom-right"
-      />
-    </ReactFlow>
-  );
-};
-
-// ─── Main AssetLineageFull component ─────────────────────────────────────────
-const AssetLineageFull=({asset})=>{
-  const [mode,setMode]=useState("table");
-
-  const legendItems=Object.entries(LINEAGE_TYPE_COLOR).slice(0,5);
-  const transformItems=Object.entries(LINEAGE_TRANSFORM_COLORS);
+  const typeLegend=Object.entries(LINEAGE_TYPE_COLOR);
+  const xformLegend=Object.entries(LINEAGE_XFORM_COLOR);
 
   return (
     <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:12}}>
-      {/* ── toolbar ── */}
+      {/* toolbar */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
-        {/* legend — changes with mode */}
         <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
-          {mode==="table"
-            ? legendItems.map(([tp,c])=>(
-                <span key={tp} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:T.textSub}}>
-                  <span style={{width:8,height:8,borderRadius:2,background:c,display:"inline-block"}}/>
-                  {tp}
-                </span>
-              ))
-            : transformItems.map(([lbl,c])=>(
-                <span key={lbl} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:T.textSub}}>
-                  <span style={{width:16,height:2,background:c,display:"inline-block",borderRadius:1}}/>
-                  {lbl}
-                </span>
-              ))
-          }
+          {(mode==="table"?typeLegend:xformLegend).map(([lbl,c])=>(
+            <span key={lbl} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:T.textSub}}>
+              {mode==="table"
+                ?<span style={{width:8,height:8,borderRadius:2,background:c,display:"inline-block"}}/>
+                :<span style={{width:16,height:2,background:c,display:"inline-block",borderRadius:1}}/>}
+              {lbl}
+            </span>
+          ))}
         </div>
-        {/* tab toggle + export */}
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          <Tabs2
-            tabs={[{key:"table",label:"Table Level"},{key:"column",label:"Column Level"}]}
-            active={mode} onChange={setMode} pill
-          />
+          <Tabs2 tabs={[{key:"table",label:"Table Level"},{key:"column",label:"Column Level"}]}
+            active={mode} onChange={setMode} pill/>
+          <Btn small ghost onClick={()=>rf?.fitView({padding:0.15,duration:400})}>Fit</Btn>
           <Btn small ghost>Export</Btn>
         </div>
       </div>
 
-      {/* ── canvas — single persistent ReactFlow instance ── */}
-      <div style={{
-        height:520,borderRadius:10,overflow:"hidden",
-        border:"1px solid #27272e",background:"#111115",
-        position:"relative",
-      }}>
-        <ReactFlowProvider>
-          <LineageCanvas mode={mode} assetName={asset?.name||"orders"}/>
-        </ReactFlowProvider>
+      {/* ── The fix: ReactFlow IS the direct child of this sized div ── */}
+      <div style={{height:520,borderRadius:10,overflow:"hidden",border:"1px solid #2e2e38",position:"relative"}}>
+        <ReactFlow
+          nodes={nodes} edges={edges}
+          onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+          nodeTypes={LIN_NODE_TYPES}
+          onInit={inst=>{setRf(inst);inst.fitView({padding:0.15});}}
+          minZoom={0.18} maxZoom={3}
+          proOptions={{hideAttribution:true}}
+          colorMode="dark"
+          style={{background:"#0e0e14"}}
+        >
+          <Background color="#252530" gap={20} size={1.3} variant="dots"/>
+          <Controls showInteractive={false}
+            style={{background:"#1a1a22",border:"1px solid #2e2e38",borderRadius:8,overflow:"hidden"}}/>
+          <MiniMap nodeColor={n=>LINEAGE_TYPE_COLOR[n.data?.assetType]||"#444"}
+            style={{background:"#111118",border:"1px solid #2e2e38",borderRadius:8}}
+            maskColor="rgba(0,0,0,0.65)" position="bottom-right"/>
+        </ReactFlow>
       </div>
 
-      {/* helper hint for column mode */}
       {mode==="column"&&(
         <div style={{fontSize:11.5,color:T.textMuted,display:"flex",alignItems:"center",gap:6}}>
-          <span style={{fontSize:12}}>ℹ️</span>
-          Column-level lineage traces individual fields. Edge labels show the transformation applied.
-          Zoom in to see per-column connections clearly.
+          <span>ℹ️</span>
+          Column-level lineage traces individual fields. Edge labels show the transformation.
+          Use <strong style={{color:T.textSub}}>Fit</strong> to reset the view.
         </div>
       )}
     </div>
