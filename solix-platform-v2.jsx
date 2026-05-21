@@ -13105,42 +13105,48 @@ const DATA_PRODUCTS_DATA = [
    owners:["maya.chen"],experts:["dev.patel"],
    lifecycleStage:"PRODUCTION",
    sla:{tier:"GOLD",availability:99.9,dataFreshness:120,dataQuality:90},
-   assetIds:[1,2],tags:["revenue","PII"],consumesFrom:[],providesTo:["dp3"],createdAt:"Jan 15, 2024"},
+   assetIds:[1,2],tags:["revenue","PII"],consumesFrom:[],providesTo:["dp3"],createdAt:"Jan 15, 2024",
+   inputPortIds:[1,2],outputPortIds:[9]},
   {id:"dp2",name:"customer-360",displayName:"Customer 360",domain:"Commerce",
    icon:"👥",color:"#0ea5e9",
    description:"Unified customer profile combining purchase history, demographics, and behavioral signals. Used for personalization, segmentation, and churn prediction across the organization.",
    owners:["maya.chen"],experts:["sarah.kim"],
    lifecycleStage:"PRODUCTION",
    sla:{tier:"GOLD",availability:99.5,dataFreshness:240,dataQuality:88},
-   assetIds:[3],tags:["PII","GDPR"],consumesFrom:[],providesTo:[],createdAt:"Feb 1, 2024"},
+   assetIds:[3],tags:["PII","GDPR"],consumesFrom:[],providesTo:[],createdAt:"Feb 1, 2024",
+   inputPortIds:[2],outputPortIds:[]},
   {id:"dp3",name:"revenue-reporting",displayName:"Revenue Reporting",domain:"Finance",
    icon:"💹",color:"#f59e0b",
    description:"Monthly and quarterly revenue reporting including GAAP metrics, rolling forecasts, and variance analysis. Official numbers used in board reports and investor communications.",
    owners:["sarah.kim"],experts:["alex.wu"],
    lifecycleStage:"PRODUCTION",
    sla:{tier:"GOLD",availability:99.9,dataFreshness:1440,dataQuality:95},
-   assetIds:[4],tags:["revenue"],consumesFrom:["dp1"],providesTo:[],createdAt:"Jan 10, 2024"},
+   assetIds:[4],tags:["revenue"],consumesFrom:["dp1"],providesTo:[],createdAt:"Jan 10, 2024",
+   inputPortIds:[9],outputPortIds:[6]},
   {id:"dp4",name:"user-behavior",displayName:"User Behavior Analytics",domain:"Product",
    icon:"📱",color:"#3b82f6",
    description:"Clickstream, funnel, and retention analysis for product decision-making. Powers the product analytics dashboard and A/B test evaluation framework.",
    owners:["alex.wu"],experts:["priya.nair"],
    lifecycleStage:"DEVELOPMENT",
    sla:{tier:"SILVER",availability:99.0,dataFreshness:60,dataQuality:82},
-   assetIds:[5,6],tags:["behavioral"],consumesFrom:[],providesTo:[],createdAt:"Mar 5, 2024"},
+   assetIds:[5,6],tags:["behavioral"],consumesFrom:[],providesTo:[],createdAt:"Mar 5, 2024",
+   inputPortIds:[4,7],outputPortIds:[]},
   {id:"dp5",name:"ml-feature-store",displayName:"ML Feature Store",domain:"ML",
    icon:"🧮",color:"#8b5cf6",
    description:"Shared feature registry for model training and inference. Includes user features, item embeddings, and real-time scoring features with versioned snapshots.",
    owners:["priya.nair"],experts:["dev.patel"],
    lifecycleStage:"PRODUCTION",
    sla:{tier:"GOLD",availability:99.9,dataFreshness:30,dataQuality:91},
-   assetIds:[],tags:["ML"],consumesFrom:[],providesTo:[],createdAt:"Feb 20, 2024"},
+   assetIds:[],tags:["ML"],consumesFrom:[],providesTo:[],createdAt:"Feb 20, 2024",
+   inputPortIds:[],outputPortIds:[]},
   {id:"dp6",name:"marketing-attribution",displayName:"Marketing Attribution",domain:"Marketing",
    icon:"🎯",color:"#f43f5e",
    description:"Multi-touch attribution models for paid and organic channels. Measures CAC, ROAS, and conversion path effectiveness for budget allocation decisions.",
    owners:["lisa.ray"],experts:["maya.chen"],
    lifecycleStage:"TESTING",
    sla:{tier:"SILVER",availability:98.5,dataFreshness:360,dataQuality:79},
-   assetIds:[],tags:["marketing"],consumesFrom:[],providesTo:[],createdAt:"Mar 12, 2024"},
+   assetIds:[],tags:["marketing"],consumesFrom:[],providesTo:[],createdAt:"Mar 12, 2024",
+   inputPortIds:[],outputPortIds:[]},
 ];
 
 // ─────────────────────────────────────────────
@@ -13273,6 +13279,218 @@ const PortsLineageFlow=({inputPorts,outputPorts,pd})=>{
         <Background color="#cbd5e1" gap={20} size={1} variant="dots"/>
         <Controls showInteractive={false} style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:8}}/>
       </ReactFlow>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
+// PORTS TAB (shared between Domains + DataProducts)
+// ─────────────────────────────────────────────
+const PortsTab=({pd,allAssets,onPatch})=>{
+  const inputPortIds  = pd.inputPortIds  || [];
+  const outputPortIds = pd.outputPortIds || [];
+
+  const inputPorts  = inputPortIds.map(id=>allAssets.find(a=>a.id===id)).filter(Boolean);
+  const outputPorts = outputPortIds.map(id=>allAssets.find(a=>a.id===id)).filter(Boolean);
+
+  const toFlowPort = a=>({id:`p-${a.id}`,name:a.name,path:a.db||a.connectionLabel||a.service,type:a.type});
+
+  const [addTarget, setAddTarget] = useState(null);   // "input"|"output"|null
+  const [addSearch, setAddSearch] = useState("");
+  const [addSelected,setAddSelected]=useState(new Set());
+
+  const openAdd=(kind)=>{setAddTarget(kind);setAddSearch("");setAddSelected(new Set());};
+  const closeAdd=()=>{setAddTarget(null);setAddSearch("");setAddSelected(new Set());};
+
+  const alreadyAdded = new Set([...inputPortIds,...outputPortIds]);
+  const pickerAssets = allAssets.filter(a=>{
+    if(addTarget==="input"  && inputPortIds.includes(a.id))  return false;
+    if(addTarget==="output" && outputPortIds.includes(a.id)) return false;
+    if(addSearch){
+      const q=addSearch.toLowerCase();
+      return a.name.toLowerCase().includes(q)||a.db.toLowerCase().includes(q)||(a.type||"").toLowerCase().includes(q);
+    }
+    return true;
+  });
+
+  const toggleSel=(id)=>setAddSelected(prev=>{
+    const n=new Set(prev);
+    n.has(id)?n.delete(id):n.add(id);
+    return n;
+  });
+
+  const confirmAdd=()=>{
+    if(addTarget==="input"){
+      onPatch({inputPortIds:[...new Set([...inputPortIds,...addSelected])]});
+    } else {
+      onPatch({outputPortIds:[...new Set([...outputPortIds,...addSelected])]});
+    }
+    closeAdd();
+  };
+
+  const removePort=(id,kind)=>{
+    if(kind==="input")  onPatch({inputPortIds:inputPortIds.filter(x=>x!==id)});
+    else                onPatch({outputPortIds:outputPortIds.filter(x=>x!==id)});
+  };
+
+  const PortAssetCard=({asset,color,kind})=>{
+    const parts=asset.db?asset.db.split(" / "):[];
+    const breadcrumb=parts.length>1?parts.slice(0,-1).join(" / "):(asset.connectionLabel||asset.service||"");
+    const [hov,setHov]=useState(false);
+    return (
+      <div style={{background:T.bgSurface,border:`1px solid ${hov?color:T.border}`,borderRadius:10,padding:"14px 16px",transition:"all .15s",boxShadow:hov?`0 2px 12px ${color}18`:"none",position:"relative"}}
+        onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}>
+        {/* breadcrumb path */}
+        <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:7,overflow:"hidden"}}>
+          <svg width="11" height="11" viewBox="0 0 14 14" fill="none" style={{flexShrink:0,color:T.textMuted}}><rect x="1" y="2" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M1 5h12" stroke="currentColor" strokeWidth="1.2"/><path d="M4 5v7" stroke="currentColor" strokeWidth="1.2"/></svg>
+          <span style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{breadcrumb||asset.connectionLabel||"—"}</span>
+        </div>
+        {/* type badge + asset name */}
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+          <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:`${color}12`,color,border:`1px solid ${color}20`,flexShrink:0}}>{asset.type}</span>
+          <span style={{fontSize:14,fontWeight:700,color:T.blue,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{asset.name}</span>
+        </div>
+        {/* description */}
+        <div style={{fontSize:12,color:T.textMuted,marginBottom:10,lineHeight:1.5,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{asset.description||"No description"}</div>
+        {/* footer */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <span style={{fontSize:11,color:T.textMuted}}>No Domains · No Owners ·</span>
+          {hov&&<button onClick={()=>removePort(asset.id,kind)}
+            style={{height:24,padding:"0 9px",borderRadius:6,background:"#fee2e2",border:"1px solid #fca5a5",color:"#ef4444",fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4,fontFamily:"inherit",transition:"all .15s"}}>
+            {Ic.trash(11)} Remove
+          </button>}
+        </div>
+      </div>
+    );
+  };
+
+  const hasAny=inputPorts.length>0||outputPorts.length>0;
+
+  return (
+    <div style={{position:"relative"}}>
+      {/* Ports Lineage */}
+      {hasAny&&(
+        <div style={{marginBottom:24}}>
+          <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:10}}>Ports Lineage</div>
+          <PortsLineageFlow
+            inputPorts={inputPorts.map(toFlowPort)}
+            outputPorts={outputPorts.map(toFlowPort)}
+            pd={pd}/>
+        </div>
+      )}
+
+      {/* Input + Output columns */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+        {/* Input Ports */}
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+            <span style={{fontSize:13,fontWeight:700,color:T.text}}>Input Ports</span>
+            <span style={{fontSize:11,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,padding:"1px 8px"}}>{inputPorts.length}</span>
+            <button onClick={()=>openAdd("input")}
+              style={{marginLeft:"auto",height:28,padding:"0 11px",borderRadius:7,background:T.blue,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
+              {Ic.plus(9)} Add
+            </button>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {inputPorts.length===0
+              ? <div style={{border:`1.5px dashed ${T.border}`,borderRadius:10,padding:"28px 16px",textAlign:"center",color:T.textMuted,fontSize:12}}>
+                  No input ports yet.<br/>
+                  <span style={{color:T.blue,cursor:"pointer",fontWeight:600}} onClick={()=>openAdd("input")}>+ Add from catalog</span>
+                </div>
+              : inputPorts.map(a=><PortAssetCard key={a.id} asset={a} color={T.blue} kind="input"/>)
+            }
+          </div>
+        </div>
+        {/* Output Ports */}
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+            <span style={{fontSize:13,fontWeight:700,color:T.text}}>Output Ports</span>
+            <span style={{fontSize:11,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,padding:"1px 8px"}}>{outputPorts.length}</span>
+            <button onClick={()=>openAdd("output")}
+              style={{marginLeft:"auto",height:28,padding:"0 11px",borderRadius:7,background:"#7c3aed",border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
+              {Ic.plus(9)} Add
+            </button>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {outputPorts.length===0
+              ? <div style={{border:`1.5px dashed ${T.border}`,borderRadius:10,padding:"28px 16px",textAlign:"center",color:T.textMuted,fontSize:12}}>
+                  No output ports yet.<br/>
+                  <span style={{color:"#7c3aed",cursor:"pointer",fontWeight:600}} onClick={()=>openAdd("output")}>+ Add from catalog</span>
+                </div>
+              : outputPorts.map(a=><PortAssetCard key={a.id} asset={a} color="#7c3aed" kind="output"/>)
+            }
+          </div>
+        </div>
+      </div>
+
+      {/* Asset Picker Overlay */}
+      {addTarget&&(
+        <>
+          {/* backdrop */}
+          <div onClick={closeAdd} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:1100}}/>
+          {/* panel */}
+          <div style={{position:"fixed",top:0,right:0,bottom:0,width:440,background:T.bgSurface,boxShadow:"-4px 0 32px rgba(0,0,0,.18)",zIndex:1101,display:"flex",flexDirection:"column"}}>
+            {/* header */}
+            <div style={{padding:"18px 20px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:15,fontWeight:700,color:T.text}}>Add {addTarget==="input"?"Input":"Output"} Port</div>
+                <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Select assets from the data catalog</div>
+              </div>
+              <button onClick={closeAdd} style={{width:30,height:30,borderRadius:8,border:`1px solid ${T.border}`,background:T.bgElevated,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted}}>
+                {Ic.x(13)}
+              </button>
+            </div>
+            {/* search */}
+            <div style={{padding:"12px 20px",borderBottom:`1px solid ${T.border}`}}>
+              <div style={{position:"relative"}}>
+                <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}>{Ic.search(13)}</span>
+                <input value={addSearch} onChange={e=>setAddSearch(e.target.value)} placeholder="Search assets…"
+                  style={{width:"100%",height:34,padding:"0 10px 0 32px",borderRadius:8,border:`1px solid ${T.border}`,background:T.bgElevated,fontSize:12.5,color:T.text,fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
+              </div>
+            </div>
+            {/* asset list */}
+            <div style={{flex:1,overflowY:"auto",padding:"8px 0"}}>
+              {pickerAssets.length===0
+                ? <div style={{padding:"32px 20px",textAlign:"center",color:T.textMuted,fontSize:13}}>No assets found</div>
+                : pickerAssets.map(a=>{
+                    const sel=addSelected.has(a.id);
+                    const parts=a.db?a.db.split(" / "):[];
+                    const breadcrumb=parts.length>1?parts.slice(0,-1).join(" / "):(a.connectionLabel||"");
+                    return (
+                      <div key={a.id} onClick={()=>toggleSel(a.id)}
+                        style={{padding:"10px 20px",cursor:"pointer",display:"flex",alignItems:"flex-start",gap:12,borderBottom:`1px solid ${T.border}`,background:sel?`${T.blue}06`:"transparent",transition:"background .1s"}}
+                        onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgElevated;}}
+                        onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
+                        {/* checkbox */}
+                        <div style={{width:16,height:16,borderRadius:4,border:`1.5px solid ${sel?T.blue:T.border}`,background:sel?T.blue:"transparent",flexShrink:0,marginTop:2,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .12s"}}>
+                          {sel&&<svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l3 3 4-4" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                        </div>
+                        {/* content */}
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}>
+                            <span style={{fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:4,background:`${T.blue}12`,color:T.blue,border:`1px solid ${T.blue}20`}}>{a.type}</span>
+                            <span style={{fontSize:13,fontWeight:700,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</span>
+                          </div>
+                          <div style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{breadcrumb||a.db}</div>
+                          <div style={{fontSize:11,color:T.textMuted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.description||"No description"}</div>
+                        </div>
+                      </div>
+                    );
+                  })
+              }
+            </div>
+            {/* footer */}
+            <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
+              <span style={{fontSize:12,color:T.textMuted,flex:1}}>{addSelected.size>0?`${addSelected.size} asset${addSelected.size>1?"s":""} selected`:"Select assets to add"}</span>
+              <button onClick={closeAdd} style={{height:34,padding:"0 14px",borderRadius:8,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.textSub,fontSize:12.5,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+              <button onClick={confirmAdd} disabled={addSelected.size===0}
+                style={{height:34,padding:"0 16px",borderRadius:8,border:"none",background:addSelected.size>0?T.blue:"#94a3b8",color:"#fff",fontSize:12.5,fontWeight:600,cursor:addSelected.size>0?"pointer":"not-allowed",fontFamily:"inherit"}}>
+                Add {addSelected.size>0?addSelected.size:""} Port{addSelected.size!==1?"s":""}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };
@@ -13710,64 +13928,10 @@ const DomainsView = ({onAsset, onNav}) => {
 
 
             {/* PORTS TAB */}
-            {productTab==="ports"&&(()=>{
-              const inputPorts=[
-                {id:"ip1",name:"orders",path:"Database Services / postgresql_prod / COMMERCE / orders",desc:"Core orders table with transactional data",domain:"Commerce",owner:"maya.chen",type:"Table"},
-                {id:"ip2",name:"customers",path:"Database Services / snowflake_prod / COMMERCE / customers",desc:"No description",domain:"Commerce",owner:"maya.chen",type:"Table"},
-                {id:"ip3",name:"products",path:"Database Services / snowflake_prod / PRODUCT / products",desc:"No description",domain:"Product",owner:"dev.patel",type:"Table"},
-              ];
-              const outputPorts=[
-                {id:"op1",name:"orders_fact",path:"Database Services / snowflake_prod / COMMERCE_PROD / orders_fact",desc:"Aggregated orders fact table for analytics",domain:"Commerce",owner:"sarah.kim",type:"Table"},
-                {id:"op2",name:"commerce_api",path:"API Services / api.company.com / commerce / v2 / analytics",desc:"REST API for commerce analytics",domain:"Commerce",owner:"maya.chen",type:"API"},
-              ];
-              const PortCard=({port,color})=>(
-                <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",transition:"all .15s",cursor:"pointer"}}
-                  onMouseEnter={e=>{e.currentTarget.style.borderColor=color;e.currentTarget.style.boxShadow=`0 2px 12px ${color}18`;}}
-                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
-                  <div style={{fontSize:10,color:T.textMuted,marginBottom:6,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{port.path}</div>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                    <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:`${color}12`,color,border:`1px solid ${color}20`}}>{port.type}</span>
-                    <span style={{fontSize:14,fontWeight:700,color:T.accent}}>{port.name}</span>
-                  </div>
-                  <div style={{fontSize:12,color:T.textMuted,marginBottom:10}}>{port.desc}</div>
-                  <div style={{display:"flex",alignItems:"center",gap:12,fontSize:11,color:T.textMuted}}>
-                    <span>No Domains · No Owners</span>
-                  </div>
-                </div>
-              );
-              return (
-                <div>
-                  {/* Ports Lineage — ReactFlow */}
-                  <div style={{marginBottom:24}}>
-                    <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:10}}>Ports Lineage</div>
-                    <PortsLineageFlow inputPorts={inputPorts} outputPorts={outputPorts} pd={pd}/>
-                  </div>
-                  {/* Input + Output columns */}
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-                    <div>
-                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-                        <span style={{fontSize:13,fontWeight:700,color:T.text}}>Input Ports</span>
-                        <span style={{fontSize:11,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,padding:"1px 8px"}}>{inputPorts.length}</span>
-                        <button style={{marginLeft:"auto",height:28,padding:"0 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>{Ic.plus(9)} Add</button>
-                      </div>
-                      <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                        {inputPorts.map(p=><PortCard key={p.id} port={p} color={T.blue}/>)}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-                        <span style={{fontSize:13,fontWeight:700,color:T.text}}>Output Ports</span>
-                        <span style={{fontSize:11,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,padding:"1px 8px"}}>{outputPorts.length}</span>
-                        <button style={{marginLeft:"auto",height:28,padding:"0 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>{Ic.plus(9)} Add</button>
-                      </div>
-                      <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                        {outputPorts.map(p=><PortCard key={p.id} port={p} color={T.violet}/>)}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
+            {productTab==="ports"&&(
+              <PortsTab pd={pd} allAssets={ASSETS}
+                onPatch={patch=>setProducts(prev=>prev.map(p=>p.id===pd.id?{...p,...patch}:p))}/>
+            )}
 
             {/* ACTIVITY TAB */}
             {productTab==="activity"&&(
@@ -15710,64 +15874,10 @@ const DataProductsView = ({onAsset, onNav}) => {
             )}
 
             {/* ── PORTS TAB ── */}
-            {productTab==="ports"&&(()=>{
-              const inputPorts=[
-                {id:"ip1",name:"orders",path:"Database Services / postgresql_prod / COMMERCE / orders",desc:"Core orders table with transactional data",domain:"Commerce",owner:"maya.chen",type:"Table"},
-                {id:"ip2",name:"customers",path:"Database Services / snowflake_prod / COMMERCE / customers",desc:"No description",domain:"Commerce",owner:"maya.chen",type:"Table"},
-                {id:"ip3",name:"products",path:"Database Services / snowflake_prod / PRODUCT / products",desc:"No description",domain:"Product",owner:"dev.patel",type:"Table"},
-              ];
-              const outputPorts=[
-                {id:"op1",name:"orders_fact",path:"Database Services / snowflake_prod / COMMERCE_PROD / orders_fact",desc:"Aggregated orders fact table for analytics",domain:"Commerce",owner:"sarah.kim",type:"Table"},
-                {id:"op2",name:"commerce_api",path:"API Services / api.company.com / commerce / v2 / analytics",desc:"REST API for commerce analytics",domain:"Commerce",owner:"maya.chen",type:"API"},
-              ];
-              const PortCard=({port,color})=>(
-                <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",transition:"all .15s",cursor:"pointer"}}
-                  onMouseEnter={e=>{e.currentTarget.style.borderColor=color;e.currentTarget.style.boxShadow=`0 2px 12px ${color}18`;}}
-                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
-                  <div style={{fontSize:10,color:T.textMuted,marginBottom:6,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{port.path}</div>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                    <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:`${color}12`,color,border:`1px solid ${color}20`}}>{port.type}</span>
-                    <span style={{fontSize:14,fontWeight:700,color:T.accent}}>{port.name}</span>
-                  </div>
-                  <div style={{fontSize:12,color:T.textMuted,marginBottom:10}}>{port.desc}</div>
-                  <div style={{display:"flex",alignItems:"center",gap:12,fontSize:11,color:T.textMuted}}>
-                    <span>No Domains · No Owners</span>
-                  </div>
-                </div>
-              );
-              return (
-                <div>
-                  {/* Ports Lineage — ReactFlow */}
-                  <div style={{marginBottom:24}}>
-                    <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:10}}>Ports Lineage</div>
-                    <PortsLineageFlow inputPorts={inputPorts} outputPorts={outputPorts} pd={pd}/>
-                  </div>
-                  {/* Input + Output columns */}
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-                    <div>
-                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-                        <span style={{fontSize:13,fontWeight:700,color:T.text}}>Input Ports</span>
-                        <span style={{fontSize:11,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,padding:"1px 8px"}}>{inputPorts.length}</span>
-                        <button style={{marginLeft:"auto",height:28,padding:"0 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>{Ic.plus(9)} Add</button>
-                      </div>
-                      <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                        {inputPorts.map(p=><PortCard key={p.id} port={p} color={T.blue}/>)}
-                      </div>
-                    </div>
-                    <div>
-                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-                        <span style={{fontSize:13,fontWeight:700,color:T.text}}>Output Ports</span>
-                        <span style={{fontSize:11,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,padding:"1px 8px"}}>{outputPorts.length}</span>
-                        <button style={{marginLeft:"auto",height:28,padding:"0 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>{Ic.plus(9)} Add</button>
-                      </div>
-                      <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                        {outputPorts.map(p=><PortCard key={p.id} port={p} color={T.violet}/>)}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
+            {productTab==="ports"&&(
+              <PortsTab pd={pd} allAssets={ASSETS}
+                onPatch={patch=>setProducts(prev=>prev.map(p=>p.id===pd.id?{...p,...patch}:p))}/>
+            )}
 
             {/* ── ACTIVITY TAB ── */}
             {productTab==="activity"&&(
