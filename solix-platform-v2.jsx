@@ -13202,6 +13202,82 @@ const AssetRowDP = ({asset, onAsset, isLast}) => (
 );
 
 // ─────────────────────────────────────────────
+// PORTS LINEAGE FLOW (ReactFlow-based)
+// ─────────────────────────────────────────────
+const PortInputNode=({data})=>(
+  <div style={{background:T.bgSurface,border:`1.5px solid ${T.blue}40`,borderRadius:8,padding:"9px 12px",minWidth:160,maxWidth:200,boxShadow:"0 2px 8px rgba(37,99,235,.08)"}}>
+    <Handle type="source" position={Position.Right} style={{width:8,height:8,background:T.blue,border:"2px solid #fff"}}/>
+    <div style={{display:"flex",alignItems:"center",gap:7}}>
+      <div style={{width:26,height:26,borderRadius:6,background:`${T.blue}12`,border:`1px solid ${T.blue}25`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+        <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="10" rx="1.5" stroke={T.blue} strokeWidth="1.2"/><path d="M1 5h12" stroke={T.blue} strokeWidth="1.2"/><path d="M4 5v7" stroke={T.blue} strokeWidth="1.2"/></svg>
+      </div>
+      <div style={{minWidth:0}}>
+        <div style={{fontSize:9,color:T.blue,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:2}}>{data.portType||"Table"}</div>
+        <div style={{fontSize:12,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{data.label}</div>
+        <div style={{fontSize:9.5,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:2}}>{data.path}</div>
+      </div>
+    </div>
+  </div>
+);
+const PortOutputNode=({data})=>(
+  <div style={{background:T.bgSurface,border:`1.5px solid ${"#7c3aed"}40`,borderRadius:8,padding:"9px 12px",minWidth:160,maxWidth:200,boxShadow:"0 2px 8px rgba(124,58,237,.08)"}}>
+    <Handle type="target" position={Position.Left} style={{width:8,height:8,background:"#7c3aed",border:"2px solid #fff"}}/>
+    <div style={{display:"flex",alignItems:"center",gap:7}}>
+      <div style={{width:26,height:26,borderRadius:6,background:"rgba(124,58,237,.1)",border:"1px solid rgba(124,58,237,.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+        <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="10" rx="1.5" stroke="#7c3aed" strokeWidth="1.2"/><path d="M1 5h12" stroke="#7c3aed" strokeWidth="1.2"/><path d="M4 5v7" stroke="#7c3aed" strokeWidth="1.2"/></svg>
+      </div>
+      <div style={{minWidth:0}}>
+        <div style={{fontSize:9,color:"#7c3aed",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:2}}>{data.portType||"Table"}</div>
+        <div style={{fontSize:12,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{data.label}</div>
+        <div style={{fontSize:9.5,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:2}}>{data.path}</div>
+      </div>
+    </div>
+  </div>
+);
+const PortProductNode=({data})=>(
+  <div style={{background:`${data.color}12`,border:`2px solid ${data.color}`,borderRadius:10,padding:"12px 16px",minWidth:120,display:"flex",flexDirection:"column",alignItems:"center",gap:5,boxShadow:`0 4px 16px ${data.color}20`}}>
+    <Handle type="target" position={Position.Left} style={{width:8,height:8,background:data.color,border:"2px solid #fff"}}/>
+    <Handle type="source" position={Position.Right} style={{width:8,height:8,background:data.color,border:"2px solid #fff"}}/>
+    <div style={{fontSize:24,lineHeight:1}}>{data.icon}</div>
+    <div style={{fontSize:11,fontWeight:700,color:data.color,fontFamily:"'Geist Mono',monospace",textAlign:"center",maxWidth:110,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{data.label}</div>
+    <div style={{fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${data.color}20`,color:data.color,border:`1px solid ${data.color}30`}}>Data Product</div>
+  </div>
+);
+const PORTS_FLOW_NODE_TYPES={portInput:PortInputNode,portOutput:PortOutputNode,portProduct:PortProductNode};
+
+const PortsLineageFlow=({inputPorts,outputPorts,pd})=>{
+  const GAP_Y=90, X_IN=0, X_PROD=280, X_OUT=560;
+  const nIn=inputPorts.length, nOut=outputPorts.length;
+  const prodY=Math.max((nIn-1)*GAP_Y/2,(nOut-1)*GAP_Y/2);
+  const inOffY=(nIn<=nOut)?((nOut-1)*GAP_Y-(nIn-1)*GAP_Y)/2:0;
+  const outOffY=(nOut<=nIn)?((nIn-1)*GAP_Y-(nOut-1)*GAP_Y)/2:0;
+
+  const initNodes=[
+    ...inputPorts.map((p,i)=>({id:p.id,type:"portInput",position:{x:X_IN,y:inOffY+i*GAP_Y},data:{label:p.name,path:p.path.split(" / ").slice(-2).join(" / "),portType:p.type}})),
+    {id:"__product__",type:"portProduct",position:{x:X_PROD,y:prodY-26},data:{label:pd.name||pd.displayName,icon:pd.icon,color:pd.color||"#6366f1"}},
+    ...outputPorts.map((p,i)=>({id:p.id,type:"portOutput",position:{x:X_OUT,y:outOffY+i*GAP_Y},data:{label:p.name,path:p.path.split(" / ").slice(-2).join(" / "),portType:p.type}})),
+  ];
+  const initEdges=[
+    ...inputPorts.map(p=>({id:`e-${p.id}-prod`,source:p.id,target:"__product__",type:"smoothstep",animated:true,style:{stroke:T.blue,strokeWidth:1.5},markerEnd:{type:MarkerType.ArrowClosed,color:T.blue,width:14,height:14}})),
+    ...outputPorts.map(p=>({id:`e-prod-${p.id}`,source:"__product__",target:p.id,type:"smoothstep",animated:true,style:{stroke:"#7c3aed",strokeWidth:1.5},markerEnd:{type:MarkerType.ArrowClosed,color:"#7c3aed",width:14,height:14}})),
+  ];
+  const [nodes,,onNodesChange]=useNodesState(initNodes);
+  const [edges,,onEdgesChange]=useEdgesState(initEdges);
+  return(
+    <div style={{height:Math.max(nIn,nOut)*GAP_Y+60,borderRadius:10,overflow:"hidden",border:`1px solid ${T.border}`,background:"#f8fafc"}}>
+      <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+        nodeTypes={PORTS_FLOW_NODE_TYPES} fitView fitViewOptions={{padding:0.2}} proOptions={{hideAttribution:true}}
+        nodesDraggable={false} nodesConnectable={false} elementsSelectable={false}
+        panOnDrag={false} zoomOnScroll={false} zoomOnPinch={false} colorMode="light"
+        style={{background:"#f8fafc"}}>
+        <Background color="#cbd5e1" gap={20} size={1} variant="dots"/>
+        <Controls showInteractive={false} style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:8}}/>
+      </ReactFlow>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
 // DOMAINS VIEW
 // ─────────────────────────────────────────────
 const DomainsView = ({onAsset, onNav}) => {
@@ -13661,37 +13737,10 @@ const DomainsView = ({onAsset, onNav}) => {
               );
               return (
                 <div>
-                  {/* Ports Lineage */}
-                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px 20px",marginBottom:24}}>
-                    <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:14}}>Ports Lineage</div>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:0,padding:"16px 0",overflowX:"auto"}}>
-                      <div style={{display:"flex",flexDirection:"column",gap:8,minWidth:160}}>
-                        {inputPorts.map(p=>(
-                          <div key={p.id} style={{padding:"8px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,display:"flex",alignItems:"center",gap:8}}>
-                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="10" rx="1.5" stroke={T.blue} strokeWidth="1.2"/><path d="M1 5h12" stroke={T.blue} strokeWidth="1.2"/><path d="M4 5v7" stroke={T.blue} strokeWidth="1.2"/></svg>
-                            <span style={{fontSize:11.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{p.name}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <div style={{display:"flex",alignItems:"center",padding:"0 8px",flexShrink:0}}>
-                        <svg width="40" height="2" viewBox="0 0 40 2" fill="none"><path d="M0 1h36" stroke={T.border} strokeWidth="1.5"/><path d="M34 -2l4 3-4 3" stroke={T.border} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
-                      </div>
-                      <div style={{padding:"12px 16px",background:`${pd.color}15`,border:`2px solid ${pd.color}`,borderRadius:10,display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:120,flexShrink:0}}>
-                        <div style={{fontSize:22}}>{pd.icon}</div>
-                        <span style={{fontSize:11,fontWeight:700,color:pd.color,fontFamily:"'Geist Mono',monospace"}}>{pd.name}</span>
-                      </div>
-                      <div style={{display:"flex",alignItems:"center",padding:"0 8px",flexShrink:0}}>
-                        <svg width="40" height="2" viewBox="0 0 40 2" fill="none"><path d="M0 1h36" stroke={T.border} strokeWidth="1.5"/><path d="M34 -2l4 3-4 3" stroke={T.border} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
-                      </div>
-                      <div style={{display:"flex",flexDirection:"column",gap:8,minWidth:160}}>
-                        {outputPorts.map(p=>(
-                          <div key={p.id} style={{padding:"8px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,display:"flex",alignItems:"center",gap:8}}>
-                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="10" rx="1.5" stroke={T.violet} strokeWidth="1.2"/><path d="M1 5h12" stroke={T.violet} strokeWidth="1.2"/><path d="M4 5v7" stroke={T.violet} strokeWidth="1.2"/></svg>
-                            <span style={{fontSize:11.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{p.name}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                  {/* Ports Lineage — ReactFlow */}
+                  <div style={{marginBottom:24}}>
+                    <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:10}}>Ports Lineage</div>
+                    <PortsLineageFlow inputPorts={inputPorts} outputPorts={outputPorts} pd={pd}/>
                   </div>
                   {/* Input + Output columns */}
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
@@ -15688,37 +15737,10 @@ const DataProductsView = ({onAsset, onNav}) => {
               );
               return (
                 <div>
-                  {/* Ports Lineage */}
-                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px 20px",marginBottom:24}}>
-                    <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:14}}>Ports Lineage</div>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:0,padding:"16px 0",overflowX:"auto"}}>
-                      <div style={{display:"flex",flexDirection:"column",gap:8,minWidth:160}}>
-                        {inputPorts.map(p=>(
-                          <div key={p.id} style={{padding:"8px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,display:"flex",alignItems:"center",gap:8}}>
-                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="10" rx="1.5" stroke={T.blue} strokeWidth="1.2"/><path d="M1 5h12" stroke={T.blue} strokeWidth="1.2"/><path d="M4 5v7" stroke={T.blue} strokeWidth="1.2"/></svg>
-                            <span style={{fontSize:11.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{p.name}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <div style={{display:"flex",alignItems:"center",padding:"0 8px",flexShrink:0}}>
-                        <svg width="40" height="2" viewBox="0 0 40 2" fill="none"><path d="M0 1h36" stroke={T.border} strokeWidth="1.5"/><path d="M34 -2l4 3-4 3" stroke={T.border} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
-                      </div>
-                      <div style={{padding:"12px 16px",background:`${pd.color}15`,border:`2px solid ${pd.color}`,borderRadius:10,display:"flex",flexDirection:"column",alignItems:"center",gap:4,minWidth:120,flexShrink:0}}>
-                        <div style={{fontSize:22}}>{pd.icon}</div>
-                        <span style={{fontSize:11,fontWeight:700,color:pd.color,fontFamily:"'Geist Mono',monospace"}}>{pd.name}</span>
-                      </div>
-                      <div style={{display:"flex",alignItems:"center",padding:"0 8px",flexShrink:0}}>
-                        <svg width="40" height="2" viewBox="0 0 40 2" fill="none"><path d="M0 1h36" stroke={T.border} strokeWidth="1.5"/><path d="M34 -2l4 3-4 3" stroke={T.border} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
-                      </div>
-                      <div style={{display:"flex",flexDirection:"column",gap:8,minWidth:160}}>
-                        {outputPorts.map(p=>(
-                          <div key={p.id} style={{padding:"8px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,display:"flex",alignItems:"center",gap:8}}>
-                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="10" rx="1.5" stroke={T.violet} strokeWidth="1.2"/><path d="M1 5h12" stroke={T.violet} strokeWidth="1.2"/><path d="M4 5v7" stroke={T.violet} strokeWidth="1.2"/></svg>
-                            <span style={{fontSize:11.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{p.name}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                  {/* Ports Lineage — ReactFlow */}
+                  <div style={{marginBottom:24}}>
+                    <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:10}}>Ports Lineage</div>
+                    <PortsLineageFlow inputPorts={inputPorts} outputPorts={outputPorts} pd={pd}/>
                   </div>
                   {/* Input + Output columns */}
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
