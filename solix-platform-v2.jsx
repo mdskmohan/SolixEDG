@@ -5671,6 +5671,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const [schedDay,       setSchedDay]       = useState("monday");
   const [schedCron,      setSchedCron]      = useState("");
   const [selRegId,       setSelRegId]       = useState(null);
+  const [regSearch,      setRegSearch]      = useState("");
   const [polEditCatOpen,  setPolEditCatOpen]  = useState(false);
   const [polEditCatDraft, setPolEditCatDraft] = useState(null);
   const filterDropRef  = useRef(null);
@@ -6876,9 +6877,6 @@ const PolicyManagerView = ({onToast, onNav}) => {
           const TYPE_COLOR = {Privacy:T.violet,Healthcare:T.rose,Financial:T.amber,Security:T.blue};
           const STATUS_COLOR = {Passing:T.green,Partial:T.amber,"Not Started":T.textMuted};
           const selReg = selRegId ? regulations.find(r=>r.id===selRegId) : null;
-
-          // ── hooks MUST be called unconditionally before any early return ──
-          const [regSearch, setRegSearch] = React.useState("");
 
           // Summary counts
           const passing = regulations.filter(r=>r.status==="Passing").length;
@@ -12505,6 +12503,9 @@ const DomainsView = ({onAsset, onNav}) => {
   const [pdStyleOpen,      setPdStyleOpen]      = useState(false);
   const [pdContractOpen,   setPdContractOpen]   = useState(false);
   const [pdCustomProps,    setPdCustomProps]    = useState([]);     // [{key,value}]
+  const [pdContractState,  setPdContractState]  = useState({status:"Active",version:"1.2.0",validFrom:"2026-01-01",validUntil:"2026-12-31",schemaTerms:{expectedColumns:12,allowSchemaEvolution:true,breakingChangePolicy:"Notify 7 days prior"},freshnessTerms:{maxLatency:120,unit:"minutes",availability:99.5},qualityTerms:[{id:"qc1",rule:"Null rate on primary key",operator:"<",threshold:0.1,unit:"%",status:"passing"},{id:"qc2",rule:"Row count",operator:">",threshold:1000,unit:"rows",status:"passing"},{id:"qc3",rule:"Completeness score",operator:">=",threshold:95,unit:"%",status:"passing"},{id:"qc4",rule:"Duplicate rate",operator:"<",threshold:0.5,unit:"%",status:"failing"}],ownershipTerms:{owner:"maya.chen",responseTime:"24 hours",escalation:"data-platform-team@company.com"},consumerTerms:"Consumers agree to: (1) not redistribute raw data outside approved use cases, (2) report issues within 24 hours, (3) not use this product for purposes inconsistent with the domain's data governance policy."});
+  const [pdContractValidating,   setPdContractValidating]   = useState(false);
+  const [pdContractLastValidated,setPdContractLastValidated] = useState("2026-05-17 14:32");
   const [pdCpKey,          setPdCpKey]          = useState("");
   const [pdCpVal,          setPdCpVal]          = useState("");
   // delete confirmation modal
@@ -13011,36 +13012,12 @@ const DomainsView = ({onAsset, onNav}) => {
 
             {/* CONTRACT TAB */}
             {productTab==="contract"&&(()=>{
-              const [contractState, setContractState] = React.useState(()=>({
-                status: pd.contract?.status||"Active",
-                version: pd.contract?.version||"1.2.0",
-                validFrom: pd.contract?.validFrom||"2026-01-01",
-                validUntil: pd.contract?.validUntil||"2026-12-31",
-                schemaTerms:{
-                  expectedColumns: pd.contract?.schemaTerms?.expectedColumns||12,
-                  allowSchemaEvolution: pd.contract?.schemaTerms?.allowSchemaEvolution||true,
-                  breakingChangePolicy: pd.contract?.schemaTerms?.breakingChangePolicy||"Notify 7 days prior",
-                },
-                freshnessTerms:{
-                  maxLatency: pd.sla?.dataFreshness||120,
-                  unit: "minutes",
-                  availability: pd.sla?.availability||99.5,
-                },
-                qualityTerms:[
-                  {id:"qc1",rule:"Null rate on primary key",operator:"<",threshold:0.1,unit:"%",status:"passing"},
-                  {id:"qc2",rule:"Row count",operator:">",threshold:1000,unit:"rows",status:"passing"},
-                  {id:"qc3",rule:"Completeness score",operator:">=",threshold:95,unit:"%",status:"passing"},
-                  {id:"qc4",rule:"Duplicate rate",operator:"<",threshold:0.5,unit:"%",status:"failing"},
-                ],
-                ownershipTerms:{
-                  owner: (pd.owners||[])[0]||"—",
-                  responseTime: "24 hours",
-                  escalation: "data-platform-team@company.com",
-                },
-                consumerTerms: pd.contract?.consumerTerms||"Consumers agree to: (1) not redistribute raw data outside approved use cases, (2) report issues within 24 hours, (3) not use this product for purposes inconsistent with the domain's data governance policy.",
-              }));
-              const [validating, setValidating] = React.useState(false);
-              const [lastValidated, setLastValidated] = React.useState("2026-05-17 14:32");
+              const contractState    = pdContractState;
+              const setContractState = setPdContractState;
+              const validating       = pdContractValidating;
+              const setValidating    = setPdContractValidating;
+              const lastValidated    = pdContractLastValidated;
+              const setLastValidated = setPdContractLastValidated;
               const STATUS_CFG = {
                 Active:{color:T.green,bg:`${T.green}12`,label:"Active"},
                 Draft:{color:T.textMuted,bg:T.bgElevated,label:"Draft"},
@@ -14817,6 +14794,9 @@ const DataProductsView = ({onAsset, onNav}) => {
   const [dpCustomProps,    setDpCustomProps]    = useState([]);
   const [dpNewCpKey,       setDpNewCpKey]       = useState("");
   const [dpNewCpVal,       setDpNewCpVal]       = useState("");
+  const [dpContractState,  setDpContractState]  = useState({status:"Active",version:"1.2.0",validFrom:"2026-01-01",validUntil:"2026-12-31",schemaTerms:{expectedColumns:12,allowSchemaEvolution:true,breakingChangePolicy:"Notify 7 days prior"},freshnessTerms:{maxLatency:120,unit:"minutes",availability:99.5},qualityTerms:[{id:"qc1",rule:"Null rate on primary key",operator:"<",threshold:0.1,unit:"%",status:"passing"},{id:"qc2",rule:"Row count",operator:">",threshold:1000,unit:"rows",status:"passing"},{id:"qc3",rule:"Completeness score",operator:">=",threshold:95,unit:"%",status:"passing"},{id:"qc4",rule:"Duplicate rate",operator:"<",threshold:0.5,unit:"%",status:"failing"}],ownershipTerms:{owner:"maya.chen",responseTime:"24 hours",escalation:"data-platform-team@company.com"},consumerTerms:"Consumers agree to: (1) not redistribute raw data outside approved use cases, (2) report issues within 24 hours, (3) not use this product for purposes inconsistent with the domain's data governance policy."});
+  const [dpContractValidating,   setDpContractValidating]   = useState(false);
+  const [dpContractLastValidated,setDpContractLastValidated] = useState("2026-05-17 14:32");
   const DP_USERS = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
   const dpAva = name => (name||"?").split(".").map(s=>s[0]?.toUpperCase()||"").join("");
   const patchDP = (id,patch) => setProducts(prev=>prev.map(p=>p.id===id?{...p,...patch}:p));
@@ -15206,21 +15186,12 @@ const DataProductsView = ({onAsset, onNav}) => {
 
             {/* ── CONTRACT TAB ── */}
             {productTab==="contract"&&(()=>{
-              const [contractState, setContractState] = React.useState(()=>({
-                status:"Active", version:"1.2.0", validFrom:"2026-01-01", validUntil:"2026-12-31",
-                schemaTerms:{expectedColumns:12,allowSchemaEvolution:true,breakingChangePolicy:"Notify 7 days prior"},
-                freshnessTerms:{maxLatency:120,unit:"minutes",availability:99.5},
-                qualityTerms:[
-                  {id:"qc1",rule:"Null rate on primary key",operator:"<",threshold:0.1,unit:"%",status:"passing"},
-                  {id:"qc2",rule:"Row count",operator:">",threshold:1000,unit:"rows",status:"passing"},
-                  {id:"qc3",rule:"Completeness score",operator:">=",threshold:95,unit:"%",status:"passing"},
-                  {id:"qc4",rule:"Duplicate rate",operator:"<",threshold:0.5,unit:"%",status:"failing"},
-                ],
-                ownershipTerms:{owner:(pd.owners||[])[0]||"—",responseTime:"24 hours",escalation:"data-platform-team@company.com"},
-                consumerTerms:"Consumers agree to: (1) not redistribute raw data outside approved use cases, (2) report issues within 24 hours, (3) not use this product for purposes inconsistent with the domain's data governance policy.",
-              }));
-              const [validating,setValidating]=React.useState(false);
-              const [lastValidated,setLastValidated]=React.useState("2026-05-17 14:32");
+              const contractState    = dpContractState;
+              const setContractState = setDpContractState;
+              const validating       = dpContractValidating;
+              const setValidating    = setDpContractValidating;
+              const lastValidated    = dpContractLastValidated;
+              const setLastValidated = setDpContractLastValidated;
               const STATUS_CFG={Active:{color:T.green,bg:`${T.green}12`,label:"Active"},Draft:{color:T.textMuted,bg:T.bgElevated,label:"Draft"},Breached:{color:T.rose,bg:`${T.rose}12`,label:"Breached"},"Under Review":{color:T.amber,bg:`${T.amber}12`,label:"Under Review"}};
               const sc=STATUS_CFG[contractState.status]||STATUS_CFG.Active;
               const runValidation=()=>{setValidating(true);setTimeout(()=>{setContractState(p=>({...p,qualityTerms:p.qualityTerms.map(q=>({...q,status:Math.random()>0.2?"passing":"failing"}))}));setLastValidated(new Date().toLocaleString("en-US",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}));setValidating(false);},1800);};
