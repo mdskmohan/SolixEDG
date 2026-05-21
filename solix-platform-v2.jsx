@@ -9218,11 +9218,15 @@ function buildLinEdges(hiddenNodes){
 // ─── AssetLineageFull ─────────────────────────────────────────────────────────
 const AssetLineageFull=({asset})=>{
   const aName=asset?.name||"orders_fact";
-  const [hiddenNodes, setHiddenNodes]=useState(new Set());
-  const [expandedCols,setExpandedCols]=useState(new Set());
-  const [selectedId,  setSelectedId] =useState(null);
-  const [selectedCol, setSelectedCol]=useState(null); // {nodeId, colName}
-  const [rf,          setRf]         =useState(null);
+  const [hiddenNodes,  setHiddenNodes] =useState(new Set());
+  const [expandedCols, setExpandedCols]=useState(new Set());
+  const [selectedId,   setSelectedId]  =useState(null);
+  const [selectedCol,  setSelectedCol] =useState(null); // {nodeId, colName}
+  const [nodeInfoTab,  setNodeInfoTab] =useState("overview"); // "overview"|"upstream"|"downstream"
+  const [rf,           setRf]          =useState(null);
+
+  // Reset tab when a different node is selected
+  useEffect(()=>{ setNodeInfoTab("overview"); },[selectedId]);
 
   const callbacks=useMemo(()=>({
     toggleExpand:(id)=>{
@@ -9367,79 +9371,136 @@ const AssetLineageFull=({asset})=>{
           </ReactFlow>
         </div>
 
-        {/* Info panel — node panel OR column lineage panel */}
+        {/* Info panel — column lineage OR node info (tabbed) */}
         {(selectedCol||(selectedId&&selMeta))&&(()=>{
           const CMETA_L={"Draft":{color:"#6b7280",bg:"rgba(107,114,128,.1)",border:"rgba(107,114,128,.25)"},"In Review":{color:"#d97706",bg:"rgba(217,119,6,.12)",border:"rgba(217,119,6,.3)"},"Approved":{color:"#16a34a",bg:"rgba(22,163,74,.12)",border:"rgba(22,163,74,.3)"}};
           const TAG_C_L={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},finance:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},KPI:{bg:"rgba(22,163,74,.08)",color:"#16a34a",border:"rgba(22,163,74,.2)"},etl:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},model:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"}};
           const SLabel=({children})=><div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>{children}</div>;
 
-          // ── COLUMN LINEAGE PANEL ──
+          // ── COLUMN LINEAGE PANEL ──────────────────────────────────────────────
           if(selectedCol){
             const cMeta=LINEAGE_NODE_META[selectedCol.nodeId];
             const colDef=cMeta?.cols.find(c=>c.n===selectedCol.colName);
-            const nodeTopo=LINEAGE_TOPO[selectedCol.nodeId];
-            const nodeLabel=nodeTopo?.active?aName:nodeTopo?.label;
-            const upConns=LINEAGE_COL_MAPS.filter(m=>m.t===selectedCol.nodeId)
-              .flatMap(m=>m.cols.filter(c=>c.tc===selectedCol.colName).map(c=>({nodeId:m.s,colName:c.sc})));
-            const downConns=LINEAGE_COL_MAPS.filter(m=>m.s===selectedCol.nodeId)
-              .flatMap(m=>m.cols.filter(c=>c.sc===selectedCol.colName).map(c=>({nodeId:m.t,colName:c.tc})));
-            const ConnRow=({nodeId,colName})=>{
-              const nm=LINEAGE_NODE_META[nodeId];
-              const nt=LINEAGE_TOPO[nodeId];
-              const nl=nt?.active?aName:nt?.label;
-              return(
-                <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,marginBottom:5}}>
-                  <TypeBadge type={nm?.assetType}/>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{colName}</div>
-                    <div style={{fontSize:10,color:T.textMuted,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nl}</div>
-                  </div>
-                </div>
-              );
+            // Build primary lineage path (upstream ← current → downstream)
+            const buildColPath=(nid,cname)=>{
+              const path=[{nodeId:nid,colName:cname,isCurrent:true}];
+              let un=nid,uc=cname;
+              for(let i=0;i<8;i++){
+                const ups=LINEAGE_COL_MAPS.filter(m=>m.t===un).flatMap(m=>m.cols.filter(c=>c.tc===uc).map(c=>({nodeId:m.s,colName:c.sc})));
+                if(!ups.length)break;path.unshift({nodeId:ups[0].nodeId,colName:ups[0].colName,isCurrent:false});
+                un=ups[0].nodeId;uc=ups[0].colName;
+              }
+              let dn=nid,dc=cname;
+              for(let i=0;i<8;i++){
+                const dns=LINEAGE_COL_MAPS.filter(m=>m.s===dn).flatMap(m=>m.cols.filter(c=>c.sc===dc).map(c=>({nodeId:m.t,colName:c.tc})));
+                if(!dns.length)break;path.push({nodeId:dns[0].nodeId,colName:dns[0].colName,isCurrent:false});
+                dn=dns[0].nodeId;dc=dns[0].colName;
+              }
+              return path;
             };
+            const fullPath=buildColPath(selectedCol.nodeId,selectedCol.colName);
+            const pathKeys=new Set(fullPath.map(s=>`${s.nodeId}.${s.colName}`));
+            // Extra downstream branches not in primary path
+            const extraDown=LINEAGE_COL_MAPS.filter(m=>m.s===selectedCol.nodeId)
+              .flatMap(m=>m.cols.filter(c=>c.sc===selectedCol.colName).map(c=>({nodeId:m.t,colName:c.tc})))
+              .filter(a=>!pathKeys.has(`${a.nodeId}.${a.colName}`));
+
             return(
-              <div className="slideInRight" style={{width:280,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-                {/* Column header */}
+              <div className="slideInRight" style={{width:300,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+                {/* Header */}
                 <div style={{padding:"14px 16px 12px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"flex-start",gap:10,flexShrink:0}}>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Column Lineage</div>
-                    <div style={{fontSize:14,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{selectedCol.colName}</div>
-                    <div style={{display:"flex",alignItems:"center",gap:6,marginTop:5}}>
+                    <div style={{fontSize:9,fontWeight:700,color:T.accent,textTransform:"uppercase",letterSpacing:"0.09em",marginBottom:4,display:"flex",alignItems:"center",gap:4}}>
+                      <svg width="10" height="10" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M9 4l3 3-3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      Column Lineage
+                    </div>
+                    <div style={{fontSize:15,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{selectedCol.colName}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginTop:5,flexWrap:"wrap"}}>
                       <TypeBadge type={cMeta?.assetType}/>
-                      <span style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nodeLabel}</span>
+                      <span style={{fontSize:10,padding:"1px 7px",borderRadius:4,background:`${T.blue}15`,color:T.blue,border:`1px solid ${T.blue}25`,fontFamily:"'Geist Mono',monospace",fontWeight:600}}>{colDef?.t||"—"}</span>
                     </div>
                   </div>
                   <button onClick={()=>setSelectedCol(null)} style={{width:26,height:26,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted,flexShrink:0,padding:0}}>{Ic.x(10)}</button>
                 </div>
-                {/* Data type row */}
-                <div style={{padding:"10px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,background:T.bgElevated}}>
-                  <span style={{fontSize:11,color:T.textMuted,fontWeight:600}}>Data Type</span>
-                  <span style={{fontSize:11,padding:"2px 8px",borderRadius:4,background:`${T.blue}15`,color:T.blue,border:`1px solid ${T.blue}30`,fontFamily:"'Geist Mono',monospace",fontWeight:600}}>{colDef?.t||"—"}</span>
-                </div>
-                {/* Connections */}
-                <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
-                  {upConns.length>0&&(
-                    <div style={{marginBottom:16}}>
-                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-                        <span style={{width:8,height:8,borderRadius:2,background:"#3b82f6",display:"inline-block",flexShrink:0}}/>
-                        <SLabel>Upstream</SLabel>
-                      </div>
-                      {upConns.map((u,i)=><ConnRow key={i} nodeId={u.nodeId} colName={u.colName}/>)}
+
+                {/* Lineage path — vertical flow */}
+                <div style={{flex:1,overflowY:"auto",padding:"16px"}}>
+                  {fullPath.length===1?(
+                    <div style={{textAlign:"center",padding:"28px 0"}}>
+                      <div style={{fontSize:26,marginBottom:8}}>🔗</div>
+                      <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6}}>No mappings defined for<br/><span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{selectedCol.colName}</span></div>
                     </div>
-                  )}
-                  {downConns.length>0&&(
-                    <div>
-                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-                        <span style={{width:8,height:8,borderRadius:2,background:"#8b5cf6",display:"inline-block",flexShrink:0}}/>
-                        <SLabel>Downstream</SLabel>
+                  ):(<>
+                    <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:14}}>Lineage Path</div>
+                    {fullPath.map((step,i)=>{
+                      const nm=LINEAGE_NODE_META[step.nodeId];
+                      const nt=LINEAGE_TOPO[step.nodeId];
+                      const nl=nt?.active?aName:nt?.label;
+                      const isCur=step.isCurrent;
+                      const isFirst=i===0&&!isCur;
+                      const isLast=i===fullPath.length-1&&!isCur;
+                      const stepType=nm?.cols.find(c=>c.n===step.colName)?.t;
+                      return(
+                        <React.Fragment key={`${step.nodeId}.${step.colName}.${i}`}>
+                          {/* Step card */}
+                          <div style={{position:"relative",padding:"11px 13px",background:isCur?T.accentDim:T.bgElevated,border:`1.5px solid ${isCur?T.accent:T.border}`,borderRadius:10}}>
+                            {/* Step label badge */}
+                            <div style={{position:"absolute",top:-8,left:10,fontSize:8.5,fontWeight:700,padding:"0 5px",background:T.bgSurface,letterSpacing:"0.06em",textTransform:"uppercase",
+                              color:isFirst?"#3b82f6":isLast?"#8b5cf6":isCur?T.accent:"transparent"}}>
+                              {isFirst?"Source":isLast?"Sink":isCur?"Selected":""}
+                            </div>
+                            {/* Node row */}
+                            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                              <ServiceIcon service={nm?.service} size={20}/>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:2}}>
+                                  <TypeBadge type={nm?.assetType}/>
+                                  {nt?.active&&<span style={{fontSize:8,fontWeight:700,color:"#ee2424",background:"rgba(238,36,36,.1)",padding:"1px 5px",borderRadius:3}}>CURRENT</span>}
+                                </div>
+                                <div style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:isCur?T.accent:T.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nl}</div>
+                              </div>
+                            </div>
+                            {/* Column chip */}
+                            <div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 9px",background:T.bgSurface,borderRadius:6,border:`1px solid ${isCur?T.accent+"55":T.border}`}}>
+                              <span style={{width:5,height:5,borderRadius:"50%",background:isCur?"#2563eb":"#94a3b8",flexShrink:0}}/>
+                              <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11,fontWeight:isCur?700:500,color:isCur?T.accent:T.text,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{step.colName}</span>
+                              {stepType&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:`${T.blue}15`,color:T.blue,border:`1px solid ${T.blue}20`,fontFamily:"'Geist Mono',monospace",flexShrink:0}}>{stepType}</span>}
+                            </div>
+                          </div>
+                          {/* Arrow connector */}
+                          {i<fullPath.length-1&&(
+                            <div style={{display:"flex",justifyContent:"center",alignItems:"center",height:22,position:"relative"}}>
+                              <div style={{position:"absolute",top:0,bottom:0,left:"50%",width:1,background:T.accent+"35"}}/>
+                              <div style={{background:T.bgSurface,zIndex:1,padding:"0 4px",color:T.accent,fontSize:13,lineHeight:1}}>↓</div>
+                            </div>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </>)}
+                  {/* Additional branches */}
+                  {extraDown.length>0&&(
+                    <div style={{marginTop:16,paddingTop:16,borderTop:`1px solid ${T.border}`}}>
+                      <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10,display:"flex",alignItems:"center",gap:5}}>
+                        <span style={{width:7,height:7,borderRadius:2,background:"#8b5cf6"}}/>
+                        Also maps to
                       </div>
-                      {downConns.map((d,i)=><ConnRow key={i} nodeId={d.nodeId} colName={d.colName}/>)}
-                    </div>
-                  )}
-                  {upConns.length===0&&downConns.length===0&&(
-                    <div style={{textAlign:"center",padding:"36px 16px"}}>
-                      <div style={{fontSize:28,marginBottom:8}}>🔗</div>
-                      <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6}}>No column-level mappings defined for <span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{selectedCol.colName}</span></div>
+                      {extraDown.map((ex,i)=>{
+                        const enm=LINEAGE_NODE_META[ex.nodeId];
+                        const ent=LINEAGE_TOPO[ex.nodeId];
+                        const enl=ent?.active?aName:ent?.label;
+                        return(
+                          <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6}}>
+                            <ServiceIcon service={enm?.service} size={18}/>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{display:"flex",gap:5,marginBottom:2}}><TypeBadge type={enm?.assetType}/></div>
+                              <div style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600}}>{ex.colName}</div>
+                              <div style={{fontSize:10,color:T.textMuted,marginTop:1}}>{enl}</div>
+                            </div>
+                            {enm?.cols.find(c=>c.n===ex.colName)?.t&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:`${T.blue}15`,color:T.blue,border:`1px solid ${T.blue}20`,fontFamily:"'Geist Mono',monospace"}}>{enm?.cols.find(c=>c.n===ex.colName)?.t}</span>}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -9447,103 +9508,145 @@ const AssetLineageFull=({asset})=>{
             );
           }
 
-          // ── NODE INFO PANEL ──
+          // ── NODE INFO PANEL (tabbed) ──────────────────────────────────────────
           const cm=CMETA_L[selMeta.cert]||CMETA_L["Draft"];
           const tagC=t=>TAG_C_L[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};
-          return (
-            <div className="slideInRight" style={{width:280,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,
-              display:"flex",flexDirection:"column",overflow:"hidden"}}>
-              {/* Header */}
-              <div style={{padding:"14px 16px 12px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"flex-start",gap:10,flexShrink:0}}>
+          const directUp=LINEAGE_TOPO[selectedId]?.upstream||[];
+          const directDown=LINEAGE_TOPO[selectedId]?.downstream||[];
+          const allUp=[...linAncestors(selectedId)];
+          const allDown=[...linDescendants(selectedId)];
+          const upOrdered=[...directUp,...allUp.filter(id=>!directUp.includes(id))];
+          const downOrdered=[...directDown,...allDown.filter(id=>!directDown.includes(id))];
+
+          const LineageNodeCard=({nodeId,direct})=>{
+            const nm=LINEAGE_NODE_META[nodeId];
+            const nt=LINEAGE_TOPO[nodeId];
+            const nl=nt?.active?aName:nt?.label;
+            return(
+              <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 13px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,marginBottom:8}}>
+                <ServiceIcon service={nm?.service} size={24}/>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:5,flexWrap:"wrap"}}>
-                    <TypeBadge type={selMeta.assetType}/>
-                    {LINEAGE_TOPO[selectedId].active&&<span style={{fontSize:9,fontWeight:700,color:"#ee2424",background:"rgba(238,36,36,0.1)",padding:"2px 6px",borderRadius:4,letterSpacing:"0.05em"}}>CURRENT</span>}
+                  <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}>
+                    <TypeBadge type={nm?.assetType}/>
+                    {direct&&<span style={{fontSize:8.5,fontWeight:700,padding:"1px 5px",borderRadius:3,background:T.accentDim,color:T.accent,letterSpacing:"0.04em"}}>DIRECT</span>}
                   </div>
-                  <div style={{fontSize:13,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",wordBreak:"break-all",lineHeight:1.35}}>{selLabel}</div>
-                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:2,fontFamily:"'Geist Mono',monospace"}}>{selMeta.db}</div>
+                  <div style={{fontSize:12,fontFamily:"'Geist Mono',monospace",fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nl}</div>
+                  <div style={{fontSize:10,color:T.textMuted,marginTop:1}}>{nm?.service}</div>
                 </div>
-                <button onClick={()=>setSelectedId(null)}
-                  style={{width:26,height:26,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted,flexShrink:0,padding:0}}>
-                  {Ic.x(10)}
-                </button>
+                <div style={{textAlign:"right",flexShrink:0}}>
+                  <div style={{fontSize:14,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:qualC(nm?.quality||0)}}>{nm?.quality}</div>
+                  <div style={{width:30,height:3,background:T.border,borderRadius:2,overflow:"hidden",marginTop:3}}>
+                    <div style={{width:`${nm?.quality||0}%`,height:"100%",background:qualC(nm?.quality||0)}}/>
+                  </div>
+                </div>
               </div>
-              {/* Scrollable body */}
-              <div style={{flex:1,overflowY:"auto"}}>
-                {/* DETAILS */}
-                <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
-                  <SLabel>Details</SLabel>
-                  {[
-                    {l:"Quality",v:<div style={{display:"flex",alignItems:"center",gap:7}}>
-                      <span style={{fontSize:13,fontWeight:700,color:qualC(selMeta.quality),fontFamily:"'Geist Mono',monospace"}}>{selMeta.quality}</span>
-                      <div style={{width:44,height:4,background:T.border,borderRadius:2,overflow:"hidden"}}>
-                        <div style={{width:`${selMeta.quality}%`,height:"100%",background:qualC(selMeta.quality),borderRadius:2}}/>
-                      </div>
-                    </div>},
-                    {l:"Service",v:<div style={{display:"flex",alignItems:"center",gap:5}}>
-                      <ServiceIcon service={selMeta.service} size={14}/>
-                      <span style={{fontSize:12,color:T.textSub}}>{selMeta.service}</span>
-                    </div>},
-                  ].map(m=>(
-                    <div key={m.l} style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,fontSize:12}}>
-                      <span style={{color:T.textMuted}}>{m.l}</span>{m.v}
+            );
+          };
+
+          return(
+            <div className="slideInRight" style={{width:300,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+              {/* Header + tab bar */}
+              <div style={{padding:"14px 16px 0",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:12}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:5,flexWrap:"wrap"}}>
+                      <TypeBadge type={selMeta.assetType}/>
+                      {LINEAGE_TOPO[selectedId].active&&<span style={{fontSize:9,fontWeight:700,color:"#ee2424",background:"rgba(238,36,36,0.1)",padding:"2px 6px",borderRadius:4}}>CURRENT</span>}
                     </div>
+                    <div style={{fontSize:13,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",wordBreak:"break-all",lineHeight:1.35}}>{selLabel}</div>
+                    <div style={{fontSize:10.5,color:T.textMuted,marginTop:2,fontFamily:"'Geist Mono',monospace"}}>{selMeta.db}</div>
+                  </div>
+                  <button onClick={()=>setSelectedId(null)} style={{width:26,height:26,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted,flexShrink:0,padding:0}}>{Ic.x(10)}</button>
+                </div>
+                {/* Tabs */}
+                <div style={{display:"flex"}}>
+                  {[{k:"overview",l:"Overview"},{k:"upstream",l:`Upstream (${upOrdered.length})`},{k:"downstream",l:`Downstream (${downOrdered.length})`}].map(tab=>(
+                    <button key={tab.k} onClick={()=>setNodeInfoTab(tab.k)}
+                      style={{padding:"7px 10px",background:"none",border:"none",borderBottom:`2px solid ${nodeInfoTab===tab.k?T.accent:"transparent"}`,
+                        color:nodeInfoTab===tab.k?T.text:T.textMuted,fontSize:11.5,fontWeight:nodeInfoTab===tab.k?600:400,
+                        cursor:"pointer",whiteSpace:"nowrap",transition:"all .12s"}}>
+                      {tab.l}
+                    </button>
                   ))}
                 </div>
-                {/* DESCRIPTION */}
-                <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
-                  <SLabel>Description</SLabel>
-                  <p style={{fontSize:12,color:T.textSub,lineHeight:1.7,margin:0}}>{selMeta.description}</p>
-                </div>
-                {/* CERTIFICATE */}
-                <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
-                  <SLabel>Certificate</SLabel>
-                  <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px 4px 9px",borderRadius:5,background:cm.bg,borderTop:`1px solid ${cm.border}`,borderRight:`1px solid ${cm.border}`,borderBottom:`1px solid ${cm.border}`,borderLeft:`3px solid ${cm.color}`}}>
-                    <span style={{fontSize:12,color:cm.color,fontWeight:600}}>{selMeta.cert}</span>
-                  </div>
-                </div>
-                {/* DOMAIN */}
-                {selMeta.domain&&(
+              </div>
+
+              {/* Tab content */}
+              <div style={{flex:1,overflowY:"auto"}}>
+                {/* OVERVIEW TAB */}
+                {nodeInfoTab==="overview"&&<div>
                   <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
+                    <SLabel>Details</SLabel>
+                    {[
+                      {l:"Quality",v:<div style={{display:"flex",alignItems:"center",gap:7}}><span style={{fontSize:13,fontWeight:700,color:qualC(selMeta.quality),fontFamily:"'Geist Mono',monospace"}}>{selMeta.quality}</span><div style={{width:44,height:4,background:T.border,borderRadius:2,overflow:"hidden"}}><div style={{width:`${selMeta.quality}%`,height:"100%",background:qualC(selMeta.quality),borderRadius:2}}/></div></div>},
+                      {l:"Service",v:<div style={{display:"flex",alignItems:"center",gap:5}}><ServiceIcon service={selMeta.service} size={14}/><span style={{fontSize:12,color:T.textSub}}>{selMeta.service}</span></div>},
+                    ].map(m=>(
+                      <div key={m.l} style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,fontSize:12}}>
+                        <span style={{color:T.textMuted}}>{m.l}</span>{m.v}
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
+                    <SLabel>Description</SLabel>
+                    <p style={{fontSize:12,color:T.textSub,lineHeight:1.7,margin:0}}>{selMeta.description}</p>
+                  </div>
+                  <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
+                    <SLabel>Certificate</SLabel>
+                    <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px 4px 9px",borderRadius:5,background:cm.bg,borderTop:`1px solid ${cm.border}`,borderRight:`1px solid ${cm.border}`,borderBottom:`1px solid ${cm.border}`,borderLeft:`3px solid ${cm.color}`}}>
+                      <span style={{fontSize:12,color:cm.color,fontWeight:600}}>{selMeta.cert}</span>
+                    </div>
+                  </div>
+                  {selMeta.domain&&<div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
                     <SLabel>Domain</SLabel>
                     <div style={{display:"inline-flex",alignItems:"center",padding:"4px 12px 4px 9px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
                       <span style={{fontSize:12,color:T.accent,fontWeight:600}}>{selMeta.domain}</span>
                     </div>
-                  </div>
-                )}
-                {/* OWNER */}
-                <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
-                  <SLabel>Owner</SLabel>
-                  <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
-                    <div style={{width:18,height:18,borderRadius:3,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:T.accent,flexShrink:0}}>
-                      {selMeta.owner.split(".").map(s=>s[0]?.toUpperCase()||"").join("")}
-                    </div>
-                    <span style={{fontSize:12,color:T.accent,fontWeight:500}}>{selMeta.owner}</span>
-                  </div>
-                </div>
-                {/* STEWARD */}
-                {selMeta.steward&&(
+                  </div>}
                   <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
+                    <SLabel>Owner</SLabel>
+                    <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
+                      <div style={{width:18,height:18,borderRadius:3,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:T.accent,flexShrink:0}}>{selMeta.owner.split(".").map(s=>s[0]?.toUpperCase()||"").join("")}</div>
+                      <span style={{fontSize:12,color:T.accent,fontWeight:500}}>{selMeta.owner}</span>
+                    </div>
+                  </div>
+                  {selMeta.steward&&<div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
                     <SLabel>Steward</SLabel>
                     <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:"rgba(217,119,6,.08)",borderTop:"1px solid rgba(217,119,6,.2)",borderRight:"1px solid rgba(217,119,6,.2)",borderBottom:"1px solid rgba(217,119,6,.2)",borderLeft:"3px solid #d97706"}}>
-                      <div style={{width:18,height:18,borderRadius:"50%",background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#d97706",flexShrink:0}}>
-                        {selMeta.steward.split(".").map(s=>s[0]?.toUpperCase()||"").join("")}
-                      </div>
+                      <div style={{width:18,height:18,borderRadius:"50%",background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#d97706",flexShrink:0}}>{selMeta.steward.split(".").map(s=>s[0]?.toUpperCase()||"").join("")}</div>
                       <span style={{fontSize:12,color:"#d97706",fontWeight:500}}>{selMeta.steward}</span>
                     </div>
-                  </div>
-                )}
-                {/* TAGS */}
-                {selMeta.tags&&selMeta.tags.length>0&&(
-                  <div style={{padding:"14px 16px"}}>
+                  </div>}
+                  {selMeta.tags&&selMeta.tags.length>0&&<div style={{padding:"14px 16px"}}>
                     <SLabel>Tags</SLabel>
                     <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                       {selMeta.tags.map(t=>{const c=tagC(t);return(
                         <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}</span>
                       );})}
                     </div>
-                  </div>
-                )}
+                  </div>}
+                </div>}
+
+                {/* UPSTREAM TAB */}
+                {nodeInfoTab==="upstream"&&<div style={{padding:"14px 16px"}}>
+                  {upOrdered.length===0?(
+                    <div style={{textAlign:"center",padding:"36px 0"}}>
+                      <div style={{fontSize:28,marginBottom:8,color:T.textMuted}}>◁</div>
+                      <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:4}}>No Upstream</div>
+                      <div style={{fontSize:11,color:T.textMuted}}>This is a source asset</div>
+                    </div>
+                  ):upOrdered.map(id=><LineageNodeCard key={id} nodeId={id} direct={directUp.includes(id)}/>)}
+                </div>}
+
+                {/* DOWNSTREAM TAB */}
+                {nodeInfoTab==="downstream"&&<div style={{padding:"14px 16px"}}>
+                  {downOrdered.length===0?(
+                    <div style={{textAlign:"center",padding:"36px 0"}}>
+                      <div style={{fontSize:28,marginBottom:8,color:T.textMuted}}>▷</div>
+                      <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:4}}>No Downstream</div>
+                      <div style={{fontSize:11,color:T.textMuted}}>This is a sink asset</div>
+                    </div>
+                  ):downOrdered.map(id=><LineageNodeCard key={id} nodeId={id} direct={directDown.includes(id)}/>)}
+                </div>}
               </div>
             </div>
           );
