@@ -6876,6 +6876,10 @@ const PolicyManagerView = ({onToast, onNav}) => {
           const TYPE_COLOR = {Privacy:T.violet,Healthcare:T.rose,Financial:T.amber,Security:T.blue};
           const STATUS_COLOR = {Passing:T.green,Partial:T.amber,"Not Started":T.textMuted};
           const selReg = selRegId ? regulations.find(r=>r.id===selRegId) : null;
+
+          // ── hooks MUST be called unconditionally before any early return ──
+          const [regSearch, setRegSearch] = React.useState("");
+
           // Summary counts
           const passing = regulations.filter(r=>r.status==="Passing").length;
           const partial  = regulations.filter(r=>r.status==="Partial").length;
@@ -7013,7 +7017,6 @@ const PolicyManagerView = ({onToast, onNav}) => {
 
           // ─── List view ───
           const enabledRegs = regulations.filter(r=>r.enabled);
-          const [regSearch, setRegSearch] = React.useState("");
           const searchedRegs = regSearch ? enabledRegs.filter(r=>r.name.toLowerCase().includes(regSearch.toLowerCase())||r.fullName.toLowerCase().includes(regSearch.toLowerCase())||r.jurisdiction.toLowerCase().includes(regSearch.toLowerCase())) : enabledRegs;
           const REG_GROUPS = [
             {label:"Privacy",   regs: searchedRegs.filter(r=>r.type==="Privacy")},
@@ -12694,8 +12697,9 @@ const DomainsView = ({onAsset, onNav}) => {
             <Tabs2 tabs={[
               {key:"overview",label:"Overview"},
               {key:"assets",label:`Assets (${productAssets.length})`},
-              {key:"activity",label:"Activity"},
+              {key:"ports",label:"Ports"},
               {key:"contract",label:"Contract"},
+              {key:"activity",label:"Activity"},
               {key:"customprops",label:"Custom Properties"},
             ]} active={productTab} onChange={setProductTab}/>
           </div>
@@ -12857,6 +12861,115 @@ const DomainsView = ({onAsset, onNav}) => {
               </div>
             )}
 
+
+            {/* PORTS TAB */}
+            {productTab==="ports"&&(()=>{
+              const inputPorts=[
+                {id:"ip1",name:"Commerce Orders Source",type:"Table",source:"postgresql_prod / COMMERCE / orders",schema:"order_id, customer_id, amount, status, created_at",format:"SQL",sla:"< 2h latency",owner:pd.owners[0]||"maya.chen",status:"active"},
+                {id:"ip2",name:"Customer Dimension Feed",type:"Table",source:"snowflake_prod / COMMERCE / customers",schema:"customer_id, name, email, tier, region",format:"SQL",sla:"< 4h latency",owner:pd.owners[0]||"maya.chen",status:"active"},
+                {id:"ip3",name:"Product Catalog Input",type:"Table",source:"snowflake_prod / PRODUCT / products",schema:"product_id, name, category, price",format:"SQL",sla:"< 8h latency",owner:(pd.owners||[])[1]||"dev.patel",status:"active"},
+              ];
+              const outputPorts=[
+                {id:"op1",name:"Commerce Analytics API",type:"REST API",endpoint:"https://api.company.com/data/commerce/v2/analytics",format:"JSON",consumers:["BI Team","ML Platform"],sla:"99.5% uptime · < 200ms p95",auth:"OAuth2",status:"active"},
+                {id:"op2",name:"Orders Fact Table",type:"Table",endpoint:"snowflake_prod / COMMERCE_PROD / orders_fact",format:"Parquet",consumers:["Revenue Dashboard","Finance Reports"],sla:"99% uptime · < 6h freshness",auth:"Snowflake RBAC",status:"active"},
+                {id:"op3",name:"Real-time Order Events",type:"Stream",endpoint:"kafka://analytics-cluster/commerce.orders.events",format:"Avro",consumers:["ML Feature Store","Alerting"],sla:"99.9% uptime · < 5min latency",auth:"SASL/SCRAM",status:"active"},
+              ];
+              const PortBadge=({status})=>(
+                <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:99,
+                  background:status==="active"?`${T.green}18`:`${T.amber}18`,
+                  color:status==="active"?T.green:T.amber,
+                  border:`1px solid ${status==="active"?T.green:T.amber}30`}}>
+                  {status==="active"?"Active":"Inactive"}
+                </span>
+              );
+              return (
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:28}}>
+                  {/* Input Ports */}
+                  <div>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                      <div style={{width:28,height:28,borderRadius:7,background:`${T.blue}18`,border:`1.5px solid ${T.blue}30`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke={T.blue} strokeWidth="1.5" strokeLinecap="round"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+                      </div>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:700,color:T.text}}>Input Ports</div>
+                        <div style={{fontSize:11,color:T.textMuted}}>Source data flowing into this product</div>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                      {inputPorts.map(p=>(
+                        <div key={p.id} style={{background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:10,padding:"14px 16px",transition:"border-color .15s"}}
+                          onMouseEnter={e=>e.currentTarget.style.borderColor=T.blue}
+                          onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:8}}>
+                            <div>
+                              <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:3}}>{p.name}</div>
+                              <div style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,lineHeight:1.5}}>{p.source}</div>
+                            </div>
+                            <PortBadge status={p.status}/>
+                          </div>
+                          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+                            <span style={{fontSize:10.5,padding:"2px 8px",borderRadius:5,background:`${T.blue}12`,color:T.blue,border:`1px solid ${T.blue}25`}}>{p.type}</span>
+                            <span style={{fontSize:10.5,padding:"2px 8px",borderRadius:5,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`}}>{p.format}</span>
+                          </div>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                            {[{l:"SLA",v:p.sla},{l:"Owner",v:p.owner}].map(m=>(
+                              <div key={m.l} style={{padding:"5px 8px",background:T.bgElevated,borderRadius:6}}>
+                                <div style={{fontSize:9.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>{m.l}</div>
+                                <div style={{fontSize:11,color:T.text,fontWeight:500}}>{m.v}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Output Ports */}
+                  <div>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                      <div style={{width:28,height:28,borderRadius:7,background:`${T.violet}18`,border:`1.5px solid ${T.violet}30`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke={T.violet} strokeWidth="1.5" strokeLinecap="round"><path d="M13 8H3M7 4L3 8l4 4"/></svg>
+                      </div>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:700,color:T.text}}>Output Ports</div>
+                        <div style={{fontSize:11,color:T.textMuted}}>Interfaces exposed to consumers</div>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                      {outputPorts.map(p=>(
+                        <div key={p.id} style={{background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:10,padding:"14px 16px",transition:"border-color .15s"}}
+                          onMouseEnter={e=>e.currentTarget.style.borderColor=T.violet}
+                          onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:8}}>
+                            <div>
+                              <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:3}}>{p.name}</div>
+                              <div style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,lineHeight:1.5,wordBreak:"break-all"}}>{p.endpoint}</div>
+                            </div>
+                            <PortBadge status={p.status}/>
+                          </div>
+                          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+                            <span style={{fontSize:10.5,padding:"2px 8px",borderRadius:5,background:`${T.violet}12`,color:T.violet,border:`1px solid ${T.violet}25`}}>{p.type}</span>
+                            <span style={{fontSize:10.5,padding:"2px 8px",borderRadius:5,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`}}>{p.format}</span>
+                          </div>
+                          <div style={{fontSize:11,color:T.textSub,marginBottom:7}}>
+                            <span style={{fontWeight:600,color:T.textMuted,fontSize:9.5,textTransform:"uppercase",letterSpacing:"0.06em"}}>Consumers: </span>
+                            {p.consumers.join(" · ")}
+                          </div>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                            {[{l:"SLA",v:p.sla},{l:"Auth",v:p.auth}].map(m=>(
+                              <div key={m.l} style={{padding:"5px 8px",background:T.bgElevated,borderRadius:6}}>
+                                <div style={{fontSize:9.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>{m.l}</div>
+                                <div style={{fontSize:11,color:T.text,fontWeight:500}}>{m.v}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* ACTIVITY TAB */}
             {productTab==="activity"&&(
