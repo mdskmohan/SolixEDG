@@ -10669,27 +10669,35 @@ function policyHistToEntries(history,p){
 // AuditLogTable — universal audit log component
 // ─────────────────────────────────────────────
 const AuditLogTable=({entries=[],pageSize=20})=>{
-  const [search,      setSearch]      =useState("");
-  const [catFilter,   setCatFilter]   =useState("All");
-  const [actFilter,   setActFilter]   =useState("All");
-  const [page,        setPage]        =useState(1);
-  const [expanded,    setExpanded]    =useState(null);
-  const [showFilters, setShowFilters] =useState(false);
+  const [search,    setSearch]    =useState("");
+  const [catSel,    setCatSel]    =useState([]);   // [] = all
+  const [actSel,    setActSel]    =useState([]);   // [] = all; values: "Users","System"
+  const [page,      setPage]      =useState(1);
+  const [expanded,  setExpanded]  =useState(null);
+  const [openDrop,  setOpenDrop]  =useState(null); // "cat"|"act"|null
 
-  useEffect(()=>setPage(1),[search,catFilter,actFilter]);
+  useEffect(()=>setPage(1),[search,catSel,actSel]);
 
-  const cats=useMemo(()=>["All",...[...new Set(entries.map(e=>e.category))]]  ,[entries]);
+  const cats=useMemo(()=>[...new Set(entries.map(e=>e.category))].filter(Boolean),[entries]);
+
+  const toggleCat=c=>setCatSel(prev=>prev.includes(c)?prev.filter(x=>x!==c):[...prev,c]);
+  const toggleAct=a=>setActSel(prev=>prev.includes(a)?prev.filter(x=>x!==a):[...prev,a]);
 
   const filtered=useMemo(()=>{
     const q=search.toLowerCase();
     return entries.filter(e=>{
       if(q&&!(e.action||"").toLowerCase().includes(q)&&!(e.details||"").toLowerCase().includes(q)&&!(e.actor||"").toLowerCase().includes(q))return false;
-      if(catFilter!=="All"&&e.category!==catFilter)return false;
-      if(actFilter==="Users"&&e.isSystem)return false;
-      if(actFilter==="System"&&!e.isSystem)return false;
+      if(catSel.length>0&&!catSel.includes(e.category))return false;
+      if(actSel.length>0){
+        const wantUsers=actSel.includes("Users");
+        const wantSystem=actSel.includes("System");
+        if(wantUsers&&wantSystem){}  // both checked = show all
+        else if(wantSystem&&!e.isSystem)return false;
+        else if(wantUsers&&e.isSystem)return false;
+      }
       return true;
     });
-  },[entries,search,catFilter,actFilter]);
+  },[entries,search,catSel,actSel]);
 
   const totalPages=Math.max(1,Math.ceil(filtered.length/pageSize));
   const paged=filtered.slice((page-1)*pageSize,page*pageSize);
@@ -10705,14 +10713,30 @@ const AuditLogTable=({entries=[],pageSize=20})=>{
 
   const initials=actor=>{if(!actor)return"?";return actor==="system"?"SYS":actor.split(".").map(p=>p[0]?.toUpperCase()||"").join("").slice(0,2);};
 
-  const activeFilterCount=(catFilter!=="All"?1:0)+(actFilter!=="All"?1:0);
+  // helper: chevron svg
+  const ChevDown=()=><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+
+  // helper: checkbox row
+  const ChkRow=({checked,onToggle,label,color,bg,border})=>(
+    <div onClick={onToggle} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 10px",borderRadius:6,cursor:"pointer",transition:"background .1s",userSelect:"none"}}
+      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+      <div style={{width:15,height:15,borderRadius:4,flexShrink:0,border:`1.5px solid ${checked?(color||T.accent):T.border}`,background:checked?(color||T.accent):"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .1s"}}>
+        {checked&&<svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M1.5 4.5l2 2 4-4" stroke="#fff" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+      </div>
+      <span style={{fontSize:12.5,color:checked?(color||T.text):T.textSub,fontWeight:checked?600:400,flex:1}}>{label}</span>
+    </div>
+  );
+
+  // dropdown label helpers
+  const catLabel=catSel.length===0?"Category":catSel.length===1?catSel[0]:`Category (${catSel.length})`;
+  const actLabel=actSel.length===0?"Actor":actSel.length===1?actSel[0]:`Actor (${actSel.length})`;
 
   return(
-    <div className="fadeIn">
+    <div className="fadeIn" onClick={()=>setOpenDrop(null)}>
       {/* ── Toolbar ── */}
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
         {/* Search */}
-        <div style={{position:"relative",flex:"1 1 200px",minWidth:180}}>
+        <div style={{position:"relative",flex:"1 1 200px",minWidth:180}} onClick={e=>e.stopPropagation()}>
           <div style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none",display:"flex"}}>{Ic.search(13)}</div>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search action, details, actor…"
             style={{width:"100%",paddingLeft:32,paddingRight:search?28:10,height:34,borderRadius:8,border:`1px solid ${search?T.accent:T.border}`,background:T.bgElevated,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",transition:"border-color .15s"}}
@@ -10720,108 +10744,55 @@ const AuditLogTable=({entries=[],pageSize=20})=>{
           {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:15,lineHeight:1}}>×</button>}
         </div>
 
-        {/* Filter button */}
-        <div style={{position:"relative"}}>
-          <button onClick={()=>setShowFilters(f=>!f)}
-            style={{height:34,padding:"0 12px",borderRadius:8,border:`1px solid ${activeFilterCount>0?T.accent:T.border}`,
-              background:activeFilterCount>0?T.accentDim:showFilters?T.bgElevated:"transparent",
-              color:activeFilterCount>0?T.accent:T.textSub,cursor:"pointer",display:"flex",alignItems:"center",gap:6,fontSize:12.5,fontFamily:"inherit",fontWeight:activeFilterCount>0?600:400,transition:"all .15s"}}>
-            <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M1.5 3.5h11M3.5 7h7M5.5 10.5h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-            Filters
-            {activeFilterCount>0&&(
-              <span style={{minWidth:16,height:16,borderRadius:99,background:T.accent,color:"#fff",fontSize:9.5,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px",marginLeft:2}}>
-                {activeFilterCount}
-              </span>
-            )}
+        {/* Category multi-select dropdown */}
+        <div style={{position:"relative"}} onClick={e=>e.stopPropagation()}>
+          <button onClick={()=>setOpenDrop(d=>d==="cat"?null:"cat")}
+            style={{height:34,padding:"0 10px 0 12px",borderRadius:8,border:`1px solid ${catSel.length>0?T.accent:T.border}`,
+              background:catSel.length>0?T.accentDim:openDrop==="cat"?T.bgElevated:"transparent",
+              color:catSel.length>0?T.accent:T.textSub,cursor:"pointer",display:"flex",alignItems:"center",gap:6,
+              fontSize:12.5,fontFamily:"inherit",fontWeight:catSel.length>0?600:400,whiteSpace:"nowrap",transition:"all .15s"}}>
+            {catLabel}
+            <ChevDown/>
           </button>
-
-          {/* Filter dropdown panel */}
-          {showFilters&&(
-            <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,zIndex:999,width:260,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.13)",padding:"14px 16px",display:"flex",flexDirection:"column",gap:16}}>
-
-              {/* Category */}
-              <div>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                  <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Category</span>
-                  {catFilter!=="All"&&<button onClick={()=>setCatFilter("All")} style={{fontSize:10.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontFamily:"inherit"}}>Clear</button>}
-                </div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                  {cats.map(c=>{
-                    const m=AUDIT_CAT_META[c];const active=catFilter===c;
-                    return(
-                      <button key={c} onClick={()=>setCatFilter(c)}
-                        style={{padding:"4px 11px",borderRadius:6,fontSize:11,fontWeight:active?700:400,cursor:"pointer",transition:"all .1s",fontFamily:"inherit",
-                          border:`1px solid ${active&&m?m.border:active?T.accent:T.border}`,
-                          background:active&&m?m.bg:active?T.accentDim:"transparent",
-                          color:active&&m?m.color:active?T.accent:T.textSub}}>
-                        {c}
-                      </button>
-                    );
-                  })}
-                </div>
+          {openDrop==="cat"&&(
+            <div style={{position:"absolute",top:"calc(100% + 5px)",left:0,zIndex:1000,minWidth:200,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.13)",padding:"6px 4px",overflow:"hidden"}}>
+              {/* Select all / Clear row */}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"4px 10px 6px",borderBottom:`1px solid ${T.border}`,marginBottom:4}}>
+                <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Category</span>
+                {catSel.length>0
+                  ?<button onClick={()=>setCatSel([])} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontFamily:"inherit"}}>Clear</button>
+                  :<button onClick={()=>setCatSel([...cats])} style={{fontSize:11,color:T.textMuted,background:"none",border:"none",cursor:"pointer",padding:0,fontFamily:"inherit"}}>Select all</button>
+                }
               </div>
-
-              {/* Divider */}
-              <div style={{height:1,background:T.border,margin:"0 -16px"}}/>
-
-              {/* Actor / Source */}
-              <div>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                  <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Actor</span>
-                  {actFilter!=="All"&&<button onClick={()=>setActFilter("All")} style={{fontSize:10.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontFamily:"inherit"}}>Clear</button>}
-                </div>
-                <div style={{display:"flex",gap:5}}>
-                  {[{v:"All",label:"All",icon:null},{v:"Users",label:"Users",icon:<svg width="11" height="11" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.3"/><path d="M2.5 12c0-2.485 2.015-4.5 4.5-4.5s4.5 2.015 4.5 4.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>},{v:"System",label:"System",icon:<svg width="11" height="11" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="3" width="11" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M5 11v1.5M9 11v1.5M3.5 13h7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>}].map(({v,label,icon})=>{
-                    const active=actFilter===v;
-                    return(
-                      <button key={v} onClick={()=>setActFilter(v)}
-                        style={{flex:1,padding:"6px 8px",borderRadius:7,fontSize:11.5,fontWeight:active?700:400,cursor:"pointer",transition:"all .1s",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:5,
-                          border:`1px solid ${active?T.accent:T.border}`,
-                          background:active?T.accentDim:"transparent",
-                          color:active?T.accent:T.textSub}}>
-                        {icon}{label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Footer: clear all */}
-              {activeFilterCount>0&&(
-                <>
-                  <div style={{height:1,background:T.border,margin:"0 -16px"}}/>
-                  <button onClick={()=>{setCatFilter("All");setActFilter("All");}}
-                    style={{width:"100%",padding:"7px",borderRadius:7,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",
-                      border:`1px solid ${T.border}`,background:T.bgElevated,color:T.textSub,transition:"all .1s"}}
-                    onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
-                    onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
-                    Clear all filters
-                  </button>
-                </>
-              )}
+              {cats.map(c=>{
+                const m=AUDIT_CAT_META[c];
+                return <ChkRow key={c} checked={catSel.includes(c)} onToggle={()=>toggleCat(c)} label={c} color={m?.color} bg={m?.bg} border={m?.border}/>;
+              })}
             </div>
           )}
         </div>
 
-        {/* Active filter chips (shown next to button when panel is closed) */}
-        {!showFilters&&activeFilterCount>0&&(
-          <div style={{display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
-            {catFilter!=="All"&&(()=>{const m=AUDIT_CAT_META[catFilter];return(
-              <span style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px 3px 10px",borderRadius:99,fontSize:11,fontWeight:600,
-                background:m?m.bg:"transparent",color:m?m.color:T.accent,border:`1px solid ${m?m.border:T.accent}`}}>
-                {catFilter}
-                <button onClick={()=>setCatFilter("All")} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,fontSize:13}}>×</button>
-              </span>
-            );})()}
-            {actFilter!=="All"&&(
-              <span style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px 3px 10px",borderRadius:99,fontSize:11,fontWeight:600,
-                background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}55`}}>
-                {actFilter}
-                <button onClick={()=>setActFilter("All")} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,fontSize:13}}>×</button>
-              </span>
-            )}
-          </div>
-        )}
+        {/* Actor multi-select dropdown */}
+        <div style={{position:"relative"}} onClick={e=>e.stopPropagation()}>
+          <button onClick={()=>setOpenDrop(d=>d==="act"?null:"act")}
+            style={{height:34,padding:"0 10px 0 12px",borderRadius:8,border:`1px solid ${actSel.length>0?T.accent:T.border}`,
+              background:actSel.length>0?T.accentDim:openDrop==="act"?T.bgElevated:"transparent",
+              color:actSel.length>0?T.accent:T.textSub,cursor:"pointer",display:"flex",alignItems:"center",gap:6,
+              fontSize:12.5,fontFamily:"inherit",fontWeight:actSel.length>0?600:400,whiteSpace:"nowrap",transition:"all .15s"}}>
+            {actLabel}
+            <ChevDown/>
+          </button>
+          {openDrop==="act"&&(
+            <div style={{position:"absolute",top:"calc(100% + 5px)",left:0,zIndex:1000,minWidth:180,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.13)",padding:"6px 4px",overflow:"hidden"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"4px 10px 6px",borderBottom:`1px solid ${T.border}`,marginBottom:4}}>
+                <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Actor</span>
+                {actSel.length>0&&<button onClick={()=>setActSel([])} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontFamily:"inherit"}}>Clear</button>}
+              </div>
+              <ChkRow checked={actSel.includes("Users")} onToggle={()=>toggleAct("Users")} label="Users"/>
+              <ChkRow checked={actSel.includes("System")} onToggle={()=>toggleAct("System")} label="System"/>
+            </div>
+          )}
+        </div>
 
         {/* Export */}
         <button onClick={exportCsv}
