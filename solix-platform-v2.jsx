@@ -9223,10 +9223,12 @@ const AssetLineageFull=({asset})=>{
   const [selectedId,   setSelectedId]  =useState(null);
   const [selectedCol,  setSelectedCol] =useState(null); // {nodeId, colName}
   const [nodeInfoTab,  setNodeInfoTab] =useState("overview"); // "overview"|"upstream"|"downstream"
+  const [colInfoTab,   setColInfoTab]  =useState("overview"); // "overview"|"upstream"|"downstream"
   const [rf,           setRf]          =useState(null);
 
-  // Reset tab when a different node is selected
+  // Reset tabs when selection changes
   useEffect(()=>{ setNodeInfoTab("overview"); },[selectedId]);
+  useEffect(()=>{ setColInfoTab("overview"); },[selectedCol]);
 
   const callbacks=useMemo(()=>({
     toggleExpand:(id)=>{
@@ -9381,128 +9383,220 @@ const AssetLineageFull=({asset})=>{
           if(selectedCol){
             const cMeta=LINEAGE_NODE_META[selectedCol.nodeId];
             const colDef=cMeta?.cols.find(c=>c.n===selectedCol.colName);
-            // Build primary lineage path (upstream ← current → downstream)
-            const buildColPath=(nid,cname)=>{
-              const path=[{nodeId:nid,colName:cname,isCurrent:true}];
-              let un=nid,uc=cname;
-              for(let i=0;i<8;i++){
-                const ups=LINEAGE_COL_MAPS.filter(m=>m.t===un).flatMap(m=>m.cols.filter(c=>c.tc===uc).map(c=>({nodeId:m.s,colName:c.sc})));
-                if(!ups.length)break;path.unshift({nodeId:ups[0].nodeId,colName:ups[0].colName,isCurrent:false});
-                un=ups[0].nodeId;uc=ups[0].colName;
+
+            // Collect all upstream column hops (BFS)
+            const gatherUpstream=(nid,cname)=>{
+              const result=[];const visited=new Set();
+              const queue=[[nid,cname,0]];
+              while(queue.length){
+                const[cn,cc,depth]=queue.shift();
+                LINEAGE_COL_MAPS.forEach(m=>{
+                  if(m.t===cn)m.cols.forEach(c=>{
+                    if(c.tc===cc){
+                      const key=`${m.s}.${c.sc}`;
+                      if(!visited.has(key)){visited.add(key);result.push({nodeId:m.s,colName:c.sc,depth:depth+1});queue.push([m.s,c.sc,depth+1]);}
+                    }
+                  });
+                });
               }
-              let dn=nid,dc=cname;
-              for(let i=0;i<8;i++){
-                const dns=LINEAGE_COL_MAPS.filter(m=>m.s===dn).flatMap(m=>m.cols.filter(c=>c.sc===dc).map(c=>({nodeId:m.t,colName:c.tc})));
-                if(!dns.length)break;path.push({nodeId:dns[0].nodeId,colName:dns[0].colName,isCurrent:false});
-                dn=dns[0].nodeId;dc=dns[0].colName;
-              }
-              return path;
+              return result;
             };
-            const fullPath=buildColPath(selectedCol.nodeId,selectedCol.colName);
-            const pathKeys=new Set(fullPath.map(s=>`${s.nodeId}.${s.colName}`));
-            // Extra downstream branches not in primary path
-            const extraDown=LINEAGE_COL_MAPS.filter(m=>m.s===selectedCol.nodeId)
-              .flatMap(m=>m.cols.filter(c=>c.sc===selectedCol.colName).map(c=>({nodeId:m.t,colName:c.tc})))
-              .filter(a=>!pathKeys.has(`${a.nodeId}.${a.colName}`));
+            // Collect all downstream column hops (BFS)
+            const gatherDownstream=(nid,cname)=>{
+              const result=[];const visited=new Set();
+              const queue=[[nid,cname,0]];
+              while(queue.length){
+                const[cn,cc,depth]=queue.shift();
+                LINEAGE_COL_MAPS.forEach(m=>{
+                  if(m.s===cn)m.cols.forEach(c=>{
+                    if(c.sc===cc){
+                      const key=`${m.t}.${c.tc}`;
+                      if(!visited.has(key)){visited.add(key);result.push({nodeId:m.t,colName:c.tc,depth:depth+1});queue.push([m.t,c.tc,depth+1]);}
+                    }
+                  });
+                });
+              }
+              return result;
+            };
+
+            const upstreamCols=gatherUpstream(selectedCol.nodeId,selectedCol.colName);
+            const downstreamCols=gatherDownstream(selectedCol.nodeId,selectedCol.colName);
+
+            // Column step card (shared by overview path + up/down tabs)
+            const ColStepCard=({nodeId,colName,isCurrent,badge,badgeColor})=>{
+              const nm=LINEAGE_NODE_META[nodeId];
+              const nt=LINEAGE_TOPO[nodeId];
+              const nl=nt?.active?aName:nt?.label;
+              const ct=nm?.cols.find(c=>c.n===colName)?.t;
+              return(
+                <div style={{position:"relative",padding:"11px 13px",background:isCurrent?T.accentDim:T.bgElevated,border:`1.5px solid ${isCurrent?T.accent:T.border}`,borderRadius:10}}>
+                  {badge&&<div style={{position:"absolute",top:-8,left:10,fontSize:8.5,fontWeight:700,padding:"0 6px",background:T.bgSurface,letterSpacing:"0.06em",textTransform:"uppercase",color:badgeColor||T.accent}}>{badge}</div>}
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                    <ServiceIcon service={nm?.service} size={20}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:2}}>
+                        <TypeBadge type={nm?.assetType}/>
+                        {nt?.active&&<span style={{fontSize:8,fontWeight:700,color:"#ee2424",background:"rgba(238,36,36,.1)",padding:"1px 5px",borderRadius:3}}>CURRENT</span>}
+                      </div>
+                      <div style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:isCurrent?T.accent:T.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nl}</div>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 9px",background:T.bgSurface,borderRadius:6,border:`1px solid ${isCurrent?T.accent+"55":T.border}`}}>
+                    <span style={{width:5,height:5,borderRadius:"50%",background:isCurrent?"#2563eb":"#94a3b8",flexShrink:0}}/>
+                    <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11,fontWeight:isCurrent?700:500,color:isCurrent?T.accent:T.text,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{colName}</span>
+                    {ct&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:`${T.blue}15`,color:T.blue,border:`1px solid ${T.blue}20`,fontFamily:"'Geist Mono',monospace",flexShrink:0}}>{ct}</span>}
+                  </div>
+                </div>
+              );
+            };
+
+            // Arrow divider
+            const Arrow=()=>(
+              <div style={{display:"flex",justifyContent:"center",alignItems:"center",height:22,position:"relative"}}>
+                <div style={{position:"absolute",top:0,bottom:0,left:"50%",width:1,background:T.accent+"35"}}/>
+                <div style={{background:T.bgSurface,zIndex:1,padding:"0 4px",color:T.accent,fontSize:13,lineHeight:1}}>↓</div>
+              </div>
+            );
 
             return(
               <div className="slideInRight" style={{width:300,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-                {/* Header */}
-                <div style={{padding:"14px 16px 12px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"flex-start",gap:10,flexShrink:0}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:9,fontWeight:700,color:T.accent,textTransform:"uppercase",letterSpacing:"0.09em",marginBottom:4,display:"flex",alignItems:"center",gap:4}}>
-                      <svg width="10" height="10" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M9 4l3 3-3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      Column Lineage
+                {/* Header + tabs */}
+                <div style={{padding:"14px 16px 0",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                  <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:10}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:9,fontWeight:700,color:T.accent,textTransform:"uppercase",letterSpacing:"0.09em",marginBottom:4,display:"flex",alignItems:"center",gap:4}}>
+                        <svg width="10" height="10" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M9 4l3 3-3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        Column Lineage
+                      </div>
+                      <div style={{fontSize:15,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{selectedCol.colName}</div>
+                      <div style={{display:"flex",alignItems:"center",gap:6,marginTop:5,flexWrap:"wrap"}}>
+                        <TypeBadge type={cMeta?.assetType}/>
+                        <span style={{fontSize:10,padding:"1px 7px",borderRadius:4,background:`${T.blue}15`,color:T.blue,border:`1px solid ${T.blue}25`,fontFamily:"'Geist Mono',monospace",fontWeight:600}}>{colDef?.t||"—"}</span>
+                      </div>
                     </div>
-                    <div style={{fontSize:15,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{selectedCol.colName}</div>
-                    <div style={{display:"flex",alignItems:"center",gap:6,marginTop:5,flexWrap:"wrap"}}>
-                      <TypeBadge type={cMeta?.assetType}/>
-                      <span style={{fontSize:10,padding:"1px 7px",borderRadius:4,background:`${T.blue}15`,color:T.blue,border:`1px solid ${T.blue}25`,fontFamily:"'Geist Mono',monospace",fontWeight:600}}>{colDef?.t||"—"}</span>
-                    </div>
+                    <button onClick={()=>setSelectedCol(null)} style={{width:26,height:26,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted,flexShrink:0,padding:0}}>{Ic.x(10)}</button>
                   </div>
-                  <button onClick={()=>setSelectedCol(null)} style={{width:26,height:26,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted,flexShrink:0,padding:0}}>{Ic.x(10)}</button>
+                  {/* Tabs */}
+                  <div style={{display:"flex"}}>
+                    {[{k:"overview",l:"Overview"},{k:"upstream",l:`Upstream (${upstreamCols.length})`},{k:"downstream",l:`Downstream (${downstreamCols.length})`}].map(tab=>(
+                      <button key={tab.k} onClick={()=>setColInfoTab(tab.k)}
+                        style={{padding:"7px 10px",background:"none",border:"none",borderBottom:`2px solid ${colInfoTab===tab.k?T.accent:"transparent"}`,
+                          color:colInfoTab===tab.k?T.text:T.textMuted,fontSize:11.5,fontWeight:colInfoTab===tab.k?600:400,
+                          cursor:"pointer",whiteSpace:"nowrap",transition:"all .12s"}}>
+                        {tab.l}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                {/* Lineage path — vertical flow */}
+                {/* Tab body */}
                 <div style={{flex:1,overflowY:"auto",padding:"16px"}}>
-                  {fullPath.length===1?(
-                    <div style={{textAlign:"center",padding:"28px 0"}}>
-                      <div style={{fontSize:26,marginBottom:8}}>🔗</div>
-                      <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6}}>No mappings defined for<br/><span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{selectedCol.colName}</span></div>
-                    </div>
-                  ):(<>
-                    <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:14}}>Lineage Path</div>
-                    {fullPath.map((step,i)=>{
-                      const nm=LINEAGE_NODE_META[step.nodeId];
-                      const nt=LINEAGE_TOPO[step.nodeId];
-                      const nl=nt?.active?aName:nt?.label;
-                      const isCur=step.isCurrent;
-                      const isFirst=i===0&&!isCur;
-                      const isLast=i===fullPath.length-1&&!isCur;
-                      const stepType=nm?.cols.find(c=>c.n===step.colName)?.t;
-                      return(
-                        <React.Fragment key={`${step.nodeId}.${step.colName}.${i}`}>
-                          {/* Step card */}
-                          <div style={{position:"relative",padding:"11px 13px",background:isCur?T.accentDim:T.bgElevated,border:`1.5px solid ${isCur?T.accent:T.border}`,borderRadius:10}}>
-                            {/* Step label badge */}
-                            <div style={{position:"absolute",top:-8,left:10,fontSize:8.5,fontWeight:700,padding:"0 5px",background:T.bgSurface,letterSpacing:"0.06em",textTransform:"uppercase",
-                              color:isFirst?"#3b82f6":isLast?"#8b5cf6":isCur?T.accent:"transparent"}}>
-                              {isFirst?"Source":isLast?"Sink":isCur?"Selected":""}
-                            </div>
-                            {/* Node row */}
-                            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                              <ServiceIcon service={nm?.service} size={20}/>
-                              <div style={{flex:1,minWidth:0}}>
-                                <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:2}}>
-                                  <TypeBadge type={nm?.assetType}/>
-                                  {nt?.active&&<span style={{fontSize:8,fontWeight:700,color:"#ee2424",background:"rgba(238,36,36,.1)",padding:"1px 5px",borderRadius:3}}>CURRENT</span>}
-                                </div>
-                                <div style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:isCur?T.accent:T.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nl}</div>
-                              </div>
-                            </div>
-                            {/* Column chip */}
-                            <div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 9px",background:T.bgSurface,borderRadius:6,border:`1px solid ${isCur?T.accent+"55":T.border}`}}>
-                              <span style={{width:5,height:5,borderRadius:"50%",background:isCur?"#2563eb":"#94a3b8",flexShrink:0}}/>
-                              <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11,fontWeight:isCur?700:500,color:isCur?T.accent:T.text,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{step.colName}</span>
-                              {stepType&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:`${T.blue}15`,color:T.blue,border:`1px solid ${T.blue}20`,fontFamily:"'Geist Mono',monospace",flexShrink:0}}>{stepType}</span>}
-                            </div>
+
+                  {/* ── OVERVIEW: full lineage path ── */}
+                  {colInfoTab==="overview"&&(()=>{
+                    const buildColPath=(nid,cname)=>{
+                      const path=[{nodeId:nid,colName:cname,isCurrent:true}];
+                      let un=nid,uc=cname;
+                      for(let i=0;i<8;i++){
+                        const ups=LINEAGE_COL_MAPS.filter(m=>m.t===un).flatMap(m=>m.cols.filter(c=>c.tc===uc).map(c=>({nodeId:m.s,colName:c.sc})));
+                        if(!ups.length)break;path.unshift({nodeId:ups[0].nodeId,colName:ups[0].colName,isCurrent:false});
+                        un=ups[0].nodeId;uc=ups[0].colName;
+                      }
+                      let dn=nid,dc=cname;
+                      for(let i=0;i<8;i++){
+                        const dns=LINEAGE_COL_MAPS.filter(m=>m.s===dn).flatMap(m=>m.cols.filter(c=>c.sc===dc).map(c=>({nodeId:m.t,colName:c.tc})));
+                        if(!dns.length)break;path.push({nodeId:dns[0].nodeId,colName:dns[0].colName,isCurrent:false});
+                        dn=dns[0].nodeId;dc=dns[0].colName;
+                      }
+                      return path;
+                    };
+                    const fullPath=buildColPath(selectedCol.nodeId,selectedCol.colName);
+                    const pathKeys=new Set(fullPath.map(s=>`${s.nodeId}.${s.colName}`));
+                    const extraDown=LINEAGE_COL_MAPS.filter(m=>m.s===selectedCol.nodeId)
+                      .flatMap(m=>m.cols.filter(c=>c.sc===selectedCol.colName).map(c=>({nodeId:m.t,colName:c.tc})))
+                      .filter(a=>!pathKeys.has(`${a.nodeId}.${a.colName}`));
+                    return(
+                      <>
+                        {fullPath.length===1?(
+                          <div style={{textAlign:"center",padding:"28px 0"}}>
+                            <div style={{fontSize:26,marginBottom:8}}>🔗</div>
+                            <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6}}>No mappings defined for<br/><span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{selectedCol.colName}</span></div>
                           </div>
-                          {/* Arrow connector */}
-                          {i<fullPath.length-1&&(
-                            <div style={{display:"flex",justifyContent:"center",alignItems:"center",height:22,position:"relative"}}>
-                              <div style={{position:"absolute",top:0,bottom:0,left:"50%",width:1,background:T.accent+"35"}}/>
-                              <div style={{background:T.bgSurface,zIndex:1,padding:"0 4px",color:T.accent,fontSize:13,lineHeight:1}}>↓</div>
+                        ):(
+                          <>
+                            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:14}}>Lineage Path</div>
+                            {fullPath.map((step,i)=>{
+                              const isFirst=i===0&&!step.isCurrent;
+                              const isLast=i===fullPath.length-1&&!step.isCurrent;
+                              return(
+                                <React.Fragment key={`${step.nodeId}.${step.colName}.${i}`}>
+                                  <ColStepCard nodeId={step.nodeId} colName={step.colName} isCurrent={step.isCurrent}
+                                    badge={isFirst?"Source":isLast?"Sink":step.isCurrent?"Selected":null}
+                                    badgeColor={isFirst?"#3b82f6":isLast?"#8b5cf6":T.accent}/>
+                                  {i<fullPath.length-1&&<Arrow/>}
+                                </React.Fragment>
+                              );
+                            })}
+                          </>
+                        )}
+                        {extraDown.length>0&&(
+                          <div style={{marginTop:16,paddingTop:16,borderTop:`1px solid ${T.border}`}}>
+                            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10,display:"flex",alignItems:"center",gap:5}}>
+                              <span style={{width:7,height:7,borderRadius:2,background:"#8b5cf6"}}/>Also maps to
                             </div>
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
-                  </>)}
-                  {/* Additional branches */}
-                  {extraDown.length>0&&(
-                    <div style={{marginTop:16,paddingTop:16,borderTop:`1px solid ${T.border}`}}>
-                      <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10,display:"flex",alignItems:"center",gap:5}}>
-                        <span style={{width:7,height:7,borderRadius:2,background:"#8b5cf6"}}/>
-                        Also maps to
+                            {extraDown.map((ex,i)=>(
+                              <ColStepCard key={i} nodeId={ex.nodeId} colName={ex.colName} isCurrent={false} badge="Branch" badgeColor="#8b5cf6"/>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+
+                  {/* ── UPSTREAM tab ── */}
+                  {colInfoTab==="upstream"&&(
+                    upstreamCols.length===0?(
+                      <div style={{textAlign:"center",padding:"32px 0"}}>
+                        <div style={{fontSize:22,marginBottom:8,color:T.textMuted}}>◁</div>
+                        <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6}}>No upstream columns<br/><span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{selectedCol.colName}</span> is a source</div>
                       </div>
-                      {extraDown.map((ex,i)=>{
-                        const enm=LINEAGE_NODE_META[ex.nodeId];
-                        const ent=LINEAGE_TOPO[ex.nodeId];
-                        const enl=ent?.active?aName:ent?.label;
-                        return(
-                          <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6}}>
-                            <ServiceIcon service={enm?.service} size={18}/>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{display:"flex",gap:5,marginBottom:2}}><TypeBadge type={enm?.assetType}/></div>
-                              <div style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600}}>{ex.colName}</div>
-                              <div style={{fontSize:10,color:T.textMuted,marginTop:1}}>{enl}</div>
-                            </div>
-                            {enm?.cols.find(c=>c.n===ex.colName)?.t&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:3,background:`${T.blue}15`,color:T.blue,border:`1px solid ${T.blue}20`,fontFamily:"'Geist Mono',monospace"}}>{enm?.cols.find(c=>c.n===ex.colName)?.t}</span>}
-                          </div>
-                        );
-                      })}
-                    </div>
+                    ):(
+                      <>
+                        <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:14}}>Upstream Columns</div>
+                        {upstreamCols.map((col,i)=>(
+                          <React.Fragment key={`up-${col.nodeId}.${col.colName}.${i}`}>
+                            <ColStepCard nodeId={col.nodeId} colName={col.colName} isCurrent={false}
+                              badge={col.depth===1?"Direct":"Transitive"}
+                              badgeColor={col.depth===1?T.accent:"#8b5cf6"}/>
+                            {i<upstreamCols.length-1&&<div style={{height:8}}/>}
+                          </React.Fragment>
+                        ))}
+                      </>
+                    )
                   )}
+
+                  {/* ── DOWNSTREAM tab ── */}
+                  {colInfoTab==="downstream"&&(
+                    downstreamCols.length===0?(
+                      <div style={{textAlign:"center",padding:"32px 0"}}>
+                        <div style={{fontSize:22,marginBottom:8,color:T.textMuted}}>▷</div>
+                        <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6}}>No downstream columns<br/><span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{selectedCol.colName}</span> is a sink</div>
+                      </div>
+                    ):(
+                      <>
+                        <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:14}}>Downstream Columns</div>
+                        {downstreamCols.map((col,i)=>(
+                          <React.Fragment key={`dn-${col.nodeId}.${col.colName}.${i}`}>
+                            <ColStepCard nodeId={col.nodeId} colName={col.colName} isCurrent={false}
+                              badge={col.depth===1?"Direct":"Transitive"}
+                              badgeColor={col.depth===1?T.accent:"#8b5cf6"}/>
+                            {i<downstreamCols.length-1&&<div style={{height:8}}/>}
+                          </React.Fragment>
+                        ))}
+                      </>
+                    )
+                  )}
+
                 </div>
               </div>
             );
