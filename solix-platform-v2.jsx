@@ -6750,8 +6750,8 @@ const PolicyManagerView = ({onToast, onNav}) => {
                         <div style={{position:"relative",paddingLeft:22}}>
                           {/* Synthetic runtime events + history */}
                           {[
-                            ...(p.lastEvaluated?[{when:p.lastEvaluated+" 14:32",who:"system",action:"Policy evaluated — "+p.compliancePct+"% compliance score",type:"eval"}]:[]),
-                            ...(p.schedule?[{when:"2026-05-19 08:00",who:"system",action:"Scheduled evaluation completed — "+p.violations+" violation"+(p.violations!==1?"s":"")+" detected",type:"eval"}]:[]),
+                            ...(p.lastEvaluated?[{when:p.lastEvaluated+" 14:32",who:"system",action:`"${p.name}" evaluated — ${p.compliancePct}% compliance score`,type:"eval"}]:[]),
+                            ...(p.schedule?[{when:"2026-05-19 08:00",who:"system",action:`Scheduled evaluation of "${p.name}" — ${p.violations} violation${p.violations!==1?"s":""} detected`,type:"eval"}]:[]),
                             ...(p.history||[]).map(h=>({...h,type:"history"})),
                           ].map((h,i,arr)=>{
                             const dot = h.type==="eval"?T.blue:h.action.toLowerCase().includes("deprecat")?T.rose:h.action.toLowerCase().includes("activat")||h.action.toLowerCase().includes("publish")?T.blue:h.action.toLowerCase().includes("approv")?T.green:h.action.toLowerCase().includes("submit")||h.action.toLowerCase().includes("review")?T.amber:T.textMuted;
@@ -8954,12 +8954,12 @@ const AssetOverview = ({asset,data,setData,onToast})=>{
         <SH title="Activity"/>
         <div style={{position:"relative",paddingLeft:18}}>
           {[
-            {ts:"2026-05-20",who:"maya.chen",  action:"Certification status changed to Approved",          color:T.green},
-            {ts:"2026-05-17",who:"dev.patel",  action:"Tag 'PII' added",                                   color:T.accent},
-            {ts:"2026-05-15",who:"ai-bot",     action:"Ingestion run — schema updated (2 columns added)",   color:T.amber},
-            {ts:"2026-05-10",who:"maya.chen",  action:"Description updated",                               color:T.textMuted},
-            {ts:"2026-04-28",who:"dev.patel",  action:"Owner assigned: maya.chen",                         color:T.blue},
-            {ts:"2026-04-15",who:"ai-bot",     action:"Asset first ingested from Snowflake DWH",           color:T.textMuted},
+            {ts:"2026-05-20",who:"maya.chen",  action:`Certification status → Approved`,                                                           color:T.green},
+            {ts:"2026-05-17",who:"dev.patel",  action:`Tag 'PII' added to ${asset.name}`,                                                          color:T.accent},
+            {ts:"2026-05-15",who:"ai-bot",     action:`Ingestion run — schema updated (2 new cols)`,                                               color:T.amber},
+            {ts:"2026-05-10",who:(asset.owners||[])[0]||"maya.chen",  action:`Description updated for ${asset.name}`,                             color:T.textMuted},
+            {ts:"2026-04-28",who:"dev.patel",  action:`Owner assigned: ${(asset.owners||[])[0]||"maya.chen"}`,                                     color:T.blue},
+            {ts:"2026-04-15",who:"ai-bot",     action:`${asset.name} first ingested from ${asset.service||"Snowflake"}`,                           color:T.textMuted},
           ].map((h,i,arr)=>(
             <div key={i} style={{position:"relative",paddingBottom:14}}>
               <div style={{position:"absolute",left:-14,top:4,width:8,height:8,borderRadius:"50%",background:h.color,border:`2px solid ${T.bgSurface}`,flexShrink:0}}/>
@@ -9157,9 +9157,17 @@ const AssetLineageFull=({asset})=>{
   const xformLegend=Object.entries(LINEAGE_XFORM_COLOR);
 
   return (
-    <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:12}}>
-      {/* toolbar */}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+    <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:0}}>
+      {/* visible toolbar card */}
+      <div style={{
+        display:"flex",justifyContent:"space-between",alignItems:"center",
+        flexWrap:"wrap",gap:10,
+        padding:"12px 16px",
+        background:T.bgSurface,
+        border:`1px solid ${T.border}`,
+        borderRadius:"10px 10px 0 0",
+        borderBottom:"none",
+      }}>
         <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
           {(mode==="table"?typeLegend:xformLegend).map(([lbl,c])=>(
             <span key={lbl} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:T.textSub}}>
@@ -9173,13 +9181,13 @@ const AssetLineageFull=({asset})=>{
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <Tabs2 tabs={[{key:"table",label:"Table Level"},{key:"column",label:"Column Level"}]}
             active={mode} onChange={setMode} pill/>
-          <Btn small ghost onClick={()=>rf?.fitView({padding:0.15,duration:400})}>Fit</Btn>
+          <Btn small ghost onClick={()=>rf?.fitView({padding:0.14,duration:400})}>Fit</Btn>
           <Btn small ghost>Export</Btn>
         </div>
       </div>
 
-      {/* ── The fix: ReactFlow IS the direct child of this sized div ── */}
-      <div style={{height:520,borderRadius:10,overflow:"hidden",border:"1px solid #2e2e38",position:"relative"}}>
+      {/* canvas - directly connected to toolbar card above */}
+      <div style={{height:490,borderRadius:"0 0 10px 10px",overflow:"hidden",border:`1px solid ${T.border}`,position:"relative"}}>
         <ReactFlow
           nodes={nodes} edges={edges}
           onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
@@ -9200,7 +9208,7 @@ const AssetLineageFull=({asset})=>{
       </div>
 
       {mode==="column"&&(
-        <div style={{fontSize:11.5,color:T.textMuted,display:"flex",alignItems:"center",gap:6}}>
+        <div style={{fontSize:11.5,color:T.textMuted,display:"flex",alignItems:"center",gap:6,marginTop:8}}>
           <span>ℹ️</span>
           Column-level lineage traces individual fields. Edge labels show the transformation.
           Use <strong style={{color:T.textSub}}>Fit</strong> to reset the view.
