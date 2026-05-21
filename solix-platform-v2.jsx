@@ -22239,6 +22239,10 @@ const SettingsView = ({onToast})=>{
   });
   const [ldapRoleGroupOpen, setLdapRoleGroupOpen] = useState({});
 
+  // ── Regulatory Frameworks state (hoisted to avoid hook-in-conditional-IIFE crash) ──
+  const [fwSearch,      setFwSearch]      = useState("");
+  const [localEnabled,  setLocalEnabled]  = useState(()=>Object.fromEntries(REGS_META.map(r=>[r.id,r.enabled])));
+
   // Simulate live progress for "running" services
   useEffect(()=>{
     timerRef.current = setInterval(()=>setTick(t=>t+1), 1200);
@@ -23269,11 +23273,9 @@ const SettingsView = ({onToast})=>{
             </>}
 
             {section==="frameworks"&&(()=>{
-              const [fwSearch, setFwSearch] = React.useState("");
               const TYPE_COLOR = {Privacy:T.violet,Healthcare:T.rose,Financial:T.amber,Security:T.blue};
               const STATUS_COLOR = {Passing:T.green,Partial:T.amber,"Not Started":T.textMuted};
               const filtered = REGS_META.filter(r=>!fwSearch||r.name.toLowerCase().includes(fwSearch.toLowerCase())||r.fullName.toLowerCase().includes(fwSearch.toLowerCase())||r.jurisdiction.toLowerCase().includes(fwSearch.toLowerCase())||r.type.toLowerCase().includes(fwSearch.toLowerCase()));
-              const [localEnabled, setLocalEnabled] = React.useState(()=>Object.fromEntries(REGS_META.map(r=>[r.id,r.enabled])));
               const activeCount = Object.values(localEnabled).filter(Boolean).length;
               const groups = ["Privacy","Healthcare","Financial","Security"];
               return (
