@@ -5615,7 +5615,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const [assetSearchQ,  setAssetSearchQ]= useState("");
   const [selAssetIds,   setSelAssetIds] = useState(new Set());
   const [assetRel,      setAssetRel]    = useState("governs");
-  const EMPTY_POL = {name:"",category:"Data",description:"",owner:[],stewards:[],tags:[],regulations:[],scope:{domains:[],assetTypes:[],sources:[],assetIds:[]},criteria:[],rules:[],links:[],history:[],fqn:"",version:1,severity:"Medium",policyTypes:[],consequence:{severity:"Medium",onViolation:"Warn",notify:"Both"},runMode:"draft",wizardSchedFreq:"daily",wizardSchedTime:"08:00",wizardSchedDay:"monday",wizardSchedCron:""};
+  const EMPTY_POL = {name:"",category:"Data",description:"",owner:[],stewards:[],tags:[],regulations:[],scope:{domains:[],assetTypes:[],sources:[],assetIds:[]},criteria:[],rules:[],links:[],history:[],fqn:"",version:1,severity:"Medium",policyTypes:[],consequence:{severity:"Medium",onViolation:"Warn",notify:"Both"},ruleLogic:"independent",runMode:"draft",wizardSchedFreq:"daily",wizardSchedTime:"08:00",wizardSchedDay:"monday",wizardSchedCron:""};
   const [newPol,         setNewPol]        = useState(EMPTY_POL);
   const [catFilter,      setCatFilter]     = useState([]);
   const [filterDropOpen, setFilterDropOpen]= useState(false);
@@ -5769,6 +5769,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
       id:`pol-${Date.now()}`,fqn:`policies.${cat}.${nm}`,version:1,
       owner:ownerArr[0]||"", owners:ownerArr,
       lifecycle, created:today(), updated:today(),
+      ruleLogic:newPol.ruleLogic||"independent",
       criteria:autoText, rules:convertedRules, links:[],
       schedule:schedObj,
       violations:0, compliancePct:null, lastEvaluated:null, assetsInScope:scopeCount,
@@ -7291,30 +7292,31 @@ const PolicyManagerView = ({onToast, onNav}) => {
                     Retention:  {color:T.amber,  icon:"🕒", desc:"Storage lifetime, archival & deletion periods"},
                     Access:     {color:T.blue,   icon:"🔑", desc:"Role-based access, approval gates & export rules"},
                   };
-                  // colScope: true = quality/retention rules may optionally scope to a specific column
+                  // scope: "table" = no column input | "column" = column required | "both" = column optional
                   const W_RULE_FIELDS = [
-                    // ── Governance ──
-                    {id:"certification",  label:"Certification Status",    type:"enum",       ops:["is","is not"],                             vals:["Draft","In Review","Approved","Rejected","Deprecated"],  types:["Governance","Quality","Access"]},
-                    {id:"domain",         label:"Domain",                  type:"enum_multi", ops:["is","is not","is one of","is not one of"], vals:ALL_DOMAINS,                                               types:["Governance","Retention"]},
-                    {id:"tag",            label:"Tag",                     type:"list",       ops:["contains","does not contain"],             vals:POLICY_TAGS,                                               types:["Governance","Retention","Access"]},
-                    {id:"glossary_term",  label:"Glossary Term",           type:"list",       ops:["contains","does not contain"],             vals:[],                                                        types:["Governance"]},
-                    {id:"owner",          label:"Owner",                   type:"presence",   ops:["is set","is not set"],                     vals:[],                                                        types:["Governance","Access"]},
-                    {id:"steward",        label:"Steward",                 type:"presence",   ops:["is set","is not set"],                     vals:[],                                                        types:["Governance","Access"]},
-                    {id:"data_product",   label:"Data Product",            type:"presence",   ops:["is set","is not set"],                     vals:[],                                                        types:["Governance"]},
-                    {id:"asset_type",     label:"Asset Type",              type:"enum_multi", ops:["is","is not","is one of","is not one of"], vals:["Table","View","Schema","Database"],                      types:["Governance","Retention"]},
-                    {id:"description",    label:"Description",             type:"presence",   ops:["is set","is not set"],                     vals:[],                                                        types:["Governance"]},
-                    {id:"business_term",  label:"Business Term",           type:"presence",   ops:["is set","is not set"],                     vals:[],                                                        types:["Governance"]},
-                    // ── Quality (column-level scoping available) ──
-                    {id:"quality_score",  label:"Quality Score",           type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Quality"]},
-                    {id:"last_updated",   label:"Last Updated (days ago)", type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Quality"],   hint:"Sourced from source system metadata (INFORMATION_SCHEMA)"},
-                    {id:"null_rate",      label:"Null Rate (%)",           type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Quality"],   colScope:true},
-                    {id:"completeness",   label:"Completeness (%)",        type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Quality"],   colScope:true},
-                    {id:"row_count",      label:"Row Count",               type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Quality"],   hint:"May be approximate on PostgreSQL (uses pg_class statistics)"},
-                    {id:"duplicate_rate", label:"Duplicate Rate (%)",      type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Quality"],   colScope:true},
-                    // ── Retention ──
-                    {id:"retention_period",label:"Retention Period (days)",type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Retention"], hint:"Catalog-stored metadata — set via policy or ingestion"},
-                    {id:"last_accessed",   label:"Last Accessed (days ago)",type:"number",    ops:["greater than","less than","equals"],       vals:[],                                                        types:["Retention"], hint:"Snowflake / BigQuery only — not available in PostgreSQL / Oracle"},
-                    {id:"archive_status",  label:"Archive Status",         type:"enum",       ops:["is","is not"],                             vals:["Archived","Active","Pending Archival"],                  types:["Retention"], hint:"Catalog-stored — set manually or via workflow"},
+                    // ── Governance — all table-level catalog attributes ──
+                    {id:"certification",  label:"Certification Status",    scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Draft","In Review","Approved","Rejected","Deprecated"],  types:["Governance","Quality","Access"]},
+                    {id:"domain",         label:"Domain",                  scope:"table",  type:"enum_multi", ops:["is","is not","is one of","is not one of"], vals:ALL_DOMAINS,                                               types:["Governance","Retention"]},
+                    {id:"tag",            label:"Tag",                     scope:"both",   type:"list",       ops:["contains","does not contain"],             vals:POLICY_TAGS,                                               types:["Governance","Retention","Access"],  hint:"Leave column blank to check the table tag; enter a column name to check that column's tag"},
+                    {id:"glossary_term",  label:"Glossary Term",           scope:"both",   type:"list",       ops:["contains","does not contain"],             vals:[],                                                        types:["Governance"],                      hint:"Leave column blank to check the table; enter a column name to check that column's glossary linkage"},
+                    {id:"owner",          label:"Owner",                   scope:"table",  type:"presence",   ops:["is set","is not set"],                     vals:[],                                                        types:["Governance","Access"]},
+                    {id:"steward",        label:"Steward",                 scope:"table",  type:"presence",   ops:["is set","is not set"],                     vals:[],                                                        types:["Governance","Access"]},
+                    {id:"data_product",   label:"Data Product",            scope:"table",  type:"presence",   ops:["is set","is not set"],                     vals:[],                                                        types:["Governance"]},
+                    {id:"asset_type",     label:"Asset Type",              scope:"table",  type:"enum_multi", ops:["is","is not","is one of","is not one of"], vals:["Table","View","Schema","Database"],                      types:["Governance","Retention"]},
+                    {id:"description",    label:"Description",             scope:"both",   type:"presence",   ops:["is set","is not set"],                     vals:[],                                                        types:["Governance"],                      hint:"Leave column blank to check the table description; enter a column name to check that column's description"},
+                    {id:"business_term",  label:"Business Term",           scope:"both",   type:"presence",   ops:["is set","is not set"],                     vals:[],                                                        types:["Governance"],                      hint:"Leave column blank to check the table; enter a column name to check that column's business term linkage"},
+                    // ── Quality — table-level ──
+                    {id:"quality_score",  label:"Quality Score",           scope:"table",  type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Quality"],                         hint:"Overall table quality score from the last profiling run"},
+                    {id:"last_updated",   label:"Last Updated (days ago)", scope:"table",  type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Quality"],                         hint:"Sourced from INFORMATION_SCHEMA — checks when the table was last modified"},
+                    {id:"row_count",      label:"Row Count",               scope:"table",  type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Quality"],                         hint:"May be approximate on PostgreSQL (uses pg_class statistics)"},
+                    // ── Quality — column-level (column name required) ──
+                    {id:"null_rate",      label:"Null Rate (%)",           scope:"column", type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Quality"]},
+                    {id:"completeness",   label:"Completeness (%)",        scope:"column", type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Quality"]},
+                    {id:"duplicate_rate", label:"Duplicate Rate (%)",      scope:"column", type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Quality"]},
+                    // ── Retention — table-level catalog metadata ──
+                    {id:"retention_period",label:"Retention Period (days)",scope:"table",  type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Retention"],                       hint:"Catalog-stored metadata — set via policy or ingestion"},
+                    {id:"last_accessed",   label:"Last Accessed (days ago)",scope:"table", type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Retention"],                       hint:"Snowflake / BigQuery only — not available in PostgreSQL / Oracle"},
+                    {id:"archive_status",  label:"Archive Status",         scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Archived","Active","Pending Archival"],                  types:["Retention"],                       hint:"Catalog-stored — set manually or via workflow"},
                   ];
                   // Filter fields by selected policy types — shows all when no type selected
                   const filteredRuleFields = selPTypes.length>0
@@ -7392,16 +7394,57 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       {divider}
 
                       {/* ── Rules ── */}
-                      {secHead("Rules","All rules must pass (AND logic). A violation is raised on any asset that fails one or more rules.")}
-                      {/* AND-logic banner */}
-                      {wizardRules.length>1&&(
-                        <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",background:T.accentDim,border:`1px solid ${T.accent}30`,borderRadius:7,marginBottom:4,fontSize:11.5,color:T.accent}}>
-                          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M2 8h12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
-                          <span><strong>AND</strong> — all {wizardRules.length} rules must pass for an asset to be compliant.{" "}
-                            <span style={{color:T.textSub,fontWeight:400}}>Rules are evaluated independently per asset.</span>
-                          </span>
+                      {secHead("Rules","Define the conditions evaluated against each in-scope asset.")}
+
+                      {/* Rule Logic selector */}
+                      {(()=>{
+                        const rl = newPol.ruleLogic||"independent";
+                        const LOGIC_OPTS=[
+                          {id:"independent", label:"Independent",
+                           desc:"Each rule is evaluated and reported separately. An asset can pass some rules and fail others.",
+                           color:T.accent},
+                          {id:"and",         label:"AND — All must pass",
+                           desc:"Asset is compliant only when every rule passes. One failure = violation raised.",
+                           color:T.green},
+                          {id:"or",          label:"OR — Any must pass",
+                           desc:"Asset is compliant if at least one rule passes. All failing = violation raised.",
+                           color:T.violet},
+                        ];
+                        return (
+                          <div style={{marginBottom:14}}>
+                            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Rule Evaluation Logic</div>
+                            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                              {LOGIC_OPTS.map(opt=>{
+                                const sel=rl===opt.id;
+                                return (
+                                  <button key={opt.id} onClick={()=>setNewPol(p=>({...p,ruleLogic:opt.id}))}
+                                    style={{display:"flex",alignItems:"flex-start",gap:10,padding:"9px 12px",borderRadius:8,border:`1.5px solid ${sel?opt.color:T.border}`,background:sel?`${opt.color}12`:T.bgElevated,cursor:"pointer",textAlign:"left",outline:"none",transition:"all .12s"}}>
+                                    <div style={{width:14,height:14,borderRadius:"50%",border:`2px solid ${sel?opt.color:T.border}`,background:sel?opt.color:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1,transition:"all .12s"}}>
+                                      {sel&&<div style={{width:5,height:5,borderRadius:"50%",background:"#fff"}}/>}
+                                    </div>
+                                    <div>
+                                      <span style={{fontSize:12,fontWeight:sel?700:500,color:sel?opt.color:T.text}}>{opt.label}</span>
+                                      <div style={{fontSize:11,color:T.textMuted,marginTop:1,lineHeight:1.5}}>{opt.desc}</div>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Logic connector banner — shown only when 2+ rules and not independent */}
+                      {wizardRules.length>1&&(newPol.ruleLogic||"independent")!=="independent"&&(
+                        <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",background:(newPol.ruleLogic==="and"?T.green:T.violet)+"18",border:`1px solid ${(newPol.ruleLogic==="and"?T.green:T.violet)}30`,borderRadius:7,marginBottom:6,fontSize:11.5,color:newPol.ruleLogic==="and"?T.green:T.violet}}>
+                          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/><line x1="8" y1="5.5" x2="8" y2="8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="10.5" r=".6" fill="currentColor" stroke="none"/></svg>
+                          {newPol.ruleLogic==="and"
+                            ? <span>All <strong>{wizardRules.length} rules</strong> must pass — one failure flags the asset as non-compliant.</span>
+                            : <span>Any <strong>1 of {wizardRules.length} rules</strong> passing is enough — all must fail to raise a violation.</span>}
                         </div>
                       )}
+
+                      {/* Rule list */}
                       <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:4}}>
                         {wizardRules.length===0
                           ? <div style={{padding:"24px 20px",textAlign:"center",background:T.bgElevated,borderRadius:10,border:`1.5px dashed ${T.border}`}}>
@@ -7410,63 +7453,88 @@ const PolicyManagerView = ({onToast, onNav}) => {
                             </div>
                           : <>
                               {wizardRules.map((r,ri)=>{
-                                const fd=W_RULE_FIELDS.find(f=>f.id===r.field)||filteredRuleFields[0]||W_RULE_FIELDS[0];
-                                const isPresence = fd.type==="presence";
-                                const needsVal   = fd.type==="enum"||fd.type==="enum_multi"||fd.type==="list";
-                                const needsNum   = fd.type==="number";
-                                const sev        = r.severity||"Medium";
-                                const supportsCol= !!fd.colScope;
+                                const fd        = W_RULE_FIELDS.find(f=>f.id===r.field)||filteredRuleFields[0]||W_RULE_FIELDS[0];
+                                const isPresence= fd.type==="presence";
+                                const needsVal  = fd.type==="enum"||fd.type==="enum_multi"||fd.type==="list";
+                                const needsNum  = fd.type==="number";
+                                const sev       = r.severity||"Medium";
+                                const ruleLogic = newPol.ruleLogic||"independent";
+                                // Scope display
+                                const scopeLabel = fd.scope==="column"?"COLUMN":fd.scope==="both"?"TABLE · COL":"TABLE";
+                                const scopeColor = fd.scope==="column"?T.violet:fd.scope==="both"?T.amber:T.textMuted;
+                                // Connector badge between rules
+                                const connectorLabel = ruleLogic==="and"?"AND":ruleLogic==="or"?"OR":null;
                                 return (
-                                  <div key={r.id} style={{background:T.bgElevated,borderRadius:9,border:`1.5px solid ${T.border}`,overflow:"hidden"}}>
-                                    {/* Rule number badge */}
-                                    <div style={{padding:"5px 11px 0 11px",display:"flex",alignItems:"center",gap:6}}>
-                                      <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Rule {ri+1}</span>
-                                      {ri>0&&<span style={{fontSize:10,padding:"1px 7px",borderRadius:10,background:`${T.accent}18`,color:T.accent,fontWeight:700}}>AND</span>}
-                                    </div>
-                                    {/* Main row */}
-                                    <div style={{padding:"7px 11px 9px 11px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                                      <select value={r.field} onChange={e=>{
-                                        const nfd=W_RULE_FIELDS.find(f=>f.id===e.target.value)||filteredRuleFields[0]||W_RULE_FIELDS[0];
-                                        updRule(r.id,"field",e.target.value);
-                                        updRule(r.id,"operator",nfd.ops[0]);
-                                        updRule(r.id,"value","");
-                                        updRule(r.id,"column","");
-                                      }} style={{...sel_s,flex:"1 1 155px",minWidth:120}}>
-                                        {filteredRuleFields.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}
-                                      </select>
-                                      <select value={r.operator} onChange={e=>updRule(r.id,"operator",e.target.value)} style={{...sel_s,flex:"0 0 auto",minWidth:isPresence?100:105}}>
-                                        {fd.ops.map(op=><option key={op} value={op}>{op}</option>)}
-                                      </select>
-                                      {needsVal&&(fd.vals||[]).length>0&&(
-                                        <select value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} style={{...sel_s,flex:"1 1 110px",minWidth:90}}>
-                                          <option value="">— select —</option>
-                                          {fd.vals.map(v=><option key={v} value={v}>{v}</option>)}
+                                  <div key={r.id}>
+                                    {/* Connector between rules */}
+                                    {ri>0&&(
+                                      <div style={{display:"flex",alignItems:"center",gap:8,margin:"2px 0",paddingLeft:12}}>
+                                        {connectorLabel
+                                          ? <span style={{fontSize:10,fontWeight:700,padding:"1px 8px",borderRadius:10,background:ruleLogic==="and"?`${T.green}18`:`${T.violet}18`,color:ruleLogic==="and"?T.green:T.violet,letterSpacing:"0.05em"}}>{connectorLabel}</span>
+                                          : <span style={{fontSize:10,color:T.textMuted,fontStyle:"italic"}}>evaluated independently</span>
+                                        }
+                                        <div style={{flex:1,height:1,background:T.border}}/>
+                                      </div>
+                                    )}
+                                    <div style={{background:T.bgElevated,borderRadius:9,border:`1.5px solid ${T.border}`,overflow:"hidden"}}>
+                                      {/* Header row: Rule N + scope badge */}
+                                      <div style={{padding:"6px 11px 0",display:"flex",alignItems:"center",gap:6}}>
+                                        <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Rule {ri+1}</span>
+                                        <span style={{fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:10,background:`${scopeColor}18`,color:scopeColor,letterSpacing:"0.04em"}}>{scopeLabel}</span>
+                                        {fd.scope==="column"&&<span style={{fontSize:10,color:T.rose,marginLeft:2}}>column required</span>}
+                                        {fd.scope==="both"&&<span style={{fontSize:10,color:T.textMuted,marginLeft:2}}>column optional</span>}
+                                      </div>
+                                      {/* Condition row */}
+                                      <div style={{padding:"6px 11px 9px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                                        <select value={r.field} onChange={e=>{
+                                          const nfd=W_RULE_FIELDS.find(f=>f.id===e.target.value)||filteredRuleFields[0]||W_RULE_FIELDS[0];
+                                          updRule(r.id,"field",e.target.value);
+                                          updRule(r.id,"operator",nfd.ops[0]);
+                                          updRule(r.id,"value","");
+                                          updRule(r.id,"column","");
+                                        }} style={{...sel_s,flex:"1 1 155px",minWidth:120}}>
+                                          {filteredRuleFields.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}
                                         </select>
+                                        <select value={r.operator} onChange={e=>updRule(r.id,"operator",e.target.value)} style={{...sel_s,flex:"0 0 auto",minWidth:isPresence?100:105}}>
+                                          {fd.ops.map(op=><option key={op} value={op}>{op}</option>)}
+                                        </select>
+                                        {needsVal&&(fd.vals||[]).length>0&&(
+                                          <select value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} style={{...sel_s,flex:"1 1 110px",minWidth:90}}>
+                                            <option value="">— select —</option>
+                                            {fd.vals.map(v=><option key={v} value={v}>{v}</option>)}
+                                          </select>
+                                        )}
+                                        {needsVal&&(fd.vals||[]).length===0&&<input type="text" value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} placeholder="value…" style={{...sel_s,flex:"1 1 110px"}}/>}
+                                        {needsNum&&<input type="number" value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} placeholder="value" style={{...sel_s,flex:"0 0 80px",width:80}}/>}
+                                        <SevBadge ruleId={r.id} sev={sev}/>
+                                        <button onClick={()=>removeRule(r.id)} title="Remove rule"
+                                          style={{width:24,height:24,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15,lineHeight:1}}
+                                          onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
+                                          onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>×</button>
+                                      </div>
+                                      {/* Column input — shown for "column" (required) and "both" (optional) scopes */}
+                                      {(fd.scope==="column"||fd.scope==="both")&&(
+                                        <div style={{padding:"0 11px 9px",borderTop:`1px solid ${T.border}`,paddingTop:8,display:"flex",alignItems:"center",gap:8}}>
+                                          <span style={{fontSize:11,color:fd.scope==="column"?T.rose:T.textMuted,whiteSpace:"nowrap",flexShrink:0,fontWeight:fd.scope==="column"?600:400}}>
+                                            Column{fd.scope==="column"&&<span style={{color:T.rose}}> *</span>}:
+                                          </span>
+                                          <input type="text" value={r.column||""} onChange={e=>updRule(r.id,"column",e.target.value)}
+                                            placeholder={fd.scope==="column"
+                                              ?"Enter column name (e.g. email, ssn)"
+                                              :"Optional — leave blank to check at table level (e.g. email, ssn)"}
+                                            style={{...sel_s,flex:1,fontSize:11,borderColor:fd.scope==="column"&&!r.column?T.rose+"80":T.border}}
+                                            onFocus={e=>e.target.style.borderColor=T.accent}
+                                            onBlur={e=>e.target.style.borderColor=fd.scope==="column"&&!r.column?T.rose+"80":T.border}/>
+                                        </div>
                                       )}
-                                      {needsVal&&(fd.vals||[]).length===0&&<input type="text" value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} placeholder="value…" style={{...sel_s,flex:"1 1 110px"}}/>}
-                                      {needsNum&&<input type="number" value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} placeholder="value" style={{...sel_s,flex:"0 0 80px",width:80}}/>}
-                                      <SevBadge ruleId={r.id} sev={sev}/>
-                                      <button onClick={()=>removeRule(r.id)} title="Remove rule"
-                                        style={{width:24,height:24,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15,lineHeight:1}}
-                                        onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
-                                        onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>×</button>
+                                      {/* Source hint */}
+                                      {fd.hint&&(
+                                        <div style={{padding:"0 11px 8px",fontSize:10.5,color:T.amber,display:"flex",alignItems:"center",gap:5}}>
+                                          <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/><line x1="8" y1="5.5" x2="8" y2="8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="10.5" r=".6" fill="currentColor" stroke="none"/></svg>
+                                          {fd.hint}
+                                        </div>
+                                      )}
                                     </div>
-                                    {/* Column scope row — only for colScope fields */}
-                                    {supportsCol&&(
-                                      <div style={{padding:"0 11px 9px 11px",display:"flex",alignItems:"center",gap:8,borderTop:`1px solid ${T.border}`,paddingTop:7}}>
-                                        <span style={{fontSize:11,color:T.textMuted,whiteSpace:"nowrap",flexShrink:0}}>Column (optional):</span>
-                                        <input type="text" value={r.column||""} onChange={e=>updRule(r.id,"column",e.target.value)}
-                                          placeholder="e.g. email, ssn, phone_number — leave blank to check all columns"
-                                          style={{...sel_s,flex:1,fontSize:11}}/>
-                                      </div>
-                                    )}
-                                    {/* Source hint */}
-                                    {fd.hint&&(
-                                      <div style={{padding:"0 11px 8px 11px",fontSize:10.5,color:T.amber,display:"flex",alignItems:"center",gap:5}}>
-                                        <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/><line x1="8" y1="5.5" x2="8" y2="8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="10.5" r=".6" fill="currentColor" stroke="none"/></svg>
-                                        {fd.hint}
-                                      </div>
-                                    )}
                                   </div>
                                 );
                               })}
@@ -7549,12 +7617,14 @@ const PolicyManagerView = ({onToast, onNav}) => {
                           ["Severity",     <span style={{padding:"2px 9px",borderRadius:5,background:SEV_BG[cq.severity]||T.bgElevated,color:SEV_COLOR[cq.severity]||T.textMuted,fontWeight:700,fontSize:11}}>{cq.severity||"Medium"}</span>],
                           ["Notify",       cq.notify||"Both"],
                         ]},
-                        {title:`Rules (${wizardRules.length}) — all must pass`, rows: wizardRules.length===0
+                        {title:`Rules (${wizardRules.length}) — logic: ${(newPol.ruleLogic||"independent").toUpperCase()}`, rows: wizardRules.length===0
                           ? [["—","No rules defined"]]
                           : wizardRules.map((r,i)=>{
                               const fl=W_FIELD_LABELS[r.field]||r.field;
-                              const colStr=r.column?` [col: ${r.column}]`:"";
-                              return [`Rule ${i+1}`, `${fl} ${r.operator}${r.value?` "${r.value}"`:""}${colStr}`.trim()];
+                              const colStr=r.column?` · col: ${r.column}`:"";
+                              const fd=W_RULE_FIELDS?.find?.(f=>f.id===r.field);
+                              const scopeStr=fd?` [${fd.scope==="column"?"COLUMN":fd.scope==="both"?"TABLE·COL":"TABLE"}]`:"";
+                              return [`Rule ${i+1}${scopeStr}`, `${fl} ${r.operator}${r.value?` "${r.value}"`:""}${colStr}`.trim()];
                             })
                         },
                         {title:"Ownership", rows:[
