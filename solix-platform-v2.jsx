@@ -7228,14 +7228,17 @@ const PolicyManagerView = ({onToast, onNav}) => {
                     <div style={{display:"flex",flexDirection:"column",gap:20}}>
                       {secHead("Policy Scope","Define which sources and asset types this policy governs. Specific tables and columns are selected per rule in the next step.")}
 
-                      {/* ── Domain (optional) ── */}
-                      <CatFieldDropdown
-                        label="Domain (optional)"
-                        placeholder="All domains — leave blank to cover all domains"
-                        options={ALL_DOMAINS}
-                        selected={scopeDoms}
-                        onChange={v=>setNewPol(p=>({...p,scope:{...p.scope,domains:v}}))}
-                      />
+                      {/* ── Domain (required) ── */}
+                      <div>
+                        <CatFieldDropdown
+                          label={<>Domain <span style={{color:T.rose}}>*</span></>}
+                          placeholder="Search and select domains…"
+                          options={ALL_DOMAINS}
+                          selected={scopeDoms}
+                          onChange={v=>setNewPol(p=>({...p,scope:{...p.scope,domains:v}}))}
+                        />
+                        {scopeDoms.length===0&&<div style={{fontSize:10.5,color:T.rose,marginTop:4}}>Select at least one domain to continue.</div>}
+                      </div>
 
                       {/* ── Source (required) ── */}
                       <div>
@@ -7249,9 +7252,9 @@ const PolicyManagerView = ({onToast, onNav}) => {
                         {scopeSrcs.length===0&&<div style={{fontSize:10.5,color:T.rose,marginTop:4}}>Select at least one source to continue.</div>}
                       </div>
 
-                      {/* ── Asset Type (single-select) ── */}
+                      {/* ── Asset Type (required single-select) ── */}
                       <div>
-                        <label style={lbl}>Asset Type</label>
+                        <label style={lbl}>Asset Type <span style={{color:T.rose}}>*</span></label>
                         <select value={assetType} onChange={e=>setNewPol(p=>({...p,scope:{...p.scope,assetType:e.target.value}}))}
                           style={{...inp,cursor:"pointer",appearance:"auto"}}>
                           <option value="both">Tables &amp; Views</option>
@@ -7947,7 +7950,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                 </button>
                 {createStep<W_STEPS.length
                   ? (()=>{
-                      const step1ok=(newPol.scope?.sources||[]).length>0;
+                      const step1ok=(newPol.scope?.domains||[]).length>0 && (newPol.scope?.sources||[]).length>0 && !!(newPol.scope?.assetType);
                       const step2ok=newPol.name.trim().length>0;
                       const canContinue=createStep===1?step1ok:createStep===2?step2ok:true;
                       return (
