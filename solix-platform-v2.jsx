@@ -7372,7 +7372,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                             <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
                               {/* Table header */}
                               <div style={{display:"grid",gridTemplateColumns:"1fr 80px 90px 100px 110px 20px",padding:"7px 14px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
-                                {["Asset","Type","Domain","Quality Score","Status",""].map(h=>(
+                                {["Asset","Type","Domain","Compliance Score","Status",""].map(h=>(
                                   <span key={h} style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</span>
                                 ))}
                               </div>
