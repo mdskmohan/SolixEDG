@@ -5804,9 +5804,13 @@ const PolicyManagerView = ({onToast, onNav}) => {
       const valStr=r.value?` ${r.value}`:"";
       const tblStr=r.table?` on ${r.table}`:"";
       const colStr=r.column?`.${r.column}`:"";
-      return {id:`r${i+1}-${Date.now()}`,name:`${fl} ${r.operator}${valStr}${tblStr}${colStr}`,table:r.table||"",column:r.column||"",criteria:`IF ${fl} ${r.operator}${valStr}${tblStr}${colStr}, THEN flag violation.`};
+      return {id:`r${i+1}-${Date.now()}`,type:"preset",field:r.field,operator:r.operator,value:r.value||"",table:r.table||"",column:r.column||"",severity:r.severity||"Medium",name:`${fl} ${r.operator}${valStr}${tblStr}${colStr}`};
     });
-    const autoText = convertedRules.map(r=>r.criteria);
+    const convertedSqlRules = wizardSqlRules.map((r,i)=>({
+      id:`rsql${i+1}-${Date.now()}`,type:"sql",table:r.table||"",sql:r.sql||"",strategy:r.strategy||"",operator:r.operator||"",threshold:r.threshold||"",partitionExpr:r.partitionExpr||"",severity:r.severity||"Medium",name:r.label||`Custom Rule ${i+1}`
+    }));
+    const allRules = [...convertedRules,...convertedSqlRules];
+    const autoText = allRules.map(r=>r.name);
     const scopeCount = (newPol.scope?.domains||[]).length?ASSETS.filter(a=>(newPol.scope.domains||[]).includes(a.domain)).length:ASSETS.length;
     const ownerArr = Array.isArray(newPol.owner)?newPol.owner:(newPol.owner?[newPol.owner]:[]);
     const schedObj = runMode==="schedule"
@@ -5819,7 +5823,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
       owner:ownerArr[0]||"", owners:ownerArr,
       lifecycle, created:today(), updated:today(),
       ruleLogic:newPol.ruleLogic||"independent",
-      criteria:autoText, rules:convertedRules, links:[],
+      criteria:autoText, rules:allRules, links:[],
       schedule:schedObj,
       violations:0, compliancePct:null, lastEvaluated:null, assetsInScope:scopeCount,
       history:[{when:today(),who:"You",action:histAction}]};
@@ -6363,7 +6367,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       {k:"overview",   l:"Overview",        badge:null},
                       {k:"rules",      l:"Rules",            badge:(p.rules||[]).length},
                       {k:"violations", l:"Violations",       badge:openViolsForPol(p.id).length||null, danger:true},
-                      {k:"assets",     l:"Governed assets",  badge:null},
+                      {k:"assets",     l:"Rule Targets",     badge:[...new Set((p.rules||[]).filter(r=>r.table).map(r=>r.table))].length||null},
                       {k:"activity",   l:"Activity",         badge:(p.history||[]).length},
                     ].map(({k,l,badge,danger})=>(
                       <button key={k} onClick={()=>setPdTab(k)}
@@ -6403,7 +6407,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       );
                       return (
                       <div style={{display:"flex",minHeight:"100%"}}>
-                        {/* Main content — description + criteria */}
+                        {/* Main content — description + rules summary */}
                         <div style={{flex:1,padding:"20px 22px",borderRight:`1px solid ${T.border}`,overflowY:"auto"}}>
                           <SideLabel label="Description" onEdit={()=>{setEditing(true);setDescDraft(p.description||"");}}/>
                           {editing
@@ -6413,18 +6417,64 @@ const PolicyManagerView = ({onToast, onNav}) => {
                                 {p.description||<span style={{color:T.textMuted,fontStyle:"italic"}}>No description — click edit to add one.</span>}
                               </div>
                           }
-                          <SideLabel label="Policy Criteria" onEdit={()=>setPolEditModal("criteria")}/>
-                          {(p.criteria||[]).length>0
-                            ? <div style={{display:"flex",flexDirection:"column",gap:5,marginBottom:20}}>
-                                {(p.criteria||[]).map((c,i)=>(
-                                  <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"9px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
-                                    <div style={{width:5,height:5,borderRadius:"50%",background:T.accent,flexShrink:0,marginTop:6}}/>
-                                    <span style={{fontSize:12.5,color:T.textSub,lineHeight:1.7}}>{c}</span>
-                                  </div>
-                                ))}
+
+                          {/* ── Rules summary ── */}
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>
+                              Rules
+                              {(p.rules||[]).length>0&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:99,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}30`}}>{(p.rules||[]).length}</span>}
+                            </div>
+                            {(p.rules||[]).length>0&&(
+                              <button onClick={()=>setPdTab("rules")} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>
+                                View all →
+                              </button>
+                            )}
+                          </div>
+                          {(p.rules||[]).length===0
+                            ? <div style={{padding:"18px 14px",borderRadius:8,border:`1.5px dashed ${T.border}`,textAlign:"center",marginBottom:20}}>
+                                <div style={{fontSize:12,color:T.textMuted}}>No rules defined for this policy.</div>
                               </div>
-                            : <div style={{fontSize:12,color:T.textMuted,fontStyle:"italic",marginBottom:20}}>No criteria defined — click the pencil to add.</div>
+                            : <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:20}}>
+                                {/* Logic mode badge */}
+                                {(p.ruleLogic&&p.ruleLogic!=="independent")&&(
+                                  <div style={{fontSize:11,fontWeight:600,padding:"4px 10px",borderRadius:6,background:(p.ruleLogic==="and"?T.green:T.violet)+"18",color:p.ruleLogic==="and"?T.green:T.violet,border:`1px solid ${(p.ruleLogic==="and"?T.green:T.violet)}30`,marginBottom:2,display:"inline-flex",alignSelf:"flex-start"}}>
+                                    {p.ruleLogic==="and"?"AND — all rules must pass":"OR — any rule passing is enough"}
+                                  </div>
+                                )}
+                                {(p.rules||[]).slice(0,4).map((r,ri)=>{
+                                  const isSQL = r.type==="sql";
+                                  const sevColor = SEV_COLOR[r.severity]||T.textMuted;
+                                  return (
+                                    <div key={r.id||ri} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"8px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+                                      <span style={{fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:4,background:isSQL?`${T.amber}18`:T.bgBase,color:isSQL?T.amber:T.textMuted,border:`1px solid ${isSQL?T.amber+"30":T.border}`,flexShrink:0,marginTop:1}}>{isSQL?"SQL":"RULE"}</span>
+                                      <span style={{fontSize:12,color:T.textSub,flex:1,lineHeight:1.5}}>{r.name}</span>
+                                      {r.table&&<span style={{fontSize:10,fontFamily:"'Geist Mono',monospace",padding:"1px 6px",borderRadius:4,background:T.bgBase,color:T.textMuted,border:`1px solid ${T.border}`,flexShrink:0}}>{r.table}{r.column?`.${r.column}`:""}</span>}
+                                      <span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:4,background:SEV_BG[r.severity]||T.bgBase,color:sevColor,flexShrink:0}}>{r.severity||"Med"}</span>
+                                    </div>
+                                  );
+                                })}
+                                {(p.rules||[]).length>4&&(
+                                  <button onClick={()=>setPdTab("rules")} style={{fontSize:11.5,color:T.accent,background:"none",border:`1px solid ${T.accent}30`,borderRadius:7,cursor:"pointer",padding:"6px 12px",textAlign:"center",fontWeight:500}}>
+                                    +{(p.rules||[]).length-4} more rules — view all
+                                  </button>
+                                )}
+                              </div>
                           }
+
+                          {/* ── Scope summary ── */}
+                          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Scope</div>
+                          <div style={{display:"flex",flexDirection:"column",gap:5,marginBottom:4}}>
+                            {[
+                              {l:"Source",     v:(p.scope?.sources||[]).join(", ")||"All sources"},
+                              {l:"Asset Type", v:p.scope?.assetType==="table"?"Tables only":p.scope?.assetType==="view"?"Views only":"Tables & Views"},
+                              {l:"Domains",    v:(p.scope?.domains||[]).join(", ")||"All domains"},
+                            ].map(row=>(
+                              <div key={row.l} style={{display:"flex",gap:8,padding:"5px 10px",background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`}}>
+                                <span style={{fontSize:11.5,color:T.textMuted,minWidth:72,flexShrink:0}}>{row.l}</span>
+                                <span style={{fontSize:11.5,color:T.textSub,fontWeight:500}}>{row.v}</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
 
                         {/* Right sidebar — exact Tags/Glossary pattern */}
@@ -6575,29 +6625,152 @@ const PolicyManagerView = ({onToast, onNav}) => {
                     );})()}
 
                     {/* ── Rules ── */}
-                    {pdTab==="rules"&&(
-                      <div style={{padding:"20px 22px"}}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-                          <div style={{fontSize:12.5,color:T.textSub}}>Rules describe how this policy is enforced in practice.</div>
-                          <Btn onClick={()=>setRuleModalOpen(true)}>+ Add rule</Btn>
-                        </div>
-                        {(p.rules||[]).length===0&&(
-                          <div style={{padding:"32px",textAlign:"center",border:`1.5px dashed ${T.border}`,borderRadius:10}}>
-                            <div style={{fontSize:13,color:T.textMuted,marginBottom:6}}>No rules yet</div>
-                            <div style={{fontSize:12,color:T.textMuted,lineHeight:1.7,maxWidth:280,margin:"0 auto"}}>Rules describe specific criteria that implement this policy — like tagging requirements, access controls, or quality gates.</div>
-                          </div>
-                        )}
-                        {(p.rules||[]).map(r=>(
-                          <div key={r.id} style={{padding:"13px 16px",border:`1px solid ${T.border}`,borderRadius:9,marginBottom:8,background:T.bgSurface}}>
-                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-                              <span style={{fontSize:13.5,fontWeight:600,color:T.text}}>{r.name}</span>
-                              <button onClick={()=>handleRemoveRule(p.id,r.id)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:18,padding:0,lineHeight:1,marginLeft:10}}>×</button>
+                    {pdTab==="rules"&&(()=>{
+                      const presetRules = (p.rules||[]).filter(r=>r.type==="preset"||(!r.type&&!r.sql));
+                      const sqlRules    = (p.rules||[]).filter(r=>r.type==="sql"||r.sql);
+                      const totalRls    = (p.rules||[]).length;
+                      const logicMode   = p.ruleLogic||"independent";
+                      const FIELD_LBL   = {certification:"Certification Status",domain:"Domain",tag:"Tag",glossary_term:"Glossary Term",null_check:"Null Check",uniqueness:"Uniqueness",format:"Format",range:"Range",referential:"Referential Integrity",freshness:"Freshness",schema_drift:"Schema Drift",custom:"Custom Check",retention:"Retention Period",classification:"Classification"};
+                      const opLabel     = op=>({eq:"=",neq:"≠",gt:">",lt:"<",gte:"≥",lte:"≤",contains:"contains",not_contains:"does not contain",starts_with:"starts with",ends_with:"ends with",is_null:"is null",is_not_null:"is not null",matches:"matches",in:"in",not_in:"not in"}[op]||op||"");
+                      return (
+                        <div style={{padding:"20px 22px"}}>
+                          {/* Header */}
+                          <div style={{marginBottom:16}}>
+                            <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:3}}>
+                              Rules
+                              {totalRls>0&&<span style={{marginLeft:7,fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:99,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}30`}}>{totalRls}</span>}
                             </div>
-                            <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.7}}>{r.criteria}</div>
+                            <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>Rules are set during policy creation and evaluated against in-scope assets.</div>
                           </div>
-                        ))}
-                      </div>
-                    )}
+
+                          {/* Rule Evaluation Logic banner */}
+                          {totalRls>1&&(
+                            <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderRadius:8,marginBottom:16,background:logicMode==="and"?`${T.green}10`:logicMode==="or"?`${T.violet}10`:T.bgElevated,border:`1px solid ${logicMode==="and"?T.green+"30":logicMode==="or"?T.violet+"30":T.border}`}}>
+                              <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:5,background:logicMode==="and"?T.green:logicMode==="or"?T.violet:T.bgBase,color:logicMode==="and"||logicMode==="or"?"#fff":T.textMuted}}>
+                                {logicMode==="and"?"AND":logicMode==="or"?"OR":"INDEPENDENT"}
+                              </span>
+                              <span style={{fontSize:12,color:logicMode==="and"?T.green:logicMode==="or"?T.violet:T.textSub}}>
+                                {logicMode==="and"?"All rules must pass for the asset to be compliant"
+                                :logicMode==="or" ?"Asset is compliant if any single rule passes"
+                                                  :"Rules are evaluated independently — each produces its own result"}
+                              </span>
+                            </div>
+                          )}
+
+                          {totalRls===0&&(
+                            <div style={{padding:"40px 20px",textAlign:"center",border:`1.5px dashed ${T.border}`,borderRadius:10}}>
+                              <div style={{fontSize:22,marginBottom:10}}>📋</div>
+                              <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:4}}>No rules defined</div>
+                              <div style={{fontSize:12,color:T.textMuted,lineHeight:1.7,maxWidth:300,margin:"0 auto"}}>Rules are added when creating a policy. They define the conditions that assets must meet to be considered compliant.</div>
+                            </div>
+                          )}
+
+                          {/* ── Preset Rules section ── */}
+                          {presetRules.length>0&&(
+                            <div style={{marginBottom:20}}>
+                              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
+                                Preset Rules
+                                <span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:99,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>{presetRules.length}</span>
+                              </div>
+                              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                                {presetRules.map((r,ri)=>{
+                                  const fieldLabel = FIELD_LBL[r.field]||r.field||"—";
+                                  const sevBg    = SEV_BG[r.severity]||T.bgElevated;
+                                  const sevClr   = SEV_COLOR[r.severity]||T.textMuted;
+                                  const hasTable  = !!r.table;
+                                  const hasCol    = !!r.column;
+                                  return (
+                                    <div key={r.id||ri} style={{padding:"12px 14px",border:`1px solid ${T.border}`,borderRadius:9,background:T.bgSurface}}>
+                                      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                                        {/* Field label */}
+                                        <span style={{fontSize:12.5,fontWeight:600,color:T.text,flex:1,minWidth:0}}>{fieldLabel}</span>
+                                        {/* Severity */}
+                                        <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:5,background:sevBg,color:sevClr,flexShrink:0}}>{r.severity||"Medium"}</span>
+                                        {/* Remove */}
+                                        <button onClick={()=>handleRemoveRule(p.id,r.id)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:16,padding:"0 2px",lineHeight:1,flexShrink:0}} title="Remove rule">×</button>
+                                      </div>
+                                      {/* Operator + value row */}
+                                      {(r.operator||r.value)&&(
+                                        <div style={{display:"flex",alignItems:"center",gap:6,marginTop:6,flexWrap:"wrap"}}>
+                                          {r.operator&&<span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",padding:"2px 7px",borderRadius:5,background:T.bgBase,color:T.textSub,border:`1px solid ${T.border}`}}>{opLabel(r.operator)}</span>}
+                                          {r.value&&<span style={{fontSize:11.5,color:T.text,fontWeight:500}}>{r.value}</span>}
+                                        </div>
+                                      )}
+                                      {/* Table / column */}
+                                      {(hasTable||hasCol)&&(
+                                        <div style={{display:"flex",alignItems:"center",gap:6,marginTop:6,flexWrap:"wrap"}}>
+                                          <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>Target:</span>
+                                          {hasTable&&<span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",padding:"2px 8px",borderRadius:5,background:`${T.accent}10`,color:T.accent,border:`1px solid ${T.accent}28`,fontWeight:500}}>{r.table}</span>}
+                                          {hasCol&&<span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",padding:"2px 8px",borderRadius:5,background:`${T.violet}12`,color:T.violet,border:`1px solid ${T.violet}28`,fontWeight:500}}>.{r.column}</span>}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* ── Custom / SQL Rules section ── */}
+                          {sqlRules.length>0&&(
+                            <div>
+                              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
+                                Custom Rules
+                                <span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:99,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>{sqlRules.length}</span>
+                              </div>
+                              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                                {sqlRules.map((r,ri)=>{
+                                  const sevBg  = SEV_BG[r.severity]||T.bgElevated;
+                                  const sevClr = SEV_COLOR[r.severity]||T.textMuted;
+                                  return (
+                                    <div key={r.id||ri} style={{padding:"12px 14px",border:`1px solid ${T.border}`,borderRadius:9,background:T.bgSurface}}>
+                                      <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                                        <span style={{fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:4,background:`${T.amber}18`,color:T.amber,border:`1px solid ${T.amber}30`,flexShrink:0,marginTop:2}}>SQL</span>
+                                        <div style={{flex:1,minWidth:0}}>
+                                          <div style={{fontSize:12.5,fontWeight:600,color:T.text,marginBottom:4}}>{r.name||`Custom Rule ${ri+1}`}</div>
+                                          {/* Strategy + operator + threshold */}
+                                          {(r.strategy||r.operator||r.threshold)&&(
+                                            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"wrap"}}>
+                                              {r.strategy&&<span style={{fontSize:10.5,padding:"2px 8px",borderRadius:5,background:T.bgBase,color:T.textSub,border:`1px solid ${T.border}`,fontWeight:600}}>{r.strategy==="BINARY"?"Binary":"Count"}</span>}
+                                              {r.operator&&<span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",padding:"2px 7px",borderRadius:5,background:T.bgBase,color:T.textSub,border:`1px solid ${T.border}`}}>{opLabel(r.operator)}</span>}
+                                              {r.threshold&&<span style={{fontSize:11,color:T.text,fontWeight:500}}>{r.threshold}</span>}
+                                            </div>
+                                          )}
+                                          {/* Target table */}
+                                          {r.table&&(
+                                            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+                                              <span style={{fontSize:10,color:T.textMuted}}>Table:</span>
+                                              <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",padding:"2px 8px",borderRadius:5,background:`${T.accent}10`,color:T.accent,border:`1px solid ${T.accent}28`,fontWeight:500}}>{r.table}</span>
+                                            </div>
+                                          )}
+                                          {/* SQL snippet */}
+                                          {r.sql&&(
+                                            <div style={{marginTop:4,padding:"7px 10px",borderRadius:7,background:T.bgBase,border:`1px solid ${T.border}`,fontFamily:"'Geist Mono','Courier New',monospace",fontSize:11,color:T.textSub,lineHeight:1.6,whiteSpace:"pre-wrap",wordBreak:"break-word",maxHeight:80,overflow:"hidden",position:"relative"}}>
+                                              {r.sql.length>200?r.sql.slice(0,200)+"…":r.sql}
+                                            </div>
+                                          )}
+                                          {/* Partition expr */}
+                                          {r.partitionExpr&&(
+                                            <div style={{display:"flex",alignItems:"center",gap:6,marginTop:6}}>
+                                              <span style={{fontSize:10,color:T.textMuted}}>Partition:</span>
+                                              <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{r.partitionExpr}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}>
+                                          <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:5,background:sevBg,color:sevClr}}>{r.severity||"Medium"}</span>
+                                          <button onClick={()=>handleRemoveRule(p.id,r.id)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:16,padding:"0 2px",lineHeight:1}} title="Remove rule">×</button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* ── Violations ── */}
                     {pdTab==="violations"&&(()=>{
