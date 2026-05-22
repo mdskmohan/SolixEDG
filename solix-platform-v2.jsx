@@ -13334,39 +13334,77 @@ const PortsTab=({pd,allAssets,onPatch})=>{
   };
 
   const SVC_ICON={snowflake:"❄️",postgres:"🐘",databricks:"🔷",oracle:"🔶",mysql:"🐬",airflow:"🌀",s3:"🪣"};
+
+  /* OM-style port card — matches screenshot exactly */
   const PortAssetCard=({asset,color,kind})=>{
-    const parts=asset.db?asset.db.split(" / "):[];
-    const pathFull=parts.join(" / ");
-    const svcIcon=SVC_ICON[asset.service]||"🗄️";
-    const [hov,setHov]=useState(false);
+    const pathFull=asset.db||"";
+    const svcIcon=SVC_ICON[asset.service]||"❄️";
+    const [menuOpen,setMenuOpen]=useState(false);
     return (
-      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${color}`,borderRadius:"0 8px 8px 0",padding:"13px 14px 11px",transition:"box-shadow .15s",boxShadow:hov?`0 2px 12px ${color}14`:"none",position:"relative"}}
-        onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}>
-        {/* service icon + db path breadcrumb */}
-        <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:7,overflow:"hidden"}}>
-          <span style={{fontSize:11,flexShrink:0}}>{svcIcon}</span>
-          <span style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{pathFull||"—"}</span>
+      <div style={{background:"#fff",border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",boxShadow:"0 1px 4px rgba(0,0,0,.06)",position:"relative"}}>
+        {/* Row 1: service icon + full breadcrumb path + ⋮ menu */}
+        <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:10}}>
+          <span style={{fontSize:14,flexShrink:0,lineHeight:1}}>{svcIcon}</span>
+          <span style={{fontSize:12,color:T.textMuted,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pathFull||"—"}</span>
+          <div style={{position:"relative",flexShrink:0}}>
+            <button onClick={e=>{e.stopPropagation();setMenuOpen(p=>!p);}}
+              style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 5px",borderRadius:5,fontSize:16,lineHeight:1,display:"flex",alignItems:"center"}}
+              onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
+              onMouseLeave={e=>e.currentTarget.style.background="none"}>⋮</button>
+            {menuOpen&&(
+              <>
+                <div onClick={()=>setMenuOpen(false)} style={{position:"fixed",inset:0,zIndex:900}}/>
+                <div style={{position:"absolute",right:0,top:"calc(100% + 4px)",zIndex:901,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 6px 20px rgba(0,0,0,.15)",minWidth:140,overflow:"hidden"}}>
+                  <button onClick={()=>{removePort(asset.id,kind);setMenuOpen(false);}}
+                    style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"9px 14px",background:"none",border:"none",cursor:"pointer",color:T.rose,fontSize:12.5,textAlign:"left"}}
+                    onMouseEnter={e=>e.currentTarget.style.background="rgba(225,29,72,.06)"}
+                    onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                    {Ic.trash(12)} Remove Port
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
-        {/* type badge + asset name */}
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:7}}>
-          <span style={{fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:`${color}12`,color,border:`1px solid ${color}22`,flexShrink:0}}>{asset.type}</span>
-          <span style={{fontSize:13.5,fontWeight:700,color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{asset.name}</span>
+        {/* Row 2: schema/network icon + large blue name */}
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="none" style={{flexShrink:0}}>
+            <circle cx="10" cy="10" r="3" fill={color}/>
+            <circle cx="3"  cy="4"  r="2" fill={color} opacity=".7"/>
+            <circle cx="17" cy="4"  r="2" fill={color} opacity=".7"/>
+            <circle cx="3"  cy="16" r="2" fill={color} opacity=".7"/>
+            <circle cx="17" cy="16" r="2" fill={color} opacity=".7"/>
+            <line x1="10" y1="10" x2="3"  y2="4"  stroke={color} strokeWidth="1.3" opacity=".7"/>
+            <line x1="10" y1="10" x2="17" y2="4"  stroke={color} strokeWidth="1.3" opacity=".7"/>
+            <line x1="10" y1="10" x2="3"  y2="16" stroke={color} strokeWidth="1.3" opacity=".7"/>
+            <line x1="10" y1="10" x2="17" y2="16" stroke={color} strokeWidth="1.3" opacity=".7"/>
+          </svg>
+          <span style={{fontSize:16,fontWeight:700,color,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{asset.name}</span>
         </div>
-        {/* description */}
-        <div style={{fontSize:11.5,color:T.textMuted,marginBottom:9,lineHeight:1.5,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{asset.description||"No description"}</div>
-        {/* footer */}
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <span style={{fontSize:11,color:T.textMuted}}>No Domains · No Owners ·</span>
-          {hov&&<button onClick={()=>removePort(asset.id,kind)}
-            style={{height:22,padding:"0 8px",borderRadius:5,background:"#fee2e2",border:"1px solid #fca5a5",color:"#ef4444",fontSize:10.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:3,fontFamily:"inherit"}}>
-            {Ic.trash(10)} Remove
-          </button>}
+        {/* Row 3: description */}
+        <div style={{fontSize:12.5,color:T.textMuted,marginBottom:10,lineHeight:1.5}}>{asset.description||"No description"}</div>
+        {/* Row 4: footer metadata */}
+        <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textMuted}}>
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.2"/><path d="M7 4v3l2 1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+          <span>No Domains</span>
+          <span>·</span>
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.2"/><path d="M2.5 12c0-2.485 2.015-4.5 4.5-4.5s4.5 2.015 4.5 4.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+          <span>No Owners</span>
+          <span>·</span>
         </div>
       </div>
     );
   };
 
+  const [inCollapsed,  setInCollapsed]  = useState(false);
+  const [outCollapsed, setOutCollapsed] = useState(false);
   const hasAny=inputPorts.length>0||outputPorts.length>0;
+
+  const ChevIcon=({open})=>(
+    <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+      <path d={open?"M3 9l4-4 4 4":"M3 5l4 4 4-4"} stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
 
   return (
     <div style={{position:"relative"}}>
@@ -13381,47 +13419,64 @@ const PortsTab=({pd,allAssets,onPatch})=>{
         </div>
       )}
 
-      {/* Input + Output columns */}
+      {/* Input + Output columns — OM layout */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
         {/* Input Ports */}
         <div>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-            <span style={{fontSize:13,fontWeight:700,color:T.text}}>Input Ports</span>
-            <span style={{fontSize:11,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,padding:"1px 8px"}}>{inputPorts.length}</span>
-            <button onClick={()=>openAdd("input")}
-              style={{marginLeft:"auto",height:28,padding:"0 11px",borderRadius:7,background:T.blue,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
-              {Ic.plus(9)} Add
-            </button>
+          <div style={{display:"flex",alignItems:"center",gap:0,marginBottom:inCollapsed?0:14,padding:"10px 14px",background:"#fff",border:`1px solid ${T.border}`,borderRadius:inCollapsed?10:"10px 10px 0 0",borderBottom:inCollapsed?`1px solid ${T.border}`:"none"}}>
+            <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Input Ports <span style={{fontWeight:400,color:T.textMuted}}>({inputPorts.length})</span></span>
+            <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
+              <button onClick={()=>openAdd("input")}
+                style={{height:28,padding:"0 12px",borderRadius:7,background:"none",border:`1.5px solid ${T.blue}`,color:T.blue,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit",transition:"all .12s"}}
+                onMouseEnter={e=>{e.currentTarget.style.background=`${T.blue}10`;}}
+                onMouseLeave={e=>{e.currentTarget.style.background="none";}}>
+                Add
+              </button>
+              <button onClick={()=>setInCollapsed(p=>!p)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
+                <ChevIcon open={!inCollapsed}/>
+              </button>
+            </div>
           </div>
-          <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            {inputPorts.length===0
-              ? <div style={{border:`1.5px dashed ${T.border}`,borderRadius:10,padding:"28px 16px",textAlign:"center",color:T.textMuted,fontSize:12}}>
-                  No input ports yet.<br/>
-                  <span style={{color:T.blue,cursor:"pointer",fontWeight:600}} onClick={()=>openAdd("input")}>+ Add from catalog</span>
-                </div>
-              : inputPorts.map(a=><PortAssetCard key={a.id} asset={a} color={T.blue} kind="input"/>)
-            }
-          </div>
+          {!inCollapsed&&(
+            <div style={{border:`1px solid ${T.border}`,borderTop:"none",borderRadius:"0 0 10px 10px",padding:12,background:"#fafafa",display:"flex",flexDirection:"column",gap:10}}>
+              {inputPorts.length===0
+                ? <div style={{padding:"24px 16px",textAlign:"center",color:T.textMuted,fontSize:12.5}}>
+                    No input ports yet.{" "}
+                    <span style={{color:T.blue,cursor:"pointer",fontWeight:600}} onClick={()=>openAdd("input")}>+ Add from catalog</span>
+                  </div>
+                : inputPorts.map(a=><PortAssetCard key={a.id} asset={a} color={T.blue} kind="input"/>)
+              }
+            </div>
+          )}
         </div>
+
         {/* Output Ports */}
         <div>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-            <span style={{fontSize:13,fontWeight:700,color:T.text}}>Output Ports</span>
-            <span style={{fontSize:11,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,padding:"1px 8px"}}>{outputPorts.length}</span>
-            <button onClick={()=>openAdd("output")}
-              style={{marginLeft:"auto",height:28,padding:"0 11px",borderRadius:7,background:"#7c3aed",border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
-              {Ic.plus(9)} Add
-            </button>
+          <div style={{display:"flex",alignItems:"center",gap:0,marginBottom:outCollapsed?0:14,padding:"10px 14px",background:"#fff",border:`1px solid ${T.border}`,borderRadius:outCollapsed?10:"10px 10px 0 0",borderBottom:outCollapsed?`1px solid ${T.border}`:"none"}}>
+            <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Output Ports <span style={{fontWeight:400,color:T.textMuted}}>({outputPorts.length})</span></span>
+            <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
+              <button onClick={()=>openAdd("output")}
+                style={{height:28,padding:"0 12px",borderRadius:7,background:"none",border:`1.5px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit",transition:"all .12s"}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor=T.textSub;}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;}}>
+                Add
+              </button>
+              <button onClick={()=>setOutCollapsed(p=>!p)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
+                <ChevIcon open={!outCollapsed}/>
+              </button>
+            </div>
           </div>
-          <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            {outputPorts.length===0
-              ? <div style={{border:`1.5px dashed ${T.border}`,borderRadius:10,padding:"28px 16px",textAlign:"center",color:T.textMuted,fontSize:12}}>
-                  No output ports yet.<br/>
-                  <span style={{color:"#7c3aed",cursor:"pointer",fontWeight:600}} onClick={()=>openAdd("output")}>+ Add from catalog</span>
-                </div>
-              : outputPorts.map(a=><PortAssetCard key={a.id} asset={a} color="#7c3aed" kind="output"/>)
-            }
-          </div>
+          {!outCollapsed&&(
+            <div style={{border:`1px solid ${T.border}`,borderTop:"none",borderRadius:"0 0 10px 10px",padding:12,background:"#fafafa",display:"flex",flexDirection:"column",gap:10}}>
+              {outputPorts.length===0
+                ? <div style={{padding:"24px 16px",textAlign:"center",color:T.textMuted,fontSize:12.5}}>
+                    No output ports yet.{" "}
+                    <span style={{color:"#7c3aed",cursor:"pointer",fontWeight:600}} onClick={()=>openAdd("output")}>+ Add from catalog</span>
+                  </div>
+                : outputPorts.map(a=><PortAssetCard key={a.id} asset={a} color="#7c3aed" kind="output"/>)
+              }
+            </div>
+          )}
         </div>
       </div>
 
