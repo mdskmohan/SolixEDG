@@ -7513,16 +7513,56 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       {/* ── Rules ── */}
                       {secHead("Rules","Define the conditions evaluated against each in-scope asset.")}
 
-                      {/* ── Rule Type tabs: Preset / Custom ── */}
-                      <div style={{display:"inline-flex",borderRadius:8,overflow:"hidden",border:`1.5px solid ${T.border}`,background:T.bgElevated,marginBottom:14}}>
-                        {[{id:"preset",label:"Preset Rules"},{id:"sql",label:"Custom"}].map(tab=>{
+                      {/* ── Rule Evaluation Logic (applies to all rules across both tabs) ── */}
+                      {(()=>{
+                        const rl = newPol.ruleLogic||"independent";
+                        const totalRules = wizardRules.length + wizardSqlRules.length;
+                        const LOGIC_OPTS=[
+                          {id:"independent", label:"Independent",        desc:"Each rule is evaluated and reported separately. An asset can pass some rules and fail others.", color:T.accent},
+                          {id:"and",         label:"AND — All must pass", desc:"Asset is compliant only when every rule passes. One failure = violation raised.",              color:T.green},
+                          {id:"or",          label:"OR — Any must pass",  desc:"Asset is compliant if at least one rule passes. All failing = violation raised.",              color:T.violet},
+                        ];
+                        return (
+                          <div style={{marginBottom:16}}>
+                            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Rule Evaluation Logic</div>
+                            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                              {LOGIC_OPTS.map(opt=>{
+                                const sel=rl===opt.id;
+                                return (
+                                  <button key={opt.id} onClick={()=>setNewPol(p=>({...p,ruleLogic:opt.id}))}
+                                    style={{display:"flex",alignItems:"flex-start",gap:10,padding:"9px 12px",borderRadius:8,border:`1.5px solid ${sel?opt.color:T.border}`,background:sel?`${opt.color}12`:T.bgElevated,cursor:"pointer",textAlign:"left",outline:"none",transition:"all .12s"}}>
+                                    <div style={{width:14,height:14,borderRadius:"50%",border:`2px solid ${sel?opt.color:T.border}`,background:sel?opt.color:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1,transition:"all .12s"}}>
+                                      {sel&&<div style={{width:5,height:5,borderRadius:"50%",background:"#fff"}}/>}
+                                    </div>
+                                    <div>
+                                      <span style={{fontSize:12,fontWeight:sel?700:500,color:sel?opt.color:T.text}}>{opt.label}</span>
+                                      <div style={{fontSize:11,color:T.textMuted,marginTop:1,lineHeight:1.5}}>{opt.desc}</div>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            {totalRules>1&&rl!=="independent"&&(
+                              <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",marginTop:8,background:(rl==="and"?T.green:T.violet)+"18",border:`1px solid ${(rl==="and"?T.green:T.violet)}30`,borderRadius:7,fontSize:11.5,color:rl==="and"?T.green:T.violet}}>
+                                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/><line x1="8" y1="5.5" x2="8" y2="8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="10.5" r=".6" fill="currentColor" stroke="none"/></svg>
+                                {rl==="and"
+                                  ? <span>All <strong>{totalRules} rules</strong> must pass — one failure flags the asset as non-compliant.</span>
+                                  : <span>Any <strong>1 of {totalRules} rules</strong> passing is enough — all must fail to raise a violation.</span>}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      {/* ── Rule Type tabs: Preset Rules / Custom ── */}
+                      <div style={{display:"flex",borderBottom:`2px solid ${T.border}`,marginBottom:16}}>
+                        {[{id:"preset",label:"Preset Rules",count:wizardRules.length},{id:"sql",label:"Custom",count:wizardSqlRules.length}].map(tab=>{
                           const sel=wizardRuleTab===tab.id;
                           return (
                             <button key={tab.id} onClick={()=>setWizardRuleTab(tab.id)}
-                              style={{display:"flex",alignItems:"center",gap:5,padding:"7px 16px",border:"none",background:sel?T.accent:"transparent",color:sel?"#fff":T.textSub,fontSize:11.5,fontWeight:sel?700:400,cursor:"pointer",transition:"all .12s",whiteSpace:"nowrap"}}>
+                              style={{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",border:"none",borderBottom:`2px solid ${sel?T.accent:"transparent"}`,marginBottom:"-2px",background:"transparent",color:sel?T.accent:T.textSub,fontSize:12,fontWeight:sel?700:400,cursor:"pointer",transition:"all .12s",whiteSpace:"nowrap",outline:"none"}}>
                               {tab.label}
-                              {tab.id==="preset"&&wizardRules.length>0&&<span style={{fontSize:10,fontWeight:700,background:sel?"rgba(255,255,255,.25)":T.accentDim,color:sel?"#fff":T.accent,borderRadius:99,padding:"1px 6px",marginLeft:2}}>{wizardRules.length}</span>}
-                              {tab.id==="sql"&&wizardSqlRules.length>0&&<span style={{fontSize:10,fontWeight:700,background:sel?"rgba(255,255,255,.25)":T.accentDim,color:sel?"#fff":T.accent,borderRadius:99,padding:"1px 6px",marginLeft:2}}>{wizardSqlRules.length}</span>}
+                              {tab.count>0&&<span style={{fontSize:10,fontWeight:700,background:sel?T.accentDim:T.bgElevated,color:sel?T.accent:T.textMuted,border:`1px solid ${sel?T.accent+"40":T.border}`,borderRadius:99,padding:"1px 7px"}}>{tab.count}</span>}
                             </button>
                           );
                         })}
@@ -7585,8 +7625,8 @@ const PolicyManagerView = ({onToast, onNav}) => {
                                           <select value={r.strategy} onChange={e=>updSqlRule(r.id,"strategy",e.target.value)}
                                             style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${r.strategy?T.accent:T.border}`,borderRadius:9,color:r.strategy?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer"}}>
                                             <option value="">Select strategy…</option>
-                                            <option value="ROWS">ROWS — count returned rows</option>
-                                            <option value="COUNT">COUNT — use COUNT() in query</option>
+                                            <option value="BINARY">Binary — pass if 0 rows returned, fail otherwise</option>
+                                            <option value="COUNT">Count — use COUNT() with threshold comparison</option>
                                           </select>
                                         </div>
                                         {/* Operator + Threshold */}
@@ -7635,56 +7675,8 @@ const PolicyManagerView = ({onToast, onNav}) => {
                         );
                       })()}
 
-                      {/* ── Preset tab: rule logic + rule list ── */}
+                      {/* ── Preset tab: rule list ── */}
                       {wizardRuleTab==="preset"&&<>
-
-                      {/* Rule Logic selector */}
-                      {(()=>{
-                        const rl = newPol.ruleLogic||"independent";
-                        const LOGIC_OPTS=[
-                          {id:"independent", label:"Independent",
-                           desc:"Each rule is evaluated and reported separately. An asset can pass some rules and fail others.",
-                           color:T.accent},
-                          {id:"and",         label:"AND — All must pass",
-                           desc:"Asset is compliant only when every rule passes. One failure = violation raised.",
-                           color:T.green},
-                          {id:"or",          label:"OR — Any must pass",
-                           desc:"Asset is compliant if at least one rule passes. All failing = violation raised.",
-                           color:T.violet},
-                        ];
-                        return (
-                          <div style={{marginBottom:14}}>
-                            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Rule Evaluation Logic</div>
-                            <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                              {LOGIC_OPTS.map(opt=>{
-                                const sel=rl===opt.id;
-                                return (
-                                  <button key={opt.id} onClick={()=>setNewPol(p=>({...p,ruleLogic:opt.id}))}
-                                    style={{display:"flex",alignItems:"flex-start",gap:10,padding:"9px 12px",borderRadius:8,border:`1.5px solid ${sel?opt.color:T.border}`,background:sel?`${opt.color}12`:T.bgElevated,cursor:"pointer",textAlign:"left",outline:"none",transition:"all .12s"}}>
-                                    <div style={{width:14,height:14,borderRadius:"50%",border:`2px solid ${sel?opt.color:T.border}`,background:sel?opt.color:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1,transition:"all .12s"}}>
-                                      {sel&&<div style={{width:5,height:5,borderRadius:"50%",background:"#fff"}}/>}
-                                    </div>
-                                    <div>
-                                      <span style={{fontSize:12,fontWeight:sel?700:500,color:sel?opt.color:T.text}}>{opt.label}</span>
-                                      <div style={{fontSize:11,color:T.textMuted,marginTop:1,lineHeight:1.5}}>{opt.desc}</div>
-                                    </div>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                      {/* Logic connector banner — shown only when 2+ rules and not independent */}
-                      {wizardRules.length>1&&(newPol.ruleLogic||"independent")!=="independent"&&(
-                        <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",background:(newPol.ruleLogic==="and"?T.green:T.violet)+"18",border:`1px solid ${(newPol.ruleLogic==="and"?T.green:T.violet)}30`,borderRadius:7,marginBottom:6,fontSize:11.5,color:newPol.ruleLogic==="and"?T.green:T.violet}}>
-                          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/><line x1="8" y1="5.5" x2="8" y2="8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="10.5" r=".6" fill="currentColor" stroke="none"/></svg>
-                          {newPol.ruleLogic==="and"
-                            ? <span>All <strong>{wizardRules.length} rules</strong> must pass — one failure flags the asset as non-compliant.</span>
-                            : <span>Any <strong>1 of {wizardRules.length} rules</strong> passing is enough — all must fail to raise a violation.</span>}
-                        </div>
-                      )}
 
                       {/* Rule list */}
                       <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:4}}>
@@ -7850,9 +7842,9 @@ const PolicyManagerView = ({onToast, onNav}) => {
                   const scopeAssetCount=(newPol.scope?.assetIds||[]).length;
                   const runMode=newPol.runMode||"draft";
                   const RUN_OPTS=[
-                    {id:"draft",  icon:"📋", label:"Save as Draft",    desc:"Create the policy without running it. Activate later after review."},
-                    {id:"run",    icon:"▶️",  label:"Save & Run Now",   desc:"Create and immediately evaluate against all scoped assets."},
-                    {id:"schedule",icon:"🗓️",label:"Save & Schedule",  desc:"Create and set a recurring evaluation schedule."},
+                    {id:"draft",   label:"Save as Draft",   desc:"Create the policy without running it. Activate later after review."},
+                    {id:"run",     label:"Save & Run Now",  desc:"Create and immediately evaluate against all scoped assets."},
+                    {id:"schedule",label:"Save & Schedule", desc:"Create and set a recurring evaluation schedule."},
                   ];
                   const inp_s={padding:"7px 10px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",fontFamily:"inherit"};
                   return (
@@ -7912,7 +7904,6 @@ const PolicyManagerView = ({onToast, onNav}) => {
                             return (
                               <button key={opt.id} onClick={()=>setNewPol(p=>({...p,runMode:opt.id}))}
                                 style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 14px",borderRadius:10,border:`2px solid ${sel?T.accent:T.border}`,background:sel?T.accentDim:T.bgElevated,cursor:"pointer",textAlign:"left",transition:"all .12s",outline:"none"}}>
-                                <span style={{fontSize:18,lineHeight:1.2,flexShrink:0,marginTop:1}}>{opt.icon}</span>
                                 <div>
                                   <div style={{fontSize:13,fontWeight:sel?700:500,color:sel?T.accent:T.text,marginBottom:2}}>{opt.label}</div>
                                   <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.5}}>{opt.desc}</div>
@@ -7929,8 +7920,8 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       {/* ── Inline schedule picker (shown only when runMode==="schedule") ── */}
                       {runMode==="schedule"&&(
                         <div style={{padding:"16px",background:T.bgElevated,border:`1.5px solid ${T.accent}40`,borderRadius:10,display:"flex",flexDirection:"column",gap:14}}>
-                          <div style={{fontSize:12,fontWeight:700,color:T.text,display:"flex",alignItems:"center",gap:6}}>
-                            🗓️ Evaluation Schedule
+                          <div style={{fontSize:12,fontWeight:700,color:T.text}}>
+                            Evaluation Schedule
                           </div>
                           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                             {["hourly","daily","weekly","custom"].map(f=>{
@@ -8003,7 +7994,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                   : (()=>{
                       const rm=newPol.runMode||"draft";
                       const canCreate=!!newPol.name.trim();
-                      const btnLabel = rm==="draft"?"📋 Save as Draft": rm==="run"?"▶ Save & Run Now":"🗓️ Save & Schedule";
+                      const btnLabel = rm==="draft"?"Save as Draft": rm==="run"?"Save & Run Now":"Save & Schedule";
                       const btnColor = rm==="run"?T.green: rm==="schedule"?T.violet:T.accent;
                       return (
                         <button onClick={()=>handleCreate(rm)} disabled={!canCreate}
