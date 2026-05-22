@@ -5688,6 +5688,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const [polEditCatOpen,  setPolEditCatOpen]  = useState(false);
   const [polEditCatDraft, setPolEditCatDraft] = useState(null);
   const [polBulkEdit,    setPolBulkEdit]    = useState(false);
+  const [isEditMode,     setIsEditMode]     = useState(false);
   const [polBulkDraft,   setPolBulkDraft]   = useState(null);
   const [polRenaming,    setPolRenaming]     = useState(null);
   const [polRenameDraft, setPolRenameDraft]  = useState("");
@@ -5759,7 +5760,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
     // Retention
     retention_period:"Retention Period (days)", last_accessed:"Last Accessed (days ago)",
   };
-  const closeWizard = () => { setCreateOpen(false); setNewPol(EMPTY_POL); setCreateStep(1); setWizardRules([]); setWizardRuleTab("preset"); setWizardSqlRules([]); };
+  const closeWizard = () => { setCreateOpen(false); setNewPol(EMPTY_POL); setCreateStep(1); setWizardRules([]); setWizardRuleTab("preset"); setWizardSqlRules([]); setIsEditMode(false); };
 
   // ─── computed ────────────────────────────────────────────────────────
   const POLICY_CATS = policyCategories.map(c=>c.name);
@@ -5844,6 +5845,17 @@ const PolicyManagerView = ({onToast, onNav}) => {
       schedule:schedObj,
       violations:0, compliancePct:null, lastEvaluated:null, assetsInScope:scopeCount,
       history:[{when:today(),who:"You",action:histAction}]};
+    if (isEditMode && selPolicyId) {
+      // Update existing policy, preserve id/created/history prefix
+      setPolicies(prev=>prev.map(existing=>existing.id===selPolicyId
+        ?{...p, id:selPolicyId, created:existing.created, lifecycle:existing.lifecycle||lifecycle,
+           history:[{when:today(),who:"You",action:"Updated policy"},...(existing.history||[])]}
+        :existing));
+      closeWizard();
+      setPdTab("overview");
+      onToast("Policy updated","success");
+      return;
+    }
     setPolicies(prev=>[...prev,p]);
     closeWizard();
     setSelPolicyId(p.id); setPdTab("overview");
@@ -5904,6 +5916,18 @@ const PolicyManagerView = ({onToast, onNav}) => {
     }
     setRulePanel(null);
     onToast(rulePanel?.mode==="edit"?"Rule updated":"Rule added","success");
+  };
+  const openEditWizard = (pol) => {
+    setNewPol({...pol});
+    // Convert existing rules back to wizard-compatible format
+    const presetBack = (pol.rules||[]).filter(r=>r.type==="preset"||(!r.type&&!r.sql)).map(r=>({id:r.id||`wr-${Date.now()}`,field:r.field||"certification",operator:r.operator||"is",value:r.value||"",table:r.table||"",column:r.column||"",severity:r.severity||"Medium"}));
+    const sqlBack    = (pol.rules||[]).filter(r=>r.type==="sql"||r.sql).map(r=>({id:r.id||`wsql-${Date.now()}`,label:r.label||r.name||"",table:r.table||"",sql:r.sql||"",strategy:r.strategy||"BINARY",operator:r.operator||"",threshold:r.threshold||"",partitionExpr:r.partitionExpr||"",severity:r.severity||"Medium"}));
+    setWizardRules(presetBack);
+    setWizardSqlRules(sqlBack);
+    setWizardRuleTab("preset");
+    setCreateStep(1);
+    setIsEditMode(true);
+    setCreateOpen(true);
   };
   const applyPolField = (field,value,histLabel) => {
     if (!selPol) return;
@@ -6332,7 +6356,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                                   onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                                   <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 9h8M6 2v5M4 4l2-2 2 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg> Rename
                                 </button>
-                                <button onMouseDown={e=>{e.stopPropagation();setSelPolicyId(p.id);setPdTab("overview");setPolBulkEdit(true);setPolBulkDraft({...p});setDotMenuOpen(null);}}
+                                <button onMouseDown={e=>{e.stopPropagation();setSelPolicyId(p.id);setPdTab("overview");openEditWizard(p);setDotMenuOpen(null);}}
                                   style={{width:"100%",padding:"9px 12px",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",fontSize:12,color:T.text,display:"flex",alignItems:"center",gap:8,borderBottom:`1px solid ${T.border}`}}
                                   onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                                   <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg> Edit
@@ -6406,7 +6430,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                             <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,width:152,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 8px 28px rgba(0,0,0,.2)",zIndex:400,overflow:"hidden"}}>
                               {[
                                 {label:"Rename",   icon:<svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 9h8M6 2v5M4 4l2-2 2 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>, action:()=>{setPolRenaming(p.id);setPolRenameDraft(p.name);setDetailDotOpen(false);}},
-                                {label:"Edit",     icon:<svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>, action:()=>{setPolBulkEdit(true);setPolBulkDraft({...p});setDetailDotOpen(false);}},
+                                {label:"Edit",     icon:<svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>, action:()=>{openEditWizard(p);setDetailDotOpen(false);}},
                                 {label:"Delete",   icon:<svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 5l.5 5M8 5l-.5 5M3 3l.5 7h5L9 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>, danger:true, action:()=>{setDeleteConfPol(p);setDetailDotOpen(false);}},
                               ].map((item,i,arr)=>(
                                 <button key={item.label} onClick={item.action}
@@ -6527,7 +6551,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                           {/* ── Scope summary ── */}
                           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
                             <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Scope</div>
-                            <button onClick={()=>{setPolBulkEdit(true);setPolBulkDraft({...p});}} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>Edit →</button>
+                            <button onClick={()=>openEditWizard(p)} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>Edit →</button>
                           </div>
                           <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:4}}>
                             {/* Domains */}
@@ -6801,9 +6825,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       };
 
                       return (
-                        <div style={{display:"flex",height:"100%",overflow:"hidden"}}>
-                          {/* Left: rule list */}
-                          <div style={{flex:1,padding:"20px 22px",overflowY:"auto",borderRight:rulePanel?`1px solid ${T.border}`:"none"}}>
+                        <div style={{padding:"20px 22px",overflowY:"auto",height:"100%",boxSizing:"border-box"}}>
                             {/* Header + Add Rule */}
                             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
                               <div>
@@ -6855,193 +6877,6 @@ const PolicyManagerView = ({onToast, onNav}) => {
                                 </div>
                               </div>
                             )}
-                          </div>
-
-                          {/* Right: Rule Add/Edit Panel */}
-                          {rulePanel&&(()=>{
-                            const W_RULE_FIELDS_SIMPLE = [
-                              {id:"certification",  label:"Certification Status",  ops:["is","is not"],                           vals:["Draft","In Review","Approved","Rejected","Deprecated"]},
-                              {id:"domain",         label:"Domain",                ops:["is","is not","is one of","is not one of"],vals:["Finance","HR","Operations","Legal","Technology","Marketing"]},
-                              {id:"tag",            label:"Tag",                   ops:["contains","does not contain"],           vals:[]},
-                              {id:"glossary_term",  label:"Glossary Term",         ops:["contains","does not contain"],           vals:[]},
-                              {id:"owner",          label:"Owner",                 ops:["is set","is not set"],                   vals:[]},
-                              {id:"steward",        label:"Steward",               ops:["is set","is not set"],                   vals:[]},
-                              {id:"data_product",   label:"Data Product",          ops:["is set","is not set"],                   vals:[]},
-                              {id:"description",    label:"Description",           ops:["is set","is not set"],                   vals:[]},
-                              {id:"quality_score",  label:"Quality Score",         ops:["greater than","less than","equals"],     vals:[]},
-                              {id:"null_rate",      label:"Null Rate (%)",         ops:["greater than","less than","equals"],     vals:[]},
-                              {id:"completeness",   label:"Completeness (%)",      ops:["greater than","less than","equals"],     vals:[]},
-                              {id:"row_count",      label:"Row Count",             ops:["greater than","less than","equals"],     vals:[]},
-                              {id:"duplicate_rate", label:"Duplicate Rate (%)",    ops:["greater than","less than","equals"],     vals:[]},
-                              {id:"retention_period",label:"Retention Period (days)",ops:["greater than","less than","equals"],  vals:[]},
-                              {id:"last_accessed",  label:"Last Accessed (days ago)",ops:["greater than","less than","equals"],  vals:[]},
-                              {id:"archive_status", label:"Archive Status",        ops:["is","is not"],                           vals:["Archived","Active","Pending Archival"]},
-                            ];
-                            const selField = W_RULE_FIELDS_SIMPLE.find(f=>f.id===rpPreset.field)||W_RULE_FIELDS_SIMPLE[0];
-                            const valOptions = selField.vals||[];
-                            const needsValue = !["is set","is not set"].includes(rpPreset.operator);
-                            const lbl2 = {fontSize:11,fontWeight:600,color:T.textMuted,marginBottom:5,display:"block"};
-                            const inp2 = {width:"100%",padding:"7px 10px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box"};
-                            const allTables2 = ASSETS.filter(a=>!!ASSET_COLUMNS[a.name]).map(a=>a.name);
-                            return (
-                              <div style={{width:300,flexShrink:0,display:"flex",flexDirection:"column",background:T.bgSurface,overflowY:"auto"}}>
-                                {/* Panel header */}
-                                <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                                  <div style={{fontSize:13,fontWeight:700,color:T.text}}>{rulePanel.mode==="add"?"Add Rule":"Edit Rule"}</div>
-                                  <button onClick={()=>setRulePanel(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:17,padding:0,lineHeight:1}}>×</button>
-                                </div>
-
-                                {/* Tab strip */}
-                                <div style={{display:"flex",borderBottom:`2px solid ${T.border}`,flexShrink:0,padding:"0 12px"}}>
-                                  {[{id:"preset",label:"Preset"},{id:"sql",label:"Custom"}].map(tab=>{
-                                    const sel=rpTab===tab.id;
-                                    return (
-                                      <button key={tab.id} onClick={()=>setRpTab(tab.id)}
-                                        style={{padding:"8px 12px",border:"none",borderBottom:`2px solid ${sel?T.accent:"transparent"}`,marginBottom:"-2px",background:"transparent",color:sel?T.accent:T.textMuted,fontSize:12,fontWeight:sel?700:400,cursor:"pointer",outline:"none",whiteSpace:"nowrap"}}>
-                                        {tab.label}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-
-                                {/* Panel body */}
-                                <div style={{flex:1,overflowY:"auto",padding:"16px"}}>
-                                  {rpTab==="preset"&&(
-                                    <div style={{display:"flex",flexDirection:"column",gap:13}}>
-                                      {/* Field */}
-                                      <div>
-                                        <label style={lbl2}>Field</label>
-                                        <select value={rpPreset.field} onChange={e=>setRpPreset(r=>({...r,field:e.target.value,operator:W_RULE_FIELDS_SIMPLE.find(f=>f.id===e.target.value)?.ops[0]||"is",value:""}))} style={{...inp2,cursor:"pointer"}}>
-                                          {W_RULE_FIELDS_SIMPLE.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}
-                                        </select>
-                                      </div>
-                                      {/* Operator */}
-                                      <div>
-                                        <label style={lbl2}>Operator</label>
-                                        <select value={rpPreset.operator} onChange={e=>setRpPreset(r=>({...r,operator:e.target.value,value:""}))} style={{...inp2,cursor:"pointer"}}>
-                                          {selField.ops.map(op=><option key={op} value={op}>{op}</option>)}
-                                        </select>
-                                      </div>
-                                      {/* Value */}
-                                      {needsValue&&(
-                                        <div>
-                                          <label style={lbl2}>Value</label>
-                                          {valOptions.length>0
-                                            ? <select value={rpPreset.value} onChange={e=>setRpPreset(r=>({...r,value:e.target.value}))} style={{...inp2,cursor:"pointer"}}>
-                                                <option value="">Select…</option>
-                                                {valOptions.map(v=><option key={v} value={v}>{v}</option>)}
-                                              </select>
-                                            : <input type="text" value={rpPreset.value} onChange={e=>setRpPreset(r=>({...r,value:e.target.value}))} placeholder="Enter value…" style={inp2}
-                                                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                                          }
-                                        </div>
-                                      )}
-                                      {/* Table */}
-                                      <div>
-                                        <label style={lbl2}>Target Table <span style={{fontWeight:400,color:T.textMuted}}>(optional)</span></label>
-                                        <select value={rpPreset.table} onChange={e=>setRpPreset(r=>({...r,table:e.target.value,column:""}))} style={{...inp2,cursor:"pointer"}}>
-                                          <option value="">Any table</option>
-                                          {allTables2.map(t=><option key={t} value={t}>{t}</option>)}
-                                        </select>
-                                      </div>
-                                      {/* Column */}
-                                      {rpPreset.table&&(
-                                        <div>
-                                          <label style={lbl2}>Column <span style={{fontWeight:400,color:T.textMuted}}>(optional)</span></label>
-                                          <select value={rpPreset.column} onChange={e=>setRpPreset(r=>({...r,column:e.target.value}))} style={{...inp2,cursor:"pointer"}}>
-                                            <option value="">Any column (table-level)</option>
-                                            {(ASSET_COLUMNS[rpPreset.table]||[]).map(c=><option key={c} value={c}>{c}</option>)}
-                                          </select>
-                                        </div>
-                                      )}
-                                      {/* Severity */}
-                                      <div>
-                                        <label style={lbl2}>Severity</label>
-                                        <select value={rpPreset.severity} onChange={e=>setRpPreset(r=>({...r,severity:e.target.value}))} style={{...inp2,cursor:"pointer"}}>
-                                          {["Critical","High","Medium","Low"].map(s=><option key={s} value={s}>{s}</option>)}
-                                        </select>
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {rpTab==="sql"&&(
-                                    <div style={{display:"flex",flexDirection:"column",gap:13}}>
-                                      {/* Rule name */}
-                                      <div>
-                                        <label style={lbl2}>Rule Name</label>
-                                        <input type="text" value={rpSql.label} onChange={e=>setRpSql(r=>({...r,label:e.target.value}))} placeholder="e.g. PII null check" style={inp2}
-                                          onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                                      </div>
-                                      {/* Target table */}
-                                      <div>
-                                        <label style={lbl2}>Target Table</label>
-                                        <select value={rpSql.table} onChange={e=>setRpSql(r=>({...r,table:e.target.value}))} style={{...inp2,cursor:"pointer"}}>
-                                          <option value="">Select table…</option>
-                                          {allTables2.map(t=><option key={t} value={t}>{t}</option>)}
-                                        </select>
-                                      </div>
-                                      {/* SQL expression */}
-                                      <div>
-                                        <label style={lbl2}>SQL Expression</label>
-                                        <textarea value={rpSql.sql} onChange={e=>setRpSql(r=>({...r,sql:e.target.value}))} rows={5} placeholder="SELECT * FROM {{table}} WHERE …" style={{...inp2,resize:"vertical",fontFamily:"'Geist Mono','Courier New',monospace",fontSize:11.5,lineHeight:1.6}}
-                                          onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                                      </div>
-                                      {/* Strategy */}
-                                      <div>
-                                        <label style={lbl2}>Strategy</label>
-                                        <select value={rpSql.strategy} onChange={e=>setRpSql(r=>({...r,strategy:e.target.value,operator:"",threshold:""}))} style={{...inp2,cursor:"pointer"}}>
-                                          <option value="BINARY">Binary — pass if 0 rows returned</option>
-                                          <option value="COUNT">Count — compare row count with threshold</option>
-                                        </select>
-                                      </div>
-                                      {/* Operator + Threshold (Count only) */}
-                                      {rpSql.strategy==="COUNT"&&(
-                                        <div style={{display:"flex",gap:8}}>
-                                          <div style={{flex:1}}>
-                                            <label style={lbl2}>Operator</label>
-                                            <select value={rpSql.operator} onChange={e=>setRpSql(r=>({...r,operator:e.target.value}))} style={{...inp2,cursor:"pointer"}}>
-                                              <option value="">Select…</option>
-                                              {["greater than","less than","equals"].map(op=><option key={op} value={op}>{op}</option>)}
-                                            </select>
-                                          </div>
-                                          <div style={{flex:1}}>
-                                            <label style={lbl2}>Threshold</label>
-                                            <input type="number" value={rpSql.threshold} onChange={e=>setRpSql(r=>({...r,threshold:e.target.value}))} placeholder="0" style={inp2}
-                                              onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                                          </div>
-                                        </div>
-                                      )}
-                                      {/* Partition expression */}
-                                      <div>
-                                        <label style={lbl2}>Partition Expression <span style={{fontWeight:400,color:T.textMuted}}>(optional)</span></label>
-                                        <input type="text" value={rpSql.partitionExpr} onChange={e=>setRpSql(r=>({...r,partitionExpr:e.target.value}))} placeholder="e.g. DATE(created_at)" style={inp2}
-                                          onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                                      </div>
-                                      {/* Severity */}
-                                      <div>
-                                        <label style={lbl2}>Severity</label>
-                                        <select value={rpSql.severity} onChange={e=>setRpSql(r=>({...r,severity:e.target.value}))} style={{...inp2,cursor:"pointer"}}>
-                                          {["Critical","High","Medium","Low"].map(s=><option key={s} value={s}>{s}</option>)}
-                                        </select>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* Panel footer */}
-                                <div style={{padding:"12px 16px",borderTop:`1px solid ${T.border}`,flexShrink:0,display:"flex",gap:8}}>
-                                  <button onClick={saveRulePanel}
-                                    style={{flex:1,padding:"8px 0",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
-                                    {rulePanel.mode==="add"?"Add Rule":"Save Changes"}
-                                  </button>
-                                  <button onClick={()=>setRulePanel(null)}
-                                    style={{padding:"8px 14px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer",fontFamily:"inherit"}}>
-                                    Cancel
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })()}
                         </div>
                       );
                     })()}
@@ -7198,8 +7033,8 @@ const PolicyManagerView = ({onToast, onNav}) => {
                     )}
                   </div>
                 </div>
-                {/* ── Bulk Edit Panel ── */}
-                {polBulkEdit&&polBulkDraft&&polBulkDraft.id===p.id&&(()=>{
+                {/* ── Bulk Edit Panel removed — Edit now uses wizard ── */}
+                {false&&false&&(()=>{
                   const bd = polBulkDraft;
                   const lbl3 = {fontSize:11,fontWeight:600,color:T.textMuted,marginBottom:5,display:"block"};
                   const inp3 = {width:"100%",padding:"7px 10px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box"};
@@ -7770,6 +7605,196 @@ const PolicyManagerView = ({onToast, onNav}) => {
 
       {/* ════ PANELS & MODALS ════ */}
 
+      {/* ══ Rule Add/Edit Panel — Fixed Right Drawer ══ */}
+      {rulePanel&&selPol&&(()=>{
+        const p2 = selPol;
+        const W_RULE_FIELDS_SIMPLE = [
+          {id:"certification",  label:"Certification Status",  ops:["is","is not"],                           vals:["Draft","In Review","Approved","Rejected","Deprecated"]},
+          {id:"domain",         label:"Domain",                ops:["is","is not","is one of","is not one of"],vals:["Finance","HR","Operations","Legal","Technology","Marketing"]},
+          {id:"tag",            label:"Tag",                   ops:["contains","does not contain"],           vals:[]},
+          {id:"glossary_term",  label:"Glossary Term",         ops:["contains","does not contain"],           vals:[]},
+          {id:"owner",          label:"Owner",                 ops:["is set","is not set"],                   vals:[]},
+          {id:"steward",        label:"Steward",               ops:["is set","is not set"],                   vals:[]},
+          {id:"data_product",   label:"Data Product",          ops:["is set","is not set"],                   vals:[]},
+          {id:"description",    label:"Description",           ops:["is set","is not set"],                   vals:[]},
+          {id:"quality_score",  label:"Quality Score",         ops:["greater than","less than","equals"],     vals:[]},
+          {id:"null_rate",      label:"Null Rate (%)",         ops:["greater than","less than","equals"],     vals:[]},
+          {id:"completeness",   label:"Completeness (%)",      ops:["greater than","less than","equals"],     vals:[]},
+          {id:"row_count",      label:"Row Count",             ops:["greater than","less than","equals"],     vals:[]},
+          {id:"duplicate_rate", label:"Duplicate Rate (%)",    ops:["greater than","less than","equals"],     vals:[]},
+          {id:"retention_period",label:"Retention Period (days)",ops:["greater than","less than","equals"],  vals:[]},
+          {id:"last_accessed",  label:"Last Accessed (days ago)",ops:["greater than","less than","equals"],  vals:[]},
+          {id:"archive_status", label:"Archive Status",        ops:["is","is not"],                           vals:["Archived","Active","Pending Archival"]},
+        ];
+        const selField = W_RULE_FIELDS_SIMPLE.find(f=>f.id===rpPreset.field)||W_RULE_FIELDS_SIMPLE[0];
+        const valOptions = selField.vals||[];
+        const needsValue = !["is set","is not set"].includes(rpPreset.operator);
+        const lbl2 = {fontSize:11,fontWeight:600,color:T.textMuted,marginBottom:5,display:"block"};
+        const inp2 = {width:"100%",padding:"7px 10px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box"};
+        const allTables2 = ASSETS.filter(a=>!!ASSET_COLUMNS[a.name]).map(a=>a.name);
+        return (
+          <>
+            <div onClick={()=>setRulePanel(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:1198}}/>
+            <div className="slideInRight" style={{position:"fixed",right:0,top:0,height:"100vh",width:420,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:1199,display:"flex",flexDirection:"column",boxShadow:"-16px 0 48px rgba(0,0,0,.28)"}}>
+              {/* Header */}
+              <div style={{padding:"16px 20px 14px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{width:28,height:28,borderRadius:6,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent}}>
+                      <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M7 1L2 4v3c0 2.8 2.2 4.5 5 5 2.8-.5 5-2.2 5-5V4L7 1z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </div>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:700,color:T.text}}>{rulePanel.mode==="add"?"Add Rule":"Edit Rule"}</div>
+                      <div style={{fontSize:11,color:T.textMuted}}>{p2.name}</div>
+                    </div>
+                  </div>
+                  <button onClick={()=>setRulePanel(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:4}}>
+                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Tab strip */}
+              <div style={{display:"flex",borderBottom:`2px solid ${T.border}`,flexShrink:0,padding:"0 16px"}}>
+                {[{id:"preset",label:"Preset Rules"},{id:"sql",label:"Custom"}].map(tab=>{
+                  const sel=rpTab===tab.id;
+                  return (
+                    <button key={tab.id} onClick={()=>setRpTab(tab.id)}
+                      style={{padding:"9px 14px",border:"none",borderBottom:`2px solid ${sel?T.accent:"transparent"}`,marginBottom:"-2px",background:"transparent",color:sel?T.accent:T.textMuted,fontSize:12,fontWeight:sel?700:400,cursor:"pointer",outline:"none",whiteSpace:"nowrap",transition:"all .1s"}}>
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Body */}
+              <div style={{flex:1,overflowY:"auto",padding:"20px"}}>
+                {rpTab==="preset"&&(
+                  <div style={{display:"flex",flexDirection:"column",gap:14}}>
+                    <div>
+                      <label style={lbl2}>Field</label>
+                      <select value={rpPreset.field} onChange={e=>setRpPreset(r=>({...r,field:e.target.value,operator:W_RULE_FIELDS_SIMPLE.find(f=>f.id===e.target.value)?.ops[0]||"is",value:""}))} style={{...inp2,cursor:"pointer"}}>
+                        {W_RULE_FIELDS_SIMPLE.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={lbl2}>Operator</label>
+                      <select value={rpPreset.operator} onChange={e=>setRpPreset(r=>({...r,operator:e.target.value,value:""}))} style={{...inp2,cursor:"pointer"}}>
+                        {selField.ops.map(op=><option key={op} value={op}>{op}</option>)}
+                      </select>
+                    </div>
+                    {needsValue&&(
+                      <div>
+                        <label style={lbl2}>Value</label>
+                        {valOptions.length>0
+                          ? <select value={rpPreset.value} onChange={e=>setRpPreset(r=>({...r,value:e.target.value}))} style={{...inp2,cursor:"pointer"}}>
+                              <option value="">Select…</option>
+                              {valOptions.map(v=><option key={v} value={v}>{v}</option>)}
+                            </select>
+                          : <input type="text" value={rpPreset.value} onChange={e=>setRpPreset(r=>({...r,value:e.target.value}))} placeholder="Enter value…" style={inp2}
+                              onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                        }
+                      </div>
+                    )}
+                    <div>
+                      <label style={lbl2}>Target Table <span style={{fontWeight:400,color:T.textMuted}}>(optional)</span></label>
+                      <select value={rpPreset.table} onChange={e=>setRpPreset(r=>({...r,table:e.target.value,column:""}))} style={{...inp2,cursor:"pointer"}}>
+                        <option value="">Any table</option>
+                        {allTables2.map(t=><option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    {rpPreset.table&&(
+                      <div>
+                        <label style={lbl2}>Column <span style={{fontWeight:400,color:T.textMuted}}>(optional)</span></label>
+                        <select value={rpPreset.column} onChange={e=>setRpPreset(r=>({...r,column:e.target.value}))} style={{...inp2,cursor:"pointer"}}>
+                          <option value="">Any column (table-level)</option>
+                          {(ASSET_COLUMNS[rpPreset.table]||[]).map(c=><option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                    )}
+                    <div>
+                      <label style={lbl2}>Severity</label>
+                      <select value={rpPreset.severity} onChange={e=>setRpPreset(r=>({...r,severity:e.target.value}))} style={{...inp2,cursor:"pointer"}}>
+                        {["Critical","High","Medium","Low"].map(s=><option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {rpTab==="sql"&&(
+                  <div style={{display:"flex",flexDirection:"column",gap:14}}>
+                    <div>
+                      <label style={lbl2}>Rule Name</label>
+                      <input type="text" value={rpSql.label} onChange={e=>setRpSql(r=>({...r,label:e.target.value}))} placeholder="e.g. PII null check" style={inp2}
+                        onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                    </div>
+                    <div>
+                      <label style={lbl2}>Target Table</label>
+                      <select value={rpSql.table} onChange={e=>setRpSql(r=>({...r,table:e.target.value}))} style={{...inp2,cursor:"pointer"}}>
+                        <option value="">Select table…</option>
+                        {allTables2.map(t=><option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={lbl2}>SQL Expression</label>
+                      <textarea value={rpSql.sql} onChange={e=>setRpSql(r=>({...r,sql:e.target.value}))} rows={5} placeholder="SELECT * FROM {{table}} WHERE …" style={{...inp2,resize:"vertical",fontFamily:"'Geist Mono','Courier New',monospace",fontSize:11.5,lineHeight:1.6}}
+                        onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                    </div>
+                    <div>
+                      <label style={lbl2}>Strategy</label>
+                      <select value={rpSql.strategy} onChange={e=>setRpSql(r=>({...r,strategy:e.target.value,operator:"",threshold:""}))} style={{...inp2,cursor:"pointer"}}>
+                        <option value="BINARY">Binary — pass if 0 rows returned</option>
+                        <option value="COUNT">Count — compare row count with threshold</option>
+                      </select>
+                    </div>
+                    {rpSql.strategy==="COUNT"&&(
+                      <div style={{display:"flex",gap:8}}>
+                        <div style={{flex:1}}>
+                          <label style={lbl2}>Operator</label>
+                          <select value={rpSql.operator} onChange={e=>setRpSql(r=>({...r,operator:e.target.value}))} style={{...inp2,cursor:"pointer"}}>
+                            <option value="">Select…</option>
+                            {["greater than","less than","equals"].map(op=><option key={op} value={op}>{op}</option>)}
+                          </select>
+                        </div>
+                        <div style={{flex:1}}>
+                          <label style={lbl2}>Threshold</label>
+                          <input type="number" value={rpSql.threshold} onChange={e=>setRpSql(r=>({...r,threshold:e.target.value}))} placeholder="0" style={inp2}
+                            onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                        </div>
+                      </div>
+                    )}
+                    <div>
+                      <label style={lbl2}>Partition Expression <span style={{fontWeight:400,color:T.textMuted}}>(optional)</span></label>
+                      <input type="text" value={rpSql.partitionExpr} onChange={e=>setRpSql(r=>({...r,partitionExpr:e.target.value}))} placeholder="e.g. DATE(created_at)" style={inp2}
+                        onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                    </div>
+                    <div>
+                      <label style={lbl2}>Severity</label>
+                      <select value={rpSql.severity} onChange={e=>setRpSql(r=>({...r,severity:e.target.value}))} style={{...inp2,cursor:"pointer"}}>
+                        {["Critical","High","Medium","Low"].map(s=><option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,flexShrink:0,display:"flex",gap:8}}>
+                <button onClick={saveRulePanel}
+                  style={{flex:1,padding:"9px 0",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",transition:"all .1s"}}
+                  onMouseEnter={e=>e.currentTarget.style.opacity="0.88"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+                  {rulePanel.mode==="add"?"Add Rule":"Save Changes"}
+                </button>
+                <button onClick={()=>setRulePanel(null)}
+                  style={{padding:"9px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </>
+        );
+      })()}
+
       {/* ══ Create Policy — Multi-Step Right Panel ══ */}
       {createOpen&&(
         <>
@@ -7782,7 +7807,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                 <div style={{display:"flex",alignItems:"center",gap:10}}>
                   <div style={{width:30,height:30,borderRadius:7,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent}}>{Ic.shield(14)}</div>
                   <div>
-                    <div style={{fontSize:14,fontWeight:700,color:T.text}}>New Policy</div>
+                    <div style={{fontSize:14,fontWeight:700,color:T.text}}>{isEditMode?"Edit Policy":"New Policy"}</div>
                     <div style={{fontSize:11,color:T.textMuted}}>{W_STEPS[createStep-1].label}</div>
                   </div>
                 </div>
@@ -8563,7 +8588,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       ))}
 
                       {/* ── Launch Mode ── */}
-                      <div>
+                      {!isEditMode&&(<div>
                         <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>How do you want to launch this policy?</div>
                         <div style={{display:"flex",flexDirection:"column",gap:8}}>
                           {RUN_OPTS.map(opt=>{
@@ -8582,10 +8607,10 @@ const PolicyManagerView = ({onToast, onNav}) => {
                             );
                           })}
                         </div>
-                      </div>
+                      </div>)}
 
                       {/* ── Inline schedule picker (shown only when runMode==="schedule") ── */}
-                      {runMode==="schedule"&&(
+                      {!isEditMode&&runMode==="schedule"&&(
                         <div style={{padding:"16px",background:T.bgElevated,border:`1.5px solid ${T.accent}40`,borderRadius:10,display:"flex",flexDirection:"column",gap:14}}>
                           <div style={{fontSize:12,fontWeight:700,color:T.text}}>
                             Evaluation Schedule
@@ -8661,10 +8686,10 @@ const PolicyManagerView = ({onToast, onNav}) => {
                   : (()=>{
                       const rm=newPol.runMode||"draft";
                       const canCreate=!!newPol.name.trim();
-                      const btnLabel = rm==="draft"?"Save as Draft": rm==="run"?"Save & Run Now":"Save & Schedule";
-                      const btnColor = rm==="run"?T.green: rm==="schedule"?T.violet:T.accent;
+                      const btnLabel = isEditMode?"Save" : rm==="draft"?"Save as Draft": rm==="run"?"Save & Run Now":"Save & Schedule";
+                      const btnColor = isEditMode?T.accent : rm==="run"?T.green: rm==="schedule"?T.violet:T.accent;
                       return (
-                        <button onClick={()=>handleCreate(rm)} disabled={!canCreate}
+                        <button onClick={()=>handleCreate(isEditMode?"draft":rm)} disabled={!canCreate}
                           style={{padding:"7px 22px",borderRadius:7,background:canCreate?btnColor:T.bgElevated,border:`1px solid ${canCreate?btnColor:T.border}`,color:canCreate?"#fff":T.textMuted,fontSize:12,fontWeight:700,cursor:canCreate?"pointer":"not-allowed",transition:"all .15s"}}>
                           {btnLabel}
                         </button>
