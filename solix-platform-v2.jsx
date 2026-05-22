@@ -7513,14 +7513,13 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       {/* ── Rules ── */}
                       {secHead("Rules","Define the conditions evaluated against each in-scope asset.")}
 
-                      {/* ── Rule Type tabs: Preset / Custom SQL ── */}
-                      <div style={{display:"flex",gap:0,borderRadius:8,overflow:"hidden",border:`1.5px solid ${T.border}`,background:T.bgElevated,marginBottom:14,alignSelf:"flex-start"}}>
-                        {[{id:"preset",label:"Preset Rules",icon:"⚙️"},{id:"sql",label:"Custom SQL",icon:"🗄️"}].map(tab=>{
+                      {/* ── Rule Type tabs: Preset / Custom ── */}
+                      <div style={{display:"inline-flex",borderRadius:8,overflow:"hidden",border:`1.5px solid ${T.border}`,background:T.bgElevated,marginBottom:14}}>
+                        {[{id:"preset",label:"Preset Rules"},{id:"sql",label:"Custom"}].map(tab=>{
                           const sel=wizardRuleTab===tab.id;
                           return (
                             <button key={tab.id} onClick={()=>setWizardRuleTab(tab.id)}
-                              style={{display:"flex",alignItems:"center",gap:6,padding:"8px 18px",border:"none",background:sel?T.accent:"transparent",color:sel?"#fff":T.textSub,fontSize:12,fontWeight:sel?700:400,cursor:"pointer",transition:"all .12s",whiteSpace:"nowrap"}}>
-                              <span style={{fontSize:13}}>{tab.icon}</span>
+                              style={{display:"flex",alignItems:"center",gap:5,padding:"7px 16px",border:"none",background:sel?T.accent:"transparent",color:sel?"#fff":T.textSub,fontSize:11.5,fontWeight:sel?700:400,cursor:"pointer",transition:"all .12s",whiteSpace:"nowrap"}}>
                               {tab.label}
                               {tab.id==="preset"&&wizardRules.length>0&&<span style={{fontSize:10,fontWeight:700,background:sel?"rgba(255,255,255,.25)":T.accentDim,color:sel?"#fff":T.accent,borderRadius:99,padding:"1px 6px",marginLeft:2}}>{wizardRules.length}</span>}
                               {tab.id==="sql"&&wizardSqlRules.length>0&&<span style={{fontSize:10,fontWeight:700,background:sel?"rgba(255,255,255,.25)":T.accentDim,color:sel?"#fff":T.accent,borderRadius:99,padding:"1px 6px",marginLeft:2}}>{wizardSqlRules.length}</span>}
@@ -7529,57 +7528,98 @@ const PolicyManagerView = ({onToast, onNav}) => {
                         })}
                       </div>
 
-                      {/* ── Custom SQL tab content ── */}
+                      {/* ── Custom tab content ── */}
                       {wizardRuleTab==="sql"&&(()=>{
-                        const addSqlRule = () => setWizardSqlRules(prev=>[...prev,{id:`wsql-${Date.now()}`,table:"",label:"",sql:"",severity:"Medium"}]);
+                        const addSqlRule = () => setWizardSqlRules(prev=>[...prev,{id:`wsql-${Date.now()}`,table:"",label:"",sql:"",strategy:"",operator:"",threshold:"",partitionExpr:"",severity:"Medium"}]);
                         const removeSqlRule = id => setWizardSqlRules(prev=>prev.filter(r=>r.id!==id));
                         const updSqlRule = (id,k,v) => setWizardSqlRules(prev=>prev.map(r=>r.id===id?{...r,[k]:v}:r));
                         return (
                           <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:4}}>
-                            <div style={{fontSize:11,color:T.textMuted,marginBottom:4,lineHeight:1.6}}>
-                              Write SQL that returns rows representing data problems. The rule passes when <strong style={{color:T.text}}>0 rows</strong> are returned.
-                            </div>
                             {wizardSqlRules.length===0
                               ? <div style={{padding:"24px 20px",textAlign:"center",background:T.bgElevated,borderRadius:10,border:`1.5px dashed ${T.border}`}}>
-                                  <div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>No SQL rules yet — write a custom condition.</div>
-                                  <button onClick={addSqlRule} style={{padding:"7px 18px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>+ Add SQL Rule</button>
+                                  <div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>No custom rules yet — write a SQL condition.</div>
+                                  <button onClick={addSqlRule} style={{padding:"7px 18px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>+ Add Rule</button>
                                 </div>
                               : <>
                                   {wizardSqlRules.map((r,ri)=>(
-                                    <div key={r.id} style={{background:T.bgElevated,borderRadius:9,border:`1.5px solid ${T.border}`}}>
+                                    <div key={r.id} style={{background:T.bgElevated,borderRadius:9,border:`1.5px solid ${T.border}`,marginBottom:4}}>
                                       {/* Header */}
-                                      <div style={{padding:"8px 12px 0",display:"flex",alignItems:"center",gap:8}}>
-                                        <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",flex:1}}>SQL Rule {ri+1}</span>
+                                      <div style={{padding:"8px 12px 6px",display:"flex",alignItems:"center",gap:8,borderBottom:`1px solid ${T.border}`}}>
+                                        <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",flex:1}}>Rule {ri+1}</span>
                                         <SevBadge ruleId={r.id+"sql"} sev={r.severity||"Medium"} onChangeSev={sv=>updSqlRule(r.id,"severity",sv)}/>
                                         <button onClick={()=>removeSqlRule(r.id)} title="Remove"
                                           style={{width:22,height:22,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}
                                           onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
                                           onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>×</button>
                                       </div>
-                                      <div style={{padding:"8px 12px 12px",display:"flex",flexDirection:"column",gap:8}}>
-                                        {/* Label */}
+                                      <div style={{padding:"10px 12px 12px",display:"flex",flexDirection:"column",gap:10}}>
+                                        {/* Rule Name */}
                                         <div>
-                                          <label style={{...lbl,marginBottom:3}}>Rule Name</label>
+                                          <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Rule Name</label>
                                           <input type="text" value={r.label} onChange={e=>updSqlRule(r.id,"label",e.target.value)}
                                             placeholder="e.g. No null emails in active users…"
-                                            style={inp} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                                            style={{width:"100%",padding:"8px 11px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+                                            onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
                                         </div>
-                                        {/* Table */}
+                                        {/* Target Table */}
                                         <div>
-                                          <label style={{...lbl,marginBottom:3}}>Target Table <span style={{color:T.rose}}>*</span></label>
-                                          <select value={r.table} onChange={e=>updSqlRule(r.id,"table",e.target.value)} style={{...inp,cursor:"pointer",appearance:"auto"}}>
-                                            <option value="">— select table —</option>
+                                          <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Target Table <span style={{color:T.rose}}>*</span></label>
+                                          <select value={r.table} onChange={e=>updSqlRule(r.id,"table",e.target.value)}
+                                            style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${r.table?T.accent:T.border}`,borderRadius:9,color:r.table?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
+                                            <option value="">Select a table…</option>
                                             {availTables.map(a=><option key={a.name} value={a.name}>{a.name} ({a.type})</option>)}
                                           </select>
                                         </div>
-                                        {/* SQL */}
+                                        {/* SQL Expression */}
                                         <div>
-                                          <label style={{...lbl,marginBottom:3}}>SQL Expression <span style={{color:T.rose}}>*</span></label>
+                                          <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>SQL Expression <span style={{color:T.rose}}>*</span></label>
                                           <textarea value={r.sql} onChange={e=>updSqlRule(r.id,"sql",e.target.value)} rows={4}
-                                            placeholder={"SELECT *\nFROM {{table}}\nWHERE email IS NULL\n  AND status = 'active'"}
-                                            style={{...inp,resize:"vertical",fontFamily:"'Geist Mono','Courier New',monospace",fontSize:11.5,lineHeight:1.6}}
+                                            placeholder={"SELECT * FROM {{table}} WHERE amount < 0"}
+                                            style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${r.sql?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box",lineHeight:1.6}}
+                                            onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=r.sql?T.accent:T.border}/>
+                                          <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>Write SQL that returns rows representing problems. Test passes when 0 rows are returned.</div>
+                                        </div>
+                                        {/* Strategy */}
+                                        <div>
+                                          <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Strategy <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
+                                          <select value={r.strategy} onChange={e=>updSqlRule(r.id,"strategy",e.target.value)}
+                                            style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${r.strategy?T.accent:T.border}`,borderRadius:9,color:r.strategy?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer"}}>
+                                            <option value="">Select strategy…</option>
+                                            <option value="ROWS">ROWS — count returned rows</option>
+                                            <option value="COUNT">COUNT — use COUNT() in query</option>
+                                          </select>
+                                        </div>
+                                        {/* Operator + Threshold */}
+                                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                                          <div>
+                                            <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Operator <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
+                                            <select value={r.operator} onChange={e=>updSqlRule(r.id,"operator",e.target.value)}
+                                              style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${r.operator?T.accent:T.border}`,borderRadius:9,color:r.operator?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer"}}>
+                                              <option value="">Select…</option>
+                                              <option value="==">== equals</option>
+                                              <option value=">">&gt; greater than</option>
+                                              <option value=">=">&gt;= greater or equal</option>
+                                              <option value="<">&lt; less than</option>
+                                              <option value="<=">&lt;= less or equal</option>
+                                              <option value="!=">!= not equal</option>
+                                            </select>
+                                          </div>
+                                          <div>
+                                            <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Threshold <span style={{color:T.textMuted,fontWeight:400}}>(default: 0)</span></label>
+                                            <input type="number" value={r.threshold} onChange={e=>updSqlRule(r.id,"threshold",e.target.value)}
+                                              placeholder="0"
+                                              style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${r.threshold!==""?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box"}}
+                                              onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                                          </div>
+                                        </div>
+                                        {/* Partition Expression */}
+                                        <div>
+                                          <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Partition Expression <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
+                                          <input value={r.partitionExpr} onChange={e=>updSqlRule(r.id,"partitionExpr",e.target.value)}
+                                            placeholder="e.g. created_date"
+                                            style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${r.partitionExpr?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"'Geist Mono',monospace"}}
                                             onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                                          <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>Use <code style={{background:T.bgElevated,padding:"1px 4px",borderRadius:3}}>{"{{table}}"}</code> to reference the selected table. Rule passes when query returns 0 rows.</div>
+                                          <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>SQL expression to group results for row-level analysis.</div>
                                         </div>
                                       </div>
                                     </div>
@@ -7587,7 +7627,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                                   <button onClick={addSqlRule} style={{padding:"9px",borderRadius:8,background:"transparent",border:`1.5px dashed ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",fontWeight:500,display:"flex",alignItems:"center",gap:6,justifyContent:"center",transition:"all .1s"}}
                                     onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
                                     onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;e.currentTarget.style.background="transparent";}}>
-                                    {Ic.plus(11)} Add SQL Rule
+                                    {Ic.plus(11)} Add Rule
                                   </button>
                                 </>
                             }
