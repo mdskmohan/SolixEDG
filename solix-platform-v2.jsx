@@ -5918,7 +5918,13 @@ const PolicyManagerView = ({onToast, onNav}) => {
     onToast(rulePanel?.mode==="edit"?"Rule updated":"Rule added","success");
   };
   const openEditWizard = (pol) => {
-    setNewPol({...pol});
+    // Normalize scope so Step 1 dropdowns show correct values and validation passes
+    const normalizedScope = {
+      domains:   pol.scope?.domains   || [],
+      sources:   pol.scope?.sources   || [],
+      assetType: pol.scope?.assetType || "both",
+    };
+    setNewPol({...pol, scope: normalizedScope});
     // Convert existing rules back to wizard-compatible format
     const presetBack = (pol.rules||[]).filter(r=>r.type==="preset"||(!r.type&&!r.sql)).map(r=>({id:r.id||`wr-${Date.now()}`,field:r.field||"certification",operator:r.operator||"is",value:r.value||"",table:r.table||"",column:r.column||"",severity:r.severity||"Medium"}));
     const sqlBack    = (pol.rules||[]).filter(r=>r.type==="sql"||r.sql).map(r=>({id:r.id||`wsql-${Date.now()}`,label:r.label||r.name||"",table:r.table||"",sql:r.sql||"",strategy:r.strategy||"BINARY",operator:r.operator||"",threshold:r.threshold||"",partitionExpr:r.partitionExpr||"",severity:r.severity||"Medium"}));
@@ -8675,7 +8681,8 @@ const PolicyManagerView = ({onToast, onNav}) => {
                   ? (()=>{
                       const step1ok=(newPol.scope?.domains||[]).length>0 && (newPol.scope?.sources||[]).length>0 && !!(newPol.scope?.assetType);
                       const step2ok=newPol.name.trim().length>0;
-                      const canContinue=createStep===1?step1ok:createStep===2?step2ok:true;
+                      // In edit mode the policy already exists — don't block on missing scope fields
+                      const canContinue=isEditMode?true:(createStep===1?step1ok:createStep===2?step2ok:true);
                       return (
                         <button onClick={()=>{if(!canContinue)return;setCreateStep(s=>s+1);}}
                           style={{padding:"7px 22px",borderRadius:7,background:canContinue?T.accent:T.bgElevated,border:`1px solid ${canContinue?T.accent:T.border}`,color:canContinue?"#fff":T.textMuted,fontSize:12,fontWeight:700,cursor:canContinue?"pointer":"not-allowed",transition:"all .1s"}}>
