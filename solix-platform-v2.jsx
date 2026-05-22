@@ -5615,7 +5615,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const [assetSearchQ,  setAssetSearchQ]= useState("");
   const [selAssetIds,   setSelAssetIds] = useState(new Set());
   const [assetRel,      setAssetRel]    = useState("governs");
-  const EMPTY_POL = {name:"",category:"Data",description:"",owner:[],stewards:[],tags:[],regulations:[],scope:{domains:[],assetTypes:[],sources:[],assetIds:[]},criteria:[],rules:[],links:[],history:[],fqn:"",version:1,severity:"Medium",policyTypes:[],consequence:{severity:"Medium",onViolation:"Warn",notify:"Both"},customSql:{connection:"",sql:"",passCondition:"count_is_zero",description:""}};
+  const EMPTY_POL = {name:"",category:"Data",description:"",owner:[],stewards:[],tags:[],regulations:[],scope:{domains:[],assetTypes:[],sources:[],assetIds:[]},criteria:[],rules:[],links:[],history:[],fqn:"",version:1,severity:"Medium",policyTypes:[],consequence:{severity:"Medium",onViolation:"Warn",notify:"Both"},runMode:"draft",wizardSchedFreq:"daily",wizardSchedTime:"08:00",wizardSchedDay:"monday",wizardSchedCron:""};
   const [newPol,         setNewPol]        = useState(EMPTY_POL);
   const [catFilter,      setCatFilter]     = useState([]);
   const [filterDropOpen, setFilterDropOpen]= useState(false);
@@ -5693,13 +5693,6 @@ const PolicyManagerView = ({onToast, onNav}) => {
     completeness:"Completeness (%)", row_count:"Row Count", duplicate_rate:"Duplicate Rate (%)",
     // Retention
     retention_period:"Retention Period (days)", last_accessed:"Last Accessed (days ago)",
-    archive_status:"Archive Status", data_classification:"Data Classification",
-    // Protection
-    encryption_at_rest:"Encryption at Rest", column_masking:"Column Masking",
-    row_level_security:"Row-Level Security", sensitivity_level:"Sensitivity Level",
-    access_role_count:"Access Role Count",
-    // Custom
-    custom_sql:"Custom SQL",
   };
   const closeWizard = () => { setCreateOpen(false); setNewPol(EMPTY_POL); setCreateStep(1); setWizardRules([]); };
 
@@ -5754,30 +5747,48 @@ const PolicyManagerView = ({onToast, onNav}) => {
       ?{...p,lifecycle:newLifecycle,updated:today(),history:[{when:today(),who:"You",action},...(p.history||[])]}:p));
     onToast(action,"success");
   };
-  const handleCreate = () => {
+  const handleCreate = (runMode="draft") => {
     if (!newPol.name.trim()) return;
     const cat = newPol.category.toLowerCase().replace(/[^a-z0-9]+/g,"_");
     const nm  = newPol.name.toLowerCase().replace(/[^a-z0-9]+/g,"_").slice(0,32);
     const convertedRules = wizardRules.map((r,i)=>{
       const fl=W_FIELD_LABELS[r.field]||r.field;
       const valStr=r.value?` ${r.value}`:"";
-      const actStr=(r.actions||[]).map(a=>a.replace(/_/g," ")).join(", ")||"flag violation";
-      return {id:`r${i+1}-${Date.now()}`,name:`${fl} ${r.operator}${valStr}`,criteria:`IF ${fl} ${r.operator}${valStr}, THEN ${actStr}.`};
+      const colStr=r.column?` [col: ${r.column}]`:"";
+      return {id:`r${i+1}-${Date.now()}`,name:`${fl} ${r.operator}${valStr}${colStr}`,criteria:`IF ${fl} ${r.operator}${valStr}, THEN flag violation.`};
     });
-    const autoText = wizardRules.map(r=>{const fl=W_FIELD_LABELS[r.field]||r.field;const valStr=r.value?` ${r.value}`:"";const actStr=(r.actions||[]).map(a=>a.replace(/_/g," ")).join(", ")||"flag violation";return `IF ${fl} ${r.operator}${valStr}, THEN ${actStr}.`;});
+    const autoText = convertedRules.map(r=>r.criteria);
     const scopeCount = (newPol.scope?.domains||[]).length?ASSETS.filter(a=>(newPol.scope.domains||[]).includes(a.domain)).length:ASSETS.length;
     const ownerArr = Array.isArray(newPol.owner)?newPol.owner:(newPol.owner?[newPol.owner]:[]);
+    const schedObj = runMode==="schedule"
+      ? {freq:newPol.wizardSchedFreq||"daily", time:newPol.wizardSchedTime||"08:00", day:newPol.wizardSchedDay||"monday", cron:newPol.wizardSchedCron||""}
+      : null;
+    const lifecycle = runMode==="draft"?"Draft":"Active";
+    const histAction = runMode==="draft"?"Created draft v1": runMode==="run"?"Created & ran immediately":"Created with schedule";
     const p = {...newPol,
       id:`pol-${Date.now()}`,fqn:`policies.${cat}.${nm}`,version:1,
       owner:ownerArr[0]||"", owners:ownerArr,
-      lifecycle:"Draft",created:today(),updated:today(),
-      criteria:autoText,rules:convertedRules,links:[],
-      violations:0,compliancePct:null,lastEvaluated:null,assetsInScope:scopeCount,
-      history:[{when:today(),who:"You",action:"Created draft v1"}]};
+      lifecycle, created:today(), updated:today(),
+      criteria:autoText, rules:convertedRules, links:[],
+      schedule:schedObj,
+      violations:0, compliancePct:null, lastEvaluated:null, assetsInScope:scopeCount,
+      history:[{when:today(),who:"You",action:histAction}]};
     setPolicies(prev=>[...prev,p]);
     closeWizard();
     setSelPolicyId(p.id); setPdTab("overview");
-    onToast("Policy created — now in Draft","success");
+    if(runMode==="run"){
+      setRunningPolId(p.id);
+      setTimeout(()=>{
+        setPolicies(prev=>prev.map(pp=>pp.id===p.id?{...pp,lastEvaluated:new Date().toISOString().slice(0,10),compliancePct:Math.floor(70+Math.random()*25)}:pp));
+        setRunningPolId(null);
+        onToast("Policy evaluation complete","success");
+      },2200);
+      onToast("Policy created — running evaluation now…","success");
+    } else if(runMode==="schedule"){
+      onToast(`Policy created — scheduled ${schedObj?.freq||"daily"} at ${schedObj?.time||"08:00"}`,"success");
+    } else {
+      onToast("Policy created — now in Draft","success");
+    }
   };
   const saveInlineEdit = () => {
     if (!selPol) return;
@@ -7192,13 +7203,11 @@ const PolicyManagerView = ({onToast, onNav}) => {
                     "PostgreSQL": ["Table","View","Schema","Database"],
                     "Oracle":     ["Table","View","Schema","Database"],
                     "BigQuery":   ["Table","View","Schema"],
-                    "S3":         ["Object","Folder","Bucket"],
-                    "Azure Blob": ["Object","Folder","Container"],
                     "Redshift":   ["Table","View","Schema","Database"],
                   };
-                  const ALL_TYPES=["Table","View","Schema","Database","Container","Column","Materialized View","Pipeline","Object","Folder","Bucket","Dashboard","ML Model"];
+                  const ALL_TYPES=["Table","View","Schema","Database"];
                   // Map picker labels → service values in ASSETS
-                  const SRC_SERVICE = {"Snowflake":["snowflake"],"Databricks":["databricks"],"PostgreSQL":["postgres","postgresql"],"Oracle":["oracle"],"BigQuery":["bigquery"],"S3":["s3"],"Azure Blob":["azure","blob"],"Redshift":["redshift"]};
+                  const SRC_SERVICE = {"Snowflake":["snowflake"],"Databricks":["databricks"],"PostgreSQL":["postgres","postgresql"],"Oracle":["oracle"],"BigQuery":["bigquery"],"Redshift":["redshift"]};
                   // Asset Type options narrow based on Source; if no source selected show all
                   const availTypes=scopeSrcs.length>0?[...new Set(scopeSrcs.flatMap(s=>SRC_TYPES[s]||ALL_TYPES))]:ALL_TYPES;
                   const validScopeTypes=scopeTypes.filter(t=>availTypes.includes(t));
@@ -7223,7 +7232,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       <CatFieldDropdown
                         label="Source"
                         placeholder="Search and select sources…"
-                        options={["Snowflake","Databricks","PostgreSQL","Oracle","BigQuery","S3","Azure Blob","Redshift"]}
+                        options={["Snowflake","Databricks","PostgreSQL","Oracle","BigQuery","Redshift"]}
                         selected={scopeSrcs}
                         onChange={v=>{
                           const newAvail=v.length>0?[...new Set(v.flatMap(s=>SRC_TYPES[s]||ALL_TYPES))]:ALL_TYPES;
@@ -7267,19 +7276,12 @@ const PolicyManagerView = ({onToast, onNav}) => {
                   const scopeTypes = newPol.scope?.assetTypes||[];
                   const selPTypes  = newPol.policyTypes||[];
                   const TYPE_BY_ASSET = {
-                    "Table":      ["Governance","Quality","Retention","Protection","Access","Custom"],
-                    "View":       ["Governance","Quality","Protection","Access","Custom"],
-                    "Schema":     ["Governance","Retention","Access","Custom"],
-                    "Database":   ["Governance","Retention","Access","Custom"],
-                    "Dashboard":  ["Governance","Access","Custom"],
-                    "ML Model":   ["Governance","Access","Custom"],
-                    "Pipeline":   ["Governance","Quality","Access","Custom"],
-                    "Container":  ["Governance","Retention","Access","Custom"],
-                    "Object":     ["Governance","Retention","Protection","Access","Custom"],
-                    "Folder":     ["Governance","Retention","Access","Custom"],
-                    "Bucket":     ["Governance","Retention","Access","Custom"],
+                    "Table":      ["Governance","Quality","Retention","Access"],
+                    "View":       ["Governance","Quality","Access"],
+                    "Schema":     ["Governance","Retention","Access"],
+                    "Database":   ["Governance","Retention","Access"],
                   };
-                  const ALL_PTYPES = ["Governance","Quality","Retention","Protection","Access","Custom"];
+                  const ALL_PTYPES = ["Governance","Quality","Retention","Access"];
                   const availPTypes = scopeTypes.length>0
                     ? [...new Set(scopeTypes.flatMap(t=>TYPE_BY_ASSET[t]||ALL_PTYPES))]
                     : ALL_PTYPES;
@@ -7287,55 +7289,43 @@ const PolicyManagerView = ({onToast, onNav}) => {
                     Governance: {color:T.violet, icon:"🏛️", desc:"Classification, tagging & naming standards"},
                     Quality:    {color:T.green,  icon:"✅", desc:"Completeness, freshness & accuracy thresholds"},
                     Retention:  {color:T.amber,  icon:"🕒", desc:"Storage lifetime, archival & deletion periods"},
-                    Protection: {color:T.rose,   icon:"🔒", desc:"Column masking, encryption & row-level security"},
                     Access:     {color:T.blue,   icon:"🔑", desc:"Role-based access, approval gates & export rules"},
-                    Custom:     {color:T.textSub,icon:"⚙️", desc:"Custom SQL rule evaluated directly on the asset"},
                   };
+                  // colScope: true = quality/retention rules may optionally scope to a specific column
                   const W_RULE_FIELDS = [
                     // ── Governance ──
-                    {id:"certification",      label:"Certification Status",    type:"enum",       ops:["is","is not"],                                vals:["Draft","In Review","Approved","Rejected","Deprecated"],                   types:["Governance","Quality","Access"]},
-                    {id:"domain",             label:"Domain",                  type:"enum_multi", ops:["is","is not","is one of","is not one of"],    vals:ALL_DOMAINS,                                                                types:["Governance","Retention"]},
-                    {id:"tag",                label:"Tag",                     type:"list",       ops:["contains","does not contain"],                vals:POLICY_TAGS,                                                                types:["Governance","Retention","Protection","Access"]},
-                    {id:"glossary_term",      label:"Glossary Term",           type:"list",       ops:["contains","does not contain"],                vals:[],                                                                         types:["Governance"]},
-                    {id:"owner",              label:"Owner",                   type:"presence",   ops:["is set","is not set"],                        vals:[],                                                                         types:["Governance","Access"]},
-                    {id:"steward",            label:"Steward",                 type:"presence",   ops:["is set","is not set"],                        vals:[],                                                                         types:["Governance","Access"]},
-                    {id:"data_product",       label:"Data Product",            type:"presence",   ops:["is set","is not set"],                        vals:[],                                                                         types:["Governance"]},
-                    {id:"asset_type",         label:"Asset Type",              type:"enum_multi", ops:["is","is not","is one of","is not one of"],    vals:["Table","View","Schema","Database","Dashboard","ML Model","Pipeline","Container","Object","Folder","Bucket"], types:["Governance","Retention"]},
-                    {id:"description",        label:"Description",             type:"presence",   ops:["is set","is not set"],                        vals:[],                                                                         types:["Governance"]},
-                    {id:"business_term",      label:"Business Term",           type:"presence",   ops:["is set","is not set"],                        vals:[],                                                                         types:["Governance"]},
-                    // ── Quality ──
-                    {id:"quality_score",      label:"Quality Score",           type:"number",     ops:["greater than","less than","equals"],           vals:[],                                                                         types:["Quality"]},
-                    {id:"last_updated",       label:"Last Updated (days ago)", type:"number",     ops:["greater than","less than","equals"],           vals:[],                                                                         types:["Quality"]},
-                    {id:"null_rate",          label:"Null Rate (%)",           type:"number",     ops:["greater than","less than","equals"],           vals:[],                                                                         types:["Quality"]},
-                    {id:"completeness",       label:"Completeness (%)",        type:"number",     ops:["greater than","less than","equals"],           vals:[],                                                                         types:["Quality"]},
-                    {id:"row_count",          label:"Row Count",               type:"number",     ops:["greater than","less than","equals"],           vals:[],                                                                         types:["Quality"]},
-                    {id:"duplicate_rate",     label:"Duplicate Rate (%)",      type:"number",     ops:["greater than","less than","equals"],           vals:[],                                                                         types:["Quality"]},
+                    {id:"certification",  label:"Certification Status",    type:"enum",       ops:["is","is not"],                             vals:["Draft","In Review","Approved","Rejected","Deprecated"],  types:["Governance","Quality","Access"]},
+                    {id:"domain",         label:"Domain",                  type:"enum_multi", ops:["is","is not","is one of","is not one of"], vals:ALL_DOMAINS,                                               types:["Governance","Retention"]},
+                    {id:"tag",            label:"Tag",                     type:"list",       ops:["contains","does not contain"],             vals:POLICY_TAGS,                                               types:["Governance","Retention","Access"]},
+                    {id:"glossary_term",  label:"Glossary Term",           type:"list",       ops:["contains","does not contain"],             vals:[],                                                        types:["Governance"]},
+                    {id:"owner",          label:"Owner",                   type:"presence",   ops:["is set","is not set"],                     vals:[],                                                        types:["Governance","Access"]},
+                    {id:"steward",        label:"Steward",                 type:"presence",   ops:["is set","is not set"],                     vals:[],                                                        types:["Governance","Access"]},
+                    {id:"data_product",   label:"Data Product",            type:"presence",   ops:["is set","is not set"],                     vals:[],                                                        types:["Governance"]},
+                    {id:"asset_type",     label:"Asset Type",              type:"enum_multi", ops:["is","is not","is one of","is not one of"], vals:["Table","View","Schema","Database"],                      types:["Governance","Retention"]},
+                    {id:"description",    label:"Description",             type:"presence",   ops:["is set","is not set"],                     vals:[],                                                        types:["Governance"]},
+                    {id:"business_term",  label:"Business Term",           type:"presence",   ops:["is set","is not set"],                     vals:[],                                                        types:["Governance"]},
+                    // ── Quality (column-level scoping available) ──
+                    {id:"quality_score",  label:"Quality Score",           type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Quality"]},
+                    {id:"last_updated",   label:"Last Updated (days ago)", type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Quality"],   hint:"Sourced from source system metadata (INFORMATION_SCHEMA)"},
+                    {id:"null_rate",      label:"Null Rate (%)",           type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Quality"],   colScope:true},
+                    {id:"completeness",   label:"Completeness (%)",        type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Quality"],   colScope:true},
+                    {id:"row_count",      label:"Row Count",               type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Quality"],   hint:"May be approximate on PostgreSQL (uses pg_class statistics)"},
+                    {id:"duplicate_rate", label:"Duplicate Rate (%)",      type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Quality"],   colScope:true},
                     // ── Retention ──
-                    {id:"retention_period",   label:"Retention Period (days)", type:"number",     ops:["greater than","less than","equals"],           vals:[],                                                                         types:["Retention"]},
-                    {id:"last_accessed",      label:"Last Accessed (days ago)",type:"number",     ops:["greater than","less than","equals"],           vals:[],                                                                         types:["Retention"]},
-                    {id:"archive_status",     label:"Archive Status",          type:"enum",       ops:["is","is not"],                                vals:["Archived","Active","Pending Archival"],                                   types:["Retention"]},
-                    {id:"data_classification",label:"Data Classification",     type:"enum",       ops:["is","is not"],                                vals:["Public","Internal","Confidential","Restricted"],                          types:["Retention"]},
-                    // ── Protection ──
-                    {id:"encryption_at_rest", label:"Encryption at Rest",      type:"enum",       ops:["is","is not"],                                vals:["Enabled","Disabled"],                                                     types:["Protection"]},
-                    {id:"column_masking",     label:"Column Masking",          type:"enum",       ops:["is","is not"],                                vals:["Enabled","Disabled"],                                                     types:["Protection"]},
-                    {id:"row_level_security", label:"Row-Level Security",      type:"enum",       ops:["is","is not"],                                vals:["Enabled","Disabled"],                                                     types:["Protection"]},
-                    {id:"sensitivity_level",  label:"Sensitivity Level",       type:"enum",       ops:["is","is not"],                                vals:["High","Medium","Low"],                                                    types:["Protection"]},
-                    {id:"access_role_count",  label:"Access Role Count",       type:"number",     ops:["greater than","less than","equals"],           vals:[],                                                                         types:["Protection","Access"]},
+                    {id:"retention_period",label:"Retention Period (days)",type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Retention"], hint:"Catalog-stored metadata — set via policy or ingestion"},
+                    {id:"last_accessed",   label:"Last Accessed (days ago)",type:"number",    ops:["greater than","less than","equals"],       vals:[],                                                        types:["Retention"], hint:"Snowflake / BigQuery only — not available in PostgreSQL / Oracle"},
+                    {id:"archive_status",  label:"Archive Status",         type:"enum",       ops:["is","is not"],                             vals:["Archived","Active","Pending Archival"],                  types:["Retention"], hint:"Catalog-stored — set manually or via workflow"},
                   ];
                   // Filter fields by selected policy types — shows all when no type selected
                   const filteredRuleFields = selPTypes.length>0
                     ? W_RULE_FIELDS.filter(f=>f.types.some(t=>selPTypes.includes(t)))
                     : W_RULE_FIELDS;
                   const defaultField = filteredRuleFields[0]||W_RULE_FIELDS[0];
-                  const addPresetRule = () => setWizardRules(prev=>[...prev,{id:`wr-${Date.now()}`,field:defaultField.id,operator:defaultField.ops[0],value:"",severity:"Medium"}]);
-                  const addSqlRule   = () => setWizardRules(prev=>[...prev,{id:`wr-${Date.now()}`,field:"custom_sql",operator:"passes",value:"",sqlConnection:"",sqlBody:"",sqlPassCondition:"count_is_zero",sqlDescription:"",severity:"Medium"}]);
+                  const addPresetRule = () => setWizardRules(prev=>[...prev,{id:`wr-${Date.now()}`,field:defaultField.id,operator:defaultField.ops[0],value:"",column:"",severity:"Medium"}]);
                   const removeRule = id => setWizardRules(prev=>prev.filter(r=>r.id!==id));
                   const updRule = (id,k,v) => setWizardRules(prev=>prev.map(r=>r.id===id?{...r,[k]:v}:r));
                   const sel_s={padding:"7px 9px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",cursor:"pointer",fontFamily:"inherit"};
                   const cq = newPol.consequence||{notify:"Both"};
-                  const activeRuleTab = newPol.ruleTab||"preset";
-                  const presetRules = wizardRules.filter(r=>r.field!=="custom_sql");
-                  const sqlRules    = wizardRules.filter(r=>r.field==="custom_sql");
                   // ── Severity badge dropdown (Option B) ──
                   const SevBadge = ({ruleId, sev}) => {
                     const isOpen = sevOpen===ruleId;
@@ -7402,44 +7392,45 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       {divider}
 
                       {/* ── Rules ── */}
-                      {secHead("Rules","Conditions evaluated on each in-scope asset. A violation is raised when a rule fails.")}
-                      {/* Tab bar */}
-                      <div style={{display:"flex",gap:0,borderBottom:`1px solid ${T.border}`,marginBottom:14}}>
-                        {[["preset","Preset"],["custom","Custom SQL"]].map(([key,label])=>{
-                          const active=activeRuleTab===key;
-                          const count=key==="preset"?presetRules.length:sqlRules.length;
-                          return (
-                            <button key={key} onClick={()=>setNewPol(p=>({...p,ruleTab:key}))}
-                              style={{padding:"8px 18px",fontSize:12,fontWeight:active?600:400,color:active?T.accent:T.textMuted,border:"none",borderBottom:`2px solid ${active?T.accent:"transparent"}`,background:"transparent",cursor:"pointer",transition:"all .15s",marginBottom:-1,display:"flex",alignItems:"center",gap:6}}>
-                              {label}
-                              {count>0&&<span style={{fontSize:10,background:active?T.accentDim:T.bgElevated,color:active?T.accent:T.textMuted,padding:"1px 6px",borderRadius:10,fontWeight:600}}>{count}</span>}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {/* Preset tab */}
-                      {activeRuleTab==="preset"&&(
-                        <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:4}}>
-                          {presetRules.length===0
-                            ? <div style={{padding:"24px 20px",textAlign:"center",background:T.bgElevated,borderRadius:10,border:`1.5px dashed ${T.border}`}}>
-                                <div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>No rules yet. Add your first rule.</div>
-                                <button onClick={addPresetRule} style={{padding:"7px 18px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>+ Add Rule</button>
-                              </div>
-                            : <>
-                                {presetRules.map((r)=>{
-                                  const fd=W_RULE_FIELDS.find(f=>f.id===r.field)||filteredRuleFields[0]||W_RULE_FIELDS[0];
-                                  const isPresence = fd.type==="presence";
-                                  const needsVal   = (fd.type==="enum"||fd.type==="enum_multi"||fd.type==="list");
-                                  const needsNum   = fd.type==="number";
-                                  const sev = r.severity||"Medium";
-                                  return (
-                                    <div key={r.id} style={{background:T.bgElevated,borderRadius:9,border:`1.5px solid ${T.border}`,padding:"9px 11px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                      {secHead("Rules","All rules must pass (AND logic). A violation is raised on any asset that fails one or more rules.")}
+                      {/* AND-logic banner */}
+                      {wizardRules.length>1&&(
+                        <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",background:T.accentDim,border:`1px solid ${T.accent}30`,borderRadius:7,marginBottom:4,fontSize:11.5,color:T.accent}}>
+                          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 2v12M2 8h12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                          <span><strong>AND</strong> — all {wizardRules.length} rules must pass for an asset to be compliant.{" "}
+                            <span style={{color:T.textSub,fontWeight:400}}>Rules are evaluated independently per asset.</span>
+                          </span>
+                        </div>
+                      )}
+                      <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:4}}>
+                        {wizardRules.length===0
+                          ? <div style={{padding:"24px 20px",textAlign:"center",background:T.bgElevated,borderRadius:10,border:`1.5px dashed ${T.border}`}}>
+                              <div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>No rules yet — add your first condition.</div>
+                              <button onClick={addPresetRule} style={{padding:"7px 18px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>+ Add Rule</button>
+                            </div>
+                          : <>
+                              {wizardRules.map((r,ri)=>{
+                                const fd=W_RULE_FIELDS.find(f=>f.id===r.field)||filteredRuleFields[0]||W_RULE_FIELDS[0];
+                                const isPresence = fd.type==="presence";
+                                const needsVal   = fd.type==="enum"||fd.type==="enum_multi"||fd.type==="list";
+                                const needsNum   = fd.type==="number";
+                                const sev        = r.severity||"Medium";
+                                const supportsCol= !!fd.colScope;
+                                return (
+                                  <div key={r.id} style={{background:T.bgElevated,borderRadius:9,border:`1.5px solid ${T.border}`,overflow:"hidden"}}>
+                                    {/* Rule number badge */}
+                                    <div style={{padding:"5px 11px 0 11px",display:"flex",alignItems:"center",gap:6}}>
+                                      <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Rule {ri+1}</span>
+                                      {ri>0&&<span style={{fontSize:10,padding:"1px 7px",borderRadius:10,background:`${T.accent}18`,color:T.accent,fontWeight:700}}>AND</span>}
+                                    </div>
+                                    {/* Main row */}
+                                    <div style={{padding:"7px 11px 9px 11px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                                       <select value={r.field} onChange={e=>{
                                         const nfd=W_RULE_FIELDS.find(f=>f.id===e.target.value)||filteredRuleFields[0]||W_RULE_FIELDS[0];
                                         updRule(r.id,"field",e.target.value);
                                         updRule(r.id,"operator",nfd.ops[0]);
                                         updRule(r.id,"value","");
+                                        updRule(r.id,"column","");
                                       }} style={{...sel_s,flex:"1 1 155px",minWidth:120}}>
                                         {filteredRuleFields.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}
                                       </select>
@@ -7454,101 +7445,39 @@ const PolicyManagerView = ({onToast, onNav}) => {
                                       )}
                                       {needsVal&&(fd.vals||[]).length===0&&<input type="text" value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} placeholder="value…" style={{...sel_s,flex:"1 1 110px"}}/>}
                                       {needsNum&&<input type="number" value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} placeholder="value" style={{...sel_s,flex:"0 0 80px",width:80}}/>}
-                                      {/* Per-rule severity badge */}
                                       <SevBadge ruleId={r.id} sev={sev}/>
-                                      <button onClick={()=>removeRule(r.id)} title="Remove"
+                                      <button onClick={()=>removeRule(r.id)} title="Remove rule"
                                         style={{width:24,height:24,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15,lineHeight:1}}
                                         onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
                                         onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>×</button>
                                     </div>
-                                  );
-                                })}
-                                <button onClick={addPresetRule} style={{padding:"9px",borderRadius:8,background:"transparent",border:`1.5px dashed ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",fontWeight:500,display:"flex",alignItems:"center",gap:6,justifyContent:"center",transition:"all .1s"}}
-                                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
-                                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;e.currentTarget.style.background="transparent";}}>
-                                  {Ic.plus(11)} Add Rule
-                                </button>
-                              </>
-                          }
-                        </div>
-                      )}
-
-                      {/* Custom SQL tab */}
-                      {activeRuleTab==="custom"&&(
-                        <div style={{display:"flex",flexDirection:"column",gap:12,marginBottom:4}}>
-                          <div style={{padding:"10px 14px",background:T.amberDim,border:`1px solid ${T.amber}30`,borderRadius:8,fontSize:11.5,color:T.textSub,display:"flex",alignItems:"center",gap:8}}>
-                            <span style={{fontSize:14}}>⚙️</span>
-                            Custom SQL rules run a query on the asset and pass or fail based on the result. Restricted to Admin and Connection Admin roles.
-                          </div>
-                          {sqlRules.length===0
-                            ? <div style={{padding:"24px 20px",textAlign:"center",background:T.bgElevated,borderRadius:10,border:`1.5px dashed ${T.border}`}}>
-                                <div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>No custom SQL rules yet.</div>
-                                <button onClick={addSqlRule} style={{padding:"7px 18px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>+ Add Custom SQL Rule</button>
-                              </div>
-                            : <>
-                                {sqlRules.map((r,ri)=>{
-                                  const sev=r.severity||"Medium";
-                                  return (
-                                    <div key={r.id} style={{background:T.bgElevated,borderRadius:9,border:`1.5px solid ${T.border}`,overflow:"hidden"}}>
-                                      <div style={{padding:"9px 12px",display:"flex",alignItems:"center",gap:8,borderBottom:`1px solid ${T.border}`,background:T.bgBase}}>
-                                        <span style={{fontSize:11,fontWeight:600,color:T.textSub}}>Rule {ri+1}</span>
-                                        <select value={r.sqlConnection||""} onChange={e=>updRule(r.id,"sqlConnection",e.target.value)} style={{...sel_s,flex:"1 1 130px",minWidth:110}}>
-                                          <option value="">— select connection —</option>
-                                          {["Snowflake","Databricks","PostgreSQL","Oracle","BigQuery","Redshift"].map(c=><option key={c} value={c}>{c}</option>)}
-                                        </select>
-                                        <select value={r.operator||"passes"} onChange={e=>updRule(r.id,"operator",e.target.value)} style={{...sel_s,flex:"0 0 auto",minWidth:100}}>
-                                          <option value="passes">passes</option><option value="does not pass">does not pass</option>
-                                        </select>
-                                        <SevBadge ruleId={r.id} sev={sev}/>
-                                        <button onClick={()=>removeRule(r.id)} title="Remove"
-                                          style={{width:24,height:24,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15,lineHeight:1,marginLeft:"auto"}}
-                                          onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
-                                          onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>×</button>
+                                    {/* Column scope row — only for colScope fields */}
+                                    {supportsCol&&(
+                                      <div style={{padding:"0 11px 9px 11px",display:"flex",alignItems:"center",gap:8,borderTop:`1px solid ${T.border}`,paddingTop:7}}>
+                                        <span style={{fontSize:11,color:T.textMuted,whiteSpace:"nowrap",flexShrink:0}}>Column (optional):</span>
+                                        <input type="text" value={r.column||""} onChange={e=>updRule(r.id,"column",e.target.value)}
+                                          placeholder="e.g. email, ssn, phone_number — leave blank to check all columns"
+                                          style={{...sel_s,flex:1,fontSize:11}}/>
                                       </div>
-                                      <div style={{padding:"12px",display:"flex",flexDirection:"column",gap:10}}>
-                                        <div>
-                                          <label style={{display:"block",fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em"}}>SQL — use {"{{schema}}"} and {"{{table}}"} as placeholders</label>
-                                          <textarea value={r.sqlBody||""} onChange={e=>updRule(r.id,"sqlBody",e.target.value)} rows={4}
-                                            placeholder={"SELECT COUNT(*)\nFROM {{schema}}.{{table}}\nWHERE pii_flag IS NOT NULL\n  AND masking_policy IS NULL"}
-                                            style={{width:"100%",padding:"8px 10px",background:T.bgBase,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11,fontFamily:"'Geist Mono','Courier New',monospace",lineHeight:1.7,outline:"none",resize:"vertical",boxSizing:"border-box"}}
-                                            onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                                        </div>
-                                        <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
-                                          <div style={{flex:1}}>
-                                            <label style={{display:"block",fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em"}}>Pass when</label>
-                                            <select value={r.sqlPassCondition||"count_is_zero"} onChange={e=>updRule(r.id,"sqlPassCondition",e.target.value)} style={{...sel_s,width:"100%"}}>
-                                              <option value="count_is_zero">Count = 0 (no violations found)</option>
-                                              <option value="count_gt_zero">Count &gt; 0 (matches found = pass)</option>
-                                              <option value="returns_true">Returns true</option>
-                                              <option value="returns_false">Returns false</option>
-                                            </select>
-                                          </div>
-                                          <button style={{padding:"7px 12px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgBase,color:T.textSub,fontSize:11.5,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}
-                                            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
-                                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
-                                            ▶ Run Test
-                                          </button>
-                                        </div>
-                                        <div>
-                                          <label style={{display:"block",fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em"}}>Description <span style={{color:T.rose}}>*</span></label>
-                                          <input value={r.sqlDescription||""} onChange={e=>updRule(r.id,"sqlDescription",e.target.value)}
-                                            placeholder="Describe what this SQL rule checks and why…"
-                                            style={{width:"100%",padding:"7px 10px",background:T.bgBase,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box"}}
-                                            onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                                        </div>
+                                    )}
+                                    {/* Source hint */}
+                                    {fd.hint&&(
+                                      <div style={{padding:"0 11px 8px 11px",fontSize:10.5,color:T.amber,display:"flex",alignItems:"center",gap:5}}>
+                                        <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/><line x1="8" y1="5.5" x2="8" y2="8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="10.5" r=".6" fill="currentColor" stroke="none"/></svg>
+                                        {fd.hint}
                                       </div>
-                                    </div>
-                                  );
-                                })}
-                                <button onClick={addSqlRule} style={{padding:"9px",borderRadius:8,background:"transparent",border:`1.5px dashed ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",fontWeight:500,display:"flex",alignItems:"center",gap:6,justifyContent:"center",transition:"all .1s"}}
-                                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
-                                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;e.currentTarget.style.background="transparent";}}>
-                                  {Ic.plus(11)} Add Custom SQL Rule
-                                </button>
-                              </>
-                          }
-                        </div>
-                      )}
+                                    )}
+                                  </div>
+                                );
+                              })}
+                              <button onClick={addPresetRule} style={{padding:"9px",borderRadius:8,background:"transparent",border:`1.5px dashed ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",fontWeight:500,display:"flex",alignItems:"center",gap:6,justifyContent:"center",transition:"all .1s"}}
+                                onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
+                                onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;e.currentTarget.style.background="transparent";}}>
+                                {Ic.plus(11)} Add Rule
+                              </button>
+                            </>
+                        }
+                      </div>
                       {divider}
 
                       {/* ── Notify on violation ── */}
@@ -7591,13 +7520,21 @@ const PolicyManagerView = ({onToast, onNav}) => {
                   );
                 }
 
-                /* ─── Step 4: Review ─── */
+                /* ─── Step 4: Review & Create ─── */
                 if(createStep===4){
                   const cq=newPol.consequence||{severity:"Medium",onViolation:"Warn",notify:"Both"};
                   const scopeAssetCount=(newPol.scope?.assetIds||[]).length;
+                  const runMode=newPol.runMode||"draft";
+                  const RUN_OPTS=[
+                    {id:"draft",  icon:"📋", label:"Save as Draft",    desc:"Create the policy without running it. Activate later after review."},
+                    {id:"run",    icon:"▶️",  label:"Save & Run Now",   desc:"Create and immediately evaluate against all scoped assets."},
+                    {id:"schedule",icon:"🗓️",label:"Save & Schedule",  desc:"Create and set a recurring evaluation schedule."},
+                  ];
+                  const inp_s={padding:"7px 10px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",fontFamily:"inherit"};
                   return (
                     <div style={{display:"flex",flexDirection:"column",gap:16}}>
-                      {secHead("Review & Confirm","Everything looks good? This policy will start in Draft.")}
+                      {secHead("Review & Create","Confirm your policy settings, then choose how to launch it.")}
+                      {/* Summary cards */}
                       {[
                         {title:"Scope", rows:[
                           ["Domains",     (newPol.scope?.domains||[]).join(", ")||"All domains"],
@@ -7612,11 +7549,12 @@ const PolicyManagerView = ({onToast, onNav}) => {
                           ["Severity",     <span style={{padding:"2px 9px",borderRadius:5,background:SEV_BG[cq.severity]||T.bgElevated,color:SEV_COLOR[cq.severity]||T.textMuted,fontWeight:700,fontSize:11}}>{cq.severity||"Medium"}</span>],
                           ["Notify",       cq.notify||"Both"],
                         ]},
-                        {title:`IF Conditions (${wizardRules.length})`, rows: wizardRules.length===0
-                          ? [["—","No conditions defined"]]
+                        {title:`Rules (${wizardRules.length}) — all must pass`, rows: wizardRules.length===0
+                          ? [["—","No rules defined"]]
                           : wizardRules.map((r,i)=>{
                               const fl=W_FIELD_LABELS[r.field]||r.field;
-                              return [`Condition ${i+1}`, `${fl} ${r.operator}${r.value?` "${r.value}"`:""}`.trim()];
+                              const colStr=r.column?` [col: ${r.column}]`:"";
+                              return [`Rule ${i+1}`, `${fl} ${r.operator}${r.value?` "${r.value}"`:""}${colStr}`.trim()];
                             })
                         },
                         {title:"Ownership", rows:[
@@ -7639,9 +7577,75 @@ const PolicyManagerView = ({onToast, onNav}) => {
                           </div>
                         </div>
                       ))}
-                      <div style={{padding:"11px 14px",background:T.amberDim,border:`1px solid ${T.amber}30`,borderRadius:8,fontSize:11.5,color:T.textSub,lineHeight:1.7}}>
-                        ⚡ Starts in <strong>Draft</strong>. Draft → Submit for review → Approve → Activate.
+
+                      {/* ── Launch Mode ── */}
+                      <div>
+                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>How do you want to launch this policy?</div>
+                        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                          {RUN_OPTS.map(opt=>{
+                            const sel=runMode===opt.id;
+                            return (
+                              <button key={opt.id} onClick={()=>setNewPol(p=>({...p,runMode:opt.id}))}
+                                style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 14px",borderRadius:10,border:`2px solid ${sel?T.accent:T.border}`,background:sel?T.accentDim:T.bgElevated,cursor:"pointer",textAlign:"left",transition:"all .12s",outline:"none"}}>
+                                <span style={{fontSize:18,lineHeight:1.2,flexShrink:0,marginTop:1}}>{opt.icon}</span>
+                                <div>
+                                  <div style={{fontSize:13,fontWeight:sel?700:500,color:sel?T.accent:T.text,marginBottom:2}}>{opt.label}</div>
+                                  <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.5}}>{opt.desc}</div>
+                                </div>
+                                <div style={{marginLeft:"auto",width:16,height:16,borderRadius:"50%",border:`2px solid ${sel?T.accent:T.border}`,background:sel?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:2,transition:"all .12s"}}>
+                                  {sel&&<div style={{width:6,height:6,borderRadius:"50%",background:"#fff"}}/>}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
+
+                      {/* ── Inline schedule picker (shown only when runMode==="schedule") ── */}
+                      {runMode==="schedule"&&(
+                        <div style={{padding:"16px",background:T.bgElevated,border:`1.5px solid ${T.accent}40`,borderRadius:10,display:"flex",flexDirection:"column",gap:14}}>
+                          <div style={{fontSize:12,fontWeight:700,color:T.text,display:"flex",alignItems:"center",gap:6}}>
+                            🗓️ Evaluation Schedule
+                          </div>
+                          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                            {["hourly","daily","weekly","custom"].map(f=>{
+                              const sel2=(newPol.wizardSchedFreq||"daily")===f;
+                              return <button key={f} onClick={()=>setNewPol(p=>({...p,wizardSchedFreq:f}))}
+                                style={{padding:"6px 14px",borderRadius:7,border:`1.5px solid ${sel2?T.accent:T.border}`,background:sel2?T.accentDim:T.bgSurface,color:sel2?T.accent:T.textSub,fontSize:12,fontWeight:sel2?700:400,cursor:"pointer",textTransform:"capitalize",transition:"all .1s"}}>{f}</button>;
+                            })}
+                          </div>
+                          {(newPol.wizardSchedFreq||"daily")!=="custom"&&(
+                            <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+                              <div style={{flex:1,minWidth:140}}>
+                                <label style={{display:"block",fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em"}}>Time</label>
+                                <input type="time" value={newPol.wizardSchedTime||"08:00"} onChange={e=>setNewPol(p=>({...p,wizardSchedTime:e.target.value}))} style={{...inp_s,width:"100%",boxSizing:"border-box"}}
+                                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                              </div>
+                              {(newPol.wizardSchedFreq||"daily")==="weekly"&&(
+                                <div style={{flex:1,minWidth:140}}>
+                                  <label style={{display:"block",fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em"}}>Day</label>
+                                  <select value={newPol.wizardSchedDay||"monday"} onChange={e=>setNewPol(p=>({...p,wizardSchedDay:e.target.value}))} style={{...inp_s,width:"100%",boxSizing:"border-box"}}>
+                                    {["monday","tuesday","wednesday","thursday","friday","saturday","sunday"].map(d=><option key={d} value={d}>{d.charAt(0).toUpperCase()+d.slice(1)}</option>)}
+                                  </select>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {(newPol.wizardSchedFreq||"daily")==="custom"&&(
+                            <div>
+                              <label style={{display:"block",fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em"}}>Cron Expression</label>
+                              <input type="text" value={newPol.wizardSchedCron||""} onChange={e=>setNewPol(p=>({...p,wizardSchedCron:e.target.value}))}
+                                placeholder="e.g. 0 8 * * 1  (every Monday at 08:00)"
+                                style={{...inp_s,width:"100%",boxSizing:"border-box",fontFamily:"'Geist Mono','Courier New',monospace"}}
+                                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                            </div>
+                          )}
+                          <div style={{fontSize:11,color:T.textMuted,display:"flex",alignItems:"center",gap:6}}>
+                            <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/><line x1="8" y1="5.5" x2="8" y2="8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="10.5" r=".6" fill="currentColor" stroke="none"/></svg>
+                            First run will execute immediately after creation. Subsequent runs follow the schedule.
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 }
@@ -7664,7 +7668,6 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       const step1ok=(newPol.scope?.assetIds||[]).length>0;
                       const step2ok=newPol.name.trim().length>0;
                       const canContinue=createStep===1?step1ok:createStep===2?step2ok:true;
-                      // step 3 (ownership) always continuable; step 4 is review/create
                       return (
                         <button onClick={()=>{if(!canContinue)return;setCreateStep(s=>s+1);}}
                           style={{padding:"7px 22px",borderRadius:7,background:canContinue?T.accent:T.bgElevated,border:`1px solid ${canContinue?T.accent:T.border}`,color:canContinue?"#fff":T.textMuted,fontSize:12,fontWeight:700,cursor:canContinue?"pointer":"not-allowed",transition:"all .1s"}}>
@@ -7672,10 +7675,18 @@ const PolicyManagerView = ({onToast, onNav}) => {
                         </button>
                       );
                     })()
-                  : <button onClick={handleCreate} disabled={!newPol.name.trim()}
-                      style={{padding:"7px 22px",borderRadius:7,background:!newPol.name.trim()?T.bgElevated:T.accent,border:`1px solid ${!newPol.name.trim()?T.border:T.accent}`,color:!newPol.name.trim()?T.textMuted:"#fff",fontSize:12,fontWeight:700,cursor:!newPol.name.trim()?"not-allowed":"pointer"}}>
-                      ✓ Create Policy
-                    </button>
+                  : (()=>{
+                      const rm=newPol.runMode||"draft";
+                      const canCreate=!!newPol.name.trim();
+                      const btnLabel = rm==="draft"?"📋 Save as Draft": rm==="run"?"▶ Save & Run Now":"🗓️ Save & Schedule";
+                      const btnColor = rm==="run"?T.green: rm==="schedule"?T.violet:T.accent;
+                      return (
+                        <button onClick={()=>handleCreate(rm)} disabled={!canCreate}
+                          style={{padding:"7px 22px",borderRadius:7,background:canCreate?btnColor:T.bgElevated,border:`1px solid ${canCreate?btnColor:T.border}`,color:canCreate?"#fff":T.textMuted,fontSize:12,fontWeight:700,cursor:canCreate?"pointer":"not-allowed",transition:"all .15s"}}>
+                          {btnLabel}
+                        </button>
+                      );
+                    })()
                 }
               </div>
             </div>
