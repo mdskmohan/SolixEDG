@@ -5520,11 +5520,11 @@ const PolicyManagerView = ({onToast, onNav}) => {
        {type:"Table",target:"customers",rel:"governs",assetId:2},
      ],
      runs:[
-       {id:"r1a",ts:"2026-05-20 14:32",trigger:"Schedule",duration:"4m 12s",assetsScanned:304,rulesEval:5,violationsNew:0,violationsResolved:0,status:"success",score:81},
-       {id:"r1b",ts:"2026-05-19 08:00",trigger:"Schedule",duration:"3m 58s",assetsScanned:301,rulesEval:5,violationsNew:2,violationsResolved:0,status:"success",score:78},
-       {id:"r1c",ts:"2026-05-18 11:24",trigger:"Manual",  duration:"5m 02s",assetsScanned:298,rulesEval:5,violationsNew:0,violationsResolved:1,status:"success",score:78},
-       {id:"r1d",ts:"2026-05-17 08:00",trigger:"Schedule",duration:"4m 44s",assetsScanned:295,rulesEval:5,violationsNew:2,violationsResolved:0,status:"success",score:75},
-       {id:"r1e",ts:"2026-05-16 08:00",trigger:"Schedule",duration:"6m 01s",assetsScanned:290,rulesEval:5,violationsNew:0,violationsResolved:0,status:"failed", score:null,errorMsg:"Connection timeout — Snowflake DWH unreachable after 3 retries"},
+       {id:"r1a",ts:"2026-05-20 14:32",trigger:"Schedule",duration:"4m 12s",assetsScanned:12,rulesEval:5,violationsNew:0,violationsResolved:0,status:"success",score:81},
+       {id:"r1b",ts:"2026-05-19 08:00",trigger:"Schedule",duration:"3m 58s",assetsScanned:12,rulesEval:5,violationsNew:2,violationsResolved:0,status:"success",score:78},
+       {id:"r1c",ts:"2026-05-18 11:24",trigger:"Manual",  duration:"5m 02s",assetsScanned:12,rulesEval:5,violationsNew:0,violationsResolved:1,status:"success",score:78},
+       {id:"r1d",ts:"2026-05-17 08:00",trigger:"Schedule",duration:"4m 44s",assetsScanned:12,rulesEval:5,violationsNew:2,violationsResolved:0,status:"success",score:75},
+       {id:"r1e",ts:"2026-05-16 08:00",trigger:"Schedule",duration:"6m 01s",assetsScanned:12,rulesEval:5,violationsNew:0,violationsResolved:0,status:"failed", score:null,errorMsg:"Connection timeout — Snowflake DWH unreachable after 3 retries"},
      ],
      governedAssets:[
        {name:"orders",      type:"Table",domain:"Commerce",service:"snowflake",   status:"fail",  failedRules:["PII classification required"],    quality:72},
@@ -5552,9 +5552,9 @@ const PolicyManagerView = ({onToast, onNav}) => {
      ],
      links:[],
      runs:[
-       {id:"r2a",ts:"2026-05-20 08:00",trigger:"Schedule",duration:"2m 44s",assetsScanned:186,rulesEval:2,violationsNew:1,violationsResolved:0,status:"success",score:88},
-       {id:"r2b",ts:"2026-05-19 08:00",trigger:"Schedule",duration:"2m 38s",assetsScanned:182,rulesEval:2,violationsNew:0,violationsResolved:0,status:"success",score:90},
-       {id:"r2c",ts:"2026-05-18 08:00",trigger:"Schedule",duration:"2m 51s",assetsScanned:180,rulesEval:2,violationsNew:0,violationsResolved:1,status:"success",score:90},
+       {id:"r2a",ts:"2026-05-20 08:00",trigger:"Schedule",duration:"2m 44s",assetsScanned:8,rulesEval:2,violationsNew:1,violationsResolved:0,status:"success",score:88},
+       {id:"r2b",ts:"2026-05-19 08:00",trigger:"Schedule",duration:"2m 38s",assetsScanned:8,rulesEval:2,violationsNew:0,violationsResolved:0,status:"success",score:90},
+       {id:"r2c",ts:"2026-05-18 08:00",trigger:"Schedule",duration:"2m 51s",assetsScanned:8,rulesEval:2,violationsNew:0,violationsResolved:1,status:"success",score:90},
      ],
      governedAssets:[
        {name:"payments",    type:"Table",domain:"Finance",service:"postgresql", status:"fail",  failedRules:["Quality threshold enforcement"],quality:67},
@@ -5599,9 +5599,9 @@ const PolicyManagerView = ({onToast, onNav}) => {
        {type:"Table",target:"customers",rel:"governs",assetId:2},
      ],
      runs:[
-       {id:"r4a",ts:"2026-05-20 18:00",trigger:"Schedule",duration:"1m 52s",assetsScanned:42,rulesEval:3,violationsNew:1,violationsResolved:0,status:"success",score:65},
-       {id:"r4b",ts:"2026-05-20 14:00",trigger:"Schedule",duration:"1m 48s",assetsScanned:40,rulesEval:3,violationsNew:2,violationsResolved:0,status:"success",score:62},
-       {id:"r4c",ts:"2026-05-19 10:00",trigger:"Manual",  duration:"2m 10s",assetsScanned:38,rulesEval:3,violationsNew:0,violationsResolved:0,status:"success",score:68},
+       {id:"r4a",ts:"2026-05-20 18:00",trigger:"Schedule",duration:"1m 52s",assetsScanned:7,rulesEval:3,violationsNew:1,violationsResolved:0,status:"success",score:65},
+       {id:"r4b",ts:"2026-05-20 14:00",trigger:"Schedule",duration:"1m 48s",assetsScanned:7,rulesEval:3,violationsNew:2,violationsResolved:0,status:"success",score:62},
+       {id:"r4c",ts:"2026-05-19 10:00",trigger:"Manual",  duration:"2m 10s",assetsScanned:7,rulesEval:3,violationsNew:0,violationsResolved:0,status:"success",score:68},
      ],
      governedAssets:[
        {name:"patient_events",   type:"Table",domain:"Commerce",service:"snowflake",  status:"fail",  failedRules:["PHI quality gate"],    quality:84},
@@ -6395,20 +6395,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                           <button onClick={()=>{setSelPolicyId(isSel?null:p.id);setPdTab("overview");setEditing(false);}}
                             style={{flex:1,display:"flex",alignItems:"center",gap:7,padding:"5px 6px 5px 30px",background:"none",border:"none",cursor:"pointer",textAlign:"left",minWidth:0}}>
                             <span style={{width:8,height:8,borderRadius:"50%",background:catColor(p.category),flexShrink:0,display:"block"}}/>
-                            <div style={{flex:1,minWidth:0}}>
-                              <span style={{display:"block",fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
-                              {p.compliancePct!=null&&(
-                                <div style={{display:"flex",alignItems:"center",gap:5,marginTop:3}}>
-                                  <div style={{flex:1,height:3,borderRadius:3,background:T.bgElevated,overflow:"hidden",maxWidth:80}}>
-                                    <div style={{height:"100%",width:`${p.compliancePct}%`,borderRadius:3,background:p.compliancePct>=80?T.green:p.compliancePct>=60?T.amber:T.rose,transition:"width .3s"}}/>
-                                  </div>
-                                  <span style={{fontSize:9.5,fontFamily:"'Geist Mono',monospace",color:p.compliancePct>=80?T.green:p.compliancePct>=60?T.amber:T.rose,fontWeight:700}}>{p.compliancePct}%</span>
-                                </div>
-                              )}
-                              {p.compliancePct==null&&p.lifecycle!=="Draft"&&p.lifecycle!=="Deprecated"&&(
-                                <span style={{display:"block",fontSize:9.5,color:T.textMuted,marginTop:2,fontStyle:"italic"}}>Not evaluated</span>
-                              )}
-                            </div>
+                            <span style={{flex:1,fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
                             {openViolsForPol(p.id).length>0&&(
                               <span title={`${openViolsForPol(p.id).length} open violation${openViolsForPol(p.id).length>1?"s":""}`}
                                 style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:8,background:T.rose,color:"#fff",flexShrink:0,fontFamily:"'Geist Mono',monospace"}}>
