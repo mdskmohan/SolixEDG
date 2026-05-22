@@ -14264,8 +14264,8 @@ const DomainsView = ({onAsset, onNav}) => {
                   {addHeaderDropdown&&(
                     <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",minWidth:190,overflow:"hidden"}}>
                       {[
-                        {icon:"📊",label:"Add Asset",action:()=>{setAddHeaderDropdown(false);setAddAssetsSelected(new Set());setAddAssetsSearch("");setAddAssetsOpen(true);}},
-                        {icon:"📦",label:"Assign Data Product",action:()=>{setAddHeaderDropdown(false);setAssignDpSearch("");setAssignDpSelected(new Set());setAssignDpOpen(true);}},
+                        {icon:"📊",label:"Asset",action:()=>{setAddHeaderDropdown(false);setAddAssetsSelected(new Set());setAddAssetsSearch("");setAddAssetsOpen(true);}},
+                        {icon:"📦",label:"Data Product",action:()=>{setAddHeaderDropdown(false);setAssignDpSearch("");setAssignDpSelected(new Set());setAssignDpOpen(true);}},
                       ].map((item,i,arr)=>(
                         <React.Fragment key={item.label}>
                           <button onMouseDown={item.action}
@@ -15243,6 +15243,12 @@ const DomainsView = ({onAsset, onNav}) => {
                 boxShadow:listView===v?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{ic}</button>
             ))}
           </div>
+          {/* New Data Domain */}
+          <button onClick={()=>setCreateDomainOpen(true)}
+            style={{display:"flex",alignItems:"center",gap:6,height:34,padding:"0 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap",transition:"opacity .12s"}}
+            onMouseEnter={e=>e.currentTarget.style.opacity=".88"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+            {Ic.plus(10)} New Data Domain
+          </button>
         </div>
 
         {/* Grid view */}
