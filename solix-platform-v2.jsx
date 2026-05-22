@@ -5674,6 +5674,8 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const [violStatusFilter, setViolStatusFilter] = useState("Open");
   const [createStep,     setCreateStep]     = useState(1);
   const [wizardRules,    setWizardRules]    = useState([]);
+  const [wizardRuleTab,  setWizardRuleTab]  = useState("preset");
+  const [wizardSqlRules, setWizardSqlRules] = useState([]);
   const [sevOpen,        setSevOpen]        = useState(null);
   const [runningPolId,   setRunningPolId]   = useState(null);
   const [scheduleModal,  setScheduleModal]  = useState(null);
@@ -5740,7 +5742,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
     // Retention
     retention_period:"Retention Period (days)", last_accessed:"Last Accessed (days ago)",
   };
-  const closeWizard = () => { setCreateOpen(false); setNewPol(EMPTY_POL); setCreateStep(1); setWizardRules([]); };
+  const closeWizard = () => { setCreateOpen(false); setNewPol(EMPTY_POL); setCreateStep(1); setWizardRules([]); setWizardRuleTab("preset"); setWizardSqlRules([]); };
 
   // ─── computed ────────────────────────────────────────────────────────
   const POLICY_CATS = policyCategories.map(c=>c.name);
@@ -7218,83 +7220,46 @@ const PolicyManagerView = ({onToast, onNav}) => {
 
                 /* ─── Step 1: Scope ─── */
                 if(createStep===1){
-                  const scopeDoms = newPol.scope?.domains||[];
-                  const scopeSrcs = newPol.scope?.sources||[];
-                  const assetType = newPol.scope?.assetType||"both";
-                  const SRC_META  = {
-                    "Snowflake":  {icon:"❄️", desc:"Cloud data warehouse"},
-                    "Databricks": {icon:"🧱", desc:"Unity Catalog / Delta"},
-                    "PostgreSQL": {icon:"🐘", desc:"Relational database"},
-                    "Oracle":     {icon:"🔴", desc:"Enterprise database"},
-                    "BigQuery":   {icon:"🔷", desc:"Google analytics warehouse"},
-                    "Redshift":   {icon:"🌀", desc:"AWS data warehouse"},
-                  };
-                  const ALL_SOURCES = Object.keys(SRC_META);
-                  // Count available tables+views per source (those with column metadata)
-                  const SRC_SERVICE = {"Snowflake":["snowflake"],"Databricks":["databricks"],"PostgreSQL":["postgres","postgresql"],"Oracle":["oracle"],"BigQuery":["bigquery"],"Redshift":["redshift"]};
-                  const srcAssetCount = src => ASSETS.filter(a=>{
-                    const svcMatch=(SRC_SERVICE[src]||[]).includes((a.service||"").toLowerCase());
-                    const typeOk=assetType==="both"||(assetType==="table"&&a.type==="Table")||(assetType==="view"&&a.type==="View");
-                    return svcMatch && typeOk && !!ASSET_COLUMNS[a.name];
-                  }).length;
+                  const scopeDoms  = newPol.scope?.domains||[];
+                  const scopeSrcs  = newPol.scope?.sources||[];
+                  const assetType  = newPol.scope?.assetType||"both";
+                  const ALL_SOURCES = ["Snowflake","Databricks","PostgreSQL","Oracle","BigQuery","Redshift"];
                   return (
-                    <div style={{display:"flex",flexDirection:"column",gap:24}}>
-                      {secHead("Policy Scope","Set the source and domain for this policy. Tables and columns are selected per rule in the next step.")}
-
-                      {/* ── Source cards (required) ── */}
-                      <div>
-                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                          <label style={{fontSize:11,fontWeight:700,color:T.text,display:"flex",alignItems:"center",gap:4}}>
-                            Source <span style={{color:T.rose}}>*</span>
-                          </label>
-                          {scopeSrcs.length>0&&<button onClick={()=>setNewPol(p=>({...p,scope:{...p.scope,sources:[]}}))} style={{fontSize:10.5,color:T.textMuted,background:"none",border:"none",cursor:"pointer",padding:0}}>Clear</button>}
-                        </div>
-                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                          {ALL_SOURCES.map(src=>{
-                            const sel=scopeSrcs.includes(src);
-                            const cnt=srcAssetCount(src);
-                            return (
-                              <button key={src} onClick={()=>setNewPol(p=>({...p,scope:{...p.scope,sources:sel?scopeSrcs.filter(s=>s!==src):[...scopeSrcs,src]}}))}
-                                style={{display:"flex",alignItems:"center",gap:10,padding:"11px 13px",borderRadius:10,border:`2px solid ${sel?T.accent:T.border}`,background:sel?T.accentDim:T.bgElevated,cursor:"pointer",textAlign:"left",outline:"none",transition:"all .12s",position:"relative"}}>
-                                <span style={{fontSize:20,lineHeight:1,flexShrink:0}}>{SRC_META[src].icon}</span>
-                                <div style={{flex:1,minWidth:0}}>
-                                  <div style={{fontSize:12,fontWeight:sel?700:600,color:sel?T.accent:T.text,lineHeight:1.2}}>{src}</div>
-                                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:2}}>{SRC_META[src].desc}</div>
-                                </div>
-                                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3,flexShrink:0}}>
-                                  {cnt>0&&<span style={{fontSize:10,fontWeight:600,color:sel?T.accent:T.textMuted,background:sel?`${T.accent}18`:T.bgSurface,padding:"1px 6px",borderRadius:99,border:`1px solid ${sel?T.accent+"30":T.border}`}}>{cnt}</span>}
-                                  <div style={{width:16,height:16,borderRadius:"50%",border:`2px solid ${sel?T.accent:T.border}`,background:sel?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .12s"}}>
-                                    {sel&&<svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1.5 4l2 2 3-3" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                                  </div>
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {scopeSrcs.length===0&&<div style={{fontSize:10.5,color:T.rose,marginTop:6}}>Select at least one source to continue.</div>}
-                      </div>
-
-                      {/* ── Asset Type toggle ── */}
-                      <div>
-                        <label style={{fontSize:11,fontWeight:700,color:T.text,display:"block",marginBottom:10}}>Asset Type</label>
-                        <div style={{display:"inline-flex",borderRadius:9,overflow:"hidden",border:`1.5px solid ${T.border}`,background:T.bgElevated}}>
-                          {[["both","Tables & Views"],["table","Tables only"],["view","Views only"]].map(([val,lbl])=>{
-                            const sel=assetType===val;
-                            return <button key={val} onClick={()=>setNewPol(p=>({...p,scope:{...p.scope,assetType:val}}))}
-                              style={{padding:"8px 16px",background:sel?T.accent:"transparent",border:"none",color:sel?"#fff":T.textSub,fontSize:12,fontWeight:sel?700:400,cursor:"pointer",transition:"all .12s",whiteSpace:"nowrap"}}>{lbl}</button>;
-                          })}
-                        </div>
-                        <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Tables are base data — use Views for derived or aggregated datasets.</div>
-                      </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:20}}>
+                      {secHead("Policy Scope","Define which sources and asset types this policy governs. Specific tables and columns are selected per rule in the next step.")}
 
                       {/* ── Domain (optional) ── */}
                       <CatFieldDropdown
                         label="Domain (optional)"
-                        placeholder="All domains — narrow to a specific domain if needed"
+                        placeholder="All domains — leave blank to cover all domains"
                         options={ALL_DOMAINS}
                         selected={scopeDoms}
                         onChange={v=>setNewPol(p=>({...p,scope:{...p.scope,domains:v}}))}
                       />
+
+                      {/* ── Source (required) ── */}
+                      <div>
+                        <CatFieldDropdown
+                          label={<>Source <span style={{color:T.rose,marginLeft:2}}>*</span></>}
+                          placeholder="Search and select data sources…"
+                          options={ALL_SOURCES}
+                          selected={scopeSrcs}
+                          onChange={v=>setNewPol(p=>({...p,scope:{...p.scope,sources:v}}))}
+                        />
+                        {scopeSrcs.length===0&&<div style={{fontSize:10.5,color:T.rose,marginTop:4}}>Select at least one source to continue.</div>}
+                      </div>
+
+                      {/* ── Asset Type (single-select) ── */}
+                      <div>
+                        <label style={lbl}>Asset Type</label>
+                        <select value={assetType} onChange={e=>setNewPol(p=>({...p,scope:{...p.scope,assetType:e.target.value}}))}
+                          style={{...inp,cursor:"pointer",appearance:"auto"}}>
+                          <option value="both">Tables &amp; Views</option>
+                          <option value="table">Tables only</option>
+                          <option value="view">Views only</option>
+                        </select>
+                        <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>Tables are base data — use Views for derived or aggregated datasets.</div>
+                      </div>
 
                       {/* Preview banner */}
                       {scopeSrcs.length>0&&(
@@ -7304,7 +7269,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                             <strong>{scopeSrcs.join(", ")}</strong> selected
                             {scopeDoms.length>0&&<> · domain: <strong>{scopeDoms.join(", ")}</strong></>}
                             {" · "}<strong>{assetType==="both"?"Tables & Views":assetType==="table"?"Tables only":"Views only"}</strong>
-                            <span style={{color:T.textSub,fontWeight:400}}{...{}}> — pick specific tables &amp; columns inside each rule in Step 2.</span>
+                            <span style={{color:T.textSub,fontWeight:400}}> — pick specific tables &amp; columns inside each rule in Step 2.</span>
                           </span>
                         </div>
                       )}
@@ -7476,10 +7441,11 @@ const PolicyManagerView = ({onToast, onNav}) => {
                   const updRule = (id,k,v) => setWizardRules(prev=>prev.map(r=>r.id===id?{...r,[k]:v}:r));
                   const sel_s={padding:"7px 9px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",cursor:"pointer",fontFamily:"inherit"};
                   const cq = newPol.consequence||{notify:"Both"};
-                  // ── Severity badge dropdown (Option B) ──
-                  const SevBadge = ({ruleId, sev}) => {
+                  // ── Severity badge dropdown — accepts optional onChangeSev for SQL rules ──
+                  const SevBadge = ({ruleId, sev, onChangeSev}) => {
                     const isOpen = sevOpen===ruleId;
                     const color  = SEV_COLOR[sev]||T.textMuted;
+                    const handleChange = sv => { onChangeSev ? onChangeSev(sv) : updRule(ruleId,"severity",sv); setSevOpen(null); };
                     return (
                       <div style={{position:"relative",flexShrink:0}} onClick={e=>e.stopPropagation()}>
                         <button onClick={()=>setSevOpen(isOpen?null:ruleId)}
@@ -7494,7 +7460,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                               const sc=SEV_COLOR[sv];
                               const active=sev===sv;
                               return (
-                                <button key={sv} onClick={()=>{updRule(ruleId,"severity",sv);setSevOpen(null);}}
+                                <button key={sv} onClick={()=>handleChange(sv)}
                                   style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:7,border:`1px solid ${active?sc+"55":"transparent"}`,background:active?`${sc}18`:"transparent",color:active?sc:T.textSub,fontSize:12,fontWeight:active?700:400,cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
                                   <span style={{width:8,height:8,borderRadius:"50%",background:sc,flexShrink:0,display:"inline-block"}}/>
                                   {sv}
@@ -7543,6 +7509,91 @@ const PolicyManagerView = ({onToast, onNav}) => {
 
                       {/* ── Rules ── */}
                       {secHead("Rules","Define the conditions evaluated against each in-scope asset.")}
+
+                      {/* ── Rule Type tabs: Preset / Custom SQL ── */}
+                      <div style={{display:"flex",gap:0,borderRadius:8,overflow:"hidden",border:`1.5px solid ${T.border}`,background:T.bgElevated,marginBottom:14,alignSelf:"flex-start"}}>
+                        {[{id:"preset",label:"Preset Rules",icon:"⚙️"},{id:"sql",label:"Custom SQL",icon:"🗄️"}].map(tab=>{
+                          const sel=wizardRuleTab===tab.id;
+                          return (
+                            <button key={tab.id} onClick={()=>setWizardRuleTab(tab.id)}
+                              style={{display:"flex",alignItems:"center",gap:6,padding:"8px 18px",border:"none",background:sel?T.accent:"transparent",color:sel?"#fff":T.textSub,fontSize:12,fontWeight:sel?700:400,cursor:"pointer",transition:"all .12s",whiteSpace:"nowrap"}}>
+                              <span style={{fontSize:13}}>{tab.icon}</span>
+                              {tab.label}
+                              {tab.id==="preset"&&wizardRules.length>0&&<span style={{fontSize:10,fontWeight:700,background:sel?"rgba(255,255,255,.25)":T.accentDim,color:sel?"#fff":T.accent,borderRadius:99,padding:"1px 6px",marginLeft:2}}>{wizardRules.length}</span>}
+                              {tab.id==="sql"&&wizardSqlRules.length>0&&<span style={{fontSize:10,fontWeight:700,background:sel?"rgba(255,255,255,.25)":T.accentDim,color:sel?"#fff":T.accent,borderRadius:99,padding:"1px 6px",marginLeft:2}}>{wizardSqlRules.length}</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* ── Custom SQL tab content ── */}
+                      {wizardRuleTab==="sql"&&(()=>{
+                        const addSqlRule = () => setWizardSqlRules(prev=>[...prev,{id:`wsql-${Date.now()}`,table:"",label:"",sql:"",severity:"Medium"}]);
+                        const removeSqlRule = id => setWizardSqlRules(prev=>prev.filter(r=>r.id!==id));
+                        const updSqlRule = (id,k,v) => setWizardSqlRules(prev=>prev.map(r=>r.id===id?{...r,[k]:v}:r));
+                        return (
+                          <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:4}}>
+                            <div style={{fontSize:11,color:T.textMuted,marginBottom:4,lineHeight:1.6}}>
+                              Write SQL that returns rows representing data problems. The rule passes when <strong style={{color:T.text}}>0 rows</strong> are returned.
+                            </div>
+                            {wizardSqlRules.length===0
+                              ? <div style={{padding:"24px 20px",textAlign:"center",background:T.bgElevated,borderRadius:10,border:`1.5px dashed ${T.border}`}}>
+                                  <div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>No SQL rules yet — write a custom condition.</div>
+                                  <button onClick={addSqlRule} style={{padding:"7px 18px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>+ Add SQL Rule</button>
+                                </div>
+                              : <>
+                                  {wizardSqlRules.map((r,ri)=>(
+                                    <div key={r.id} style={{background:T.bgElevated,borderRadius:9,border:`1.5px solid ${T.border}`}}>
+                                      {/* Header */}
+                                      <div style={{padding:"8px 12px 0",display:"flex",alignItems:"center",gap:8}}>
+                                        <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",flex:1}}>SQL Rule {ri+1}</span>
+                                        <SevBadge ruleId={r.id+"sql"} sev={r.severity||"Medium"} onChangeSev={sv=>updSqlRule(r.id,"severity",sv)}/>
+                                        <button onClick={()=>removeSqlRule(r.id)} title="Remove"
+                                          style={{width:22,height:22,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}
+                                          onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
+                                          onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>×</button>
+                                      </div>
+                                      <div style={{padding:"8px 12px 12px",display:"flex",flexDirection:"column",gap:8}}>
+                                        {/* Label */}
+                                        <div>
+                                          <label style={{...lbl,marginBottom:3}}>Rule Name</label>
+                                          <input type="text" value={r.label} onChange={e=>updSqlRule(r.id,"label",e.target.value)}
+                                            placeholder="e.g. No null emails in active users…"
+                                            style={inp} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                                        </div>
+                                        {/* Table */}
+                                        <div>
+                                          <label style={{...lbl,marginBottom:3}}>Target Table <span style={{color:T.rose}}>*</span></label>
+                                          <select value={r.table} onChange={e=>updSqlRule(r.id,"table",e.target.value)} style={{...inp,cursor:"pointer",appearance:"auto"}}>
+                                            <option value="">— select table —</option>
+                                            {availTables.map(a=><option key={a.name} value={a.name}>{a.name} ({a.type})</option>)}
+                                          </select>
+                                        </div>
+                                        {/* SQL */}
+                                        <div>
+                                          <label style={{...lbl,marginBottom:3}}>SQL Expression <span style={{color:T.rose}}>*</span></label>
+                                          <textarea value={r.sql} onChange={e=>updSqlRule(r.id,"sql",e.target.value)} rows={4}
+                                            placeholder={"SELECT *\nFROM {{table}}\nWHERE email IS NULL\n  AND status = 'active'"}
+                                            style={{...inp,resize:"vertical",fontFamily:"'Geist Mono','Courier New',monospace",fontSize:11.5,lineHeight:1.6}}
+                                            onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                                          <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>Use <code style={{background:T.bgElevated,padding:"1px 4px",borderRadius:3}}>{"{{table}}"}</code> to reference the selected table. Rule passes when query returns 0 rows.</div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                  <button onClick={addSqlRule} style={{padding:"9px",borderRadius:8,background:"transparent",border:`1.5px dashed ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",fontWeight:500,display:"flex",alignItems:"center",gap:6,justifyContent:"center",transition:"all .1s"}}
+                                    onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
+                                    onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;e.currentTarget.style.background="transparent";}}>
+                                    {Ic.plus(11)} Add SQL Rule
+                                  </button>
+                                </>
+                            }
+                          </div>
+                        );
+                      })()}
+
+                      {/* ── Preset tab: rule logic + rule list ── */}
+                      {wizardRuleTab==="preset"&&<>
 
                       {/* Rule Logic selector */}
                       {(()=>{
@@ -7624,7 +7675,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                                         <div style={{flex:1,height:1,background:T.border}}/>
                                       </div>
                                     )}
-                                    <div style={{background:T.bgElevated,borderRadius:9,border:`1.5px solid ${T.border}`,overflow:"hidden"}}>
+                                    <div style={{background:T.bgElevated,borderRadius:9,border:`1.5px solid ${T.border}`}}>
                                       {/* Header row: Rule N + scope badge */}
                                       <div style={{padding:"6px 11px 0",display:"flex",alignItems:"center",gap:6}}>
                                         <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Rule {ri+1}</span>
@@ -7704,6 +7755,10 @@ const PolicyManagerView = ({onToast, onNav}) => {
                             </>
                         }
                       </div>
+
+                      {/* close preset tab */}
+                      </>}
+
                       {divider}
 
                       {/* ── Notify on violation ── */}
