@@ -6528,7 +6528,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       {k:"rules",      l:"Rules",            badge:(p.rules||[]).length},
                       {k:"violations", l:"Violations",       badge:openViolsForPol(p.id).length||null, danger:openViolsForPol(p.id).length>0},
                       {k:"runs",       l:"Runs",             badge:(p.runs||[]).length||null},
-                      {k:"assets",     l:"Governed Assets",  badge:(p.governedAssets||[]).length||[...new Set((p.rules||[]).filter(r=>r.table).map(r=>r.table))].length||null},
+                      {k:"assets",     l:"Assets",           badge:(p.governedAssets||[]).length||[...new Set((p.rules||[]).filter(r=>r.table).map(r=>r.table))].length||null},
                       {k:"activity",   l:"Activity",         badge:(p.history||[]).length},
                     ].map(({k,l,badge,danger})=>(
                       <button key={k} onClick={()=>setPdTab(k)}
@@ -7338,8 +7338,8 @@ const PolicyManagerView = ({onToast, onNav}) => {
                           {/* Header */}
                           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:16,gap:12}}>
                             <div>
-                              <div style={{fontSize:13,fontWeight:700,color:T.text}}>Governed Assets</div>
-                              <div style={{fontSize:11.5,color:T.textMuted,marginTop:2,lineHeight:1.6}}>Assets within this policy's scope and their current compliance status.</div>
+                              <div style={{fontSize:13,fontWeight:700,color:T.text}}>Assets</div>
+                              <div style={{fontSize:11.5,color:T.textMuted,marginTop:2,lineHeight:1.6}}>Tables and views in this policy's scope and their current compliance status.</div>
                             </div>
                             {hasStatus&&(
                               <div style={{display:"flex",gap:8,flexShrink:0}}>
