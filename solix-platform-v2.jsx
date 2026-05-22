@@ -7235,7 +7235,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                               <div style={{fontSize:28,marginBottom:10}}>▷</div>
                               <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:4}}>No runs yet</div>
                               <div style={{fontSize:12,color:T.textMuted,maxWidth:260,margin:"0 auto",lineHeight:1.7}}>
-                                {p.lifecycle==="Draft"?"Publish this policy first, then run it to see evaluation history.":"Click "Run Now" to evaluate this policy for the first time."}
+                                {p.lifecycle==="Draft"?"Publish this policy first, then run it to see evaluation history.":'Click "Run Now" to evaluate this policy for the first time.'}
                               </div>
                             </div>
                           ):(
@@ -7299,7 +7299,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                                           ].map(m=>(
                                             <div key={m.label} style={{padding:"8px 10px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`}}>
                                               <div style={{fontSize:9.5,color:T.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{m.label}</div>
-                                              <div style={{fontSize:13,fontWeight:700,color:m.color||T.text,fontFamily:"'Geist Mono',monospace"}}>{m.value??<span style={{color:T.textMuted}}>—</span>}</div>
+                                              <div style={{fontSize:13,fontWeight:700,color:m.color||T.text,fontFamily:"'Geist Mono',monospace"}}>{m.value!=null?m.value:<span style={{color:T.textMuted}}>—</span>}</div>
                                             </div>
                                           ))}
                                         </div>
