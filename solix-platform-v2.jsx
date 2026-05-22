@@ -178,6 +178,52 @@ const HIERARCHY_ASSETS = [
 ASSETS.push(...HIERARCHY_ASSETS);
 
 // ─────────────────────────────────────────────
+// COLUMN METADATA (keyed by asset name)
+// ─────────────────────────────────────────────
+const ASSET_COLUMNS = {
+  // ── orders (Snowflake) ──
+  "orders":          ["order_id","customer_id","product_id","order_date","status","amount","currency","discount","region","shipping_address","created_at","updated_at"],
+  // ── customers (Snowflake) ──
+  "customers":       ["customer_id","email","phone","first_name","last_name","date_of_birth","address","city","country","segment","created_at","updated_at"],
+  // ── dim_products (Snowflake) ──
+  "dim_products":    ["product_id","sku","name","category","sub_category","brand","unit_price","cost","is_active","created_at"],
+  // ── transactions (Snowflake / Finance) ──
+  "transactions":    ["transaction_id","account_id","counterparty_id","amount","currency","exchange_rate","type","status","date","reference","created_at"],
+  // ── vw_order_summary (Snowflake View) ──
+  "vw_order_summary":["order_id","customer_id","customer_name","product_id","total_amount","discount_pct","region","order_date"],
+  // ── product_events (PostgreSQL) ──
+  "product_events":  ["event_id","user_id","session_id","event_type","event_name","page","properties","platform","timestamp","ip_address"],
+  // ── user_sessions (PostgreSQL) ──
+  "user_sessions":   ["session_id","user_id","start_time","end_time","duration_sec","page_views","bounce","device_type","browser","ip_address"],
+  // ── users (PostgreSQL) ──
+  "users":           ["user_id","email","password_hash","phone","first_name","last_name","role","status","created_at","last_login","email_verified"],
+  // ── vw_active_users (PostgreSQL View) ──
+  "vw_active_users": ["user_id","email","session_count","last_login","days_active"],
+  // ── user_events (Databricks) ──
+  "user_events":     ["event_id","user_id","event_type","event_name","session_id","device","os","app_version","properties","timestamp"],
+  // ── feature_store (Databricks) ──
+  "feature_store":   ["user_id","churn_score","ltv_score","recommendation_score","days_since_purchase","avg_order_value","purchase_count","updated_at"],
+  // ── vw_daily_active (Databricks View) ──
+  "vw_daily_active": ["date","dau","wau","mau","new_users","churned_users"],
+  // ── employees (Oracle) ──
+  "employees":       ["employee_id","first_name","last_name","email","phone","hire_date","department_id","job_title","salary","manager_id","status","national_id"],
+  // ── departments (Oracle) ──
+  "departments":     ["department_id","name","parent_department_id","cost_center","manager_id","location"],
+  // ── gl_accounts (Oracle) ──
+  "gl_accounts":     ["account_id","account_code","account_name","account_type","balance","currency","parent_account_id","is_active","created_at"],
+  // ── vw_headcount (Oracle View) ──
+  "vw_headcount":    ["department_id","department_name","headcount","avg_salary","open_positions"],
+  // ── app_orders (MySQL) ──
+  "app_orders":      ["order_id","user_id","product_id","quantity","unit_price","total","status","created_at","fulfilled_at"],
+  // ── app_users (MySQL) ──
+  "app_users":       ["user_id","email","phone","first_name","last_name","address","city","signup_source","created_at"],
+  // ── app_products (MySQL) ──
+  "app_products":    ["product_id","name","sku","description","price","cost","stock_qty","category","is_active"],
+  // ── vw_recent_orders (MySQL View) ──
+  "vw_recent_orders":["order_id","user_id","product_name","quantity","total","status","order_date"],
+};
+
+// ─────────────────────────────────────────────
 // TAG MANAGEMENT MOCK DATA
 // ─────────────────────────────────────────────
 const INITIAL_TAG_DEFS = [
@@ -7325,6 +7371,94 @@ const PolicyManagerView = ({onToast, onNav}) => {
                   const defaultField = filteredRuleFields[0]||W_RULE_FIELDS[0];
                   const addPresetRule = () => setWizardRules(prev=>[...prev,{id:`wr-${Date.now()}`,field:defaultField.id,operator:defaultField.ops[0],value:"",column:"",severity:"Medium"}]);
                   const removeRule = id => setWizardRules(prev=>prev.filter(r=>r.id!==id));
+
+                  // ── Build grouped column list from selected assets ──
+                  const selectedAssetNames = newPol.scope?.assetIds||[];
+                  // Each entry: { tableName, columns:[...] }
+                  const colGroups = selectedAssetNames
+                    .map(nm=>({ tableName:nm, columns:ASSET_COLUMNS[nm]||[] }))
+                    .filter(g=>g.columns.length>0);
+                  // Flat unique list for quick lookup
+                  const allColumns = [...new Set(colGroups.flatMap(g=>g.columns))];
+
+                  // ── Inline searchable column picker ──
+                  const ColPicker = ({ruleId, value, required}) => {
+                    const [open,  setOpen]  = React.useState(false);
+                    const [q,     setQ]     = React.useState("");
+                    const ref = React.useRef(null);
+                    React.useEffect(()=>{
+                      if(!open) return;
+                      const fn = e=>{ if(ref.current&&!ref.current.contains(e.target)) setOpen(false); };
+                      document.addEventListener("mousedown",fn);
+                      return()=>document.removeEventListener("mousedown",fn);
+                    },[open]);
+                    const isEmpty = !value;
+                    const borderCol = required&&isEmpty ? T.rose+"80" : open ? T.accent : T.border;
+                    // Filtered groups
+                    const filtGroups = q.trim()
+                      ? colGroups.map(g=>({...g,columns:g.columns.filter(c=>c.toLowerCase().includes(q.toLowerCase()))})).filter(g=>g.columns.length>0)
+                      : colGroups;
+                    return (
+                      <div ref={ref} style={{position:"relative",flex:1}}>
+                        <button type="button" onClick={()=>setOpen(o=>!o)}
+                          style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 10px",background:T.bgSurface,border:`1.5px solid ${borderCol}`,borderRadius:7,cursor:"pointer",outline:"none",transition:"border-color .12s",textAlign:"left"}}>
+                          {value
+                            ? <span style={{fontSize:11.5,color:T.text,fontWeight:500}}>{value}</span>
+                            : <span style={{fontSize:11.5,color:T.textMuted}}>{required?"Select column…":"Any column (table-level check)"}</span>
+                          }
+                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:T.textMuted,transform:open?"rotate(180deg)":"none",transition:"transform .15s"}}><path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </button>
+                        {open&&(
+                          <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:400,background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,boxShadow:"0 8px 28px rgba(0,0,0,.18)",overflow:"hidden",maxHeight:260,display:"flex",flexDirection:"column"}}>
+                            {/* Search */}
+                            <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                              <input autoFocus type="text" value={q} onChange={e=>setQ(e.target.value)}
+                                placeholder="Search columns…"
+                                style={{width:"100%",padding:"5px 8px",border:`1.5px solid ${T.border}`,borderRadius:6,fontSize:11.5,color:T.text,background:T.bgElevated,outline:"none",boxSizing:"border-box"}}
+                                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                            </div>
+                            <div style={{overflowY:"auto",flex:1}}>
+                              {/* "Clear / any column" option for optional scope */}
+                              {!required&&(
+                                <div onClick={()=>{updRule(ruleId,"column","");setOpen(false);setQ("");}}
+                                  style={{padding:"8px 12px",fontSize:11.5,color:value?"":T.accent,fontWeight:value?"400":"600",cursor:"pointer",borderBottom:`1px solid ${T.border}`,fontStyle:"italic",background:value?"transparent":T.accentDim}}
+                                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
+                                  onMouseLeave={e=>e.currentTarget.style.background=value?"transparent":T.accentDim}>
+                                  Any column (table-level check)
+                                </div>
+                              )}
+                              {colGroups.length===0
+                                ? <div style={{padding:"16px 12px",fontSize:11.5,color:T.textMuted,textAlign:"center"}}>No column metadata — select assets with known columns in Step 1</div>
+                                : filtGroups.length===0
+                                  ? <div style={{padding:"16px 12px",fontSize:11.5,color:T.textMuted,textAlign:"center"}}>No columns match "{q}"</div>
+                                  : filtGroups.map(g=>(
+                                      <div key={g.tableName}>
+                                        {/* Table group header */}
+                                        <div style={{padding:"5px 12px 3px",fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",background:T.bgBase,borderBottom:`1px solid ${T.border}`,borderTop:`1px solid ${T.border}`,position:"sticky",top:0}}>
+                                          {g.tableName}
+                                        </div>
+                                        {g.columns.map(col=>{
+                                          const sel=value===col;
+                                          return (
+                                            <div key={col} onClick={()=>{updRule(ruleId,"column",col);setOpen(false);setQ("");}}
+                                              style={{padding:"7px 14px 7px 20px",fontSize:11.5,color:sel?T.accent:T.text,fontWeight:sel?600:400,cursor:"pointer",background:sel?T.accentDim:"transparent",display:"flex",alignItems:"center",gap:8}}
+                                              onMouseEnter={e=>e.currentTarget.style.background=sel?T.accentDim:T.bgHover}
+                                              onMouseLeave={e=>e.currentTarget.style.background=sel?T.accentDim:"transparent"}>
+                                              <svg width="11" height="11" viewBox="0 0 12 12" fill="none" style={{color:T.textMuted,flexShrink:0}}><rect x="1" y="1" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.2"/><line x1="3.5" y1="4" x2="8.5" y2="4" stroke="currentColor" strokeWidth="1"/><line x1="3.5" y1="6" x2="8.5" y2="6" stroke="currentColor" strokeWidth="1"/><line x1="3.5" y1="8" x2="6" y2="8" stroke="currentColor" strokeWidth="1"/></svg>
+                                              {col}
+                                              {sel&&<svg width="11" height="11" viewBox="0 0 12 12" fill="none" style={{marginLeft:"auto",color:T.accent}}><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    ))
+                              }
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  };
                   const updRule = (id,k,v) => setWizardRules(prev=>prev.map(r=>r.id===id?{...r,[k]:v}:r));
                   const sel_s={padding:"7px 9px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",cursor:"pointer",fontFamily:"inherit"};
                   const cq = newPol.consequence||{notify:"Both"};
@@ -7512,19 +7646,13 @@ const PolicyManagerView = ({onToast, onNav}) => {
                                           onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
                                           onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>×</button>
                                       </div>
-                                      {/* Column input — shown for "column" (required) and "both" (optional) scopes */}
+                                      {/* Column picker — shown for "column" (required) and "both" (optional) scopes */}
                                       {(fd.scope==="column"||fd.scope==="both")&&(
                                         <div style={{padding:"0 11px 9px",borderTop:`1px solid ${T.border}`,paddingTop:8,display:"flex",alignItems:"center",gap:8}}>
                                           <span style={{fontSize:11,color:fd.scope==="column"?T.rose:T.textMuted,whiteSpace:"nowrap",flexShrink:0,fontWeight:fd.scope==="column"?600:400}}>
-                                            Column{fd.scope==="column"&&<span style={{color:T.rose}}> *</span>}:
+                                            Column{fd.scope==="column"?<span style={{color:T.rose}}> *</span>:" (optional)"}:
                                           </span>
-                                          <input type="text" value={r.column||""} onChange={e=>updRule(r.id,"column",e.target.value)}
-                                            placeholder={fd.scope==="column"
-                                              ?"Enter column name (e.g. email, ssn)"
-                                              :"Optional — leave blank to check at table level (e.g. email, ssn)"}
-                                            style={{...sel_s,flex:1,fontSize:11,borderColor:fd.scope==="column"&&!r.column?T.rose+"80":T.border}}
-                                            onFocus={e=>e.target.style.borderColor=T.accent}
-                                            onBlur={e=>e.target.style.borderColor=fd.scope==="column"&&!r.column?T.rose+"80":T.border}/>
+                                          <ColPicker ruleId={r.id} value={r.column||""} required={fd.scope==="column"}/>
                                         </div>
                                       )}
                                       {/* Source hint */}
