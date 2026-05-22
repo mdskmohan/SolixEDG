@@ -15206,6 +15206,7 @@ const DomainsView = ({onAsset, onNav}) => {
   const [assignDpOpen,      setAssignDpOpen]      = useState(false);
   const [assignDpSearch,    setAssignDpSearch]    = useState("");
   const [assignDpSelected,  setAssignDpSelected]  = useState(new Set());
+  const [domainAssetSearch, setDomainAssetSearch] = useState("");
   const [editDdOwnerOpen,   setEditDdOwnerOpen]   = useState(false);
   const [editDdOwnerSearch, setEditDdOwnerSearch] = useState("");
   const [editDdExpertOpen,  setEditDdExpertOpen]  = useState(false);
@@ -15294,7 +15295,7 @@ const DomainsView = ({onAsset, onNav}) => {
           <div style={{padding:"24px 28px 0"}}>
             <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:20}}>
               {/* Icon */}
-              <div style={{width:60,height:60,borderRadius:16,background:`${pd.color}18`,border:`2px solid ${pd.color}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}>{pd.icon}</div>
+              <div style={{width:64,height:64,borderRadius:18,background:`${pd.color}20`,border:`2.5px solid ${pd.color}50`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,flexShrink:0,boxShadow:`0 4px 16px ${pd.color}25`}}>{pd.icon}</div>
               {/* Title + meta */}
               <div style={{flex:1,minWidth:0}}>
                 {pdRenameMode
@@ -15305,10 +15306,12 @@ const DomainsView = ({onAsset, onNav}) => {
                       <button onClick={()=>{patchProduct(pd.id,{displayName:pdRenameValue.trim()||pd.displayName});setPdRenameMode(false);}} style={{padding:"5px 12px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Save</button>
                       <button onClick={()=>setPdRenameMode(false)} style={{padding:"5px 10px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
                     </div>
-                  : <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
-                      <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:0,lineHeight:1.2}}>{pd.displayName}</h1>
-                    </div>
+                  : <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:"0 0 4px",lineHeight:1.2}}>{pd.displayName}</h1>
                 }
+                {!pdRenameMode&&<div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                  {pdDomain&&<span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 9px 2px 7px",borderRadius:5,fontSize:10.5,fontWeight:600,background:`${pdDomain.color}18`,color:pdDomain.color,border:`1px solid ${pdDomain.color}35`}}>{pdDomain.icon} {pdDomain.displayName}</span>}
+                  {pd.description&&<span style={{fontSize:11,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:280}}>{pd.description.slice(0,80)}{pd.description.length>80?"…":""}</span>}
+                </div>}
               </div>
               {/* Action buttons */}
               <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0}} onClick={e=>e.stopPropagation()}>
@@ -15375,9 +15378,9 @@ const DomainsView = ({onAsset, onNav}) => {
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
                     <div style={{fontSize:13,fontWeight:700,color:T.text}}>Description</div>
                     {!pdDescEditMode&&<button onClick={()=>{setPdDescEditValue(pd.description);setPdDescEditMode(true);}}
-                      style={{display:"flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:6,background:"none",border:`1px solid ${T.border}`,color:T.textMuted,fontSize:11.5,cursor:"pointer",fontWeight:500}}
-                      onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
-                      ✏️ Edit
+                      style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"3px 4px",display:"flex",borderRadius:5,transition:"all .12s"}}
+                      onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
+                      <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </button>}
                   </div>
                   {pdDescEditMode
@@ -15774,10 +15777,10 @@ const DomainsView = ({onAsset, onNav}) => {
           <div style={{padding:"24px 28px 0"}}>
             <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:20}}>
               {/* Icon */}
-              <div style={{width:60,height:60,borderRadius:16,background:`${dm.color}18`,border:`2px solid ${dm.color}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}>{dm.icon}</div>
+              <div style={{width:64,height:64,borderRadius:18,background:`${dm.color}20`,border:`2.5px solid ${dm.color}50`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,flexShrink:0,boxShadow:`0 4px 16px ${dm.color}25`}}>{dm.icon}</div>
               {/* Title + meta */}
               <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,flexWrap:"wrap"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4,flexWrap:"wrap"}}>
                   {dmRenameMode
                     ? <input autoFocus value={dmRenameValue} onChange={e=>setDmRenameValue(e.target.value)}
                         onKeyDown={e=>{if(e.key==="Enter"){patchDomain(dm.id,{displayName:dmRenameValue.trim()||dm.displayName});setDmRenameMode(false);}if(e.key==="Escape")setDmRenameMode(false);}}
@@ -15786,37 +15789,13 @@ const DomainsView = ({onAsset, onNav}) => {
                     : <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:0,lineHeight:1.2}}>{dm.displayName}</h1>
                   }
                 </div>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                  {(dm.owners||[]).map(o=><OwnerChip key={o} name={o}/>)}
-                </div>
+                {!dmRenameMode&&<div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                  <DomainTypeBadge type={dm.domainType}/>
+                  {dm.description&&<span style={{fontSize:11,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:320}}>{dm.description.slice(0,90)}{dm.description.length>90?"…":""}</span>}
+                </div>}
               </div>
               {/* Action buttons */}
               <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0}} onClick={e=>e.stopPropagation()}>
-                {/* Add ▾ */}
-                <div style={{position:"relative"}}>
-                  <button onClick={()=>{setAddHeaderDropdown(p=>!p);setDmMenuOpen(false);}}
-                    style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,fontSize:12,fontWeight:600,cursor:"pointer",transition:"all .15s"}}
-                    onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.text;}}>
-                    {Ic.plus(10)} Add ▾
-                  </button>
-                  {addHeaderDropdown&&(
-                    <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",minWidth:190,overflow:"hidden"}}>
-                      {[
-                        {icon:"📊",label:"Asset",action:()=>{setAddHeaderDropdown(false);setAddAssetsSelected(new Set());setAddAssetsSearch("");setAddAssetsOpen(true);}},
-                        {icon:"📦",label:"Data Product",action:()=>{setAddHeaderDropdown(false);setAssignDpSearch("");setAssignDpSelected(new Set());setAssignDpOpen(true);}},
-                      ].map((item,i,arr)=>(
-                        <React.Fragment key={item.label}>
-                          <button onMouseDown={item.action}
-                            style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",fontSize:12,color:T.text}}
-                            onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                            {item.label}
-                          </button>
-                          {i<arr.length-1&&<div style={{height:1,background:T.border}}/>}
-                        </React.Fragment>
-                      ))}
-                    </div>
-                  )}
-                </div>
                 {/* ⋮ */}
                 <div style={{position:"relative"}}>
                   <button onClick={()=>{setDmMenuOpen(p=>!p);setAddHeaderDropdown(false);}}
@@ -15884,9 +15863,9 @@ const DomainsView = ({onAsset, onNav}) => {
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
                     <div style={{fontSize:13,fontWeight:700,color:T.text}}>About this domain</div>
                     {!descEditMode&&<button onClick={()=>{setDescEditValue(dm.description);setDescEditMode(true);}}
-                      style={{display:"flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:6,background:"none",border:`1px solid ${T.border}`,color:T.textMuted,fontSize:11.5,cursor:"pointer",fontWeight:500}}
-                      onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
-                      ✏️ Edit
+                      style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"3px 4px",display:"flex",borderRadius:5,transition:"all .12s"}}
+                      onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
+                      <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </button>}
                   </div>
                   {descEditMode
@@ -16006,7 +15985,7 @@ const DomainsView = ({onAsset, onNav}) => {
                       onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
                     <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none",fontSize:13}}>🔍</span>
                   </div>
-                  <button onClick={()=>{setAddPanelType("dataproduct");setAddPanelOpen(true);}} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0}}>
+                  <button onClick={()=>{setAssignDpSearch("");setAssignDpSelected(new Set());setAssignDpOpen(true);}} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0}}>
                     {Ic.plus(10)} Add Data Product
                   </button>
                 </div>
@@ -16015,7 +15994,7 @@ const DomainsView = ({onAsset, onNav}) => {
                       <div style={{fontSize:36,marginBottom:12}}>📦</div>
                       <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>No data products yet</div>
                       <div style={{fontSize:12,color:T.textMuted,maxWidth:380,margin:"0 auto 16px",lineHeight:1.6}}>A data product bundles related assets into a governed, discoverable unit with SLAs and ownership.</div>
-                      <button onClick={()=>{setAddPanelType("dataproduct");setAddPanelOpen(true);}} style={{padding:"9px 22px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:600,cursor:"pointer"}}>{Ic.plus(11)} Add Data Product</button>
+                      <button onClick={()=>{setAssignDpSearch("");setAssignDpSelected(new Set());setAssignDpOpen(true);}} style={{padding:"9px 22px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:600,cursor:"pointer"}}>{Ic.plus(11)} Add Data Product</button>
                     </div>
                   : (() => {
                       const filtered = domainProducts.filter(p=>
@@ -16055,7 +16034,12 @@ const DomainsView = ({onAsset, onNav}) => {
             {domainTab==="assets"&&(
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,flexWrap:"wrap"}}>
-                  <div style={{fontSize:13,color:T.textMuted,flex:1}}>{domainAssets.length} assets in this domain</div>
+                  <div style={{flex:1,minWidth:160,position:"relative"}}>
+                    <input placeholder="Search assets…" value={domainAssetSearch} onChange={e=>setDomainAssetSearch(e.target.value)}
+                      style={{width:"100%",padding:"7px 12px 7px 32px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                    <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}>{Ic.search(12)}</span>
+                  </div>
                   {/* Layout toggle */}
                   <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7}}>
                     {[["table",<svg key="t" width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="1" width="11" height="2.5" rx="1" fill="currentColor" opacity=".4"/><rect x="1" y="5" width="11" height="2.5" rx="1" fill="currentColor" opacity=".7"/><rect x="1" y="9.5" width="11" height="2.5" rx="1" fill="currentColor"/></svg>],
@@ -16073,13 +16057,16 @@ const DomainsView = ({onAsset, onNav}) => {
                 </div>
                 {domainAssets.length===0
                   ? <div style={{padding:"60px 0",textAlign:"center",color:T.textMuted,fontSize:13}}>No assets assigned to this domain</div>
-                  : domainAssetView==="table"
+                  : (()=>{
+                      const filteredDomainAssets = domainAssets.filter(a=>!domainAssetSearch||a.name.toLowerCase().includes(domainAssetSearch.toLowerCase())||a.type.toLowerCase().includes(domainAssetSearch.toLowerCase()));
+                      if(filteredDomainAssets.length===0) return <div style={{padding:"40px 0",textAlign:"center",color:T.textMuted,fontSize:13}}>No assets match your search</div>;
+                      return domainAssetView==="table"
                     ? <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
                         <AssetTableHeader/>
-                        {domainAssets.map((a,i,arr)=><AssetRowDP key={a.id} asset={a} onAsset={onAsset} isLast={i===arr.length-1}/>)}
+                        {filteredDomainAssets.map((a,i,arr)=><AssetRowDP key={a.id} asset={a} onAsset={onAsset} isLast={i===arr.length-1}/>)}
                       </div>
                     : <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                        {domainAssets.map(a=>(
+                        {filteredDomainAssets.map(a=>(
                           <div key={a.id} onClick={()=>onAsset&&onAsset(a)} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,cursor:onAsset?"pointer":"default",transition:"all .15s",overflow:"hidden"}}
                             onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent+"55";e.currentTarget.style.background=T.bgHover;}}
                             onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.bgSurface;}}>
@@ -16109,7 +16096,8 @@ const DomainsView = ({onAsset, onNav}) => {
                             </div>
                           </div>
                         ))}
-                      </div>
+                      </div>;
+                    })()
                 }
               </div>
             )}
@@ -16863,12 +16851,12 @@ const DomainsView = ({onAsset, onNav}) => {
                     const desc = {"Source-aligned":"Aligned with a system of record or transactional source","Consumer-aligned":"Shaped to serve specific business consumers","Aggregate":"Curates data from multiple source-aligned domains"}[t];
                     const selected = nd.domainType===t;
                     return (
-                      <button key={t} onClick={()=>setNd(d=>({...d,domainType:t}))} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 14px",borderRadius:9,border:`1.5px solid ${selected?T.accent:T.border}`,background:selected?T.accentDim:T.bgElevated,cursor:"pointer",textAlign:"left",transition:"all .12s"}}>
-                        <div style={{width:14,height:14,borderRadius:"50%",border:`2px solid ${selected?T.accent:T.border}`,background:selected?T.accent:"transparent",flexShrink:0,marginTop:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      <button key={t} onClick={()=>setNd(d=>({...d,domainType:t}))} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 14px",borderRadius:9,border:`1.5px solid ${selected?T.border:T.border}`,background:selected?T.bgElevated:T.bgElevated,cursor:"pointer",textAlign:"left",transition:"all .12s",outline:selected?`2px solid ${T.text}25`:"none",outlineOffset:0}}>
+                        <div style={{width:14,height:14,borderRadius:"50%",border:`2px solid ${selected?T.textSub:T.border}`,background:selected?T.textSub:"transparent",flexShrink:0,marginTop:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
                           {selected&&<div style={{width:5,height:5,borderRadius:"50%",background:"#fff"}}/>}
                         </div>
                         <div>
-                          <div style={{fontSize:12,fontWeight:600,color:selected?T.accent:T.text}}>{t}</div>
+                          <div style={{fontSize:12,fontWeight:600,color:T.text}}>{t}</div>
                           <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{desc}</div>
                         </div>
                       </button>
@@ -17224,6 +17212,14 @@ const DataProductsView = ({onAsset, onNav}) => {
   const [prodOwnerSearch, setProdOwnerSearch] = useState("");
   const [prodStewOpen, setProdStewOpen] = useState(false);
   const [prodStewSearch, setProdStewSearch] = useState("");
+  const [npOwners, setNpOwners] = useState([]);
+  const [npStewards, setNpStewards] = useState([]);
+  const [npTags, setNpTags] = useState([]);
+  const [npGlossary, setNpGlossary] = useState([]);
+  const [npTagInput, setNpTagInput] = useState("");
+  const [npGlInput, setNpGlInput] = useState("");
+  const [dvDescEditMode, setDvDescEditMode] = useState(false);
+  const [dvDescEditValue, setDvDescEditValue] = useState("");
   // standalone product profile extras
   const [dpMenuOpen,       setDpMenuOpen]       = useState(false);
   const [dpAddAssetsOpen,  setDpAddAssetsOpen]  = useState(false);
@@ -17265,15 +17261,18 @@ const DataProductsView = ({onAsset, onNav}) => {
       id:`dp${Date.now()}`,name:np.name.trim(),displayName:np.displayName.trim()||np.name.trim(),
       domain:createDomain,icon:np.icon,color:domain?.color||"#6366f1",
       description:np.description.trim()||"No description provided.",
-      owners:domain?.owners||[],experts:[],lifecycleStage:np.lifecycleStage,
+      owners:npOwners.length?npOwners:(domain?.owners||[]),
+      experts:npStewards,lifecycleStage:np.lifecycleStage,
       sla:{tier:"SILVER",availability:99.0,dataFreshness:60,dataQuality:80},
-      assetIds:[],tags:[],consumesFrom:[],providesTo:[],
+      assetIds:[],tags:npTags,glossaryTerms:npGlossary,consumesFrom:[],providesTo:[],
       createdAt:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
     };
     setProducts(prev=>[...prev,p]);
     setCreateOpen(false);
     setNp({name:"",displayName:"",description:"",lifecycleStage:"DEVELOPMENT",icon:"📦"});
     setCreateDomain("");
+    setNpOwners([]);setNpStewards([]);setNpTags([]);setNpGlossary([]);setNpTagInput("");setNpGlInput("");
+    setProdOwnerOpen(false);setProdStewOpen(false);
     setSelectedProductId(p.id);
     setProductTab("overview");
   };
@@ -17299,11 +17298,13 @@ const DataProductsView = ({onAsset, onNav}) => {
           <div style={{padding:"24px 28px 0"}}>
             <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:20}}>
               {/* Icon */}
-              <div style={{width:60,height:60,borderRadius:16,background:`${pd.color}18`,border:`2px solid ${pd.color}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}>{pd.icon}</div>
+              <div style={{width:64,height:64,borderRadius:18,background:`${pd.color}20`,border:`2.5px solid ${pd.color}50`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,flexShrink:0,boxShadow:`0 4px 16px ${pd.color}25`}}>{pd.icon}</div>
               {/* Title + meta */}
               <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
-                  <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:0,lineHeight:1.2}}>{pd.displayName}</h1>
+                <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:"0 0 4px",lineHeight:1.2}}>{pd.displayName}</h1>
+                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                  {pdDomain&&<span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 9px 2px 7px",borderRadius:5,fontSize:10.5,fontWeight:600,background:`${pdDomain.color}18`,color:pdDomain.color,border:`1px solid ${pdDomain.color}35`}}>{pdDomain.icon} {pdDomain.displayName}</span>}
+                  {pd.description&&<span style={{fontSize:11,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:280}}>{pd.description.slice(0,80)}{pd.description.length>80?"…":""}</span>}
                 </div>
               </div>
               {/* Action buttons */}
@@ -17347,8 +17348,27 @@ const DataProductsView = ({onAsset, onNav}) => {
             {productTab==="overview"&&(
               <div style={{display:"grid",gridTemplateColumns:"1fr 300px",gap:24}}>
                 <div>
-                  <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:10}}>Description</div>
-                  <p style={{fontSize:13,color:T.textSub,lineHeight:1.7,marginBottom:24}}>{pd.description}</p>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                    <div style={{fontSize:13,fontWeight:700,color:T.text}}>Description</div>
+                    {!dvDescEditMode&&<button onClick={()=>{setDvDescEditValue(pd.description);setDvDescEditMode(true);}}
+                      style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"3px 4px",display:"flex",borderRadius:5,transition:"all .12s"}}
+                      onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
+                      <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>}
+                  </div>
+                  {dvDescEditMode
+                    ? <div style={{marginBottom:24}}>
+                        <textarea value={dvDescEditValue} onChange={e=>setDvDescEditValue(e.target.value)} rows={5} autoFocus
+                          style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,lineHeight:1.75,resize:"vertical",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
+                        <div style={{display:"flex",gap:8,marginTop:8}}>
+                          <button onClick={()=>{patchDP(pd.id,{description:dvDescEditValue.trim()||pd.description});setDvDescEditMode(false);}}
+                            style={{padding:"6px 16px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Save</button>
+                          <button onClick={()=>setDvDescEditMode(false)}
+                            style={{padding:"6px 14px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+                        </div>
+                      </div>
+                    : <p style={{fontSize:13,color:T.textSub,lineHeight:1.7,marginBottom:24}}>{pd.description}</p>
+                  }
                 </div>
                 {/* Metadata sidebar — matches asset profile style */}
                 <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
@@ -18007,6 +18027,110 @@ const DataProductsView = ({onAsset, onNav}) => {
                 <textarea value={np.description} onChange={e=>setNp(p=>({...p,description:e.target.value}))} rows={3} placeholder="What data does this product contain, and who consumes it?"
                   style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box"}}
                   onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+              </div>
+              {/* Owners picker */}
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Owners</label>
+                <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
+                  {npOwners.map(o=>(
+                    <div key={o} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:5,background:T.accentDim,border:`1px solid ${T.accent}33`,borderLeft:`3px solid ${T.accent}`}}>
+                      <div style={{width:16,height:16,borderRadius:3,background:T.accent+"33",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:T.accent}}>{o[0].toUpperCase()}</div>
+                      <span style={{fontSize:11.5,color:T.accent,fontWeight:500}}>{o}</span>
+                      <button onClick={()=>setNpOwners(p=>p.filter(x=>x!==o))} style={{background:"none",border:"none",color:T.accent,cursor:"pointer",padding:0,fontSize:11,lineHeight:1,marginLeft:1}}>×</button>
+                    </div>
+                  ))}
+                </div>
+                <div style={{position:"relative"}}>
+                  <button onClick={()=>{setProdOwnerOpen(p=>!p);setProdOwnerSearch("");}} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",borderRadius:8,border:`1.5px solid ${prodOwnerOpen?T.accent:T.border}`,background:T.bgElevated,color:T.textSub,fontSize:12,cursor:"pointer",width:"100%"}}>
+                    {Ic.plus(10)} Add owner
+                  </button>
+                  {prodOwnerOpen&&(
+                    <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,boxShadow:"0 8px 24px rgba(0,0,0,.25)",zIndex:50,overflow:"hidden"}}>
+                      <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}>
+                        <input autoFocus value={prodOwnerSearch} onChange={e=>setProdOwnerSearch(e.target.value)} placeholder="Search users…"
+                          style={{width:"100%",padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+                      </div>
+                      <div style={{maxHeight:140,overflowY:"auto"}}>
+                        {["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"].filter(u=>!npOwners.includes(u)&&(!prodOwnerSearch||u.includes(prodOwnerSearch.toLowerCase()))).map(u=>(
+                          <button key={u} onClick={()=>{setNpOwners(p=>[...p,u]);setProdOwnerOpen(false);setProdOwnerSearch("");}}
+                            style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:12,textAlign:"left"}}
+                            onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                            <div style={{width:22,height:22,borderRadius:5,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:T.accent}}>{u[0].toUpperCase()}</div>
+                            {u}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {/* Stewards picker */}
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Stewards</label>
+                <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
+                  {npStewards.map(o=>(
+                    <div key={o} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:5,background:"rgba(217,119,6,.1)",border:`1px solid rgba(217,119,6,.2)`,borderLeft:`3px solid #d97706`}}>
+                      <div style={{width:16,height:16,borderRadius:3,background:"rgba(217,119,6,.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#d97706"}}>{o[0].toUpperCase()}</div>
+                      <span style={{fontSize:11.5,color:"#d97706",fontWeight:500}}>{o}</span>
+                      <button onClick={()=>setNpStewards(p=>p.filter(x=>x!==o))} style={{background:"none",border:"none",color:"#d97706",cursor:"pointer",padding:0,fontSize:11,lineHeight:1,marginLeft:1}}>×</button>
+                    </div>
+                  ))}
+                </div>
+                <div style={{position:"relative"}}>
+                  <button onClick={()=>{setProdStewOpen(p=>!p);setProdStewSearch("");}} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",borderRadius:8,border:`1.5px solid ${prodStewOpen?"#d97706":T.border}`,background:T.bgElevated,color:T.textSub,fontSize:12,cursor:"pointer",width:"100%"}}>
+                    {Ic.plus(10)} Add steward
+                  </button>
+                  {prodStewOpen&&(
+                    <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,boxShadow:"0 8px 24px rgba(0,0,0,.25)",zIndex:50,overflow:"hidden"}}>
+                      <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}>
+                        <input autoFocus value={prodStewSearch} onChange={e=>setProdStewSearch(e.target.value)} placeholder="Search users…"
+                          style={{width:"100%",padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+                      </div>
+                      <div style={{maxHeight:140,overflowY:"auto"}}>
+                        {["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"].filter(u=>!npStewards.includes(u)&&(!prodStewSearch||u.includes(prodStewSearch.toLowerCase()))).map(u=>(
+                          <button key={u} onClick={()=>{setNpStewards(p=>[...p,u]);setProdStewOpen(false);setProdStewSearch("");}}
+                            style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:12,textAlign:"left"}}
+                            onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                            <div style={{width:22,height:22,borderRadius:5,background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#d97706"}}>{u[0].toUpperCase()}</div>
+                            {u}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {/* Tags */}
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Tags</label>
+                <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
+                  {npTags.map(t=>(
+                    <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textSub}}>
+                      {t}<button onClick={()=>setNpTags(p=>p.filter(x=>x!==t))} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,lineHeight:1,display:"flex"}}>{Ic.x(7)}</button>
+                    </span>
+                  ))}
+                </div>
+                <input value={npTagInput} onChange={e=>setNpTagInput(e.target.value)}
+                  onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&npTagInput.trim()){setNpTags(p=>[...p,npTagInput.trim()]);setNpTagInput("");e.preventDefault();}}}
+                  placeholder="Type and press Enter to add…"
+                  style={{width:"100%",padding:"7px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+              </div>
+              {/* Glossary Terms */}
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Glossary Terms</label>
+                <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
+                  {npGlossary.map(t=>(
+                    <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:6,background:"rgba(139,92,246,.08)",border:"1px solid rgba(139,92,246,.2)",fontSize:11.5,color:"#8b5cf6"}}>
+                      {t}<button onClick={()=>setNpGlossary(p=>p.filter(x=>x!==t))} style={{background:"none",border:"none",cursor:"pointer",color:"#8b5cf6",padding:0,lineHeight:1,display:"flex",opacity:.6}}>{Ic.x(7)}</button>
+                    </span>
+                  ))}
+                </div>
+                <input value={npGlInput} onChange={e=>setNpGlInput(e.target.value)}
+                  onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&npGlInput.trim()){setNpGlossary(p=>[...p,npGlInput.trim()]);setNpGlInput("");e.preventDefault();}}}
+                  placeholder="Type and press Enter to add…"
+                  style={{width:"100%",padding:"7px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                  onFocus={e=>e.target.style.borderColor="#8b5cf6"} onBlur={e=>e.target.style.borderColor=T.border}/>
               </div>
               {/* Icon picker — at end */}
               <div>
