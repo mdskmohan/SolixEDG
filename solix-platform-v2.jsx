@@ -6904,7 +6904,6 @@ const PolicyManagerView = ({onToast, onNav}) => {
                             {label:"Industry", value:selReg.industry},
                             {label:"Effective Date", value:selReg.effective},
                             {label:"Max Penalty", value:selReg.penalty},
-                            ...(selReg.lastAudit?[{label:"Last Audit", value:selReg.lastAudit}]:[]),
                           ].map(m=>(
                             <div key={m.label} style={{padding:"8px 12px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>
                               <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>{m.label}</div>
@@ -8516,9 +8515,8 @@ const ComplianceView = () => {
                     <span style={{fontSize:10.5,fontWeight:700,padding:"3px 9px",borderRadius:99,background:`${statusColor}18`,color:statusColor,border:`1px solid ${statusColor}33`}}>{f.status}</span>
                   </div>
                   <QScore score={f.score}/>
-                  <div style={{display:"flex",justifyContent:"space-between",marginTop:10,fontSize:11,color:T.textMuted}}>
+                  <div style={{marginTop:10,fontSize:11,color:T.textMuted}}>
                     <span>{f.passing}/{f.controls} controls passing</span>
-                    <span>Last audit: {f.lastAudit}</span>
                   </div>
                 </div></Card2>
               );
