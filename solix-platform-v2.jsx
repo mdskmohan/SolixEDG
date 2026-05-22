@@ -5661,7 +5661,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const [assetSearchQ,  setAssetSearchQ]= useState("");
   const [selAssetIds,   setSelAssetIds] = useState(new Set());
   const [assetRel,      setAssetRel]    = useState("governs");
-  const EMPTY_POL = {name:"",category:"Data",description:"",owner:[],stewards:[],tags:[],regulations:[],scope:{domains:[],assetTypes:[],sources:[],assetIds:[]},criteria:[],rules:[],links:[],history:[],fqn:"",version:1,severity:"Medium",policyTypes:[],consequence:{severity:"Medium",onViolation:"Warn",notify:"Both"},ruleLogic:"independent",runMode:"draft",wizardSchedFreq:"daily",wizardSchedTime:"08:00",wizardSchedDay:"monday",wizardSchedCron:""};
+  const EMPTY_POL = {name:"",category:"Data",description:"",owner:[],stewards:[],tags:[],regulations:[],scope:{domains:[],sources:[],assetType:"both"},criteria:[],rules:[],links:[],history:[],fqn:"",version:1,severity:"Medium",policyTypes:[],consequence:{severity:"Medium",onViolation:"Warn",notify:"Both"},ruleLogic:"independent",runMode:"draft",wizardSchedFreq:"daily",wizardSchedTime:"08:00",wizardSchedDay:"monday",wizardSchedCron:""};
   const [newPol,         setNewPol]        = useState(EMPTY_POL);
   const [catFilter,      setCatFilter]     = useState([]);
   const [filterDropOpen, setFilterDropOpen]= useState(false);
@@ -5800,8 +5800,9 @@ const PolicyManagerView = ({onToast, onNav}) => {
     const convertedRules = wizardRules.map((r,i)=>{
       const fl=W_FIELD_LABELS[r.field]||r.field;
       const valStr=r.value?` ${r.value}`:"";
-      const colStr=r.column?` [col: ${r.column}]`:"";
-      return {id:`r${i+1}-${Date.now()}`,name:`${fl} ${r.operator}${valStr}${colStr}`,criteria:`IF ${fl} ${r.operator}${valStr}, THEN flag violation.`};
+      const tblStr=r.table?` on ${r.table}`:"";
+      const colStr=r.column?`.${r.column}`:"";
+      return {id:`r${i+1}-${Date.now()}`,name:`${fl} ${r.operator}${valStr}${tblStr}${colStr}`,table:r.table||"",column:r.column||"",criteria:`IF ${fl} ${r.operator}${valStr}${tblStr}${colStr}, THEN flag violation.`};
     });
     const autoText = convertedRules.map(r=>r.criteria);
     const scopeCount = (newPol.scope?.domains||[]).length?ASSETS.filter(a=>(newPol.scope.domains||[]).includes(a.domain)).length:ASSETS.length;
@@ -6157,84 +6158,14 @@ const PolicyManagerView = ({onToast, onNav}) => {
                   )}
                 </div>
               </div>
-              {/* Search + filter button row */}
-              <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                <div style={{flex:1,position:"relative"}}>
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.5"/><path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-                  <input value={polSearch} onChange={e=>setPolSearch(e.target.value)} placeholder="Search policies…"
-                    style={{width:"100%",padding:"6px 8px 6px 26px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,fontSize:12,color:T.text,outline:"none",boxSizing:"border-box"}}
-                    onFocus={e=>e.target.style.borderColor=T.blue} onBlur={e=>e.target.style.borderColor=T.border}/>
-                </div>
-                {/* Filter button */}
-                <div ref={filterDropRef} style={{position:"relative",flexShrink:0}}>
-                  <button onClick={()=>setFilterDropOpen(o=>!o)} title="Filter"
-                    style={{height:30,padding:"0 9px",borderRadius:7,background:filterDropOpen||catFilter.length>0?T.accentDim:"transparent",border:`1px solid ${filterDropOpen||catFilter.length>0?T.accent:T.border}`,color:filterDropOpen||catFilter.length>0?T.accent:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontSize:11,transition:"all .12s"}}>
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M4 8h8M7 12h2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                    {catFilter.length>0&&<span style={{minWidth:14,height:14,borderRadius:99,background:T.accent,color:"#fff",fontSize:9,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 3px"}}>{catFilter.length}</span>}
-                  </button>
-                  {filterDropOpen&&(
-                    <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,width:210,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",zIndex:200,overflow:"hidden"}}>
-                      <div style={{padding:"9px 12px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                        <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Filter by Category</span>
-                        {catFilter.length>0&&<button onClick={()=>setCatFilter([])} style={{fontSize:10.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:600}}>Clear</button>}
-                      </div>
-                      <div style={{padding:"4px 0",maxHeight:220,overflowY:"auto"}}>
-                        {POLICY_CATS.map(cat=>{
-                          const checked = catFilter.includes(cat);
-                          const cnt = policies.filter(p=>p.category===cat).length;
-                          return (
-                            <button key={cat} onClick={()=>setCatFilter(prev=>checked?prev.filter(c=>c!==cat):[...prev,cat])}
-                              style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"7px 12px",background:checked?T.accentDim:"transparent",border:"none",cursor:"pointer",textAlign:"left"}}
-                              onMouseEnter={e=>{if(!checked)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!checked)e.currentTarget.style.background="transparent";}}>
-                              <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${checked?T.accent:T.border}`,background:checked?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .1s"}}>
-                                {checked&&<svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1 4l2 2 4-4" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                              </div>
-                              <div style={{width:7,height:7,borderRadius:1,background:catColor(cat),flexShrink:0}}/>
-                              <span style={{flex:1,fontSize:12,color:T.text}}>{cat}</span>
-                              <span style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{cnt}</span>
-                            </button>
-                          );
-                        })}
-                        <div style={{borderTop:`1px solid ${T.border}`,marginTop:4,padding:"8px 10px"}}>
-                          <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",display:"block",marginBottom:6}}>Lifecycle</span>
-                          {["All",...LC_STEPS].map(lc=>(
-                            <button key={lc} onClick={()=>setLcFilter(lc)}
-                              style={{display:"inline-block",margin:"2px 3px 2px 0",padding:"3px 9px",borderRadius:99,fontSize:11,fontWeight:lcFilter===lc?700:400,border:`1px solid ${lcFilter===lc?(LC_COLORS[lc]||T.blue):T.border}`,background:lcFilter===lc?`${LC_COLORS[lc]||T.blue}14`:"transparent",color:lcFilter===lc?(LC_COLORS[lc]||T.blue):T.textSub,cursor:"pointer"}}>
-                              {lc}{lc!=="All"&&<span style={{marginLeft:3,fontSize:9.5,opacity:.65}}>{policies.filter(p=>p.lifecycle===lc).length}</span>}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <div style={{padding:"8px 10px",borderTop:`1px solid ${T.border}`}}>
-                        <button onClick={()=>setFilterDropOpen(false)} style={{width:"100%",padding:"5px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Done</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
+              {/* Search row */}
+              <div style={{position:"relative"}}>
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.5"/><path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                <input value={polSearch} onChange={e=>setPolSearch(e.target.value)} placeholder="Search policies…"
+                  style={{width:"100%",padding:"7px 8px 7px 28px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,fontSize:12,color:T.text,outline:"none",boxSizing:"border-box"}}
+                  onFocus={e=>e.target.style.borderColor=T.blue} onBlur={e=>e.target.style.borderColor=T.border}/>
               </div>
             </div>
-
-            {/* Active filter strip */}
-            {(polSearch||catFilter.length>0||lcFilter!=="All")&&(
-              <div style={{padding:"5px 10px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:4,flexShrink:0,flexWrap:"wrap",background:T.bgElevated}}>
-                <span style={{fontSize:10.5,color:T.textMuted,flexShrink:0}}>{filteredPols.length} result{filteredPols.length!==1?"s":""}:</span>
-                {catFilter.map(cat=>(
-                  <span key={cat} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10.5,padding:"1px 6px",borderRadius:99,background:`${catColor(cat)}15`,color:catColor(cat),border:`1px solid ${catColor(cat)}30`,fontWeight:600}}>
-                    {cat}<button onClick={()=>setCatFilter(p=>p.filter(c=>c!==cat))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,fontSize:11,lineHeight:1}}>×</button>
-                  </span>
-                ))}
-                {lcFilter!=="All"&&(
-                  <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10.5,padding:"1px 6px",borderRadius:99,background:`${lcColor(lcFilter)}14`,color:lcColor(lcFilter),border:`1px solid ${lcColor(lcFilter)}30`,fontWeight:600}}>
-                    {lcFilter}<button onClick={()=>setLcFilter("All")} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,fontSize:11,lineHeight:1}}>×</button>
-                  </span>
-                )}
-                {polSearch&&(
-                  <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10.5,padding:"1px 6px",borderRadius:99,background:T.bgSurface,color:T.textSub,border:`1px solid ${T.border}`,fontFamily:"'Geist Mono',monospace"}}>
-                    "{polSearch}"<button onClick={()=>setPolSearch("")} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,fontSize:11,lineHeight:1}}>×</button>
-                  </span>
-                )}
-              </div>
-            )}
 
             {/* Policy list grouped by category — Tags-style with hover actions */}
             <div style={{flex:1,overflowY:"auto",minHeight:0}}>
@@ -6728,40 +6659,87 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       );
                     })()}
 
-                    {/* ── Linked Assets ── */}
-                    {pdTab==="assets"&&(
-                      <div style={{padding:"20px 22px"}}>
-                        {/* Directly linked */}
-                        <div style={{marginBottom:28}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-                            <div>
-                              <div style={{fontSize:13,fontWeight:600,color:T.text}}>Linked assets</div>
-                              <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Catalog assets this policy explicitly governs</div>
+                    {/* ── Rule Targets (auto-derived, read-only) ── */}
+                    {pdTab==="assets"&&(()=>{
+                      // Derive targets from rules that have a table set
+                      const ruleTargets = (p.rules||[]).filter(r=>r.table);
+                      // Group by table
+                      const byTable = {};
+                      ruleTargets.forEach(r=>{
+                        if(!byTable[r.table]) byTable[r.table]=[];
+                        byTable[r.table].push(r);
+                      });
+                      const tableNames = Object.keys(byTable);
+                      const SVC_ICON_MAP = {"snowflake":"❄️","databricks":"🧱","postgres":"🐘","postgresql":"🐘","oracle":"🔴","bigquery":"🔷","redshift":"🌀"};
+                      return (
+                        <div style={{padding:"20px 22px"}}>
+                          <div style={{marginBottom:16}}>
+                            <div style={{fontSize:13,fontWeight:600,color:T.text}}>Rule Targets</div>
+                            <div style={{fontSize:11.5,color:T.textMuted,marginTop:3,lineHeight:1.6}}>
+                              Tables and columns checked by this policy's rules. Derived automatically — edit rules to change these.
                             </div>
-                            <Btn onClick={()=>{setSelAssetIds(new Set());setAssetSearchQ("");setAssetRel("governs");setLinkAssetOpen(true);}}>+ Link assets</Btn>
                           </div>
-                          {(p.links||[]).length===0&&(
-                            <div style={{padding:"28px",textAlign:"center",border:`1.5px dashed ${T.border}`,borderRadius:9,fontSize:12.5,color:T.textMuted}}>
-                              No assets linked yet — click "+ Link assets" to add from the catalog.
+                          {tableNames.length===0
+                            ? (
+                              <div style={{padding:"32px 20px",textAlign:"center",border:`1.5px dashed ${T.border}`,borderRadius:10}}>
+                                <div style={{fontSize:22,marginBottom:8}}>🎯</div>
+                                <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:4}}>No rule targets yet</div>
+                                <div style={{fontSize:12,color:T.textMuted}}>Add Quality or Retention rules with a table selected — they'll appear here automatically.</div>
+                              </div>
+                            ) : tableNames.map(tbl=>{
+                              const asset = ASSETS.find(a=>a.name===tbl);
+                              const svcIcon = SVC_ICON_MAP[(asset?.service||"").toLowerCase()]||"🗄️";
+                              const qualityScore = asset?.quality;
+                              const qColor = !qualityScore?T.textMuted:qualityScore>=80?T.green:qualityScore>=60?T.amber:T.rose;
+                              const rules = byTable[tbl];
+                              const colsUsed = [...new Set(rules.filter(r=>r.column).map(r=>r.column))];
+                              return (
+                                <div key={tbl} style={{border:`1px solid ${T.border}`,borderRadius:10,marginBottom:10,overflow:"hidden",background:T.bgSurface}}>
+                                  {/* Table header row */}
+                                  <div style={{padding:"11px 14px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
+                                    <span style={{fontSize:16,flexShrink:0}}>{svcIcon}</span>
+                                    <span style={{fontFamily:"'Geist Mono','Courier New',monospace",fontSize:13,fontWeight:700,color:T.text,flex:1}}>{tbl}</span>
+                                    {asset&&<span style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:T.bgBase,color:T.textMuted,border:`1px solid ${T.border}`}}>{asset.type}</span>}
+                                    {asset&&<span style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:T.bgBase,color:T.textMuted,border:`1px solid ${T.border}`}}>{asset.domain}</span>}
+                                    {qualityScore&&<span style={{fontSize:11,fontWeight:700,color:qColor}}>{qualityScore}%</span>}
+                                    <span style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:`${T.accent}12`,color:T.accent,fontWeight:600,border:`1px solid ${T.accent}30`}}>{rules.length} rule{rules.length!==1?"s":""}</span>
+                                  </div>
+                                  {/* Rules within this table */}
+                                  <div style={{padding:"8px 14px 10px"}}>
+                                    {/* Columns used */}
+                                    {colsUsed.length>0&&(
+                                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8,flexWrap:"wrap"}}>
+                                        <span style={{fontSize:10.5,color:T.textMuted,flexShrink:0}}>Columns checked:</span>
+                                        {colsUsed.map(c=>(
+                                          <span key={c} style={{fontSize:11,fontFamily:"'Geist Mono','Courier New',monospace",padding:"2px 8px",borderRadius:5,background:T.violet+"12",color:T.violet,border:`1px solid ${T.violet}25`,fontWeight:500}}>{c}</span>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {/* Rule list */}
+                                    {rules.map((r,ri)=>(
+                                      <div key={r.id||ri} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:ri<rules.length-1?`1px solid ${T.border}`:"none"}}>
+                                        <span style={{fontSize:10,fontWeight:700,color:T.textMuted,minWidth:44,flexShrink:0}}>Rule {ri+1}</span>
+                                        <span style={{fontSize:11.5,color:T.text,flex:1,lineHeight:1.4}}>{r.name||r.criteria}</span>
+                                        {r.column&&<span style={{fontSize:10.5,fontFamily:"'Geist Mono','Courier New',monospace",padding:"1px 7px",borderRadius:5,background:T.violet+"12",color:T.violet,border:`1px solid ${T.violet}25`,flexShrink:0}}>{r.column}</span>}
+                                        <span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:SEV_BG[r.severity]||T.bgElevated,color:SEV_COLOR[r.severity]||T.textMuted,fontWeight:700,flexShrink:0}}>{r.severity||"Med"}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            })
+                          }
+                          {/* Scope context */}
+                          {(p.scope?.sources||[]).length>0&&(
+                            <div style={{marginTop:16,padding:"10px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textMuted,display:"flex",alignItems:"center",gap:8}}>
+                              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/><line x1="8" y1="5.5" x2="8" y2="8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="10.5" r=".6" fill="currentColor" stroke="none"/></svg>
+                              Policy scope: <strong style={{color:T.textSub}}>{(p.scope.sources||[]).join(", ")}</strong>
+                              {(p.scope?.domains||[]).length>0&&<> · domain: <strong style={{color:T.textSub}}>{p.scope.domains.join(", ")}</strong></>}
                             </div>
                           )}
-                          {(p.links||[]).map((l,i)=>{
-                            const asset = ASSETS.find(a=>a.id===l.assetId);
-                            const flagged = asset&&typeof asset.quality==="number"&&asset.quality<70;
-                            return (
-                              <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",border:`1px solid ${flagged?T.amber+"50":T.border}`,borderRadius:8,marginBottom:6,background:flagged?`${T.amber}05`:T.bgSurface}}>
-                                <span style={{fontSize:10.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`,flexShrink:0}}>{l.type}</span>
-                                <span style={{fontSize:13,fontWeight:500,color:T.text,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontFamily:"'Geist Mono',monospace"}}>{l.target}</span>
-                                {asset&&<span style={{fontSize:11,fontWeight:700,color:asset.quality>=80?T.green:asset.quality>=60?T.amber:T.rose,flexShrink:0}}>{asset.quality}%</span>}
-                                {asset&&<span style={{fontSize:10.5,padding:"1px 6px",borderRadius:4,background:T.bgElevated,color:T.textMuted,flexShrink:0}}>{asset.domain}</span>}
-                                <span style={{fontSize:11,color:T.textMuted,fontStyle:"italic",flexShrink:0}}>{l.rel}</span>
-                                <button onClick={()=>handleRemoveLink(p.id,i)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:18,padding:0,lineHeight:1,flexShrink:0}}>×</button>
-                              </div>
-                            );
-                          })}
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {/* ── Activity ── */}
                     {pdTab==="activity"&&(
@@ -7240,77 +7218,93 @@ const PolicyManagerView = ({onToast, onNav}) => {
 
                 /* ─── Step 1: Scope ─── */
                 if(createStep===1){
-                  const scopeDoms  = newPol.scope?.domains||[];
-                  const scopeTypes = newPol.scope?.assetTypes||[];
-                  const scopeSrcs  = newPol.scope?.sources||[];
-                  const scopeAssets= newPol.scope?.assetIds||[];
-                  const SRC_TYPES = {
-                    "Snowflake":  ["Table","View","Schema","Database"],
-                    "Databricks": ["Table","View","Schema"],
-                    "PostgreSQL": ["Table","View","Schema","Database"],
-                    "Oracle":     ["Table","View","Schema","Database"],
-                    "BigQuery":   ["Table","View","Schema"],
-                    "Redshift":   ["Table","View","Schema","Database"],
+                  const scopeDoms = newPol.scope?.domains||[];
+                  const scopeSrcs = newPol.scope?.sources||[];
+                  const assetType = newPol.scope?.assetType||"both";
+                  const SRC_META  = {
+                    "Snowflake":  {icon:"❄️", desc:"Cloud data warehouse"},
+                    "Databricks": {icon:"🧱", desc:"Unity Catalog / Delta"},
+                    "PostgreSQL": {icon:"🐘", desc:"Relational database"},
+                    "Oracle":     {icon:"🔴", desc:"Enterprise database"},
+                    "BigQuery":   {icon:"🔷", desc:"Google analytics warehouse"},
+                    "Redshift":   {icon:"🌀", desc:"AWS data warehouse"},
                   };
-                  const ALL_TYPES=["Table","View","Schema","Database"];
-                  // Map picker labels → service values in ASSETS
+                  const ALL_SOURCES = Object.keys(SRC_META);
+                  // Count available tables+views per source (those with column metadata)
                   const SRC_SERVICE = {"Snowflake":["snowflake"],"Databricks":["databricks"],"PostgreSQL":["postgres","postgresql"],"Oracle":["oracle"],"BigQuery":["bigquery"],"Redshift":["redshift"]};
-                  // Asset Type options narrow based on Source; if no source selected show all
-                  const availTypes=scopeSrcs.length>0?[...new Set(scopeSrcs.flatMap(s=>SRC_TYPES[s]||ALL_TYPES))]:ALL_TYPES;
-                  const validScopeTypes=scopeTypes.filter(t=>availTypes.includes(t));
-                  // Cascade filter: domain → source → asset type → asset list
-                  let matchedAssets=[...ASSETS];
-                  if(scopeDoms.length>0)       matchedAssets=matchedAssets.filter(a=>scopeDoms.includes(a.domain));
-                  if(scopeSrcs.length>0)       matchedAssets=matchedAssets.filter(a=>scopeSrcs.some(s=>(SRC_SERVICE[s]||[s.toLowerCase()]).includes((a.service||"").toLowerCase())));
-                  if(validScopeTypes.length>0) matchedAssets=matchedAssets.filter(a=>validScopeTypes.includes(a.type||"Table"));
-                  const assetOpts=matchedAssets.map(a=>a.name||String(a.id));
+                  const srcAssetCount = src => ASSETS.filter(a=>{
+                    const svcMatch=(SRC_SERVICE[src]||[]).includes((a.service||"").toLowerCase());
+                    const typeOk=assetType==="both"||(assetType==="table"&&a.type==="Table")||(assetType==="view"&&a.type==="View");
+                    return svcMatch && typeOk && !!ASSET_COLUMNS[a.name];
+                  }).length;
                   return (
-                    <div style={{display:"flex",flexDirection:"column",gap:20}}>
-                      {secHead("Policy Scope","Define which assets this policy governs. Asset selection is required — conditions will be evaluated against these assets.")}
-                      {/* 1. Domain */}
+                    <div style={{display:"flex",flexDirection:"column",gap:24}}>
+                      {secHead("Policy Scope","Set the source and domain for this policy. Tables and columns are selected per rule in the next step.")}
+
+                      {/* ── Source cards (required) ── */}
+                      <div>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                          <label style={{fontSize:11,fontWeight:700,color:T.text,display:"flex",alignItems:"center",gap:4}}>
+                            Source <span style={{color:T.rose}}>*</span>
+                          </label>
+                          {scopeSrcs.length>0&&<button onClick={()=>setNewPol(p=>({...p,scope:{...p.scope,sources:[]}}))} style={{fontSize:10.5,color:T.textMuted,background:"none",border:"none",cursor:"pointer",padding:0}}>Clear</button>}
+                        </div>
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                          {ALL_SOURCES.map(src=>{
+                            const sel=scopeSrcs.includes(src);
+                            const cnt=srcAssetCount(src);
+                            return (
+                              <button key={src} onClick={()=>setNewPol(p=>({...p,scope:{...p.scope,sources:sel?scopeSrcs.filter(s=>s!==src):[...scopeSrcs,src]}}))}
+                                style={{display:"flex",alignItems:"center",gap:10,padding:"11px 13px",borderRadius:10,border:`2px solid ${sel?T.accent:T.border}`,background:sel?T.accentDim:T.bgElevated,cursor:"pointer",textAlign:"left",outline:"none",transition:"all .12s",position:"relative"}}>
+                                <span style={{fontSize:20,lineHeight:1,flexShrink:0}}>{SRC_META[src].icon}</span>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontSize:12,fontWeight:sel?700:600,color:sel?T.accent:T.text,lineHeight:1.2}}>{src}</div>
+                                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:2}}>{SRC_META[src].desc}</div>
+                                </div>
+                                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3,flexShrink:0}}>
+                                  {cnt>0&&<span style={{fontSize:10,fontWeight:600,color:sel?T.accent:T.textMuted,background:sel?`${T.accent}18`:T.bgSurface,padding:"1px 6px",borderRadius:99,border:`1px solid ${sel?T.accent+"30":T.border}`}}>{cnt}</span>}
+                                  <div style={{width:16,height:16,borderRadius:"50%",border:`2px solid ${sel?T.accent:T.border}`,background:sel?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .12s"}}>
+                                    {sel&&<svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1.5 4l2 2 3-3" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {scopeSrcs.length===0&&<div style={{fontSize:10.5,color:T.rose,marginTop:6}}>Select at least one source to continue.</div>}
+                      </div>
+
+                      {/* ── Asset Type toggle ── */}
+                      <div>
+                        <label style={{fontSize:11,fontWeight:700,color:T.text,display:"block",marginBottom:10}}>Asset Type</label>
+                        <div style={{display:"inline-flex",borderRadius:9,overflow:"hidden",border:`1.5px solid ${T.border}`,background:T.bgElevated}}>
+                          {[["both","Tables & Views"],["table","Tables only"],["view","Views only"]].map(([val,lbl])=>{
+                            const sel=assetType===val;
+                            return <button key={val} onClick={()=>setNewPol(p=>({...p,scope:{...p.scope,assetType:val}}))}
+                              style={{padding:"8px 16px",background:sel?T.accent:"transparent",border:"none",color:sel?"#fff":T.textSub,fontSize:12,fontWeight:sel?700:400,cursor:"pointer",transition:"all .12s",whiteSpace:"nowrap"}}>{lbl}</button>;
+                          })}
+                        </div>
+                        <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Tables are base data — use Views for derived or aggregated datasets.</div>
+                      </div>
+
+                      {/* ── Domain (optional) ── */}
                       <CatFieldDropdown
-                        label="Domain"
-                        placeholder="Search and select domains… (empty = all domains)"
+                        label="Domain (optional)"
+                        placeholder="All domains — narrow to a specific domain if needed"
                         options={ALL_DOMAINS}
                         selected={scopeDoms}
-                        onChange={v=>setNewPol(p=>({...p,scope:{...p.scope,domains:v,assetIds:[]}}))}
+                        onChange={v=>setNewPol(p=>({...p,scope:{...p.scope,domains:v}}))}
                       />
-                      {/* 2. Source */}
-                      <CatFieldDropdown
-                        label="Source"
-                        placeholder="Search and select sources…"
-                        options={["Snowflake","Databricks","PostgreSQL","Oracle","BigQuery","Redshift"]}
-                        selected={scopeSrcs}
-                        onChange={v=>{
-                          const newAvail=v.length>0?[...new Set(v.flatMap(s=>SRC_TYPES[s]||ALL_TYPES))]:ALL_TYPES;
-                          const keptTypes=scopeTypes.filter(t=>newAvail.includes(t));
-                          setNewPol(p=>({...p,scope:{...p.scope,sources:v,assetTypes:keptTypes,assetIds:[]}}));
-                        }}
-                      />
-                      {/* 3. Asset Type — always visible; values narrow based on Source */}
-                      <CatFieldDropdown
-                        label="Asset Type"
-                        placeholder={scopeSrcs.length>0?"Search and select asset types…":"Select a source to narrow asset types…"}
-                        options={availTypes}
-                        selected={validScopeTypes}
-                        onChange={v=>setNewPol(p=>({...p,scope:{...p.scope,assetTypes:v,assetIds:[]}}))}
-                      />
-                      <div>
-                        <CatFieldDropdown
-                          label={<>Asset <span style={{color:T.rose,marginLeft:2}}>*</span></>}
-                          placeholder={assetOpts.length>0?"Search and select assets…":"No assets match current filters"}
-                          options={assetOpts}
-                          selected={scopeAssets}
-                          onChange={v=>setNewPol(p=>({...p,scope:{...p.scope,assetIds:v}}))}
-                        />
-                        {scopeAssets.length===0&&<div style={{fontSize:10.5,color:T.rose,marginTop:4}}>At least one asset is required to continue.</div>}
-                      </div>
-                      {matchedAssets.length>0&&(
+
+                      {/* Preview banner */}
+                      {scopeSrcs.length>0&&(
                         <div style={{padding:"12px 16px",borderRadius:9,background:T.accentDim,border:`1px solid ${T.accent}30`,display:"flex",alignItems:"center",gap:10}}>
                           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{color:T.accent,flexShrink:0}}><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/><line x1="8" y1="5.5" x2="8" y2="8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="10.5" r=".6" fill="currentColor" stroke="none"/></svg>
-                          <span style={{fontSize:12,color:T.accent,lineHeight:1.6}}>
-                            <strong>{matchedAssets.length}</strong> asset{matchedAssets.length!==1?"s":""} match current filters
-                            {scopeAssets.length>0&&<> · <strong>{scopeAssets.length}</strong> selected</>}
+                          <span style={{fontSize:12,color:T.accent,lineHeight:1.7}}>
+                            <strong>{scopeSrcs.join(", ")}</strong> selected
+                            {scopeDoms.length>0&&<> · domain: <strong>{scopeDoms.join(", ")}</strong></>}
+                            {" · "}<strong>{assetType==="both"?"Tables & Views":assetType==="table"?"Tables only":"Views only"}</strong>
+                            <span style={{color:T.textSub,fontWeight:400}}{...{}}> — pick specific tables &amp; columns inside each rule in Step 2.</span>
                           </span>
                         </div>
                       )}
@@ -7369,95 +7363,115 @@ const PolicyManagerView = ({onToast, onNav}) => {
                     ? W_RULE_FIELDS.filter(f=>f.types.some(t=>selPTypes.includes(t)))
                     : W_RULE_FIELDS;
                   const defaultField = filteredRuleFields[0]||W_RULE_FIELDS[0];
-                  const addPresetRule = () => setWizardRules(prev=>[...prev,{id:`wr-${Date.now()}`,field:defaultField.id,operator:defaultField.ops[0],value:"",column:"",severity:"Medium"}]);
+                  const addPresetRule = () => setWizardRules(prev=>[...prev,{id:`wr-${Date.now()}`,field:defaultField.id,operator:defaultField.ops[0],value:"",table:"",column:"",severity:"Medium"}]);
                   const removeRule = id => setWizardRules(prev=>prev.filter(r=>r.id!==id));
 
-                  // ── Build grouped column list from selected assets ──
-                  const selectedAssetNames = newPol.scope?.assetIds||[];
-                  // Each entry: { tableName, columns:[...] }
-                  const colGroups = selectedAssetNames
-                    .map(nm=>({ tableName:nm, columns:ASSET_COLUMNS[nm]||[] }))
-                    .filter(g=>g.columns.length>0);
-                  // Flat unique list for quick lookup
-                  const allColumns = [...new Set(colGroups.flatMap(g=>g.columns))];
+                  // ── Tables available for rule-level picking (from Step 1 source + assetType) ──
+                  const scopeSrcs2  = newPol.scope?.sources||[];
+                  const assetType2  = newPol.scope?.assetType||"both";
+                  const SRC_SVC2    = {"Snowflake":["snowflake"],"Databricks":["databricks"],"PostgreSQL":["postgres","postgresql"],"Oracle":["oracle"],"BigQuery":["bigquery"],"Redshift":["redshift"]};
+                  const SRC_ICON2   = {"snowflake":"❄️","databricks":"🧱","postgres":"🐘","postgresql":"🐘","oracle":"🔴","bigquery":"🔷","redshift":"🌀"};
+                  const availTables = ASSETS.filter(a=>{
+                    const svcMatch = scopeSrcs2.length===0 || scopeSrcs2.some(s=>(SRC_SVC2[s]||[]).includes((a.service||"").toLowerCase()));
+                    const typeOk   = assetType2==="both" || (assetType2==="table"&&a.type==="Table") || (assetType2==="view"&&a.type==="View");
+                    return svcMatch && typeOk && !!ASSET_COLUMNS[a.name];
+                  });
 
-                  // ── Inline searchable column picker ──
-                  const ColPicker = ({ruleId, value, required}) => {
-                    const [open,  setOpen]  = React.useState(false);
-                    const [q,     setQ]     = React.useState("");
+                  // ── Reusable searchable dropdown factory ──
+                  const makeDropdown = ({placeholder, value, onChange, items, renderItem, renderSelected, emptyMsg, zIndex=400, dropWidth="100%"}) => {
+                    // Items: array of {key, label, meta?}
+                    const [open, setOpen] = React.useState(false);
+                    const [q,    setQ]    = React.useState("");
                     const ref = React.useRef(null);
                     React.useEffect(()=>{
                       if(!open) return;
-                      const fn = e=>{ if(ref.current&&!ref.current.contains(e.target)) setOpen(false); };
-                      document.addEventListener("mousedown",fn);
-                      return()=>document.removeEventListener("mousedown",fn);
+                      const fn=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};
+                      document.addEventListener("mousedown",fn); return()=>document.removeEventListener("mousedown",fn);
                     },[open]);
-                    const isEmpty = !value;
-                    const borderCol = required&&isEmpty ? T.rose+"80" : open ? T.accent : T.border;
-                    // Filtered groups
-                    const filtGroups = q.trim()
-                      ? colGroups.map(g=>({...g,columns:g.columns.filter(c=>c.toLowerCase().includes(q.toLowerCase()))})).filter(g=>g.columns.length>0)
-                      : colGroups;
+                    const filtered = q.trim() ? items.filter(it=>it.label.toLowerCase().includes(q.toLowerCase())) : items;
                     return (
                       <div ref={ref} style={{position:"relative",flex:1}}>
                         <button type="button" onClick={()=>setOpen(o=>!o)}
-                          style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 10px",background:T.bgSurface,border:`1.5px solid ${borderCol}`,borderRadius:7,cursor:"pointer",outline:"none",transition:"border-color .12s",textAlign:"left"}}>
-                          {value
-                            ? <span style={{fontSize:11.5,color:T.text,fontWeight:500}}>{value}</span>
-                            : <span style={{fontSize:11.5,color:T.textMuted}}>{required?"Select column…":"Any column (table-level check)"}</span>
-                          }
+                          style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",gap:6,padding:"7px 10px",background:T.bgSurface,border:`1.5px solid ${open?T.accent:T.border}`,borderRadius:7,cursor:"pointer",outline:"none",transition:"border-color .12s",textAlign:"left"}}>
+                          {value ? (renderSelected ? renderSelected(value) : <span style={{fontSize:11.5,color:T.text,fontWeight:500}}>{value}</span>)
+                            : <span style={{fontSize:11.5,color:T.textMuted}}>{placeholder}</span>}
                           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:T.textMuted,transform:open?"rotate(180deg)":"none",transition:"transform .15s"}}><path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                         </button>
                         {open&&(
-                          <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:400,background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,boxShadow:"0 8px 28px rgba(0,0,0,.18)",overflow:"hidden",maxHeight:260,display:"flex",flexDirection:"column"}}>
-                            {/* Search */}
+                          <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,width:dropWidth,zIndex,background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,boxShadow:"0 10px 32px rgba(0,0,0,.2)",overflow:"hidden",maxHeight:280,display:"flex",flexDirection:"column"}}>
                             <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-                              <input autoFocus type="text" value={q} onChange={e=>setQ(e.target.value)}
-                                placeholder="Search columns…"
+                              <input autoFocus type="text" value={q} onChange={e=>setQ(e.target.value)} placeholder="Search…"
                                 style={{width:"100%",padding:"5px 8px",border:`1.5px solid ${T.border}`,borderRadius:6,fontSize:11.5,color:T.text,background:T.bgElevated,outline:"none",boxSizing:"border-box"}}
                                 onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
                             </div>
                             <div style={{overflowY:"auto",flex:1}}>
-                              {/* "Clear / any column" option for optional scope */}
-                              {!required&&(
-                                <div onClick={()=>{updRule(ruleId,"column","");setOpen(false);setQ("");}}
-                                  style={{padding:"8px 12px",fontSize:11.5,color:value?"":T.accent,fontWeight:value?"400":"600",cursor:"pointer",borderBottom:`1px solid ${T.border}`,fontStyle:"italic",background:value?"transparent":T.accentDim}}
-                                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
-                                  onMouseLeave={e=>e.currentTarget.style.background=value?"transparent":T.accentDim}>
-                                  Any column (table-level check)
-                                </div>
-                              )}
-                              {colGroups.length===0
-                                ? <div style={{padding:"16px 12px",fontSize:11.5,color:T.textMuted,textAlign:"center"}}>No column metadata — select assets with known columns in Step 1</div>
-                                : filtGroups.length===0
-                                  ? <div style={{padding:"16px 12px",fontSize:11.5,color:T.textMuted,textAlign:"center"}}>No columns match "{q}"</div>
-                                  : filtGroups.map(g=>(
-                                      <div key={g.tableName}>
-                                        {/* Table group header */}
-                                        <div style={{padding:"5px 12px 3px",fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",background:T.bgBase,borderBottom:`1px solid ${T.border}`,borderTop:`1px solid ${T.border}`,position:"sticky",top:0}}>
-                                          {g.tableName}
-                                        </div>
-                                        {g.columns.map(col=>{
-                                          const sel=value===col;
-                                          return (
-                                            <div key={col} onClick={()=>{updRule(ruleId,"column",col);setOpen(false);setQ("");}}
-                                              style={{padding:"7px 14px 7px 20px",fontSize:11.5,color:sel?T.accent:T.text,fontWeight:sel?600:400,cursor:"pointer",background:sel?T.accentDim:"transparent",display:"flex",alignItems:"center",gap:8}}
-                                              onMouseEnter={e=>e.currentTarget.style.background=sel?T.accentDim:T.bgHover}
-                                              onMouseLeave={e=>e.currentTarget.style.background=sel?T.accentDim:"transparent"}>
-                                              <svg width="11" height="11" viewBox="0 0 12 12" fill="none" style={{color:T.textMuted,flexShrink:0}}><rect x="1" y="1" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.2"/><line x1="3.5" y1="4" x2="8.5" y2="4" stroke="currentColor" strokeWidth="1"/><line x1="3.5" y1="6" x2="8.5" y2="6" stroke="currentColor" strokeWidth="1"/><line x1="3.5" y1="8" x2="6" y2="8" stroke="currentColor" strokeWidth="1"/></svg>
-                                              {col}
-                                              {sel&&<svg width="11" height="11" viewBox="0 0 12 12" fill="none" style={{marginLeft:"auto",color:T.accent}}><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                                            </div>
-                                          );
-                                        })}
+                              {filtered.length===0
+                                ? <div style={{padding:"18px 12px",fontSize:11.5,color:T.textMuted,textAlign:"center"}}>{emptyMsg||"No results"}</div>
+                                : filtered.map(it=>{
+                                    const sel=value===it.key;
+                                    return (
+                                      <div key={it.key} onClick={()=>{onChange(it.key);setOpen(false);setQ("");}}
+                                        style={{padding:"8px 12px",fontSize:11.5,color:sel?T.accent:T.text,fontWeight:sel?600:400,cursor:"pointer",background:sel?T.accentDim:"transparent",display:"flex",alignItems:"center",gap:8,transition:"background .08s"}}
+                                        onMouseEnter={e=>e.currentTarget.style.background=sel?T.accentDim:T.bgHover}
+                                        onMouseLeave={e=>e.currentTarget.style.background=sel?T.accentDim:"transparent"}>
+                                        {renderItem ? renderItem(it,sel) : <><span style={{flex:1}}>{it.label}</span>{sel&&<svg width="11" height="11" viewBox="0 0 12 12" fill="none" style={{color:T.accent,flexShrink:0}}><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}</>}
                                       </div>
-                                    ))
-                              }
+                                    );
+                                  })}
                             </div>
                           </div>
                         )}
                       </div>
                     );
+                  };
+
+                  // ── TablePicker: searchable dropdown of available tables/views ──
+                  const TablePicker = ({ruleId, value}) => {
+                    const items = availTables.map(a=>({key:a.name, label:a.name, type:a.type, service:a.service, domain:a.domain}));
+                    const svcIcon = svc => SRC_ICON2[(svc||"").toLowerCase()]||"🗄️";
+                    return makeDropdown({
+                      placeholder: availTables.length>0 ? "Select table or view…" : "Select a source in Step 1 first",
+                      value,
+                      onChange: v=>{ updRule(ruleId,"table",v); updRule(ruleId,"column",""); },
+                      items,
+                      emptyMsg: "No tables match",
+                      renderItem:(it,sel)=>(
+                        <>
+                          <span style={{fontSize:14,flexShrink:0}}>{svcIcon(it.service)}</span>
+                          <span style={{flex:1,fontFamily:"'Geist Mono','Courier New',monospace",fontSize:11.5,color:sel?T.accent:T.text}}>{it.label}</span>
+                          <span style={{fontSize:10,padding:"1px 5px",borderRadius:4,background:T.bgElevated,color:T.textMuted,flexShrink:0,border:`1px solid ${T.border}`}}>{it.type}</span>
+                          {sel&&<svg width="11" height="11" viewBox="0 0 12 12" fill="none" style={{color:T.accent,flexShrink:0}}><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                        </>
+                      ),
+                      renderSelected: v=>{
+                        const a=availTables.find(x=>x.name===v);
+                        return <span style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:T.text,fontWeight:500}}>
+                          <span>{svcIcon(a?.service)}</span>
+                          <span style={{fontFamily:"'Geist Mono','Courier New',monospace"}}>{v}</span>
+                          {a&&<span style={{fontSize:10,padding:"1px 5px",borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>{a.type}</span>}
+                        </span>;
+                      }
+                    });
+                  };
+
+                  // ── ColPicker: columns from the rule's selected table ──
+                  const ColPicker = ({ruleId, value, required, tableVal}) => {
+                    const cols = tableVal ? (ASSET_COLUMNS[tableVal]||[]) : [];
+                    const items = cols.map(c=>({key:c, label:c}));
+                    return makeDropdown({
+                      placeholder: !tableVal ? "Select a table first" : required ? "Select column…" : "Any column (table-level check)",
+                      value,
+                      onChange: v=>updRule(ruleId,"column",v),
+                      items,
+                      emptyMsg: tableVal ? "No columns found for this table" : "Select a table first",
+                      renderItem:(it,sel)=>(
+                        <>
+                          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" style={{color:T.textMuted,flexShrink:0}}><rect x="1" y="1" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.2"/><line x1="3.5" y1="4" x2="8.5" y2="4" stroke="currentColor" strokeWidth="1"/><line x1="3.5" y1="6" x2="8.5" y2="6" stroke="currentColor" strokeWidth="1"/><line x1="3.5" y1="8" x2="6" y2="8" stroke="currentColor" strokeWidth="1"/></svg>
+                          <span style={{flex:1,fontFamily:"'Geist Mono','Courier New',monospace",fontSize:11.5,color:sel?T.accent:T.text}}>{it.label}</span>
+                          {sel&&<svg width="11" height="11" viewBox="0 0 12 12" fill="none" style={{color:T.accent,flexShrink:0}}><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                        </>
+                      ),
+                    });
                   };
                   const updRule = (id,k,v) => setWizardRules(prev=>prev.map(r=>r.id===id?{...r,[k]:v}:r));
                   const sel_s={padding:"7px 9px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",cursor:"pointer",fontFamily:"inherit"};
@@ -7646,13 +7660,29 @@ const PolicyManagerView = ({onToast, onNav}) => {
                                           onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
                                           onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>×</button>
                                       </div>
-                                      {/* Column picker — shown for "column" (required) and "both" (optional) scopes */}
-                                      {(fd.scope==="column"||fd.scope==="both")&&(
-                                        <div style={{padding:"0 11px 9px",borderTop:`1px solid ${T.border}`,paddingTop:8,display:"flex",alignItems:"center",gap:8}}>
-                                          <span style={{fontSize:11,color:fd.scope==="column"?T.rose:T.textMuted,whiteSpace:"nowrap",flexShrink:0,fontWeight:fd.scope==="column"?600:400}}>
-                                            Column{fd.scope==="column"?<span style={{color:T.rose}}> *</span>:" (optional)"}:
-                                          </span>
-                                          <ColPicker ruleId={r.id} value={r.column||""} required={fd.scope==="column"}/>
+                                      {/* Table + Column pickers for Quality/Retention rules */}
+                                      {(fd.types.includes("Quality")||fd.types.includes("Retention"))&&(
+                                        <div style={{borderTop:`1px solid ${T.border}`,padding:"10px 11px 11px",display:"flex",flexDirection:"column",gap:8,background:`${T.bgBase}88`}}>
+                                          {/* Table row */}
+                                          <div style={{display:"flex",alignItems:"center",gap:8}}>
+                                            <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0,minWidth:60}}>
+                                              <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/><line x1="1" y1="5" x2="13" y2="5" stroke="currentColor" strokeWidth="1"/><line x1="5" y1="5" x2="5" y2="13" stroke="currentColor" strokeWidth="1"/></svg>
+                                              <span style={{fontSize:11,fontWeight:600,color:T.textSub}}>Table <span style={{color:T.rose}}>*</span></span>
+                                            </div>
+                                            <TablePicker ruleId={r.id} value={r.table||""}/>
+                                          </div>
+                                          {/* Column row — only for column-scoped fields */}
+                                          {(fd.scope==="column"||fd.scope==="both")&&(
+                                            <div style={{display:"flex",alignItems:"center",gap:8}}>
+                                              <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0,minWidth:60}}>
+                                                <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/><line x1="1" y1="5" x2="13" y2="5" stroke="currentColor" strokeWidth="1"/><line x1="5" y1="1" x2="5" y2="13" stroke="currentColor" strokeWidth="1"/></svg>
+                                                <span style={{fontSize:11,fontWeight:600,color:fd.scope==="column"?T.textSub:T.textMuted}}>
+                                                  Column{fd.scope==="column"?<span style={{color:T.rose}}> *</span>:<span style={{color:T.textMuted,fontWeight:400}}> (opt)</span>}
+                                                </span>
+                                              </div>
+                                              <ColPicker ruleId={r.id} value={r.column||""} required={fd.scope==="column"} tableVal={r.table||""}/>
+                                            </div>
+                                          )}
                                         </div>
                                       )}
                                       {/* Source hint */}
@@ -7749,10 +7779,9 @@ const PolicyManagerView = ({onToast, onNav}) => {
                           ? [["—","No rules defined"]]
                           : wizardRules.map((r,i)=>{
                               const fl=W_FIELD_LABELS[r.field]||r.field;
-                              const colStr=r.column?` · col: ${r.column}`:"";
-                              const fd=W_RULE_FIELDS?.find?.(f=>f.id===r.field);
-                              const scopeStr=fd?` [${fd.scope==="column"?"COLUMN":fd.scope==="both"?"TABLE·COL":"TABLE"}]`:"";
-                              return [`Rule ${i+1}${scopeStr}`, `${fl} ${r.operator}${r.value?` "${r.value}"`:""}${colStr}`.trim()];
+                              const tblStr=r.table?` · ${r.table}`:"";
+                              const colStr=r.column?`.${r.column}`:"";
+                              return [`Rule ${i+1}`, `${fl} ${r.operator}${r.value?` "${r.value}"`:""}${tblStr}${colStr}`.trim()];
                             })
                         },
                         {title:"Ownership", rows:[
@@ -7863,7 +7892,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                 </button>
                 {createStep<W_STEPS.length
                   ? (()=>{
-                      const step1ok=(newPol.scope?.assetIds||[]).length>0;
+                      const step1ok=(newPol.scope?.sources||[]).length>0;
                       const step2ok=newPol.name.trim().length>0;
                       const canContinue=createStep===1?step1ok:createStep===2?step2ok:true;
                       return (
