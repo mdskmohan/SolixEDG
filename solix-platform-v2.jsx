@@ -5661,7 +5661,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const [assetSearchQ,  setAssetSearchQ]= useState("");
   const [selAssetIds,   setSelAssetIds] = useState(new Set());
   const [assetRel,      setAssetRel]    = useState("governs");
-  const EMPTY_POL = {name:"",category:"Data",description:"",owner:[],stewards:[],tags:[],regulations:[],scope:{domains:[],sources:[],assetType:"both"},criteria:[],rules:[],links:[],history:[],fqn:"",version:1,severity:"Medium",policyTypes:[],consequence:{severity:"Medium",onViolation:"Warn",notify:"Both"},ruleLogic:"independent",runMode:"draft",wizardSchedFreq:"daily",wizardSchedTime:"08:00",wizardSchedDay:"monday",wizardSchedCron:""};
+  const EMPTY_POL = {name:"",category:"Data",description:"",owner:[],stewards:[],tags:[],regulations:[],regulationArticles:{},scope:{domains:[],sources:[],assetType:"both"},criteria:[],rules:[],links:[],history:[],fqn:"",version:1,severity:"Medium",policyTypes:[],consequence:{severity:"Medium",onViolation:"Warn",notify:"Both"},ruleLogic:"independent",runMode:"draft",wizardSchedFreq:"daily",wizardSchedTime:"08:00",wizardSchedDay:"monday",wizardSchedCron:""};
   const [newPol,         setNewPol]        = useState(EMPTY_POL);
   const [catFilter,      setCatFilter]     = useState([]);
   const [filterDropOpen, setFilterDropOpen]= useState(false);
@@ -7826,7 +7826,60 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       {secHead("Ownership & Classification","Assign who is responsible for this policy and link it to regulations and tags.")}
                       <CatFieldDropdown label="Owner" placeholder="Search and select owners…" options={PMV_USERS} selected={newPol.owner||[]} onChange={v=>setNewPol(p=>({...p,owner:v}))} renderOpt={userRenderOpt}/>
                       <CatFieldDropdown label="Stewards" placeholder="Search and select stewards…" options={PMV_USERS} selected={newPol.stewards||[]} onChange={v=>setNewPol(p=>({...p,stewards:v}))} renderOpt={userRenderOpt}/>
-                      <CatFieldDropdown label="Regulatory Frameworks" placeholder="Search and select frameworks…" options={REGULATION_FRAMEWORKS} selected={newPol.regulations||[]} onChange={v=>setNewPol(p=>({...p,regulations:v}))}/>
+                      {/* ── Regulatory Frameworks + Article picker ── */}
+                      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                        <CatFieldDropdown
+                          label="Regulatory Frameworks"
+                          placeholder="Search and select frameworks…"
+                          options={REGULATION_FRAMEWORKS}
+                          selected={newPol.regulations||[]}
+                          onChange={v=>{
+                            // Drop articles for any de-selected frameworks
+                            const kept={};
+                            v.forEach(f=>{kept[f]=(newPol.regulationArticles||{})[f]||[];});
+                            setNewPol(p=>({...p,regulations:v,regulationArticles:kept}));
+                          }}
+                        />
+                        {/* Per-framework article picker — shown for each selected framework that has requirements */}
+                        {(newPol.regulations||[]).map(regName=>{
+                          const meta = REGS_META.find(r=>r.name===regName);
+                          if(!meta||!meta.requirements||meta.requirements.length===0) return null;
+                          const selArts = (newPol.regulationArticles||{})[regName]||[];
+                          const toggleArt = artId => {
+                            const next = selArts.includes(artId) ? selArts.filter(a=>a!==artId) : [...selArts,artId];
+                            setNewPol(p=>({...p,regulationArticles:{...(p.regulationArticles||{}),[regName]:next}}));
+                          };
+                          return (
+                            <div key={regName} style={{marginLeft:12,borderLeft:`2px solid ${T.accent}40`,paddingLeft:12}}>
+                              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                                <div style={{fontSize:11,fontWeight:700,color:T.textSub}}>{regName} — Articles / Clauses</div>
+                                {selArts.length>0&&(
+                                  <button onClick={()=>setNewPol(p=>({...p,regulationArticles:{...(p.regulationArticles||{}),[regName]:[]}})) }
+                                    style={{fontSize:10.5,color:T.textMuted,background:"none",border:"none",cursor:"pointer",padding:0}}>Clear</button>
+                                )}
+                              </div>
+                              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                                {meta.requirements.map(req=>{
+                                  const sel=selArts.includes(req.id);
+                                  return (
+                                    <button key={req.id} onClick={()=>toggleArt(req.id)}
+                                      style={{display:"flex",alignItems:"flex-start",gap:8,padding:"7px 10px",borderRadius:7,border:`1.5px solid ${sel?T.accent:T.border}`,background:sel?T.accentDim:T.bgElevated,cursor:"pointer",textAlign:"left",outline:"none",transition:"all .1s"}}>
+                                      <div style={{width:14,height:14,borderRadius:3,border:`2px solid ${sel?T.accent:T.border}`,background:sel?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1,transition:"all .1s"}}>
+                                        {sel&&<svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1.5 4l2 2 3-3" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                      </div>
+                                      <div>
+                                        <span style={{fontSize:10.5,fontWeight:700,color:sel?T.accent:T.textSub,marginRight:6}}>{req.ref}</span>
+                                        <span style={{fontSize:11,color:sel?T.text:T.textMuted,lineHeight:1.5}}>{req.title}</span>
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              {selArts.length===0&&<div style={{fontSize:10.5,color:T.textMuted,marginTop:4,fontStyle:"italic"}}>No articles selected — policy covers the full framework.</div>}
+                            </div>
+                          );
+                        })}
+                      </div>
                       <CatFieldDropdown label="Tags" placeholder="Search and select tags…" options={POLICY_TAGS} selected={newPol.tags||[]} onChange={v=>setNewPol(p=>({...p,tags:v}))}/>
                       <div style={{padding:"10px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textMuted,lineHeight:1.7}}>
                         <strong style={{color:T.textSub}}>Evaluation:</strong> Policy conditions run automatically on every workflow run. Violations are created immediately when a condition fails on an asset.
@@ -7876,7 +7929,17 @@ const PolicyManagerView = ({onToast, onNav}) => {
                         {title:"Ownership", rows:[
                           ["Owner",      (Array.isArray(newPol.owner)?newPol.owner:[newPol.owner]).filter(Boolean).join(", ")||"Not set"],
                           ["Stewards",   (newPol.stewards||[]).join(", ")||"Not set"],
-                          ["Frameworks", (newPol.regulations||[]).join(", ")||"Not set"],
+                          ["Frameworks", (()=>{
+                            const regs=newPol.regulations||[];
+                            if(regs.length===0) return "Not set";
+                            return regs.map(r=>{
+                              const arts=((newPol.regulationArticles||{})[r]||[]);
+                              const meta=REGS_META.find(m=>m.name===r);
+                              if(arts.length===0) return r;
+                              const refs=arts.map(aid=>{const req=meta?.requirements?.find(rq=>rq.id===aid);return req?.ref||aid;}).join(", ");
+                              return `${r} (${refs})`;
+                            }).join(" · ");
+                          })()],
                         ]},
                       ].map(sec=>(
                         <div key={sec.title} style={{background:T.bgElevated,borderRadius:10,border:`1px solid ${T.border}`,overflow:"hidden"}}>
