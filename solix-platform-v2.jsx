@@ -5519,6 +5519,20 @@ const PolicyManagerView = ({onToast, onNav}) => {
        {type:"Table",target:"orders",rel:"governs",assetId:1},
        {type:"Table",target:"customers",rel:"governs",assetId:2},
      ],
+     runs:[
+       {id:"r1a",ts:"2026-05-20 14:32",trigger:"Schedule",duration:"4m 12s",assetsScanned:304,rulesEval:5,violationsNew:0,violationsResolved:0,status:"success",score:81},
+       {id:"r1b",ts:"2026-05-19 08:00",trigger:"Schedule",duration:"3m 58s",assetsScanned:301,rulesEval:5,violationsNew:2,violationsResolved:0,status:"success",score:78},
+       {id:"r1c",ts:"2026-05-18 11:24",trigger:"Manual",  duration:"5m 02s",assetsScanned:298,rulesEval:5,violationsNew:0,violationsResolved:1,status:"success",score:78},
+       {id:"r1d",ts:"2026-05-17 08:00",trigger:"Schedule",duration:"4m 44s",assetsScanned:295,rulesEval:5,violationsNew:2,violationsResolved:0,status:"success",score:75},
+       {id:"r1e",ts:"2026-05-16 08:00",trigger:"Schedule",duration:"6m 01s",assetsScanned:290,rulesEval:5,violationsNew:0,violationsResolved:0,status:"failed", score:null,errorMsg:"Connection timeout — Snowflake DWH unreachable after 3 retries"},
+     ],
+     governedAssets:[
+       {name:"orders",      type:"Table",domain:"Commerce",service:"snowflake",   status:"fail",  failedRules:["PII classification required"],    quality:72},
+       {name:"customers",   type:"Table",domain:"Commerce",service:"snowflake",   status:"pass",  failedRules:[],                                  quality:91},
+       {name:"transactions",type:"Table",domain:"Finance", service:"postgresql",  status:"fail",  failedRules:["Certification gate"],              quality:85},
+       {name:"revenue",     type:"Table",domain:"Finance", service:"postgresql",  status:"pass",  failedRules:[],                                  quality:93},
+       {name:"dim_products",type:"Table",domain:"Commerce",service:"databricks",  status:"pass",  failedRules:[],                                  quality:88},
+     ],
      history:[
        {when:"2026-05-01",who:"maya.chen",action:"Policy activated"},
        {when:"2026-04-15",who:"dev.patel",action:"Approved v2"},
@@ -5537,6 +5551,17 @@ const PolicyManagerView = ({onToast, onNav}) => {
        {id:"r2-2",name:"Stewardship escalation",criteria:"Assets scoring below 70 must trigger an escalation to the assigned steward within 24 hours."},
      ],
      links:[],
+     runs:[
+       {id:"r2a",ts:"2026-05-20 08:00",trigger:"Schedule",duration:"2m 44s",assetsScanned:186,rulesEval:2,violationsNew:1,violationsResolved:0,status:"success",score:88},
+       {id:"r2b",ts:"2026-05-19 08:00",trigger:"Schedule",duration:"2m 38s",assetsScanned:182,rulesEval:2,violationsNew:0,violationsResolved:0,status:"success",score:90},
+       {id:"r2c",ts:"2026-05-18 08:00",trigger:"Schedule",duration:"2m 51s",assetsScanned:180,rulesEval:2,violationsNew:0,violationsResolved:1,status:"success",score:90},
+     ],
+     governedAssets:[
+       {name:"payments",    type:"Table",domain:"Finance",service:"postgresql", status:"fail",  failedRules:["Quality threshold enforcement"],quality:67},
+       {name:"revenue",     type:"Table",domain:"Finance",service:"postgresql", status:"pass",  failedRules:[],                               quality:93},
+       {name:"transactions",type:"Table",domain:"Finance",service:"postgresql", status:"pass",  failedRules:[],                               quality:85},
+       {name:"orders",      type:"Table",domain:"Finance",service:"snowflake",  status:"pass",  failedRules:[],                               quality:88},
+     ],
      history:[
        {when:"2026-04-20",who:"dev.patel",action:"Policy activated"},
        {when:"2026-03-10",who:"sarah.kim",action:"Approved v1"},
@@ -5572,6 +5597,17 @@ const PolicyManagerView = ({onToast, onNav}) => {
      ],
      links:[
        {type:"Table",target:"customers",rel:"governs",assetId:2},
+     ],
+     runs:[
+       {id:"r4a",ts:"2026-05-20 18:00",trigger:"Schedule",duration:"1m 52s",assetsScanned:42,rulesEval:3,violationsNew:1,violationsResolved:0,status:"success",score:65},
+       {id:"r4b",ts:"2026-05-20 14:00",trigger:"Schedule",duration:"1m 48s",assetsScanned:40,rulesEval:3,violationsNew:2,violationsResolved:0,status:"success",score:62},
+       {id:"r4c",ts:"2026-05-19 10:00",trigger:"Manual",  duration:"2m 10s",assetsScanned:38,rulesEval:3,violationsNew:0,violationsResolved:0,status:"success",score:68},
+     ],
+     governedAssets:[
+       {name:"patient_events",   type:"Table",domain:"Commerce",service:"snowflake",  status:"fail",  failedRules:["PHI quality gate"],    quality:84},
+       {name:"user_health_data", type:"Table",domain:"Finance", service:"postgresql", status:"fail",  failedRules:["Access restriction"],  quality:91},
+       {name:"audit_records",    type:"Table",domain:"Commerce",service:"snowflake",  status:"fail",  failedRules:["Audit logging"],       quality:79},
+       {name:"customers",        type:"Table",domain:"Commerce",service:"snowflake",  status:"pass",  failedRules:[],                      quality:91},
      ],
      history:[
        {when:"2026-04-01",who:"lisa.ray",action:"Policy activated"},
@@ -5670,8 +5706,11 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const [polPlusMenuOpen, setPolPlusMenuOpen] = useState(false);
   const [polNewCatOpen,   setPolNewCatOpen]   = useState(false);
   const [polNewCatDraft,  setPolNewCatDraft]  = useState({name:"",description:"",color:"#6366f1",owners:[],stewards:[],domains:[],tags:[],frameworks:[]});
-  const [violTab,        setViolTab]         = useState("all");
-  const [violStatusFilter, setViolStatusFilter] = useState("Open");
+  const [violTab,          setViolTab]          = useState("all");
+  const [violStatusFilter, setViolStatusFilter] = useState("All");
+  const [violSevFilter,    setViolSevFilter]    = useState("All");
+  const [violExpanded,     setViolExpanded]     = useState(null);
+  const [runExpanded,      setRunExpanded]      = useState(null);
   const [createStep,     setCreateStep]     = useState(1);
   const [wizardRules,    setWizardRules]    = useState([]);
   const [wizardRuleTab,  setWizardRuleTab]  = useState("preset");
@@ -6356,7 +6395,20 @@ const PolicyManagerView = ({onToast, onNav}) => {
                           <button onClick={()=>{setSelPolicyId(isSel?null:p.id);setPdTab("overview");setEditing(false);}}
                             style={{flex:1,display:"flex",alignItems:"center",gap:7,padding:"5px 6px 5px 30px",background:"none",border:"none",cursor:"pointer",textAlign:"left",minWidth:0}}>
                             <span style={{width:8,height:8,borderRadius:"50%",background:catColor(p.category),flexShrink:0,display:"block"}}/>
-                            <span style={{flex:1,fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+                            <div style={{flex:1,minWidth:0}}>
+                              <span style={{display:"block",fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+                              {p.compliancePct!=null&&(
+                                <div style={{display:"flex",alignItems:"center",gap:5,marginTop:3}}>
+                                  <div style={{flex:1,height:3,borderRadius:3,background:T.bgElevated,overflow:"hidden",maxWidth:80}}>
+                                    <div style={{height:"100%",width:`${p.compliancePct}%`,borderRadius:3,background:p.compliancePct>=80?T.green:p.compliancePct>=60?T.amber:T.rose,transition:"width .3s"}}/>
+                                  </div>
+                                  <span style={{fontSize:9.5,fontFamily:"'Geist Mono',monospace",color:p.compliancePct>=80?T.green:p.compliancePct>=60?T.amber:T.rose,fontWeight:700}}>{p.compliancePct}%</span>
+                                </div>
+                              )}
+                              {p.compliancePct==null&&p.lifecycle!=="Draft"&&p.lifecycle!=="Deprecated"&&(
+                                <span style={{display:"block",fontSize:9.5,color:T.textMuted,marginTop:2,fontStyle:"italic"}}>Not evaluated</span>
+                              )}
+                            </div>
                             {openViolsForPol(p.id).length>0&&(
                               <span title={`${openViolsForPol(p.id).length} open violation${openViolsForPol(p.id).length>1?"s":""}`}
                                 style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:8,background:T.rose,color:"#fff",flexShrink:0,fontFamily:"'Geist Mono',monospace"}}>
@@ -6474,8 +6526,9 @@ const PolicyManagerView = ({onToast, onNav}) => {
                     {[
                       {k:"overview",   l:"Overview",        badge:null},
                       {k:"rules",      l:"Rules",            badge:(p.rules||[]).length},
-                      {k:"violations", l:"Violations",       badge:openViolsForPol(p.id).length||null, danger:true},
-                      {k:"assets",     l:"Governed Assets",  badge:[...new Set((p.rules||[]).filter(r=>r.table).map(r=>r.table))].length||null},
+                      {k:"violations", l:"Violations",       badge:openViolsForPol(p.id).length||null, danger:openViolsForPol(p.id).length>0},
+                      {k:"runs",       l:"Runs",             badge:(p.runs||[]).length||null},
+                      {k:"assets",     l:"Governed Assets",  badge:(p.governedAssets||[]).length||[...new Set((p.rules||[]).filter(r=>r.table).map(r=>r.table))].length||null},
                       {k:"activity",   l:"Activity",         badge:(p.history||[]).length},
                     ].map(({k,l,badge,danger})=>(
                       <button key={k} onClick={()=>setPdTab(k)}
@@ -6525,6 +6578,92 @@ const PolicyManagerView = ({onToast, onNav}) => {
                                 {p.description||<span style={{color:T.textMuted,fontStyle:"italic"}}>No description — click edit to add one.</span>}
                               </div>
                           }
+
+                          {/* ── Evaluation Results banner ── */}
+                          {(p.compliancePct!=null||p.lastEvaluated)&&(()=>{
+                            const openV    = openViolsForPol(p.id);
+                            const critV    = openV.filter(v=>v.severity==="Critical").length;
+                            const highV    = openV.filter(v=>v.severity==="High").length;
+                            const pct      = p.compliancePct??0;
+                            const healthColor = pct>=80?T.green:pct>=60?T.amber:T.rose;
+                            const healthBg    = pct>=80?`${T.green}10`:pct>=60?`${T.amber}10`:`${T.rose}10`;
+                            const healthLabel = pct>=80?"Healthy":pct>=60?"Needs attention":"Critical";
+                            const lastRun  = (p.runs||[])[0];
+                            return (
+                              <div style={{marginBottom:20,borderRadius:10,border:`1px solid ${healthColor}30`,background:healthBg,overflow:"hidden"}}>
+                                {/* Banner header */}
+                                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:`1px solid ${healthColor}20`}}>
+                                  <div style={{display:"flex",alignItems:"center",gap:7}}>
+                                    <span style={{width:7,height:7,borderRadius:"50%",background:healthColor,display:"inline-block",boxShadow:`0 0 0 3px ${healthColor}25`}}/>
+                                    <span style={{fontSize:11,fontWeight:700,color:healthColor,textTransform:"uppercase",letterSpacing:"0.07em"}}>Evaluation Results</span>
+                                  </div>
+                                  <button onClick={()=>setPdTab("runs")} style={{fontSize:10.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>View all runs →</button>
+                                </div>
+                                {/* Two-column metrics */}
+                                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0}}>
+                                  {/* Compliance score */}
+                                  <div style={{padding:"14px 16px",borderRight:`1px solid ${healthColor}15`}}>
+                                    <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Compliance Score</div>
+                                    <div style={{display:"flex",alignItems:"flex-end",gap:8,marginBottom:8}}>
+                                      <span style={{fontSize:32,fontWeight:800,color:healthColor,lineHeight:1,fontFamily:"'Geist Mono',monospace"}}>{pct}%</span>
+                                      <span style={{fontSize:11,color:healthColor,fontWeight:600,marginBottom:4,padding:"1px 7px",borderRadius:99,background:`${healthColor}18`,border:`1px solid ${healthColor}30`}}>{healthLabel}</span>
+                                    </div>
+                                    {/* Progress bar */}
+                                    <div style={{height:6,borderRadius:3,background:T.bgElevated,overflow:"hidden"}}>
+                                      <div style={{height:"100%",width:`${pct}%`,borderRadius:3,background:healthColor,transition:"width .4s"}}/>
+                                    </div>
+                                    <div style={{fontSize:10,color:T.textMuted,marginTop:5}}>
+                                      {Math.round((pct/100)*(p.assetsInScope||0))} of {p.assetsInScope||0} assets passing
+                                    </div>
+                                  </div>
+                                  {/* Last run + violations */}
+                                  <div style={{padding:"14px 16px"}}>
+                                    <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Last Evaluation</div>
+                                    {lastRun?(
+                                      <div style={{marginBottom:10}}>
+                                        <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:2}}>{lastRun.ts}</div>
+                                        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:4}}>
+                                          <span style={{fontSize:10.5,color:T.textMuted}}>⏱ {lastRun.duration}</span>
+                                          <span style={{fontSize:10.5,color:T.textMuted}}>· {lastRun.assetsScanned} assets</span>
+                                          <span style={{fontSize:10.5,padding:"1px 6px",borderRadius:4,background:lastRun.trigger==="Manual"?`${T.violet}14`:`${T.blue}14`,color:lastRun.trigger==="Manual"?T.violet:T.blue,fontWeight:600}}>{lastRun.trigger}</span>
+                                        </div>
+                                      </div>
+                                    ):(
+                                      <div style={{fontSize:12,color:T.textMuted,marginBottom:10}}>{p.lastEvaluated||"—"}</div>
+                                    )}
+                                    {/* Open violations summary */}
+                                    {openV.length>0?(
+                                      <button onClick={()=>setPdTab("violations")} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 10px",borderRadius:7,background:`${T.rose}10`,border:`1px solid ${T.rose}25`,cursor:"pointer",textAlign:"left"}}>
+                                        <span style={{fontSize:11,fontWeight:600,color:T.rose}}>{openV.length} open violation{openV.length!==1?"s":""}</span>
+                                        <div style={{display:"flex",gap:4}}>
+                                          {critV>0&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:3,background:T.rose,color:"#fff"}}>{critV} Crit</span>}
+                                          {highV>0&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:3,background:T.amber,color:"#fff"}}>{highV} High</span>}
+                                        </div>
+                                      </button>
+                                    ):(
+                                      <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 10px",borderRadius:7,background:`${T.green}10`,border:`1px solid ${T.green}25`}}>
+                                        <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M3 7l3 3 5-5" stroke={T.green} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="7" cy="7" r="6" stroke={T.green} strokeWidth="1.3"/></svg>
+                                        <span style={{fontSize:11,fontWeight:600,color:T.green}}>All assets compliant</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                          {/* ── Not-yet-evaluated notice ── */}
+                          {p.compliancePct==null&&p.lastEvaluated==null&&p.lifecycle==="Active"&&(
+                            <div style={{marginBottom:20,padding:"12px 14px",borderRadius:10,border:`1.5px dashed ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
+                              <div style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke={T.textMuted} strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>
+                              </div>
+                              <div style={{flex:1}}>
+                                <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:2}}>Policy not yet evaluated</div>
+                                <div style={{fontSize:11.5,color:T.textMuted}}>Run this policy to see compliance scores and violations.</div>
+                              </div>
+                            </div>
+                          )}
 
                           {/* ── Rules summary ── */}
                           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
@@ -6905,142 +7044,390 @@ const PolicyManagerView = ({onToast, onNav}) => {
 
                     {/* ── Violations ── */}
                     {pdTab==="violations"&&(()=>{
-                      const polViols = violsForPol(p.id);
-                      const resolveViol = (id) => {
-                        setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"Resolved"}:v));
-                        onToast("Violation resolved","success");
-                      };
-                      const dismissViol = (id) => {
-                        setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"Dismissed"}:v));
-                        onToast("Violation dismissed","info");
-                      };
-                      const ackViol = (id) => {
-                        setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"In Progress"}:v));
-                        onToast("Violation acknowledged","info");
-                      };
+                      const allPolViols = violsForPol(p.id);
+                      const STATUSES = ["All","Open","In Progress","Resolved","Waived"];
+                      const SEVS     = ["All","Critical","High","Medium","Low"];
+                      const filtered = allPolViols.filter(v=>{
+                        const matchStat = violStatusFilter==="All"||v.status===violStatusFilter;
+                        const matchSev  = violSevFilter==="All"||v.severity===violSevFilter;
+                        return matchStat && matchSev;
+                      });
+                      const openCount   = allPolViols.filter(v=>v.status==="Open").length;
+                      const inProgCount = allPolViols.filter(v=>v.status==="In Progress").length;
+                      const resolvedCount = allPolViols.filter(v=>v.status==="Resolved"||v.status==="Waived").length;
+
+                      const resolveViol = (id) => { setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"Resolved"}:v)); onToast("Violation resolved","success"); };
+                      const waiveViol   = (id) => { setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"Waived"}:v));   onToast("Violation waived","info"); };
+                      const ackViol     = (id) => { setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"In Progress"}:v)); onToast("Violation acknowledged — marked In Progress","info"); };
+                      const reopenViol  = (id) => { setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"Open"}:v)); onToast("Violation reopened","info"); };
+
+                      const statusStyle = (s) => ({
+                        "Open":       {bg:`${T.rose}14`,   color:T.rose,   dot:T.rose},
+                        "In Progress":{bg:`${T.amber}14`,  color:T.amber,  dot:T.amber},
+                        "Resolved":   {bg:`${T.green}14`,  color:T.green,  dot:T.green},
+                        "Waived":     {bg:`${T.blue}10`,   color:T.blue,   dot:T.blue},
+                        "Dismissed":  {bg:T.bgElevated,    color:T.textMuted,dot:T.textMuted},
+                      }[s]||{bg:T.bgElevated,color:T.textMuted,dot:T.textMuted});
+
                       return (
                         <div style={{padding:"20px 22px"}}>
-                          {polViols.length===0
-                            ? <div style={{textAlign:"center",padding:"40px 20px"}}>
-                                <div style={{width:40,height:40,borderRadius:10,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}>
-                                  <svg width="18" height="18" viewBox="0 0 20 20" fill="none"><path d="M9 12l2 2 4-4" stroke={T.green} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="10" cy="10" r="8" stroke={T.green} strokeWidth="1.5"/></svg>
-                                </div>
-                                <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:4}}>No violations</div>
-                                <div style={{fontSize:12,color:T.textMuted}}>This policy has no open violations. All in-scope assets are compliant.</div>
+                          {/* ── Summary stat pills ── */}
+                          <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+                            {[
+                              {label:"Open",       count:openCount,    color:T.rose,  bg:`${T.rose}12`},
+                              {label:"In Progress",count:inProgCount,  color:T.amber, bg:`${T.amber}12`},
+                              {label:"Resolved",   count:resolvedCount,color:T.green, bg:`${T.green}12`},
+                            ].map(s=>(
+                              <div key={s.label} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",borderRadius:8,background:s.bg,border:`1px solid ${s.color}25`}}>
+                                <span style={{width:6,height:6,borderRadius:"50%",background:s.color,display:"block"}}/>
+                                <span style={{fontSize:11,fontWeight:600,color:s.color}}>{s.count}</span>
+                                <span style={{fontSize:11,color:s.color,opacity:.8}}>{s.label}</span>
                               </div>
-                            : <>
-                                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-                                  <div style={{fontSize:12,color:T.textMuted}}>{polViols.length} total · {openViolsForPol(p.id).length} open</div>
-                                  {p.lastEvaluated&&<div style={{fontSize:11,color:T.textMuted}}>Last evaluated: <span style={{color:T.textSub,fontWeight:500}}>{p.lastEvaluated}</span></div>}
-                                </div>
-                                <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                                  {polViols.map(v=>(
-                                    <div key={v.id} style={{padding:"12px 14px",borderRadius:9,background:T.bgElevated,border:`1px solid ${v.status==="Open"?`${T.rose}30`:T.border}`}}>
-                                      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:6}}>
-                                        <div style={{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0}}>
-                                          <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:5,background:SEV_BG[v.severity],color:SEV_COLOR[v.severity],flexShrink:0}}>{v.severity}</span>
-                                          <span style={{fontSize:12,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.assetName}</span>
-                                          <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>{v.assetType} · {v.domain}</span>
+                            ))}
+                            <div style={{marginLeft:"auto",fontSize:11,color:T.textMuted,alignSelf:"center"}}>{allPolViols.length} total violations</div>
+                          </div>
+
+                          {/* ── Filter bar ── */}
+                          <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+                            <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                              <span style={{fontSize:10.5,color:T.textMuted,fontWeight:600}}>Status:</span>
+                              {STATUSES.map(s=>(
+                                <button key={s} onClick={()=>setViolStatusFilter(s)}
+                                  style={{fontSize:10.5,padding:"3px 9px",borderRadius:99,border:`1px solid ${violStatusFilter===s?T.accent:T.border}`,background:violStatusFilter===s?T.accentDim:"transparent",color:violStatusFilter===s?T.accent:T.textSub,cursor:"pointer",fontWeight:violStatusFilter===s?700:400,transition:"all .1s"}}>
+                                  {s}
+                                </button>
+                              ))}
+                            </div>
+                            <div style={{display:"flex",gap:4,alignItems:"center",marginLeft:8}}>
+                              <span style={{fontSize:10.5,color:T.textMuted,fontWeight:600}}>Severity:</span>
+                              {SEVS.map(s=>(
+                                <button key={s} onClick={()=>setViolSevFilter(s)}
+                                  style={{fontSize:10.5,padding:"3px 9px",borderRadius:99,border:`1px solid ${violSevFilter===s?T.accent:T.border}`,background:violSevFilter===s?T.accentDim:"transparent",color:violSevFilter===s?T.accent:T.textSub,cursor:"pointer",fontWeight:violSevFilter===s?700:400,transition:"all .1s"}}>
+                                  {s}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {filtered.length===0&&allPolViols.length===0&&(
+                            <div style={{textAlign:"center",padding:"48px 20px"}}>
+                              <div style={{width:44,height:44,borderRadius:11,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}>
+                                <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7 10l3 3 5-5" stroke={T.green} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="10" cy="10" r="8" stroke={T.green} strokeWidth="1.5"/></svg>
+                              </div>
+                              <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:4}}>No violations detected</div>
+                              <div style={{fontSize:12,color:T.textMuted,lineHeight:1.7,maxWidth:280,margin:"0 auto"}}>All in-scope assets are compliant with this policy. Run the policy again to check for new issues.</div>
+                            </div>
+                          )}
+                          {filtered.length===0&&allPolViols.length>0&&(
+                            <div style={{textAlign:"center",padding:"32px 20px",color:T.textMuted,fontSize:12}}>No violations match the current filters.</div>
+                          )}
+
+                          {/* ── Violation rows ── */}
+                          <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                            {filtered.map(v=>{
+                              const ss    = statusStyle(v.status);
+                              const isExp = violExpanded===v.id;
+                              const sevColor = SEV_COLOR[v.severity]||T.textMuted;
+                              return (
+                                <div key={v.id} style={{borderRadius:10,border:`1.5px solid ${v.status==="Open"?`${SEV_COLOR[v.severity]||T.rose}35`:T.border}`,background:T.bgSurface,overflow:"hidden",transition:"border-color .15s"}}>
+                                  {/* Left severity stripe + main row */}
+                                  <div style={{display:"flex",cursor:"pointer"}} onClick={()=>setViolExpanded(isExp?null:v.id)}>
+                                    {/* Severity stripe */}
+                                    <div style={{width:4,background:sevColor,flexShrink:0}}/>
+                                    <div style={{flex:1,padding:"11px 14px"}}>
+                                      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                                        {/* Severity badge */}
+                                        <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:SEV_BG[v.severity],color:sevColor,flexShrink:0,textTransform:"uppercase",letterSpacing:"0.05em"}}>{v.severity}</span>
+                                        {/* Asset name */}
+                                        <span style={{fontSize:12.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{v.assetName}</span>
+                                        {/* Type + Domain */}
+                                        <span style={{fontSize:10.5,color:T.textMuted}}>{v.assetType}</span>
+                                        <span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted}}>{v.domain}</span>
+                                        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:7}}>
+                                          {/* Status pill */}
+                                          <span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:99,background:ss.bg,color:ss.color,border:`1px solid ${ss.color}30`,display:"flex",alignItems:"center",gap:4}}>
+                                            <span style={{width:5,height:5,borderRadius:"50%",background:ss.dot,display:"inline-block"}}/>
+                                            {v.status}
+                                          </span>
+                                          {/* Detected date */}
+                                          <span style={{fontSize:10,color:T.textMuted,whiteSpace:"nowrap"}}>Detected {v.detectedAt}</span>
+                                          {/* Expand chevron */}
+                                          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" style={{color:T.textMuted,transition:"transform .15s",transform:isExp?"rotate(180deg)":"rotate(0deg)"}}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                                         </div>
-                                        <span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:5,background:v.status==="Open"?`${T.rose}14`:v.status==="In Progress"?`${T.amber}14`:v.status==="Resolved"?`${T.green}14`:T.bgElevated,color:v.status==="Open"?T.rose:v.status==="In Progress"?T.amber:v.status==="Resolved"?T.green:T.textMuted,flexShrink:0}}>
-                                          {v.status}
-                                        </span>
                                       </div>
-                                      <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.6,marginBottom:8}}>{v.description}</div>
-                                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                                        <span style={{fontSize:10.5,color:T.textMuted}}>Rule: <span style={{color:T.textSub,fontWeight:500}}>{v.rule}</span> · Detected {v.detectedAt}</span>
-                                        {(v.status==="Open"||v.status==="In Progress")&&(
-                                          <div style={{display:"flex",gap:6}}>
-                                            {v.status==="Open"&&<button onClick={()=>ackViol(v.id)} style={{fontSize:10.5,padding:"3px 10px",borderRadius:5,background:"transparent",border:`1px solid ${T.amber}`,color:T.amber,cursor:"pointer",fontWeight:600}}>Acknowledge</button>}
-                                            {v.status==="In Progress"&&<><button onClick={()=>resolveViol(v.id)} style={{fontSize:10.5,padding:"3px 10px",borderRadius:5,background:T.green,border:"none",color:"#fff",cursor:"pointer",fontWeight:600}}>Resolve</button><button onClick={()=>dismissViol(v.id)} style={{fontSize:10.5,padding:"3px 10px",borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>Dismiss</button></>}
-                                          </div>
-                                        )}
+                                      {/* Rule triggered */}
+                                      <div style={{marginTop:5,display:"flex",alignItems:"center",gap:5}}>
+                                        <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M1 6h10M8 3l3 3-3 3" stroke={T.textMuted} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                        <span style={{fontSize:11,color:T.textMuted}}>Rule: </span>
+                                        <span style={{fontSize:11,fontWeight:600,color:T.textSub,fontStyle:"italic"}}>"{v.rule}"</span>
                                       </div>
                                     </div>
-                                  ))}
+                                  </div>
+
+                                  {/* Expanded detail */}
+                                  {isExp&&(
+                                    <div style={{borderTop:`1px solid ${T.border}`,background:T.bgElevated,padding:"14px 18px 14px 22px"}}>
+                                      <div style={{fontSize:12,color:T.textSub,lineHeight:1.7,marginBottom:12}}>{v.description}</div>
+                                      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                                        {v.status==="Open"&&(
+                                          <>
+                                            <button onClick={()=>ackViol(v.id)}
+                                              style={{fontSize:11,padding:"5px 14px",borderRadius:7,background:"transparent",border:`1.5px solid ${T.amber}`,color:T.amber,cursor:"pointer",fontWeight:600,transition:"all .1s"}}
+                                              onMouseEnter={e=>{e.currentTarget.style.background=`${T.amber}14`;}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
+                                              ✋ Acknowledge
+                                            </button>
+                                            <button onClick={()=>waiveViol(v.id)}
+                                              style={{fontSize:11,padding:"5px 14px",borderRadius:7,background:"transparent",border:`1.5px solid ${T.blue}`,color:T.blue,cursor:"pointer",fontWeight:600,transition:"all .1s"}}
+                                              onMouseEnter={e=>{e.currentTarget.style.background=`${T.blue}10`;}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
+                                              Waive
+                                            </button>
+                                          </>
+                                        )}
+                                        {v.status==="In Progress"&&(
+                                          <>
+                                            <button onClick={()=>resolveViol(v.id)}
+                                              style={{fontSize:11,padding:"5px 14px",borderRadius:7,background:T.green,border:`1.5px solid ${T.green}`,color:"#fff",cursor:"pointer",fontWeight:600,transition:"opacity .1s"}}
+                                              onMouseEnter={e=>e.currentTarget.style.opacity=".85"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+                                              ✓ Resolve
+                                            </button>
+                                            <button onClick={()=>waiveViol(v.id)}
+                                              style={{fontSize:11,padding:"5px 14px",borderRadius:7,background:"transparent",border:`1.5px solid ${T.blue}`,color:T.blue,cursor:"pointer",fontWeight:600}}>
+                                              Waive
+                                            </button>
+                                          </>
+                                        )}
+                                        {(v.status==="Resolved"||v.status==="Waived")&&(
+                                          <button onClick={()=>reopenViol(v.id)}
+                                            style={{fontSize:11,padding:"5px 14px",borderRadius:7,background:"transparent",border:`1.5px solid ${T.border}`,color:T.textSub,cursor:"pointer",fontWeight:600}}>
+                                            ↩ Reopen
+                                          </button>
+                                        )}
+                                        <button onClick={()=>onToast("Asset profile opened","info")} style={{fontSize:11,padding:"5px 14px",borderRadius:7,background:"transparent",border:`1.5px solid ${T.border}`,color:T.textSub,cursor:"pointer",fontWeight:600,marginLeft:"auto"}}>
+                                          View Asset →
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
-                              </>
-                          }
+                              );
+                            })}
+                          </div>
                         </div>
                       );
                     })()}
 
-                    {/* ── Rule Targets (auto-derived, read-only) ── */}
-                    {pdTab==="assets"&&(()=>{
-                      // Derive targets from rules that have a table set
-                      const ruleTargets = (p.rules||[]).filter(r=>r.table);
-                      // Group by table
-                      const byTable = {};
-                      ruleTargets.forEach(r=>{
-                        if(!byTable[r.table]) byTable[r.table]=[];
-                        byTable[r.table].push(r);
-                      });
-                      const tableNames = Object.keys(byTable);
-                      const SVC_ICON_MAP = {"snowflake":"❄️","databricks":"🧱","postgres":"🐘","postgresql":"🐘","oracle":"🔴","bigquery":"🔷","redshift":"🌀"};
+                    {/* ── Runs ── */}
+                    {pdTab==="runs"&&(()=>{
+                      const runs = p.runs||[];
                       return (
                         <div style={{padding:"20px 22px"}}>
-                          <div style={{marginBottom:16}}>
-                            <div style={{fontSize:13,fontWeight:600,color:T.text}}>Rule Targets</div>
-                            <div style={{fontSize:11.5,color:T.textMuted,marginTop:3,lineHeight:1.6}}>
-                              Tables and columns checked by this policy's rules. Derived automatically — edit rules to change these.
+                          {/* Header */}
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+                            <div>
+                              <div style={{fontSize:13,fontWeight:700,color:T.text}}>Evaluation Runs</div>
+                              <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Every execution of this policy — an immutable audit trail of what was found and when.</div>
                             </div>
+                            {runs.length>0&&<span style={{fontSize:11,color:T.textMuted}}>{runs.length} run{runs.length!==1?"s":""}</span>}
                           </div>
-                          {tableNames.length===0
-                            ? (
-                              <div style={{padding:"32px 20px",textAlign:"center",border:`1.5px dashed ${T.border}`,borderRadius:10}}>
-                                <div style={{fontSize:22,marginBottom:8}}>🎯</div>
-                                <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:4}}>No rule targets yet</div>
-                                <div style={{fontSize:12,color:T.textMuted}}>Add Quality or Retention rules with a table selected — they'll appear here automatically.</div>
+
+                          {runs.length===0?(
+                            <div style={{textAlign:"center",padding:"48px 20px",border:`1.5px dashed ${T.border}`,borderRadius:12}}>
+                              <div style={{fontSize:28,marginBottom:10}}>▷</div>
+                              <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:4}}>No runs yet</div>
+                              <div style={{fontSize:12,color:T.textMuted,maxWidth:260,margin:"0 auto",lineHeight:1.7}}>
+                                {p.lifecycle==="Draft"?"Publish this policy first, then run it to see evaluation history.":"Click "Run Now" to evaluate this policy for the first time."}
                               </div>
-                            ) : tableNames.map(tbl=>{
-                              const asset = ASSETS.find(a=>a.name===tbl);
-                              const svcIcon = SVC_ICON_MAP[(asset?.service||"").toLowerCase()]||"🗄️";
-                              const qualityScore = asset?.quality;
-                              const qColor = !qualityScore?T.textMuted:qualityScore>=80?T.green:qualityScore>=60?T.amber:T.rose;
-                              const rules = byTable[tbl];
-                              const colsUsed = [...new Set(rules.filter(r=>r.column).map(r=>r.column))];
-                              return (
-                                <div key={tbl} style={{border:`1px solid ${T.border}`,borderRadius:10,marginBottom:10,overflow:"hidden",background:T.bgSurface}}>
-                                  {/* Table header row */}
-                                  <div style={{padding:"11px 14px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
-                                    <span style={{fontSize:16,flexShrink:0}}>{svcIcon}</span>
-                                    <span style={{fontFamily:"'Geist Mono','Courier New',monospace",fontSize:13,fontWeight:700,color:T.text,flex:1}}>{tbl}</span>
-                                    {asset&&<span style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:T.bgBase,color:T.textMuted,border:`1px solid ${T.border}`}}>{asset.type}</span>}
-                                    {asset&&<span style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:T.bgBase,color:T.textMuted,border:`1px solid ${T.border}`}}>{asset.domain}</span>}
-                                    {qualityScore&&<span style={{fontSize:11,fontWeight:700,color:qColor}}>{qualityScore}%</span>}
-                                    <span style={{fontSize:10,padding:"2px 8px",borderRadius:99,background:`${T.accent}12`,color:T.accent,fontWeight:600,border:`1px solid ${T.accent}30`}}>{rules.length} rule{rules.length!==1?"s":""}</span>
-                                  </div>
-                                  {/* Rules within this table */}
-                                  <div style={{padding:"8px 14px 10px"}}>
-                                    {/* Columns used */}
-                                    {colsUsed.length>0&&(
-                                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8,flexWrap:"wrap"}}>
-                                        <span style={{fontSize:10.5,color:T.textMuted,flexShrink:0}}>Columns checked:</span>
-                                        {colsUsed.map(c=>(
-                                          <span key={c} style={{fontSize:11,fontFamily:"'Geist Mono','Courier New',monospace",padding:"2px 8px",borderRadius:5,background:T.violet+"12",color:T.violet,border:`1px solid ${T.violet}25`,fontWeight:500}}>{c}</span>
-                                        ))}
+                            </div>
+                          ):(
+                            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                              {runs.map((run,ri)=>{
+                                const isExp = runExpanded===run.id;
+                                const isLatest = ri===0;
+                                const statusColor = run.status==="success"?T.green:run.status==="failed"?T.rose:T.amber;
+                                const statusBg    = run.status==="success"?`${T.green}10`:run.status==="failed"?`${T.rose}10`:`${T.amber}10`;
+                                const statusLabel = run.status==="success"?"Passed":"Failed";
+                                return (
+                                  <div key={run.id} style={{borderRadius:10,border:`1.5px solid ${isLatest?`${T.accent}30`:T.border}`,background:T.bgSurface,overflow:"hidden",transition:"border-color .15s"}}>
+                                    {/* Run row — click to expand */}
+                                    <div style={{display:"flex",alignItems:"center",gap:0,cursor:"pointer"}} onClick={()=>setRunExpanded(isExp?null:run.id)}>
+                                      {/* Status stripe */}
+                                      <div style={{width:4,background:statusColor,alignSelf:"stretch",flexShrink:0}}/>
+                                      <div style={{flex:1,padding:"11px 14px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                                        {/* Status dot + label */}
+                                        <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:statusBg,color:statusColor,border:`1px solid ${statusColor}30`,display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+                                          <span style={{width:5,height:5,borderRadius:"50%",background:statusColor,display:"inline-block"}}/>
+                                          {statusLabel}
+                                        </span>
+                                        {/* Latest badge */}
+                                        {isLatest&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}30`,textTransform:"uppercase",letterSpacing:"0.05em",flexShrink:0}}>Latest</span>}
+                                        {/* Timestamp */}
+                                        <span style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{run.ts}</span>
+                                        {/* Trigger badge */}
+                                        <span style={{fontSize:10.5,padding:"1px 8px",borderRadius:4,background:run.trigger==="Manual"?`${T.violet}14`:`${T.blue}10`,color:run.trigger==="Manual"?T.violet:T.blue,fontWeight:600,border:`1px solid ${run.trigger==="Manual"?T.violet:T.blue}25`,flexShrink:0}}>{run.trigger}</span>
+                                        {/* Stats */}
+                                        <div style={{display:"flex",gap:12,marginLeft:"auto",alignItems:"center"}}>
+                                          <span style={{fontSize:11,color:T.textMuted,display:"flex",alignItems:"center",gap:3}}>
+                                            <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><rect x="1" y="3" width="10" height="8" rx="1" stroke="currentColor" strokeWidth="1.2"/><path d="M4 3V2a2 2 0 014 0v1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                                            {run.assetsScanned} assets
+                                          </span>
+                                          <span style={{fontSize:11,color:T.textMuted}}>⏱ {run.duration}</span>
+                                          {run.violationsNew>0&&<span style={{fontSize:11,fontWeight:700,color:T.rose}}>+{run.violationsNew} violation{run.violationsNew!==1?"s":""}</span>}
+                                          {run.violationsNew===0&&run.status==="success"&&<span style={{fontSize:11,fontWeight:600,color:T.green}}>0 new</span>}
+                                          {run.score!=null&&<span style={{fontSize:11,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:run.score>=80?T.green:run.score>=60?T.amber:T.rose}}>{run.score}%</span>}
+                                        </div>
+                                        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" style={{color:T.textMuted,transition:"transform .15s",transform:isExp?"rotate(180deg)":"rotate(0deg)",flexShrink:0}}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                      </div>
+                                    </div>
+
+                                    {/* Expanded run detail */}
+                                    {isExp&&(
+                                      <div style={{borderTop:`1px solid ${T.border}`,background:T.bgElevated,padding:"14px 18px 14px 22px"}}>
+                                        {run.status==="failed"&&run.errorMsg&&(
+                                          <div style={{display:"flex",gap:8,padding:"9px 12px",borderRadius:8,background:`${T.rose}0a`,border:`1px solid ${T.rose}25`,marginBottom:12}}>
+                                            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{flexShrink:0,marginTop:1}}><path d="M7 1L1 13h12L7 1z" stroke={T.rose} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><line x1="7" y1="5.5" x2="7" y2="8.5" stroke={T.rose} strokeWidth="1.3" strokeLinecap="round"/><circle cx="7" cy="10.5" r=".6" fill={T.rose}/></svg>
+                                            <span style={{fontSize:11.5,color:T.rose,lineHeight:1.6}}>{run.errorMsg}</span>
+                                          </div>
+                                        )}
+                                        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:12}}>
+                                          {[
+                                            {label:"Assets Scanned",   value:run.assetsScanned},
+                                            {label:"Rules Evaluated",  value:run.rulesEval},
+                                            {label:"Duration",         value:run.duration},
+                                            {label:"New Violations",   value:run.violationsNew,  color:run.violationsNew>0?T.rose:T.green},
+                                            {label:"Score",            value:run.score!=null?`${run.score}%`:"—", color:run.score!=null?(run.score>=80?T.green:run.score>=60?T.amber:T.rose):T.textMuted},
+                                            {label:"Trigger",          value:run.trigger},
+                                          ].map(m=>(
+                                            <div key={m.label} style={{padding:"8px 10px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`}}>
+                                              <div style={{fontSize:9.5,color:T.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{m.label}</div>
+                                              <div style={{fontSize:13,fontWeight:700,color:m.color||T.text,fontFamily:"'Geist Mono',monospace"}}>{m.value??<span style={{color:T.textMuted}}>—</span>}</div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                        {run.violationsNew>0&&(
+                                          <button onClick={()=>setPdTab("violations")}
+                                            style={{fontSize:11.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:600}}>
+                                            View violations detected in this run →
+                                          </button>
+                                        )}
                                       </div>
                                     )}
-                                    {/* Rule list */}
-                                    {rules.map((r,ri)=>(
-                                      <div key={r.id||ri} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:ri<rules.length-1?`1px solid ${T.border}`:"none"}}>
-                                        <span style={{fontSize:10,fontWeight:700,color:T.textMuted,minWidth:44,flexShrink:0}}>Rule {ri+1}</span>
-                                        <span style={{fontSize:11.5,color:T.text,flex:1,lineHeight:1.4}}>{r.name||r.criteria}</span>
-                                        {r.column&&<span style={{fontSize:10.5,fontFamily:"'Geist Mono','Courier New',monospace",padding:"1px 7px",borderRadius:5,background:T.violet+"12",color:T.violet,border:`1px solid ${T.violet}25`,flexShrink:0}}>{r.column}</span>}
-                                        <span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:SEV_BG[r.severity]||T.bgElevated,color:SEV_COLOR[r.severity]||T.textMuted,fontWeight:700,flexShrink:0}}>{r.severity||"Med"}</span>
-                                      </div>
-                                    ))}
                                   </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* ── Governed Assets ── */}
+                    {pdTab==="assets"&&(()=>{
+                      const SVC_ICON_MAP = {"snowflake":"❄️","databricks":"🧱","postgres":"🐘","postgresql":"🐘","oracle":"🔴","bigquery":"🔷","redshift":"🌀"};
+                      // Use enriched governedAssets if available, else fall back to rule targets
+                      const govAssets = p.governedAssets||[];
+                      const ruleTargets = (p.rules||[]).filter(r=>r.table);
+                      const byTable = {};
+                      ruleTargets.forEach(r=>{ if(!byTable[r.table]) byTable[r.table]=[]; byTable[r.table].push(r); });
+                      const fallbackTables = Object.keys(byTable).map(tbl=>({name:tbl,type:"Table",domain:ASSETS.find(a=>a.name===tbl)?.domain||"",service:ASSETS.find(a=>a.name===tbl)?.service||"",status:null,failedRules:[],quality:ASSETS.find(a=>a.name===tbl)?.quality}));
+                      const displayAssets = govAssets.length>0 ? govAssets : fallbackTables;
+                      const passCount = displayAssets.filter(a=>a.status==="pass").length;
+                      const failCount = displayAssets.filter(a=>a.status==="fail").length;
+                      const hasStatus = displayAssets.some(a=>a.status!=null);
+                      return (
+                        <div style={{padding:"20px 22px"}}>
+                          {/* Header */}
+                          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:16,gap:12}}>
+                            <div>
+                              <div style={{fontSize:13,fontWeight:700,color:T.text}}>Governed Assets</div>
+                              <div style={{fontSize:11.5,color:T.textMuted,marginTop:2,lineHeight:1.6}}>Assets within this policy's scope and their current compliance status.</div>
+                            </div>
+                            {hasStatus&&(
+                              <div style={{display:"flex",gap:8,flexShrink:0}}>
+                                <div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:7,background:`${T.green}10`,border:`1px solid ${T.green}25`}}>
+                                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-4" stroke={T.green} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                  <span style={{fontSize:11,fontWeight:700,color:T.green}}>{passCount} passing</span>
                                 </div>
-                              );
-                            })
-                          }
-                          {/* Scope context */}
-                          {(p.scope?.sources||[]).length>0&&(
-                            <div style={{marginTop:16,padding:"10px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textMuted,display:"flex",alignItems:"center",gap:8}}>
-                              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/><line x1="8" y1="5.5" x2="8" y2="8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="10.5" r=".6" fill="currentColor" stroke="none"/></svg>
-                              Policy scope: <strong style={{color:T.textSub}}>{(p.scope.sources||[]).join(", ")}</strong>
-                              {(p.scope?.domains||[]).length>0&&<> · domain: <strong style={{color:T.textSub}}>{p.scope.domains.join(", ")}</strong></>}
+                                {failCount>0&&(
+                                  <div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:7,background:`${T.rose}10`,border:`1px solid ${T.rose}25`}}>
+                                    <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M3 3l6 6M9 3l-6 6" stroke={T.rose} strokeWidth="1.5" strokeLinecap="round"/></svg>
+                                    <span style={{fontSize:11,fontWeight:700,color:T.rose}}>{failCount} failing</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {displayAssets.length===0?(
+                            <div style={{padding:"32px 20px",textAlign:"center",border:`1.5px dashed ${T.border}`,borderRadius:10}}>
+                              <div style={{fontSize:22,marginBottom:8}}>🎯</div>
+                              <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:4}}>No governed assets yet</div>
+                              <div style={{fontSize:12,color:T.textMuted,maxWidth:260,margin:"0 auto",lineHeight:1.7}}>Run this policy to populate the governed assets list with real compliance status.</div>
+                            </div>
+                          ):(
+                            <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                              {/* Table header */}
+                              <div style={{display:"grid",gridTemplateColumns:"1fr 80px 90px 80px 110px",padding:"7px 14px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
+                                {["Asset","Type","Domain","Quality","Status"].map(h=>(
+                                  <span key={h} style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</span>
+                                ))}
+                              </div>
+                              {/* Rows */}
+                              {displayAssets.map((a,ai)=>{
+                                const svcIcon = SVC_ICON_MAP[(a.service||"").toLowerCase()]||"🗄️";
+                                const qColor = !a.quality?T.textMuted:a.quality>=80?T.green:a.quality>=60?T.amber:T.rose;
+                                const statusColor = a.status==="pass"?T.green:a.status==="fail"?T.rose:T.textMuted;
+                                const statusBg    = a.status==="pass"?`${T.green}10`:a.status==="fail"?`${T.rose}10`:T.bgElevated;
+                                const statusLabel = a.status==="pass"?"Passing":a.status==="fail"?"Failing":"Unknown";
+                                const isLast = ai===displayAssets.length-1;
+                                return (
+                                  <div key={a.name} style={{display:"grid",gridTemplateColumns:"1fr 80px 90px 80px 110px",padding:"10px 14px",borderBottom:isLast?"none":`1px solid ${T.border}`,background:a.status==="fail"?`${T.rose}04`:T.bgSurface,alignItems:"center"}}>
+                                    {/* Asset name + service icon */}
+                                    <div style={{display:"flex",alignItems:"center",gap:7,minWidth:0}}>
+                                      <span style={{fontSize:13,flexShrink:0}}>{svcIcon}</span>
+                                      <span style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</span>
+                                    </div>
+                                    {/* Type */}
+                                    <span style={{fontSize:11,color:T.textMuted}}>{a.type||"Table"}</span>
+                                    {/* Domain */}
+                                    <span style={{fontSize:11,color:T.textMuted}}>{a.domain||"—"}</span>
+                                    {/* Quality score */}
+                                    <span style={{fontSize:12,fontWeight:700,color:qColor,fontFamily:"'Geist Mono',monospace"}}>{a.quality?`${a.quality}%`:"—"}</span>
+                                    {/* Status */}
+                                    <div>
+                                      {a.status!=null?(
+                                        <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:700,padding:"2px 9px",borderRadius:99,background:statusBg,color:statusColor,border:`1px solid ${statusColor}30`}}>
+                                          <span style={{width:5,height:5,borderRadius:"50%",background:statusColor,display:"inline-block"}}/>
+                                          {statusLabel}
+                                        </span>
+                                      ):(
+                                        <span style={{fontSize:10.5,color:T.textMuted,fontStyle:"italic"}}>Not evaluated</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Failed rules per asset detail */}
+                          {displayAssets.some(a=>a.failedRules?.length>0)&&(
+                            <div style={{marginTop:16}}>
+                              <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Failed Rules by Asset</div>
+                              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                                {displayAssets.filter(a=>a.failedRules?.length>0).map(a=>(
+                                  <div key={a.name} style={{padding:"9px 12px",borderRadius:8,background:`${T.rose}06`,border:`1px solid ${T.rose}25`,display:"flex",alignItems:"flex-start",gap:10}}>
+                                    <div style={{fontSize:13,flexShrink:0,marginTop:1}}>{SVC_ICON_MAP[(a.service||"").toLowerCase()]||"🗄️"}</div>
+                                    <div>
+                                      <span style={{fontSize:12,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{a.name}</span>
+                                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:5}}>
+                                        {(a.failedRules||[]).map(rule=>(
+                                          <span key={rule} style={{fontSize:11,padding:"2px 8px",borderRadius:5,background:T.bgSurface,border:`1px solid ${T.rose}30`,color:T.rose,fontWeight:500}}>✕ {rule}</span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
                           )}
                         </div>
