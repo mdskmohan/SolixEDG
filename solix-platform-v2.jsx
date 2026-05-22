@@ -5831,9 +5831,24 @@ const PolicyManagerView = ({onToast, onNav}) => {
     const autoText = allRules.map(r=>r.name);
     const scopeCount = (newPol.scope?.domains||[]).length?ASSETS.filter(a=>(newPol.scope.domains||[]).includes(a.domain)).length:ASSETS.length;
     const ownerArr = Array.isArray(newPol.owner)?newPol.owner:(newPol.owner?[newPol.owner]:[]);
-    const schedObj = runMode==="schedule"
-      ? {freq:newPol.wizardSchedFreq||"daily", time:newPol.wizardSchedTime||"08:00", day:newPol.wizardSchedDay||"monday", cron:newPol.wizardSchedCron||""}
-      : null;
+    // Build cron string (never store schedule as an object — objects crash React child rendering)
+    const buildCron = () => {
+      const freq = newPol.wizardSchedFreq||"daily";
+      const time = newPol.wizardSchedTime||"08:00";
+      const day  = newPol.wizardSchedDay||"monday";
+      if(freq==="custom") return newPol.wizardSchedCron||"0 8 * * *";
+      const [hh,mm] = time.split(":").map(Number);
+      const h = isNaN(hh)?8:hh;
+      const m = isNaN(mm)?0:mm;
+      if(freq==="hourly")  return `0 * * * *`;
+      if(freq==="weekly") {
+        const DAY_MAP = {sunday:0,monday:1,tuesday:2,wednesday:3,thursday:4,friday:5,saturday:6};
+        const d = DAY_MAP[day]??1;
+        return `${m} ${h} * * ${d}`;
+      }
+      return `${m} ${h} * * *`; // daily
+    };
+    const schedObj = runMode==="schedule" ? buildCron() : null;
     const lifecycle = runMode==="draft"?"Draft":"Active";
     const histAction = runMode==="draft"?"Created draft v1": runMode==="run"?"Created & ran immediately":"Created with schedule";
     const p = {...newPol,
@@ -5868,7 +5883,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
       },2200);
       onToast("Policy created — running evaluation now…","success");
     } else if(runMode==="schedule"){
-      onToast(`Policy created — scheduled ${schedObj?.freq||"daily"} at ${schedObj?.time||"08:00"}`,"success");
+      onToast(`Policy created — scheduled (${schedObj||"0 8 * * *"})`,"success");
     } else {
       onToast("Policy created — now in Draft","success");
     }
@@ -6715,7 +6730,8 @@ const PolicyManagerView = ({onToast, onNav}) => {
                             {/* Schedule button */}
                             <button
                               onClick={()=>{
-                                setSchedFreq(p.schedule?.startsWith("0 */")?"hourly":p.schedule?.includes("* * 1")?"weekly":p.schedule?"daily":"daily");
+                                const sched = typeof p.schedule==="string" ? p.schedule : "";
+                                setSchedFreq(sched.startsWith("0 */")?"hourly":sched.includes("* * 1")?"weekly":sched?"daily":"daily");
                                 setSchedTime("08:00");
                                 setScheduleModal(p.id);
                               }}
@@ -6729,7 +6745,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                               <div style={{marginTop:8,padding:"7px 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`}}>
                                 <div style={{fontSize:10.5,color:T.textMuted,marginBottom:2}}>Next run</div>
                                 <div style={{fontSize:11.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{p.nextRun||"—"}</div>
-                                <div style={{fontSize:10,color:T.textMuted,marginTop:3,fontFamily:"'Geist Mono',monospace"}}>{p.schedule}</div>
+                                <div style={{fontSize:10,color:T.textMuted,marginTop:3,fontFamily:"'Geist Mono',monospace"}}>{typeof p.schedule==="string"?p.schedule:""}</div>
                               </div>
                             )}
                           </div>
@@ -24226,6 +24242,11 @@ const SettingsView = ({onToast})=>{
   const [fwSearch,      setFwSearch]      = useState("");
   const [localEnabled,  setLocalEnabled]  = useState(()=>Object.fromEntries(REGS_META.map(r=>[r.id,r.enabled])));
 
+  // ── Audit Logs state (hoisted to avoid hook-in-conditional-IIFE crash) ──
+  const [auditSearch,    setAuditSearch]    = useState("");
+  const [auditCatFilter, setAuditCatFilter] = useState("All");
+  const [auditPage,      setAuditPage]      = useState(0);
+
   // Simulate live progress for "running" services
   useEffect(()=>{
     timerRef.current = setInterval(()=>setTick(t=>t+1), 1200);
@@ -25353,9 +25374,6 @@ const SettingsView = ({onToast})=>{
                 {ts:"2026-05-19 13:55",u:"ai-bot",      cat:"Ingestion",a:"SCHEMA_CHANGE",        r:"COMMERCE.orders",           detail:"Column 'discount_code' added (VARCHAR 64)",ip:"10.0.3.5"},
               ];
               const CAT_COLOR = {Policy:T.violet,Asset:T.blue,Ingestion:T.amber,Quality:T.rose,Glossary:T.green,Access:"#0891b2",Domain:T.accent,Contract:"#7c3aed",Settings:T.textMuted,Tag:"#f97316",Lineage:"#06b6d4"};
-              const [auditSearch,   setAuditSearch]   = React.useState("");
-              const [auditCatFilter,setAuditCatFilter]= React.useState("All");
-              const [auditPage,     setAuditPage]     = React.useState(0);
               const PAGE_SIZE = 10;
               const cats = ["All","Policy","Asset","Ingestion","Quality","Glossary","Access","Domain","Contract","Settings"];
               const filtered = ALL_AUDIT.filter(r=>{
