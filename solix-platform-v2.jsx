@@ -15146,6 +15146,10 @@ const DomainsView = ({onAsset, onNav}) => {
   const [ndExperts,     setNdExperts]     = useState([]);
   const [ndExpertOpen,  setNdExpertOpen]  = useState(false);
   const [ndExpertSearch,setNdExpertSearch]= useState("");
+  const [ndGlossary,    setNdGlossary]    = useState([]);
+  const [ndGlInput,     setNdGlInput]     = useState("");
+  const [ndTags,        setNdTags]        = useState([]);
+  const [ndTagInput,    setNdTagInput]    = useState("");
   // domain profile list + menu state
   const [dpListSelected,   setDpListSelected]   = useState(null);   // selected product id in domain dp-list tab
   const [dmMenuOpen,       setDmMenuOpen]       = useState(false);  // domain ⋮ menu
@@ -15225,11 +15229,11 @@ const DomainsView = ({onAsset, onNav}) => {
 
   const handleCreateDomain = () => {
     if(!nd.name.trim()) return;
-    const d = {id:`d${Date.now()}`,name:nd.name.trim(),displayName:nd.displayName.trim()||nd.name.trim(),icon:nd.icon,color:nd.color,domainType:nd.domainType,description:nd.description.trim()||"No description provided.",owners:ndOwners,experts:ndExperts,tags:[],quality:0,assetCount:0,extraAssetIds:[]};
+    const d = {id:`d${Date.now()}`,name:nd.name.trim(),displayName:nd.displayName.trim()||nd.name.trim(),icon:nd.icon,color:nd.color,domainType:nd.domainType,description:nd.description.trim()||"No description provided.",owners:ndOwners,experts:ndExperts,tags:ndTags,glossaryTerms:ndGlossary,quality:0,assetCount:0,extraAssetIds:[]};
     setDomains(prev=>[...prev,d]);
     setCreateDomainOpen(false);
     setNd({name:"",displayName:"",description:"",domainType:"Source-aligned",icon:"🗂️",color:"#0ea5e9"});
-    setNdOwners([]); setNdExperts([]);
+    setNdOwners([]); setNdExperts([]); setNdTags([]); setNdGlossary([]); setNdGlInput(""); setNdTagInput("");
     setSelectedDomainId(d.id);
   };
 
@@ -15303,39 +15307,35 @@ const DomainsView = ({onAsset, onNav}) => {
                     </div>
                   : <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
                       <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:0,lineHeight:1.2}}>{pd.displayName}</h1>
-                      <LifecycleBadge stage={pd.lifecycleStage}/>
                     </div>
                 }
-                <div style={{fontSize:12,color:T.textMuted,marginBottom:6}}>{pd.domain} Domain · Created {pd.createdAt}</div>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                  {pd.owners.map(o=><OwnerChip key={o} name={o}/>)}
-                </div>
               </div>
               {/* Action buttons */}
               <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0}} onClick={e=>e.stopPropagation()}>
-                <button onClick={()=>{setAddPdAssetsOpen(true);}}
-                  style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,fontSize:12,fontWeight:600,cursor:"pointer",transition:"all .15s"}}
-                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.text;}}>
-                  {Ic.plus(10)} Add Assets
-                </button>
                 <div style={{position:"relative"}}>
                   <button onClick={()=>{setPdMenuOpen(p=>!p);setPdStyleOpen(false);}}
                     style={{width:34,height:34,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,transition:"all .15s"}}
                     onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>⋮</button>
                   {pdMenuOpen&&(
-                    <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,minWidth:200,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",zIndex:500,overflow:"hidden"}}>
+                    <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,minWidth:220,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",zIndex:500,overflow:"hidden"}}>
                       {[
-                        {label:"✏️ Rename",action:()=>{setPdRenameValue(pd.displayName);setPdRenameMode(true);setPdMenuOpen(false);}},
-                        {label:"🖊️ Edit Details",action:()=>{setPdEditOpen(true);setPdEditData({...pd});setPdMenuOpen(false);}},
-                        {label:"🎨 Style",action:()=>{setPdStyleOpen(p=>!p);setPdMenuOpen(false);}},
-                        {label:"🗑️ Delete",action:()=>{setDeleteConfirm({type:"product",id:pd.id,name:pd.displayName});setPdMenuOpen(false);},danger:true},
+                        {icon:"✏️",label:"Rename",sub:"Change the display name",action:()=>{setPdRenameValue(pd.displayName);setPdRenameMode(true);setPdMenuOpen(false);}},
+                        {icon:"🖊️",label:"Edit Details",sub:"Edit all product fields",action:()=>{setPdEditOpen(true);setPdEditData({...pd});setPdMenuOpen(false);}},
+                        {icon:"🎨",label:"Style",sub:"Change icon and color",action:()=>{setPdStyleOpen(p=>!p);setPdMenuOpen(false);}},
                       ].map(item=>(
                         <button key={item.label} onClick={e=>{e.stopPropagation();item.action();}}
-                          style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"transparent",border:"none",cursor:"pointer",fontSize:12.5,color:item.danger?T.rose:T.text,textAlign:"left"}}
-                          onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                          {item.label}
+                          style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",borderBottom:`1px solid ${T.border}`}}
+                          onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                          <span style={{fontSize:15,marginTop:1}}>{item.icon}</span>
+                          <div><div style={{fontSize:12,fontWeight:600,color:T.text}}>{item.label}</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{item.sub}</div></div>
                         </button>
                       ))}
+                      <button onClick={e=>{e.stopPropagation();setDeleteConfirm({type:"product",id:pd.id,name:pd.displayName});setPdMenuOpen(false);}}
+                        style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}
+                        onMouseEnter={e=>e.currentTarget.style.background="rgba(239,68,68,.07)"} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                        <span style={{fontSize:15,marginTop:1}}>🗑️</span>
+                        <div><div style={{fontSize:12,fontWeight:600,color:T.rose}}>Delete Product</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>Permanently remove this product</div></div>
+                      </button>
                     </div>
                   )}
                   {pdStyleOpen&&(
@@ -15363,7 +15363,6 @@ const DomainsView = ({onAsset, onNav}) => {
               {key:"overview",label:"Overview"},
               {key:"assets",label:`Assets (${productAssets.length})`},
               {key:"ports",label:"Ports"},
-              {key:"contract",label:"Contract"},
               {key:"activity",label:"Activity"},
             ]} active={productTab} onChange={setProductTab}/>
           </div>
@@ -15416,7 +15415,6 @@ const DomainsView = ({onAsset, onNav}) => {
                         {[
                           {l:"Domain",   v:<span style={{display:"inline-flex",alignItems:"center",padding:"2px 10px 2px 7px",borderRadius:4,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`,fontSize:11.5,color:T.accent,fontWeight:600}}>{pd.domain}</span>},
                           {l:"Created",  v:<span style={{fontSize:11.5,color:T.textSub}}>{pd.createdAt}</span>},
-                          {l:"Lifecycle",v:<LifecycleBadge stage={pd.lifecycleStage}/>},
                           {l:"SLA",      v:<SlaTierBadge tier={pd.sla?.tier||"SILVER"}/>},
                           {l:"Assets",   v:<span style={{fontSize:11.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{productAssets.length}</span>},
                         ].map(({l,v})=>(
@@ -15811,7 +15809,7 @@ const DomainsView = ({onAsset, onNav}) => {
                           <button onMouseDown={item.action}
                             style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",fontSize:12,color:T.text}}
                             onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                            <span style={{fontSize:15}}>{item.icon}</span> {item.label}
+                            {item.label}
                           </button>
                           {i<arr.length-1&&<div style={{height:1,background:T.border}}/>}
                         </React.Fragment>
@@ -16021,95 +16019,31 @@ const DomainsView = ({onAsset, onNav}) => {
                     </div>
                   : (() => {
                       const filtered = domainProducts.filter(p=>
-                        (!dpSearch||p.displayName.toLowerCase().includes(dpSearch.toLowerCase())||p.description.toLowerCase().includes(dpSearch.toLowerCase())) &&
-                        (!dpStageFilter||p.lifecycleStage===dpStageFilter)
+                        !dpSearch||p.displayName.toLowerCase().includes(dpSearch.toLowerCase())||p.description.toLowerCase().includes(dpSearch.toLowerCase())
                       );
-                      const selPd = filtered.find(p=>p.id===dpListSelected)||filtered[0]||null;
                       return (
-                        <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,300px)",gap:0,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden",background:T.bgSurface}}>
-                          {/* List column */}
-                          <div style={{borderRight:`1px solid ${T.border}`,overflowY:"auto",maxHeight:520}}>
-                            {filtered.length===0
-                              ? <div style={{padding:"40px 0",textAlign:"center",color:T.textMuted,fontSize:13}}>No products match your filter</div>
-                              : filtered.map((p,i)=>{
-                                  const isSel = selPd?.id===p.id;
-                                  return (
-                                    <div key={p.id}
-                                      onClick={()=>setDpListSelected(p.id)}
-                                      style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",cursor:"pointer",background:isSel?T.accentDim:"transparent",borderBottom:i<filtered.length-1?`1px solid ${T.border}`:"none",borderLeft:`3px solid ${isSel?T.accent:"transparent"}`,transition:"all .1s"}}
-                                      onMouseEnter={e=>{if(!isSel){e.currentTarget.style.background=T.bgHover;}}}
-                                      onMouseLeave={e=>{if(!isSel){e.currentTarget.style.background="transparent";}}}>
-                                      <div style={{width:36,height:36,borderRadius:10,background:`${p.color}18`,border:`1.5px solid ${p.color}35`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{p.icon}</div>
-                                      <div style={{flex:1,minWidth:0}}>
-                                        <div style={{fontSize:12.5,fontWeight:600,color:isSel?T.accent:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.displayName}</div>
-                                        <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3}}>
-                                          <LifecycleBadge stage={p.lifecycleStage}/>
-                                          <SlaTierBadge tier={p.sla.tier}/>
-                                        </div>
-                                      </div>
-                                      <div style={{fontSize:11,color:T.textMuted,flexShrink:0}}>{p.assetIds.length} assets</div>
-                                    </div>
-                                  );
-                                })
-                            }
-                          </div>
-                          {/* Preview panel */}
-                          {selPd ? (
-                            <div style={{padding:20,overflowY:"auto",maxHeight:520}}>
-                              <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:16}}>
-                                <div style={{width:44,height:44,borderRadius:12,background:`${selPd.color}18`,border:`2px solid ${selPd.color}35`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0}}>{selPd.icon}</div>
-                                <div style={{flex:1,minWidth:0}}>
-                                  <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:4}}>{selPd.displayName}</div>
-                                  <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                                    <LifecycleBadge stage={selPd.lifecycleStage}/>
-                                    <SlaTierBadge tier={selPd.sla.tier}/>
+                        <div style={{border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden",background:T.bgSurface}}>
+                          {filtered.length===0
+                            ? <div style={{padding:"40px 0",textAlign:"center",color:T.textMuted,fontSize:13}}>No products match your filter</div>
+                            : filtered.map((p,i)=>(
+                                <div key={p.id}
+                                  onClick={()=>{setSelectedProductId(p.id);setProductTab("overview");}}
+                                  style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",cursor:"pointer",background:"transparent",borderBottom:i<filtered.length-1?`1px solid ${T.border}`:"none",borderLeft:"3px solid transparent",transition:"all .1s"}}
+                                  onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;e.currentTarget.style.borderLeftColor=p.color;}}
+                                  onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderLeftColor="transparent";}}>
+                                  <div style={{width:36,height:36,borderRadius:10,background:`${p.color}18`,border:`1.5px solid ${p.color}35`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{p.icon}</div>
+                                  <div style={{flex:1,minWidth:0}}>
+                                    <div style={{fontSize:12.5,fontWeight:600,color:T.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.displayName}</div>
+                                    <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{p.description?.slice(0,80)}{p.description?.length>80?"…":""}</div>
+                                  </div>
+                                  <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                                    <SlaTierBadge tier={p.sla.tier}/>
+                                    <span style={{fontSize:11,color:T.textMuted}}>{p.assetIds.length} assets</span>
+                                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,opacity:.5}}><path d="M3.5 2l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                                   </div>
                                 </div>
-                              </div>
-                              <p style={{fontSize:12,color:T.textSub,lineHeight:1.7,marginBottom:16}}>{selPd.description}</p>
-                              <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
-                                {[["Domain",selPd.domain],["Assets",selPd.assetIds.length],["Created",selPd.createdAt]].map(([l,v])=>(
-                                  <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:`1px solid ${T.border}`}}>
-                                    <span style={{fontSize:11,color:T.textMuted}}>{l}</span>
-                                    <span style={{fontSize:11,color:T.text,fontWeight:500}}>{v}</span>
-                                  </div>
-                                ))}
-                              </div>
-                              {selPd.owners.length>0&&(
-                                <div style={{marginBottom:12}}>
-                                  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Owners</div>
-                                  <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                                    {selPd.owners.map(o=><OwnerChip key={o} name={o}/>)}
-                                  </div>
-                                </div>
-                              )}
-                              {(selPd.tags||[]).length>0&&(
-                                <div style={{marginBottom:16}}>
-                                  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Tags</div>
-                                  <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                                    {selPd.tags.map(t=><span key={t} style={{fontSize:11,padding:"2px 8px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>{t}</span>)}
-                                  </div>
-                                </div>
-                              )}
-                              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:16}}>
-                                {[
-                                  {label:"Availability",value:`${selPd.sla.availability}%`,color:T.green},
-                                  {label:"Min. Quality",value:`${selPd.sla.dataQuality}%`,color:T.accent},
-                                ].map(m=>(
-                                  <div key={m.label} style={{background:T.bgElevated,borderRadius:8,padding:"10px 12px",border:`1px solid ${T.border}`}}>
-                                    <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{m.label}</div>
-                                    <div style={{fontSize:16,fontWeight:800,color:m.color,fontFamily:"'Geist Mono',monospace"}}>{m.value}</div>
-                                  </div>
-                                ))}
-                              </div>
-                              <button onClick={()=>{setSelectedProductId(selPd.id);setProductTab("overview");}}
-                                style={{width:"100%",padding:"9px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                                Open Data Product →
-                              </button>
-                            </div>
-                          ) : (
-                            <div style={{display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted,fontSize:13,padding:40}}>Select a product</div>
-                          )}
+                              ))
+                          }
                         </div>
                       );
                     })()
@@ -16387,21 +16321,6 @@ const DomainsView = ({onAsset, onNav}) => {
                       </div>
                     )}
 
-                    {/* Lifecycle Stage (data product only) */}
-                    {isDP&&(
-                      <div>
-                        <label style={lblStyle}>Lifecycle Stage</label>
-                        <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                          {LIFECYCLE_STAGES.map(s=>(
-                            <button key={s} onClick={()=>setSt(p=>({...p,lifecycleStage:s}))}
-                              style={{padding:"4px 11px",borderRadius:6,fontSize:11,fontWeight:600,cursor:"pointer",
-                                background:st.lifecycleStage===s?`${LIFECYCLE_COLORS[s]}18`:T.bgElevated,
-                                border:`1.5px solid ${st.lifecycleStage===s?LIFECYCLE_COLORS[s]:T.border}`,
-                                color:st.lifecycleStage===s?LIFECYCLE_COLORS[s]:T.textMuted}}>{s}</button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
 
                     {/* Tags */}
                     <div>
@@ -16917,21 +16836,6 @@ const DomainsView = ({onAsset, onNav}) => {
               </div>
             </div>
             <div style={{padding:"20px 24px",flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:16}}>
-              {/* Icon + color */}
-              <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Icon</label>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
-                  {ICON_OPTIONS.map(ic=>(
-                    <button key={ic} onClick={()=>setNd(d=>({...d,icon:ic}))} style={{width:36,height:36,borderRadius:8,background:nd.icon===ic?T.accentDim:T.bgElevated,border:`1.5px solid ${nd.icon===ic?T.accent:T.border}`,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>{ic}</button>
-                  ))}
-                </div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Color</label>
-                <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
-                  {COLOR_PALETTE.map(c=>(
-                    <button key={c} onClick={()=>setNd(d=>({...d,color:c}))} style={{width:26,height:26,borderRadius:7,background:c,border:nd.color===c?`3px solid ${T.text}`:"2px solid transparent",cursor:"pointer",transition:"transform .1s",transform:nd.color===c?"scale(1.15)":"scale(1)"}}/>
-                  ))}
-                </div>
-              </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                 <div>
                   <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Name <span style={{color:T.rose}}>*</span></label>
@@ -17008,9 +16912,9 @@ const DomainsView = ({onAsset, onNav}) => {
                   )}
                 </div>
               </div>
-              {/* Experts picker */}
+              {/* Steward picker */}
               <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Domain Experts</label>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Steward</label>
                 <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
                   {ndExperts.map(o=>(
                     <div key={o} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:5,background:"rgba(217,119,6,.1)",border:`1px solid rgba(217,119,6,.2)`,borderLeft:`3px solid #d97706`}}>
@@ -17022,7 +16926,7 @@ const DomainsView = ({onAsset, onNav}) => {
                 </div>
                 <div style={{position:"relative"}}>
                   <button onClick={()=>{setNdExpertOpen(p=>!p);setNdExpertSearch("");}} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",borderRadius:8,border:`1.5px solid ${ndExpertOpen?T.accent:T.border}`,background:T.bgElevated,color:T.textSub,fontSize:12,cursor:"pointer",width:"100%"}}>
-                    {Ic.plus(10)} Add expert
+                    {Ic.plus(10)} Add steward
                   </button>
                   {ndExpertOpen&&(
                     <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,boxShadow:"0 8px 24px rgba(0,0,0,.25)",zIndex:50,overflow:"hidden"}}>
@@ -17042,6 +16946,47 @@ const DomainsView = ({onAsset, onNav}) => {
                       </div>
                     </div>
                   )}
+                </div>
+              </div>
+              {/* Glossary Terms */}
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Glossary Terms</label>
+                <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
+                  {ndGlossary.map(t=>(
+                    <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:6,background:"rgba(139,92,246,.08)",border:"1px solid rgba(139,92,246,.2)",fontSize:11.5,color:"#8b5cf6"}}>
+                      {t}<button onClick={()=>setNdGlossary(p=>p.filter(x=>x!==t))} style={{background:"none",border:"none",cursor:"pointer",color:"#8b5cf6",padding:0,lineHeight:1,display:"flex",opacity:.6}}>{Ic.x(7)}</button>
+                    </span>
+                  ))}
+                </div>
+                <input value={ndGlInput} onChange={e=>setNdGlInput(e.target.value)}
+                  onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&ndGlInput.trim()){setNdGlossary(p=>[...p,ndGlInput.trim()]);setNdGlInput("");e.preventDefault();}}}
+                  placeholder="Type and press Enter to add…"
+                  style={{width:"100%",padding:"7px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+              </div>
+              {/* Tags */}
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Tags</label>
+                <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
+                  {ndTags.map(t=>(
+                    <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textSub}}>
+                      {t}<button onClick={()=>setNdTags(p=>p.filter(x=>x!==t))} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,lineHeight:1,display:"flex"}}>{Ic.x(7)}</button>
+                    </span>
+                  ))}
+                </div>
+                <input value={ndTagInput} onChange={e=>setNdTagInput(e.target.value)}
+                  onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&ndTagInput.trim()){setNdTags(p=>[...p,ndTagInput.trim()]);setNdTagInput("");e.preventDefault();}}}
+                  placeholder="Type and press Enter to add…"
+                  style={{width:"100%",padding:"7px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+              </div>
+              {/* Icon */}
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Icon</label>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {ICON_OPTIONS.map(ic=>(
+                    <button key={ic} onClick={()=>setNd(d=>({...d,icon:ic}))} style={{width:36,height:36,borderRadius:8,background:nd.icon===ic?T.accentDim:T.bgElevated,border:`1.5px solid ${nd.icon===ic?T.accent:T.border}`,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center"}}>{ic}</button>
+                  ))}
                 </div>
               </div>
             </div>
@@ -17359,41 +17304,32 @@ const DataProductsView = ({onAsset, onNav}) => {
               <div style={{flex:1,minWidth:0}}>
                 <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
                   <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:0,lineHeight:1.2}}>{pd.displayName}</h1>
-                  <LifecycleBadge stage={pd.lifecycleStage}/>
-                </div>
-                <div style={{fontSize:12,color:T.textMuted,marginBottom:6}}>
-                  <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 8px",borderRadius:4,fontSize:10.5,fontWeight:600,background:`${pdDomain?.color||"#6366f1"}15`,color:pdDomain?.color||"#6366f1",border:`1px solid ${pdDomain?.color||"#6366f1"}25`,marginRight:8}}>
-                    {pdDomain?.icon} {pd.domain}
-                  </span>
-                  Created {pd.createdAt}
-                </div>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                  {(pd.owners||[]).map(o=><OwnerChip key={o} name={o}/>)}
                 </div>
               </div>
               {/* Action buttons */}
               <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0}} onClick={e=>e.stopPropagation()}>
-                <button onClick={()=>setDpAddAssetsOpen(true)}
-                  style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,fontSize:12,fontWeight:600,cursor:"pointer",transition:"all .15s"}}
-                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.text;}}>
-                  {Ic.plus(10)} Add Assets
-                </button>
                 <div style={{position:"relative"}}>
                   <button onClick={()=>setDpMenuOpen(p=>!p)}
                     style={{width:34,height:34,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,transition:"all .15s"}}
                     onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>⋮</button>
                   {dpMenuOpen&&(
-                    <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,minWidth:200,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",zIndex:500,overflow:"hidden"}}>
+                    <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,minWidth:220,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",zIndex:500,overflow:"hidden"}}>
                       {[
-                        {label:"🖊️ Edit Details",action:()=>{setDpEditOpen(true);setDpEditData({...pd});setDpMenuOpen(false);}},
-                        {label:"🗑️ Delete",action:()=>{setSelectedProductId(null);setDpMenuOpen(false);},danger:true},
+                        {icon:"🖊️",label:"Edit Details",sub:"Edit all product fields",action:()=>{setDpEditOpen(true);setDpEditData({...pd});setDpMenuOpen(false);}},
                       ].map(item=>(
                         <button key={item.label} onClick={item.action}
-                          style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"transparent",border:"none",cursor:"pointer",fontSize:12.5,color:item.danger?T.rose:T.text,textAlign:"left"}}
-                          onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                          {item.label}
+                          style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",borderBottom:`1px solid ${T.border}`}}
+                          onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                          <span style={{fontSize:15,marginTop:1}}>{item.icon}</span>
+                          <div><div style={{fontSize:12,fontWeight:600,color:T.text}}>{item.label}</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{item.sub}</div></div>
                         </button>
                       ))}
+                      <button onClick={()=>{setSelectedProductId(null);setDpMenuOpen(false);}}
+                        style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}
+                        onMouseEnter={e=>e.currentTarget.style.background="rgba(239,68,68,.07)"} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                        <span style={{fontSize:15,marginTop:1}}>🗑️</span>
+                        <div><div style={{fontSize:12,fontWeight:600,color:T.rose}}>Delete Product</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>Permanently remove this product</div></div>
+                      </button>
                     </div>
                   )}
                 </div>
@@ -17403,7 +17339,6 @@ const DataProductsView = ({onAsset, onNav}) => {
               {key:"overview",   label:"Overview"},
               {key:"assets",     label:`Assets (${productAssets.length})`},
               {key:"ports",      label:"Ports"},
-              {key:"contract",   label:"Contract"},
               {key:"activity",   label:"Activity"},
             ]} active={productTab} onChange={setProductTab}/>
           </div>
@@ -17435,7 +17370,6 @@ const DataProductsView = ({onAsset, onNav}) => {
                         {[
                           {l:"Domain",   v:<span style={{display:"inline-flex",alignItems:"center",padding:"2px 10px 2px 7px",borderRadius:4,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`,fontSize:11.5,color:T.accent,fontWeight:600}}>{pd.domain}</span>},
                           {l:"Created",  v:<span style={{fontSize:11.5,color:T.textSub}}>{pd.createdAt}</span>},
-                          {l:"Lifecycle",v:<LifecycleBadge stage={pd.lifecycleStage}/>},
                           {l:"SLA",      v:<SlaTierBadge tier={pd.sla?.tier||"SILVER"}/>},
                           {l:"Assets",   v:<span style={{fontSize:11.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{productAssets.length}</span>},
                         ].map(({l,v})=>(
@@ -18073,17 +18007,6 @@ const DataProductsView = ({onAsset, onNav}) => {
                 <textarea value={np.description} onChange={e=>setNp(p=>({...p,description:e.target.value}))} rows={3} placeholder="What data does this product contain, and who consumes it?"
                   style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box"}}
                   onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-              </div>
-              <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Lifecycle Stage</label>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                  {LIFECYCLE_STAGES.map(s=>(
-                    <button key={s} onClick={()=>setNp(p=>({...p,lifecycleStage:s}))} style={{padding:"5px 12px",borderRadius:6,fontSize:11,fontWeight:600,cursor:"pointer",
-                      background:np.lifecycleStage===s?`${LIFECYCLE_COLORS_DP[s]}18`:T.bgElevated,
-                      border:`1.5px solid ${np.lifecycleStage===s?LIFECYCLE_COLORS_DP[s]:T.border}`,
-                      color:np.lifecycleStage===s?LIFECYCLE_COLORS_DP[s]:T.textMuted}}>{s}</button>
-                  ))}
-                </div>
               </div>
               {/* Icon picker — at end */}
               <div>
