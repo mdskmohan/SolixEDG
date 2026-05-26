@@ -12517,7 +12517,8 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
   const [showAllStewards,setShowAllStewards]= useState(false);
   const [showAllTags,    setShowAllTags]    = useState(false);
   const [assetGlTerms,   setAssetGlTerms]  = useState([]);
-  const [assetGlInput,   setAssetGlInput]  = useState("");
+  const [assetGlOpen,    setAssetGlOpen]   = useState(false);
+  const [assetGlSearch,  setAssetGlSearch] = useState("");
   const [editDesc,       setEditDesc]       = useState(false);
   const [descVal,      setDescVal]     = useState(asset.description||"");
   const [editNotes,    setEditNotes]   = useState(false);
@@ -12896,20 +12897,41 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
           </div>
 
           {/* BUSINESS GLOSSARY */}
-          <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
+          <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
               <MetaLabel>Business Glossary</MetaLabel>
-              <button style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color="#8b5cf6";e.currentTarget.style.background="rgba(139,92,246,.08)";}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}} onClick={()=>{const inp=document.querySelector('[data-asset-gl-input]');if(inp)inp.focus();}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+              <button onClick={()=>{setAssetGlOpen(p=>!p);setAssetGlSearch("");}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color="#8b5cf6";e.currentTarget.style.background="rgba(139,92,246,.08)";}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
             </div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
+            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
               {assetGlTerms.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
               {assetGlTerms.map((t,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t}<button onClick={()=>setAssetGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
             </div>
-            <input data-asset-gl-input value={assetGlInput} onChange={e=>setAssetGlInput(e.target.value)}
-              onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&assetGlInput.trim()){setAssetGlTerms(prev=>[...prev,assetGlInput.trim()]);setAssetGlInput("");}}}
-              placeholder="Link glossary term…"
-              style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box"}}
-              onFocus={e=>e.target.style.borderColor="#8b5cf6"} onBlur={e=>e.target.style.borderColor=T.border}/>
+            {assetGlOpen&&<div style={{position:"absolute",left:0,right:0,top:"calc(100% - 4px)",zIndex:400,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.22)",overflow:"hidden"}}>
+              <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}>
+                <input autoFocus placeholder="Search glossary terms…" value={assetGlSearch} onChange={e=>setAssetGlSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#8b5cf6"} onBlur={e=>e.target.style.borderColor=T.border}/>
+              </div>
+              <div style={{maxHeight:200,overflowY:"auto"}}>
+                {GLOSSARY_TERMS.filter(t=>!assetGlSearch||t.term.toLowerCase().includes(assetGlSearch.toLowerCase())||t.abbr?.toLowerCase().includes(assetGlSearch.toLowerCase())).map(t=>{
+                  const sel=assetGlTerms.includes(t.term);
+                  return(<button key={t.id} onMouseDown={e=>{e.stopPropagation();setAssetGlTerms(prev=>sel?prev.filter(x=>x!==t.term):[...prev,t.term]);}}
+                    style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:sel?"rgba(139,92,246,.06)":"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}}
+                    onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12.5,fontWeight:600,color:sel?"#8b5cf6":T.text}}>{t.term}</div>
+                      <div style={{fontSize:11,color:T.textMuted,display:"flex",gap:6,marginTop:1}}>
+                        {t.abbr&&t.abbr!=="—"&&<span style={{fontFamily:"'Geist Mono',monospace"}}>{t.abbr}</span>}
+                        <span>{t.domain}</span>
+                      </div>
+                    </div>
+                    {sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke="#8b5cf6" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </button>);
+                })}
+                {GLOSSARY_TERMS.filter(t=>!assetGlSearch||t.term.toLowerCase().includes(assetGlSearch.toLowerCase())).length===0&&<div style={{padding:"16px 12px",fontSize:12,color:T.textMuted,textAlign:"center"}}>No terms match</div>}
+              </div>
+              <div style={{padding:"8px 10px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end"}}>
+                <button onMouseDown={()=>setAssetGlOpen(false)} style={{padding:"5px 14px",borderRadius:6,background:"#8b5cf6",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Done</button>
+              </div>
+            </div>}
           </div>
 
           {/* ACTIONS */}
@@ -13358,7 +13380,8 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
   const [showAllStewards,setShowAllStewards]= useState(false);
   const [showAllTags,    setShowAllTags]    = useState(false);
   const [assetGlTerms,   setAssetGlTerms]  = useState([]);
-  const [assetGlInput,   setAssetGlInput]  = useState("");
+  const [assetGlOpen,    setAssetGlOpen]   = useState(false);
+  const [assetGlSearch,  setAssetGlSearch] = useState("");
 
   const DOMAINS_LIST = ["Commerce","Finance","Product","Marketing","ML","Engineering"];
   const USERS_LIST   = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
@@ -13829,20 +13852,41 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
         </div>
 
         {/* BUSINESS GLOSSARY */}
-        <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
+        <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
             <MetaLabel>Business Glossary</MetaLabel>
-            <button style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color="#8b5cf6";e.currentTarget.style.background="rgba(139,92,246,.08)";}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}} onClick={()=>{const inp=document.querySelector('[data-asset2-gl-input]');if(inp)inp.focus();}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+            <button onClick={()=>{setAssetGlOpen(p=>!p);setAssetGlSearch("");}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color="#8b5cf6";e.currentTarget.style.background="rgba(139,92,246,.08)";}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
           </div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
+          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
             {assetGlTerms.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
             {assetGlTerms.map((t,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t}<button onClick={()=>setAssetGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
           </div>
-          <input data-asset2-gl-input value={assetGlInput} onChange={e=>setAssetGlInput(e.target.value)}
-            onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&assetGlInput.trim()){setAssetGlTerms(prev=>[...prev,assetGlInput.trim()]);setAssetGlInput("");}}}
-            placeholder="Link glossary term…"
-            style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box"}}
-            onFocus={e=>e.target.style.borderColor="#8b5cf6"} onBlur={e=>e.target.style.borderColor=T.border}/>
+          {assetGlOpen&&<div style={{position:"absolute",left:0,right:0,top:"calc(100% - 4px)",zIndex:400,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.22)",overflow:"hidden"}}>
+            <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}>
+              <input autoFocus placeholder="Search glossary terms…" value={assetGlSearch} onChange={e=>setAssetGlSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#8b5cf6"} onBlur={e=>e.target.style.borderColor=T.border}/>
+            </div>
+            <div style={{maxHeight:200,overflowY:"auto"}}>
+              {GLOSSARY_TERMS.filter(t=>!assetGlSearch||t.term.toLowerCase().includes(assetGlSearch.toLowerCase())||t.abbr?.toLowerCase().includes(assetGlSearch.toLowerCase())).map(t=>{
+                const sel=assetGlTerms.includes(t.term);
+                return(<button key={t.id} onMouseDown={e=>{e.stopPropagation();setAssetGlTerms(prev=>sel?prev.filter(x=>x!==t.term):[...prev,t.term]);}}
+                  style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:sel?"rgba(139,92,246,.06)":"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}}
+                  onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12.5,fontWeight:600,color:sel?"#8b5cf6":T.text}}>{t.term}</div>
+                    <div style={{fontSize:11,color:T.textMuted,display:"flex",gap:6,marginTop:1}}>
+                      {t.abbr&&t.abbr!=="—"&&<span style={{fontFamily:"'Geist Mono',monospace"}}>{t.abbr}</span>}
+                      <span>{t.domain}</span>
+                    </div>
+                  </div>
+                  {sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke="#8b5cf6" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </button>);
+              })}
+              {GLOSSARY_TERMS.filter(t=>!assetGlSearch||t.term.toLowerCase().includes(assetGlSearch.toLowerCase())).length===0&&<div style={{padding:"16px 12px",fontSize:12,color:T.textMuted,textAlign:"center"}}>No terms match</div>}
+            </div>
+            <div style={{padding:"8px 10px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end"}}>
+              <button onMouseDown={()=>setAssetGlOpen(false)} style={{padding:"5px 14px",borderRadius:6,background:"#8b5cf6",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Done</button>
+            </div>
+          </div>}
         </div>
 
         {/* Edit Metadata Modal */}
