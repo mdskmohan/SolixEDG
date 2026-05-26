@@ -15907,8 +15907,11 @@ const DomainsView = ({onAsset, onNav}) => {
                   <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
                     {/* Owners */}
                     <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
-                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Owners</div>
-                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:(dm.owners||[]).length>0?8:0}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Owners</div>
+                        <button onClick={()=>{setDmOwnerOpen(p=>!p);setDmOwnerSearch("");}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+                      </div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                         {(dm.owners||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owners assigned</span>}
                         {(dm.owners||[]).map((o,i)=>(
                           <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
@@ -15918,7 +15921,6 @@ const DomainsView = ({onAsset, onNav}) => {
                           </div>
                         ))}
                       </div>
-                      <button onClick={()=>{setDmOwnerOpen(p=>!p);setDmOwnerSearch("");}} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,color:dmOwnerOpen?T.accent:T.textMuted,background:"none",border:`1px dashed ${dmOwnerOpen?T.accent:T.border}`,borderRadius:6,padding:"4px 10px",cursor:"pointer",transition:"all .12s"}}>{Ic.plus(9)} Add owner</button>
                       {dmOwnerOpen&&<div style={{position:"absolute",left:16,right:16,top:"calc(100% - 4px)",zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.22)",overflow:"hidden"}}>
                         <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}><input autoFocus placeholder="Search users…" value={dmOwnerSearch} onChange={e=>setDmOwnerSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none"}}/></div>
                         <div style={{maxHeight:160,overflowY:"auto"}}>{ALL_USERS.filter(u=>!dmOwnerSearch||u.toLowerCase().includes(dmOwnerSearch.toLowerCase())).map(u=>{const sel=(dm.owners||[]).includes(u);return(<button key={u} onMouseDown={e=>{e.stopPropagation();patchDomain(dm.id,{owners:sel?(dm.owners||[]).filter(x=>x!==u):[...(dm.owners||[]),u]});}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 12px",background:sel?T.bgElevated:"transparent",border:"none",cursor:"pointer",textAlign:"left"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{width:24,height:24,borderRadius:"50%",background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8.5,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(u)}</div><span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>{sel&&<span style={{fontSize:12,color:T.accent,fontWeight:700}}>✓</span>}</button>);})}</div>
@@ -15926,8 +15928,11 @@ const DomainsView = ({onAsset, onNav}) => {
                     </div>
                     {/* Stewards */}
                     <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
-                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Stewards</div>
-                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:(dm.experts||[]).length>0?8:0}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Stewards</div>
+                        <button onClick={()=>{setDmStewOpen(p=>!p);setDmStewSearch("");}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color="#d97706";e.currentTarget.style.background="rgba(217,119,6,.08)";}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+                      </div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                         {(dm.experts||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards assigned</span>}
                         {(dm.experts||[]).map((s,i)=>(
                           <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:"rgba(217,119,6,.08)",borderTop:"1px solid rgba(217,119,6,.2)",borderRight:"1px solid rgba(217,119,6,.2)",borderBottom:"1px solid rgba(217,119,6,.2)",borderLeft:"3px solid #d97706"}}>
@@ -15937,7 +15942,6 @@ const DomainsView = ({onAsset, onNav}) => {
                           </div>
                         ))}
                       </div>
-                      <button onClick={()=>{setDmStewOpen(p=>!p);setDmStewSearch("");}} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,color:dmStewOpen?"#d97706":T.textMuted,background:"none",border:`1px dashed ${dmStewOpen?"#d97706":T.border}`,borderRadius:6,padding:"4px 10px",cursor:"pointer",transition:"all .12s"}}>{Ic.plus(9)} Add steward</button>
                       {dmStewOpen&&<div style={{position:"absolute",left:16,right:16,top:"calc(100% - 4px)",zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.22)",overflow:"hidden"}}>
                         <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}><input autoFocus placeholder="Search users…" value={dmStewSearch} onChange={e=>setDmStewSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none"}}/></div>
                         <div style={{maxHeight:160,overflowY:"auto"}}>{ALL_USERS.filter(u=>!dmStewSearch||u.toLowerCase().includes(dmStewSearch.toLowerCase())).map(u=>{const sel=(dm.experts||[]).includes(u);return(<button key={u} onMouseDown={e=>{e.stopPropagation();patchDomain(dm.id,{experts:sel?(dm.experts||[]).filter(x=>x!==u):[...(dm.experts||[]),u]});}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 12px",background:sel?T.bgElevated:"transparent",border:"none",cursor:"pointer",textAlign:"left"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{width:24,height:24,borderRadius:"50%",background:"rgba(217,119,6,.12)",border:"1px solid rgba(217,119,6,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8.5,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(u)}</div><span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>{sel&&<span style={{fontSize:12,color:"#d97706",fontWeight:700}}>✓</span>}</button>);})}</div>
@@ -15945,12 +15949,15 @@ const DomainsView = ({onAsset, onNav}) => {
                     </div>
                     {/* Tags */}
                     <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
-                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Tags</div>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Tags</div>
+                        <button style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}} onClick={()=>{const inp=document.querySelector('[data-dm-tag-input]');if(inp)inp.focus();}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+                      </div>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
                         {(dm.tags||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
-                        {(dm.tags||[]).map(t=><span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`,color:T.accent,fontWeight:600}}>{t}<button onClick={()=>patchDomain(dm.id,{tags:(dm.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+                        {(()=>{const TAG_C={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},marketing:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},ML:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},behavioral:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},GDPR:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"}};return (dm.tags||[]).map(t=>{const c=TAG_C[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};return <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}<button onClick={()=>patchDomain(dm.id,{tags:(dm.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>;});})()}
                       </div>
-                      <input value={dmTagInput} onChange={e=>setDmTagInput(e.target.value)}
+                      <input data-dm-tag-input value={dmTagInput} onChange={e=>setDmTagInput(e.target.value)}
                         onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&dmTagInput.trim()){patchDomain(dm.id,{tags:[...(dm.tags||[]),dmTagInput.trim()]});setDmTagInput("");}}}
                         placeholder="Add tag…"
                         style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box"}}
@@ -15958,12 +15965,15 @@ const DomainsView = ({onAsset, onNav}) => {
                     </div>
                     {/* Business Glossary */}
                     <div style={{padding:"14px 16px"}}>
-                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Business Glossary</div>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Business Glossary</div>
+                        <button style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color="#8b5cf6";e.currentTarget.style.background="rgba(139,92,246,.08)";}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}} onClick={()=>{const inp=document.querySelector('[data-dm-gl-input]');if(inp)inp.focus();}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+                      </div>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
                         {dmGlossaryTerms.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
                         {dmGlossaryTerms.map((t,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t}<button onClick={()=>setDmGlossaryTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
                       </div>
-                      <input value={dmGlInput} onChange={e=>setDmGlInput(e.target.value)}
+                      <input data-dm-gl-input value={dmGlInput} onChange={e=>setDmGlInput(e.target.value)}
                         onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&dmGlInput.trim()){setDmGlossaryTerms(prev=>[...prev,dmGlInput.trim()]);setDmGlInput("");}}}
                         placeholder="Link glossary term…"
                         style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box"}}
