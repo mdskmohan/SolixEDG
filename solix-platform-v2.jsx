@@ -3905,8 +3905,10 @@ const QualityView = () => {
   };
   const INC_NEXT_STATES = {
     "Open":       ["In Progress","Resolved","Dismissed"],
-    "In Progress":["Resolved","Dismissed"],
-    "In Review":  ["Resolved","Dismissed"],
+    "In Progress":["Open","Resolved","Dismissed"],
+    "In Review":  ["Open","Resolved","Dismissed"],
+    "Resolved":   ["Open","In Progress","Dismissed"],
+    "Dismissed":  ["Open","In Progress","Resolved"],
   };
   const INC_STATE_LABEL = {"In Progress":"In Review","In Review":"In Review","Open":"Open","Resolved":"Resolved","Dismissed":"Dismissed"};
   const TABS = [
@@ -4663,9 +4665,7 @@ const QualityView = () => {
                         </td>
                         <td style={{padding:"10px 14px",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{inc.opened}</td>
                         <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
-                          {(()=>{const terminal=inc.status==="Resolved"||inc.status==="Dismissed";return terminal
-                            ?<span style={{fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:6,background:sCfg.bg,color:sCfg.color,border:`1px solid ${sCfg.color}28`,whiteSpace:"nowrap"}}>{sCfg.label}</span>
-                            :<button onClick={()=>setIncActionModal({id:inc.id,newStatus:null,desc:""})} style={{fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:6,background:sCfg.bg,color:sCfg.color,border:`1.5px solid ${sCfg.color}45`,whiteSpace:"nowrap",cursor:"pointer",transition:"all .12s",display:"inline-flex",alignItems:"center",gap:5}} onMouseEnter={e=>{e.currentTarget.style.background=`${sCfg.color}20`;e.currentTarget.style.borderColor=sCfg.color;}} onMouseLeave={e=>{e.currentTarget.style.background=sCfg.bg;e.currentTarget.style.borderColor=`${sCfg.color}45`;}}>{sCfg.label}<svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{opacity:.7}}><path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></button>;})()}
+                          <button onClick={()=>setIncActionModal({id:inc.id,newStatus:null,desc:""})} style={{fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:6,background:sCfg.bg,color:sCfg.color,border:`1.5px solid ${sCfg.color}45`,whiteSpace:"nowrap",cursor:"pointer",transition:"all .12s",display:"inline-flex",alignItems:"center",gap:5}} onMouseEnter={e=>{e.currentTarget.style.background=`${sCfg.color}20`;e.currentTarget.style.borderColor=sCfg.color;}} onMouseLeave={e=>{e.currentTarget.style.background=sCfg.bg;e.currentTarget.style.borderColor=`${sCfg.color}45`;}}>{sCfg.label}<svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{opacity:.7}}><path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
                         </td>
                         <td style={{padding:"10px 14px"}}>
                           <DQSeverityBadge severity={inc.severity}/>
@@ -7119,7 +7119,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       const resolvedCount = allPolViols.filter(v=>v.status==="Resolved"||v.status==="Waived").length;
 
                       const VIOL_STATUS_CFG = {"Open":{color:T.rose,bg:T.roseDim,label:"Open"},"In Progress":{color:T.amber,bg:T.amberDim,label:"In Review"},"In Review":{color:T.amber,bg:T.amberDim,label:"In Review"},"Resolved":{color:"#16a34a",bg:"#16a34a12",label:"Resolved"},"Dismissed":{color:T.textMuted,bg:T.bgElevated,label:"Dismissed"},"Waived":{color:T.textMuted,bg:T.bgElevated,label:"Dismissed"}};
-                      const VIOL_NEXT = {"Open":["In Progress","Resolved","Dismissed"],"In Progress":["Resolved","Dismissed"],"In Review":["Resolved","Dismissed"]};
+                      const VIOL_NEXT = {"Open":["In Progress","Resolved","Dismissed"],"In Progress":["Open","Resolved","Dismissed"],"In Review":["Open","Resolved","Dismissed"],"Resolved":["Open","In Progress","Dismissed"],"Dismissed":["Open","In Progress","Resolved"],"Waived":["Open","In Progress","Resolved"]};
                       const openViolActionModal = (id) => setViolActionModal({id,newStatus:null,desc:""});
 
                       const statusStyle = (s) => ({
@@ -7205,18 +7205,12 @@ const PolicyManagerView = ({onToast, onNav}) => {
                                         <span style={{fontSize:10.5,color:T.textMuted}}>{v.assetType}</span>
                                         <span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted}}>{v.domain}</span>
                                         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:7}} onClick={e=>e.stopPropagation()}>
-                                          {/* Status pill — clickable for non-terminal */}
-                                          {(v.status==="Resolved"||v.status==="Dismissed"||v.status==="Waived")
-                                            ?<span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:99,background:ss.bg,color:ss.color,border:`1px solid ${ss.color}30`,display:"flex",alignItems:"center",gap:4}}>
-                                              <span style={{width:5,height:5,borderRadius:"50%",background:ss.dot,display:"inline-block"}}/>
-                                              {VIOL_STATUS_CFG[v.status]?.label||v.status}
-                                            </span>
-                                            :<button onClick={()=>openViolActionModal(v.id)} style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:99,background:ss.bg,color:ss.color,border:`1.5px solid ${ss.color}55`,display:"flex",alignItems:"center",gap:4,cursor:"pointer",transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.background=`${ss.color}20`;e.currentTarget.style.borderColor=ss.color;}} onMouseLeave={e=>{e.currentTarget.style.background=ss.bg;e.currentTarget.style.borderColor=`${ss.color}55`;}}>
-                                              <span style={{width:5,height:5,borderRadius:"50%",background:ss.dot,display:"inline-block"}}/>
-                                              {VIOL_STATUS_CFG[v.status]?.label||v.status}
-                                              <svg width="8" height="8" viewBox="0 0 10 10" fill="none" style={{opacity:.7}}><path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                                            </button>
-                                          }
+                                          {/* Status pill — always clickable */}
+                                          <button onClick={()=>openViolActionModal(v.id)} style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:99,background:ss.bg,color:ss.color,border:`1.5px solid ${ss.color}55`,display:"flex",alignItems:"center",gap:4,cursor:"pointer",transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.background=`${ss.color}20`;e.currentTarget.style.borderColor=ss.color;}} onMouseLeave={e=>{e.currentTarget.style.background=ss.bg;e.currentTarget.style.borderColor=`${ss.color}55`;}}>
+                                            <span style={{width:5,height:5,borderRadius:"50%",background:ss.dot,display:"inline-block"}}/>
+                                            {VIOL_STATUS_CFG[v.status]?.label||v.status}
+                                            <svg width="8" height="8" viewBox="0 0 10 10" fill="none" style={{opacity:.7}}><path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                          </button>
                                           {/* Detected date */}
                                           <span style={{fontSize:10,color:T.textMuted,whiteSpace:"nowrap"}}>Detected {v.detectedAt}</span>
                                           {/* Expand chevron */}
@@ -7238,13 +7232,11 @@ const PolicyManagerView = ({onToast, onNav}) => {
                                       <div style={{fontSize:12,color:T.textSub,lineHeight:1.7,marginBottom:12}}>{v.description}</div>
                                       {v.resolutionNote&&<div style={{fontSize:12,color:T.textSub,lineHeight:1.6,padding:"9px 12px",background:(v.status==="Resolved"?"#16a34a":T.bgElevated)+"10",borderRadius:8,border:`1px solid ${(v.status==="Resolved"?"#16a34a":T.border)}22`,marginBottom:12,fontStyle:"italic"}}><span style={{fontWeight:600,fontStyle:"normal",fontSize:11,color:v.status==="Resolved"?"#16a34a":T.textMuted}}>Note: </span>{v.resolutionNote}</div>}
                                       <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-                                        {(v.status!=="Resolved"&&v.status!=="Dismissed"&&v.status!=="Waived")&&(
-                                          <button onClick={()=>openViolActionModal(v.id)}
-                                            style={{fontSize:11,padding:"5px 14px",borderRadius:7,background:T.accentDim,border:`1.5px solid ${T.accent}44`,color:T.accent,cursor:"pointer",fontWeight:600,transition:"all .1s"}}
-                                            onMouseEnter={e=>{e.currentTarget.style.background=`${T.accent}20`;}} onMouseLeave={e=>{e.currentTarget.style.background=T.accentDim;}}>
-                                            Update Status
-                                          </button>
-                                        )}
+                                        <button onClick={()=>openViolActionModal(v.id)}
+                                          style={{fontSize:11,padding:"5px 14px",borderRadius:7,background:T.accentDim,border:`1.5px solid ${T.accent}44`,color:T.accent,cursor:"pointer",fontWeight:600,transition:"all .1s"}}
+                                          onMouseEnter={e=>{e.currentTarget.style.background=`${T.accent}20`;}} onMouseLeave={e=>{e.currentTarget.style.background=T.accentDim;}}>
+                                          Update Status
+                                        </button>
                                         <button onClick={()=>onToast("Asset profile opened","info")} style={{fontSize:11,padding:"5px 14px",borderRadius:7,background:"transparent",border:`1.5px solid ${T.border}`,color:T.textSub,cursor:"pointer",fontWeight:600,marginLeft:"auto"}}>
                                           View Asset →
                                         </button>
@@ -9250,7 +9242,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
         const viol = violations.find(v=>v.id===violActionModal.id);
         if(!viol) return null;
         const VIOL_STATUS_CFG_M = {"Open":{color:T.rose,bg:T.roseDim,label:"Open"},"In Progress":{color:T.amber,bg:T.amberDim,label:"In Review"},"In Review":{color:T.amber,bg:T.amberDim,label:"In Review"},"Resolved":{color:"#16a34a",bg:"#16a34a12",label:"Resolved"},"Dismissed":{color:T.textMuted,bg:T.bgElevated,label:"Dismissed"},"Waived":{color:T.textMuted,bg:T.bgElevated,label:"Dismissed"}};
-        const VIOL_NEXT_M = {"Open":["In Progress","Resolved","Dismissed"],"In Progress":["Resolved","Dismissed"],"In Review":["Resolved","Dismissed"]};
+        const VIOL_NEXT_M = {"Open":["In Progress","Resolved","Dismissed"],"In Progress":["Open","Resolved","Dismissed"],"In Review":["Open","Resolved","Dismissed"],"Resolved":["Open","In Progress","Dismissed"],"Dismissed":["Open","In Progress","Resolved"],"Waived":["Open","In Progress","Resolved"]};
         const vCfg = VIOL_STATUS_CFG_M[viol.status]||{label:viol.status,color:T.textMuted,bg:T.bgElevated};
         const nextStates = VIOL_NEXT_M[viol.status]||[];
         const terminalTarget = violActionModal.newStatus==="Resolved"||violActionModal.newStatus==="Dismissed";
