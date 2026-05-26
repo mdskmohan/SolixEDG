@@ -3747,6 +3747,7 @@ const QualityView = () => {
   const [incResolveModal, setIncResolveModal] = useState(false);
   const [incResolveId,    setIncResolveId]    = useState(null);
   const [incResolveReason,setIncResolveReason]= useState("");
+  const [incActionModal,  setIncActionModal]  = useState(null); // {id, newStatus, desc}
 
   // Add Test Case modal (OM-style: level selector + single form + help panel)
   const [newTCModal,  setNewTCModal]  = useState(false);
@@ -3897,10 +3898,17 @@ const QualityView = () => {
   // ── status config ──────────────────────────────────────────────────────────
   const INC_STATUS_CFG = {
     "Open":        {color:T.rose,      bg:T.roseDim,      label:"Open"},
-    "In Progress": {color:T.amber,     bg:T.amberDim,     label:"In Progress"},
+    "In Progress": {color:T.amber,     bg:T.amberDim,     label:"In Review"},
+    "In Review":   {color:T.amber,     bg:T.amberDim,     label:"In Review"},
     "Resolved":    {color:"#16a34a",   bg:"#16a34a12",    label:"Resolved"},
     "Dismissed":   {color:T.textMuted, bg:T.bgElevated,   label:"Dismissed"},
   };
+  const INC_NEXT_STATES = {
+    "Open":       ["In Progress","Resolved","Dismissed"],
+    "In Progress":["Resolved","Dismissed"],
+    "In Review":  ["Resolved","Dismissed"],
+  };
+  const INC_STATE_LABEL = {"In Progress":"In Review","In Review":"In Review","Open":"Open","Resolved":"Resolved","Dismissed":"Dismissed"};
   const TABS = [
     {key:"testcases",  label:"Test Cases"},
     {key:"incidents",  label:openIncCount>0?`Incidents (${openIncCount} open)`:"Incidents"},
@@ -4604,7 +4612,7 @@ const QualityView = () => {
             </div>
             <div style={{padding:"10px 16px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
               {["all","Open","In Progress","Resolved","Dismissed"].map(s=>{
-                const cfg = s==="all"?null:INC_STATUS_CFG[s];
+                const cfg = s==="all"?null:(INC_STATUS_CFG[s]||INC_STATUS_CFG["In Review"]);
                 return (
                   <FPill
                     key={s}
@@ -4627,7 +4635,7 @@ const QualityView = () => {
             <table style={{width:"100%",borderCollapse:"collapse"}}>
               <thead>
                 <tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
-                  {["Test Case Name","Table","Last Updated","Status","Severity","Assignee","Actions"].map(l=>(
+                  {["Test Case Name","Table","Last Updated","Status","Severity","Assignee"].map(l=>(
                     <th key={l} style={{padding:"9px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textAlign:"left",letterSpacing:.5,textTransform:"uppercase",whiteSpace:"nowrap"}}>{l}</th>
                   ))}
                 </tr>
@@ -4654,8 +4662,10 @@ const QualityView = () => {
                           <span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textSub,whiteSpace:"nowrap"}}>{inc.table}{inc.col?`.${inc.col}`:""}</span>
                         </td>
                         <td style={{padding:"10px 14px",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{inc.opened}</td>
-                        <td style={{padding:"10px 14px"}}>
-                          <span style={{fontSize:11,fontWeight:700,padding:"2px 9px",borderRadius:6,background:sCfg.bg,color:sCfg.color,border:`1px solid ${sCfg.color}28`,whiteSpace:"nowrap"}}>{sCfg.label}</span>
+                        <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
+                          {(()=>{const terminal=inc.status==="Resolved"||inc.status==="Dismissed";return terminal
+                            ?<span style={{fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:6,background:sCfg.bg,color:sCfg.color,border:`1px solid ${sCfg.color}28`,whiteSpace:"nowrap"}}>{sCfg.label}</span>
+                            :<button onClick={()=>setIncActionModal({id:inc.id,newStatus:null,desc:""})} style={{fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:6,background:sCfg.bg,color:sCfg.color,border:`1.5px solid ${sCfg.color}45`,whiteSpace:"nowrap",cursor:"pointer",transition:"all .12s",display:"inline-flex",alignItems:"center",gap:5}} onMouseEnter={e=>{e.currentTarget.style.background=`${sCfg.color}20`;e.currentTarget.style.borderColor=sCfg.color;}} onMouseLeave={e=>{e.currentTarget.style.background=sCfg.bg;e.currentTarget.style.borderColor=`${sCfg.color}45`;}}>{sCfg.label}<svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{opacity:.7}}><path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></button>;})()}
                         </td>
                         <td style={{padding:"10px 14px"}}>
                           <DQSeverityBadge severity={inc.severity}/>
@@ -4666,38 +4676,12 @@ const QualityView = () => {
                             : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>Unassigned</span>
                           }
                         </td>
-                        <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
-                          <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                            {inc.status==="Open"&&(
-                              <button
-                                onClick={e=>acknowledgeInc(inc.id,e)}
-                                style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:T.amberDim,border:`1px solid ${T.amber}30`,color:T.amber,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}
-                                onMouseEnter={e=>e.currentTarget.style.background=`${T.amber}22`}
-                                onMouseLeave={e=>e.currentTarget.style.background=T.amberDim}
-                              >Acknowledge</button>
-                            )}
-                            {inc.status==="In Progress"&&(<>
-                              <button
-                                onClick={e=>openResolveModal(inc.id,e)}
-                                style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:"#16a34a12",border:"1px solid #16a34a28",color:"#16a34a",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}
-                                onMouseEnter={e=>e.currentTarget.style.background="#16a34a20"}
-                                onMouseLeave={e=>e.currentTarget.style.background="#16a34a12"}
-                              >Resolve</button>
-                              <button
-                                onClick={e=>dismissInc(inc.id,e)}
-                                style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}
-                                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
-                                onMouseLeave={e=>e.currentTarget.style.background=T.bgElevated}
-                              >Dismiss</button>
-                            </>)}
-                          </div>
-                        </td>
                       </tr>
 
                       {/* ── Expanded incident detail ── */}
                       {isExp&&(
                         <tr style={{borderBottom:i<filteredInc.length-1?`1px solid ${T.border}`:"none"}}>
-                          <td colSpan={7} style={{padding:0}}>
+                          <td colSpan={6} style={{padding:0}}>
                             <div style={{background:T.bgElevated,borderTop:`1px solid ${T.border}`}}>
                               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0,borderBottom:`1px solid ${T.border}`}}>
 
@@ -4800,6 +4784,75 @@ const QualityView = () => {
         </>}
 
       </div>
+
+      {/* ════════════════ INCIDENT ACTION MODAL ════════════════ */}
+      {incActionModal&&(()=>{
+        const inc = incidents.find(i=>i.id===incActionModal.id);
+        if(!inc) return null;
+        const sCfg = INC_STATUS_CFG[inc.status]||{label:inc.status,color:T.textMuted,bg:T.bgElevated};
+        const nextStates = INC_NEXT_STATES[inc.status]||[];
+        const terminalTarget = incActionModal.newStatus==="Resolved"||incActionModal.newStatus==="Dismissed";
+        const canSubmit = incActionModal.newStatus && (!terminalTarget || incActionModal.desc.trim().length>0);
+        const submitAction = () => {
+          if(!canSubmit) return;
+          const ns = incActionModal.newStatus;
+          const timeline = [...(inc.timeline||[]),{action:ns==="In Progress"?"Moved to In Review":ns,by:"You",at:"Just now",note:incActionModal.desc.trim()||undefined}];
+          setIncidents(prev=>prev.map(i=>i.id===inc.id?{...i,status:ns,resolutionReason:terminalTarget?incActionModal.desc.trim():i.resolutionReason,timeline}:i));
+          setIncActionModal(null);
+        };
+        return (
+          <>
+            <div onClick={()=>setIncActionModal(null)} style={{position:"fixed",inset:0,zIndex:1100,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}/>
+            <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:1101,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:16,boxShadow:"0 32px 80px rgba(0,0,0,.45)",width:400,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${T.border}`}}>
+                <span style={{fontSize:14,fontWeight:700,color:T.text}}>Update Status</span>
+                <button onClick={()=>setIncActionModal(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:4,display:"flex",borderRadius:6}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><svg width="13" height="13" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg></button>
+              </div>
+              <div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:18}}>
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:6}}>Incident</div>
+                  <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:5}}>{inc.title}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{fontSize:11,color:T.textMuted}}>Current status:</span>
+                    <span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:5,background:sCfg.bg,color:sCfg.color,border:`1px solid ${sCfg.color}28`}}>{sCfg.label}</span>
+                  </div>
+                </div>
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Move to</div>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                    {nextStates.map(ns=>{
+                      const nc=INC_STATUS_CFG[ns]||{label:ns,color:T.textMuted,bg:T.bgElevated};
+                      const sel=incActionModal.newStatus===ns;
+                      return <button key={ns} onClick={()=>setIncActionModal(p=>({...p,newStatus:ns}))}
+                        style={{padding:"7px 16px",borderRadius:8,border:`2px solid ${sel?nc.color:T.border}`,background:sel?nc.bg:"transparent",color:sel?nc.color:T.textSub,fontSize:12.5,fontWeight:sel?700:500,cursor:"pointer",transition:"all .12s"}}>
+                        {nc.label}
+                      </button>;
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:6}}>
+                    Description {terminalTarget&&<span style={{color:T.rose,fontWeight:700}}>*</span>}
+                    {!terminalTarget&&<span style={{fontWeight:400,textTransform:"none",letterSpacing:0,marginLeft:4}}>(optional)</span>}
+                  </div>
+                  <textarea value={incActionModal.desc} onChange={e=>setIncActionModal(p=>({...p,desc:e.target.value}))} rows={3}
+                    placeholder={terminalTarget?"Describe the outcome — this is required to close the incident…":"Add context or notes…"}
+                    style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${incActionModal.desc.trim()&&terminalTarget?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12.5,lineHeight:1.6,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box",transition:"border-color .15s"}}
+                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=incActionModal.desc.trim()&&terminalTarget?T.accent:T.border}/>
+                  {terminalTarget&&!incActionModal.desc.trim()&&<div style={{fontSize:11,color:T.rose,marginTop:4}}>Required before closing this incident.</div>}
+                </div>
+              </div>
+              <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8}}>
+                <button onClick={()=>setIncActionModal(null)} style={{padding:"8px 18px",borderRadius:8,background:"none",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>Cancel</button>
+                <button onClick={submitAction} disabled={!canSubmit}
+                  style={{padding:"8px 20px",borderRadius:8,background:canSubmit?T.accent:"rgba(99,102,241,.3)",border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:canSubmit?"pointer":"not-allowed",transition:"opacity .15s"}}>
+                  Submit →
+                </button>
+              </div>
+            </div>
+          </>
+        );
+      })()}
 
       {/* ════════════════ TEST CASE DETAIL SLIDE-IN ════════════════ */}
       {tcDetail&&(
@@ -5683,6 +5736,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const [polDraftTags,    setPolDraftTags]=useState([]);
   const [polDraftFrameworks,setPolDraftFrameworks]=useState([]);
   const [polDraftCriteria, setPolDraftCriteria]=useState([]);
+  const [violActionModal,  setViolActionModal] = useState(null); // {id, newStatus, desc}
   const [polDraftNewCriterion,setPolDraftNewCriterion]=useState("");
   const [dotMenuOpen,   setDotMenuOpen] = useState(null);
   const [flashSaved,    setFlashSaved]  = useState(false);
@@ -6556,16 +6610,19 @@ const PolicyManagerView = ({onToast, onNav}) => {
                     {/* ── Overview ── */}
                     {pdTab==="overview"&&(()=>{
                       const ava=u=>u.split(".").map(s=>s[0]?.toUpperCase()).join("");
+                      const patchPol=(patch)=>setPolicies(prev=>prev.map(q=>q.id===p.id?{...q,...patch}:q));
                       const ownerChip=(u)=>(
                         <div key={u} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
                           <div style={{width:18,height:18,borderRadius:3,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(u)}</div>
                           <span style={{fontSize:12,color:T.accent,fontWeight:500}}>{u}</span>
+                          <button onClick={()=>patchPol({owner:""})} style={{background:"none",border:"none",cursor:"pointer",color:T.accent,padding:0,display:"flex",lineHeight:1,opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(8)}</button>
                         </div>
                       );
                       const stewardChip=(u)=>(
                         <div key={u} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:"rgba(217,119,6,.08)",borderTop:"1px solid rgba(217,119,6,.2)",borderRight:"1px solid rgba(217,119,6,.2)",borderBottom:"1px solid rgba(217,119,6,.2)",borderLeft:"3px solid #d97706"}}>
                           <div style={{width:18,height:18,borderRadius:"50%",background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(u)}</div>
                           <span style={{fontSize:12,color:"#d97706",fontWeight:500}}>{u}</span>
+                          <button onClick={()=>patchPol({stewards:(p.stewards||[]).filter(x=>x!==u)})} style={{background:"none",border:"none",cursor:"pointer",color:"#d97706",padding:0,display:"flex",lineHeight:1,opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(8)}</button>
                         </div>
                       );
                       const SB=({ch,onEdit,children})=>(
@@ -6773,7 +6830,8 @@ const PolicyManagerView = ({onToast, onNav}) => {
                             <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                               {(p.stewards||[]).length===0
                                 ? <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards set</span>
-                                : (p.stewards||[]).map(u=>stewardChip(u))}
+                                : (p.stewards||[]).slice(0,3).map(u=>stewardChip(u))}
+                              {(p.stewards||[]).length>3&&<span title={(p.stewards||[]).slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{(p.stewards||[]).length-3}</span>}
                             </div>
                           </SB>
 
@@ -6799,7 +6857,8 @@ const PolicyManagerView = ({onToast, onNav}) => {
                             <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                               {(p.tags||[]).length===0
                                 ? <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags set</span>
-                                : (()=>{const TAG_C={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},PHI:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},marketing:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},ML:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},behavioral:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},GDPR:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"},sensitive:{bg:"rgba(239,68,68,.08)",color:"#ef4444",border:"rgba(239,68,68,.2)"},regulated:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},financial:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},internal:{bg:T.bgElevated,color:T.textSub,border:T.border},"customer-data":{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},healthcare:{bg:"rgba(239,68,68,.08)",color:"#ef4444",border:"rgba(239,68,68,.2)"},confidential:{bg:"rgba(239,68,68,.08)",color:"#ef4444",border:"rgba(239,68,68,.2)"},public:{bg:"rgba(22,163,74,.08)",color:"#16a34a",border:"rgba(22,163,74,.2)"}};return (p.tags||[]).map(t=>{const c=TAG_C[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};return <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}</span>;});})()}
+                                : (()=>{const TAG_C={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},PHI:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},marketing:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},ML:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},behavioral:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},GDPR:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"},sensitive:{bg:"rgba(239,68,68,.08)",color:"#ef4444",border:"rgba(239,68,68,.2)"},regulated:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},financial:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},internal:{bg:T.bgElevated,color:T.textSub,border:T.border},"customer-data":{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},healthcare:{bg:"rgba(239,68,68,.08)",color:"#ef4444",border:"rgba(239,68,68,.2)"},confidential:{bg:"rgba(239,68,68,.08)",color:"#ef4444",border:"rgba(239,68,68,.2)"},public:{bg:"rgba(22,163,74,.08)",color:"#16a34a",border:"rgba(22,163,74,.2)"}};return (p.tags||[]).slice(0,3).map(t=>{const c=TAG_C[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};return <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}<button onClick={()=>patchPol({tags:(p.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>;});})()}
+                              {(p.tags||[]).length>3&&<span title={(p.tags||[]).slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{(p.tags||[]).length-3}</span>}
                             </div>
                           </SB>
 
@@ -7059,10 +7118,9 @@ const PolicyManagerView = ({onToast, onNav}) => {
                       const inProgCount = allPolViols.filter(v=>v.status==="In Progress").length;
                       const resolvedCount = allPolViols.filter(v=>v.status==="Resolved"||v.status==="Waived").length;
 
-                      const resolveViol = (id) => { setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"Resolved"}:v)); onToast("Violation resolved","success"); };
-                      const waiveViol   = (id) => { setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"Waived"}:v));   onToast("Violation waived","info"); };
-                      const ackViol     = (id) => { setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"In Progress"}:v)); onToast("Violation acknowledged — marked In Progress","info"); };
-                      const reopenViol  = (id) => { setViolations(prev=>prev.map(v=>v.id===id?{...v,status:"Open"}:v)); onToast("Violation reopened","info"); };
+                      const VIOL_STATUS_CFG = {"Open":{color:T.rose,bg:T.roseDim,label:"Open"},"In Progress":{color:T.amber,bg:T.amberDim,label:"In Review"},"In Review":{color:T.amber,bg:T.amberDim,label:"In Review"},"Resolved":{color:"#16a34a",bg:"#16a34a12",label:"Resolved"},"Dismissed":{color:T.textMuted,bg:T.bgElevated,label:"Dismissed"},"Waived":{color:T.textMuted,bg:T.bgElevated,label:"Dismissed"}};
+                      const VIOL_NEXT = {"Open":["In Progress","Resolved","Dismissed"],"In Progress":["Resolved","Dismissed"],"In Review":["Resolved","Dismissed"]};
+                      const openViolActionModal = (id) => setViolActionModal({id,newStatus:null,desc:""});
 
                       const statusStyle = (s) => ({
                         "Open":       {bg:`${T.rose}14`,   color:T.rose,   dot:T.rose},
@@ -7146,12 +7204,19 @@ const PolicyManagerView = ({onToast, onNav}) => {
                                         {/* Type + Domain */}
                                         <span style={{fontSize:10.5,color:T.textMuted}}>{v.assetType}</span>
                                         <span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted}}>{v.domain}</span>
-                                        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:7}}>
-                                          {/* Status pill */}
-                                          <span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:99,background:ss.bg,color:ss.color,border:`1px solid ${ss.color}30`,display:"flex",alignItems:"center",gap:4}}>
-                                            <span style={{width:5,height:5,borderRadius:"50%",background:ss.dot,display:"inline-block"}}/>
-                                            {v.status}
-                                          </span>
+                                        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:7}} onClick={e=>e.stopPropagation()}>
+                                          {/* Status pill — clickable for non-terminal */}
+                                          {(v.status==="Resolved"||v.status==="Dismissed"||v.status==="Waived")
+                                            ?<span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:99,background:ss.bg,color:ss.color,border:`1px solid ${ss.color}30`,display:"flex",alignItems:"center",gap:4}}>
+                                              <span style={{width:5,height:5,borderRadius:"50%",background:ss.dot,display:"inline-block"}}/>
+                                              {VIOL_STATUS_CFG[v.status]?.label||v.status}
+                                            </span>
+                                            :<button onClick={()=>openViolActionModal(v.id)} style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:99,background:ss.bg,color:ss.color,border:`1.5px solid ${ss.color}55`,display:"flex",alignItems:"center",gap:4,cursor:"pointer",transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.background=`${ss.color}20`;e.currentTarget.style.borderColor=ss.color;}} onMouseLeave={e=>{e.currentTarget.style.background=ss.bg;e.currentTarget.style.borderColor=`${ss.color}55`;}}>
+                                              <span style={{width:5,height:5,borderRadius:"50%",background:ss.dot,display:"inline-block"}}/>
+                                              {VIOL_STATUS_CFG[v.status]?.label||v.status}
+                                              <svg width="8" height="8" viewBox="0 0 10 10" fill="none" style={{opacity:.7}}><path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                            </button>
+                                          }
                                           {/* Detected date */}
                                           <span style={{fontSize:10,color:T.textMuted,whiteSpace:"nowrap"}}>Detected {v.detectedAt}</span>
                                           {/* Expand chevron */}
@@ -7171,38 +7236,13 @@ const PolicyManagerView = ({onToast, onNav}) => {
                                   {isExp&&(
                                     <div style={{borderTop:`1px solid ${T.border}`,background:T.bgElevated,padding:"14px 18px 14px 22px"}}>
                                       <div style={{fontSize:12,color:T.textSub,lineHeight:1.7,marginBottom:12}}>{v.description}</div>
-                                      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                                        {v.status==="Open"&&(
-                                          <>
-                                            <button onClick={()=>ackViol(v.id)}
-                                              style={{fontSize:11,padding:"5px 14px",borderRadius:7,background:"transparent",border:`1.5px solid ${T.amber}`,color:T.amber,cursor:"pointer",fontWeight:600,transition:"all .1s"}}
-                                              onMouseEnter={e=>{e.currentTarget.style.background=`${T.amber}14`;}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
-                                              ✋ Acknowledge
-                                            </button>
-                                            <button onClick={()=>waiveViol(v.id)}
-                                              style={{fontSize:11,padding:"5px 14px",borderRadius:7,background:"transparent",border:`1.5px solid ${T.blue}`,color:T.blue,cursor:"pointer",fontWeight:600,transition:"all .1s"}}
-                                              onMouseEnter={e=>{e.currentTarget.style.background=`${T.blue}10`;}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
-                                              Waive
-                                            </button>
-                                          </>
-                                        )}
-                                        {v.status==="In Progress"&&(
-                                          <>
-                                            <button onClick={()=>resolveViol(v.id)}
-                                              style={{fontSize:11,padding:"5px 14px",borderRadius:7,background:T.green,border:`1.5px solid ${T.green}`,color:"#fff",cursor:"pointer",fontWeight:600,transition:"opacity .1s"}}
-                                              onMouseEnter={e=>e.currentTarget.style.opacity=".85"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
-                                              ✓ Resolve
-                                            </button>
-                                            <button onClick={()=>waiveViol(v.id)}
-                                              style={{fontSize:11,padding:"5px 14px",borderRadius:7,background:"transparent",border:`1.5px solid ${T.blue}`,color:T.blue,cursor:"pointer",fontWeight:600}}>
-                                              Waive
-                                            </button>
-                                          </>
-                                        )}
-                                        {(v.status==="Resolved"||v.status==="Waived")&&(
-                                          <button onClick={()=>reopenViol(v.id)}
-                                            style={{fontSize:11,padding:"5px 14px",borderRadius:7,background:"transparent",border:`1.5px solid ${T.border}`,color:T.textSub,cursor:"pointer",fontWeight:600}}>
-                                            ↩ Reopen
+                                      {v.resolutionNote&&<div style={{fontSize:12,color:T.textSub,lineHeight:1.6,padding:"9px 12px",background:(v.status==="Resolved"?"#16a34a":T.bgElevated)+"10",borderRadius:8,border:`1px solid ${(v.status==="Resolved"?"#16a34a":T.border)}22`,marginBottom:12,fontStyle:"italic"}}><span style={{fontWeight:600,fontStyle:"normal",fontSize:11,color:v.status==="Resolved"?"#16a34a":T.textMuted}}>Note: </span>{v.resolutionNote}</div>}
+                                      <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                                        {(v.status!=="Resolved"&&v.status!=="Dismissed"&&v.status!=="Waived")&&(
+                                          <button onClick={()=>openViolActionModal(v.id)}
+                                            style={{fontSize:11,padding:"5px 14px",borderRadius:7,background:T.accentDim,border:`1.5px solid ${T.accent}44`,color:T.accent,cursor:"pointer",fontWeight:600,transition:"all .1s"}}
+                                            onMouseEnter={e=>{e.currentTarget.style.background=`${T.accent}20`;}} onMouseLeave={e=>{e.currentTarget.style.background=T.accentDim;}}>
+                                            Update Status
                                           </button>
                                         )}
                                         <button onClick={()=>onToast("Asset profile opened","info")} style={{fontSize:11,padding:"5px 14px",borderRadius:7,background:"transparent",border:`1.5px solid ${T.border}`,color:T.textSub,cursor:"pointer",fontWeight:600,marginLeft:"auto"}}>
@@ -9204,6 +9244,76 @@ const PolicyManagerView = ({onToast, onNav}) => {
           </div>
         </>
       )}
+
+      {/* ════════════════ VIOLATION ACTION MODAL ════════════════ */}
+      {violActionModal&&(()=>{
+        const viol = violations.find(v=>v.id===violActionModal.id);
+        if(!viol) return null;
+        const VIOL_STATUS_CFG_M = {"Open":{color:T.rose,bg:T.roseDim,label:"Open"},"In Progress":{color:T.amber,bg:T.amberDim,label:"In Review"},"In Review":{color:T.amber,bg:T.amberDim,label:"In Review"},"Resolved":{color:"#16a34a",bg:"#16a34a12",label:"Resolved"},"Dismissed":{color:T.textMuted,bg:T.bgElevated,label:"Dismissed"},"Waived":{color:T.textMuted,bg:T.bgElevated,label:"Dismissed"}};
+        const VIOL_NEXT_M = {"Open":["In Progress","Resolved","Dismissed"],"In Progress":["Resolved","Dismissed"],"In Review":["Resolved","Dismissed"]};
+        const vCfg = VIOL_STATUS_CFG_M[viol.status]||{label:viol.status,color:T.textMuted,bg:T.bgElevated};
+        const nextStates = VIOL_NEXT_M[viol.status]||[];
+        const terminalTarget = violActionModal.newStatus==="Resolved"||violActionModal.newStatus==="Dismissed";
+        const canSubmit = violActionModal.newStatus && (!terminalTarget || violActionModal.desc.trim().length>0);
+        const submitViol = () => {
+          if(!canSubmit) return;
+          const ns = violActionModal.newStatus;
+          setViolations(prev=>prev.map(v=>v.id===viol.id?{...v,status:ns,resolutionNote:terminalTarget?violActionModal.desc.trim():v.resolutionNote}:v));
+          setViolActionModal(null);
+        };
+        return (
+          <>
+            <div onClick={()=>setViolActionModal(null)} style={{position:"fixed",inset:0,zIndex:1100,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}/>
+            <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:1101,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:16,boxShadow:"0 32px 80px rgba(0,0,0,.45)",width:400,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${T.border}`}}>
+                <span style={{fontSize:14,fontWeight:700,color:T.text}}>Update Status</span>
+                <button onClick={()=>setViolActionModal(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:4,display:"flex",borderRadius:6}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><svg width="13" height="13" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"/></svg></button>
+              </div>
+              <div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:18}}>
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:6}}>Violation</div>
+                  <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:5}}>{viol.rule}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{fontSize:11,color:T.textMuted}}>Current status:</span>
+                    <span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:5,background:vCfg.bg,color:vCfg.color,border:`1px solid ${vCfg.color}28`}}>{vCfg.label}</span>
+                  </div>
+                </div>
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Move to</div>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                    {nextStates.map(ns=>{
+                      const nc=VIOL_STATUS_CFG_M[ns]||{label:ns,color:T.textMuted,bg:T.bgElevated};
+                      const sel=violActionModal.newStatus===ns;
+                      return <button key={ns} onClick={()=>setViolActionModal(p=>({...p,newStatus:ns}))}
+                        style={{padding:"7px 16px",borderRadius:8,border:`2px solid ${sel?nc.color:T.border}`,background:sel?nc.bg:"transparent",color:sel?nc.color:T.textSub,fontSize:12.5,fontWeight:sel?700:500,cursor:"pointer",transition:"all .12s"}}>
+                        {nc.label}
+                      </button>;
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:6}}>
+                    Description {terminalTarget&&<span style={{color:T.rose,fontWeight:700}}>*</span>}
+                    {!terminalTarget&&<span style={{fontWeight:400,textTransform:"none",letterSpacing:0,marginLeft:4}}>(optional)</span>}
+                  </div>
+                  <textarea value={violActionModal.desc} onChange={e=>setViolActionModal(p=>({...p,desc:e.target.value}))} rows={3}
+                    placeholder={terminalTarget?"Describe the outcome — this is required to close the violation…":"Add context or notes…"}
+                    style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${violActionModal.desc.trim()&&terminalTarget?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12.5,lineHeight:1.6,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box",transition:"border-color .15s"}}
+                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=violActionModal.desc.trim()&&terminalTarget?T.accent:T.border}/>
+                  {terminalTarget&&!violActionModal.desc.trim()&&<div style={{fontSize:11,color:T.rose,marginTop:4}}>Required before closing this violation.</div>}
+                </div>
+              </div>
+              <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8}}>
+                <button onClick={()=>setViolActionModal(null)} style={{padding:"8px 18px",borderRadius:8,background:"none",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>Cancel</button>
+                <button onClick={submitViol} disabled={!canSubmit}
+                  style={{padding:"8px 20px",borderRadius:8,background:canSubmit?T.accent:"rgba(99,102,241,.3)",border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:canSubmit?"pointer":"not-allowed",transition:"opacity .15s"}}>
+                  Submit →
+                </button>
+              </div>
+            </div>
+          </>
+        );
+      })()}
 
       {/* Field-level edit modals (Tags/Glossary-style) */}
       {polEditModal&&selPol&&(()=>{
@@ -12897,20 +13007,30 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
           </div>
 
           {/* BUSINESS GLOSSARY */}
-          <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
+          <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
               <MetaLabel>Business Glossary</MetaLabel>
               <button onClick={()=>{setAssetGlOpen(p=>!p);setAssetGlSearch("");}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color="#8b5cf6";e.currentTarget.style.background="rgba(139,92,246,.08)";}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
             </div>
             <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
               {assetGlTerms.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
-              {assetGlTerms.map((t,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t}<button onClick={()=>setAssetGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+              {assetGlTerms.slice(0,3).map((t,i)=><span key={i} title={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t.length>10?t.slice(0,10)+"…":t}<button onClick={()=>setAssetGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+              {assetGlTerms.length>3&&<span title={assetGlTerms.slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{assetGlTerms.length-3}</span>}
             </div>
-            {assetGlOpen&&<div style={{position:"absolute",left:0,right:0,top:"calc(100% - 4px)",zIndex:400,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.22)",overflow:"hidden"}}>
-              <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}>
+          </div>
+          {assetGlOpen&&<>
+            <div onClick={()=>setAssetGlOpen(false)} style={{position:"fixed",inset:0,zIndex:499,background:"rgba(0,0,0,.35)"}}/>
+            <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:320,display:"flex",flexDirection:"column",maxHeight:"80vh",overflow:"hidden"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Business Glossary</span>
+                <button onClick={()=>setAssetGlOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5,transition:"all .1s"}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
+                  <svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                </button>
+              </div>
+              <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
                 <input autoFocus placeholder="Search glossary terms…" value={assetGlSearch} onChange={e=>setAssetGlSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#8b5cf6"} onBlur={e=>e.target.style.borderColor=T.border}/>
               </div>
-              <div style={{maxHeight:200,overflowY:"auto"}}>
+              <div style={{flex:1,overflowY:"auto"}}>
                 {GLOSSARY_TERMS.filter(t=>!assetGlSearch||t.term.toLowerCase().includes(assetGlSearch.toLowerCase())||t.abbr?.toLowerCase().includes(assetGlSearch.toLowerCase())).map(t=>{
                   const sel=assetGlTerms.includes(t.term);
                   return(<button key={t.id} onMouseDown={e=>{e.stopPropagation();setAssetGlTerms(prev=>sel?prev.filter(x=>x!==t.term):[...prev,t.term]);}}
@@ -12928,11 +13048,11 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
                 })}
                 {GLOSSARY_TERMS.filter(t=>!assetGlSearch||t.term.toLowerCase().includes(assetGlSearch.toLowerCase())).length===0&&<div style={{padding:"16px 12px",fontSize:12,color:T.textMuted,textAlign:"center"}}>No terms match</div>}
               </div>
-              <div style={{padding:"8px 10px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end"}}>
+              <div style={{padding:"8px 10px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",flexShrink:0}}>
                 <button onMouseDown={()=>setAssetGlOpen(false)} style={{padding:"5px 14px",borderRadius:6,background:"#8b5cf6",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Done</button>
               </div>
-            </div>}
-          </div>
+            </div>
+          </>}
 
           {/* ACTIONS */}
           <div style={{padding:"16px"}}>
@@ -13852,20 +13972,30 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
         </div>
 
         {/* BUSINESS GLOSSARY */}
-        <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
+        <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
             <MetaLabel>Business Glossary</MetaLabel>
             <button onClick={()=>{setAssetGlOpen(p=>!p);setAssetGlSearch("");}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color="#8b5cf6";e.currentTarget.style.background="rgba(139,92,246,.08)";}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
           </div>
           <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
             {assetGlTerms.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
-            {assetGlTerms.map((t,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t}<button onClick={()=>setAssetGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+            {assetGlTerms.slice(0,3).map((t,i)=><span key={i} title={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t.length>10?t.slice(0,10)+"…":t}<button onClick={()=>setAssetGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+            {assetGlTerms.length>3&&<span title={assetGlTerms.slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{assetGlTerms.length-3}</span>}
           </div>
-          {assetGlOpen&&<div style={{position:"absolute",left:0,right:0,top:"calc(100% - 4px)",zIndex:400,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.22)",overflow:"hidden"}}>
-            <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}>
+        </div>
+        {assetGlOpen&&<>
+          <div onClick={()=>setAssetGlOpen(false)} style={{position:"fixed",inset:0,zIndex:499,background:"rgba(0,0,0,.35)"}}/>
+          <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:320,display:"flex",flexDirection:"column",maxHeight:"80vh",overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+              <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Business Glossary</span>
+              <button onClick={()=>setAssetGlOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5,transition:"all .1s"}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
+                <svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+              </button>
+            </div>
+            <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
               <input autoFocus placeholder="Search glossary terms…" value={assetGlSearch} onChange={e=>setAssetGlSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#8b5cf6"} onBlur={e=>e.target.style.borderColor=T.border}/>
             </div>
-            <div style={{maxHeight:200,overflowY:"auto"}}>
+            <div style={{flex:1,overflowY:"auto"}}>
               {GLOSSARY_TERMS.filter(t=>!assetGlSearch||t.term.toLowerCase().includes(assetGlSearch.toLowerCase())||t.abbr?.toLowerCase().includes(assetGlSearch.toLowerCase())).map(t=>{
                 const sel=assetGlTerms.includes(t.term);
                 return(<button key={t.id} onMouseDown={e=>{e.stopPropagation();setAssetGlTerms(prev=>sel?prev.filter(x=>x!==t.term):[...prev,t.term]);}}
@@ -13883,11 +14013,11 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
               })}
               {GLOSSARY_TERMS.filter(t=>!assetGlSearch||t.term.toLowerCase().includes(assetGlSearch.toLowerCase())).length===0&&<div style={{padding:"16px 12px",fontSize:12,color:T.textMuted,textAlign:"center"}}>No terms match</div>}
             </div>
-            <div style={{padding:"8px 10px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end"}}>
+            <div style={{padding:"8px 10px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",flexShrink:0}}>
               <button onMouseDown={()=>setAssetGlOpen(false)} style={{padding:"5px 14px",borderRadius:6,background:"#8b5cf6",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Done</button>
             </div>
-          </div>}
-        </div>
+          </div>
+        </>}
 
         {/* Edit Metadata Modal */}
         {editModal&&(
@@ -15215,6 +15345,10 @@ const DomainsView = ({onAsset, onNav}) => {
   const [dmOwnerSearch, setDmOwnerSearch] = useState("");
   const [dmStewOpen, setDmStewOpen] = useState(false);
   const [dmStewSearch, setDmStewSearch] = useState("");
+  const [dmTagOpen,   setDmTagOpen]   = useState(false);
+  const [dmTagSearch, setDmTagSearch] = useState("");
+  const [dmGlOpen,    setDmGlOpen]    = useState(false);
+  const [dmGlSearch,  setDmGlSearch]  = useState("");
   const [pdOwnerOpen, setPdOwnerOpen] = useState(false);
   const [pdOwnerSearch, setPdOwnerSearch] = useState("");
   const [pdStewOpen, setPdStewOpen] = useState(false);
@@ -15518,12 +15652,14 @@ const DomainsView = ({onAsset, onNav}) => {
                         <SbLabel onEdit={()=>{setPdSbModal("owners");setPdSbSearch("");}}>Owners</SbLabel>
                         <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                           {(pd.owners||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owners assigned</span>}
-                          {(pd.owners||[]).map((o,i)=>(
+                          {(pd.owners||[]).slice(0,3).map((o,i)=>(
                             <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
                               <div style={{width:18,height:18,borderRadius:3,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(o)}</div>
                               <span style={{fontSize:12,color:T.accent,fontWeight:500}}>{o}</span>
+                              <button onClick={()=>patchProduct(pd.id,{owners:(pd.owners||[]).filter(x=>x!==o)})} style={{background:"none",border:"none",cursor:"pointer",color:T.accent,padding:0,display:"flex",lineHeight:1,opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(8)}</button>
                             </div>
                           ))}
+                          {(pd.owners||[]).length>3&&<span title={(pd.owners||[]).slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{(pd.owners||[]).length-3}</span>}
                         </div>
                       </div>
                       {/* EXPERTS / STEWARDS */}
@@ -15531,12 +15667,14 @@ const DomainsView = ({onAsset, onNav}) => {
                         <SbLabel onEdit={()=>{setPdSbModal("experts");setPdSbSearch("");}}>Stewards</SbLabel>
                         <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                           {(pd.experts||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards assigned</span>}
-                          {(pd.experts||[]).map((s,i)=>(
+                          {(pd.experts||[]).slice(0,3).map((s,i)=>(
                             <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:"rgba(217,119,6,.08)",borderTop:"1px solid rgba(217,119,6,.2)",borderRight:"1px solid rgba(217,119,6,.2)",borderBottom:"1px solid rgba(217,119,6,.2)",borderLeft:"3px solid #d97706"}}>
                               <div style={{width:18,height:18,borderRadius:"50%",background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(s)}</div>
                               <span style={{fontSize:12,color:"#d97706",fontWeight:500}}>{s}</span>
+                              <button onClick={()=>patchProduct(pd.id,{experts:(pd.experts||[]).filter(x=>x!==s)})} style={{background:"none",border:"none",cursor:"pointer",color:"#d97706",padding:0,display:"flex",lineHeight:1,opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(8)}</button>
                             </div>
                           ))}
+                          {(pd.experts||[]).length>3&&<span title={(pd.experts||[]).slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{(pd.experts||[]).length-3}</span>}
                         </div>
                       </div>
                       {/* TAGS */}
@@ -15544,28 +15682,18 @@ const DomainsView = ({onAsset, onNav}) => {
                         <SbLabel onEdit={()=>{setPdSbModal("tags");setPdSbSearch("");}}>Tags</SbLabel>
                         <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                           {(pd.tags||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
-                          {(pd.tags||[]).map(t=>{
-                            const TAG_C_PD={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},marketing:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},ML:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},behavioral:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},GDPR:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"}};
-                            const c=TAG_C_PD[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};
-                            return <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px 3px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}</span>;
-                          })}
+                          {(()=>{const TC={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},marketing:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},ML:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},behavioral:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},GDPR:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"}};return (pd.tags||[]).slice(0,3).map(t=>{const c=TC[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};return <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}<button onClick={()=>patchProduct(pd.id,{tags:(pd.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>;});})()}
+                          {(pd.tags||[]).length>3&&<span title={(pd.tags||[]).slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{(pd.tags||[]).length-3}</span>}
                         </div>
                       </div>
                       {/* BUSINESS GLOSSARY */}
                       <div style={{padding:16}}>
-                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                          <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Business Glossary</div>
-                          <button style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color="#8b5cf6";e.currentTarget.style.background="rgba(139,92,246,.08)";}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}} onClick={()=>{const inp=document.querySelector('[data-pd-gl-input]');if(inp)inp.focus();}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
-                        </div>
-                        <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
+                        <SbLabel onEdit={()=>{setPdSbModal("glossary");setPdSbSearch("");}}>Business Glossary</SbLabel>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                           {pdGlTerms.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
-                          {pdGlTerms.map((t,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t}<button onClick={()=>setPdGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+                          {pdGlTerms.slice(0,3).map((t,i)=><span key={i} title={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t.length>10?t.slice(0,10)+"…":t}<button onClick={()=>setPdGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+                          {pdGlTerms.length>3&&<span title={pdGlTerms.slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{pdGlTerms.length-3}</span>}
                         </div>
-                        <input data-pd-gl-input value={pdGlInput} onChange={e=>setPdGlInput(e.target.value)}
-                          onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&pdGlInput.trim()){setPdGlTerms(prev=>[...prev,pdGlInput.trim()]);setPdGlInput("");}}}
-                          placeholder="Link glossary term…"
-                          style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box"}}
-                          onFocus={e=>e.target.style.borderColor="#8b5cf6"} onBlur={e=>e.target.style.borderColor=T.border}/>
                       </div>
                       {/* Edit modal */}
                       {pdSbModal&&(
@@ -15573,18 +15701,19 @@ const DomainsView = ({onAsset, onNav}) => {
                           <div onClick={()=>setPdSbModal(null)} style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,.4)"}}/>
                           <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:501,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:300,display:"flex",flexDirection:"column",maxHeight:"80vh",overflow:"hidden"}}>
                             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-                              <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Edit {pdSbModal==="cert"?"Certificate":pdSbModal==="owners"?"Owners":pdSbModal==="experts"?"Stewards":"Tags"}</span>
-                              <button onClick={()=>setPdSbModal(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{Ic.x(12)}</button>
+                              <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>{pdSbModal==="cert"?"Certificate":pdSbModal==="owners"?"Owners":pdSbModal==="experts"?"Stewards":pdSbModal==="glossary"?"Business Glossary":"Tags"}</span>
+                              <button onClick={()=>setPdSbModal(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg></button>
                             </div>
-                            {pdSbModal!=="cert"&&<div style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                            {(pdSbModal==="owners"||pdSbModal==="experts"||pdSbModal==="tags"||pdSbModal==="glossary")&&<div style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
                               <input autoFocus value={pdSbSearch} onChange={e=>setPdSbSearch(e.target.value)}
-                                placeholder={pdSbModal==="tags"?"Add tag…":"Search users…"}
+                                placeholder={pdSbModal==="tags"?"Search or add tag…":pdSbModal==="glossary"?"Search glossary terms…":"Search users…"}
                                 style={{width:"100%",padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"}}
-                                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}
+                                onFocus={e=>e.target.style.borderColor=pdSbModal==="glossary"?"#8b5cf6":T.accent} onBlur={e=>e.target.style.borderColor=T.border}
                                 onKeyDown={e=>{if(pdSbModal==="tags"&&(e.key==="Enter"||e.key===",")&&pdSbSearch.trim()){patchProduct(pd.id,{tags:[...(pd.tags||[]),pdSbSearch.trim()]});setPdSbSearch("");e.preventDefault();}}}/>
                             </div>}
                             <div style={{overflowY:"auto",flex:1}}>
-                              {pdSbModal==="cert"&&(()=>{const CM={"Draft":{color:"#6b7280",bg:"rgba(107,114,128,.1)",border:"rgba(107,114,128,.25)",icon:"◐"},"In Review":{color:"#d97706",bg:"rgba(217,119,6,.12)",border:"rgba(217,119,6,.3)",icon:"⏳"},"Approved":{color:"#16a34a",bg:"rgba(22,163,74,.12)",border:"rgba(22,163,74,.3)",icon:"✓"},"Rejected":{color:"#e11d48",bg:"rgba(225,29,72,.12)",border:"rgba(225,29,72,.3)",icon:"✕"},"Deprecated":{color:"#7c3aed",bg:"rgba(124,58,237,.1)",border:"rgba(124,58,237,.25)",icon:"—"}};return Object.entries(CM).map(([c,m])=><button key={c} onClick={()=>{patchProduct(pd.id,{cert:c});setPdSbModal(null);}} style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"11px 16px",background:pd.cert===c?m.bg:"transparent",border:"none",cursor:"pointer",transition:"background .1s"}} onMouseEnter={e=>{if(pd.cert!==c)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(pd.cert!==c)e.currentTarget.style.background="transparent;"}}><span style={{fontSize:16,flexShrink:0}}>{m.icon}</span><span style={{flex:1,fontSize:13,fontWeight:600,color:m.color}}>{c}</span>{pd.cert===c&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={m.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})()}
+                              {pdSbModal==="cert"&&(()=>{const CM={"Draft":{color:"#6b7280",bg:"rgba(107,114,128,.1)",border:"rgba(107,114,128,.25)",icon:"◐"},"In Review":{color:"#d97706",bg:"rgba(217,119,6,.12)",border:"rgba(217,119,6,.3)",icon:"⏳"},"Approved":{color:"#16a34a",bg:"rgba(22,163,74,.12)",border:"rgba(22,163,74,.3)",icon:"✓"},"Rejected":{color:"#e11d48",bg:"rgba(225,29,72,.12)",border:"rgba(225,29,72,.3)",icon:"✕"},"Deprecated":{color:"#7c3aed",bg:"rgba(124,58,237,.1)",border:"rgba(124,58,237,.25)",icon:"—"}};return Object.entries(CM).map(([c,m])=><button key={c} onClick={()=>{patchProduct(pd.id,{cert:c});setPdSbModal(null);}} style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"11px 16px",background:pd.cert===c?m.bg:"transparent",border:"none",cursor:"pointer",transition:"background .1s"}} onMouseEnter={e=>{if(pd.cert!==c)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(pd.cert!==c)e.currentTarget.style.background="transparent"}}><span style={{fontSize:16,flexShrink:0}}>{m.icon}</span><span style={{flex:1,fontSize:13,fontWeight:600,color:m.color}}>{c}</span>{pd.cert===c&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={m.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})()}
+                              {pdSbModal==="glossary"&&GLOSSARY_TERMS.filter(t=>!pdSbSearch||t.term.toLowerCase().includes(pdSbSearch.toLowerCase())||t.abbr?.toLowerCase().includes(pdSbSearch.toLowerCase())).map(t=>{const sel=pdGlTerms.includes(t.term);return(<button key={t.id} onMouseDown={e=>{e.stopPropagation();setPdGlTerms(prev=>sel?prev.filter(x=>x!==t.term):[...prev,t.term]);}} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:sel?"rgba(139,92,246,.06)":"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:sel?"#8b5cf6":T.text}}>{t.term}</div><div style={{fontSize:11,color:T.textMuted,display:"flex",gap:6,marginTop:1}}>{t.abbr&&t.abbr!=="—"&&<span style={{fontFamily:"'Geist Mono',monospace"}}>{t.abbr}</span>}<span>{t.domain}</span></div></div>{sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke="#8b5cf6" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})}
                               {pdSbModal==="tags"&&(
                                 <div style={{padding:"10px 12px",display:"flex",flexWrap:"wrap",gap:6}}>
                                   {["PII","revenue","marketing","ML","behavioral","GDPR","operational","finance","platform","events"].filter(s=>!(pd.tags||[]).includes(s)&&(!pdSbSearch||s.toLowerCase().includes(pdSbSearch.toLowerCase()))).map(s=>(
@@ -15606,7 +15735,7 @@ const DomainsView = ({onAsset, onNav}) => {
                                 return(<button key={u} onMouseDown={e=>{e.stopPropagation();const newList=sel?list.filter(x=>x!==u):[...list,u];patchProduct(pd.id,pdSbModal==="owners"?{owners:newList}:{experts:newList});}}
                                   style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 12px",background:sel?T.bgElevated:"transparent",border:"none",cursor:"pointer",textAlign:"left"}}
                                   onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
-                                  <div style={{width:24,height:24,borderRadius:"50%",background:pdSbModal==="owners"?T.accentDim:"rgba(217,119,6,.12)",border:`1px solid ${pdSbModal==="owners"?T.accent+"33":"rgba(217,119,6,.25)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8.5,fontWeight:700,color:pdSbModal==="owners"?T.accent:"#d97706",flexShrink:0}}>{ava(u)}</div>
+                                  <div style={{width:24,height:24,borderRadius:pdSbModal==="owners"?3:"50%",background:pdSbModal==="owners"?T.accentDim:"rgba(217,119,6,.12)",border:`1px solid ${pdSbModal==="owners"?T.accent+"33":"rgba(217,119,6,.25)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8.5,fontWeight:700,color:pdSbModal==="owners"?T.accent:"#d97706",flexShrink:0}}>{ava(u)}</div>
                                   <span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>
                                   {sel&&<span style={{fontSize:12,color:pdSbModal==="owners"?T.accent:"#d97706",fontWeight:700}}>✓</span>}
                                 </button>);
@@ -16007,83 +16136,77 @@ const DomainsView = ({onAsset, onNav}) => {
                       ))}
                     </div>
                   </div>
-                  {/* Owners / Stewards / Tags card */}
+                  {/* Owners / Stewards / Tags / Glossary card */}
                   <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
                     {/* Owners */}
-                    <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
+                    <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
                         <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Owners</div>
                         <button onClick={()=>{setDmOwnerOpen(p=>!p);setDmOwnerSearch("");}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
                       </div>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                         {(dm.owners||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owners assigned</span>}
-                        {(dm.owners||[]).map((o,i)=>(
+                        {(dm.owners||[]).slice(0,3).map((o,i)=>(
                           <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
                             <div style={{width:18,height:18,borderRadius:3,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(o)}</div>
                             <span style={{fontSize:12,color:T.accent,fontWeight:500}}>{o}</span>
                             <button onClick={()=>patchDomain(dm.id,{owners:(dm.owners||[]).filter(x=>x!==o)})} style={{background:"none",border:"none",cursor:"pointer",color:T.accent,padding:0,display:"flex",lineHeight:1,opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(8)}</button>
                           </div>
                         ))}
+                        {(dm.owners||[]).length>3&&<span title={(dm.owners||[]).slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{(dm.owners||[]).length-3}</span>}
                       </div>
-                      {dmOwnerOpen&&<div style={{position:"absolute",left:16,right:16,top:"calc(100% - 4px)",zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.22)",overflow:"hidden"}}>
-                        <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}><input autoFocus placeholder="Search users…" value={dmOwnerSearch} onChange={e=>setDmOwnerSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none"}}/></div>
-                        <div style={{maxHeight:160,overflowY:"auto"}}>{ALL_USERS.filter(u=>!dmOwnerSearch||u.toLowerCase().includes(dmOwnerSearch.toLowerCase())).map(u=>{const sel=(dm.owners||[]).includes(u);return(<button key={u} onMouseDown={e=>{e.stopPropagation();patchDomain(dm.id,{owners:sel?(dm.owners||[]).filter(x=>x!==u):[...(dm.owners||[]),u]});}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 12px",background:sel?T.bgElevated:"transparent",border:"none",cursor:"pointer",textAlign:"left"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{width:24,height:24,borderRadius:"50%",background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8.5,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(u)}</div><span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>{sel&&<span style={{fontSize:12,color:T.accent,fontWeight:700}}>✓</span>}</button>);})}</div>
-                      </div>}
                     </div>
                     {/* Stewards */}
-                    <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
+                    <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
                         <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Stewards</div>
                         <button onClick={()=>{setDmStewOpen(p=>!p);setDmStewSearch("");}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color="#d97706";e.currentTarget.style.background="rgba(217,119,6,.08)";}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
                       </div>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                         {(dm.experts||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards assigned</span>}
-                        {(dm.experts||[]).map((s,i)=>(
+                        {(dm.experts||[]).slice(0,3).map((s,i)=>(
                           <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:"rgba(217,119,6,.08)",borderTop:"1px solid rgba(217,119,6,.2)",borderRight:"1px solid rgba(217,119,6,.2)",borderBottom:"1px solid rgba(217,119,6,.2)",borderLeft:"3px solid #d97706"}}>
                             <div style={{width:18,height:18,borderRadius:"50%",background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(s)}</div>
                             <span style={{fontSize:12,color:"#d97706",fontWeight:500}}>{s}</span>
                             <button onClick={()=>patchDomain(dm.id,{experts:(dm.experts||[]).filter(x=>x!==s)})} style={{background:"none",border:"none",cursor:"pointer",color:"#d97706",padding:0,display:"flex",lineHeight:1,opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(8)}</button>
                           </div>
                         ))}
+                        {(dm.experts||[]).length>3&&<span title={(dm.experts||[]).slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{(dm.experts||[]).length-3}</span>}
                       </div>
-                      {dmStewOpen&&<div style={{position:"absolute",left:16,right:16,top:"calc(100% - 4px)",zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.22)",overflow:"hidden"}}>
-                        <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}><input autoFocus placeholder="Search users…" value={dmStewSearch} onChange={e=>setDmStewSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none"}}/></div>
-                        <div style={{maxHeight:160,overflowY:"auto"}}>{ALL_USERS.filter(u=>!dmStewSearch||u.toLowerCase().includes(dmStewSearch.toLowerCase())).map(u=>{const sel=(dm.experts||[]).includes(u);return(<button key={u} onMouseDown={e=>{e.stopPropagation();patchDomain(dm.id,{experts:sel?(dm.experts||[]).filter(x=>x!==u):[...(dm.experts||[]),u]});}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 12px",background:sel?T.bgElevated:"transparent",border:"none",cursor:"pointer",textAlign:"left"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{width:24,height:24,borderRadius:"50%",background:"rgba(217,119,6,.12)",border:"1px solid rgba(217,119,6,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8.5,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(u)}</div><span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>{sel&&<span style={{fontSize:12,color:"#d97706",fontWeight:700}}>✓</span>}</button>);})}</div>
-                      </div>}
                     </div>
                     {/* Tags */}
                     <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
                         <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Tags</div>
-                        <button style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}} onClick={()=>{const inp=document.querySelector('[data-dm-tag-input]');if(inp)inp.focus();}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+                        <button onClick={()=>{setDmTagOpen(p=>!p);setDmTagSearch("");}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
                       </div>
-                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                         {(dm.tags||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
-                        {(()=>{const TAG_C={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},marketing:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},ML:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},behavioral:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},GDPR:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"}};return (dm.tags||[]).map(t=>{const c=TAG_C[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};return <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}<button onClick={()=>patchDomain(dm.id,{tags:(dm.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>;});})()}
+                        {(()=>{const TAG_C={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},marketing:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},ML:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},behavioral:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},GDPR:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"}};return (dm.tags||[]).slice(0,3).map(t=>{const c=TAG_C[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};return <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}<button onClick={()=>patchDomain(dm.id,{tags:(dm.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>;});})()}
+                        {(dm.tags||[]).length>3&&<span title={(dm.tags||[]).slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{(dm.tags||[]).length-3}</span>}
                       </div>
-                      <input data-dm-tag-input value={dmTagInput} onChange={e=>setDmTagInput(e.target.value)}
-                        onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&dmTagInput.trim()){patchDomain(dm.id,{tags:[...(dm.tags||[]),dmTagInput.trim()]});setDmTagInput("");}}}
-                        placeholder="Add tag…"
-                        style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box"}}
-                        onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
                     </div>
                     {/* Business Glossary */}
                     <div style={{padding:"14px 16px"}}>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
                         <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Business Glossary</div>
-                        <button style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color="#8b5cf6";e.currentTarget.style.background="rgba(139,92,246,.08)";}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}} onClick={()=>{const inp=document.querySelector('[data-dm-gl-input]');if(inp)inp.focus();}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+                        <button onClick={()=>{setDmGlOpen(p=>!p);setDmGlSearch("");}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color="#8b5cf6";e.currentTarget.style.background="rgba(139,92,246,.08)";}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
                       </div>
-                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                         {dmGlossaryTerms.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
-                        {dmGlossaryTerms.map((t,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t}<button onClick={()=>setDmGlossaryTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+                        {dmGlossaryTerms.slice(0,3).map((t,i)=><span key={i} title={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t.length>10?t.slice(0,10)+"…":t}<button onClick={()=>setDmGlossaryTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+                        {dmGlossaryTerms.length>3&&<span title={dmGlossaryTerms.slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{dmGlossaryTerms.length-3}</span>}
                       </div>
-                      <input data-dm-gl-input value={dmGlInput} onChange={e=>setDmGlInput(e.target.value)}
-                        onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&dmGlInput.trim()){setDmGlossaryTerms(prev=>[...prev,dmGlInput.trim()]);setDmGlInput("");}}}
-                        placeholder="Link glossary term…"
-                        style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box"}}
-                        onFocus={e=>e.target.style.borderColor="#8b5cf6"} onBlur={e=>e.target.style.borderColor=T.border}/>
                     </div>
                   </div>
+                  {/* Domain Owner Modal */}
+                  {dmOwnerOpen&&<><div onClick={()=>setDmOwnerOpen(false)} style={{position:"fixed",inset:0,zIndex:499,background:"rgba(0,0,0,.35)"}}/><div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:300,display:"flex",flexDirection:"column",maxHeight:"70vh",overflow:"hidden"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}><span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Owners</span><button onClick={()=>setDmOwnerOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg></button></div><div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}><input autoFocus placeholder="Search users…" value={dmOwnerSearch} onChange={e=>setDmOwnerSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/></div><div style={{flex:1,overflowY:"auto"}}>{ALL_USERS.filter(u=>!dmOwnerSearch||u.toLowerCase().includes(dmOwnerSearch.toLowerCase())).map(u=>{const sel=(dm.owners||[]).includes(u);return(<button key={u} onMouseDown={e=>{e.stopPropagation();patchDomain(dm.id,{owners:sel?(dm.owners||[]).filter(x=>x!==u):[...(dm.owners||[]),u]});}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"9px 12px",background:sel?"rgba(99,102,241,.06)":"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{width:26,height:26,borderRadius:3,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(u)}</div><span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>{sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={T.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})}</div><div style={{padding:"8px 10px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",flexShrink:0}}><button onMouseDown={()=>setDmOwnerOpen(false)} style={{padding:"5px 14px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Done</button></div></div></>}
+                  {/* Domain Steward Modal */}
+                  {dmStewOpen&&<><div onClick={()=>setDmStewOpen(false)} style={{position:"fixed",inset:0,zIndex:499,background:"rgba(0,0,0,.35)"}}/><div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:300,display:"flex",flexDirection:"column",maxHeight:"70vh",overflow:"hidden"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}><span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Stewards</span><button onClick={()=>setDmStewOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg></button></div><div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}><input autoFocus placeholder="Search users…" value={dmStewSearch} onChange={e=>setDmStewSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#d97706"} onBlur={e=>e.target.style.borderColor=T.border}/></div><div style={{flex:1,overflowY:"auto"}}>{ALL_USERS.filter(u=>!dmStewSearch||u.toLowerCase().includes(dmStewSearch.toLowerCase())).map(u=>{const sel=(dm.experts||[]).includes(u);return(<button key={u} onMouseDown={e=>{e.stopPropagation();patchDomain(dm.id,{experts:sel?(dm.experts||[]).filter(x=>x!==u):[...(dm.experts||[]),u]});}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"9px 12px",background:sel?"rgba(217,119,6,.06)":"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{width:26,height:26,borderRadius:"50%",background:"rgba(217,119,6,.12)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(u)}</div><span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>{sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke="#d97706" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})}</div><div style={{padding:"8px 10px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",flexShrink:0}}><button onMouseDown={()=>setDmStewOpen(false)} style={{padding:"5px 14px",borderRadius:6,background:"#d97706",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Done</button></div></div></>}
+                  {/* Domain Tag Modal */}
+                  {dmTagOpen&&<><div onClick={()=>setDmTagOpen(false)} style={{position:"fixed",inset:0,zIndex:499,background:"rgba(0,0,0,.35)"}}/><div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:300,display:"flex",flexDirection:"column",maxHeight:"70vh",overflow:"hidden"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}><span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Tags</span><button onClick={()=>setDmTagOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg></button></div><div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}><input autoFocus placeholder="Search or add tag…" value={dmTagSearch} onChange={e=>setDmTagSearch(e.target.value)} onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&dmTagSearch.trim()&&!(dm.tags||[]).includes(dmTagSearch.trim())){patchDomain(dm.id,{tags:[...(dm.tags||[]),dmTagSearch.trim()]});setDmTagSearch("");e.preventDefault();}}} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/></div><div style={{flex:1,overflowY:"auto",padding:"8px 10px",display:"flex",flexWrap:"wrap",gap:6}}>{["PII","revenue","marketing","ML","behavioral","GDPR","operational","finance","platform","events"].filter(s=>!(dm.tags||[]).includes(s)&&(!dmTagSearch||s.toLowerCase().includes(dmTagSearch.toLowerCase()))).map(s=><button key={s} onMouseDown={()=>{patchDomain(dm.id,{tags:[...(dm.tags||[]),s]});}} style={{padding:"5px 12px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}} onMouseEnter={e=>{e.currentTarget.style.background=T.accentDim;e.currentTarget.style.color=T.accent;e.currentTarget.style.borderColor=T.accent+"55";}} onMouseLeave={e=>{e.currentTarget.style.background=T.bgElevated;e.currentTarget.style.color=T.textSub;e.currentTarget.style.borderColor=T.border;}}>{s}</button>)}{(dm.tags||[]).map(t=><span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"5px 10px",borderRadius:6,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600}}>{t}<button onMouseDown={()=>patchDomain(dm.id,{tags:(dm.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:T.accent,padding:0,lineHeight:1,display:"flex"}}>{Ic.x(8)}</button></span>)}</div><div style={{padding:"8px 10px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",flexShrink:0}}><button onMouseDown={()=>setDmTagOpen(false)} style={{padding:"5px 14px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Done</button></div></div></>}
+                  {/* Domain Glossary Modal */}
+                  {dmGlOpen&&<><div onClick={()=>setDmGlOpen(false)} style={{position:"fixed",inset:0,zIndex:499,background:"rgba(0,0,0,.35)"}}/><div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:320,display:"flex",flexDirection:"column",maxHeight:"75vh",overflow:"hidden"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}><span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Business Glossary</span><button onClick={()=>setDmGlOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg></button></div><div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}><input autoFocus placeholder="Search glossary terms…" value={dmGlSearch} onChange={e=>setDmGlSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#8b5cf6"} onBlur={e=>e.target.style.borderColor=T.border}/></div><div style={{flex:1,overflowY:"auto"}}>{GLOSSARY_TERMS.filter(t=>!dmGlSearch||t.term.toLowerCase().includes(dmGlSearch.toLowerCase())||t.abbr?.toLowerCase().includes(dmGlSearch.toLowerCase())).map(t=>{const sel=dmGlossaryTerms.includes(t.term);return(<button key={t.id} onMouseDown={e=>{e.stopPropagation();setDmGlossaryTerms(prev=>sel?prev.filter(x=>x!==t.term):[...prev,t.term]);}} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:sel?"rgba(139,92,246,.06)":"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:sel?"#8b5cf6":T.text}}>{t.term}</div><div style={{fontSize:11,color:T.textMuted,display:"flex",gap:6,marginTop:1}}>{t.abbr&&t.abbr!=="—"&&<span style={{fontFamily:"'Geist Mono',monospace"}}>{t.abbr}</span>}<span>{t.domain}</span></div></div>{sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke="#8b5cf6" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})}{GLOSSARY_TERMS.filter(t=>!dmGlSearch||t.term.toLowerCase().includes(dmGlSearch.toLowerCase())).length===0&&<div style={{padding:"16px 12px",fontSize:12,color:T.textMuted,textAlign:"center"}}>No terms match</div>}</div><div style={{padding:"8px 10px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",flexShrink:0}}><button onMouseDown={()=>setDmGlOpen(false)} style={{padding:"5px 14px",borderRadius:6,background:"#8b5cf6",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Done</button></div></div></>}
                 </div>
               </div>
             )}
@@ -17524,12 +17647,14 @@ const DataProductsView = ({onAsset, onNav}) => {
                         <SbLabel onEdit={()=>{setDpSbModal("owners");setDpSbSearch("");}}>Owners</SbLabel>
                         <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                           {(pd.owners||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owners assigned</span>}
-                          {(pd.owners||[]).map((o,i)=>(
+                          {(pd.owners||[]).slice(0,3).map((o,i)=>(
                             <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
                               <div style={{width:18,height:18,borderRadius:3,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:T.accent,flexShrink:0}}>{dpAva(o)}</div>
                               <span style={{fontSize:12,color:T.accent,fontWeight:500}}>{o}</span>
+                              <button onClick={()=>patchDP(pd.id,{owners:(pd.owners||[]).filter(x=>x!==o)})} style={{background:"none",border:"none",cursor:"pointer",color:T.accent,padding:0,display:"flex",lineHeight:1,opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(8)}</button>
                             </div>
                           ))}
+                          {(pd.owners||[]).length>3&&<span title={(pd.owners||[]).slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{(pd.owners||[]).length-3}</span>}
                         </div>
                       </div>
                       {/* EXPERTS / STEWARDS */}
@@ -17537,12 +17662,14 @@ const DataProductsView = ({onAsset, onNav}) => {
                         <SbLabel onEdit={()=>{setDpSbModal("experts");setDpSbSearch("");}}>Stewards</SbLabel>
                         <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                           {(pd.experts||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards assigned</span>}
-                          {(pd.experts||[]).map((s,i)=>(
+                          {(pd.experts||[]).slice(0,3).map((s,i)=>(
                             <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:"rgba(217,119,6,.08)",borderTop:"1px solid rgba(217,119,6,.2)",borderRight:"1px solid rgba(217,119,6,.2)",borderBottom:"1px solid rgba(217,119,6,.2)",borderLeft:"3px solid #d97706"}}>
                               <div style={{width:18,height:18,borderRadius:"50%",background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#d97706",flexShrink:0}}>{dpAva(s)}</div>
                               <span style={{fontSize:12,color:"#d97706",fontWeight:500}}>{s}</span>
+                              <button onClick={()=>patchDP(pd.id,{experts:(pd.experts||[]).filter(x=>x!==s)})} style={{background:"none",border:"none",cursor:"pointer",color:"#d97706",padding:0,display:"flex",lineHeight:1,opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(8)}</button>
                             </div>
                           ))}
+                          {(pd.experts||[]).length>3&&<span title={(pd.experts||[]).slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{(pd.experts||[]).length-3}</span>}
                         </div>
                       </div>
                       {/* TAGS */}
@@ -17550,28 +17677,18 @@ const DataProductsView = ({onAsset, onNav}) => {
                         <SbLabel onEdit={()=>{setDpSbModal("tags");setDpSbSearch("");}}>Tags</SbLabel>
                         <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                           {(pd.tags||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
-                          {(pd.tags||[]).map(t=>{
-                            const TAG_C_DP={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},marketing:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},ML:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},behavioral:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},GDPR:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"}};
-                            const c=TAG_C_DP[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};
-                            return <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px 3px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}</span>;
-                          })}
+                          {(()=>{const TC={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},marketing:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},ML:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},behavioral:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},GDPR:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"}};return (pd.tags||[]).slice(0,3).map(t=>{const c=TC[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};return <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}<button onClick={()=>patchDP(pd.id,{tags:(pd.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>;});})()}
+                          {(pd.tags||[]).length>3&&<span title={(pd.tags||[]).slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{(pd.tags||[]).length-3}</span>}
                         </div>
                       </div>
                       {/* BUSINESS GLOSSARY */}
                       <div style={{padding:16}}>
-                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                          <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Business Glossary</div>
-                          <button style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color="#8b5cf6";e.currentTarget.style.background="rgba(139,92,246,.08)";}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}} onClick={()=>{const inp=document.querySelector('[data-dp-gl-input]');if(inp)inp.focus();}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
-                        </div>
-                        <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
+                        <SbLabel onEdit={()=>{setDpSbModal("glossary");setDpSbSearch("");}}>Business Glossary</SbLabel>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                           {dpGlTerms.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
-                          {dpGlTerms.map((t,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t}<button onClick={()=>setDpGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+                          {dpGlTerms.slice(0,3).map((t,i)=><span key={i} title={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t.length>10?t.slice(0,10)+"…":t}<button onClick={()=>setDpGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+                          {dpGlTerms.length>3&&<span title={dpGlTerms.slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{dpGlTerms.length-3}</span>}
                         </div>
-                        <input data-dp-gl-input value={dpGlInput} onChange={e=>setDpGlInput(e.target.value)}
-                          onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&dpGlInput.trim()){setDpGlTerms(prev=>[...prev,dpGlInput.trim()]);setDpGlInput("");}}}
-                          placeholder="Link glossary term…"
-                          style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box"}}
-                          onFocus={e=>e.target.style.borderColor="#8b5cf6"} onBlur={e=>e.target.style.borderColor=T.border}/>
                       </div>
                       {/* Edit modal */}
                       {dpSbModal&&(
@@ -17579,18 +17696,19 @@ const DataProductsView = ({onAsset, onNav}) => {
                           <div onClick={()=>setDpSbModal(null)} style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,.4)"}}/>
                           <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:501,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:300,display:"flex",flexDirection:"column",maxHeight:"80vh",overflow:"hidden"}}>
                             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-                              <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Edit {dpSbModal==="cert"?"Certificate":dpSbModal==="owners"?"Owners":dpSbModal==="experts"?"Stewards":"Tags"}</span>
-                              <button onClick={()=>setDpSbModal(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{Ic.x(12)}</button>
+                              <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>{dpSbModal==="cert"?"Certificate":dpSbModal==="owners"?"Owners":dpSbModal==="experts"?"Stewards":dpSbModal==="glossary"?"Business Glossary":"Tags"}</span>
+                              <button onClick={()=>setDpSbModal(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg></button>
                             </div>
-                            {dpSbModal!=="cert"&&<div style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                            {(dpSbModal==="owners"||dpSbModal==="experts"||dpSbModal==="tags"||dpSbModal==="glossary")&&<div style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
                               <input autoFocus value={dpSbSearch} onChange={e=>setDpSbSearch(e.target.value)}
-                                placeholder={dpSbModal==="tags"?"Add tag…":"Search users…"}
+                                placeholder={dpSbModal==="tags"?"Search or add tag…":dpSbModal==="glossary"?"Search glossary terms…":"Search users…"}
                                 style={{width:"100%",padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"}}
-                                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}
+                                onFocus={e=>e.target.style.borderColor=dpSbModal==="glossary"?"#8b5cf6":T.accent} onBlur={e=>e.target.style.borderColor=T.border}
                                 onKeyDown={e=>{if(dpSbModal==="tags"&&(e.key==="Enter"||e.key===",")&&dpSbSearch.trim()){patchDP(pd.id,{tags:[...(pd.tags||[]),dpSbSearch.trim()]});setDpSbSearch("");e.preventDefault();}}}/>
                             </div>}
                             <div style={{overflowY:"auto",flex:1}}>
-                              {dpSbModal==="cert"&&(()=>{const CM={"Draft":{color:"#6b7280",bg:"rgba(107,114,128,.1)",border:"rgba(107,114,128,.25)",icon:"◐"},"In Review":{color:"#d97706",bg:"rgba(217,119,6,.12)",border:"rgba(217,119,6,.3)",icon:"⏳"},"Approved":{color:"#16a34a",bg:"rgba(22,163,74,.12)",border:"rgba(22,163,74,.3)",icon:"✓"},"Rejected":{color:"#e11d48",bg:"rgba(225,29,72,.12)",border:"rgba(225,29,72,.3)",icon:"✕"},"Deprecated":{color:"#7c3aed",bg:"rgba(124,58,237,.1)",border:"rgba(124,58,237,.25)",icon:"—"}};return Object.entries(CM).map(([c,m])=><button key={c} onClick={()=>{patchDP(pd.id,{cert:c});setDpSbModal(null);}} style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"11px 16px",background:pd.cert===c?m.bg:"transparent",border:"none",cursor:"pointer",transition:"background .1s"}} onMouseEnter={e=>{if(pd.cert!==c)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(pd.cert!==c)e.currentTarget.style.background="transparent;"}}><span style={{fontSize:16,flexShrink:0}}>{m.icon}</span><span style={{flex:1,fontSize:13,fontWeight:600,color:m.color}}>{c}</span>{pd.cert===c&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={m.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})()}
+                              {dpSbModal==="cert"&&(()=>{const CM={"Draft":{color:"#6b7280",bg:"rgba(107,114,128,.1)",border:"rgba(107,114,128,.25)",icon:"◐"},"In Review":{color:"#d97706",bg:"rgba(217,119,6,.12)",border:"rgba(217,119,6,.3)",icon:"⏳"},"Approved":{color:"#16a34a",bg:"rgba(22,163,74,.12)",border:"rgba(22,163,74,.3)",icon:"✓"},"Rejected":{color:"#e11d48",bg:"rgba(225,29,72,.12)",border:"rgba(225,29,72,.3)",icon:"✕"},"Deprecated":{color:"#7c3aed",bg:"rgba(124,58,237,.1)",border:"rgba(124,58,237,.25)",icon:"—"}};return Object.entries(CM).map(([c,m])=><button key={c} onClick={()=>{patchDP(pd.id,{cert:c});setDpSbModal(null);}} style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"11px 16px",background:pd.cert===c?m.bg:"transparent",border:"none",cursor:"pointer",transition:"background .1s"}} onMouseEnter={e=>{if(pd.cert!==c)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(pd.cert!==c)e.currentTarget.style.background="transparent"}}><span style={{fontSize:16,flexShrink:0}}>{m.icon}</span><span style={{flex:1,fontSize:13,fontWeight:600,color:m.color}}>{c}</span>{pd.cert===c&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={m.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})()}
+                              {dpSbModal==="glossary"&&GLOSSARY_TERMS.filter(t=>!dpSbSearch||t.term.toLowerCase().includes(dpSbSearch.toLowerCase())||t.abbr?.toLowerCase().includes(dpSbSearch.toLowerCase())).map(t=>{const sel=dpGlTerms.includes(t.term);return(<button key={t.id} onMouseDown={e=>{e.stopPropagation();setDpGlTerms(prev=>sel?prev.filter(x=>x!==t.term):[...prev,t.term]);}} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:sel?"rgba(139,92,246,.06)":"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:sel?"#8b5cf6":T.text}}>{t.term}</div><div style={{fontSize:11,color:T.textMuted,display:"flex",gap:6,marginTop:1}}>{t.abbr&&t.abbr!=="—"&&<span style={{fontFamily:"'Geist Mono',monospace"}}>{t.abbr}</span>}<span>{t.domain}</span></div></div>{sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke="#8b5cf6" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})}
                               {dpSbModal==="tags"&&(
                                 <div style={{padding:"10px 12px",display:"flex",flexWrap:"wrap",gap:6}}>
                                   {["PII","revenue","marketing","ML","behavioral","GDPR","operational","finance","platform","events"].filter(s=>!(pd.tags||[]).includes(s)&&(!dpSbSearch||s.toLowerCase().includes(dpSbSearch.toLowerCase()))).map(s=>(
@@ -17612,9 +17730,9 @@ const DataProductsView = ({onAsset, onNav}) => {
                                 return(<button key={u} onMouseDown={e=>{e.stopPropagation();const newList=sel?list.filter(x=>x!==u):[...list,u];patchDP(pd.id,dpSbModal==="owners"?{owners:newList}:{experts:newList});}}
                                   style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 12px",background:sel?T.bgElevated:"transparent",border:"none",cursor:"pointer",textAlign:"left"}}
                                   onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
-                                  <div style={{width:24,height:24,borderRadius:"50%",background:dpSbModal==="owners"?T.accentDim:"rgba(217,119,6,.12)",border:`1px solid ${dpSbModal==="owners"?T.accent+"33":"rgba(217,119,6,.25)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8.5,fontWeight:700,color:dpSbModal==="owners"?T.accent:"#d97706",flexShrink:0}}>{dpAva(u)}</div>
+                                  <div style={{width:24,height:24,borderRadius:dpSbModal==="owners"?3:"50%",background:dpSbModal==="owners"?T.accentDim:"rgba(217,119,6,.12)",border:`1px solid ${dpSbModal==="owners"?T.accent+"33":"rgba(217,119,6,.25)"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8.5,fontWeight:700,color:dpSbModal==="owners"?T.accent:"#d97706",flexShrink:0}}>{dpAva(u)}</div>
                                   <span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>
-                                  {sel&&<span style={{fontSize:12,color:dpSbModal==="owners"?T.accent:"#d97706",fontWeight:700}}>✓</span>}
+                                  {sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={dpSbModal==="owners"?T.accent:"#d97706"} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                                 </button>);
                               })}
                             </div>
