@@ -6763,7 +6763,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                         {/* Right sidebar — exact Tags/Glossary pattern */}
                         <div style={{width:272,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto"}}>
 
-                          <SB ch="Owner" onEdit={()=>setPolEditModal("owner")}>
+                          <SB ch="Owners" onEdit={()=>setPolEditModal("owner")}>
                             {p.owner
                               ? ownerChip(p.owner)
                               : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owner set</span>}
@@ -12516,6 +12516,8 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
   const [showAllOwners,  setShowAllOwners]  = useState(false);
   const [showAllStewards,setShowAllStewards]= useState(false);
   const [showAllTags,    setShowAllTags]    = useState(false);
+  const [assetGlTerms,   setAssetGlTerms]  = useState([]);
+  const [assetGlInput,   setAssetGlInput]  = useState("");
   const [editDesc,       setEditDesc]       = useState(false);
   const [descVal,      setDescVal]     = useState(asset.description||"");
   const [editNotes,    setEditNotes]   = useState(false);
@@ -12891,6 +12893,23 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
               {(data.tags||[]).length>3&&!showAllTags&&<span onClick={()=>setShowAllTags(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{(data.tags||[]).length-3} more</span>}
               {(data.tags||[]).length>3&&showAllTags&&<span onClick={()=>setShowAllTags(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
             </div>
+          </div>
+
+          {/* BUSINESS GLOSSARY */}
+          <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+              <MetaLabel>Business Glossary</MetaLabel>
+              <button style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color="#8b5cf6";e.currentTarget.style.background="rgba(139,92,246,.08)";}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}} onClick={()=>{const inp=document.querySelector('[data-asset-gl-input]');if(inp)inp.focus();}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+            </div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
+              {assetGlTerms.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
+              {assetGlTerms.map((t,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t}<button onClick={()=>setAssetGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+            </div>
+            <input data-asset-gl-input value={assetGlInput} onChange={e=>setAssetGlInput(e.target.value)}
+              onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&assetGlInput.trim()){setAssetGlTerms(prev=>[...prev,assetGlInput.trim()]);setAssetGlInput("");}}}
+              placeholder="Link glossary term…"
+              style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box"}}
+              onFocus={e=>e.target.style.borderColor="#8b5cf6"} onBlur={e=>e.target.style.borderColor=T.border}/>
           </div>
 
           {/* ACTIONS */}
@@ -13338,6 +13357,8 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
   const [showAllOwners,  setShowAllOwners]  = useState(false);
   const [showAllStewards,setShowAllStewards]= useState(false);
   const [showAllTags,    setShowAllTags]    = useState(false);
+  const [assetGlTerms,   setAssetGlTerms]  = useState([]);
+  const [assetGlInput,   setAssetGlInput]  = useState("");
 
   const DOMAINS_LIST = ["Commerce","Finance","Product","Marketing","ML","Engineering"];
   const USERS_LIST   = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
@@ -13805,6 +13826,23 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
             {(data.tags||[]).length>3&&!showAllTags&&<span onClick={()=>setShowAllTags(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{(data.tags||[]).length-3} more</span>}
             {(data.tags||[]).length>3&&showAllTags&&<span onClick={()=>setShowAllTags(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
           </div>
+        </div>
+
+        {/* BUSINESS GLOSSARY */}
+        <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+            <MetaLabel>Business Glossary</MetaLabel>
+            <button style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color="#8b5cf6";e.currentTarget.style.background="rgba(139,92,246,.08)";}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}} onClick={()=>{const inp=document.querySelector('[data-asset2-gl-input]');if(inp)inp.focus();}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
+            {assetGlTerms.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
+            {assetGlTerms.map((t,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t}<button onClick={()=>setAssetGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+          </div>
+          <input data-asset2-gl-input value={assetGlInput} onChange={e=>setAssetGlInput(e.target.value)}
+            onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&assetGlInput.trim()){setAssetGlTerms(prev=>[...prev,assetGlInput.trim()]);setAssetGlInput("");}}}
+            placeholder="Link glossary term…"
+            style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box"}}
+            onFocus={e=>e.target.style.borderColor="#8b5cf6"} onBlur={e=>e.target.style.borderColor=T.border}/>
         </div>
 
         {/* Edit Metadata Modal */}
@@ -15166,8 +15204,10 @@ const DomainsView = ({onAsset, onNav}) => {
   const [pdRenameValue,    setPdRenameValue]    = useState("");
   const [pdStyleOpen,      setPdStyleOpen]      = useState(false);
   const [pdContractOpen,   setPdContractOpen]   = useState(false);
-  const [pdSbModal,        setPdSbModal]        = useState(null);   // "owners"|"experts"|"tags"|null
+  const [pdSbModal,        setPdSbModal]        = useState(null);   // "owners"|"experts"|"tags"|"cert"|null
   const [pdSbSearch,       setPdSbSearch]       = useState("");
+  const [pdGlTerms,        setPdGlTerms]        = useState([]);
+  const [pdGlInput,        setPdGlInput]        = useState("");
   const [pdCustomProps,    setPdCustomProps]    = useState([]);     // [{key,value}]
   const [pdContractState,  setPdContractState]  = useState({status:"Active",version:"1.2.0",validFrom:"2026-01-01",validUntil:"2026-12-31",schemaTerms:{expectedColumns:12,allowSchemaEvolution:true,breakingChangePolicy:"Notify 7 days prior"},freshnessTerms:{maxLatency:120,unit:"minutes",availability:99.5},qualityTerms:[{id:"qc1",rule:"Null rate on primary key",operator:"<",threshold:0.1,unit:"%",status:"passing"},{id:"qc2",rule:"Row count",operator:">",threshold:1000,unit:"rows",status:"passing"},{id:"qc3",rule:"Completeness score",operator:">=",threshold:95,unit:"%",status:"passing"},{id:"qc4",rule:"Duplicate rate",operator:"<",threshold:0.5,unit:"%",status:"failing"}],ownershipTerms:{owner:"maya.chen",responseTime:"24 hours",escalation:"data-platform-team@company.com"},consumerTerms:"Consumers agree to: (1) not redistribute raw data outside approved use cases, (2) report issues within 24 hours, (3) not use this product for purposes inconsistent with the domain's data governance policy."});
   const [pdContractValidating,   setPdContractValidating]   = useState(false);
@@ -15424,6 +15464,11 @@ const DomainsView = ({onAsset, onNav}) => {
                           </div>
                         ))}
                       </div>
+                      {/* CERTIFICATE */}
+                      <div style={{padding:16,borderBottom:`1px solid ${T.border}`}}>
+                        <SbLabel onEdit={()=>{setPdSbModal("cert");setPdSbSearch("");}}>Certificate</SbLabel>
+                        {(()=>{const CM={"Draft":{color:"#6b7280",bg:"rgba(107,114,128,.1)",border:"rgba(107,114,128,.25)",icon:"◐"},"In Review":{color:"#d97706",bg:"rgba(217,119,6,.12)",border:"rgba(217,119,6,.3)",icon:"⏳"},"Approved":{color:"#16a34a",bg:"rgba(22,163,74,.12)",border:"rgba(22,163,74,.3)",icon:"✓"},"Rejected":{color:"#e11d48",bg:"rgba(225,29,72,.12)",border:"rgba(225,29,72,.3)",icon:"✕"},"Deprecated":{color:"#7c3aed",bg:"rgba(124,58,237,.1)",border:"rgba(124,58,237,.25)",icon:"—"}};const cm=CM[pd.cert]||CM["Draft"];return <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px 4px 9px",borderRadius:5,background:cm.bg,borderTop:`1px solid ${cm.border}`,borderRight:`1px solid ${cm.border}`,borderBottom:`1px solid ${cm.border}`,borderLeft:`3px solid ${cm.color}`}}><span style={{fontSize:13}}>{cm.icon}</span><span style={{fontSize:12,color:cm.color,fontWeight:600}}>{pd.cert||"Draft"}</span></div>;})()}
+                      </div>
                       {/* OWNERS */}
                       <div style={{padding:16,borderBottom:`1px solid ${T.border}`}}>
                         <SbLabel onEdit={()=>{setPdSbModal("owners");setPdSbSearch("");}}>Owners</SbLabel>
@@ -15451,7 +15496,7 @@ const DomainsView = ({onAsset, onNav}) => {
                         </div>
                       </div>
                       {/* TAGS */}
-                      <div style={{padding:16}}>
+                      <div style={{padding:16,borderBottom:`1px solid ${T.border}`}}>
                         <SbLabel onEdit={()=>{setPdSbModal("tags");setPdSbSearch("");}}>Tags</SbLabel>
                         <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                           {(pd.tags||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
@@ -15462,23 +15507,40 @@ const DomainsView = ({onAsset, onNav}) => {
                           })}
                         </div>
                       </div>
+                      {/* BUSINESS GLOSSARY */}
+                      <div style={{padding:16}}>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                          <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Business Glossary</div>
+                          <button style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color="#8b5cf6";e.currentTarget.style.background="rgba(139,92,246,.08)";}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}} onClick={()=>{const inp=document.querySelector('[data-pd-gl-input]');if(inp)inp.focus();}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+                        </div>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
+                          {pdGlTerms.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
+                          {pdGlTerms.map((t,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t}<button onClick={()=>setPdGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+                        </div>
+                        <input data-pd-gl-input value={pdGlInput} onChange={e=>setPdGlInput(e.target.value)}
+                          onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&pdGlInput.trim()){setPdGlTerms(prev=>[...prev,pdGlInput.trim()]);setPdGlInput("");}}}
+                          placeholder="Link glossary term…"
+                          style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box"}}
+                          onFocus={e=>e.target.style.borderColor="#8b5cf6"} onBlur={e=>e.target.style.borderColor=T.border}/>
+                      </div>
                       {/* Edit modal */}
                       {pdSbModal&&(
                         <>
                           <div onClick={()=>setPdSbModal(null)} style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,.4)"}}/>
                           <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:501,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:300,display:"flex",flexDirection:"column",maxHeight:"80vh",overflow:"hidden"}}>
                             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-                              <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Edit {pdSbModal==="owners"?"Owners":pdSbModal==="experts"?"Stewards":"Tags"}</span>
+                              <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Edit {pdSbModal==="cert"?"Certificate":pdSbModal==="owners"?"Owners":pdSbModal==="experts"?"Stewards":"Tags"}</span>
                               <button onClick={()=>setPdSbModal(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{Ic.x(12)}</button>
                             </div>
-                            <div style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                            {pdSbModal!=="cert"&&<div style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
                               <input autoFocus value={pdSbSearch} onChange={e=>setPdSbSearch(e.target.value)}
                                 placeholder={pdSbModal==="tags"?"Add tag…":"Search users…"}
                                 style={{width:"100%",padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"}}
                                 onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}
                                 onKeyDown={e=>{if(pdSbModal==="tags"&&(e.key==="Enter"||e.key===",")&&pdSbSearch.trim()){patchProduct(pd.id,{tags:[...(pd.tags||[]),pdSbSearch.trim()]});setPdSbSearch("");e.preventDefault();}}}/>
-                            </div>
+                            </div>}
                             <div style={{overflowY:"auto",flex:1}}>
+                              {pdSbModal==="cert"&&(()=>{const CM={"Draft":{color:"#6b7280",bg:"rgba(107,114,128,.1)",border:"rgba(107,114,128,.25)",icon:"◐"},"In Review":{color:"#d97706",bg:"rgba(217,119,6,.12)",border:"rgba(217,119,6,.3)",icon:"⏳"},"Approved":{color:"#16a34a",bg:"rgba(22,163,74,.12)",border:"rgba(22,163,74,.3)",icon:"✓"},"Rejected":{color:"#e11d48",bg:"rgba(225,29,72,.12)",border:"rgba(225,29,72,.3)",icon:"✕"},"Deprecated":{color:"#7c3aed",bg:"rgba(124,58,237,.1)",border:"rgba(124,58,237,.25)",icon:"—"}};return Object.entries(CM).map(([c,m])=><button key={c} onClick={()=>{patchProduct(pd.id,{cert:c});setPdSbModal(null);}} style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"11px 16px",background:pd.cert===c?m.bg:"transparent",border:"none",cursor:"pointer",transition:"background .1s"}} onMouseEnter={e=>{if(pd.cert!==c)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(pd.cert!==c)e.currentTarget.style.background="transparent;"}}><span style={{fontSize:16,flexShrink:0}}>{m.icon}</span><span style={{flex:1,fontSize:13,fontWeight:600,color:m.color}}>{c}</span>{pd.cert===c&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={m.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})()}
                               {pdSbModal==="tags"&&(
                                 <div style={{padding:"10px 12px",display:"flex",flexWrap:"wrap",gap:6}}>
                                   {["PII","revenue","marketing","ML","behavioral","GDPR","operational","finance","platform","events"].filter(s=>!(pd.tags||[]).includes(s)&&(!pdSbSearch||s.toLowerCase().includes(pdSbSearch.toLowerCase()))).map(s=>(
@@ -17238,8 +17300,10 @@ const DataProductsView = ({onAsset, onNav}) => {
   const [dpAssetView,      setDpAssetView]      = useState("table");
   const [dpSearch,         setDpSearch]         = useState("");
   const [dpCustomProps,    setDpCustomProps]    = useState([]);
-  const [dpSbModal,        setDpSbModal]        = useState(null);
+  const [dpSbModal,        setDpSbModal]        = useState(null);   // "owners"|"experts"|"tags"|"cert"|null
   const [dpSbSearch,       setDpSbSearch]       = useState("");
+  const [dpGlTerms,        setDpGlTerms]        = useState([]);
+  const [dpGlInput,        setDpGlInput]        = useState("");
   const [dpNewCpKey,       setDpNewCpKey]       = useState("");
   const [dpNewCpVal,       setDpNewCpVal]       = useState("");
   const [dpContractState,  setDpContractState]  = useState({status:"Active",version:"1.2.0",validFrom:"2026-01-01",validUntil:"2026-12-31",schemaTerms:{expectedColumns:12,allowSchemaEvolution:true,breakingChangePolicy:"Notify 7 days prior"},freshnessTerms:{maxLatency:120,unit:"minutes",availability:99.5},qualityTerms:[{id:"qc1",rule:"Null rate on primary key",operator:"<",threshold:0.1,unit:"%",status:"passing"},{id:"qc2",rule:"Row count",operator:">",threshold:1000,unit:"rows",status:"passing"},{id:"qc3",rule:"Completeness score",operator:">=",threshold:95,unit:"%",status:"passing"},{id:"qc4",rule:"Duplicate rate",operator:"<",threshold:0.5,unit:"%",status:"failing"}],ownershipTerms:{owner:"maya.chen",responseTime:"24 hours",escalation:"data-platform-team@company.com"},consumerTerms:"Consumers agree to: (1) not redistribute raw data outside approved use cases, (2) report issues within 24 hours, (3) not use this product for purposes inconsistent with the domain's data governance policy."});
@@ -17406,6 +17470,11 @@ const DataProductsView = ({onAsset, onNav}) => {
                           </div>
                         ))}
                       </div>
+                      {/* CERTIFICATE */}
+                      <div style={{padding:16,borderBottom:`1px solid ${T.border}`}}>
+                        <SbLabel onEdit={()=>{setDpSbModal("cert");setDpSbSearch("");}}>Certificate</SbLabel>
+                        {(()=>{const CM={"Draft":{color:"#6b7280",bg:"rgba(107,114,128,.1)",border:"rgba(107,114,128,.25)",icon:"◐"},"In Review":{color:"#d97706",bg:"rgba(217,119,6,.12)",border:"rgba(217,119,6,.3)",icon:"⏳"},"Approved":{color:"#16a34a",bg:"rgba(22,163,74,.12)",border:"rgba(22,163,74,.3)",icon:"✓"},"Rejected":{color:"#e11d48",bg:"rgba(225,29,72,.12)",border:"rgba(225,29,72,.3)",icon:"✕"},"Deprecated":{color:"#7c3aed",bg:"rgba(124,58,237,.1)",border:"rgba(124,58,237,.25)",icon:"—"}};const cm=CM[pd.cert]||CM["Draft"];return <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px 4px 9px",borderRadius:5,background:cm.bg,borderTop:`1px solid ${cm.border}`,borderRight:`1px solid ${cm.border}`,borderBottom:`1px solid ${cm.border}`,borderLeft:`3px solid ${cm.color}`}}><span style={{fontSize:13}}>{cm.icon}</span><span style={{fontSize:12,color:cm.color,fontWeight:600}}>{pd.cert||"Draft"}</span></div>;})()}
+                      </div>
                       {/* OWNERS */}
                       <div style={{padding:16,borderBottom:`1px solid ${T.border}`}}>
                         <SbLabel onEdit={()=>{setDpSbModal("owners");setDpSbSearch("");}}>Owners</SbLabel>
@@ -17433,7 +17502,7 @@ const DataProductsView = ({onAsset, onNav}) => {
                         </div>
                       </div>
                       {/* TAGS */}
-                      <div style={{padding:16}}>
+                      <div style={{padding:16,borderBottom:`1px solid ${T.border}`}}>
                         <SbLabel onEdit={()=>{setDpSbModal("tags");setDpSbSearch("");}}>Tags</SbLabel>
                         <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                           {(pd.tags||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
@@ -17444,23 +17513,40 @@ const DataProductsView = ({onAsset, onNav}) => {
                           })}
                         </div>
                       </div>
+                      {/* BUSINESS GLOSSARY */}
+                      <div style={{padding:16}}>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                          <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Business Glossary</div>
+                          <button style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color="#8b5cf6";e.currentTarget.style.background="rgba(139,92,246,.08)";}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}} onClick={()=>{const inp=document.querySelector('[data-dp-gl-input]');if(inp)inp.focus();}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+                        </div>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
+                          {dpGlTerms.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
+                          {dpGlTerms.map((t,i)=><span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t}<button onClick={()=>setDpGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+                        </div>
+                        <input data-dp-gl-input value={dpGlInput} onChange={e=>setDpGlInput(e.target.value)}
+                          onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&dpGlInput.trim()){setDpGlTerms(prev=>[...prev,dpGlInput.trim()]);setDpGlInput("");}}}
+                          placeholder="Link glossary term…"
+                          style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box"}}
+                          onFocus={e=>e.target.style.borderColor="#8b5cf6"} onBlur={e=>e.target.style.borderColor=T.border}/>
+                      </div>
                       {/* Edit modal */}
                       {dpSbModal&&(
                         <>
                           <div onClick={()=>setDpSbModal(null)} style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,.4)"}}/>
                           <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:501,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:300,display:"flex",flexDirection:"column",maxHeight:"80vh",overflow:"hidden"}}>
                             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-                              <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Edit {dpSbModal==="owners"?"Owners":dpSbModal==="experts"?"Stewards":"Tags"}</span>
+                              <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Edit {dpSbModal==="cert"?"Certificate":dpSbModal==="owners"?"Owners":dpSbModal==="experts"?"Stewards":"Tags"}</span>
                               <button onClick={()=>setDpSbModal(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>{Ic.x(12)}</button>
                             </div>
-                            <div style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                            {dpSbModal!=="cert"&&<div style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
                               <input autoFocus value={dpSbSearch} onChange={e=>setDpSbSearch(e.target.value)}
                                 placeholder={dpSbModal==="tags"?"Add tag…":"Search users…"}
                                 style={{width:"100%",padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"}}
                                 onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}
                                 onKeyDown={e=>{if(dpSbModal==="tags"&&(e.key==="Enter"||e.key===",")&&dpSbSearch.trim()){patchDP(pd.id,{tags:[...(pd.tags||[]),dpSbSearch.trim()]});setDpSbSearch("");e.preventDefault();}}}/>
-                            </div>
+                            </div>}
                             <div style={{overflowY:"auto",flex:1}}>
+                              {dpSbModal==="cert"&&(()=>{const CM={"Draft":{color:"#6b7280",bg:"rgba(107,114,128,.1)",border:"rgba(107,114,128,.25)",icon:"◐"},"In Review":{color:"#d97706",bg:"rgba(217,119,6,.12)",border:"rgba(217,119,6,.3)",icon:"⏳"},"Approved":{color:"#16a34a",bg:"rgba(22,163,74,.12)",border:"rgba(22,163,74,.3)",icon:"✓"},"Rejected":{color:"#e11d48",bg:"rgba(225,29,72,.12)",border:"rgba(225,29,72,.3)",icon:"✕"},"Deprecated":{color:"#7c3aed",bg:"rgba(124,58,237,.1)",border:"rgba(124,58,237,.25)",icon:"—"}};return Object.entries(CM).map(([c,m])=><button key={c} onClick={()=>{patchDP(pd.id,{cert:c});setDpSbModal(null);}} style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"11px 16px",background:pd.cert===c?m.bg:"transparent",border:"none",cursor:"pointer",transition:"background .1s"}} onMouseEnter={e=>{if(pd.cert!==c)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(pd.cert!==c)e.currentTarget.style.background="transparent;"}}><span style={{fontSize:16,flexShrink:0}}>{m.icon}</span><span style={{flex:1,fontSize:13,fontWeight:600,color:m.color}}>{c}</span>{pd.cert===c&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={m.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})()}
                               {dpSbModal==="tags"&&(
                                 <div style={{padding:"10px 12px",display:"flex",flexWrap:"wrap",gap:6}}>
                                   {["PII","revenue","marketing","ML","behavioral","GDPR","operational","finance","platform","events"].filter(s=>!(pd.tags||[]).includes(s)&&(!dpSbSearch||s.toLowerCase().includes(dpSbSearch.toLowerCase()))).map(s=>(
@@ -26777,9 +26863,9 @@ const TagManagementView = ({onToast}) => {
                         }
                       </div>
 
-                      {/* OWNER */}
+                      {/* OWNERS */}
                       <div style={{padding:'16px',borderBottom:`1px solid ${T.border}`}}>
-                        <SideLabel ch="Owner" onEdit={()=>{setTagEditModal('owners');setTagModalSearch('');}}/>
+                        <SideLabel ch="Owners" onEdit={()=>{setTagEditModal('owners');setTagModalSearch('');}}/>
                         <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
                           {tagOwners.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No owners set</span>}
                           {(showAllTagOwners?tagOwners:tagOwners.slice(0,3)).map((o,i)=>(
@@ -26793,9 +26879,9 @@ const TagManagementView = ({onToast}) => {
                         </div>
                       </div>
 
-                      {/* STEWARD */}
+                      {/* STEWARDS */}
                       <div style={{padding:'16px',borderBottom:`1px solid ${T.border}`}}>
-                        <SideLabel ch="Steward" onEdit={()=>{setTagEditModal('stewards');setTagModalSearch('');}}/>
+                        <SideLabel ch="Stewards" onEdit={()=>{setTagEditModal('stewards');setTagModalSearch('');}}/>
                         <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
                           {tagStewards.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No stewards set</span>}
                           {(showAllTagStewards?tagStewards:tagStewards.slice(0,3)).map((s,i)=>(
