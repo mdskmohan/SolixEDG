@@ -26925,7 +26925,7 @@ const TagManagementView = ({onToast}) => {
                       {key:'overview',   label:'Overview'},
                       {key:'assets',     label:'Linked Assets', count:affectedAssets.length},
                       {key:'connectors', label:'Assignments', count:tagSyncRows.length},
-                      {key:'activity',   label:'Activity',   count:tagActivity.length},
+                      {key:'activity',   label:'Audit Logs',   count:tagActivity.length},
                     ].map(({key:t,label,count})=>(
                       <button key={t} onClick={()=>setDetailTab(t)}
                         style={{display:'flex',alignItems:'center',gap:5,padding:'9px 16px',background:'none',border:'none',
