@@ -5624,6 +5624,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   const [mainViolExpanded,     setMainViolExpanded]     = useState(null);
   const [topViolStatusF,       setTopViolStatusF]       = useState("All");
   const [topViolSevF,          setTopViolSevF]          = useState("All");
+  const [violSearch,           setViolSearch]           = useState("");
+  const [topViolSearch,        setTopViolSearch]        = useState("");
   const [createStep,     setCreateStep]     = useState(1);
   const [wizardRules,    setWizardRules]    = useState([]);
   const [wizardRuleTab,  setWizardRuleTab]  = useState("preset");
@@ -6349,11 +6351,6 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                             </button>
                             {dotMenuOpen===p.id&&(
                               <div style={{position:"absolute",top:"100%",right:0,width:148,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 8px 24px rgba(0,0,0,.18)",zIndex:300,overflow:"hidden"}}>
-                                <button onMouseDown={e=>{e.stopPropagation();setPolRenaming(p.id);setPolRenameDraft(p.name);setSelPolicyId(p.id);setDotMenuOpen(null);}}
-                                  style={{width:"100%",padding:"9px 12px",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",fontSize:12,color:T.text,display:"flex",alignItems:"center",gap:8,borderBottom:`1px solid ${T.border}`}}
-                                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 9h8M6 2v5M4 4l2-2 2 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg> Rename
-                                </button>
                                 <button onMouseDown={e=>{e.stopPropagation();setSelPolicyId(p.id);setPdTab("overview");openEditWizard(p);setDotMenuOpen(null);}}
                                   style={{width:"100%",padding:"9px 12px",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",fontSize:12,color:T.text,display:"flex",alignItems:"center",gap:8,borderBottom:`1px solid ${T.border}`}}
                                   onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
@@ -6401,7 +6398,6 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                     <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16}}>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:17,fontWeight:700,color:T.text,lineHeight:1.3,marginBottom:4}}>{p.name}</div>
-                        <div style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{p.fqn||"—"}</div>
                       </div>
                       <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
                         {p.severity&&(
@@ -6427,7 +6423,6 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                           {detailDotOpen&&(
                             <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,width:152,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 8px 28px rgba(0,0,0,.2)",zIndex:400,overflow:"hidden"}}>
                               {[
-                                {label:"Rename",   icon:<svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 9h8M6 2v5M4 4l2-2 2 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>, action:()=>{setPolRenaming(p.id);setPolRenameDraft(p.name);setDetailDotOpen(false);}},
                                 {label:"Edit",     icon:<svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>, action:()=>{openEditWizard(p);setDetailDotOpen(false);}},
                                 {label:"Delete",   icon:<svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 5l.5 5M8 5l-.5 5M3 3l.5 7h5L9 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>, danger:true, action:()=>{setDeleteConfPol(p);setDetailDotOpen(false);}},
                               ].map((item,i,arr)=>(
@@ -6683,6 +6678,18 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                         {/* Right sidebar — exact Tags/Glossary pattern */}
                         <div style={{width:272,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto"}}>
 
+                          <SB ch="Domain" onEdit={()=>setPolEditModal("domains")}>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                              {(p.scope?.domains||[]).length===0
+                                ? <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No domain</span>
+                                : (p.scope.domains).map(d=>(
+                                    <div key={d} style={{display:"inline-flex",alignItems:"center",padding:"4px 10px 4px 9px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
+                                      <span style={{fontSize:12,color:T.accent,fontWeight:600}}>{d}</span>
+                                    </div>
+                                  ))}
+                            </div>
+                          </SB>
+
                           <SB ch="Owners" onEdit={()=>setPolEditModal("owner")}>
                             {p.owner
                               ? ownerChip(p.owner)
@@ -6698,30 +6705,18 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                             </div>
                           </SB>
 
-                          <SB ch="Category" onEdit={()=>setPolEditModal("category")}>
-                            <div style={{display:"inline-flex",alignItems:"center",padding:"4px 12px 4px 9px",borderRadius:5,background:`${catColor(p.category)}0f`,borderTop:`1px solid ${catColor(p.category)}20`,borderRight:`1px solid ${catColor(p.category)}20`,borderBottom:`1px solid ${catColor(p.category)}20`,borderLeft:`3px solid ${catColor(p.category)}`}}>
-                              <span style={{fontSize:12,color:catColor(p.category),fontWeight:600}}>{p.category}</span>
-                            </div>
-                          </SB>
-
-                          <SB ch="Domains" onEdit={()=>setPolEditModal("domains")}>
-                            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                              {(p.scope?.domains||[]).length===0
-                                ? <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No domains</span>
-                                : (p.scope.domains).map(d=>(
-                                    <div key={d} style={{display:"inline-flex",alignItems:"center",padding:"4px 10px 4px 9px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
-                                      <span style={{fontSize:12,color:T.accent,fontWeight:600}}>{d}</span>
-                                    </div>
-                                  ))}
-                            </div>
-                          </SB>
-
                           <SB ch="Tags" onEdit={()=>setPolEditModal("tags")}>
                             <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                               {(p.tags||[]).length===0
                                 ? <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags set</span>
                                 : (()=>{const TAG_C={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},PHI:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},marketing:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},ML:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},behavioral:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},GDPR:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"},sensitive:{bg:"rgba(239,68,68,.08)",color:"#ef4444",border:"rgba(239,68,68,.2)"},regulated:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},financial:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},internal:{bg:T.bgElevated,color:T.textSub,border:T.border},"customer-data":{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},healthcare:{bg:"rgba(239,68,68,.08)",color:"#ef4444",border:"rgba(239,68,68,.2)"},confidential:{bg:"rgba(239,68,68,.08)",color:"#ef4444",border:"rgba(239,68,68,.2)"},public:{bg:"rgba(22,163,74,.08)",color:"#16a34a",border:"rgba(22,163,74,.2)"}};return (p.tags||[]).slice(0,3).map(t=>{const c=TAG_C[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};return <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}<button onClick={()=>patchPol({tags:(p.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>;});})()}
                               {(p.tags||[]).length>3&&<span title={(p.tags||[]).slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{(p.tags||[]).length-3}</span>}
+                            </div>
+                          </SB>
+
+                          <SB ch="Category" onEdit={()=>setPolEditModal("category")}>
+                            <div style={{display:"inline-flex",alignItems:"center",padding:"4px 12px 4px 9px",borderRadius:5,background:`${catColor(p.category)}0f`,borderTop:`1px solid ${catColor(p.category)}20`,borderRight:`1px solid ${catColor(p.category)}20`,borderBottom:`1px solid ${catColor(p.category)}20`,borderLeft:`3px solid ${catColor(p.category)}`}}>
+                              <span style={{fontSize:12,color:catColor(p.category),fontWeight:600}}>{p.category}</span>
                             </div>
                           </SB>
 
@@ -6975,7 +6970,9 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       const filtered = allPolViols.filter(v=>{
                         const matchStat = violStatusFilter==="All"||(violStatusFilter==="Dismissed"?(v.status==="Dismissed"||v.status==="Waived"):v.status===violStatusFilter);
                         const matchSev  = violSevFilter==="All"||v.severity===violSevFilter;
-                        return matchStat && matchSev;
+                        const q = violSearch.toLowerCase();
+                        const matchSearch = !q||(v.assetName||"").toLowerCase().includes(q)||(v.rule||"").toLowerCase().includes(q)||(v.domain||"").toLowerCase().includes(q);
+                        return matchStat && matchSev && matchSearch;
                       });
                       const openCount      = allPolViols.filter(v=>v.status==="Open").length;
                       const inProgCount    = allPolViols.filter(v=>v.status==="In Progress"||v.status==="In Review").length;
@@ -7015,23 +7012,37 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
 
                           {/* ── Filter bar ── */}
                           <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
-                            <div style={{display:"flex",gap:4,alignItems:"center"}}>
-                              <span style={{fontSize:10.5,color:T.textMuted,fontWeight:600}}>Status:</span>
-                              {STATUSES.map(s=>(
-                                <button key={s} onClick={()=>setViolStatusFilter(s)}
-                                  style={{fontSize:10.5,padding:"3px 9px",borderRadius:99,border:`1px solid ${violStatusFilter===s?T.accent:T.border}`,background:violStatusFilter===s?T.accentDim:"transparent",color:violStatusFilter===s?T.accent:T.textSub,cursor:"pointer",fontWeight:violStatusFilter===s?700:400,transition:"all .1s"}}>
-                                  {s==="In Progress"?"In Review":s}
-                                </button>
-                              ))}
+                            {/* Search */}
+                            <div style={{position:"relative",flex:"1 1 180px",minWidth:160,maxWidth:280}}>
+                              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5"/><path d="M10 10l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                              <input value={violSearch} onChange={e=>setViolSearch(e.target.value)} placeholder="Search asset, rule…"
+                                style={{width:"100%",paddingLeft:28,paddingRight:violSearch?26:10,paddingTop:5,paddingBottom:5,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+                                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                              {violSearch&&<button onClick={()=>setViolSearch("")} style={{position:"absolute",right:7,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex"}}>{Ic.x(10)}</button>}
                             </div>
-                            <div style={{display:"flex",gap:4,alignItems:"center",marginLeft:8}}>
-                              <span style={{fontSize:10.5,color:T.textMuted,fontWeight:600}}>Severity:</span>
-                              {SEVS.map(s=>(
-                                <button key={s} onClick={()=>setViolSevFilter(s)}
-                                  style={{fontSize:10.5,padding:"3px 9px",borderRadius:99,border:`1px solid ${violSevFilter===s?T.accent:T.border}`,background:violSevFilter===s?T.accentDim:"transparent",color:violSevFilter===s?T.accent:T.textSub,cursor:"pointer",fontWeight:violSevFilter===s?700:400,transition:"all .1s"}}>
-                                  {s}
-                                </button>
-                              ))}
+                            {/* Status dropdown */}
+                            <div style={{display:"flex",alignItems:"center",gap:5}}>
+                              <span style={{fontSize:10.5,color:T.textMuted,fontWeight:600,whiteSpace:"nowrap"}}>Status:</span>
+                              <select value={violStatusFilter} onChange={e=>setViolStatusFilter(e.target.value)}
+                                style={{fontSize:11.5,padding:"4px 8px",borderRadius:7,border:`1px solid ${violStatusFilter!=="All"?T.accent:T.border}`,background:violStatusFilter!=="All"?T.accentDim:T.bgElevated,color:violStatusFilter!=="All"?T.accent:T.textSub,cursor:"pointer",outline:"none",fontFamily:"inherit"}}>
+                                <option value="All">All</option>
+                                <option value="Open">Open</option>
+                                <option value="In Progress">In Review</option>
+                                <option value="Resolved">Resolved</option>
+                                <option value="Dismissed">Dismissed</option>
+                              </select>
+                            </div>
+                            {/* Severity dropdown */}
+                            <div style={{display:"flex",alignItems:"center",gap:5}}>
+                              <span style={{fontSize:10.5,color:T.textMuted,fontWeight:600,whiteSpace:"nowrap"}}>Severity:</span>
+                              <select value={violSevFilter} onChange={e=>setViolSevFilter(e.target.value)}
+                                style={{fontSize:11.5,padding:"4px 8px",borderRadius:7,border:`1px solid ${violSevFilter!=="All"?T.accent:T.border}`,background:violSevFilter!=="All"?T.accentDim:T.bgElevated,color:violSevFilter!=="All"?T.accent:T.textSub,cursor:"pointer",outline:"none",fontFamily:"inherit"}}>
+                                <option value="All">All</option>
+                                <option value="Critical">Critical</option>
+                                <option value="High">High</option>
+                                <option value="Medium">Medium</option>
+                                <option value="Low">Low</option>
+                              </select>
                             </div>
                           </div>
 
@@ -7472,7 +7483,9 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
           const displayViols = violations.filter(v=>{
             const matchStat = topViolStatusF==="All"||(topViolStatusF==="Dismissed"?(v.status==="Dismissed"||v.status==="Waived"):(topViolStatusF==="In Progress"?(v.status==="In Progress"||v.status==="In Review"):v.status===topViolStatusF));
             const matchSev  = topViolSevF==="All"||v.severity===topViolSevF;
-            return matchStat&&matchSev;
+            const q = topViolSearch.toLowerCase();
+            const matchSearch = !q||(v.assetName||"").toLowerCase().includes(q)||(v.rule||"").toLowerCase().includes(q)||(v.domain||"").toLowerCase().includes(q)||(v.policyId||"").toLowerCase().includes(q);
+            return matchStat&&matchSev&&matchSearch;
           });
           const openCnt      = violations.filter(v=>v.status==="Open").length;
           const inRevCnt     = violations.filter(v=>v.status==="In Progress"||v.status==="In Review").length;
@@ -7511,37 +7524,42 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                 <div style={{marginLeft:"auto",alignSelf:"center",fontSize:11,color:T.textMuted}}>{violations.length} total</div>
               </div>
 
-              {/* ── Filter pills ── */}
-              <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
-                <div style={{display:"flex",gap:4,alignItems:"center"}}>
-                  <span style={{fontSize:10.5,color:T.textMuted,fontWeight:600,marginRight:2}}>Status:</span>
-                  {["All","Open","In Progress","Resolved","Dismissed"].map(s=>{
-                    const active=topViolStatusF===s;
-                    const sc=s==="All"?T.accent:MV_STATUS_CFG[s]?.color||T.textMuted;
-                    return (
-                      <button key={s} onClick={()=>setTopViolStatusF(s)}
-                        style={{fontSize:10.5,padding:"3px 9px",borderRadius:99,border:`1px solid ${active?sc:T.border}`,background:active?`${sc}18`:"transparent",color:active?sc:T.textSub,cursor:"pointer",fontWeight:active?700:400,transition:"all .1s"}}>
-                        {s==="In Progress"?"In Review":s}
-                        <span style={{fontSize:9.5,opacity:.7,marginLeft:3}}>{s==="All"?violations.length:s==="Dismissed"?(violations.filter(v=>v.status==="Dismissed"||v.status==="Waived").length):(s==="In Progress"?violations.filter(v=>v.status==="In Progress"||v.status==="In Review").length:violations.filter(v=>v.status===s).length)}</span>
-                      </button>
-                    );
-                  })}
+              {/* ── Filter bar ── */}
+              <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
+                {/* Search */}
+                <div style={{position:"relative",flex:"1 1 200px",minWidth:180,maxWidth:320}}>
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5"/><path d="M10 10l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                  <input value={topViolSearch} onChange={e=>setTopViolSearch(e.target.value)} placeholder="Search asset, rule, domain…"
+                    style={{width:"100%",paddingLeft:28,paddingRight:topViolSearch?26:10,paddingTop:5,paddingBottom:5,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                  {topViolSearch&&<button onClick={()=>setTopViolSearch("")} style={{position:"absolute",right:7,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:0,display:"flex"}}>{Ic.x(10)}</button>}
                 </div>
-                <div style={{display:"flex",gap:4,alignItems:"center",marginLeft:12}}>
-                  <span style={{fontSize:10.5,color:T.textMuted,fontWeight:600,marginRight:2}}>Severity:</span>
-                  {["All","Critical","High","Medium","Low"].map(s=>{
-                    const active=topViolSevF===s;
-                    const sc=SEV_COLOR[s]||T.textSub;
-                    return (
-                      <button key={s} onClick={()=>setTopViolSevF(s)}
-                        style={{fontSize:10.5,padding:"3px 9px",borderRadius:99,border:`1px solid ${active?(s==="All"?T.accent:sc):T.border}`,background:active?(s==="All"?T.accentDim:SEV_BG[s]||T.bgElevated):"transparent",color:active?(s==="All"?T.accent:sc):T.textSub,cursor:"pointer",fontWeight:active?700:400,transition:"all .1s"}}>
-                        {s}
-                      </button>
-                    );
-                  })}
+                {/* Status dropdown */}
+                <div style={{display:"flex",alignItems:"center",gap:5}}>
+                  <span style={{fontSize:10.5,color:T.textMuted,fontWeight:600,whiteSpace:"nowrap"}}>Status:</span>
+                  <select value={topViolStatusF} onChange={e=>setTopViolStatusF(e.target.value)}
+                    style={{fontSize:11.5,padding:"4px 8px",borderRadius:7,border:`1px solid ${topViolStatusF!=="All"?T.accent:T.border}`,background:topViolStatusF!=="All"?T.accentDim:T.bgElevated,color:topViolStatusF!=="All"?T.accent:T.textSub,cursor:"pointer",outline:"none",fontFamily:"inherit"}}>
+                    <option value="All">All</option>
+                    <option value="Open">Open</option>
+                    <option value="In Progress">In Review</option>
+                    <option value="Resolved">Resolved</option>
+                    <option value="Dismissed">Dismissed</option>
+                  </select>
                 </div>
-                {(topViolStatusF!=="All"||topViolSevF!=="All")&&(
-                  <button onClick={()=>{setTopViolStatusF("All");setTopViolSevF("All");}} style={{fontSize:11,color:T.textMuted,background:"none",border:"none",cursor:"pointer",marginLeft:4,fontWeight:500}}>Clear</button>
+                {/* Severity dropdown */}
+                <div style={{display:"flex",alignItems:"center",gap:5}}>
+                  <span style={{fontSize:10.5,color:T.textMuted,fontWeight:600,whiteSpace:"nowrap"}}>Severity:</span>
+                  <select value={topViolSevF} onChange={e=>setTopViolSevF(e.target.value)}
+                    style={{fontSize:11.5,padding:"4px 8px",borderRadius:7,border:`1px solid ${topViolSevF!=="All"?T.accent:T.border}`,background:topViolSevF!=="All"?T.accentDim:T.bgElevated,color:topViolSevF!=="All"?T.accent:T.textSub,cursor:"pointer",outline:"none",fontFamily:"inherit"}}>
+                    <option value="All">All</option>
+                    <option value="Critical">Critical</option>
+                    <option value="High">High</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Low">Low</option>
+                  </select>
+                </div>
+                {(topViolStatusF!=="All"||topViolSevF!=="All"||topViolSearch)&&(
+                  <button onClick={()=>{setTopViolStatusF("All");setTopViolSevF("All");setTopViolSearch("");}} style={{fontSize:11,color:T.textMuted,background:"none",border:"none",cursor:"pointer",fontWeight:500}}>Clear</button>
                 )}
               </div>
 
@@ -8200,16 +8218,15 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                     <div style={{display:"flex",flexDirection:"column",gap:20}}>
                       {secHead("Policy Scope","Define which sources and asset types this policy governs. Specific tables and columns are selected per rule in the next step.")}
 
-                      {/* ── Domain (required) ── */}
+                      {/* ── Domain (required, single-select) ── */}
                       <div>
-                        <CatFieldDropdown
-                          label={<>Domain <span style={{color:T.rose}}>*</span></>}
-                          placeholder="Search and select domains…"
-                          options={ALL_DOMAINS}
-                          selected={scopeDoms}
-                          onChange={v=>setNewPol(p=>({...p,scope:{...p.scope,domains:v}}))}
-                        />
-                        {scopeDoms.length===0&&<div style={{fontSize:10.5,color:T.rose,marginTop:4}}>Select at least one domain to continue.</div>}
+                        <label style={lbl}>Domain <span style={{color:T.rose}}>*</span></label>
+                        <select value={scopeDoms[0]||""} onChange={e=>setNewPol(p=>({...p,scope:{...p.scope,domains:e.target.value?[e.target.value]:[]}}))}
+                          style={{...inp,cursor:"pointer",appearance:"auto"}}>
+                          <option value="">Select a domain…</option>
+                          {ALL_DOMAINS.map(d=><option key={d} value={d}>{d}</option>)}
+                        </select>
+                        {scopeDoms.length===0&&<div style={{fontSize:10.5,color:T.rose,marginTop:4}}>Select a domain to continue.</div>}
                       </div>
 
                       {/* ── Source (required) ── */}
@@ -9343,22 +9360,6 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
         </CenteredModal>
       )}
 
-      {/* Rename modal */}
-      {polRenaming&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}} onClick={()=>setPolRenaming(null)}>
-          <div style={{background:T.bgSurface,borderRadius:14,padding:"24px 28px",width:380,boxShadow:"0 20px 60px rgba(0,0,0,.35)",border:`1px solid ${T.border}`}} onClick={e=>e.stopPropagation()}>
-            <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:6}}>Rename Policy</div>
-            <div style={{fontSize:12.5,color:T.textMuted,marginBottom:18}}>Enter a new name for this policy.</div>
-            <input autoFocus type="text" value={polRenameDraft} onChange={e=>setPolRenameDraft(e.target.value)}
-              onKeyDown={e=>{if(e.key==="Enter")saveRename();if(e.key==="Escape")setPolRenaming(null);}}
-              style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box",marginBottom:18}}/>
-            <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
-              <button onClick={()=>setPolRenaming(null)} style={{padding:"7px 16px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
-              <button onClick={saveRename} disabled={!polRenameDraft.trim()} style={{padding:"7px 16px",borderRadius:7,background:polRenameDraft.trim()?T.accent:T.bgElevated,border:"none",color:polRenameDraft.trim()?"#fff":T.textMuted,fontSize:12.5,fontWeight:600,cursor:polRenameDraft.trim()?"pointer":"not-allowed",fontFamily:"inherit"}}>Rename</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Link Policy to Regulation Requirement — multi-select modal */}
       {/* New / Edit Policy Category slide-in panels */}
