@@ -4704,88 +4704,25 @@ const QualityView = () => {
                       </tr>
 
                       {/* ── Expanded incident detail ── */}
-                      {isExp&&(
+                      {isExp&&(inc.status==="Open"||inc.status==="Resolved"||inc.status==="Dismissed")&&(
                         <tr style={{borderBottom:i<filteredInc.length-1?`1px solid ${T.border}`:"none"}}>
                           <td colSpan={6} style={{padding:0}}>
-                            <div style={{background:T.bgElevated,borderTop:`1px solid ${T.border}`}}>
-                              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0,borderBottom:`1px solid ${T.border}`}}>
-
-                                {/* LEFT: Description + resolution */}
-                                <div style={{padding:"18px 20px",borderRight:`1px solid ${T.border}`}}>
-                                  <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:8,textTransform:"uppercase"}}>Description</div>
-                                  <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.7,marginBottom:16}}>{inc.desc}</div>
-
-                                  {isResolved&&inc.resolutionReason&&(
-                                    <div style={{marginBottom:16}}>
-                                      <div style={{fontSize:10.5,fontWeight:700,color:"#16a34a",letterSpacing:.5,marginBottom:8,textTransform:"uppercase"}}>Resolution</div>
-                                      <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6,padding:"10px 12px",background:"#16a34a08",borderRadius:8,border:"1px solid #16a34a20"}}>{inc.resolutionReason}</div>
-                                    </div>
-                                  )}
-
-                                  {inc.tcId&&(
-                                    <button
-                                      onClick={e=>{e.stopPropagation();const tc=testCases.find(t=>t.id===inc.tcId);if(tc){setTab("testcases");setTcDetail(tc);setExpandedInc(null);}}}
-                                      style={{fontSize:12,padding:"7px 14px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}22`,color:T.accent,cursor:"pointer",fontWeight:500,display:"inline-block"}}
-                                    >View linked test case →</button>
-                                  )}
-                                </div>
-
-                                {/* RIGHT: Activity timeline */}
-                                <div style={{padding:"18px 20px"}}>
-                                  <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:12,textTransform:"uppercase"}}>Activity Timeline</div>
-                                  <div style={{display:"flex",flexDirection:"column",gap:0}}>
-                                    {(inc.timeline||[]).map((ev,ti,tarr)=>{
-                                      const isLast=ti===tarr.length-1;
-                                      const evColor=ev.action.startsWith("Incident")?T.rose:ev.action.startsWith("Acknowledged")?T.amber:ev.action.startsWith("Assigned")?T.accent:ev.action.startsWith("Resolved")?"#16a34a":T.textMuted;
-                                      return (
-                                        <div key={ti} style={{display:"flex",gap:10}}>
-                                          <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0}}>
-                                            <div style={{width:8,height:8,borderRadius:"50%",background:evColor,border:`2px solid ${evColor}`,marginTop:3,flexShrink:0}}/>
-                                            {!isLast&&<div style={{width:1.5,flex:1,background:T.border,marginTop:2,marginBottom:2,minHeight:14}}/>}
-                                          </div>
-                                          <div style={{paddingBottom:isLast?0:12,flex:1}}>
-                                            <div style={{fontSize:12.5,fontWeight:500,color:T.text,marginBottom:1}}>{ev.action}</div>
-                                            <div style={{fontSize:11,color:T.textMuted}}>by <strong style={{color:T.textSub,fontWeight:500}}>{ev.by}</strong> · {ev.at}</div>
-                                            {ev.note&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:3,fontStyle:"italic",lineHeight:1.5}}>"{ev.note}"</div>}
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
+                            <div style={{background:T.bgElevated,borderTop:`1px solid ${T.border}`,display:"grid",gridTemplateColumns:"1fr 1fr",gap:0}}>
+                              {/* Root Cause */}
+                              <div style={{padding:"16px 20px",borderRight:`1px solid ${T.border}`}}>
+                                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:.6,marginBottom:8,textTransform:"uppercase"}}>Root Cause</div>
+                                {inc.desc
+                                  ? <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.7}}>{inc.desc}</div>
+                                  : <div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>Not yet provided.</div>}
                               </div>
-
-                              {/* Comments */}
-                              <div style={{padding:"16px 20px"}} onClick={e=>e.stopPropagation()}>
-                                <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:10,textTransform:"uppercase"}}>Comments ({(inc.comments||[]).length})</div>
-                                {(inc.comments||[]).length>0&&(
-                                  <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:12}}>
-                                    {(inc.comments||[]).map((c,ci)=>(
-                                      <div key={ci} style={{padding:"10px 14px",background:T.bgSurface,borderRadius:9,border:`1px solid ${T.border}`}}>
-                                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
-                                          <span style={{fontSize:11.5,fontWeight:600,color:T.text}}>{c.by}</span>
-                                          <span style={{fontSize:11,color:T.textMuted}}>{c.at}</span>
-                                        </div>
-                                        <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6}}>{c.text}</div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                                <div style={{display:"flex",gap:8}}>
-                                  <input
-                                    value={incCommentText[inc.id]||""}
-                                    onChange={e=>setIncCommentText(prev=>({...prev,[inc.id]:e.target.value}))}
-                                    onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();addIncComment(inc.id);}}}
-                                    placeholder="Add a comment…"
-                                    style={{flex:1,padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",transition:"border-color .15s"}}
-                                    onFocus={e=>e.target.style.borderColor=T.accent}
-                                    onBlur={e=>e.target.style.borderColor=T.border}
-                                  />
-                                  <button
-                                    onClick={()=>addIncComment(inc.id)}
-                                    style={{padding:"9px 16px",borderRadius:9,background:T.accentDim,border:`1px solid ${T.accent}25`,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}
-                                  >Post</button>
+                              {/* Description (resolution/dismissal note) */}
+                              <div style={{padding:"16px 20px"}}>
+                                <div style={{fontSize:10,fontWeight:700,color:inc.status==="Resolved"?"#16a34a":inc.status==="Dismissed"?T.textMuted:T.textMuted,letterSpacing:.6,marginBottom:8,textTransform:"uppercase"}}>
+                                  {inc.status==="Resolved"?"Resolution Note":inc.status==="Dismissed"?"Dismissal Note":"Description"}
                                 </div>
+                                {(inc.status==="Resolved"||inc.status==="Dismissed")&&inc.resolutionReason
+                                  ? <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.7,padding:"10px 12px",background:inc.status==="Resolved"?"#16a34a08":T.bgSurface,borderRadius:8,border:`1px solid ${inc.status==="Resolved"?"#16a34a22":T.border}`}}>{inc.resolutionReason}</div>
+                                  : <div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>—</div>}
                               </div>
                             </div>
                           </td>
@@ -4815,11 +4752,12 @@ const QualityView = () => {
         const sCfg = INC_STATUS_CFG[inc.status]||{label:inc.status,color:T.textMuted,bg:T.bgElevated};
         const nextStates = INC_NEXT_STATES[inc.status]||[];
         const terminalTarget = incActionModal.newStatus==="Resolved"||incActionModal.newStatus==="Dismissed";
-        const canSubmit = incActionModal.newStatus && (!terminalTarget || incActionModal.desc.trim().length>0);
+        const noDescNeeded   = incActionModal.newStatus==="In Progress";
+        const canSubmit = incActionModal.newStatus && (noDescNeeded || incActionModal.desc.trim().length>0);
         const submitAction = () => {
           if(!canSubmit) return;
           const ns = incActionModal.newStatus;
-          const timeline = [...(inc.timeline||[]),{action:ns==="In Progress"?"Moved to In Review":ns,by:"You",at:"Just now",note:incActionModal.desc.trim()||undefined}];
+          const timeline = [...(inc.timeline||[]),{action:ns==="In Progress"?"Moved to In Review":ns==="Open"?"Re-opened":ns,by:"You",at:"Just now",note:incActionModal.desc.trim()||undefined}];
           setIncidents(prev=>prev.map(i=>i.id===inc.id?{...i,status:ns,resolutionReason:terminalTarget?incActionModal.desc.trim():i.resolutionReason,timeline}:i));
           setIncStatusF("all");
           setIncActionModal(null);
@@ -4854,17 +4792,18 @@ const QualityView = () => {
                     })}
                   </div>
                 </div>
-                <div>
-                  <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:6}}>
-                    Description {terminalTarget&&<span style={{color:T.rose,fontWeight:700}}>*</span>}
-                    {!terminalTarget&&<span style={{fontWeight:400,textTransform:"none",letterSpacing:0,marginLeft:4}}>(optional)</span>}
+                {!noDescNeeded&&(
+                  <div>
+                    <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:6}}>
+                      Description <span style={{color:T.rose,fontWeight:700}}>*</span>
+                    </div>
+                    <textarea value={incActionModal.desc} onChange={e=>setIncActionModal(p=>({...p,desc:e.target.value}))} rows={3}
+                      placeholder={terminalTarget?"Describe the outcome — required to close this incident…":"Provide context for this status change…"}
+                      style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${incActionModal.desc.trim()?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12.5,lineHeight:1.6,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box",transition:"border-color .15s"}}
+                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=incActionModal.desc.trim()?T.accent:T.border}/>
+                    {!incActionModal.desc.trim()&&<div style={{fontSize:11,color:T.rose,marginTop:4}}>Required to proceed.</div>}
                   </div>
-                  <textarea value={incActionModal.desc} onChange={e=>setIncActionModal(p=>({...p,desc:e.target.value}))} rows={3}
-                    placeholder={terminalTarget?"Describe the outcome — this is required to close the incident…":"Add context or notes…"}
-                    style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${incActionModal.desc.trim()&&terminalTarget?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12.5,lineHeight:1.6,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box",transition:"border-color .15s"}}
-                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=incActionModal.desc.trim()&&terminalTarget?T.accent:T.border}/>
-                  {terminalTarget&&!incActionModal.desc.trim()&&<div style={{fontSize:11,color:T.rose,marginTop:4}}>Required before closing this incident.</div>}
-                </div>
+                )}
               </div>
               <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8}}>
                 <button onClick={()=>setIncActionModal(null)} style={{padding:"8px 18px",borderRadius:8,background:"none",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>Cancel</button>
@@ -7212,14 +7151,22 @@ const PolicyManagerView = ({onToast, onNav}) => {
                             <div style={{textAlign:"center",padding:"32px 20px",color:T.textMuted,fontSize:12}}>No violations match the current filters.</div>
                           )}
 
-                          {/* ── Violation rows ── */}
-                          <div style={{display:"flex",flexDirection:"column",gap:7}}>
-                            {filtered.map(v=>{
+                          {/* ── Violation table ── */}
+                          <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                            <table style={{width:"100%",borderCollapse:"collapse"}}>
+                              <thead><tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>{["Asset","Rule","Severity","Status","Detected"].map(h=>(<th key={h} style={{padding:"8px 14px",fontSize:10,fontWeight:700,color:T.textMuted,textAlign:"left",letterSpacing:.6,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>))}</tr></thead>
+                              <tbody>
+                            {filtered.map((v,vi)=>{
                               const ss    = statusStyle(v.status);
                               const isExp = violExpanded===v.id;
-                              const sevColor = SEV_COLOR[v.severity]||T.textMuted;
+                              const isClosed = v.status==="Resolved"||v.status==="Dismissed"||v.status==="Waived";
                               return (
-                                <div key={v.id} style={{borderRadius:10,border:`1.5px solid ${v.status==="Open"?`${SEV_COLOR[v.severity]||T.rose}35`:v.status==="Resolved"?"#16a34a35":T.border}`,background:v.status==="Resolved"?"#16a34a06":T.bgSurface,overflow:"hidden",transition:"all .15s",opacity:(v.status==="Dismissed"||v.status==="Waived")?0.55:1}}>
+                                <React.Fragment key={v.id}><tr onClick={()=>setViolExpanded(isExp?null:v.id)} style={{borderBottom:(!isExp&&vi<filtered.length-1)?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"background .1s",background:v.status==="Resolved"?"#16a34a07":isExp?`${T.accent}06`:"transparent",boxShadow:v.status==="Resolved"?"inset 3px 0 0 #16a34a":(v.status==="Dismissed"||v.status==="Waived")?`inset 3px 0 0 ${T.textMuted}`:"none",opacity:isClosed&&v.status!=="Resolved"?0.6:1}} onMouseEnter={e=>e.currentTarget.style.background=v.status==="Resolved"?"#16a34a12":isExp?`${T.accent}06`:T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=v.status==="Resolved"?"#16a34a07":isExp?`${T.accent}06`:"transparent"}><td style={{padding:"10px 14px",maxWidth:180}}><div style={{fontSize:12.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.assetName}</div><div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{v.assetType} · {v.domain}</div></td><td style={{padding:"10px 14px",maxWidth:180}}><div style={{fontSize:11.5,color:T.textSub,fontStyle:"italic",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>"{v.rule}"</div></td><td style={{padding:"10px 14px"}}><span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:5,background:SEV_BG[v.severity],color:SEV_COLOR[v.severity]||T.textMuted,textTransform:"uppercase",letterSpacing:"0.05em"}}>{v.severity}</span></td><td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}><button onClick={()=>openViolActionModal(v.id)} style={{fontSize:10.5,fontWeight:700,padding:"3px 10px",borderRadius:6,background:ss.bg,color:ss.color,border:`1.5px solid ${ss.color}45`,whiteSpace:"nowrap",cursor:"pointer",transition:"all .12s",display:"inline-flex",alignItems:"center",gap:5}} onMouseEnter={e=>{e.currentTarget.style.background=`${ss.color}20`;e.currentTarget.style.borderColor=ss.color;}} onMouseLeave={e=>{e.currentTarget.style.background=ss.bg;e.currentTarget.style.borderColor=`${ss.color}45`;}}>{VIOL_STATUS_CFG[v.status]?.label||v.status}<svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{opacity:.7}}><path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></button></td><td style={{padding:"10px 14px",fontSize:11,color:T.textMuted,whiteSpace:"nowrap"}}>{v.detectedAt}</td></tr>
+                                {isExp&&(v.status==="Open"||v.status==="Resolved"||v.status==="Dismissed"||v.status==="Waived")&&(<tr style={{borderBottom:vi<filtered.length-1?`1px solid ${T.border}`:"none"}}><td colSpan={5} style={{padding:0}}><div style={{background:T.bgElevated,borderTop:`1px solid ${T.border}`,display:"grid",gridTemplateColumns:"1fr 1fr",gap:0}}><div style={{padding:"14px 18px",borderRight:`1px solid ${T.border}`}}><div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:.6,marginBottom:7,textTransform:"uppercase"}}>Root Cause</div>{v.description?<div style={{fontSize:12,color:T.textSub,lineHeight:1.7}}>{v.description}</div>:<div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>Not yet provided.</div>}</div><div style={{padding:"14px 18px"}}><div style={{fontSize:10,fontWeight:700,color:v.status==="Resolved"?"#16a34a":T.textMuted,letterSpacing:.6,marginBottom:7,textTransform:"uppercase"}}>{v.status==="Resolved"?"Resolution Note":v.status==="Dismissed"||v.status==="Waived"?"Dismissal Note":"Description"}</div>{isClosed&&v.resolutionNote?<div style={{fontSize:12,color:T.textSub,lineHeight:1.7,padding:"9px 12px",background:v.status==="Resolved"?"#16a34a08":T.bgSurface,borderRadius:8,border:`1px solid ${v.status==="Resolved"?"#16a34a22":T.border}`}}>{v.resolutionNote}</div>:<div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>—</div>}</div></div></td></tr>)}
+                                </React.Fragment>
+                              );
+                            })}
+                              </tbody></table>
                                   {/* Left severity stripe + main row */}
                                   <div style={{display:"flex",cursor:"pointer"}} onClick={()=>setViolExpanded(isExp?null:v.id)}>
                                     {/* Severity stripe */}
@@ -7245,31 +7192,6 @@ const PolicyManagerView = ({onToast, onNav}) => {
                                           {/* Expand chevron */}
                                           <svg width="11" height="11" viewBox="0 0 12 12" fill="none" style={{color:T.textMuted,transition:"transform .15s",transform:isExp?"rotate(180deg)":"rotate(0deg)"}}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                                         </div>
-                                      </div>
-                                      {/* Rule triggered */}
-                                      <div style={{marginTop:5,display:"flex",alignItems:"center",gap:5}}>
-                                        <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M1 6h10M8 3l3 3-3 3" stroke={T.textMuted} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                                        <span style={{fontSize:11,color:T.textMuted}}>Rule: </span>
-                                        <span style={{fontSize:11,fontWeight:600,color:T.textSub,fontStyle:"italic"}}>"{v.rule}"</span>
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  {/* Expanded detail */}
-                                  {isExp&&(
-                                    <div style={{borderTop:`1px solid ${T.border}`,background:T.bgElevated,padding:"14px 18px 14px 22px"}}>
-                                      <div style={{fontSize:12,color:T.textSub,lineHeight:1.7,marginBottom:12}}>{v.description}</div>
-                                      {v.resolutionNote&&<div style={{fontSize:12,color:T.textSub,lineHeight:1.6,padding:"9px 12px",background:(v.status==="Resolved"?"#16a34a":T.bgElevated)+"10",borderRadius:8,border:`1px solid ${(v.status==="Resolved"?"#16a34a":T.border)}22`,marginBottom:12,fontStyle:"italic"}}><span style={{fontWeight:600,fontStyle:"normal",fontSize:11,color:v.status==="Resolved"?"#16a34a":T.textMuted}}>Note: </span>{v.resolutionNote}</div>}
-                                      <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-                                        <button onClick={()=>onToast("Asset profile opened","info")} style={{fontSize:11,padding:"5px 14px",borderRadius:7,background:"transparent",border:`1.5px solid ${T.border}`,color:T.textSub,cursor:"pointer",fontWeight:600}}>
-                                          View Asset →
-                                        </button>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
                           </div>
                         </div>
                       );
@@ -7751,7 +7673,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
                 )}
               </div>
 
-              {/* ── Violation cards ── */}
+              {/* ── Violation table ── */}
               {displayViols.length===0
                 ? <div style={{textAlign:"center",padding:"52px 24px"}}>
                     <div style={{width:44,height:44,borderRadius:11,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}>
@@ -7760,64 +7682,77 @@ const PolicyManagerView = ({onToast, onNav}) => {
                     <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:4}}>No violations</div>
                     <div style={{fontSize:12,color:T.textMuted}}>No {(topViolStatusF!=="All"||topViolSevF!=="All")?"matching ":""}violations found.</div>
                   </div>
-                : <div style={{display:"flex",flexDirection:"column",gap:7}}>
-                    {displayViols.map(v=>{
-                      const pol    = policies.find(p=>p.id===v.policyId);
-                      const sc     = MV_STATUS_CFG[v.status]||MV_STATUS_CFG["Dismissed"];
-                      const sevClr = SEV_COLOR[v.severity]||T.textMuted;
-                      const isExp  = mainViolExpanded===v.id;
-                      const isClosed = v.status==="Resolved"||v.status==="Dismissed"||v.status==="Waived";
-                      return (
-                        <div key={v.id} style={{borderRadius:10,border:`1.5px solid ${v.status==="Open"?`${sevClr}40`:v.status==="Resolved"?"#16a34a35":T.border}`,background:v.status==="Resolved"?"#16a34a06":T.bgSurface,overflow:"hidden",transition:"all .15s",opacity:isClosed&&v.status!=="Resolved"?0.6:1}}>
-                          {/* ── Card header row ── */}
-                          <div style={{display:"flex",cursor:"pointer"}} onClick={()=>setMainViolExpanded(isExp?null:v.id)}>
-                            {/* Severity stripe */}
-                            <div style={{width:4,background:sevClr,flexShrink:0}}/>
-                            <div style={{flex:1,padding:"11px 14px"}}>
-                              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                                <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:SEV_BG[v.severity],color:sevClr,flexShrink:0,textTransform:"uppercase",letterSpacing:"0.05em"}}>{v.severity}</span>
-                                <span style={{fontSize:12.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{v.assetName}</span>
-                                <span style={{fontSize:10.5,color:T.textMuted}}>{v.assetType}</span>
-                                <span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted}}>{v.domain}</span>
-                                <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:7}} onClick={e=>e.stopPropagation()}>
-                                  <button onClick={()=>setViolActionModal({id:v.id,newStatus:null,desc:""})}
-                                    style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:99,background:sc.bg,color:sc.color,border:`1.5px solid ${sc.color}55`,display:"flex",alignItems:"center",gap:4,cursor:"pointer",transition:"all .12s"}}
-                                    onMouseEnter={e=>{e.currentTarget.style.background=`${sc.color}20`;e.currentTarget.style.borderColor=sc.color;}}
-                                    onMouseLeave={e=>{e.currentTarget.style.background=sc.bg;e.currentTarget.style.borderColor=`${sc.color}55`;}}>
-                                    <span style={{width:5,height:5,borderRadius:"50%",background:sc.dot,display:"inline-block"}}/>
+                : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse"}}>
+                      <thead>
+                        <tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
+                          {["Asset","Policy / Rule","Severity","Status","Detected"].map(h=>(
+                            <th key={h} style={{padding:"9px 14px",fontSize:10,fontWeight:700,color:T.textMuted,textAlign:"left",letterSpacing:.6,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {displayViols.map((v,vi)=>{
+                          const pol    = policies.find(p=>p.id===v.policyId);
+                          const sc     = MV_STATUS_CFG[v.status]||MV_STATUS_CFG["Dismissed"];
+                          const isExp  = mainViolExpanded===v.id;
+                          const isClosed = v.status==="Resolved"||v.status==="Dismissed"||v.status==="Waived";
+                          return (
+                            <React.Fragment key={v.id}>
+                              <tr onClick={()=>setMainViolExpanded(isExp?null:v.id)}
+                                style={{borderBottom:(!isExp&&vi<displayViols.length-1)?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"background .1s",
+                                  background:v.status==="Resolved"?"#16a34a07":isExp?`${T.accent}06`:"transparent",
+                                  boxShadow:v.status==="Resolved"?"inset 3px 0 0 #16a34a":(v.status==="Dismissed"||v.status==="Waived")?`inset 3px 0 0 ${T.textMuted}`:"none",
+                                  opacity:isClosed&&v.status!=="Resolved"?0.6:1,
+                                }}
+                                onMouseEnter={e=>e.currentTarget.style.background=v.status==="Resolved"?"#16a34a12":isExp?`${T.accent}06`:T.bgHover}
+                                onMouseLeave={e=>e.currentTarget.style.background=v.status==="Resolved"?"#16a34a07":isExp?`${T.accent}06`:"transparent"}>
+                                <td style={{padding:"10px 14px",maxWidth:200}}>
+                                  <div style={{fontSize:12.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.assetName}</div>
+                                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{v.assetType} · {v.domain}</div>
+                                </td>
+                                <td style={{padding:"10px 14px",maxWidth:220}}>
+                                  <div style={{fontSize:11.5,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>{pol?.name||v.policyId}</div>
+                                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontStyle:"italic"}}>"{v.rule}"</div>
+                                </td>
+                                <td style={{padding:"10px 14px"}}>
+                                  <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:5,background:SEV_BG[v.severity],color:SEV_COLOR[v.severity]||T.textMuted,textTransform:"uppercase",letterSpacing:"0.05em"}}>{v.severity}</span>
+                                </td>
+                                <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
+                                  <button onClick={()=>setViolActionModal({id:v.id,newStatus:null,desc:""})} style={{fontSize:10.5,fontWeight:700,padding:"3px 10px",borderRadius:6,background:sc.bg,color:sc.color,border:`1.5px solid ${sc.color}45`,whiteSpace:"nowrap",cursor:"pointer",transition:"all .12s",display:"inline-flex",alignItems:"center",gap:5}} onMouseEnter={e=>{e.currentTarget.style.background=`${sc.color}20`;e.currentTarget.style.borderColor=sc.color;}} onMouseLeave={e=>{e.currentTarget.style.background=sc.bg;e.currentTarget.style.borderColor=`${sc.color}45`;}}>
                                     {sc.label}
-                                    <svg width="8" height="8" viewBox="0 0 10 10" fill="none" style={{opacity:.7}}><path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                    <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{opacity:.7}}><path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                                   </button>
-                                  <span style={{fontSize:10,color:T.textMuted,whiteSpace:"nowrap"}}>{v.detectedAt}</span>
-                                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none" style={{color:T.textMuted,transition:"transform .15s",transform:isExp?"rotate(180deg)":"rotate(0deg)"}}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                                </div>
-                              </div>
-                              <div style={{marginTop:5,display:"flex",alignItems:"center",gap:5}}>
-                                <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M1 6h10M8 3l3 3-3 3" stroke={T.textMuted} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                                <span style={{fontSize:11,color:T.textMuted}}>Policy: </span>
-                                <span style={{fontSize:11,fontWeight:600,color:T.textSub}}>{pol?.name||v.policyId}</span>
-                                <span style={{fontSize:11,color:T.textMuted,marginLeft:4}}>· Rule: </span>
-                                <span style={{fontSize:11,color:T.textSub,fontStyle:"italic"}}>"{v.rule}"</span>
-                              </div>
-                            </div>
-                          </div>
-                          {/* ── Expanded detail ── */}
-                          {isExp&&(
-                            <div style={{borderTop:`1px solid ${T.border}`,background:T.bgElevated,padding:"14px 18px 14px 22px"}}>
-                              <div style={{fontSize:12,color:T.textSub,lineHeight:1.7,marginBottom:v.resolutionNote?12:8}}>{v.description}</div>
-                              {v.resolutionNote&&(
-                                <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,padding:"9px 12px",background:(v.status==="Resolved"?"#16a34a":"transparent")+"10",borderRadius:8,border:`1px solid ${v.status==="Resolved"?"#16a34a":T.border}22`,marginBottom:12,fontStyle:"italic"}}>
-                                  <span style={{fontWeight:600,fontStyle:"normal",fontSize:11,color:v.status==="Resolved"?"#16a34a":T.textMuted}}>Note: </span>{v.resolutionNote}
-                                </div>
+                                </td>
+                                <td style={{padding:"10px 14px",fontSize:11,color:T.textMuted,whiteSpace:"nowrap"}}>{v.detectedAt}</td>
+                              </tr>
+                              {isExp&&(v.status==="Open"||v.status==="Resolved"||v.status==="Dismissed"||v.status==="Waived")&&(
+                                <tr style={{borderBottom:vi<displayViols.length-1?`1px solid ${T.border}`:"none"}}>
+                                  <td colSpan={5} style={{padding:0}}>
+                                    <div style={{background:T.bgElevated,borderTop:`1px solid ${T.border}`,display:"grid",gridTemplateColumns:"1fr 1fr",gap:0}}>
+                                      <div style={{padding:"16px 20px",borderRight:`1px solid ${T.border}`}}>
+                                        <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:.6,marginBottom:8,textTransform:"uppercase"}}>Root Cause</div>
+                                        {v.description
+                                          ? <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.7}}>{v.description}</div>
+                                          : <div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>Not yet provided.</div>}
+                                      </div>
+                                      <div style={{padding:"16px 20px"}}>
+                                        <div style={{fontSize:10,fontWeight:700,color:v.status==="Resolved"?"#16a34a":T.textMuted,letterSpacing:.6,marginBottom:8,textTransform:"uppercase"}}>
+                                          {v.status==="Resolved"?"Resolution Note":v.status==="Dismissed"||v.status==="Waived"?"Dismissal Note":"Description"}
+                                        </div>
+                                        {isClosed&&v.resolutionNote
+                                          ? <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.7,padding:"10px 12px",background:v.status==="Resolved"?"#16a34a08":T.bgSurface,borderRadius:8,border:`1px solid ${v.status==="Resolved"?"#16a34a22":T.border}`}}>{v.resolutionNote}</div>
+                                          : <div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>—</div>}
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
                               )}
-                              <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                                <button onClick={()=>onToast("Asset profile opened","info")} style={{fontSize:11,padding:"5px 14px",borderRadius:7,background:"transparent",border:`1.5px solid ${T.border}`,color:T.textSub,cursor:"pointer",fontWeight:600}}>View Asset →</button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                            </React.Fragment>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
               }
             </div>
@@ -9248,7 +9183,8 @@ const PolicyManagerView = ({onToast, onNav}) => {
         const vCfg = VIOL_STATUS_CFG_M[viol.status]||{label:viol.status,color:T.textMuted,bg:T.bgElevated};
         const nextStates = VIOL_NEXT_M[viol.status]||[];
         const terminalTarget = violActionModal.newStatus==="Resolved"||violActionModal.newStatus==="Dismissed";
-        const canSubmit = violActionModal.newStatus && (!terminalTarget || violActionModal.desc.trim().length>0);
+        const noDescNeeded   = violActionModal.newStatus==="In Progress";
+        const canSubmit = violActionModal.newStatus && (noDescNeeded || violActionModal.desc.trim().length>0);
         const submitViol = () => {
           if(!canSubmit) return;
           const ns = violActionModal.newStatus;
@@ -9288,17 +9224,18 @@ const PolicyManagerView = ({onToast, onNav}) => {
                     })}
                   </div>
                 </div>
-                <div>
-                  <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:6}}>
-                    Description {terminalTarget&&<span style={{color:T.rose,fontWeight:700}}>*</span>}
-                    {!terminalTarget&&<span style={{fontWeight:400,textTransform:"none",letterSpacing:0,marginLeft:4}}>(optional)</span>}
+                {!noDescNeeded&&(
+                  <div>
+                    <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:6}}>
+                      Description <span style={{color:T.rose,fontWeight:700}}>*</span>
+                    </div>
+                    <textarea value={violActionModal.desc} onChange={e=>setViolActionModal(p=>({...p,desc:e.target.value}))} rows={3}
+                      placeholder={terminalTarget?"Describe the outcome — required to close this violation…":"Provide context for this status change…"}
+                      style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${violActionModal.desc.trim()?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12.5,lineHeight:1.6,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box",transition:"border-color .15s"}}
+                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=violActionModal.desc.trim()?T.accent:T.border}/>
+                    {!violActionModal.desc.trim()&&<div style={{fontSize:11,color:T.rose,marginTop:4}}>Required to proceed.</div>}
                   </div>
-                  <textarea value={violActionModal.desc} onChange={e=>setViolActionModal(p=>({...p,desc:e.target.value}))} rows={3}
-                    placeholder={terminalTarget?"Describe the outcome — this is required to close the violation…":"Add context or notes…"}
-                    style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${violActionModal.desc.trim()&&terminalTarget?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12.5,lineHeight:1.6,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box",transition:"border-color .15s"}}
-                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=violActionModal.desc.trim()&&terminalTarget?T.accent:T.border}/>
-                  {terminalTarget&&!violActionModal.desc.trim()&&<div style={{fontSize:11,color:T.rose,marginTop:4}}>Required before closing this violation.</div>}
-                </div>
+                )}
               </div>
               <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8}}>
                 <button onClick={()=>setViolActionModal(null)} style={{padding:"8px 18px",borderRadius:8,background:"none",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>Cancel</button>
