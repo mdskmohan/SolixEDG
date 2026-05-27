@@ -1864,7 +1864,7 @@ const GlossaryView = ({onToast}) => {
             {/* Deprecation banner */}
             {term.status==="Deprecated"&&term.deprecationReason&&(<div style={{margin:"0 0 8px",padding:"8px 14px",background:"rgba(124,58,237,.06)",border:"1px solid rgba(124,58,237,.25)",borderRadius:8,fontSize:12.5,color:"#7c3aed",lineHeight:1.5}}><strong>Deprecated: </strong>{term.deprecationReason}</div>)}
             <div style={{display:"flex",gap:0,marginBottom:-1}}>
-              {[{id:"overview",l:"Overview"},{id:"assets",l:`Linked Assets (${term.linkedAssets.length})`},{id:"activity",l:`Activity (${term.activity.length+(term.auditLog||[]).length})`}].map(tab=>(
+              {[{id:"overview",l:"Overview"},{id:"assets",l:`Linked Assets (${term.linkedAssets.length})`},{id:"activity",l:`Activity (${term.activity.length})`},{id:"auditlog",l:`Audit Log (${(term.auditLog||[]).length})`}].map(tab=>(
                 <button key={tab.id} onClick={()=>setTermTab(tab.id)} style={{padding:"8px 18px",background:"transparent",border:"none",borderBottom:`2px solid ${termTab===tab.id?T.accent:"transparent"}`,color:termTab===tab.id?T.text:T.textMuted,fontSize:13,fontWeight:termTab===tab.id?600:400,cursor:"pointer",transition:"all .12s"}}>{tab.l}</button>
               ))}
             </div>
@@ -1908,44 +1908,12 @@ const GlossaryView = ({onToast}) => {
               </div>
             )}
             {termTab==="assets"&&(<div><div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>{["All",...new Set(term.linkedAssets.map(a=>a.type))].map(type=>(<span key={type} style={{fontSize:12,padding:"4px 12px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer"}}>{type}{type==="All"?` (${term.linkedAssets.length})`:""}</span>))}</div>{term.linkedAssets.length===0?<div style={{padding:"40px 0",textAlign:"center",color:T.textMuted,fontSize:13}}>No linked assets yet.</div>:(<div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>{term.linkedAssets.map((a,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderBottom:i<term.linkedAssets.length-1?`1px solid ${T.border}`:"none",transition:"background .1s"}} onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><div style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:T.accent,flexShrink:0}}>{{"Table":"⊞","Dashboard":"⊟","Pipeline":"⇢","ML Model":"◈"}[a.type]||"○"}</div><div style={{flex:1}}><div style={{fontSize:13.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{a.name}</div><div style={{fontSize:11.5,color:T.textMuted,marginTop:1}}>{a.type}</div></div><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke={T.textMuted} strokeWidth="1.3" strokeLinecap="round"/></svg></div>))}</div>)}<button onClick={()=>onToast("Open catalog to link assets","success")} style={{marginTop:12,display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}><IcPlus/> Link Asset</button></div>)}
-            {termTab==="activity"&&(()=>{
-              const auditItems=(term.auditLog||[]).map((e,i)=>({
-                avatar:e.by==="system"?"SY":e.by.split(".").map(p=>p[0]?.toUpperCase()||"").join("").slice(0,2),
-                user:e.by,
-                time:e.at,
-                action:e.action+(e.note?` — ${e.note}`:""),
-                isComment:false,
-                isAudit:true,
-              }));
-              const combined=[...term.activity,...auditItems];
-              return (
-                <div style={{maxWidth:680}}>
-                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px",marginBottom:16}}>
-                    <div style={{fontSize:12.5,fontWeight:600,color:T.textSub,marginBottom:8}}>Add a comment</div>
-                    <textarea value={commentText} onChange={e=>setCommentText(e.target.value)} placeholder="Use @mention to tag teammates…" rows={3} style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12.5,resize:"none",outline:"none",fontFamily:"inherit",lineHeight:1.55,boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                    <div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}>
-                      <button onClick={()=>addComment(term.id)} disabled={!commentText.trim()} style={{padding:"6px 16px",borderRadius:7,background:commentText.trim()?T.accent:"rgba(238,36,36,.2)",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:commentText.trim()?"pointer":"default"}}>Post</button>
-                    </div>
-                  </div>
-                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                    {combined.map((act,i)=>(
-                      <div key={i} style={{display:"flex",gap:12,padding:"12px 14px",background:T.bgSurface,border:`1px solid ${act.isAudit?T.border:T.border}`,borderRadius:9,opacity:act.isAudit?0.85:1}}>
-                        <div style={{width:30,height:30,borderRadius:8,background:act.isAudit?"rgba(107,114,128,.1)":T.accentDim,border:`1px solid ${act.isAudit?"rgba(107,114,128,.25)":T.accent+"33"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9.5,fontWeight:700,color:act.isAudit?T.textMuted:T.accent,flexShrink:0}}>{act.avatar}</div>
-                        <div style={{flex:1}}>
-                          <div style={{display:"flex",alignItems:"baseline",gap:6}}>
-                            <span style={{fontSize:13,fontWeight:600,color:T.text}}>{act.user}</span>
-                            <span style={{fontSize:11,color:T.textMuted}}>{act.time}</span>
-                            {act.isAudit&&<span style={{fontSize:10,padding:"1px 5px",borderRadius:4,background:"rgba(107,114,128,.1)",color:T.textMuted,fontWeight:600}}>audit</span>}
-                          </div>
-                          <div style={{fontSize:13,color:act.isComment?T.text:T.textSub,marginTop:3,lineHeight:1.55}}>{act.action}</div>
-                        </div>
-                      </div>
-                    ))}
-                    {combined.length===0&&<div style={{textAlign:"center",padding:"32px 0",color:T.textMuted,fontSize:13}}>No activity yet.</div>}
-                  </div>
-                </div>
-              );
-            })()}
+            {termTab==="activity"&&(<div style={{maxWidth:680}}><div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px",marginBottom:16}}><div style={{fontSize:12.5,fontWeight:600,color:T.textSub,marginBottom:8}}>Add a comment</div><textarea value={commentText} onChange={e=>setCommentText(e.target.value)} placeholder="Use @mention to tag teammates…" rows={3} style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12.5,resize:"none",outline:"none",fontFamily:"inherit",lineHeight:1.55,boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/><div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}><button onClick={()=>addComment(term.id)} disabled={!commentText.trim()} style={{padding:"6px 16px",borderRadius:7,background:commentText.trim()?T.accent:"rgba(238,36,36,.2)",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:commentText.trim()?"pointer":"default"}}>Post</button></div></div><div style={{display:"flex",flexDirection:"column",gap:8}}>{term.activity.map((act,i)=>(<div key={i} style={{display:"flex",gap:12,padding:"12px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}><div style={{width:30,height:30,borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9.5,fontWeight:700,color:T.accent,flexShrink:0}}>{act.avatar}</div><div style={{flex:1}}><div style={{display:"flex",alignItems:"baseline",gap:6}}><span style={{fontSize:13,fontWeight:600,color:T.text}}>{act.user}</span><span style={{fontSize:11,color:T.textMuted}}>{act.time}</span></div><div style={{fontSize:13,color:act.isComment?T.text:T.textSub,marginTop:3,lineHeight:1.55}}>{act.action}</div></div></div>))}{term.activity.length===0&&<div style={{textAlign:"center",padding:"32px 0",color:T.textMuted,fontSize:13}}>No activity yet.</div>}</div></div>)}
+            {termTab==="auditlog"&&(
+              <div style={{maxWidth:900}}>
+                <AuditLogTable entries={glossAuditToEntries(term.auditLog)}/>
+              </div>
+            )}
           </div>
         </div>
         {/* RIGHT metadata panel */}
@@ -19551,7 +19519,7 @@ const ProfileView = ({onToast}) => {
         <Tabs2 tabs={[
           {key:"profile",  label:"Profile"},
           {key:"assets",   label:`Assets${myAssets.length>0?` (${myAssets.length})`:""}`, badge:null},
-          {key:"activity", label:"Activity", badge:NOTIFS.filter(n=>n.unread).length||null},
+          {key:"auditlog", label:"Audit Log"},
         ]} active={tab} onChange={setTab}/>
 
         {tab==="profile"&&(
@@ -19751,27 +19719,24 @@ const ProfileView = ({onToast}) => {
           );
         })()}
 
-        {tab==="activity"&&(
-          <div style={{display:"flex",flexDirection:"column",gap:6}}>
-            {NOTIFS.map((n,i)=>{
-              const nc=NOTIF_TYPE_CFG[n.type]||{bg:T.accentDim,color:T.accent,icon:null};
-              return (
-                <div key={i} style={{display:"flex",gap:12,padding:"12px 16px",background:T.bgSurface,border:`1px solid ${n.unread?T.border+"88":T.border}`,borderLeft:`3px solid ${n.unread?nc.color:"transparent"}`,borderRadius:9,transition:"background .1s"}}
-                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=T.bgSurface}>
-                  <div style={{width:30,height:30,borderRadius:8,background:nc.bg,display:"flex",alignItems:"center",justifyContent:"center",color:nc.color,flexShrink:0}}>{nc.icon}</div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
-                      <span style={{fontSize:12.5,fontWeight:n.unread?600:500,color:T.text}}>{n.title}</span>
-                      {n.unread&&<span style={{width:6,height:6,borderRadius:"50%",background:nc.color,flexShrink:0,display:"block"}}/>}
-                    </div>
-                    <div style={{fontSize:12,color:T.textSub,lineHeight:1.5}}>{n.body}</div>
-                    <div style={{fontSize:10.5,color:T.textMuted,marginTop:3}}>{n.time}</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {tab==="auditlog"&&(()=>{
+          const userHandle = cfg.email?.split("@")[0] || "maya.chen";
+          const USER_AUDIT_ENTRIES = [
+            {id:"ua1", timestamp:"May 27, 2026 · 10:14", category:"CERT",   action:"Certified asset as Approved",         details:"orders — Certification changed from In Review → Approved",       actor:userHandle, isSystem:false, note:"Q2 annual data quality review completed."},
+            {id:"ua2", timestamp:"May 25, 2026 · 14:32", category:"EDIT",   action:"Description updated",                  details:"customers — Asset description edited",                           actor:userHandle, isSystem:false},
+            {id:"ua3", timestamp:"May 22, 2026 · 11:05", category:"ACCESS", action:"Access granted",                        details:"analytics_team granted read access to finance_summary",          actor:userHandle, isSystem:false},
+            {id:"ua4", timestamp:"May 20, 2026 · 09:48", category:"EDIT",   action:"Owner updated",                        details:"payments — Owner changed from john.doe → "+userHandle,           actor:userHandle, isSystem:false},
+            {id:"ua5", timestamp:"May 18, 2026 · 16:20", category:"TAG",    action:"Tag added",                             details:"PII tag applied to column 'email' on customers",                 actor:userHandle, isSystem:false},
+            {id:"ua6", timestamp:"May 15, 2026 · 13:00", category:"CERT",   action:"Submitted asset for Review",           details:"fact_revenue — Submitted for Q2 certification cycle",             actor:userHandle, isSystem:false, note:"Owner has reviewed all columns."},
+            {id:"ua7", timestamp:"May 12, 2026 · 10:30", category:"ACCESS", action:"Access revoked",                        details:"Role 'finance_analyst' read access removed from orders",         actor:userHandle, isSystem:false},
+            {id:"ua8", timestamp:"May 08, 2026 · 15:45", category:"EDIT",   action:"Glossary term linked",                 details:"'Customer Lifetime Value' term linked to customers asset",        actor:userHandle, isSystem:false},
+            {id:"ua9", timestamp:"May 05, 2026 · 09:10", category:"CERT",   action:"Returned asset to Draft",              details:"fact_revenue — Certification reverted, quality score dropped",    actor:userHandle, isSystem:false, note:"Quality score fell to 78. Requires remediation before recertification."},
+            {id:"ua10",timestamp:"Apr 30, 2026 · 11:22", category:"EDIT",   action:"Steward assigned",                     details:"transactions — "+userHandle+" added as steward",                  actor:userHandle, isSystem:false},
+            {id:"ua11",timestamp:"Apr 25, 2026 · 14:00", category:"TAG",    action:"Tag removed",                          details:"'finance' tag replaced with 'KPI' on fact_revenue",               actor:userHandle, isSystem:false},
+            {id:"ua12",timestamp:"Apr 18, 2026 · 08:55", category:"EDIT",   action:"Quality rule updated",                 details:"Freshness threshold updated 24 h → 12 h on orders",              actor:userHandle, isSystem:false},
+          ];
+          return <AuditLogTable entries={USER_AUDIT_ENTRIES}/>;
+        })()}
       </div>
     </div>
   );
