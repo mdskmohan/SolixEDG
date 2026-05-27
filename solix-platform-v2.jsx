@@ -12205,6 +12205,22 @@ function glossAuditToEntries(auditLog){
   }));
 }
 
+function domainToActivityEntries(dm){
+  const owners = dm.owners||[];
+  const experts = dm.experts||[];
+  const tags = dm.tags||[];
+  return [
+    {id:"da1",timestamp:"2026-05-27 · 10:14",category:"EDIT",   action:`Domain "${dm.displayName}" created`,                         details:`Type: ${dm.domainType}`,                    actor:"alex.rivera", isSystem:false,note:null,diff:null},
+    {id:"da2",timestamp:"2026-05-26 · 14:32",category:"EDIT",   action:"Description updated",                                        details:"",                                           actor:owners[0]||"maya.chen",isSystem:false,note:null,diff:null},
+    {id:"da3",timestamp:"2026-05-25 · 09:20",category:"LINEAGE",action:`${dm.assetCount} asset${dm.assetCount!==1?"s":""} linked to domain`, details:"",                               actor:"system",      isSystem:true, note:null,diff:null},
+    {id:"da4",timestamp:"2026-05-24 · 16:45",category:"EDIT",   action:"Owner assigned",                                             details:owners[0]?`${owners[0]} added as owner`:"",  actor:"alex.rivera", isSystem:false,note:null,diff:null},
+    {id:"da5",timestamp:"2026-05-23 · 11:30",category:"EDIT",   action:"Steward assigned",                                           details:experts[0]?`${experts[0]} added as steward`:"",actor:owners[0]||"maya.chen",isSystem:false,note:null,diff:null},
+    {id:"da6",timestamp:"2026-05-22 · 08:00",category:"SYSTEM", action:"Quality score recalculated",                                 details:`Score: ${dm.quality}%`,                     actor:"system",      isSystem:true, note:null,diff:null},
+    {id:"da7",timestamp:"2026-05-21 · 13:15",category:"EDIT",   action:`Domain type set to "${dm.domainType}"`,                      details:"",                                           actor:owners[0]||"maya.chen",isSystem:false,note:null,diff:null},
+    ...tags.map((t,i)=>({id:`dat${i}`,timestamp:`2026-05-${20-i} · ${9+i}:${10+i*7<60?10+i*7:"0"+i}`,category:"EDIT",action:`Tag "${t}" added`,details:"",actor:owners[0]||"maya.chen",isSystem:false,note:null,diff:null})),
+  ];
+}
+
 function policyHistToEntries(history,p){
   const all=[
     ...(p.lastEvaluated?[{when:p.lastEvaluated+" · 14:32",who:"system",action:`Policy evaluated — ${p.compliancePct}% compliance`,type:"eval"}]:[]),
@@ -15337,6 +15353,9 @@ const DomainsView = ({onAsset, onNav}) => {
   const [editDdOwnerSearch, setEditDdOwnerSearch] = useState("");
   const [editDdExpertOpen,  setEditDdExpertOpen]  = useState(false);
   const [editDdExpertSearch,setEditDdExpertSearch]= useState("");
+  const [editDdTagInput,    setEditDdTagInput]    = useState("");
+  const [editDdGlInput,     setEditDdGlInput]     = useState("");
+  const [editDdGlOpen,      setEditDdGlOpen]      = useState(false);
   const ALL_USERS = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
   const ava = name => (name||"?").split(".").map(s=>s[0]?.toUpperCase()||"").join("");
   const patchDomain = (id,patch) => setDomains(prev=>prev.map(d=>d.id===id?{...d,...patch}:d));
@@ -15366,8 +15385,9 @@ const DomainsView = ({onAsset, onNav}) => {
 
   const handleEditDomain = () => {
     if(!editDd||!editDd.name.trim()) return;
-    patchDomain(editDd.id,{name:editDd.name.trim(),displayName:editDd.displayName.trim()||editDd.name.trim(),icon:editDd.icon,color:editDd.color,domainType:editDd.domainType,description:(editDd.description||"").trim(),owners:editDd.owners||[],experts:editDd.experts||[]});
-    setEditDomainOpen(false); setEditDd(null);
+    patchDomain(editDd.id,{name:editDd.name.trim(),displayName:editDd.displayName.trim()||editDd.name.trim(),icon:editDd.icon,color:editDd.color,domainType:editDd.domainType,description:(editDd.description||"").trim(),owners:editDd.owners||[],experts:editDd.experts||[],tags:editDd.tags||[],glossaryTerms:editDd.glossaryTerms||[]});
+    setDmGlossaryTerms(editDd.glossaryTerms||[]);
+    setEditDomainOpen(false); setEditDd(null); setEditDdTagInput(""); setEditDdGlInput("");
   };
 
   const handleAddAssets = () => {
@@ -15945,7 +15965,7 @@ const DomainsView = ({onAsset, onNav}) => {
                   {dmMenuOpen&&(
                     <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",minWidth:220,overflow:"hidden"}}>
                       {[
-                        {icon:"🖊️",label:"Edit Details",sub:"Edit all domain fields",action:()=>{setEditDd({...dm});setEditDomainOpen(true);setDmMenuOpen(false);}},
+                        {icon:"🖊️",label:"Edit Details",sub:"Edit all domain fields",action:()=>{setEditDd({...dm,glossaryTerms:dmGlossaryTerms});setEditDomainOpen(true);setDmMenuOpen(false);setEditDdTagInput("");setEditDdGlInput("");}},
                         {icon:"🎨",label:"Style",sub:"Change icon and color",action:()=>{setDmStyleOpen(true);setDmMenuOpen(false);}},
                       ].map(item=>(
                         <button key={item.label} onClick={item.action}
@@ -15989,9 +16009,10 @@ const DomainsView = ({onAsset, onNav}) => {
               </div>
             </div>
             <Tabs2 tabs={[
-              {key:"documentation",label:"Documentation"},
+              {key:"documentation",label:"Overview"},
               {key:"dataproducts",label:`Data Products (${domainProducts.length})`},
               {key:"assets",label:`Assets (${domainAssets.length})`},
+              {key:"activity",label:"Activity"},
             ]} active={domainTab} onChange={setDomainTab}/>
           </div>
 
@@ -16175,6 +16196,12 @@ const DomainsView = ({onAsset, onNav}) => {
             )}
 
             {/* ASSETS TAB */}
+            {domainTab==="activity"&&(
+              <div style={{maxWidth:900}}>
+                <AuditLogTable entries={domainToActivityEntries(dm)}/>
+              </div>
+            )}
+
             {domainTab==="assets"&&(
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,flexWrap:"wrap"}}>
@@ -16695,11 +16722,58 @@ const DomainsView = ({onAsset, onNav}) => {
                         ))}
                       </div>
                     </div>
+                    {/* Tags */}
+                    <div>
+                      <label style={lblStyle}>Tags</label>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:7}}>
+                        {(editDd.tags||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
+                        {(editDd.tags||[]).map(t=>(
+                          <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,padding:"4px 10px 4px 9px",borderRadius:5,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontWeight:600}}>
+                            {t}<button onClick={()=>setEditDd(p=>({...p,tags:(p.tags||[]).filter(x=>x!==t)}))} style={{background:"none",border:"none",cursor:"pointer",color:T.accent,padding:0,lineHeight:1,display:"flex",opacity:.7}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".7"}>{Ic.x(8)}</button>
+                          </span>
+                        ))}
+                      </div>
+                      <input value={editDdTagInput} onChange={e=>setEditDdTagInput(e.target.value)}
+                        onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&editDdTagInput.trim()&&!(editDd.tags||[]).includes(editDdTagInput.trim())){setEditDd(p=>({...p,tags:[...(p.tags||[]),editDdTagInput.trim()]}));setEditDdTagInput("");e.preventDefault();}}}
+                        placeholder="Type a tag and press Enter…" style={{...fldStyle}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                    </div>
+                    {/* Business Glossary */}
+                    <div>
+                      <label style={lblStyle}>Business Glossary</label>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:7}}>
+                        {(editDd.glossaryTerms||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
+                        {(editDd.glossaryTerms||[]).map(t=>(
+                          <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.1)",border:"1px solid rgba(139,92,246,.25)",color:"#8b5cf6",fontWeight:600}}>
+                            {t.length>14?t.slice(0,14)+"…":t}<button onClick={()=>setEditDd(p=>({...p,glossaryTerms:(p.glossaryTerms||[]).filter(x=>x!==t)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#8b5cf6",padding:0,lineHeight:1,display:"flex",opacity:.7}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".7"}>{Ic.x(8)}</button>
+                          </span>
+                        ))}
+                      </div>
+                      <div style={{position:"relative"}}>
+                        <input value={editDdGlInput} onChange={e=>{setEditDdGlInput(e.target.value);setEditDdGlOpen(true);}}
+                          onFocus={()=>setEditDdGlOpen(true)} onBlur={()=>setTimeout(()=>setEditDdGlOpen(false),150)}
+                          placeholder="Search glossary terms…" style={{...fldStyle}} onFocus={e=>{e.target.style.borderColor="#8b5cf6";setEditDdGlOpen(true);}} onBlur={e=>{e.target.style.borderColor=T.border;setTimeout(()=>setEditDdGlOpen(false),150);}}/>
+                        {editDdGlOpen&&editDdGlInput&&(
+                          <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,boxShadow:"0 8px 24px rgba(0,0,0,.2)",zIndex:600,maxHeight:160,overflowY:"auto"}}>
+                            {GLOSSARY_TERMS.filter(t=>!(editDd.glossaryTerms||[]).includes(t.term)&&t.term.toLowerCase().includes(editDdGlInput.toLowerCase())).slice(0,6).map(t=>(
+                              <button key={t.id} onMouseDown={()=>{setEditDd(p=>({...p,glossaryTerms:[...(p.glossaryTerms||[]),t.term]}));setEditDdGlInput("");setEditDdGlOpen(false);}}
+                                style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"none",border:"none",cursor:"pointer",textAlign:"left",borderBottom:`1px solid ${T.border}`}}
+                                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                                <span style={{fontSize:12.5,fontWeight:600,color:T.text,flex:1}}>{t.term}</span>
+                                <span style={{fontSize:11,color:T.textMuted}}>{t.domain}</span>
+                              </button>
+                            ))}
+                            {GLOSSARY_TERMS.filter(t=>!(editDd.glossaryTerms||[]).includes(t.term)&&t.term.toLowerCase().includes(editDdGlInput.toLowerCase())).length===0&&(
+                              <div style={{padding:"10px 12px",fontSize:12,color:T.textMuted}}>No matching terms</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </>);
                 })()}
               </div>
               <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.bgElevated,flexShrink:0}}>
-                <button onClick={()=>{setEditDomainOpen(false);setEditDd(null);}} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+                <button onClick={()=>{setEditDomainOpen(false);setEditDd(null);setEditDdTagInput("");setEditDdGlInput("");}} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
                 <button onClick={()=>{handleEditDomain();}} style={{padding:"8px 20px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Save Changes</button>
               </div>
             </div>
