@@ -5394,7 +5394,7 @@ const DEMO_POLICIES_GLOBAL = [
   {id:"pol-6",name:"Engineering Pipeline Governance",category:"Data",severity:"Medium",lifecycle:"Deprecated",regulations:["SOC2"],scope:{domains:["Engineering"]},links:[]},
 ];
 
-const PolicyManagerView = ({onToast, onNav}) => {
+const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   // ─── palette & constants ──────────────────────────────────────────────
   const LC_COLORS  = {"Draft":T.textMuted,"In Review":T.amber,"Approved":T.green,"Active":T.blue,"Deprecated":T.rose};
   const LC_STEPS   = ["Draft","In Review","Approved","Active","Deprecated"];
@@ -5655,6 +5655,15 @@ const PolicyManagerView = ({onToast, onNav}) => {
   const detailDotRef   = useRef(null);
   const topViolStatusDropRef = useRef(null);
   const topViolSevDropRef    = useRef(null);
+
+  // Deep-link: navigate directly to a specific policy (e.g. from Asset Profile governing policies)
+  useEffect(()=>{
+    if(deepLinkPolicyId){
+      setSelPolicyId(deepLinkPolicyId);
+      setTab("policies");
+      setPdTab("overview");
+    }
+  },[deepLinkPolicyId]);
 
   useEffect(()=>{
     if(!filterDropOpen) return;
@@ -10217,6 +10226,7 @@ const StewardshipView = ({onToast, initialTab}) => {
 // ASSET DETAIL — sub-tab components
 // ─────────────────────────────────────────────
 const AssetOverview = ({asset,data,setData,onToast})=>{
+  const navFn = useNav();
   const [editingDesc,setEditingDesc]=useState(false);
   const [descVal,setDescVal]=useState(data.description||asset.description);
   const [editingNotes,setEditingNotes]=useState(false);
@@ -10281,13 +10291,18 @@ const AssetOverview = ({asset,data,setData,onToast})=>{
                 const lcc = LC_COLOR[p.lifecycle]||T.textMuted;
                 const cc  = CAT_COLOR[p.category]||T.accent;
                 return (
-                  <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6}}>
+                  <div key={p.id}
+                    onClick={()=>navFn("policymanager",{policyId:p.id})}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
+                    onMouseLeave={e=>e.currentTarget.style.background=T.bgElevated}
+                    style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6,cursor:"pointer",transition:"background .1s"}}>
                     <div style={{width:7,height:7,borderRadius:"50%",background:lcc,flexShrink:0}}/>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:12,fontWeight:600,color:T.text,lineHeight:1.4}}>{p.name}</div>
                       <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{p.category} · {p.severity} severity</div>
                     </div>
                     <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:99,background:`${lcc}15`,color:lcc,border:`1px solid ${lcc}25`,flexShrink:0,whiteSpace:"nowrap"}}>{p.lifecycle}</span>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{flexShrink:0,color:T.textMuted}}><path d="M2.5 6h7M6.5 3l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </div>
                 );
               })}
@@ -12435,6 +12450,7 @@ const AssetCommentsTab = ({asset,onToast})=>{
 // ─────────────────────────────────────────────
 // ── Container asset detail (Database / Catalog / Schema / Bucket / Container / Folder) ──
 const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => {
+  const navFn = useNav();
   const [tab,          setTab]         = useState("overview");
   const [data,         setData]        = useState({...asset, owners:asset.owners||[asset.owner], stewards:asset.stewards||(asset.steward?[asset.steward]:[]), tags:[...(asset.tags||[])]});
   const [certOpen,     setCertOpen]    = useState(false);
@@ -12666,13 +12682,18 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
                         {govPols.map(p=>{
                           const lcc = LC_COLOR[p.lifecycle]||T.textMuted;
                           return (
-                            <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6}}>
+                            <div key={p.id}
+                              onClick={()=>navFn("policymanager",{policyId:p.id})}
+                              onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
+                              onMouseLeave={e=>e.currentTarget.style.background=T.bgElevated}
+                              style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6,cursor:"pointer",transition:"background .1s"}}>
                               <div style={{width:7,height:7,borderRadius:"50%",background:lcc,flexShrink:0}}/>
                               <div style={{flex:1,minWidth:0}}>
                                 <div style={{fontSize:12,fontWeight:600,color:T.text,lineHeight:1.4}}>{p.name}</div>
                                 <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{p.category} · {p.severity} severity</div>
                               </div>
                               <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:99,background:`${lcc}15`,color:lcc,border:`1px solid ${lcc}25`,flexShrink:0,whiteSpace:"nowrap"}}>{p.lifecycle}</span>
+                              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{flexShrink:0,color:T.textMuted}}><path d="M2.5 6h7M6.5 3l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                             </div>
                           );
                         })}
@@ -27720,6 +27741,7 @@ export default function App(){
   const [isDark,   setIsDark]   = useState(false);
   const [themeKey, setThemeKey] = useState(0);
   const [sideExp,  setSideExp]  = useState(false);
+  const [deepLinkPolicyId, setDeepLinkPolicyId] = useState(null);
 
   const roleCfg    = ROLES_CONFIG[role] || ROLES_CONFIG.analyst;
   const allowedNav = roleCfg.nav || [];
@@ -27727,9 +27749,10 @@ export default function App(){
   const handleLogin  = (r) => { setRole(r); setNav("home"); setLoggedIn(true); };
   const handleLogout = () => { setLoggedIn(false); setNav("home"); setAssetStack([]); };
   const handleRole   = (r) => { setRole(r); setNav("home"); setAsset(null); };
-  const handleNav    = (id) => {
+  const handleNav    = (id, payload=null) => {
     // Guard: redirect disallowed pages to home
     if(!allowedNav.includes(id) && id!=="profile") { setNav("home"); return; }
+    setDeepLinkPolicyId(payload?.policyId ?? null);
     setNav(id); setAssetStack([]);
   };
   const handleAsset     = (a) => { setAssetStack([a]); setNav("catalog"); };
@@ -27754,7 +27777,7 @@ export default function App(){
       case "catalog":       return <CatalogView onAsset={handleAsset}/>;
       case "quality":       return <QualityView/>;
       case "contracts":     return <ContractsView onToast={showToast}/>;
-      case "policymanager": return <PolicyManagerView onToast={showToast} onNav={handleNav}/>;
+      case "policymanager": return <PolicyManagerView onToast={showToast} onNav={handleNav} deepLinkPolicyId={deepLinkPolicyId}/>;
       case "access":        return <AccessView onToast={showToast}/>;
       case "certifications":return <CertificationsView onToast={showToast}/>;
       case "stewardship":   return <InboxView onToast={showToast}/>;
