@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>GDPR — Collibra vs Our Prototype</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f1117;color:#e2e8f0;min-height:100vh;padding:32px 24px;}
+  h1{text-align:center;font-size:22px;font-weight:700;color:#fff;margin-bottom:6px;}
+  .sub{text-align:center;font-size:13px;color:#64748b;margin-bottom:40px;}
+
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:28px;max-width:1200px;margin:0 auto;}
+
+  .panel{background:#161b27;border:1.5px solid #1e2736;border-radius:16px;overflow:hidden;}
+  .panel-head{padding:16px 20px;display:flex;align-items:center;gap:10px;border-bottom:1.5px solid #1e2736;}
+  .panel-head .badge{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;}
+  .panel-head h2{font-size:15px;font-weight:700;}
+  .panel-body{padding:20px;}
+
+  /* OUR PROTOTYPE */
+  .proto .panel-head{background:#1a1f2e;}
+  .proto .panel-head .badge{background:#1e3a5f;color:#60a5fa;}
+  .proto .panel-head h2{color:#93c5fd;}
+
+  .proto-box{background:#0f1117;border:1.5px solid #1e2736;border-radius:10px;padding:16px;margin-bottom:14px;}
+  .proto-box .label{font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;}
+  .proto-box .policy-name{font-size:14px;font-weight:600;color:#e2e8f0;margin-bottom:12px;}
+  .field-row{display:flex;align-items:flex-start;gap:8px;margin-bottom:7px;font-size:12px;}
+  .field-key{color:#64748b;min-width:110px;flex-shrink:0;}
+  .field-val{color:#94a3b8;}
+  .tag{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;}
+  .tag-blue{background:#1e3a5f;color:#60a5fa;}
+  .tag-green{background:#14321f;color:#4ade80;}
+  .tag-amber{background:#362009;color:#fbbf24;}
+  .tag-red{background:#3b0f12;color:#f87171;}
+  .tag-gray{background:#1e2736;color:#94a3b8;}
+
+  .arrow-box{text-align:center;padding:14px;background:#1a1f2e;border-radius:8px;border:1px dashed #334155;margin-top:6px;}
+  .arrow-box .arrow-label{font-size:11px;color:#475569;margin-bottom:4px;}
+  .arrow-box .nothing{font-size:13px;font-weight:600;color:#f87171;}
+
+  /* COLLIBRA */
+  .collibra .panel-head{background:#1a2435;}
+  .collibra .panel-head .badge{background:#1c3a2a;color:#4ade80;}
+  .collibra .panel-head h2{color:#86efac;}
+
+  .reg-card{background:#0f1117;border:1.5px solid #1e2736;border-radius:12px;overflow:hidden;margin-bottom:14px;}
+  .reg-card-head{background:#161b27;padding:12px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #1e2736;}
+  .reg-icon{width:32px;height:32px;border-radius:8px;background:#1c3a2a;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+  .reg-title{font-size:14px;font-weight:700;color:#fff;}
+  .reg-subtitle{font-size:11px;color:#64748b;margin-top:1px;}
+  .reg-status{margin-left:auto;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:#1c3a2a;color:#4ade80;}
+
+  .reg-section{padding:12px 16px;border-bottom:1px solid #1e2736;}
+  .reg-section:last-child{border-bottom:none;}
+  .reg-section-title{font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;}
+
+  .article-row{display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;}
+  .art-num{font-size:10px;font-weight:700;color:#818cf8;background:#1e1b4b;padding:2px 7px;border-radius:5px;flex-shrink:0;margin-top:1px;}
+  .art-title{font-size:12px;font-weight:600;color:#c4b5fd;}
+  .art-desc{font-size:11px;color:#64748b;margin-top:1px;}
+
+  .linked-item{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #1e2736;}
+  .linked-item:last-child{border-bottom:none;}
+  .linked-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+  .linked-name{font-size:12px;color:#cbd5e1;}
+  .linked-type{font-size:10px;color:#475569;margin-left:auto;}
+
+  .workflow-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+  .wf-icon{font-size:13px;}
+  .wf-label{font-size:12px;color:#94a3b8;}
+  .wf-status{margin-left:auto;font-size:10px;font-weight:600;padding:2px 7px;border-radius:20px;}
+  .wf-active{background:#1c3a2a;color:#4ade80;}
+  .wf-template{background:#1e1b4b;color:#818cf8;}
+
+  .compliance-bar{margin-bottom:10px;}
+  .comp-label{display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-bottom:5px;}
+  .comp-track{height:6px;background:#1e2736;border-radius:10px;overflow:hidden;}
+  .comp-fill{height:100%;border-radius:10px;}
+
+  .vs-divider{display:flex;align-items:center;justify-content:center;position:relative;}
+  .vs-divider::before{content:'';position:absolute;left:0;right:0;height:1px;background:#1e2736;}
+  .vs-badge{position:relative;background:#1a1f2e;border:1.5px solid #334155;border-radius:20px;padding:4px 14px;font-size:12px;font-weight:700;color:#475569;z-index:1;}
+
+  .bottom{max-width:1200px;margin:28px auto 0;}
+  .compare-table{width:100%;border-collapse:collapse;background:#161b27;border-radius:12px;overflow:hidden;border:1.5px solid #1e2736;}
+  .compare-table th{background:#1a1f2e;padding:11px 16px;text-align:left;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.07em;}
+  .compare-table td{padding:11px 16px;font-size:12px;border-top:1px solid #1e2736;color:#94a3b8;vertical-align:top;}
+  .compare-table td:first-child{color:#e2e8f0;font-weight:600;}
+  .yes{color:#4ade80;font-weight:700;}
+  .no{color:#f87171;font-weight:700;}
+  .partial{color:#fbbf24;font-weight:700;}
+
+  .callout{display:flex;align-items:flex-start;gap:12px;background:#1a1f2e;border:1.5px solid #334155;border-radius:10px;padding:14px 16px;margin-top:20px;max-width:1200px;margin-left:auto;margin-right:auto;}
+  .callout-icon{font-size:20px;flex-shrink:0;}
+  .callout-text{font-size:13px;color:#94a3b8;line-height:1.6;}
+  .callout-text strong{color:#e2e8f0;}
+</style>
+</head>
+<body>
+
+<h1>GDPR — How Collibra Has It vs How We Have It</h1>
+<p class="sub">Same concept, very different depth. Here's the visual.</p>
+
+<div class="cols">
+
+  <!-- OUR PROTOTYPE -->
+  <div class="panel proto">
+    <div class="panel-head">
+      <div class="badge">OUR PROTOTYPE</div>
+      <h2>GDPR is just a word in a list</h2>
+    </div>
+    <div class="panel-body">
+      <div class="proto-box">
+        <div class="label">Policy Object</div>
+        <div class="policy-name">PII Data Handling Policy</div>
+        <div class="field-row"><span class="field-key">name</span><span class="field-val">"PII Data Handling"</span></div>
+        <div class="field-row"><span class="field-key">owner</span><span class="field-val">maya.chen</span></div>
+        <div class="field-row"><span class="field-key">policyTypes</span><span class="field-val">["Governance", "Protection"]</span></div>
+        <div class="field-row">
+          <span class="field-key">regulations</span>
+          <span class="field-val" style="display:flex;gap:5px;flex-wrap:wrap;">
+            <span class="tag tag-blue">GDPR</span>
+            <span class="tag tag-green">HIPAA</span>
+          </span>
+        </div>
+        <div class="field-row"><span class="field-key">severity</span><span class="field-val"><span class="tag tag-red">High</span></span></div>
+      </div>
+
+      <div class="arrow-box">
+        <div class="arrow-label">When you pick GDPR in our wizard…</div>
+        <div class="nothing">Nothing else happens.</div>
+        <div style="font-size:11px;color:#475569;margin-top:5px;">It's just the string "GDPR" stored in an array.<br/>No workflows trigger. No checks run. No templates load.</div>
+      </div>
+
+      <div style="margin-top:16px;padding:12px;background:#1a1f2e;border-radius:8px;border:1px solid #334155;">
+        <div style="font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;">What GDPR looks like in our data model</div>
+        <div style="font-size:12px;color:#94a3b8;background:#0f1117;border-radius:6px;padding:10px;font-family:monospace;line-height:1.8;">
+          regulations: [<span style="color:#60a5fa;">"GDPR"</span>, <span style="color:#4ade80;">"HIPAA"</span>]<br/>
+          <span style="color:#475569;">// That's it. Just strings.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COLLIBRA -->
+  <div class="panel collibra">
+    <div class="panel-head">
+      <div class="badge">COLLIBRA</div>
+      <h2>GDPR is its own full object</h2>
+    </div>
+    <div class="panel-body">
+
+      <div class="reg-card">
+        <div class="reg-card-head">
+          <div class="reg-icon">🇪🇺</div>
+          <div>
+            <div class="reg-title">General Data Protection Regulation</div>
+            <div class="reg-subtitle">Type: Regulation &nbsp;·&nbsp; Jurisdiction: European Union &nbsp;·&nbsp; Since: May 25, 2018</div>
+          </div>
+          <div class="reg-status">Active</div>
+        </div>
+
+        <!-- Articles -->
+        <div class="reg-section">
+          <div class="reg-section-title">Key Articles (linked as sub-objects)</div>
+          <div class="article-row">
+            <div class="art-num">Art. 5</div>
+            <div><div class="art-title">Principles of processing</div><div class="art-desc">Lawfulness, fairness, transparency, purpose limitation</div></div>
+          </div>
+          <div class="article-row">
+            <div class="art-num">Art. 17</div>
+            <div><div class="art-title">Right to erasure</div><div class="art-desc">"Right to be forgotten" — deletion on request</div></div>
+          </div>
+          <div class="article-row">
+            <div class="art-num">Art. 25</div>
+            <div><div class="art-title">Privacy by design</div><div class="art-desc">Data protection built into systems from the start</div></div>
+          </div>
+          <div class="article-row">
+            <div class="art-num">Art. 30</div>
+            <div><div class="art-title">Record of Processing Activities</div><div class="art-desc">Must document every data processing operation</div></div>
+          </div>
+          <div class="article-row">
+            <div class="art-num">Art. 35</div>
+            <div><div class="art-title">DPIA required</div><div class="art-desc">Data Protection Impact Assessment for high-risk data</div></div>
+          </div>
+        </div>
+
+        <!-- Linked objects -->
+        <div class="reg-section">
+          <div class="reg-section-title">Assets linked to GDPR via "complies_with"</div>
+          <div class="linked-item"><div class="linked-dot" style="background:#818cf8;"></div><div class="linked-name">PII Data Handling Policy</div><div class="linked-type">Policy</div></div>
+          <div class="linked-item"><div class="linked-dot" style="background:#818cf8;"></div><div class="linked-name">Data Retention 90d Policy</div><div class="linked-type">Policy</div></div>
+          <div class="linked-item"><div class="linked-dot" style="background:#60a5fa;"></div><div class="linked-name">customers (Snowflake)</div><div class="linked-type">Table</div></div>
+          <div class="linked-item"><div class="linked-dot" style="background:#60a5fa;"></div><div class="linked-name">user_sessions (Snowflake)</div><div class="linked-type">Table</div></div>
+          <div class="linked-item"><div class="linked-dot" style="background:#fbbf24;"></div><div class="linked-name">Customer Data Processing</div><div class="linked-type">Business Process</div></div>
+        </div>
+
+        <!-- Workflows -->
+        <div class="reg-section">
+          <div class="reg-section-title">Workflows that auto-trigger when linked</div>
+          <div class="workflow-row"><span class="wf-icon">📋</span><span class="wf-label">DPIA Form (Article 35)</span><span class="wf-status wf-template">Template</span></div>
+          <div class="workflow-row"><span class="wf-icon">📄</span><span class="wf-label">Record of Processing Activities (Article 30)</span><span class="wf-status wf-template">Template</span></div>
+          <div class="workflow-row"><span class="wf-icon">✅</span><span class="wf-label">GDPR Readiness Review</span><span class="wf-status wf-active">Active</span></div>
+          <div class="workflow-row"><span class="wf-icon">🔔</span><span class="wf-label">Breach Notification (72hr rule)</span><span class="wf-status wf-active">Active</span></div>
+        </div>
+
+        <!-- Compliance dashboard -->
+        <div class="reg-section">
+          <div class="reg-section-title">Live compliance dashboard</div>
+          <div class="compliance-bar">
+            <div class="comp-label"><span>Tables compliant</span><span style="color:#4ade80;font-weight:700;">32 / 47</span></div>
+            <div class="comp-track"><div class="comp-fill" style="width:68%;background:#4ade80;"></div></div>
+          </div>
+          <div class="compliance-bar">
+            <div class="comp-label"><span>DPIAs completed</span><span style="color:#fbbf24;font-weight:700;">8 / 12</span></div>
+            <div class="comp-track"><div class="comp-fill" style="width:66%;background:#fbbf24;"></div></div>
+          </div>
+          <div class="compliance-bar">
+            <div class="comp-label"><span>Open violations</span><span style="color:#f87171;font-weight:700;">3</span></div>
+            <div class="comp-track"><div class="comp-fill" style="width:94%;background:#f87171;"></div></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Comparison table -->
+<div class="bottom">
+  <table class="compare-table">
+    <thead>
+      <tr>
+        <th>Capability</th>
+        <th>Our Prototype</th>
+        <th>Collibra</th>
+        <th>Gap</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>GDPR linked to a policy</td>
+        <td><span class="yes">✅ Yes</span> — stored as string</td>
+        <td><span class="yes">✅ Yes</span> — structural relationship</td>
+        <td>Same idea, different depth</td>
+      </tr>
+      <tr>
+        <td>GDPR has its own page / object</td>
+        <td><span class="no">❌ No</span> — just a word</td>
+        <td><span class="yes">✅ Yes</span> — full object with fields</td>
+        <td>We'd need a Regulations module</td>
+      </tr>
+      <tr>
+        <td>See which assets are under GDPR</td>
+        <td><span class="no">❌ No</span></td>
+        <td><span class="yes">✅ Yes</span> — live relationship view</td>
+        <td>Needs query on regulation field</td>
+      </tr>
+      <tr>
+        <td>GDPR articles / requirements listed</td>
+        <td><span class="no">❌ No</span></td>
+        <td><span class="yes">✅ Yes</span> — Article 5, 17, 25, 30, 35</td>
+        <td>Phase 2 feature</td>
+      </tr>
+      <tr>
+        <td>DPIA / compliance form triggered</td>
+        <td><span class="no">❌ No</span></td>
+        <td><span class="yes">✅ Yes</span> — auto workflow fires</td>
+        <td>Phase 3 feature</td>
+      </tr>
+      <tr>
+        <td>Compliance % dashboard per regulation</td>
+        <td><span class="no">❌ No</span></td>
+        <td><span class="yes">✅ Yes</span></td>
+        <td>Phase 2 feature</td>
+      </tr>
+      <tr>
+        <td>Policy creation wizard</td>
+        <td><span class="yes">✅ Yes</span> — 4-step wizard</td>
+        <td><span class="yes">✅ Yes</span></td>
+        <td>We have this ✅</td>
+      </tr>
+      <tr>
+        <td>Rules with field + operator + value</td>
+        <td><span class="yes">✅ Yes</span></td>
+        <td><span class="yes">✅ Yes</span></td>
+        <td>We have this ✅</td>
+      </tr>
+      <tr>
+        <td>Owner + Steward on a policy</td>
+        <td><span class="yes">✅ Yes</span></td>
+        <td><span class="yes">✅ Yes</span></td>
+        <td>We have this ✅</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout" style="margin-top:20px;">
+    <div class="callout-icon">💡</div>
+    <div class="callout-text">
+      <strong>Bottom line:</strong> In our prototype, GDPR is a sticky note — a label you put on a policy to say "this is why this policy exists." In Collibra, GDPR is a living object — it has its own page, its own articles, it knows which tables and policies are linked to it, it fires workflows, and it shows you a live compliance dashboard. Both start from the same idea: <strong>link a policy to a regulation</strong>. Collibra just built 5 years of product depth on top of that. Our foundation is correct — it just needs those layers added over time.
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -16054,8 +16054,6 @@ const DomainsView = ({onAsset, onNav}) => {
                         ["Type",<DomainTypeBadge key="t" type={dm.domainType}/>],
                         ["Assets",<span key="a" style={{fontSize:13,fontWeight:700,color:dm.color,fontFamily:"'Geist Mono',monospace"}}>{dm.assetCount}</span>],
                         ["Data Products",<span key="dp" style={{fontSize:13,fontWeight:700,color:"#8b5cf6",fontFamily:"'Geist Mono',monospace"}}>{domainProducts.length}</span>],
-                        ["Quality",<span key="q" style={{fontSize:13,fontWeight:700,color:dm.quality>=90?T.green:dm.quality>=70?T.amber:T.rose,fontFamily:"'Geist Mono',monospace"}}>{dm.quality}%</span>],
-                        ...(hasSensitive?[["Sensitivity",<span key="s" style={{padding:"2px 7px",borderRadius:4,fontSize:10.5,fontWeight:700,background:"rgba(239,68,68,.1)",color:"#ef4444",border:"1px solid rgba(239,68,68,.2)"}}>🔒 Sensitive</span>]]:[]),
                       ].map(([l,v],i,arr)=>(
                         <div key={l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
                           <span style={{fontSize:11.5,color:T.textMuted}}>{l}</span>
@@ -16750,8 +16748,9 @@ const DomainsView = ({onAsset, onNav}) => {
                       </div>
                       <div style={{position:"relative"}}>
                         <input value={editDdGlInput} onChange={e=>{setEditDdGlInput(e.target.value);setEditDdGlOpen(true);}}
-                          onFocus={()=>setEditDdGlOpen(true)} onBlur={()=>setTimeout(()=>setEditDdGlOpen(false),150)}
-                          placeholder="Search glossary terms…" style={{...fldStyle}} onFocus={e=>{e.target.style.borderColor="#8b5cf6";setEditDdGlOpen(true);}} onBlur={e=>{e.target.style.borderColor=T.border;setTimeout(()=>setEditDdGlOpen(false),150);}}/>
+                          onFocus={e=>{e.target.style.borderColor="#8b5cf6";setEditDdGlOpen(true);}}
+                          onBlur={e=>{e.target.style.borderColor=T.border;setTimeout(()=>setEditDdGlOpen(false),150);}}
+                          placeholder="Search glossary terms…" style={{...fldStyle}}/>
                         {editDdGlOpen&&editDdGlInput&&(
                           <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,boxShadow:"0 8px 24px rgba(0,0,0,.2)",zIndex:600,maxHeight:160,overflowY:"auto"}}>
                             {GLOSSARY_TERMS.filter(t=>!(editDd.glossaryTerms||[]).includes(t.term)&&t.term.toLowerCase().includes(editDdGlInput.toLowerCase())).slice(0,6).map(t=>(
@@ -16765,6 +16764,80 @@ const DomainsView = ({onAsset, onNav}) => {
                             {GLOSSARY_TERMS.filter(t=>!(editDd.glossaryTerms||[]).includes(t.term)&&t.term.toLowerCase().includes(editDdGlInput.toLowerCase())).length===0&&(
                               <div style={{padding:"10px 12px",fontSize:12,color:T.textMuted}}>No matching terms</div>
                             )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {/* Owners */}
+                    <div>
+                      <label style={lblStyle}>Owners</label>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:7}}>
+                        {(editDd.owners||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owners assigned</span>}
+                        {(editDd.owners||[]).map(o=>(
+                          <div key={o} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:T.accentDim,border:`1px solid ${T.accent}33`,borderLeft:`3px solid ${T.accent}`}}>
+                            <div style={{width:18,height:18,borderRadius:3,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(o)}</div>
+                            <span style={{fontSize:12,color:T.accent,fontWeight:500}}>{o}</span>
+                            <button onClick={()=>setEditDd(p=>({...p,owners:(p.owners||[]).filter(x=>x!==o)}))} style={{background:"none",border:"none",cursor:"pointer",color:T.accent,padding:0,display:"flex",lineHeight:1,opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(8)}</button>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{position:"relative"}}>
+                        <button onClick={()=>{setEditDdOwnerOpen(p=>!p);setEditDdOwnerSearch("");}} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",borderRadius:8,border:`1.5px solid ${editDdOwnerOpen?T.accent:T.border}`,background:T.bgElevated,color:T.textSub,fontSize:12,cursor:"pointer",width:"100%"}}>
+                          {Ic.plus(10)} Add owner
+                        </button>
+                        {editDdOwnerOpen&&(
+                          <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,boxShadow:"0 8px 24px rgba(0,0,0,.25)",zIndex:600,overflow:"hidden"}}>
+                            <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}>
+                              <input autoFocus value={editDdOwnerSearch} onChange={e=>setEditDdOwnerSearch(e.target.value)} placeholder="Search users…"
+                                style={{width:"100%",padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+                            </div>
+                            <div style={{maxHeight:150,overflowY:"auto"}}>
+                              {ALL_USERS.filter(u=>!(editDd.owners||[]).includes(u)&&(!editDdOwnerSearch||u.toLowerCase().includes(editDdOwnerSearch.toLowerCase()))).map(u=>(
+                                <button key={u} onClick={()=>{setEditDd(p=>({...p,owners:[...(p.owners||[]),u]}));setEditDdOwnerOpen(false);setEditDdOwnerSearch("");}}
+                                  style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:12,textAlign:"left"}}
+                                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                                  <div style={{width:22,height:22,borderRadius:5,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:T.accent}}>{ava(u)}</div>
+                                  {u}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {/* Stewards */}
+                    <div>
+                      <label style={lblStyle}>Stewards</label>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:7}}>
+                        {(editDd.experts||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards assigned</span>}
+                        {(editDd.experts||[]).map(s=>(
+                          <div key={s} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:"rgba(217,119,6,.08)",border:"1px solid rgba(217,119,6,.2)",borderLeft:"3px solid #d97706"}}>
+                            <div style={{width:18,height:18,borderRadius:"50%",background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(s)}</div>
+                            <span style={{fontSize:12,color:"#d97706",fontWeight:500}}>{s}</span>
+                            <button onClick={()=>setEditDd(p=>({...p,experts:(p.experts||[]).filter(x=>x!==s)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#d97706",padding:0,display:"flex",lineHeight:1,opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(8)}</button>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{position:"relative"}}>
+                        <button onClick={()=>{setEditDdExpertOpen(p=>!p);setEditDdExpertSearch("");}} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",borderRadius:8,border:`1.5px solid ${editDdExpertOpen?"#d97706":T.border}`,background:T.bgElevated,color:T.textSub,fontSize:12,cursor:"pointer",width:"100%"}}>
+                          {Ic.plus(10)} Add steward
+                        </button>
+                        {editDdExpertOpen&&(
+                          <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,boxShadow:"0 8px 24px rgba(0,0,0,.25)",zIndex:600,overflow:"hidden"}}>
+                            <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}>
+                              <input autoFocus value={editDdExpertSearch} onChange={e=>setEditDdExpertSearch(e.target.value)} placeholder="Search users…"
+                                style={{width:"100%",padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+                            </div>
+                            <div style={{maxHeight:150,overflowY:"auto"}}>
+                              {ALL_USERS.filter(u=>!(editDd.experts||[]).includes(u)&&(!editDdExpertSearch||u.toLowerCase().includes(editDdExpertSearch.toLowerCase()))).map(u=>(
+                                <button key={u} onClick={()=>{setEditDd(p=>({...p,experts:[...(p.experts||[]),u]}));setEditDdExpertOpen(false);setEditDdExpertSearch("");}}
+                                  style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"none",border:"none",cursor:"pointer",color:T.text,fontSize:12,textAlign:"left"}}
+                                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                                  <div style={{width:22,height:22,borderRadius:5,background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#d97706"}}>{ava(u)}</div>
+                                  {u}
+                                </button>
+                              ))}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -16837,6 +16910,51 @@ const DomainsView = ({onAsset, onNav}) => {
               </div>
             </div>
           </>
+        )}
+
+        {/* ── Delete Confirmation Modal (domain profile view) ── */}
+        {deleteConfirm&&(
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:950,backdropFilter:"blur(4px)"}}>
+            <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,width:400,padding:"28px 28px 22px",boxShadow:"0 24px 60px rgba(0,0,0,.35)"}}>
+              <div style={{width:44,height:44,borderRadius:12,background:`${T.rose}15`,border:`1px solid ${T.rose}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,marginBottom:16}}>🗑️</div>
+              <div style={{fontSize:16,fontWeight:700,color:T.text,marginBottom:8}}>
+                Delete {deleteConfirm.type==="domain"?"Domain":"Data Product"}?
+              </div>
+              <p style={{fontSize:13,color:T.textSub,lineHeight:1.65,margin:"0 0 8px"}}>
+                You are about to permanently delete <span style={{fontWeight:700,color:T.text}}>"{deleteConfirm.name}"</span>.
+              </p>
+              {deleteConfirm.type==="domain"&&(
+                <p style={{fontSize:12.5,color:T.textMuted,lineHeight:1.65,margin:"0 0 20px"}}>
+                  All data products associated with this domain will be orphaned. This action cannot be undone.
+                </p>
+              )}
+              {deleteConfirm.type==="product"&&(
+                <p style={{fontSize:12.5,color:T.textMuted,lineHeight:1.65,margin:"0 0 20px"}}>
+                  All asset links, SLA settings, and metadata for this data product will be permanently removed. This action cannot be undone.
+                </p>
+              )}
+              <div style={{padding:"12px 14px",background:`${T.rose}08`,border:`1px solid ${T.rose}25`,borderRadius:9,fontSize:12.5,color:T.textSub,marginBottom:22}}>
+                ⚠️ This action is irreversible.
+              </div>
+              <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+                <button onClick={()=>setDeleteConfirm(null)}
+                  style={{padding:"9px 18px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:13,fontWeight:500,cursor:"pointer"}}>
+                  Cancel
+                </button>
+                <button onClick={()=>{
+                  if(deleteConfirm.type==="product"){
+                    setProducts(prev=>prev.filter(p=>p.id!==deleteConfirm.id));
+                  } else {
+                    setSelectedDomainId(null);
+                    setDomains(prev=>prev.filter(d=>d.id!==deleteConfirm.id));
+                  }
+                  setDeleteConfirm(null);
+                }} style={{padding:"9px 18px",borderRadius:8,background:T.rose,border:"none",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     );

@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>How GDPR Links to Everything</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f1117;color:#e2e8f0;padding:32px 24px;min-height:100vh;}
+
+  h1{text-align:center;font-size:20px;font-weight:700;color:#fff;margin-bottom:6px;}
+  .sub{text-align:center;font-size:13px;color:#64748b;margin-bottom:40px;}
+
+  /* ── SECTION LABELS ── */
+  .section{max-width:1100px;margin:0 auto 48px;}
+  .section-title{font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.1em;margin-bottom:20px;display:flex;align-items:center;gap:10px;}
+  .section-title::after{content:'';flex:1;height:1px;background:#1e2736;}
+
+  /* ── CARDS ── */
+  .card{background:#161b27;border:1.5px solid #1e2736;border-radius:12px;overflow:hidden;}
+  .card-head{padding:12px 16px;border-bottom:1px solid #1e2736;display:flex;align-items:center;gap:10px;}
+  .card-body{padding:14px 16px;}
+  .card-icon{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;}
+  .card-title{font-size:13px;font-weight:700;color:#fff;}
+  .card-sub{font-size:11px;color:#64748b;margin-top:1px;}
+  .type-pill{font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px;margin-left:auto;flex-shrink:0;}
+
+  /* ── APPROACH A — TAG ── */
+  .tag-demo{max-width:1100px;margin:0 auto 48px;}
+  .tag-scene{display:grid;grid-template-columns:1fr 60px 1fr;gap:0;align-items:center;margin-bottom:24px;}
+  .tag-left,.tag-right{background:#161b27;border:1.5px solid #1e2736;border-radius:12px;padding:16px;}
+  .tag-mid{text-align:center;font-size:22px;color:#334155;}
+  .tag-head{font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;}
+  .tag-name{font-size:14px;font-weight:700;color:#fff;margin-bottom:10px;}
+  .tag-field{display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11.5px;}
+  .tag-key{color:#64748b;min-width:100px;}
+  .tag-val{color:#94a3b8;}
+  .inline-tag{display:inline-flex;align-items:center;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600;margin:2px;}
+  .it-blue{background:#1e3a5f;color:#60a5fa;}
+  .it-green{background:#14321f;color:#4ade80;}
+  .it-purple{background:#2e1065;color:#c4b5fd;}
+  .it-amber{background:#362009;color:#fbbf24;}
+  .it-red{background:#3b0f12;color:#f87171;}
+  .it-gray{background:#1e2736;color:#6b7280;}
+
+  .problem-box{background:#1a1215;border:1.5px solid #f8717130;border-radius:10px;padding:14px 16px;margin-top:10px;}
+  .problem-box .pb-title{font-size:11px;font-weight:700;color:#f87171;margin-bottom:8px;display:flex;align-items:center;gap:6px;}
+  .problem-row{font-size:12px;color:#94a3b8;margin-bottom:5px;display:flex;align-items:flex-start;gap:8px;}
+  .problem-row::before{content:'✗';color:#f87171;flex-shrink:0;margin-top:1px;}
+
+  /* ── APPROACH B — OBJECT ── */
+  .obj-scene{display:grid;grid-template-columns:280px 1fr;gap:24px;max-width:1100px;margin:0 auto 48px;}
+
+  .reg-obj{background:#161b27;border:1.5px solid #818cf830;border-radius:12px;overflow:hidden;}
+  .reg-obj-head{background:#1e1b4b;padding:14px 16px;border-bottom:1px solid #818cf830;}
+  .reg-obj-type{font-size:10px;font-weight:700;color:#818cf8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;}
+  .reg-obj-name{font-size:16px;font-weight:800;color:#fff;}
+  .reg-obj-meta{font-size:11px;color:#818cf870;margin-top:3px;}
+  .reg-section{padding:12px 16px;border-bottom:1px solid #1e2736;}
+  .reg-section:last-child{border-bottom:none;}
+  .reg-sec-title{font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;}
+  .reg-field{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:11.5px;}
+  .reg-field-k{color:#64748b;}
+  .reg-field-v{color:#c4b5fd;font-weight:600;}
+
+  .art-item{display:flex;gap:8px;margin-bottom:8px;align-items:flex-start;}
+  .art-badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:#2e1065;color:#818cf8;flex-shrink:0;margin-top:1px;}
+  .art-text{font-size:11.5px;color:#94a3b8;line-height:1.4;}
+  .art-text strong{color:#c4b5fd;}
+
+  /* relationship lines */
+  .rel-container{display:flex;flex-direction:column;gap:16px;}
+  .rel-group{background:#161b27;border:1.5px solid #1e2736;border-radius:12px;overflow:hidden;}
+  .rel-group-head{background:#0f1117;padding:10px 14px;border-bottom:1px solid #1e2736;font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.08em;display:flex;align-items:center;gap:8px;}
+  .rel-line{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid #0f1117;}
+  .rel-line:last-child{border-bottom:none;}
+  .rel-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;}
+  .rel-name{font-size:12px;font-weight:600;color:#e2e8f0;flex:1;}
+  .rel-sub{font-size:10px;color:#475569;}
+  .rel-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;flex-shrink:0;}
+  .rb-policy{background:#2e1065;color:#c4b5fd;}
+  .rb-table{background:#1e3a5f;color:#60a5fa;}
+  .rb-process{background:#362009;color:#fbbf24;}
+  .rb-rule{background:#14321f;color:#4ade80;}
+
+  .rel-verb{font-size:10px;color:#818cf8;background:#2e1065;padding:2px 8px;border-radius:20px;flex-shrink:0;}
+
+  /* ── WHAT CHANGES ── */
+  .change-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;max-width:1100px;margin:0 auto 48px;}
+  .change-card{background:#161b27;border:1.5px solid #1e2736;border-radius:12px;padding:16px;}
+  .change-num{font-size:28px;font-weight:800;margin-bottom:4px;}
+  .change-label{font-size:12px;font-weight:600;color:#94a3b8;margin-bottom:10px;}
+  .change-desc{font-size:11.5px;color:#64748b;line-height:1.6;}
+
+  /* ── COMPARISON ── */
+  .comp-row{display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:1100px;margin:0 auto 20px;}
+  .comp-panel{background:#161b27;border:1.5px solid #1e2736;border-radius:12px;padding:18px;}
+  .comp-panel-title{font-size:12px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+  .comp-item{display:flex;align-items:flex-start;gap:8px;margin-bottom:10px;font-size:12px;color:#94a3b8;line-height:1.5;}
+  .comp-item .bullet{flex-shrink:0;margin-top:2px;}
+
+  /* ── BOTTOM CALLOUT ── */
+  .final{max-width:1100px;margin:0 auto;background:#161b27;border:1.5px solid #334155;border-radius:12px;padding:20px 24px;display:flex;gap:14px;align-items:flex-start;}
+  .final-icon{font-size:24px;flex-shrink:0;}
+  .final-text{font-size:13px;color:#94a3b8;line-height:1.8;}
+  .final-text strong{color:#fff;}
+  .final-text .hl{color:#818cf8;font-weight:700;}
+  .final-text .hl2{color:#4ade80;font-weight:700;}
+  .final-text .hl3{color:#f87171;font-weight:700;}
+
+  .arrow-right{font-size:20px;color:#334155;text-align:center;line-height:1;}
+</style>
+</head>
+<body>
+
+<h1>How Does GDPR Link to Assets — Tag vs Object?</h1>
+<p class="sub">Three ways to understand the same question.</p>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- PART 1 — TAG APPROACH                                  -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">Approach A — The Tag Way (like a sticky note)</div>
+
+  <div class="tag-scene">
+    <!-- LEFT: Asset -->
+    <div class="tag-left">
+      <div class="tag-head">📦 Asset (Table)</div>
+      <div class="tag-name">customers</div>
+      <div class="tag-field"><span class="tag-key">database</span><span class="tag-val">Snowflake</span></div>
+      <div class="tag-field"><span class="tag-key">domain</span><span class="tag-val">Marketing</span></div>
+      <div class="tag-field"><span class="tag-key">owner</span><span class="tag-val">maya.chen</span></div>
+      <div class="tag-field" style="align-items:flex-start;">
+        <span class="tag-key">tags</span>
+        <span>
+          <span class="inline-tag it-red">PII</span>
+          <span class="inline-tag it-blue">GDPR</span>
+          <span class="inline-tag it-green">customer-data</span>
+        </span>
+      </div>
+      <div class="tag-field" style="align-items:flex-start;">
+        <span class="tag-key">regulations</span>
+        <span>
+          <span class="inline-tag it-purple">GDPR</span>
+          <span class="inline-tag it-amber">HIPAA</span>
+        </span>
+      </div>
+    </div>
+
+    <!-- MIDDLE -->
+    <div class="tag-mid">
+      <div style="font-size:11px;color:#475569;margin-bottom:4px;">links to</div>
+      ──→
+    </div>
+
+    <!-- RIGHT: GDPR as tag -->
+    <div class="tag-right">
+      <div class="tag-head">🏷️ GDPR (as a tag / string)</div>
+      <div style="background:#2e1065;border:1.5px solid #818cf840;border-radius:10px;padding:16px;text-align:center;">
+        <div style="font-size:32px;font-weight:800;color:#818cf8;margin-bottom:6px;">"GDPR"</div>
+        <div style="font-size:11px;color:#64748b;">That's it. Just a word.<br/>No page. No fields. No relationships.<br/>No articles. No workflows.</div>
+      </div>
+      <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:6px;">
+        <div style="flex:1;background:#0f1117;border-radius:7px;padding:8px 10px;font-size:11px;color:#475569;text-align:center;">❌ No own page</div>
+        <div style="flex:1;background:#0f1117;border-radius:7px;padding:8px 10px;font-size:11px;color:#475569;text-align:center;">❌ No articles</div>
+        <div style="flex:1;background:#0f1117;border-radius:7px;padding:8px 10px;font-size:11px;color:#475569;text-align:center;">❌ No workflows</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="problem-box">
+    <div class="pb-title">⚠️ What goes wrong with just a tag</div>
+    <div class="problem-row">You can filter policies by "GDPR" — but GDPR itself knows nothing about your data.</div>
+    <div class="problem-row">GDPR has no idea which tables, columns or processes it covers. You have to manually check.</div>
+    <div class="problem-row">When an auditor asks "show me everything covered under GDPR" — you have to go search for it yourself.</div>
+    <div class="problem-row">Nothing automatically happens when you add the GDPR tag. No tasks. No checks. No forms.</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- PART 2 — OBJECT APPROACH                               -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">Approach B — The Object Way (Collibra) — GDPR has its own page</div>
+
+  <div class="obj-scene">
+
+    <!-- LEFT: GDPR OBJECT -->
+    <div class="reg-obj">
+      <div class="reg-obj-head">
+        <div class="reg-obj-type">Regulation Object</div>
+        <div class="reg-obj-name">🇪🇺 GDPR</div>
+        <div class="reg-obj-meta">General Data Protection Regulation</div>
+      </div>
+      <div class="reg-section">
+        <div class="reg-sec-title">Details</div>
+        <div class="reg-field"><span class="reg-field-k">Jurisdiction</span><span class="reg-field-v">European Union</span></div>
+        <div class="reg-field"><span class="reg-field-k">Effective</span><span class="reg-field-v">May 25, 2018</span></div>
+        <div class="reg-field"><span class="reg-field-k">Status</span><span style="color:#4ade80;font-weight:700;">Active</span></div>
+        <div class="reg-field"><span class="reg-field-k">Penalty</span><span class="reg-field-v">4% global revenue</span></div>
+      </div>
+      <div class="reg-section">
+        <div class="reg-sec-title">Key Articles</div>
+        <div class="art-item"><div class="art-badge">Art.5</div><div class="art-text"><strong>Processing Principles</strong> — lawful, fair, transparent</div></div>
+        <div class="art-item"><div class="art-badge">Art.17</div><div class="art-text"><strong>Right to Erasure</strong> — delete on request</div></div>
+        <div class="art-item"><div class="art-badge">Art.25</div><div class="art-text"><strong>Privacy by Design</strong> — built-in protection</div></div>
+        <div class="art-item"><div class="art-badge">Art.30</div><div class="art-text"><strong>Record of Processing</strong> — document everything</div></div>
+        <div class="art-item"><div class="art-badge">Art.35</div><div class="art-text"><strong>DPIA Required</strong> — assess high-risk data</div></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: RELATIONSHIPS -->
+    <div class="rel-container">
+
+      <div style="background:#0f1117;border:1.5px dashed #334155;border-radius:10px;padding:12px 16px;font-size:12px;color:#64748b;line-height:1.6;">
+        <strong style="color:#e2e8f0;">The key difference:</strong> GDPR is a node in a graph. Everything that relates to GDPR creates a named, typed edge connecting to it. You can traverse that graph in any direction — start from GDPR and find every linked asset, or start from an asset and find every regulation it falls under.
+      </div>
+
+      <!-- Policies -->
+      <div class="rel-group">
+        <div class="rel-group-head">
+          📋 Policies  <span style="color:#818cf8;">complies_with</span>  GDPR
+        </div>
+        <div class="rel-line">
+          <div class="rel-icon" style="background:#2e1065;">📋</div>
+          <div style="flex:1;"><div class="rel-name">PII Data Handling Policy</div><div class="rel-sub">Active · Owner: maya.chen</div></div>
+          <div class="rel-badge rb-policy">Policy</div>
+        </div>
+        <div class="rel-line">
+          <div class="rel-icon" style="background:#2e1065;">📋</div>
+          <div style="flex:1;"><div class="rel-name">Data Retention 90d Policy</div><div class="rel-sub">Active · Owner: dev.patel</div></div>
+          <div class="rel-badge rb-policy">Policy</div>
+        </div>
+        <div class="rel-line">
+          <div class="rel-icon" style="background:#2e1065;">📋</div>
+          <div style="flex:1;"><div class="rel-name">Right to Erasure Workflow</div><div class="rel-sub">Active · Owner: sarah.kim</div></div>
+          <div class="rel-badge rb-policy">Policy</div>
+        </div>
+      </div>
+
+      <!-- Tables -->
+      <div class="rel-group">
+        <div class="rel-group-head">
+          📦 Data Assets  <span style="color:#60a5fa;">governed_by</span>  GDPR
+        </div>
+        <div class="rel-line">
+          <div class="rel-icon" style="background:#1e3a5f;">📦</div>
+          <div style="flex:1;"><div class="rel-name">customers</div><div class="rel-sub">Snowflake · Marketing domain</div></div>
+          <div class="rel-badge rb-table">Table</div>
+        </div>
+        <div class="rel-line">
+          <div class="rel-icon" style="background:#1e3a5f;">📦</div>
+          <div style="flex:1;"><div class="rel-name">user_sessions</div><div class="rel-sub">Snowflake · Product domain</div></div>
+          <div class="rel-badge rb-table">Table</div>
+        </div>
+        <div class="rel-line">
+          <div class="rel-icon" style="background:#1e3a5f;">📦</div>
+          <div style="flex:1;"><div class="rel-name">email_column → customers</div><div class="rel-sub">Must be masked · PII type: email</div></div>
+          <div class="rel-badge rb-table">Column</div>
+        </div>
+      </div>
+
+      <!-- Processes -->
+      <div class="rel-group">
+        <div class="rel-group-head">
+          ⚙️ Business Processes  <span style="color:#fbbf24;">subject_to</span>  GDPR
+        </div>
+        <div class="rel-line">
+          <div class="rel-icon" style="background:#362009;">⚙️</div>
+          <div style="flex:1;"><div class="rel-name">Customer Data Ingestion</div><div class="rel-sub">DPIA required · Status: Completed</div></div>
+          <div class="rel-badge rb-process">Process</div>
+        </div>
+        <div class="rel-line">
+          <div class="rel-icon" style="background:#362009;">⚙️</div>
+          <div style="flex:1;"><div class="rel-name">Marketing Campaign Pipeline</div><div class="rel-sub">DPIA required · Status: Pending</div></div>
+          <div class="rel-badge rb-process">Process</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- PART 3 — WHAT CHANGES WHEN GDPR IS AN OBJECT          -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">What actually changes when GDPR is an object</div>
+  <div class="change-grid">
+
+    <div class="change-card">
+      <div class="change-num" style="color:#818cf8;">1</div>
+      <div class="change-label">You can ask "what is under GDPR?"</div>
+      <div class="change-desc">
+        With a tag: you search every policy and asset for the string "GDPR". Manual. Slow.<br/><br/>
+        With an object: you open the GDPR page and <strong style="color:#e2e8f0;">it already lists everything linked to it</strong> — all tables, all policies, all processes. One click.
+      </div>
+    </div>
+
+    <div class="change-card">
+      <div class="change-num" style="color:#4ade80;">2</div>
+      <div class="change-label">Linking triggers something real</div>
+      <div class="change-desc">
+        With a tag: nothing happens when you add "GDPR".<br/><br/>
+        With an object: the moment you create a <strong style="color:#e2e8f0;">complies_with relationship</strong> between a table and GDPR — tasks fire. The data owner gets a DPIA form. The steward gets a masking check task. Article 30 register gets a new entry.
+      </div>
+    </div>
+
+    <div class="change-card">
+      <div class="change-num" style="color:#fbbf24;">3</div>
+      <div class="change-label">Compliance % becomes calculable</div>
+      <div class="change-desc">
+        With a tag: how many assets are GDPR compliant? You don't know. You'd have to check manually.<br/><br/>
+        With an object: GDPR knows <strong style="color:#e2e8f0;">exactly how many things are linked to it</strong> and whether each one has completed the required tasks. So it can show: 47 assets, 32 compliant = 68%.
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- PART 4 — THE SIMPLE ANALOGY                           -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="section">
+  <div class="section-title">The simplest way to think about it</div>
+  <div class="comp-row">
+
+    <div class="comp-panel" style="border-color:#f8717130;">
+      <div class="comp-panel-title" style="color:#f87171;">
+        <span style="font-size:18px;">🏷️</span> GDPR as a Tag
+      </div>
+      <div style="font-size:13px;color:#94a3b8;line-height:1.7;margin-bottom:14px;">
+        Like writing <strong style="color:#fff;">"GDPR"</strong> on a sticky note and putting it on a folder.
+      </div>
+      <div class="comp-item"><span class="bullet" style="color:#f87171;">✗</span> GDPR doesn't know about the folder</div>
+      <div class="comp-item"><span class="bullet" style="color:#f87171;">✗</span> The folder doesn't know about other GDPR folders</div>
+      <div class="comp-item"><span class="bullet" style="color:#f87171;">✗</span> Removing the sticky note is all you need to "remove" GDPR</div>
+      <div class="comp-item"><span class="bullet" style="color:#f87171;">✗</span> Nothing happens when you put the sticky note on</div>
+      <div style="margin-top:14px;background:#1a1215;border-radius:8px;padding:10px 12px;font-size:12px;color:#f87171;">GDPR is passive. It's just a label you read.</div>
+    </div>
+
+    <div class="comp-panel" style="border-color:#818cf830;">
+      <div class="comp-panel-title" style="color:#818cf8;">
+        <span style="font-size:18px;">📋</span> GDPR as an Object
+      </div>
+      <div style="font-size:13px;color:#94a3b8;line-height:1.7;margin-bottom:14px;">
+        Like hiring a <strong style="color:#fff;">GDPR compliance officer</strong> who sits in your system.
+      </div>
+      <div class="comp-item"><span class="bullet" style="color:#4ade80;">✓</span> They know every table, policy, process under their watch</div>
+      <div class="comp-item"><span class="bullet" style="color:#4ade80;">✓</span> When you add something new, they hand you a checklist</div>
+      <div class="comp-item"><span class="bullet" style="color:#4ade80;">✓</span> They track whether every item on that list is done</div>
+      <div class="comp-item"><span class="bullet" style="color:#4ade80;">✓</span> They can tell an auditor exactly what's covered and what isn't</div>
+      <div style="margin-top:14px;background:#1a2720;border-radius:8px;padding:10px 12px;font-size:12px;color:#4ade80;">GDPR is active. It watches, tracks, and assigns work.</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
+<!-- BOTTOM LINE                                           -->
+<!-- ══════════════════════════════════════════════════════ -->
+<div class="final">
+  <div class="final-icon">💡</div>
+  <div class="final-text">
+    <strong>So to directly answer your question:</strong> In Collibra, GDPR is linked to assets through a <span class="hl">named relationship</span> — not a tag, not a free-text field. The relationship has a type (e.g. <span class="hl">"complies_with"</span>, <span class="hl">"governed_by"</span>, <span class="hl">"subject_to"</span>) and it goes both ways. From the GDPR page you can see every asset linked to it. From an asset's page you can see every regulation it falls under. <span class="hl2">In our prototype right now, we store GDPR as a string in an array on the policy — which is the tag approach.</span> It's the right starting point. The upgrade path is: make Regulation its own entity, define the relationship types, and let the system traverse those relationships — that's when GDPR becomes active instead of passive. <span class="hl3">That's a Regulations module — a Phase 2 feature.</span>
+  </div>
+</div>
+
+</body>
+</html>
