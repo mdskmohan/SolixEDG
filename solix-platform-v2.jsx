@@ -14813,6 +14813,7 @@ const DATA_PRODUCTS_DATA = [
 // ─────────────────────────────────────────────
 const LIFECYCLE_COLORS_DP = {PRODUCTION:"#16a34a",DEVELOPMENT:"#0891b2",TESTING:"#d97706",IDEATION:"#8b5cf6",DEPRECATED:"#6b7280",RETIRED:"#374151"};
 const SLA_COLORS_DP = {GOLD:"#f59e0b",SILVER:"#9ca3af",BRONZE:"#b45309",CUSTOM:"#6366f1"};
+const COLOR_PALETTE = ["#0ea5e9","#f59e0b","#3b82f6","#8b5cf6","#f43f5e","#10b981","#f97316","#06b6d4","#84cc16","#ec4899"];
 
 const LifecycleBadge = ({stage}) => (
   <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 9px",borderRadius:99,fontSize:10.5,fontWeight:700,
@@ -15397,8 +15398,6 @@ const DomainsView = ({onAsset, onNav}) => {
     resetAddPanel();
     setDomainTab("subdomains");
   };
-
-  const COLOR_PALETTE = ["#0ea5e9","#f59e0b","#3b82f6","#8b5cf6","#f43f5e","#10b981","#f97316","#06b6d4","#84cc16","#ec4899"];
 
   // ══════════════════════════════════════════════
   // DATA PRODUCT DETAIL VIEW
@@ -17947,7 +17946,7 @@ const DataProductsView = ({onAsset, onNav}) => {
                       <div><label style={lblStyle}>Name</label><input value={dpEditData.name} onChange={e=>setDpEditData(p=>({...p,name:e.target.value}))} style={{...fldStyle,fontFamily:"'Geist Mono',monospace"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/></div>
                       <div><label style={lblStyle}>Display Name</label><input value={dpEditData.displayName} onChange={e=>setDpEditData(p=>({...p,displayName:e.target.value}))} style={fldStyle} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/></div>
                     </div>
-                    <div><label style={lblStyle}>Description</label><textarea value={dpEditData.description} onChange={e=>setDpEditData(p=>({...p,description:e.target.value}))} rows={4} style={{...fldStyle,resize:"vertical"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/></div>
+                    <div><label style={lblStyle}>Description</label><textarea value={dpEditData.description||""} onChange={e=>setDpEditData(p=>({...p,description:e.target.value}))} rows={4} style={{...fldStyle,resize:"vertical"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/></div>
                     <div>
                       <label style={lblStyle}>Icon</label>
                       <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
@@ -17969,7 +17968,7 @@ const DataProductsView = ({onAsset, onNav}) => {
               </div>
               <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.bgElevated,flexShrink:0}}>
                 <button onClick={()=>{setDpEditOpen(false);setDpEditData(null);}} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
-                <button onClick={()=>{patchDP(dpEditData.id,{name:dpEditData.name,displayName:dpEditData.displayName,description:dpEditData.description,icon:dpEditData.icon,color:dpEditData.color});setDpEditOpen(false);setDpEditData(null);}}
+                <button onClick={()=>{patchDP(dpEditData.id,{name:dpEditData.name,displayName:dpEditData.displayName,description:dpEditData.description||"",icon:dpEditData.icon,color:dpEditData.color});setDpEditOpen(false);setDpEditData(null);}}
                   style={{padding:"8px 20px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Save Changes</button>
               </div>
             </div>
