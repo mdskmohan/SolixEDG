@@ -6454,7 +6454,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       {k:"violations", l:"Violations",       badge:openViolsForPol(p.id).length||null, danger:openViolsForPol(p.id).length>0},
                       {k:"runs",       l:"Runs",             badge:(p.runs||[]).length||null},
                       {k:"assets",     l:"Assets",           badge:(p.governedAssets||[]).length||[...new Set((p.rules||[]).filter(r=>r.table).map(r=>r.table))].length||null},
-                      {k:"activity",   l:"Activity",         badge:(p.history||[]).length},
+                      {k:"activity",   l:"Audit Logs",       badge:(p.history||[]).length},
                     ].map(({k,l,badge,danger})=>(
                       <button key={k} onClick={()=>setPdTab(k)}
                         style={{display:"flex",alignItems:"center",gap:5,padding:"9px 12px",background:"none",border:"none",borderBottom:`2px solid ${pdTab===k?T.accent:"transparent"}`,color:pdTab===k?T.accent:T.textMuted,fontSize:11.5,fontWeight:pdTab===k?600:400,cursor:"pointer",marginBottom:-1,whiteSpace:"nowrap",transition:"all .1s",flexShrink:0}}>
@@ -6816,7 +6816,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
 
                           <div style={{padding:"16px"}}>
                             <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:9}}>Actions</div>
-                            {[{l:"View Linked Assets",action:()=>setPdTab("assets")},{l:"Copy Link",action:()=>onToast("Link copied","success")},{l:"View Activity",action:()=>setPdTab("activity")}].map((a,i)=>(
+                            {[{l:"View Linked Assets",action:()=>setPdTab("assets")},{l:"Copy Link",action:()=>onToast("Link copied","success")},{l:"View Audit Logs",action:()=>setPdTab("activity")}].map((a,i)=>(
                               <button key={i} onClick={a.action} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",background:"none",border:"none",borderBottom:i<2?`1px solid ${T.border}`:"none",color:T.textSub,fontSize:12.5,cursor:"pointer"}}
                                 onMouseEnter={e=>e.currentTarget.style.color=T.accent} onMouseLeave={e=>e.currentTarget.style.color=T.textSub}>
                                 {a.l}<svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
@@ -7288,7 +7288,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       );
                     })()}
 
-                    {/* ── Activity ── */}
+                    {/* ── Audit Logs ── */}
                     {pdTab==="activity"&&(
                       <div style={{padding:"20px 22px"}}>
                         <AuditLogTable entries={policyHistToEntries(p.history,p)}/>
