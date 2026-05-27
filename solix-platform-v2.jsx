@@ -12210,14 +12210,14 @@ function domainToActivityEntries(dm){
   const experts = dm.experts||[];
   const tags = dm.tags||[];
   return [
-    {id:"da1",timestamp:"2026-05-27 · 10:14",category:"EDIT",   action:`Domain "${dm.displayName}" created`,                         details:`Type: ${dm.domainType}`,                    actor:"alex.rivera", isSystem:false,note:null,diff:null},
-    {id:"da2",timestamp:"2026-05-26 · 14:32",category:"EDIT",   action:"Description updated",                                        details:"",                                           actor:owners[0]||"maya.chen",isSystem:false,note:null,diff:null},
-    {id:"da3",timestamp:"2026-05-25 · 09:20",category:"LINEAGE",action:`${dm.assetCount} asset${dm.assetCount!==1?"s":""} linked to domain`, details:"",                               actor:"system",      isSystem:true, note:null,diff:null},
-    {id:"da4",timestamp:"2026-05-24 · 16:45",category:"EDIT",   action:"Owner assigned",                                             details:owners[0]?`${owners[0]} added as owner`:"",  actor:"alex.rivera", isSystem:false,note:null,diff:null},
-    {id:"da5",timestamp:"2026-05-23 · 11:30",category:"EDIT",   action:"Steward assigned",                                           details:experts[0]?`${experts[0]} added as steward`:"",actor:owners[0]||"maya.chen",isSystem:false,note:null,diff:null},
-    {id:"da6",timestamp:"2026-05-22 · 08:00",category:"SYSTEM", action:"Quality score recalculated",                                 details:`Score: ${dm.quality}%`,                     actor:"system",      isSystem:true, note:null,diff:null},
-    {id:"da7",timestamp:"2026-05-21 · 13:15",category:"EDIT",   action:`Domain type set to "${dm.domainType}"`,                      details:"",                                           actor:owners[0]||"maya.chen",isSystem:false,note:null,diff:null},
-    ...tags.map((t,i)=>({id:`dat${i}`,timestamp:`2026-05-${20-i} · ${9+i}:${10+i*7<60?10+i*7:"0"+i}`,category:"EDIT",action:`Tag "${t}" added`,details:"",actor:owners[0]||"maya.chen",isSystem:false,note:null,diff:null})),
+    {id:"da1",timestamp:"2026-05-27 · 10:14",category:"EDIT",   action:`Domain "${dm.displayName}" created`,                              details:`Type: ${dm.domainType}`,                        actor:"alex.rivera",         isSystem:false,note:null,diff:null},
+    {id:"da2",timestamp:"2026-05-26 · 14:32",category:"EDIT",   action:"Description updated",                                             details:"",                                              actor:owners[0]||"maya.chen", isSystem:false,note:null,diff:null},
+    {id:"da3",timestamp:"2026-05-25 · 09:20",category:"LINEAGE",action:`${dm.assetCount} asset${dm.assetCount!==1?"s":""} linked to domain`,details:"",                                            actor:"system",               isSystem:true, note:null,diff:null},
+    {id:"da4",timestamp:"2026-05-24 · 16:45",category:"EDIT",   action:"Owner assigned",                                                  details:owners[0]?`${owners[0]} added as owner`:"",      actor:"alex.rivera",         isSystem:false,note:null,diff:null},
+    {id:"da5",timestamp:"2026-05-23 · 11:30",category:"EDIT",   action:"Steward assigned",                                                details:experts[0]?`${experts[0]} added as steward`:"",  actor:owners[0]||"maya.chen", isSystem:false,note:null,diff:null},
+    {id:"da6",timestamp:"2026-05-22 · 13:15",category:"LINEAGE",action:"Data products linked to domain",                                  details:`${dm.displayName} domain`,                      actor:"system",               isSystem:true, note:null,diff:null},
+    {id:"da7",timestamp:"2026-05-21 · 10:00",category:"EDIT",   action:`Domain type set to "${dm.domainType}"`,                           details:"",                                              actor:owners[0]||"maya.chen", isSystem:false,note:null,diff:null},
+    ...tags.map((t,i)=>({id:`dat${i}`,timestamp:`2026-05-${20-i} · ${9+i}:${10+i*7<60?10+i*7:"0"+i}`,category:"TAG",action:`Tag "${t}" added`,details:"",actor:owners[0]||"maya.chen",isSystem:false,note:null,diff:null})),
   ];
 }
 
