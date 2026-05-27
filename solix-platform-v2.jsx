@@ -4752,7 +4752,7 @@ const QualityView = () => {
         const sCfg = INC_STATUS_CFG[inc.status]||{label:inc.status,color:T.textMuted,bg:T.bgElevated};
         const nextStates = INC_NEXT_STATES[inc.status]||[];
         const terminalTarget = incActionModal.newStatus==="Resolved"||incActionModal.newStatus==="Dismissed";
-        const noDescNeeded   = incActionModal.newStatus==="In Progress";
+        const noDescNeeded   = incActionModal.newStatus==="In Progress"||incActionModal.newStatus==="Open";
         const canSubmit = incActionModal.newStatus && (noDescNeeded || incActionModal.desc.trim().length>0);
         const submitAction = () => {
           if(!canSubmit) return;
@@ -9158,7 +9158,7 @@ const PolicyManagerView = ({onToast, onNav}) => {
         const vCfg = VIOL_STATUS_CFG_M[viol.status]||{label:viol.status,color:T.textMuted,bg:T.bgElevated};
         const nextStates = VIOL_NEXT_M[viol.status]||[];
         const terminalTarget = violActionModal.newStatus==="Resolved"||violActionModal.newStatus==="Dismissed";
-        const noDescNeeded   = violActionModal.newStatus==="In Progress";
+        const noDescNeeded   = violActionModal.newStatus==="In Progress"||violActionModal.newStatus==="Open";
         const canSubmit = violActionModal.newStatus && (noDescNeeded || violActionModal.desc.trim().length>0);
         const submitViol = () => {
           if(!canSubmit) return;
@@ -15365,7 +15365,7 @@ const DomainsView = ({onAsset, onNav}) => {
 
   const handleEditDomain = () => {
     if(!editDd||!editDd.name.trim()) return;
-    patchDomain(editDd.id,{name:editDd.name.trim(),displayName:editDd.displayName.trim()||editDd.name.trim(),icon:editDd.icon,color:editDd.color,domainType:editDd.domainType,description:editDd.description.trim(),owners:editDd.owners||[],experts:editDd.experts||[]});
+    patchDomain(editDd.id,{name:editDd.name.trim(),displayName:editDd.displayName.trim()||editDd.name.trim(),icon:editDd.icon,color:editDd.color,domainType:editDd.domainType,description:(editDd.description||"").trim(),owners:editDd.owners||[],experts:editDd.experts||[]});
     setEditDomainOpen(false); setEditDd(null);
   };
 
@@ -15946,7 +15946,6 @@ const DomainsView = ({onAsset, onNav}) => {
                   {dmMenuOpen&&(
                     <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",minWidth:220,overflow:"hidden"}}>
                       {[
-                        {icon:"✏️",label:"Rename",sub:"Change the display name",action:()=>{setDmRenameValue(dm.displayName);setDmRenameMode(true);setDmMenuOpen(false);}},
                         {icon:"🖊️",label:"Edit Details",sub:"Edit all domain fields",action:()=>{setEditDd({...dm});setEditDomainOpen(true);setDmMenuOpen(false);}},
                         {icon:"🎨",label:"Style",sub:"Change icon and color",action:()=>{setDmStyleOpen(true);setDmMenuOpen(false);}},
                       ].map(item=>(
@@ -16671,7 +16670,7 @@ const DomainsView = ({onAsset, onNav}) => {
                     </div>
                     <div>
                       <label style={lblStyle}>Description</label>
-                      <textarea value={editDd.description} onChange={e=>setEditDd(p=>({...p,description:e.target.value}))} rows={4} style={{...fldStyle,resize:"vertical"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                      <textarea value={editDd.description||""} onChange={e=>setEditDd(p=>({...p,description:e.target.value}))} rows={4} style={{...fldStyle,resize:"vertical"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
                     </div>
                     <div>
                       <label style={lblStyle}>Domain Type</label>
@@ -16737,7 +16736,7 @@ const DomainsView = ({onAsset, onNav}) => {
                     </div>
                     <div>
                       <label style={lblStyle}>Description</label>
-                      <textarea value={pdEditData.description} onChange={e=>setPdEditData(p=>({...p,description:e.target.value}))} rows={4} style={{...fldStyle,resize:"vertical"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                      <textarea value={pdEditData.description||""} onChange={e=>setPdEditData(p=>({...p,description:e.target.value}))} rows={4} style={{...fldStyle,resize:"vertical"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
                     </div>
                     <div>
                       <label style={lblStyle}>Icon</label>
@@ -16760,7 +16759,7 @@ const DomainsView = ({onAsset, onNav}) => {
               </div>
               <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.bgElevated,flexShrink:0}}>
                 <button onClick={()=>{setPdEditOpen(false);setPdEditData(null);}} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
-                <button onClick={()=>{patchProduct(pdEditData.id,{name:pdEditData.name,displayName:pdEditData.displayName,description:pdEditData.description,icon:pdEditData.icon,color:pdEditData.color});setPdEditOpen(false);setPdEditData(null);}}
+                <button onClick={()=>{patchProduct(pdEditData.id,{name:pdEditData.name,displayName:pdEditData.displayName,description:pdEditData.description||"",icon:pdEditData.icon,color:pdEditData.color});setPdEditOpen(false);setPdEditData(null);}}
                   style={{padding:"8px 20px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Save Changes</button>
               </div>
             </div>
