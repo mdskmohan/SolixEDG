@@ -12129,7 +12129,7 @@ function policyHistToEntries(history,p){
 // ─────────────────────────────────────────────
 // AuditLogTable — universal audit log component
 // ─────────────────────────────────────────────
-const AuditLogTable=({entries=[],pageSize=20})=>{
+const AuditLogTable=({entries=[],pageSize=20,hideActorFilter=false})=>{
   const [search,    setSearch]    =useState("");
   const [catSel,    setCatSel]    =useState([]);   // [] = all
   const [actSel,    setActSel]    =useState([]);   // [] = all; values: "Users","System"
@@ -12233,7 +12233,8 @@ const AuditLogTable=({entries=[],pageSize=20})=>{
           )}
         </div>
 
-        {/* Actor multi-select dropdown */}
+        {/* Actor multi-select dropdown — hidden when all entries are user-scoped */}
+        {!hideActorFilter&&(
         <div style={{position:"relative"}} onClick={e=>e.stopPropagation()}>
           <button onClick={()=>setOpenDrop(d=>d==="act"?null:"act")}
             style={{height:34,padding:"0 10px 0 12px",borderRadius:8,border:`1px solid ${actSel.length>0?T.accent:T.border}`,
@@ -12254,6 +12255,7 @@ const AuditLogTable=({entries=[],pageSize=20})=>{
             </div>
           )}
         </div>
+        )}
 
         {/* Export */}
         <button onClick={exportCsv}
@@ -12268,11 +12270,13 @@ const AuditLogTable=({entries=[],pageSize=20})=>{
       {/* ── Table ── */}
       <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
         {/* Header row */}
-        <div style={{display:"grid",gridTemplateColumns:"190px 86px 1fr 1fr 150px 28px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,padding:"0 16px"}}>
-          {["Timestamp","Category","Action","Details","Actor",""].map((h,i)=>(
-            <div key={i} style={{padding:"9px 0",paddingRight:i<5?12:0,fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</div>
+        {(()=>{const hdrs=hideActorFilter?["Timestamp","Category","Action","Details",""] :["Timestamp","Category","Action","Details","Actor",""];const lastIdx=hdrs.length-1;return(
+        <div style={{display:"grid",gridTemplateColumns:hideActorFilter?"190px 86px 1fr 1fr 28px":"190px 86px 1fr 1fr 150px 28px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,padding:"0 16px"}}>
+          {hdrs.map((h,i)=>(
+            <div key={i} style={{padding:"9px 0",paddingRight:i<lastIdx?12:0,fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</div>
           ))}
         </div>
+        );})()}
 
         {paged.length===0&&(
           <div style={{padding:"36px",textAlign:"center",fontSize:12.5,color:T.textMuted}}>No audit entries match your filters.</div>
@@ -12287,7 +12291,7 @@ const AuditLogTable=({entries=[],pageSize=20})=>{
             <React.Fragment key={entry.id}>
               <div
                 onClick={()=>hasExp&&setExpanded(isExp?null:entry.id)}
-                style={{display:"grid",gridTemplateColumns:"190px 86px 1fr 1fr 150px 28px",padding:"0 16px",
+                style={{display:"grid",gridTemplateColumns:hideActorFilter?"190px 86px 1fr 1fr 28px":"190px 86px 1fr 1fr 150px 28px",padding:"0 16px",
                   borderBottom:isLast&&!isExp?"none":`1px solid ${T.border}`,
                   background:isExp?T.bgElevated:"transparent",
                   cursor:hasExp?"pointer":"default",transition:"background .1s"}}
@@ -12309,7 +12313,8 @@ const AuditLogTable=({entries=[],pageSize=20})=>{
                 <div style={{padding:"12px 12px 12px 0",display:"flex",alignItems:"center",minWidth:0}}>
                   <span style={{fontSize:12,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.details||"—"}</span>
                 </div>
-                {/* Actor */}
+                {/* Actor — hidden in user-scoped contexts */}
+                {!hideActorFilter&&(
                 <div style={{padding:"12px 0",display:"flex",alignItems:"center",gap:7,minWidth:0}}>
                   <div style={{width:22,height:22,borderRadius:6,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,
                     background:entry.isSystem?"rgba(107,114,128,.15)":T.accentDim,
@@ -12318,6 +12323,7 @@ const AuditLogTable=({entries=[],pageSize=20})=>{
                   </div>
                   <span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:entry.isSystem?"#6b7280":T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.actor}</span>
                 </div>
+                )}
                 {/* Expand chevron */}
                 <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}>
                   {hasExp&&<svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{color:T.textMuted,transition:"transform .15s",transform:isExp?"rotate(180deg)":"rotate(0deg)"}}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
@@ -19735,7 +19741,7 @@ const ProfileView = ({onToast}) => {
             {id:"ua11",timestamp:"Apr 25, 2026 · 14:00", category:"TAG",    action:"Tag removed",                          details:"'finance' tag replaced with 'KPI' on fact_revenue",               actor:userHandle, isSystem:false},
             {id:"ua12",timestamp:"Apr 18, 2026 · 08:55", category:"EDIT",   action:"Quality rule updated",                 details:"Freshness threshold updated 24 h → 12 h on orders",              actor:userHandle, isSystem:false},
           ];
-          return <AuditLogTable entries={USER_AUDIT_ENTRIES}/>;
+          return <AuditLogTable entries={USER_AUDIT_ENTRIES} hideActorFilter/>;
         })()}
       </div>
     </div>
