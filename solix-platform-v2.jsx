@@ -14780,7 +14780,7 @@ const DATA_PRODUCTS_DATA = [
    owners:["maya.chen"],experts:["dev.patel"],
    lifecycleStage:"PRODUCTION",
    sla:{tier:"GOLD",availability:99.9,dataFreshness:120,dataQuality:90},
-   assetIds:[1,2],tags:["revenue","PII"],consumesFrom:[],providesTo:["dp3"],createdAt:"Jan 15, 2024",
+   assetIds:[1,2],tags:["revenue","PII"],consumesFrom:[],providesTo:["dp3"],createdAt:"Jan 15, 2024",updatedAt:"May 24, 2026",
    inputPortIds:[1,2],outputPortIds:[9]},
   {id:"dp2",name:"customer-360",displayName:"Customer 360",domain:"Commerce",
    icon:"👥",color:"#0ea5e9",
@@ -14788,7 +14788,7 @@ const DATA_PRODUCTS_DATA = [
    owners:["maya.chen"],experts:["sarah.kim"],
    lifecycleStage:"PRODUCTION",
    sla:{tier:"GOLD",availability:99.5,dataFreshness:240,dataQuality:88},
-   assetIds:[3],tags:["PII","GDPR"],consumesFrom:[],providesTo:[],createdAt:"Feb 1, 2024",
+   assetIds:[3],tags:["PII","GDPR"],consumesFrom:[],providesTo:[],createdAt:"Feb 1, 2024",updatedAt:"May 20, 2026",
    inputPortIds:[2],outputPortIds:[]},
   {id:"dp3",name:"revenue-reporting",displayName:"Revenue Reporting",domain:"Finance",
    icon:"💹",color:"#f59e0b",
@@ -14796,7 +14796,7 @@ const DATA_PRODUCTS_DATA = [
    owners:["sarah.kim"],experts:["alex.wu"],
    lifecycleStage:"PRODUCTION",
    sla:{tier:"GOLD",availability:99.9,dataFreshness:1440,dataQuality:95},
-   assetIds:[4],tags:["revenue"],consumesFrom:["dp1"],providesTo:[],createdAt:"Jan 10, 2024",
+   assetIds:[4],tags:["revenue"],consumesFrom:["dp1"],providesTo:[],createdAt:"Jan 10, 2024",updatedAt:"May 22, 2026",
    inputPortIds:[9],outputPortIds:[6]},
   {id:"dp4",name:"user-behavior",displayName:"User Behavior Analytics",domain:"Product",
    icon:"📱",color:"#3b82f6",
@@ -14804,7 +14804,7 @@ const DATA_PRODUCTS_DATA = [
    owners:["alex.wu"],experts:["priya.nair"],
    lifecycleStage:"DEVELOPMENT",
    sla:{tier:"SILVER",availability:99.0,dataFreshness:60,dataQuality:82},
-   assetIds:[5,6],tags:["behavioral"],consumesFrom:[],providesTo:[],createdAt:"Mar 5, 2024",
+   assetIds:[5,6],tags:["behavioral"],consumesFrom:[],providesTo:[],createdAt:"Mar 5, 2024",updatedAt:"May 18, 2026",
    inputPortIds:[4,7],outputPortIds:[]},
   {id:"dp5",name:"ml-feature-store",displayName:"ML Feature Store",domain:"ML",
    icon:"🧮",color:"#8b5cf6",
@@ -14812,7 +14812,7 @@ const DATA_PRODUCTS_DATA = [
    owners:["priya.nair"],experts:["dev.patel"],
    lifecycleStage:"PRODUCTION",
    sla:{tier:"GOLD",availability:99.9,dataFreshness:30,dataQuality:91},
-   assetIds:[],tags:["ML"],consumesFrom:[],providesTo:[],createdAt:"Feb 20, 2024",
+   assetIds:[],tags:["ML"],consumesFrom:[],providesTo:[],createdAt:"Feb 20, 2024",updatedAt:"May 15, 2026",
    inputPortIds:[],outputPortIds:[]},
   {id:"dp6",name:"marketing-attribution",displayName:"Marketing Attribution",domain:"Marketing",
    icon:"🎯",color:"#f43f5e",
@@ -14820,7 +14820,7 @@ const DATA_PRODUCTS_DATA = [
    owners:["lisa.ray"],experts:["maya.chen"],
    lifecycleStage:"TESTING",
    sla:{tier:"SILVER",availability:98.5,dataFreshness:360,dataQuality:79},
-   assetIds:[],tags:["marketing"],consumesFrom:[],providesTo:[],createdAt:"Mar 12, 2024",
+   assetIds:[],tags:["marketing"],consumesFrom:[],providesTo:[],createdAt:"Mar 12, 2024",updatedAt:"May 10, 2026",
    inputPortIds:[],outputPortIds:[]},
 ];
 
@@ -15561,8 +15561,8 @@ const DomainsView = ({onAsset, onNav}) => {
                         <SbLabel>Details</SbLabel>
                         {[
                           {l:"Domain",   v:<span style={{display:"inline-flex",alignItems:"center",padding:"2px 10px 2px 7px",borderRadius:4,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`,fontSize:11.5,color:T.accent,fontWeight:600}}>{pd.domain}</span>},
-                          {l:"Created",  v:<span style={{fontSize:11.5,color:T.textSub}}>{pd.createdAt}</span>},
-                          {l:"SLA",      v:<SlaTierBadge tier={pd.sla?.tier||"SILVER"}/>},
+                          {l:"Created",  v:<span style={{fontSize:11.5,color:T.textSub}}>{pd.createdAt||"—"}</span>},
+                          {l:"Updated",  v:<span style={{fontSize:11.5,color:T.textSub}}>{pd.updatedAt||"—"}</span>},
                           {l:"Assets",   v:<span style={{fontSize:11.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{productAssets.length}</span>},
                         ].map(({l,v})=>(
                           <div key={l} style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:9,fontSize:12}}>
@@ -16181,7 +16181,6 @@ const DomainsView = ({onAsset, onNav}) => {
                                     <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{p.description?.slice(0,80)}{p.description?.length>80?"…":""}</div>
                                   </div>
                                   <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-                                    <SlaTierBadge tier={p.sla.tier}/>
                                     <span style={{fontSize:11,color:T.textMuted}}>{p.assetIds.length} assets</span>
                                     <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,opacity:.5}}><path d="M3.5 2l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                                   </div>
@@ -17618,7 +17617,6 @@ const DataProductsView = ({onAsset, onNav}) => {
   };
 
   // ── Stats ──
-  const goldSla     = products.filter(p=>p.sla?.tier==="GOLD").length;
   const avgQuality  = Math.round(products.reduce((a,p)=>a+(p.sla?.dataQuality||0),0)/Math.max(products.length,1));
 
   // ── Product detail view ──
@@ -17729,8 +17727,8 @@ const DataProductsView = ({onAsset, onNav}) => {
                         <SbLabel>Details</SbLabel>
                         {[
                           {l:"Domain",   v:<span style={{display:"inline-flex",alignItems:"center",padding:"2px 10px 2px 7px",borderRadius:4,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`,fontSize:11.5,color:T.accent,fontWeight:600}}>{pd.domain}</span>},
-                          {l:"Created",  v:<span style={{fontSize:11.5,color:T.textSub}}>{pd.createdAt}</span>},
-                          {l:"SLA",      v:<SlaTierBadge tier={pd.sla?.tier||"SILVER"}/>},
+                          {l:"Created",  v:<span style={{fontSize:11.5,color:T.textSub}}>{pd.createdAt||"—"}</span>},
+                          {l:"Updated",  v:<span style={{fontSize:11.5,color:T.textSub}}>{pd.updatedAt||"—"}</span>},
                           {l:"Assets",   v:<span style={{fontSize:11.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{productAssets.length}</span>},
                         ].map(({l,v})=>(
                           <div key={l} style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:9,fontSize:12}}>
