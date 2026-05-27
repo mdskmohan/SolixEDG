@@ -7167,31 +7167,6 @@ const PolicyManagerView = ({onToast, onNav}) => {
                               );
                             })}
                               </tbody></table>
-                                  {/* Left severity stripe + main row */}
-                                  <div style={{display:"flex",cursor:"pointer"}} onClick={()=>setViolExpanded(isExp?null:v.id)}>
-                                    {/* Severity stripe */}
-                                    <div style={{width:4,background:sevColor,flexShrink:0}}/>
-                                    <div style={{flex:1,padding:"11px 14px"}}>
-                                      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                                        {/* Severity badge */}
-                                        <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:SEV_BG[v.severity],color:sevColor,flexShrink:0,textTransform:"uppercase",letterSpacing:"0.05em"}}>{v.severity}</span>
-                                        {/* Asset name */}
-                                        <span style={{fontSize:12.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{v.assetName}</span>
-                                        {/* Type + Domain */}
-                                        <span style={{fontSize:10.5,color:T.textMuted}}>{v.assetType}</span>
-                                        <span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted}}>{v.domain}</span>
-                                        <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:7}} onClick={e=>e.stopPropagation()}>
-                                          {/* Status pill — always clickable */}
-                                          <button onClick={()=>openViolActionModal(v.id)} style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:99,background:ss.bg,color:ss.color,border:`1.5px solid ${ss.color}55`,display:"flex",alignItems:"center",gap:4,cursor:"pointer",transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.background=`${ss.color}20`;e.currentTarget.style.borderColor=ss.color;}} onMouseLeave={e=>{e.currentTarget.style.background=ss.bg;e.currentTarget.style.borderColor=`${ss.color}55`;}}>
-                                            <span style={{width:5,height:5,borderRadius:"50%",background:ss.dot,display:"inline-block"}}/>
-                                            {VIOL_STATUS_CFG[v.status]?.label||v.status}
-                                            <svg width="8" height="8" viewBox="0 0 10 10" fill="none" style={{opacity:.7}}><path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                                          </button>
-                                          {/* Detected date */}
-                                          <span style={{fontSize:10,color:T.textMuted,whiteSpace:"nowrap"}}>Detected {v.detectedAt}</span>
-                                          {/* Expand chevron */}
-                                          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" style={{color:T.textMuted,transition:"transform .15s",transform:isExp?"rotate(180deg)":"rotate(0deg)"}}><path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                                        </div>
                           </div>
                         </div>
                       );
