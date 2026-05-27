@@ -13370,7 +13370,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
   const tabs=[
     {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},
     {key:"quality",label:"Quality"},{key:"usage",label:"Usage"},{key:"lineage",label:"Lineage"},
-    {key:"activity",label:"Activity"},
+    {key:"activity",label:"Audit Logs"},
   ];
 
   const handleCertify=()=>{
@@ -15425,7 +15425,7 @@ const DomainsView = ({onAsset, onNav}) => {
               {key:"overview",label:"Overview"},
               {key:"assets",label:`Assets (${productAssets.length})`},
               {key:"ports",label:"Ports"},
-              {key:"activity",label:"Activity"},
+              {key:"activity",label:"Audit Logs"},
             ]} active={productTab} onChange={setProductTab}/>
           </div>
 
@@ -15927,7 +15927,7 @@ const DomainsView = ({onAsset, onNav}) => {
               {key:"documentation",label:"Overview"},
               {key:"dataproducts",label:`Data Products (${domainProducts.length})`},
               {key:"assets",label:`Assets (${domainAssets.length})`},
-              {key:"activity",label:"Activity"},
+              {key:"activity",label:"Audit Logs"},
             ]} active={domainTab} onChange={setDomainTab}/>
           </div>
 
@@ -17593,7 +17593,7 @@ const DataProductsView = ({onAsset, onNav}) => {
               {key:"overview",   label:"Overview"},
               {key:"assets",     label:`Assets (${productAssets.length})`},
               {key:"ports",      label:"Ports"},
-              {key:"activity",   label:"Activity"},
+              {key:"activity",   label:"Audit Logs"},
             ]} active={productTab} onChange={setProductTab}/>
           </div>
 
