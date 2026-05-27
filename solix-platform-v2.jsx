@@ -1072,7 +1072,6 @@ const GlossaryView = ({onToast}) => {
   const [addingRelated,setAddingRelated] = useState(false);
   const [ctxMenu,      setCtxMenu]       = useState(null);
   const [gTab,         setGTab]          = useState("overview");
-  const [conflictModal,setConflictModal] = useState(null);
   const [auditModal,   setAuditModal]    = useState(null);
   const [rejectReason, setRejectReason]  = useState("");
   const [deprecateReason,setDeprecateReason] = useState("");
@@ -1083,6 +1082,7 @@ const GlossaryView = ({onToast}) => {
   const [glossModalSearch,setGlossModalSearch] = useState("");
   const [showAllGlossOwners,  setShowAllGlossOwners]   = useState(false);
   const [showAllGlossStewards,setShowAllGlossStewards] = useState(false);
+  const [termMenuOpen,        setTermMenuOpen]         = useState(false);
 
   useEffect(()=>{
     if(!ctxMenu) return;
@@ -1248,36 +1248,6 @@ const GlossaryView = ({onToast}) => {
     setTransitionModal(null); setRejectReason(""); setDeprecateReason("");
     const toastMsg = toStatus==="Approved"?"Term approved":toStatus==="In Review"?"Term submitted for review":toStatus==="Deprecated"?"Term deprecated":toStatus==="Rejected"?"Term rejected":toStatus==="Draft"?"Term returned to draft":"Term updated";
     onToast(toastMsg, toStatus==="Rejected"?"error":"success");
-  };
-
-  const detectConflicts = (checkTerm, allTerms) => {
-    if(!checkTerm) return [];
-    const nameLower = checkTerm.term.toLowerCase();
-    const synLower = (checkTerm.synonyms||[]).map(s=>s.toLowerCase());
-    return allTerms.filter(t => {
-      if(t.id===checkTerm.id||t.domain===checkTerm.domain) return false;
-      if(t.status==="Deprecated") return false;
-      const tName = t.term.toLowerCase();
-      const tSyns = (t.synonyms||[]).map(s=>s.toLowerCase());
-      return tName===nameLower||synLower.includes(tName)||tSyns.includes(nameLower)||synLower.some(s=>tSyns.includes(s));
-    });
-  };
-
-  const resolveConflict = (termId, relatedId, resolution) => {
-    // resolution: "use_a" keep termId | "use_b" keep relatedId | "fresh" both keep, just clear conflict flag
-    const now = new Date().toISOString().slice(0,10);
-    if(resolution==="use_a") {
-      patchTerm(termId,{conflictWith:null,auditLog:[{action:"Conflict Resolved — this term retained",by:CURRENT_USER,at:now,note:""},...(terms.find(x=>x.id===termId)?.auditLog||[])]});
-      patchTerm(relatedId,{cert:"Deprecated",status:"Deprecated",conflictWith:null,deprecationReason:`Superseded by ${terms.find(x=>x.id===termId)?.term}`,auditLog:[{action:"Deprecated — conflict resolution",by:CURRENT_USER,at:now,note:""},...(terms.find(x=>x.id===relatedId)?.auditLog||[])]});
-    } else if(resolution==="use_b") {
-      patchTerm(relatedId,{conflictWith:null,auditLog:[{action:"Conflict Resolved — this term retained",by:CURRENT_USER,at:now,note:""},...(terms.find(x=>x.id===relatedId)?.auditLog||[])]});
-      patchTerm(termId,{cert:"Deprecated",status:"Deprecated",conflictWith:null,deprecationReason:`Superseded by ${terms.find(x=>x.id===relatedId)?.term}`,auditLog:[{action:"Deprecated — conflict resolution",by:CURRENT_USER,at:now,note:""},...(terms.find(x=>x.id===termId)?.auditLog||[])]});
-    } else {
-      patchTerm(termId,{conflictWith:null,cert:"In Review",status:"In Review",auditLog:[{action:"Conflict Cleared — both terms retained",by:CURRENT_USER,at:now,note:""},...(terms.find(x=>x.id===termId)?.auditLog||[])]});
-      patchTerm(relatedId,{conflictWith:null,auditLog:[{action:"Conflict Cleared",by:CURRENT_USER,at:now,note:""},...(terms.find(x=>x.id===relatedId)?.auditLog||[])]});
-    }
-    setConflictModal(null);
-    onToast("Conflict resolved","success");
   };
 
   const addSynonym = id => {
@@ -1587,7 +1557,6 @@ const GlossaryView = ({onToast}) => {
             const draft=allT.filter(t=>t.status==="Draft").length;
             const deprecated=allT.filter(t=>t.status==="Deprecated").length;
             const rejected=allT.filter(t=>t.status==="Rejected").length;
-            const conflicts=allT.filter(t=>t.conflictFlag).length;
             const coveragePct=totalTerms>0?Math.round((approved/totalTerms)*100):0;
             const catStats=glossary.categories.map(cat=>{const ct=allT.filter(t=>t.category===cat.id);const ca=ct.filter(t=>t.status==="Approved").length;return{name:cat.name,id:cat.id,total:ct.length,approved:ca,pct:ct.length>0?Math.round((ca/ct.length)*100):0};});
             const unlinked=allT.filter(t=>(t.linkedAssets||[]).length===0&&t.status!=="Deprecated");
@@ -1629,33 +1598,7 @@ const GlossaryView = ({onToast}) => {
                   </div>
                 )}
 
-                {/* ── SECTION 2: Lifecycle bar ── */}
-                {totalTerms>0&&(
-                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px 20px"}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-                      <span style={{fontSize:13,fontWeight:700,color:T.text}}>Term Lifecycle</span>
-                      <span style={{fontSize:11.5,color:T.textMuted}}>{totalTerms} total</span>
-                    </div>
-                    {/* Stacked bar */}
-                    <div style={{height:10,borderRadius:5,overflow:"hidden",display:"flex",gap:2,marginBottom:12}}>
-                      {[{s:"Approved",n:approved,c:"#16a34a"},{s:"In Review",n:inReview,c:"#d97706"},{s:"Draft",n:draft,c:"#94a3b8"},{s:"Rejected",n:rejected,c:"#e11d48"},{s:"Deprecated",n:deprecated,c:"#7c3aed"}].filter(x=>x.n>0).map(x=>(
-                        <div key={x.s} title={`${x.s}: ${x.n}`} style={{flex:x.n,background:x.c,minWidth:4,borderRadius:3}}/>
-                      ))}
-                    </div>
-                    {/* Legend */}
-                    <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
-                      {[{s:"Approved",n:approved,c:"#16a34a"},{s:"In Review",n:inReview,c:"#d97706"},{s:"Draft",n:draft,c:"#94a3b8"},{s:"Rejected",n:rejected,c:"#e11d48"},{s:"Deprecated",n:deprecated,c:"#7c3aed"}].filter(x=>x.n>0).map(x=>(
-                        <div key={x.s} style={{display:"flex",alignItems:"center",gap:5}}>
-                          <span style={{width:8,height:8,borderRadius:"50%",background:x.c,flexShrink:0}}/>
-                          <span style={{fontSize:12,color:T.textSub}}>{x.s}</span>
-                          <span style={{fontSize:12,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{x.n}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* ── SECTION 3: Needs Attention (only shown when issues exist) ── */}
+                {/* ── SECTION 2: Needs Attention (only shown when issues exist) ── */}
                 {(unlinked.length>0||noDefn.length>0)&&(
                   <div>
                     <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Needs Attention</div>
@@ -1894,25 +1837,34 @@ const GlossaryView = ({onToast}) => {
                   <span style={{fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}33`,fontWeight:600}}>{term.domain}</span>
                 </div>
               </div>
-              <div style={{display:"flex",gap:5,flexShrink:0,flexWrap:"wrap",justifyContent:"flex-end"}}>
-                {term.status==="Draft"&&<Btn small ghost onClick={()=>transitionTerm(term.id,"In Review")} style={{color:"#d97706",borderColor:"rgba(217,119,6,.4)"}}>⏳ Submit for Review</Btn>}
-                {term.status==="In Review"&&<><Btn small ghost onClick={()=>transitionTerm(term.id,"Approved")} style={{color:"#16a34a",borderColor:"rgba(22,163,74,.4)"}}>✓ Approve</Btn><Btn small ghost onClick={()=>setTransitionModal({id:term.id,to:"Rejected",label:"Reject Term"})} style={{color:"#e11d48",borderColor:"rgba(225,29,72,.4)"}}>✕ Reject</Btn><Btn small ghost onClick={()=>transitionTerm(term.id,"Draft")} style={{color:T.textMuted}}>↩ Return to Draft</Btn></>}
-                {term.status==="Approved"&&<><Btn small ghost onClick={()=>setTransitionModal({id:term.id,to:"Deprecated",label:"Deprecate"})} style={{color:"#7c3aed",borderColor:"rgba(124,58,237,.4)"}}>Deprecate</Btn><Btn small ghost onClick={()=>transitionTerm(term.id,"In Review")} style={{color:"#d97706",borderColor:"rgba(217,119,6,.4)"}}>Re-Review</Btn></>}
-                {term.status==="Rejected"&&<Btn small ghost onClick={()=>transitionTerm(term.id,"Draft")} style={{color:T.textMuted}}>↩ Reopen as Draft</Btn>}
-                {term.status==="Deprecated"&&<Btn small ghost onClick={()=>transitionTerm(term.id,"Draft")} style={{color:T.textMuted}}>Reactivate</Btn>}
-                {term.conflictFlag&&term.conflictWith&&<Btn small ghost onClick={()=>{const rel=terms.find(x=>x.id===term.conflictWith);setConflictModal({termA:term,termB:rel});}} style={{color:"#d97706",borderColor:"rgba(217,119,6,.4)"}}>⚡ Resolve Conflict</Btn>}
-                <Btn small ghost onClick={()=>openModal("editTerm",{id:term.id,term:term.term,abbr:term.abbr,definition:term.definition,domain:term.domain,owner:term.owner,category:term.category,cert:term.cert})}>Edit</Btn>
-                <Btn small ghost onClick={()=>openModal("deleteTerm",{id:term.id,term:term.term})} style={{color:T.rose}}>Delete</Btn>
+              <div style={{display:"flex",gap:5,flexShrink:0,position:"relative"}} onClick={e=>e.stopPropagation()}>
+                <button onClick={()=>setTermMenuOpen(p=>!p)}
+                  style={{width:34,height:34,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,transition:"all .15s"}}
+                  onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>⋮</button>
+                {termMenuOpen&&(
+                  <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",minWidth:210,overflow:"hidden"}}>
+                    <button onClick={()=>{openModal("editTerm",{id:term.id,term:term.term,abbr:term.abbr,definition:term.definition,domain:term.domain,owner:term.owner,category:term.category,cert:term.cert});setTermMenuOpen(false);}}
+                      style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",borderBottom:`1px solid ${T.border}`}}
+                      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                      <span style={{fontSize:14,marginTop:1}}>🖊️</span>
+                      <div><div style={{fontSize:12,fontWeight:600,color:T.text}}>Bulk Edit</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>Edit all term fields</div></div>
+                    </button>
+                    <button onClick={()=>{openModal("deleteTerm",{id:term.id,term:term.term});setTermMenuOpen(false);}}
+                      style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}
+                      onMouseEnter={e=>e.currentTarget.style.background="rgba(239,68,68,.07)"} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                      <span style={{fontSize:14,marginTop:1}}>🗑️</span>
+                      <div><div style={{fontSize:12,fontWeight:600,color:T.rose}}>Delete Term</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>Permanently remove this term</div></div>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
-            {/* Conflict banner — shown as a flag independent of lifecycle status */}
-            {term.conflictFlag&&term.conflictWith&&(()=>{const rival=terms.find(x=>x.id===term.conflictWith);return rival&&(<div style={{margin:"0 0 8px",padding:"8px 14px",background:"rgba(217,119,6,.08)",border:"1px solid rgba(217,119,6,.35)",borderRadius:8,display:"flex",alignItems:"center",gap:10}}><span style={{color:"#d97706",fontSize:15}}>⚡</span><span style={{fontSize:12.5,color:"#d97706",flex:1}}>Conflict with <strong>{rival.term}</strong> ({rival.domain} domain) — synonyms or name overlap detected.</span><button onClick={()=>setConflictModal({termA:term,termB:rival})} style={{fontSize:11.5,fontWeight:700,color:"#d97706",background:"rgba(217,119,6,.1)",border:"1px solid rgba(217,119,6,.35)",borderRadius:6,padding:"3px 10px",cursor:"pointer"}}>Resolve →</button></div>);})()}
             {/* Rejected banner */}
             {term.status==="Rejected"&&term.rejectionReason&&(<div style={{margin:"0 0 8px",padding:"8px 14px",background:"rgba(225,29,72,.06)",border:"1px solid rgba(225,29,72,.25)",borderRadius:8,fontSize:12.5,color:"#e11d48",lineHeight:1.5}}><strong>Rejected: </strong>{term.rejectionReason}</div>)}
             {/* Deprecation banner */}
             {term.status==="Deprecated"&&term.deprecationReason&&(<div style={{margin:"0 0 8px",padding:"8px 14px",background:"rgba(124,58,237,.06)",border:"1px solid rgba(124,58,237,.25)",borderRadius:8,fontSize:12.5,color:"#7c3aed",lineHeight:1.5}}><strong>Deprecated: </strong>{term.deprecationReason}</div>)}
             <div style={{display:"flex",gap:0,marginBottom:-1}}>
-              {[{id:"overview",l:"Overview"},{id:"assets",l:`Linked Assets (${term.linkedAssets.length})`},{id:"activity",l:`Activity (${term.activity.length})`},{id:"auditlog",l:`Audit Log (${(term.auditLog||[]).length})`}].map(tab=>(
+              {[{id:"overview",l:"Overview"},{id:"assets",l:`Linked Assets (${term.linkedAssets.length})`},{id:"activity",l:`Activity (${term.activity.length+(term.auditLog||[]).length})`}].map(tab=>(
                 <button key={tab.id} onClick={()=>setTermTab(tab.id)} style={{padding:"8px 18px",background:"transparent",border:"none",borderBottom:`2px solid ${termTab===tab.id?T.accent:"transparent"}`,color:termTab===tab.id?T.text:T.textMuted,fontSize:13,fontWeight:termTab===tab.id?600:400,cursor:"pointer",transition:"all .12s"}}>{tab.l}</button>
               ))}
             </div>
@@ -1956,12 +1908,44 @@ const GlossaryView = ({onToast}) => {
               </div>
             )}
             {termTab==="assets"&&(<div><div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>{["All",...new Set(term.linkedAssets.map(a=>a.type))].map(type=>(<span key={type} style={{fontSize:12,padding:"4px 12px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer"}}>{type}{type==="All"?` (${term.linkedAssets.length})`:""}</span>))}</div>{term.linkedAssets.length===0?<div style={{padding:"40px 0",textAlign:"center",color:T.textMuted,fontSize:13}}>No linked assets yet.</div>:(<div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>{term.linkedAssets.map((a,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderBottom:i<term.linkedAssets.length-1?`1px solid ${T.border}`:"none",transition:"background .1s"}} onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><div style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:T.accent,flexShrink:0}}>{{"Table":"⊞","Dashboard":"⊟","Pipeline":"⇢","ML Model":"◈"}[a.type]||"○"}</div><div style={{flex:1}}><div style={{fontSize:13.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{a.name}</div><div style={{fontSize:11.5,color:T.textMuted,marginTop:1}}>{a.type}</div></div><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke={T.textMuted} strokeWidth="1.3" strokeLinecap="round"/></svg></div>))}</div>)}<button onClick={()=>onToast("Open catalog to link assets","success")} style={{marginTop:12,display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}><IcPlus/> Link Asset</button></div>)}
-            {termTab==="activity"&&(<div style={{maxWidth:680}}><div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px",marginBottom:16}}><div style={{fontSize:12.5,fontWeight:600,color:T.textSub,marginBottom:8}}>Add a comment</div><textarea value={commentText} onChange={e=>setCommentText(e.target.value)} placeholder="Use @mention to tag teammates…" rows={3} style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12.5,resize:"none",outline:"none",fontFamily:"inherit",lineHeight:1.55,boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/><div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}><button onClick={()=>addComment(term.id)} disabled={!commentText.trim()} style={{padding:"6px 16px",borderRadius:7,background:commentText.trim()?T.accent:"rgba(238,36,36,.2)",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:commentText.trim()?"pointer":"default"}}>Post</button></div></div><div style={{display:"flex",flexDirection:"column",gap:8}}>{term.activity.map((act,i)=>(<div key={i} style={{display:"flex",gap:12,padding:"12px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}><div style={{width:30,height:30,borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9.5,fontWeight:700,color:T.accent,flexShrink:0}}>{act.avatar}</div><div style={{flex:1}}><div style={{display:"flex",alignItems:"baseline",gap:6}}><span style={{fontSize:13,fontWeight:600,color:T.text}}>{act.user}</span><span style={{fontSize:11,color:T.textMuted}}>{act.time}</span></div><div style={{fontSize:13,color:act.isComment?T.text:T.textSub,marginTop:3,lineHeight:1.55}}>{act.action}</div></div></div>))}{term.activity.length===0&&<div style={{textAlign:"center",padding:"32px 0",color:T.textMuted,fontSize:13}}>No activity yet.</div>}</div></div>)}
-            {termTab==="auditlog"&&(
-              <div style={{maxWidth:900}}>
-                <AuditLogTable entries={glossAuditToEntries(term.auditLog)}/>
-              </div>
-            )}
+            {termTab==="activity"&&(()=>{
+              const auditItems=(term.auditLog||[]).map((e,i)=>({
+                avatar:e.by==="system"?"SY":e.by.split(".").map(p=>p[0]?.toUpperCase()||"").join("").slice(0,2),
+                user:e.by,
+                time:e.at,
+                action:e.action+(e.note?` — ${e.note}`:""),
+                isComment:false,
+                isAudit:true,
+              }));
+              const combined=[...term.activity,...auditItems];
+              return (
+                <div style={{maxWidth:680}}>
+                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px",marginBottom:16}}>
+                    <div style={{fontSize:12.5,fontWeight:600,color:T.textSub,marginBottom:8}}>Add a comment</div>
+                    <textarea value={commentText} onChange={e=>setCommentText(e.target.value)} placeholder="Use @mention to tag teammates…" rows={3} style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12.5,resize:"none",outline:"none",fontFamily:"inherit",lineHeight:1.55,boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                    <div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}>
+                      <button onClick={()=>addComment(term.id)} disabled={!commentText.trim()} style={{padding:"6px 16px",borderRadius:7,background:commentText.trim()?T.accent:"rgba(238,36,36,.2)",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:commentText.trim()?"pointer":"default"}}>Post</button>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                    {combined.map((act,i)=>(
+                      <div key={i} style={{display:"flex",gap:12,padding:"12px 14px",background:T.bgSurface,border:`1px solid ${act.isAudit?T.border:T.border}`,borderRadius:9,opacity:act.isAudit?0.85:1}}>
+                        <div style={{width:30,height:30,borderRadius:8,background:act.isAudit?"rgba(107,114,128,.1)":T.accentDim,border:`1px solid ${act.isAudit?"rgba(107,114,128,.25)":T.accent+"33"}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9.5,fontWeight:700,color:act.isAudit?T.textMuted:T.accent,flexShrink:0}}>{act.avatar}</div>
+                        <div style={{flex:1}}>
+                          <div style={{display:"flex",alignItems:"baseline",gap:6}}>
+                            <span style={{fontSize:13,fontWeight:600,color:T.text}}>{act.user}</span>
+                            <span style={{fontSize:11,color:T.textMuted}}>{act.time}</span>
+                            {act.isAudit&&<span style={{fontSize:10,padding:"1px 5px",borderRadius:4,background:"rgba(107,114,128,.1)",color:T.textMuted,fontWeight:600}}>audit</span>}
+                          </div>
+                          <div style={{fontSize:13,color:act.isComment?T.text:T.textSub,marginTop:3,lineHeight:1.55}}>{act.action}</div>
+                        </div>
+                      </div>
+                    ))}
+                    {combined.length===0&&<div style={{textAlign:"center",padding:"32px 0",color:T.textMuted,fontSize:13}}>No activity yet.</div>}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
         {/* RIGHT metadata panel */}
@@ -2095,20 +2079,19 @@ const GlossaryView = ({onToast}) => {
               </div>
             )}
             <div style={{padding:"6px 0"}}>
-              {glossEditModal==="cert"&&(LIFECYCLE_TRANSITIONS[term.cert||"Draft"]||[]).map(c=>{
-                const m=CERT_META[c]||CERT_META.Draft;
+              {glossEditModal==="cert"&&Object.keys(CERT_META).map(c=>{
+                const m=CERT_META[c];
+                const isCurrent=c===(term.cert||"Draft");
                 return (
-                  <button key={c} onClick={()=>{transitionTerm(term.id,c);setGlossEditModal(null);}}
-                    style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"11px 16px",background:"transparent",border:"none",cursor:"pointer",transition:"background .1s"}}
-                    onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <button key={c} onClick={()=>{if(!isCurrent){transitionTerm(term.id,c);setGlossEditModal(null);}}}
+                    style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"11px 16px",background:isCurrent?T.accentDim:"transparent",border:"none",cursor:isCurrent?"default":"pointer",transition:"background .1s"}}
+                    onMouseEnter={e=>{if(!isCurrent)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!isCurrent)e.currentTarget.style.background="transparent";}}>
                     <span style={{fontSize:16,flexShrink:0}}>{m.icon}</span>
                     <span style={{flex:1,fontSize:13,fontWeight:600,color:m.color}}>{c}</span>
+                    {isCurrent&&<span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:m.bg,color:m.color,border:`1px solid ${m.border}`,fontWeight:700}}>current</span>}
                   </button>
                 );
               })}
-              {glossEditModal==="cert"&&(LIFECYCLE_TRANSITIONS[term.cert||"Draft"]||[]).length===0&&(
-                <div style={{padding:"14px 16px",fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No transitions available from {term.cert}.</div>
-              )}
               {glossEditModal==="domain"&&DOMAINS.filter(d=>!glossModalSearch||d.toLowerCase().includes(glossModalSearch.toLowerCase())).map(d=>(
                 <button key={d} onClick={()=>{patchTerm(term.id,{domain:d});setGlossEditModal(null);}}
                   style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",background:term.domain===d?T.accentDim:"transparent",border:"none",cursor:"pointer"}}
@@ -2286,68 +2269,6 @@ const GlossaryView = ({onToast}) => {
     return null;
   };
 
-  // ─── CONFLICT RESOLUTION MODAL ───
-  const renderConflictModal = () => {
-    if(!conflictModal) return null;
-    const {termA,termB} = conflictModal;
-    if(!termA||!termB) return null;
-    const cmA=CERT_META[termA.cert]||CERT_META.Draft;
-    const cmB=CERT_META[termB.cert]||CERT_META.Draft;
-    return (
-      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,backdropFilter:"blur(6px)"}}>
-        <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid rgba(124,58,237,.4)`,borderRadius:16,width:760,maxHeight:"88vh",overflow:"auto",boxShadow:"0 30px 70px rgba(0,0,0,.4)"}}>
-          <div style={{padding:"20px 24px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <div>
-              <div style={{fontSize:15,fontWeight:700,color:T.text,display:"flex",alignItems:"center",gap:8}}><span style={{color:"#7c3aed"}}>⚡</span>Resolve Terminology Conflict</div>
-              <div style={{fontSize:12,color:T.textMuted,marginTop:2}}>Two terms share overlapping names or synonyms across domains. Choose a resolution.</div>
-            </div>
-            <button onClick={()=>setConflictModal(null)} style={{background:T.bgHover,border:`1px solid ${T.border}`,borderRadius:6,color:T.textMuted,cursor:"pointer",padding:"3px 6px",display:"flex"}}><IcX/></button>
-          </div>
-          <div style={{padding:"20px 24px"}}>
-            {/* Side-by-side comparison */}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}}>
-              {[{t:termA,label:"Term A"},{t:termB,label:"Term B"}].map(({t,label})=>{
-                const cm=CERT_META[t.cert]||CERT_META.Draft;
-                return (
-                  <div key={t.id} style={{padding:"16px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10}}>
-                    <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>{label}</div>
-                    <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:4}}>{t.term}</div>
-                    <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
-                      <span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:99,background:cm.bg,color:cm.color,border:`1px solid ${cm.border}`}}>{cm.icon} {t.cert}</span>
-                      <span style={{fontSize:10.5,padding:"2px 8px",borderRadius:99,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}33`,fontWeight:600}}>{t.domain}</span>
-                    </div>
-                    <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6,marginBottom:8}}>{t.definition||<em style={{color:T.textMuted}}>No definition</em>}</div>
-                    {(t.synonyms||[]).length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:4}}><span style={{fontSize:10.5,color:T.textMuted,marginRight:2}}>Synonyms:</span>{(t.synonyms||[]).map(s=><span key={s} style={{fontSize:10.5,padding:"1px 6px",borderRadius:99,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub}}>{s}</span>)}</div>}
-                    <div style={{marginTop:8,fontSize:11.5,color:T.textMuted}}>Owner: <strong style={{color:T.text}}>{t.owner}</strong> · Steward: <strong style={{color:T.text}}>{t.steward}</strong></div>
-                  </div>
-                );
-              })}
-            </div>
-            <div style={{marginBottom:12,fontSize:12.5,fontWeight:600,color:T.textSub}}>Choose resolution:</div>
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {[
-                {res:"use_a",icon:"✓",label:`Keep "${termA.term}" (${termA.domain})`,desc:`Deprecate "${termB.term}" and redirect all references to "${termA.term}"`,color:"#16a34a"},
-                {res:"use_b",icon:"✓",label:`Keep "${termB.term}" (${termB.domain})`,desc:`Deprecate "${termA.term}" and redirect all references to "${termB.term}"`,color:"#16a34a"},
-                {res:"fresh",icon:"◐",label:"Keep both — clear conflict flag",desc:"Both terms are valid in their own domains. Flag removed, both sent back to In Review.",color:T.textSub},
-              ].map(opt=>(
-                <button key={opt.res} onClick={()=>resolveConflict(termA.id,termB.id,opt.res)}
-                  style={{display:"flex",alignItems:"flex-start",gap:12,padding:"13px 16px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,cursor:"pointer",textAlign:"left",transition:"all .12s"}}
-                  onMouseEnter={e=>{e.currentTarget.style.borderColor=opt.color;e.currentTarget.style.background=T.bgSurface;}}
-                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.bgElevated;}}>
-                  <span style={{fontSize:16,color:opt.color,flexShrink:0,marginTop:1}}>{opt.icon}</span>
-                  <div>
-                    <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:3}}>{opt.label}</div>
-                    <div style={{fontSize:12,color:T.textSub,lineHeight:1.5}}>{opt.desc}</div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   // ─── TRANSITION CONFIRM MODAL ───
   const renderTransitionModal = () => {
     if(!transitionModal) return null;
@@ -2397,7 +2318,6 @@ const GlossaryView = ({onToast}) => {
       </div>
       {renderModal()}
       {renderCtxMenu()}
-      {renderConflictModal()}
       {renderTransitionModal()}
     </div>
   );
@@ -25147,11 +25067,10 @@ const SettingsView = ({onToast})=>{
       {key:"teams",        icon:"teams",   label:"Teams & Users",         desc:"Members and teams"},
       {key:"access",       icon:"access",  label:"Access Control",       desc:"Roles & policies"},
       {key:"bots",         icon:"bot",     label:"Bots",                 desc:"Service accounts"},
-      {key:"personas",     icon:"persona", label:"Personas",             desc:"UX role customization"},
       {key:"sso",          icon:"sso",     label:"SSO",                  desc:"Identity providers"},
     ]},
     {label:"Compliance", items:[
-      {key:"frameworks",   icon:"shield",  label:"Regulatory Frameworks", desc:"Enable applicable compliance frameworks"},
+      {key:"frameworks",   icon:"shield",  label:"Regulations",           desc:"Enable applicable compliance frameworks"},
     ]},
     {label:"Platform", items:[
       {key:"notifications",icon:"notif",   label:"Notifications",        desc:"Alerts & channels"},
@@ -25662,8 +25581,6 @@ const SettingsView = ({onToast})=>{
 
             {section==="teams" && <TeamsSection onToast={onToast}/>}
             {section==="access" && <AccessSection onToast={onToast}/>}
-            {section==="personas" && <PersonasSection onToast={onToast}/>}
-
             {/* ══ SSO ══ */}
             {section==="bots"&&<>
               <SettSH icon={Ic.bot(16)} title="Bots" desc="Service accounts with scoped access permissions for automated metadata operations."
@@ -26168,7 +26085,7 @@ const SettingsView = ({onToast})=>{
               const groups = ["Privacy","Healthcare","Financial","Security"];
               return (
                 <>
-                  <SettSH icon={Ic.shield(16)} title="Regulatory Frameworks" desc="Configure which compliance frameworks apply to your organisation. Active frameworks appear in Policy Manager and asset governance panels."/>
+                  <SettSH icon={Ic.shield(16)} title="Regulations" desc="Configure which compliance frameworks and regulations apply to your organisation. Active regulations appear in Policy Manager and asset governance panels."/>
                   <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
                     <div style={{position:"relative",flex:1,maxWidth:400}}>
                       <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
