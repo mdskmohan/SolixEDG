@@ -13333,7 +13333,9 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
   const [certModal,  setCertModal] = useState(false);
   const [certNote,   setCertNote]  = useState("");
   const [colTagsMap,       setColTagsMap]       = useState({});
-  const [colTagInput,      setColTagInput]       = useState("");
+  const [colTagModalOpen,  setColTagModalOpen]  = useState(false);
+  const [colTagModalSearch,setColTagModalSearch]= useState("");
+  const [showAllColTags,   setShowAllColTags]   = useState(false);
   const [colGlTermsMap,    setColGlTermsMap]    = useState({});
   const [colGlOpen,        setColGlOpen]        = useState(false);
   const [colGlSearch,      setColGlSearch]      = useState("");
@@ -13608,43 +13610,55 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
 
                   {/* Tags — column-level, user can add */}
                   {(()=>{
-                    const COL_TAG_C={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},finance:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},KPI:{bg:"rgba(22,163,74,.08)",color:"#16a34a",border:"rgba(22,163,74,.2)"},sensitive:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"},events:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},model:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},etl:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"}};
+                    const COL_TAG_C={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},finance:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},KPI:{bg:"rgba(22,163,74,.08)",color:"#16a34a",border:"rgba(22,163,74,.2)"},sensitive:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"},events:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},model:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},etl:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},dimension:{bg:"rgba(16,185,129,.08)",color:"#059669",border:"rgba(16,185,129,.2)"},marketing:{bg:"rgba(236,72,153,.08)",color:"#db2777",border:"rgba(236,72,153,.2)"}};
                     const ctc=tag=>COL_TAG_C[tag]||{bg:T.bgElevated,color:T.textSub,border:T.border};
                     const colTags=colTagsMap[selCol.name]||[];
+                    const visibleTags=showAllColTags?colTags:colTags.slice(0,3);
                     return (
                       <div style={{position:"relative"}}>
-                        <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Tags</div>
-                        <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:colTags.length?8:0}}>
-                          {colTags.length===0&&<p style={{fontSize:12,color:T.textMuted,fontStyle:"italic",margin:"0 0 6px"}}>No tags added</p>}
-                          {colTags.map(t=>{const c=ctc(t);return(
-                            <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"3px 10px",borderRadius:6,background:c.bg,color:c.color,border:`1px solid ${c.border}`,fontWeight:500}}>
-                              {t}
-                              <button onClick={()=>setColTagsMap(m=>({...m,[selCol.name]:(m[selCol.name]||[]).filter(x=>x!==t)}))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,display:"flex",opacity:.6,lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>
-                                <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                              </button>
-                            </span>
+                        <MetaLabel onEdit={()=>{setColTagModalOpen(true);setColTagModalSearch("");}}>Tags</MetaLabel>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                          {colTags.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
+                          {visibleTags.map(t=>{const c=ctc(t);return(
+                            <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}</span>
                           );})}
+                          {colTags.length>3&&!showAllColTags&&<span onClick={()=>setShowAllColTags(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{colTags.length-3} more</span>}
+                          {colTags.length>3&&showAllColTags&&<span onClick={()=>setShowAllColTags(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
                         </div>
-                        <button onMouseDown={e=>{e.stopPropagation();setColTagInput(p=>p==="_open_"?"":"_open_");}}
-                          style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"4px 10px",borderRadius:6,border:`1px dashed ${colTagInput==="_open_"?T.accent:T.border}`,background:"none",color:colTagInput==="_open_"?T.accent:T.textMuted,cursor:"pointer",transition:"all .12s"}}
-                          onMouseEnter={e=>{if(colTagInput!=="open_"){e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}}
-                          onMouseLeave={e=>{if(colTagInput!=="open_"){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}}>
-                          <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg> Add tag
-                        </button>
-                        {colTagInput==="_open_"&&(
-                          <div onMouseDown={e=>e.stopPropagation()} style={{position:"absolute",left:0,top:"calc(100% + 6px)",zIndex:400,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.22)",padding:"10px 12px",minWidth:210}}>
-                            <div style={{fontSize:11,color:T.textMuted,marginBottom:8,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>Suggested</div>
-                            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                              {["PII","sensitive","financial","identifier","dimension","measure","KPI","events","etl"].filter(s=>!colTags.includes(s)).map(s=>(
-                                <button key={s} onMouseDown={e=>{e.stopPropagation();setColTagsMap(m=>({...m,[selCol.name]:[...(m[selCol.name]||[]),s]}));setColTagInput("");}}
-                                  style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",transition:"all .1s"}}
-                                  onMouseEnter={e=>{e.currentTarget.style.background=T.accentDim;e.currentTarget.style.color=T.accent;e.currentTarget.style.borderColor=T.accent+"55";}}
-                                  onMouseLeave={e=>{e.currentTarget.style.background=T.bgElevated;e.currentTarget.style.color=T.textSub;e.currentTarget.style.borderColor=T.border;}}>
-                                  {s}
+                        {colTagModalOpen&&(
+                          <>
+                            <div onClick={()=>setColTagModalOpen(false)} style={{position:"fixed",inset:0,zIndex:499,background:"rgba(0,0,0,.35)"}}/>
+                            <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:300,display:"flex",flexDirection:"column",maxHeight:"80vh",overflow:"hidden"}}>
+                              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                                <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Edit Tags</span>
+                                <button onClick={()=>setColTagModalOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
+                                  <svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
                                 </button>
-                              ))}
+                              </div>
+                              <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                                <input autoFocus placeholder="Search tags…" value={colTagModalSearch} onChange={e=>setColTagModalSearch(e.target.value)} style={{width:"100%",padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                              </div>
+                              <div style={{flex:1,overflowY:"auto",padding:"12px 16px"}}>
+                                <div style={{fontSize:11,color:T.textMuted,marginBottom:10,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>{colTagModalSearch?"Results":"Suggested"}</div>
+                                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                                  {["PII","revenue","finance","KPI","events","sensitive","dimension","model","etl","marketing"]
+                                    .filter(s=>!colTagModalSearch||s.toLowerCase().includes(colTagModalSearch.toLowerCase()))
+                                    .map(s=>{
+                                      const sel=colTags.includes(s);
+                                      const c=ctc(s);
+                                      return <button key={s} onClick={()=>setColTagsMap(m=>({...m,[selCol.name]:sel?(m[selCol.name]||[]).filter(x=>x!==s):[...(m[selCol.name]||[]),s]}))}
+                                        style={{display:"inline-flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,fontSize:12,cursor:"pointer",transition:"all .1s",background:sel?c.bg:T.bgElevated,borderTop:`1px solid ${sel?c.border:T.border}`,borderRight:`1px solid ${sel?c.border:T.border}`,borderBottom:`1px solid ${sel?c.border:T.border}`,borderLeft:`3px solid ${sel?c.color:T.border}`,color:sel?c.color:T.textSub,fontWeight:sel?600:400}}>
+                                        {sel&&<svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                        {s}
+                                      </button>;
+                                    })}
+                                </div>
+                              </div>
+                              <div style={{padding:"8px 10px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",flexShrink:0}}>
+                                <button onClick={()=>setColTagModalOpen(false)} style={{padding:"5px 14px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Done</button>
+                              </div>
                             </div>
-                          </div>
+                          </>
                         )}
                       </div>
                     );
