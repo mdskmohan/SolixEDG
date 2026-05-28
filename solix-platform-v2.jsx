@@ -6867,7 +6867,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                             </div>
                           </SB>
 
-                          <SB ch="Category" onEdit={()=>setPolEditModal("category")}>
+                          <SB ch="Policy Type" onEdit={()=>setPolEditModal("category")}>
                             <div style={{display:"inline-flex",alignItems:"center",padding:"4px 12px 4px 9px",borderRadius:5,background:`${catColor(p.category)}0f`,borderTop:`1px solid ${catColor(p.category)}20`,borderRight:`1px solid ${catColor(p.category)}20`,borderBottom:`1px solid ${catColor(p.category)}20`,borderLeft:`3px solid ${catColor(p.category)}`}}>
                               <span style={{fontSize:12,color:catColor(p.category),fontWeight:600}}>{p.category}</span>
                             </div>
@@ -9397,7 +9397,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
 
         if(polEditModal==="category") return (
           <CenteredModal onClose={close}>
-            {mHead("Edit Category")}
+            {mHead("Edit Policy Type")}
             <div style={{padding:"20px 24px",display:"flex",flexDirection:"column",gap:12}}>
               <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
                 {POLICY_CATS.map(c=>{const sel=polDraftCategory===c;return <button key={c} onClick={()=>setPolDraftCategory(c)} style={tBtn(sel,{borderColor:sel?catColor(c):T.border,background:sel?`${catColor(c)}18`:"transparent",color:sel?catColor(c):T.textSub})}>{c}</button>;})}
