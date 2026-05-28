@@ -8202,7 +8202,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                 </div>
               </div>
 
-              {/* Tab strip */}
+              {/* Tab strip — only shown when adding a new rule */}
+              {rulePanel.mode==="add"&&(
               <div style={{display:"flex",borderBottom:`2px solid ${T.border}`,flexShrink:0,padding:"0 16px"}}>
                 {[{id:"preset",label:"Preset Rules"},{id:"sql",label:"Custom"}].map(tab=>{
                   const sel=rpTab===tab.id;
@@ -8214,6 +8215,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   );
                 })}
               </div>
+              )}
 
               {/* Body */}
               <div style={{flex:1,overflowY:"auto",padding:"20px"}}>
@@ -9665,41 +9667,6 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                 ))}
               </div>
             </div>
-            {/* Owner */}
-            <CatFieldDropdown
-              label="Owner" placeholder="Select owner…"
-              options={PMV_USERS} selected={draft.owners||[]}
-              onChange={v=>setDraft(d=>({...d,owners:v}))}
-              renderOpt={userRenderOpt}
-            />
-            {/* Stewards */}
-            <CatFieldDropdown
-              label="Stewards" placeholder="Select stewards…"
-              options={PMV_USERS} selected={draft.stewards||[]}
-              onChange={v=>setDraft(d=>({...d,stewards:v}))}
-              renderOpt={stewardRenderOpt}
-            />
-            {/* Domains */}
-            <CatFieldDropdown
-              label="Domains" placeholder="Select domains…"
-              options={ALL_DOMAINS} selected={draft.domains||[]}
-              onChange={v=>setDraft(d=>({...d,domains:v}))}
-              renderOpt={domainRenderOpt}
-            />
-            {/* Tags */}
-            <CatFieldDropdown
-              label="Tags" placeholder="Select tags…"
-              options={POLICY_TAGS} selected={draft.tags||[]}
-              onChange={v=>setDraft(d=>({...d,tags:v}))}
-              renderOpt={tagRenderOpt}
-            />
-            {/* Regulatory Frameworks */}
-            <CatFieldDropdown
-              label="Regulatory Frameworks" placeholder="Select frameworks…"
-              options={FRAMEWORKS} selected={draft.frameworks||[]}
-              onChange={v=>setDraft(d=>({...d,frameworks:v}))}
-              renderOpt={frameworkRenderOpt}
-            />
             {/* Preview */}
             <div style={{padding:"14px 16px",background:T.bgElevated,borderRadius:10,border:`1px solid ${T.border}`}}>
               <div style={{fontSize:11,color:T.textMuted,marginBottom:6}}>Preview</div>
@@ -9731,7 +9698,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   <button disabled={!polNewCatDraft.name.trim()} onClick={()=>{
                     const name=polNewCatDraft.name.trim();
                     if(!name) return;
-                    setPolicyCategories(prev=>[...prev,{id:`cat_${Date.now()}`,name,description:polNewCatDraft.description,color:polNewCatDraft.color,owners:polNewCatDraft.owners,stewards:polNewCatDraft.stewards,domains:polNewCatDraft.domains,tags:polNewCatDraft.tags,frameworks:polNewCatDraft.frameworks}]);
+                    setPolicyCategories(prev=>[...prev,{id:`cat_${Date.now()}`,name,description:polNewCatDraft.description,color:polNewCatDraft.color}]);
                     setExpCat(p=>({...p,[name]:true}));
                     setPolNewCatOpen(false);
                     onToast("Category created","success");
