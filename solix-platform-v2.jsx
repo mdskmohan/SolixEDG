@@ -526,22 +526,22 @@ Object.assign(SCHEMA,{
 
 // Column-level profile stats (used in column sidenav)
 const COL_PROFILES = {
-  order_id:      {nullPct:0,    distinctPct:100,  min:"1",        max:"48,200,000", avg:null,        topValues:null, dataType:"numeric"},
-  customer_id:   {nullPct:0,    distinctPct:8.2,  min:"1,001",    max:"3,100,000",  avg:null,        topValues:null, dataType:"numeric"},
-  email:         {nullPct:2.3,  distinctPct:95.1, min:null,       max:null,         avg:null,        topValues:null, dataType:"string", minLen:"14 chars", maxLen:"38 chars", avgLen:"24 chars", samples:["john.doe@jnj.com","sarah.kim@jnj.com","alex.r@jnj.com"]},
-  amount:        {nullPct:0,    distinctPct:45.2, min:"$0.99",    max:"$9,999.99",  avg:"$127.43",   topValues:null, dataType:"numeric"},
-  status:        {nullPct:0,    distinctPct:0.001,min:null,       max:null,         avg:null,        topValues:["completed (62%)","pending (18%)","cancelled (12%)","refunded (8%)"], dataType:"categorical"},
-  shipping_address:{nullPct:4.1,distinctPct:91.2, min:null,       max:null,         avg:null,        topValues:null, dataType:"json"},
-  created_at:    {nullPct:0,    distinctPct:88.4, min:"2021-01-01",max:"2026-04-24",avg:null,        topValues:null, dataType:"datetime"},
-  updated_at:    {nullPct:0,    distinctPct:89.1, min:"2021-01-01",max:"2026-04-24",avg:null,        topValues:null, dataType:"datetime"},
-  emp_id:        {nullPct:0,    distinctPct:100,  min:"1000",     max:"99999",      avg:null,        topValues:null, dataType:"numeric"},
-  first_name:    {nullPct:0,    distinctPct:31.2, min:null,       max:null,         avg:null,        topValues:["James (3.1%)","Maria (2.8%)","John (2.6%)"], dataType:"string", minLen:"3 chars", maxLen:"11 chars", avgLen:"6 chars",  samples:["James","Maria","Alex"]},
-  last_name:     {nullPct:0,    distinctPct:42.8, min:null,       max:null,         avg:null,        topValues:null, dataType:"string", minLen:"3 chars", maxLen:"14 chars", avgLen:"7 chars",  samples:["Rivera","Kim","Patel"]},
-  salary:        {nullPct:1.2,  distinctPct:68.4, min:"$42,000",  max:"$420,000",   avg:"$124,800",  topValues:null, dataType:"numeric"},
-  event_type:    {nullPct:0,    distinctPct:0.002,min:null,       max:null,         avg:null,        topValues:["page_view (41%)","click (29%)","add_to_cart (11%)","purchase (6%)"], dataType:"categorical"},
-  txn_id:        {nullPct:0,    distinctPct:100,  min:"1",        max:"12,700,000", avg:null,        topValues:null, dataType:"numeric"},
-  txn_amount:    {nullPct:0,    distinctPct:72.1, min:"$0.01",    max:"$2,400,000", avg:"$18,420",   topValues:null, dataType:"numeric"},
-  user_id:       {nullPct:0,    distinctPct:100,  min:"1",        max:"2,800,000",  avg:null,        topValues:null, dataType:"numeric"},
+  order_id:      {nullPct:0,    nullCount:"0",       distinctPct:100,  distinctCount:"48.2M",  min:"1",         max:"48,200,000", avg:null,       topValues:null, dataType:"numeric"},
+  customer_id:   {nullPct:0,    nullCount:"0",       distinctPct:8.2,  distinctCount:"3.96M",  min:"1,001",     max:"3,100,000",  avg:null,       topValues:null, dataType:"numeric"},
+  email:         {nullPct:2.3,  nullCount:"71,397",  distinctPct:95.1, distinctCount:"2.95M",  min:null,        max:null,         avg:null,       topValues:null, dataType:"string",   minLen:"14 chars", maxLen:"38 chars", avgLen:"24 chars", samples:["john.doe@jnj.com","sarah.kim@jnj.com","alex.r@jnj.com"]},
+  amount:        {nullPct:0,    nullCount:"0",       distinctPct:45.2, distinctCount:"21.8M",  min:"$0.99",     max:"$9,999.99",  avg:"$127.43",  topValues:null, dataType:"numeric"},
+  status:        {nullPct:0,    nullCount:"0",       distinctPct:0.001,distinctCount:"5",       min:null,        max:null,         avg:null,       topValues:["completed (62%)","pending (18%)","cancelled (12%)","refunded (8%)"], dataType:"categorical"},
+  shipping_address:{nullPct:4.1,nullCount:"1.98M",   distinctPct:91.2, distinctCount:"43.9M",  min:null,        max:null,         avg:null,       topValues:null, dataType:"json"},
+  created_at:    {nullPct:0,    nullCount:"0",       distinctPct:88.4, distinctCount:"42.6M",  min:"2021-01-01",max:"2026-04-24", avg:null,       topValues:null, dataType:"datetime"},
+  updated_at:    {nullPct:0,    nullCount:"0",       distinctPct:89.1, distinctCount:"43.0M",  min:"2021-01-01",max:"2026-04-24", avg:null,       topValues:null, dataType:"datetime"},
+  emp_id:        {nullPct:0,    nullCount:"0",       distinctPct:100,  distinctCount:"24,810", min:"1000",      max:"99999",      avg:null,       topValues:null, dataType:"numeric"},
+  first_name:    {nullPct:0,    nullCount:"0",       distinctPct:31.2, distinctCount:"7,741",  min:null,        max:null,         avg:null,       topValues:["James (3.1%)","Maria (2.8%)","John (2.6%)"], dataType:"string", minLen:"3 chars", maxLen:"11 chars", avgLen:"6 chars", samples:["James","Maria","Alex"]},
+  last_name:     {nullPct:0,    nullCount:"0",       distinctPct:42.8, distinctCount:"10,619", min:null,        max:null,         avg:null,       topValues:null, dataType:"string",   minLen:"3 chars", maxLen:"14 chars", avgLen:"7 chars", samples:["Rivera","Kim","Patel"]},
+  salary:        {nullPct:1.2,  nullCount:"298",     distinctPct:68.4, distinctCount:"16,970", min:"$42,000",   max:"$420,000",   avg:"$124,800", topValues:null, dataType:"numeric"},
+  event_type:    {nullPct:0,    nullCount:"0",       distinctPct:0.002,distinctCount:"8",       min:null,        max:null,         avg:null,       topValues:["page_view (41%)","click (29%)","add_to_cart (11%)","purchase (6%)"], dataType:"categorical"},
+  txn_id:        {nullPct:0,    nullCount:"0",       distinctPct:100,  distinctCount:"12.7M",  min:"1",         max:"12,700,000", avg:null,       topValues:null, dataType:"numeric"},
+  txn_amount:    {nullPct:0,    nullCount:"0",       distinctPct:72.1, distinctCount:"9.16M",  min:"$0.01",     max:"$2,400,000", avg:"$18,420",  topValues:null, dataType:"numeric"},
+  user_id:       {nullPct:0,    nullCount:"0",       distinctPct:100,  distinctCount:"12.7M",  min:"1",         max:"2,800,000",  avg:null,       topValues:null, dataType:"numeric"},
 };
 
 const QUALITY_RULES = [
@@ -13588,7 +13588,10 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
                         <div style={{padding:"9px 12px",borderBottom:`1px solid ${T.border}`}}>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
                             <span style={{fontSize:11,color:T.textMuted}}>Null %</span>
-                            <span style={{fontSize:11,fontWeight:700,color:prof.nullPct>5?T.rose:T.green}}>{prof.nullPct}%</span>
+                            <div style={{display:"flex",alignItems:"baseline",gap:5}}>
+                              <span style={{fontSize:11,fontWeight:700,color:prof.nullPct>5?T.rose:T.green}}>{prof.nullPct}%</span>
+                              {prof.nullCount&&prof.nullCount!=="0"&&<span style={{fontSize:9.5,color:T.textMuted}}>{prof.nullCount} rows</span>}
+                            </div>
                           </div>
                           <div style={{height:4,background:T.bgHover,borderRadius:2,overflow:"hidden"}}>
                             <div style={{width:`${Math.min(100,prof.nullPct)}%`,height:"100%",background:prof.nullPct>5?T.rose:T.green,borderRadius:2,transition:"width .3s"}}/>
@@ -13599,7 +13602,10 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
                         <div style={{padding:"9px 12px",borderBottom:(prof.dataType==="numeric"&&prof.min!=null)||prof.topValues||prof.samples?`1px solid ${T.border}`:"none"}}>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
                             <span style={{fontSize:11,color:T.textMuted}}>Distinct %</span>
-                            <span style={{fontSize:11,fontWeight:700,color:T.blue}}>{prof.distinctPct}%</span>
+                            <div style={{display:"flex",alignItems:"baseline",gap:5}}>
+                              <span style={{fontSize:11,fontWeight:700,color:T.blue}}>{prof.distinctPct}%</span>
+                              {prof.distinctCount&&<span style={{fontSize:9.5,color:T.textMuted}}>{prof.distinctCount} values</span>}
+                            </div>
                           </div>
                           <div style={{height:4,background:T.bgHover,borderRadius:2,overflow:"hidden"}}>
                             <div style={{width:`${Math.min(100,prof.distinctPct)}%`,height:"100%",background:T.blue,borderRadius:2,transition:"width .3s"}}/>
