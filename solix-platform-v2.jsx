@@ -528,15 +528,15 @@ Object.assign(SCHEMA,{
 const COL_PROFILES = {
   order_id:      {nullPct:0,    distinctPct:100,  min:"1",        max:"48,200,000", avg:null,        topValues:null, dataType:"numeric"},
   customer_id:   {nullPct:0,    distinctPct:8.2,  min:"1,001",    max:"3,100,000",  avg:null,        topValues:null, dataType:"numeric"},
-  email:         {nullPct:2.3,  distinctPct:95.1, min:null,       max:null,         avg:null,        topValues:null, dataType:"string"},
+  email:         {nullPct:2.3,  distinctPct:95.1, min:null,       max:null,         avg:null,        topValues:null, dataType:"string", minLen:"14 chars", maxLen:"38 chars", avgLen:"24 chars", samples:["john.doe@jnj.com","sarah.kim@jnj.com","alex.r@jnj.com"]},
   amount:        {nullPct:0,    distinctPct:45.2, min:"$0.99",    max:"$9,999.99",  avg:"$127.43",   topValues:null, dataType:"numeric"},
   status:        {nullPct:0,    distinctPct:0.001,min:null,       max:null,         avg:null,        topValues:["completed (62%)","pending (18%)","cancelled (12%)","refunded (8%)"], dataType:"categorical"},
   shipping_address:{nullPct:4.1,distinctPct:91.2, min:null,       max:null,         avg:null,        topValues:null, dataType:"json"},
   created_at:    {nullPct:0,    distinctPct:88.4, min:"2021-01-01",max:"2026-04-24",avg:null,        topValues:null, dataType:"datetime"},
   updated_at:    {nullPct:0,    distinctPct:89.1, min:"2021-01-01",max:"2026-04-24",avg:null,        topValues:null, dataType:"datetime"},
   emp_id:        {nullPct:0,    distinctPct:100,  min:"1000",     max:"99999",      avg:null,        topValues:null, dataType:"numeric"},
-  first_name:    {nullPct:0,    distinctPct:31.2, min:null,       max:null,         avg:null,        topValues:["James (3.1%)","Maria (2.8%)","John (2.6%)"], dataType:"string"},
-  last_name:     {nullPct:0,    distinctPct:42.8, min:null,       max:null,         avg:null,        topValues:null, dataType:"string"},
+  first_name:    {nullPct:0,    distinctPct:31.2, min:null,       max:null,         avg:null,        topValues:["James (3.1%)","Maria (2.8%)","John (2.6%)"], dataType:"string", minLen:"3 chars", maxLen:"11 chars", avgLen:"6 chars",  samples:["James","Maria","Alex"]},
+  last_name:     {nullPct:0,    distinctPct:42.8, min:null,       max:null,         avg:null,        topValues:null, dataType:"string", minLen:"3 chars", maxLen:"14 chars", avgLen:"7 chars",  samples:["Rivera","Kim","Patel"]},
   salary:        {nullPct:1.2,  distinctPct:68.4, min:"$42,000",  max:"$420,000",   avg:"$124,800",  topValues:null, dataType:"numeric"},
   event_type:    {nullPct:0,    distinctPct:0.002,min:null,       max:null,         avg:null,        topValues:["page_view (41%)","click (29%)","add_to_cart (11%)","purchase (6%)"], dataType:"categorical"},
   txn_id:        {nullPct:0,    distinctPct:100,  min:"1",        max:"12,700,000", avg:null,        topValues:null, dataType:"numeric"},
@@ -13596,7 +13596,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
                         </div>
 
                         {/* Distinct % */}
-                        <div style={{padding:"9px 12px",borderBottom:prof.dataType==="numeric"&&prof.min!=null||prof.topValues?`1px solid ${T.border}`:"none"}}>
+                        <div style={{padding:"9px 12px",borderBottom:(prof.dataType==="numeric"&&prof.min!=null)||prof.topValues||prof.samples?`1px solid ${T.border}`:"none"}}>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
                             <span style={{fontSize:11,color:T.textMuted}}>Distinct %</span>
                             <span style={{fontSize:11,fontWeight:700,color:T.blue}}>{prof.distinctPct}%</span>
@@ -13618,9 +13618,9 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
                           </div>
                         )}
 
-                        {/* Top Values — categorical only */}
+                        {/* Top Values — categorical and string columns with topValues */}
                         {prof.topValues&&(
-                          <div style={{padding:"9px 12px"}}>
+                          <div style={{padding:"9px 12px",borderBottom:prof.samples?`1px solid ${T.border}`:"none"}}>
                             <div style={{fontSize:9,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Top Values</div>
                             {prof.topValues.map((v,i)=>{
                               const pct=parseFloat(v.match(/\((\d+)/)?.[1]||0);
@@ -13637,6 +13637,30 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
                                 </div>
                               );
                             })}
+                          </div>
+                        )}
+
+                        {/* Length Stats — string columns only */}
+                        {prof.samples&&(
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:`1px solid ${T.border}`}}>
+                            {[{l:"Min Len",v:prof.minLen},{l:"Max Len",v:prof.maxLen},{l:"Avg Len",v:prof.avgLen}].map((s,i)=>(
+                              <div key={s.l} style={{padding:"9px 10px",borderRight:i<2?`1px solid ${T.border}`:"none",textAlign:"center"}}>
+                                <div style={{fontSize:9,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>{s.l}</div>
+                                <div style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600}}>{s.v}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Sample Values — string columns only */}
+                        {prof.samples&&(
+                          <div style={{padding:"9px 12px"}}>
+                            <div style={{fontSize:9,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Sample Values</div>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                              {prof.samples.map((s,i)=>(
+                                <span key={i} style={{fontSize:10.5,padding:"3px 9px",borderRadius:5,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{s}</span>
+                              ))}
+                            </div>
                           </div>
                         )}
 
