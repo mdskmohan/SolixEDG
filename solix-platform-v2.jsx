@@ -6822,6 +6822,15 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                         {/* Right sidebar — exact Tags/Glossary pattern */}
                         <div style={{width:272,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto"}}>
 
+                          <SB ch="Certification" onEdit={()=>setPolEditModal("cert")}>
+                            {(()=>{const cm=CERT_META[p.cert]||CERT_META.Draft;return(
+                              <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px 4px 9px",borderRadius:5,background:cm.bg,borderTop:`1px solid ${cm.border}`,borderRight:`1px solid ${cm.border}`,borderBottom:`1px solid ${cm.border}`,borderLeft:`3px solid ${cm.color}`}}>
+                                <span style={{fontSize:13}}>{cm.icon}</span>
+                                <span style={{fontSize:12,color:cm.color,fontWeight:600}}>{p.cert||"Draft"}</span>
+                              </div>
+                            );})()}
+                          </SB>
+
                           <SB ch="Domain" onEdit={()=>setPolEditModal("domains")}>
                             <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                               {(p.scope?.domains||[]).length===0
@@ -6872,15 +6881,6 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                     <span key={r} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:`${T.blue}0f`,borderTop:`1px solid ${T.blue}20`,borderRight:`1px solid ${T.blue}20`,borderBottom:`1px solid ${T.blue}20`,borderLeft:`3px solid ${T.blue}`,color:T.blue,fontWeight:600}}>{r}</span>
                                   ))}
                             </div>
-                          </SB>
-
-                          <SB ch="Certification" onEdit={()=>setPolEditModal("cert")}>
-                            {(()=>{const cm=CERT_META[p.cert]||CERT_META.Draft;return(
-                              <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px 4px 9px",borderRadius:5,background:cm.bg,borderTop:`1px solid ${cm.border}`,borderRight:`1px solid ${cm.border}`,borderBottom:`1px solid ${cm.border}`,borderLeft:`3px solid ${cm.color}`}}>
-                                <span style={{fontSize:13}}>{cm.icon}</span>
-                                <span style={{fontSize:12,color:cm.color,fontWeight:600}}>{p.cert||"Draft"}</span>
-                              </div>
-                            );})()}
                           </SB>
 
                           <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
@@ -9436,20 +9436,28 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
         );
 
         if(polEditModal==="cert") return (
-          <CenteredModal onClose={close}>
-            {mHead("Edit Certification Status")}
-            <div style={{padding:"20px 24px",display:"flex",flexDirection:"column",gap:12}}>
-              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                {Object.entries(CERT_META).map(([k,cm])=>{const sel=polDraftCert===k;return(
-                  <button key={k} onClick={()=>setPolDraftCert(k)}
-                    style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 14px",borderRadius:6,border:`1.5px solid ${sel?cm.color:T.border}`,background:sel?cm.bg:"transparent",color:sel?cm.color:T.textSub,fontSize:12,fontWeight:sel?600:400,cursor:"pointer",transition:"all .1s"}}>
-                    <span>{cm.icon}</span>{k}
-                  </button>
-                );})}
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1200,backdropFilter:"blur(3px)"}} onClick={close}>
+            <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,width:360,maxHeight:"80vh",overflow:"auto",boxShadow:"0 24px 60px rgba(0,0,0,.35)"}} onClick={e=>e.stopPropagation()}>
+              <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <div style={{fontSize:13,fontWeight:700,color:T.text}}>Edit Certification</div>
+                <button onClick={close} style={{background:T.bgHover,border:`1px solid ${T.border}`,borderRadius:6,color:T.textMuted,cursor:"pointer",padding:"3px 6px",display:"flex"}}>{Ic.x(11)}</button>
+              </div>
+              <div style={{padding:"6px 0"}}>
+                {Object.entries(CERT_META).map(([k,m])=>{
+                  const isCurrent=k===(selPol.cert||"Draft");
+                  return (
+                    <button key={k} onClick={()=>{if(!isCurrent){applyPolField("cert",k,"Updated certification");close();}}}
+                      style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"11px 16px",background:isCurrent?T.accentDim:"transparent",border:"none",cursor:isCurrent?"default":"pointer",transition:"background .1s"}}
+                      onMouseEnter={e=>{if(!isCurrent)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!isCurrent)e.currentTarget.style.background="transparent";}}>
+                      <span style={{fontSize:16,flexShrink:0}}>{m.icon}</span>
+                      <span style={{flex:1,fontSize:13,fontWeight:600,color:m.color}}>{k}</span>
+                      {isCurrent&&<span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:m.bg,color:m.color,border:`1px solid ${m.border}`,fontWeight:700}}>current</span>}
+                    </button>
+                  );
+                })}
               </div>
             </div>
-            {mFoot(()=>{applyPolField("cert",polDraftCert,"Updated certification");close();})}
-          </CenteredModal>
+          </div>
         );
 
         if(polEditModal==="frameworks") return (
