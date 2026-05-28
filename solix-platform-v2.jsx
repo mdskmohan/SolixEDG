@@ -3658,6 +3658,15 @@ const QualityView = () => {
   const [tcParams,     setTcParams]    = useState({});
   const [tcDim,        setTcDim]       = useState("");
 
+  // DQ Suite schedule modal
+  const [dqSchedModal,   setDqSchedModal]   = useState(null);
+  const [dqSchedFreq,    setDqSchedFreq]    = useState("daily");
+  const [dqSchedTime,    setDqSchedTime]    = useState("08:00");
+  const [dqSchedDay,     setDqSchedDay]     = useState("monday");
+  const [dqSchedCron,    setDqSchedCron]    = useState("");
+  const [dqSchedTz,      setDqSchedTz]      = useState("UTC");
+  const [dqSchedEnabled, setDqSchedEnabled] = useState(true);
+
   // Add Bundle Suite modal
   const [newSuiteModal, setNewSuiteModal] = useState(false);
   const [nsName,        setNsName]        = useState("");
@@ -5770,13 +5779,6 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   const [schedCron,      setSchedCron]      = useState("");
   const [schedTz,        setSchedTz]        = useState("UTC");
   const [schedEnabled,   setSchedEnabled]   = useState(true);
-  const [dqSchedModal,   setDqSchedModal]   = useState(null);
-  const [dqSchedFreq,    setDqSchedFreq]    = useState("daily");
-  const [dqSchedTime,    setDqSchedTime]    = useState("08:00");
-  const [dqSchedDay,     setDqSchedDay]     = useState("monday");
-  const [dqSchedCron,    setDqSchedCron]    = useState("");
-  const [dqSchedTz,      setDqSchedTz]      = useState("UTC");
-  const [dqSchedEnabled, setDqSchedEnabled] = useState(true);
   const [selRegId,       setSelRegId]       = useState(null);
   const [regSearch,      setRegSearch]      = useState("");
   const [polEditCatOpen,  setPolEditCatOpen]  = useState(false);
