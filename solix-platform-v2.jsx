@@ -10893,64 +10893,185 @@ const AssetLineageFull=({asset})=>{
                 {/* Tab body */}
                 <div style={{flex:1,overflowY:"auto",padding:"16px"}}>
 
-                  {/* ── OVERVIEW: full lineage path ── */}
+                  {/* ── OVERVIEW: column metadata (mirrors Schema tab column panel) ── */}
                   {colInfoTab==="overview"&&(()=>{
-                    const buildColPath=(nid,cname)=>{
-                      const path=[{nodeId:nid,colName:cname,isCurrent:true}];
-                      let un=nid,uc=cname;
-                      for(let i=0;i<8;i++){
-                        const ups=LINEAGE_COL_MAPS.filter(m=>m.t===un).flatMap(m=>m.cols.filter(c=>c.tc===uc).map(c=>({nodeId:m.s,colName:c.sc})));
-                        if(!ups.length)break;path.unshift({nodeId:ups[0].nodeId,colName:ups[0].colName,isCurrent:false});
-                        un=ups[0].nodeId;uc=ups[0].colName;
-                      }
-                      let dn=nid,dc=cname;
-                      for(let i=0;i<8;i++){
-                        const dns=LINEAGE_COL_MAPS.filter(m=>m.s===dn).flatMap(m=>m.cols.filter(c=>c.sc===dc).map(c=>({nodeId:m.t,colName:c.tc})));
-                        if(!dns.length)break;path.push({nodeId:dns[0].nodeId,colName:dns[0].colName,isCurrent:false});
-                        dn=dns[0].nodeId;dc=dns[0].colName;
-                      }
-                      return path;
-                    };
-                    const fullPath=buildColPath(selectedCol.nodeId,selectedCol.colName);
-                    const pathKeys=new Set(fullPath.map(s=>`${s.nodeId}.${s.colName}`));
-                    const extraDown=LINEAGE_COL_MAPS.filter(m=>m.s===selectedCol.nodeId)
-                      .flatMap(m=>m.cols.filter(c=>c.sc===selectedCol.colName).map(c=>({nodeId:m.t,colName:c.tc})))
-                      .filter(a=>!pathKeys.has(`${a.nodeId}.${a.colName}`));
+                    const prof=COL_PROFILES[selectedCol.colName]||null;
+                    const ava=name=>(name||"").split(".").map(s=>s[0]?.toUpperCase()||"").join("");
+                    const cm2=CMETA_L[cMeta?.cert]||CMETA_L["Draft"];
+                    const StatBar=({pct,color})=>(
+                      <div style={{height:4,background:"#f1f5f9",borderRadius:2,overflow:"hidden",marginTop:4}}>
+                        <div style={{width:`${Math.min(100,pct||0)}%`,height:"100%",background:color,borderRadius:2}}/>
+                      </div>
+                    );
                     return(
-                      <>
-                        {fullPath.length===1?(
-                          <div style={{textAlign:"center",padding:"28px 0"}}>
-                            <div style={{fontSize:26,marginBottom:8}}>🔗</div>
-                            <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6}}>No mappings defined for<br/><span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{selectedCol.colName}</span></div>
-                          </div>
-                        ):(
-                          <>
-                            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:14}}>Lineage Path</div>
-                            {fullPath.map((step,i)=>{
-                              const isFirst=i===0&&!step.isCurrent;
-                              const isLast=i===fullPath.length-1&&!step.isCurrent;
-                              return(
-                                <React.Fragment key={`${step.nodeId}.${step.colName}.${i}`}>
-                                  <ColStepCard nodeId={step.nodeId} colName={step.colName} isCurrent={step.isCurrent}
-                                    badge={isFirst?"Source":isLast?"Sink":step.isCurrent?"Selected":null}
-                                    badgeColor={isFirst?"#3b82f6":isLast?"#8b5cf6":T.accent}/>
-                                  {i<fullPath.length-1&&<Arrow/>}
-                                </React.Fragment>
-                              );
-                            })}
-                          </>
-                        )}
-                        {extraDown.length>0&&(
-                          <div style={{marginTop:16,paddingTop:16,borderTop:`1px solid ${T.border}`}}>
-                            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10,display:"flex",alignItems:"center",gap:5}}>
-                              <span style={{width:7,height:7,borderRadius:2,background:"#8b5cf6"}}/>Also maps to
-                            </div>
-                            {extraDown.map((ex,i)=>(
-                              <ColStepCard key={i} nodeId={ex.nodeId} colName={ex.colName} isCurrent={false} badge="Branch" badgeColor="#8b5cf6"/>
+                      <div style={{display:"flex",flexDirection:"column",gap:14}}>
+
+                        {/* Description */}
+                        <div>
+                          <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Description</div>
+                          <p style={{fontSize:12,color:"#64748b",fontStyle:"italic",margin:0}}>No description provided.</p>
+                        </div>
+
+                        {/* Details */}
+                        <div>
+                          <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Details</div>
+                          <div style={{background:"#f8fafc",borderRadius:8,border:"1px solid #e2e8f0",overflow:"hidden"}}>
+                            {[
+                              {l:"Data Type",   v:<span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:"#2563eb",fontWeight:600}}>{colDef?.t||"—"}</span>},
+                              {l:"Nullable",    v:<span style={{fontSize:11,color:"#64748b",fontWeight:600}}>—</span>},
+                              {l:"Primary Key", v:<span style={{fontSize:11,color:"#64748b",fontWeight:600}}>—</span>},
+                            ].map((r,i)=>(
+                              <div key={r.l} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",borderBottom:i<2?"1px solid #e2e8f0":"none"}}>
+                                <span style={{fontSize:11.5,color:"#94a3b8"}}>{r.l}</span>{r.v}
+                              </div>
                             ))}
                           </div>
+                        </div>
+
+                        {/* Stats */}
+                        {prof&&(
+                          <div>
+                            <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Stats</div>
+                            <div style={{background:"#f8fafc",borderRadius:8,border:"1px solid #e2e8f0",overflow:"hidden"}}>
+                              <div style={{padding:"9px 12px",borderBottom:"1px solid #e2e8f0"}}>
+                                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                                  <span style={{fontSize:11,color:"#94a3b8"}}>Null %</span>
+                                  <div style={{display:"flex",alignItems:"baseline",gap:5}}>
+                                    <span style={{fontSize:11,fontWeight:700,color:prof.nullPct>5?"#e11d48":"#16a34a"}}>{prof.nullPct}%</span>
+                                    {prof.nullCount&&prof.nullCount!=="0"&&<span style={{fontSize:9.5,color:"#94a3b8"}}>{prof.nullCount} rows</span>}
+                                  </div>
+                                </div>
+                                <StatBar pct={prof.nullPct} color={prof.nullPct>5?"#e11d48":"#16a34a"}/>
+                              </div>
+                              <div style={{padding:"9px 12px",borderBottom:(prof.dataType==="numeric"&&prof.min!=null)||prof.topValues||prof.samples?"1px solid #e2e8f0":"none"}}>
+                                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                                  <span style={{fontSize:11,color:"#94a3b8"}}>Distinct %</span>
+                                  <div style={{display:"flex",alignItems:"baseline",gap:5}}>
+                                    <span style={{fontSize:11,fontWeight:700,color:"#2563eb"}}>{prof.distinctPct}%</span>
+                                    {prof.distinctCount&&<span style={{fontSize:9.5,color:"#94a3b8"}}>{prof.distinctCount} values</span>}
+                                  </div>
+                                </div>
+                                <StatBar pct={prof.distinctPct} color="#2563eb"/>
+                              </div>
+                              {prof.dataType==="numeric"&&prof.min!=null&&(
+                                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:prof.topValues?"1px solid #e2e8f0":"none"}}>
+                                  {[{l:"Min",v:prof.min},{l:"Max",v:prof.max},{l:"Avg",v:prof.avg||"—"}].map((s,i)=>(
+                                    <div key={s.l} style={{padding:"9px 10px",borderRight:i<2?"1px solid #e2e8f0":"none",textAlign:"center"}}>
+                                      <div style={{fontSize:9,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>{s.l}</div>
+                                      <div style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:"#1e293b",fontWeight:600}}>{s.v}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {prof.topValues&&(
+                                <div style={{padding:"9px 12px",borderBottom:prof.samples?"1px solid #e2e8f0":"none"}}>
+                                  <div style={{fontSize:9,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Top Values</div>
+                                  {prof.topValues.map((v,i)=>{
+                                    const pct=parseFloat(v.match(/\((\d+)/)?.[1]||0);
+                                    const label=v.replace(/\s*\(.*\)/,"");
+                                    return(
+                                      <div key={i} style={{marginBottom:i<prof.topValues.length-1?7:0}}>
+                                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                                          <span style={{fontSize:10.5,color:"#475569",fontWeight:500}}>{label}</span>
+                                          <span style={{fontSize:10,color:"#94a3b8"}}>{pct}%</span>
+                                        </div>
+                                        <div style={{height:3,background:"#f1f5f9",borderRadius:2,overflow:"hidden"}}>
+                                          <div style={{width:`${pct}%`,height:"100%",background:"#8b5cf6",borderRadius:2}}/>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                              {prof.samples&&(
+                                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"1px solid #e2e8f0"}}>
+                                  {[{l:"Min Len",v:prof.minLen},{l:"Max Len",v:prof.maxLen},{l:"Avg Len",v:prof.avgLen}].map((s,i)=>(
+                                    <div key={s.l} style={{padding:"9px 10px",borderRight:i<2?"1px solid #e2e8f0":"none",textAlign:"center"}}>
+                                      <div style={{fontSize:9,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>{s.l}</div>
+                                      <div style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:"#1e293b",fontWeight:600}}>{s.v}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {prof.samples&&(
+                                <div style={{padding:"9px 12px"}}>
+                                  <div style={{fontSize:9,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Sample Values</div>
+                                  <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                                    {prof.samples.map((s,i)=>(
+                                      <span key={i} style={{fontSize:10.5,padding:"3px 9px",borderRadius:5,background:"#f1f5f9",border:"1px solid #e2e8f0",color:"#475569",fontFamily:"'Geist Mono',monospace"}}>{s}</span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
                         )}
-                      </>
+
+                        {/* Certificate — inherited from parent node */}
+                        <div>
+                          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                            <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em"}}>Certificate</div>
+                            <span style={{fontSize:9.5,color:"#94a3b8",fontStyle:"italic"}}>Inherited</span>
+                          </div>
+                          <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px 4px 9px",borderRadius:5,background:cm2.bg,borderTop:`1px solid ${cm2.border}`,borderRight:`1px solid ${cm2.border}`,borderBottom:`1px solid ${cm2.border}`,borderLeft:`3px solid ${cm2.color}`}}>
+                            <span style={{fontSize:12,color:cm2.color,fontWeight:600}}>{cMeta?.cert||"Draft"}</span>
+                          </div>
+                        </div>
+
+                        {/* Domain — inherited */}
+                        {cMeta?.domain&&(
+                          <div>
+                            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                              <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em"}}>Domain</div>
+                              <span style={{fontSize:9.5,color:"#94a3b8",fontStyle:"italic"}}>Inherited</span>
+                            </div>
+                            <div style={{display:"inline-flex",alignItems:"center",padding:"4px 12px 4px 9px",borderRadius:5,background:"rgba(238,36,36,.06)",borderTop:"1px solid rgba(238,36,36,.15)",borderRight:"1px solid rgba(238,36,36,.15)",borderBottom:"1px solid rgba(238,36,36,.15)",borderLeft:"3px solid #ee2424"}}>
+                              <span style={{fontSize:12,color:"#ee2424",fontWeight:600}}>{cMeta.domain}</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Owner — inherited */}
+                        {cMeta?.owner&&(
+                          <div>
+                            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                              <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em"}}>Owner</div>
+                              <span style={{fontSize:9.5,color:"#94a3b8",fontStyle:"italic"}}>Inherited</span>
+                            </div>
+                            <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:"rgba(238,36,36,.06)",borderTop:"1px solid rgba(238,36,36,.15)",borderRight:"1px solid rgba(238,36,36,.15)",borderBottom:"1px solid rgba(238,36,36,.15)",borderLeft:"3px solid #ee2424"}}>
+                              <div style={{width:18,height:18,borderRadius:3,background:"rgba(238,36,36,.12)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#ee2424",flexShrink:0}}>{ava(cMeta.owner)}</div>
+                              <span style={{fontSize:12,color:"#ee2424",fontWeight:500}}>{cMeta.owner}</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Steward — inherited */}
+                        {cMeta?.steward&&(
+                          <div>
+                            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                              <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em"}}>Steward</div>
+                              <span style={{fontSize:9.5,color:"#94a3b8",fontStyle:"italic"}}>Inherited</span>
+                            </div>
+                            <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:"rgba(217,119,6,.08)",borderTop:"1px solid rgba(217,119,6,.2)",borderRight:"1px solid rgba(217,119,6,.2)",borderBottom:"1px solid rgba(217,119,6,.2)",borderLeft:"3px solid #d97706"}}>
+                              <div style={{width:18,height:18,borderRadius:"50%",background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(cMeta.steward)}</div>
+                              <span style={{fontSize:12,color:"#d97706",fontWeight:500}}>{cMeta.steward}</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Tags */}
+                        {cMeta?.tags&&cMeta.tags.length>0&&(
+                          <div>
+                            <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Tags</div>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                              {cMeta.tags.map(t=>{const c=TAG_C_L[t]||{bg:"#f1f5f9",color:"#64748b",border:"#e2e8f0"};return(
+                                <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}</span>
+                              );})}
+                            </div>
+                          </div>
+                        )}
+
+                      </div>
                     );
                   })()}
 
