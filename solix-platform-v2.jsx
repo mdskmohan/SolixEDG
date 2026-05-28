@@ -19100,7 +19100,7 @@ const SearchView = ({onAsset})=>{
       {/* Main results */}
       <div style={{flex:1,overflowY:"auto",padding:28}}>
         <div style={{marginBottom:20}}>
-          <Input2 placeholder="Search by name, path, or tag…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(16)}/>
+          <Input2 placeholder="Search by name, fully qualified name, or tag…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(16)}/>
           {(q.length>0||selTagIds.size>0)&&<div style={{fontSize:11,color:T.textMuted,marginTop:6}}>{baseAssets.length+gResults.length} result{baseAssets.length+gResults.length!==1?"s":""}{q.length>1?` for "${q}"`:""}</div>}
         </div>
 
