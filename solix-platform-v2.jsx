@@ -13578,6 +13578,72 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
                     </div>
                   </div>
 
+                  {/* Profile Stats — rendered from COL_PROFILES */}
+                  {prof&&(
+                    <div>
+                      <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Profile Stats</div>
+                      <div style={{background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden"}}>
+
+                        {/* Null % */}
+                        <div style={{padding:"9px 12px",borderBottom:`1px solid ${T.border}`}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                            <span style={{fontSize:11,color:T.textMuted}}>Null %</span>
+                            <span style={{fontSize:11,fontWeight:700,color:prof.nullPct>5?T.rose:T.green}}>{prof.nullPct}%</span>
+                          </div>
+                          <div style={{height:4,background:T.bgHover,borderRadius:2,overflow:"hidden"}}>
+                            <div style={{width:`${Math.min(100,prof.nullPct)}%`,height:"100%",background:prof.nullPct>5?T.rose:T.green,borderRadius:2,transition:"width .3s"}}/>
+                          </div>
+                        </div>
+
+                        {/* Distinct % */}
+                        <div style={{padding:"9px 12px",borderBottom:prof.dataType==="numeric"&&prof.min!=null||prof.topValues?`1px solid ${T.border}`:"none"}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                            <span style={{fontSize:11,color:T.textMuted}}>Distinct %</span>
+                            <span style={{fontSize:11,fontWeight:700,color:T.blue}}>{prof.distinctPct}%</span>
+                          </div>
+                          <div style={{height:4,background:T.bgHover,borderRadius:2,overflow:"hidden"}}>
+                            <div style={{width:`${Math.min(100,prof.distinctPct)}%`,height:"100%",background:T.blue,borderRadius:2,transition:"width .3s"}}/>
+                          </div>
+                        </div>
+
+                        {/* Min / Max / Avg — numeric only */}
+                        {prof.dataType==="numeric"&&prof.min!=null&&(
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:prof.topValues?`1px solid ${T.border}`:"none"}}>
+                            {[{l:"Min",v:prof.min},{l:"Max",v:prof.max},{l:"Avg",v:prof.avg||"—"}].map((s,i)=>(
+                              <div key={s.l} style={{padding:"9px 10px",borderRight:i<2?`1px solid ${T.border}`:"none",textAlign:"center"}}>
+                                <div style={{fontSize:9,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>{s.l}</div>
+                                <div style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600}}>{s.v}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Top Values — categorical only */}
+                        {prof.topValues&&(
+                          <div style={{padding:"9px 12px"}}>
+                            <div style={{fontSize:9,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Top Values</div>
+                            {prof.topValues.map((v,i)=>{
+                              const pct=parseFloat(v.match(/\((\d+)/)?.[1]||0);
+                              const label=v.replace(/\s*\(.*\)/,"");
+                              return(
+                                <div key={i} style={{marginBottom:i<prof.topValues.length-1?7:0}}>
+                                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                                    <span style={{fontSize:10.5,color:T.textSub,fontWeight:500}}>{label}</span>
+                                    <span style={{fontSize:10,color:T.textMuted}}>{pct}%</span>
+                                  </div>
+                                  <div style={{height:3,background:T.bgHover,borderRadius:2,overflow:"hidden"}}>
+                                    <div style={{width:`${pct}%`,height:"100%",background:T.violet,borderRadius:2,transition:"width .3s"}}/>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                      </div>
+                    </div>
+                  )}
+
                 </div>
               )}
 
