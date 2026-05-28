@@ -5549,7 +5549,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   // ─── state ──────────────────────────────────────────────────────────
   const [policies, setPolicies] = useState([
     {id:"pol-1",name:"Commerce PII Sensitivity",fqn:"policies.data.commerce_pii",version:2,
-     category:"Data",severity:"Critical",lifecycle:"Active",owner:"maya.chen",stewards:["dev.patel","sarah.kim"],tags:["PII","sensitive"],
+     category:"Data",severity:"Critical",lifecycle:"Active",cert:"Approved",owner:"maya.chen",stewards:["dev.patel","sarah.kim"],tags:["PII","sensitive"],
      created:"2026-02-10",updated:"2026-05-01",regulations:["GDPR","CCPA"],
      violations:2,compliancePct:78,lastEvaluated:"2026-05-17",assetsInScope:12,schedule:"0 */6 * * *",nextRun:"2026-05-20 20:00",
      scope:{domains:["Commerce","Finance"]},
@@ -5584,7 +5584,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
        {when:"2026-02-10",who:"maya.chen",action:"Created draft v1"},
      ]},
     {id:"pol-2",name:"Finance Data Integrity",fqn:"policies.quality.finance_integrity",version:1,
-     category:"Quality",severity:"High",lifecycle:"Active",owner:"dev.patel",stewards:["sarah.kim"],tags:["financial","regulated"],
+     category:"Quality",severity:"High",lifecycle:"Active",cert:"Approved",owner:"dev.patel",stewards:["sarah.kim"],tags:["financial","regulated"],
      created:"2026-01-15",updated:"2026-04-20",regulations:["SOC2","PCI DSS"],
      violations:1,compliancePct:88,lastEvaluated:"2026-05-17",assetsInScope:8,schedule:"0 8 * * *",nextRun:"2026-05-21 08:00",
      scope:{domains:["Finance"]},
@@ -5612,7 +5612,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
        {when:"2026-01-15",who:"dev.patel",action:"Created draft v1"},
      ]},
     {id:"pol-3",name:"ML Feature Readiness",fqn:"policies.quality.ml_feature_readiness",version:1,
-     category:"Quality",severity:"High",lifecycle:"In Review",owner:"sarah.kim",stewards:["alex.wu"],tags:["regulated"],
+     category:"Quality",severity:"High",lifecycle:"In Review",cert:"In Review",owner:"sarah.kim",stewards:["alex.wu"],tags:["regulated"],
      created:"2026-03-20",updated:"2026-05-05",regulations:[],
      violations:0,compliancePct:null,lastEvaluated:null,assetsInScope:5,
      scope:{domains:["ML","Engineering"]},
@@ -5628,7 +5628,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
        {when:"2026-03-20",who:"sarah.kim",action:"Created draft v1"},
      ]},
     {id:"pol-4",name:"HIPAA PHI Compliance",fqn:"policies.access.hipaa_phi",version:3,
-     category:"Access",severity:"Critical",lifecycle:"Active",owner:"lisa.ray",stewards:["priya.nair","maya.chen"],tags:["PHI","healthcare","sensitive","regulated"],
+     category:"Access",severity:"Critical",lifecycle:"Active",cert:"Approved",owner:"lisa.ray",stewards:["priya.nair","maya.chen"],tags:["PHI","healthcare","sensitive","regulated"],
      created:"2026-01-05",updated:"2026-04-01",regulations:["HIPAA"],
      violations:3,compliancePct:65,lastEvaluated:"2026-05-17",assetsInScope:7,schedule:"0 */4 * * *",nextRun:"2026-05-20 22:00",
      scope:{domains:["Finance","Commerce"]},
@@ -5659,7 +5659,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
        {when:"2026-01-05",who:"lisa.ray",action:"Created draft v1"},
      ]},
     {id:"pol-5",name:"Product Catalog Completeness",fqn:"policies.quality.product_completeness",version:1,
-     category:"Quality",severity:"Medium",lifecycle:"Draft",owner:"alex.wu",stewards:[],tags:["internal"],
+     category:"Quality",severity:"Medium",lifecycle:"Draft",cert:"Draft",owner:"alex.wu",stewards:[],tags:["internal"],
      created:"2026-04-10",updated:"2026-05-10",regulations:[],
      violations:0,compliancePct:null,lastEvaluated:null,assetsInScope:4,
      scope:{domains:["Product","Marketing"]},
@@ -5673,7 +5673,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
        {when:"2026-05-10",who:"alex.wu",action:"Created draft v1"},
      ]},
     {id:"pol-6",name:"Engineering Pipeline Governance",fqn:"policies.data.engineering_pipeline",version:2,
-     category:"Data",severity:"Medium",lifecycle:"Deprecated",owner:"priya.nair",stewards:[],tags:[],
+     category:"Data",severity:"Medium",lifecycle:"Deprecated",cert:"Deprecated",owner:"priya.nair",stewards:[],tags:[],
      created:"2025-11-01",updated:"2026-02-15",regulations:["SOC2"],
      violations:0,compliancePct:null,lastEvaluated:null,assetsInScope:3,
      scope:{domains:["Engineering"]},
@@ -5726,6 +5726,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   const [polDraftDomains, setPolDraftDomains]=useState([]);
   const [polDraftTags,    setPolDraftTags]=useState([]);
   const [polDraftFrameworks,setPolDraftFrameworks]=useState([]);
+  const [polDraftCert,      setPolDraftCert]     =useState("Draft");
   const [polDraftCriteria, setPolDraftCriteria]=useState([]);
   const [violActionModal,  setViolActionModal] = useState(null); // {id, newStatus, desc}
   const [polDraftNewCriterion,setPolDraftNewCriterion]=useState("");
@@ -5859,6 +5860,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
     if(polEditModal==="domains")    setPolDraftDomains([...(selPol.scope?.domains||[])]);
     if(polEditModal==="tags")       setPolDraftTags([...(selPol.tags||[])]);
     if(polEditModal==="frameworks") setPolDraftFrameworks([...(selPol.regulations||[])]);
+    if(polEditModal==="cert")       setPolDraftCert(selPol.cert||"Draft");
     if(polEditModal==="criteria")   {setPolDraftCriteria([...(selPol.criteria||[])]);setPolDraftNewCriterion("");}
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[polEditModal]);
@@ -6870,6 +6872,15 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                     <span key={r} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:`${T.blue}0f`,borderTop:`1px solid ${T.blue}20`,borderRight:`1px solid ${T.blue}20`,borderBottom:`1px solid ${T.blue}20`,borderLeft:`3px solid ${T.blue}`,color:T.blue,fontWeight:600}}>{r}</span>
                                   ))}
                             </div>
+                          </SB>
+
+                          <SB ch="Certification" onEdit={()=>setPolEditModal("cert")}>
+                            {(()=>{const cm=CERT_META[p.cert]||CERT_META.Draft;return(
+                              <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px 4px 9px",borderRadius:5,background:cm.bg,borderTop:`1px solid ${cm.border}`,borderRight:`1px solid ${cm.border}`,borderBottom:`1px solid ${cm.border}`,borderLeft:`3px solid ${cm.color}`}}>
+                                <span style={{fontSize:13}}>{cm.icon}</span>
+                                <span style={{fontSize:12,color:cm.color,fontWeight:600}}>{p.cert||"Draft"}</span>
+                              </div>
+                            );})()}
                           </SB>
 
                           <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
@@ -9421,6 +9432,23 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
               {polDraftTags.length>0&&<div style={{fontSize:11,color:T.textMuted}}>Selected: {polDraftTags.join(", ")}</div>}
             </div>
             {mFoot(()=>{applyPolField("tags",polDraftTags,"Updated tags");close();})}
+          </CenteredModal>
+        );
+
+        if(polEditModal==="cert") return (
+          <CenteredModal onClose={close}>
+            {mHead("Edit Certification Status")}
+            <div style={{padding:"20px 24px",display:"flex",flexDirection:"column",gap:12}}>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {Object.entries(CERT_META).map(([k,cm])=>{const sel=polDraftCert===k;return(
+                  <button key={k} onClick={()=>setPolDraftCert(k)}
+                    style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 14px",borderRadius:6,border:`1.5px solid ${sel?cm.color:T.border}`,background:sel?cm.bg:"transparent",color:sel?cm.color:T.textSub,fontSize:12,fontWeight:sel?600:400,cursor:"pointer",transition:"all .1s"}}>
+                    <span>{cm.icon}</span>{k}
+                  </button>
+                );})}
+              </div>
+            </div>
+            {mFoot(()=>{applyPolField("cert",polDraftCert,"Updated certification");close();})}
           </CenteredModal>
         );
 
