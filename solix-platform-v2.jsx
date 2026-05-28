@@ -21048,11 +21048,12 @@ const AddServiceWizard = ({onClose, onDone}) => {
   const [svcOwner,     setSvcOwner]    = useState("data-eng");
   const [svcAdmins,    setSvcAdmins]   = useState([]);
   const [svcAdminOpen, setSvcAdminOpen]= useState(false);
-  const [schedule,     setSchedule]    = useState("0 2 * * *");
-  const [schedMode,    setSchedMode]   = useState("scheduled");
-  const [connTime,     setConnTime]    = useState("02:00");
-  const [connDay,      setConnDay]     = useState("sunday");
-  const [connTz,       setConnTz]      = useState("UTC");
+  const [schedFreq,    setSchedFreq]   = useState("daily");
+  const [schedTime,    setSchedTime]   = useState("08:00");
+  const [schedDay,     setSchedDay]    = useState("monday");
+  const [schedCron,    setSchedCron]   = useState("");
+  const [schedTz,      setSchedTz]     = useState("UTC");
+  const [schedEnabled, setSchedEnabled]= useState(true);
   const [authType,     setAuthType]    = useState("userpass"); // userpass|oauth|keypair|token
   const [fields,       setFields]      = useState({});
   const [objTypes,     setObjTypes]    = useState([]);
@@ -21079,23 +21080,18 @@ const AddServiceWizard = ({onClose, onDone}) => {
   const catMeta  = category ? ADD_SERVICE_CONNECTORS[category] : null;
   const availObjTypes = category ? (OBJECT_TYPES_BY_CATEGORY[category] || OBJECT_TYPES_BY_CATEGORY["Databases"]) : [];
 
-  const SCHED_PRESETS = [
-    {l:"15 min",  v:"*/15 * * * *"},
-    {l:"Hourly",  v:"0 * * * *"},
-    {l:"6 hrs",   v:"0 */6 * * *"},
-    {l:"Daily",   v:"0 2 * * *"},
-    {l:"Weekly",  v:"0 2 * * 0"},
-    {l:"Monthly", v:"0 2 1 * *"},
-  ];
-
-  const schedLabel = (v) => {
-    if(v==="*/15 * * * *") return "every 15 min";
-    if(v==="0 * * * *")    return "every hour";
-    if(v==="0 */6 * * *")  return "every 6 hours";
-    if(v==="0 2 * * *")    return "daily at 2:00 AM";
-    if(v==="0 2 * * 0")    return "weekly on Sunday";
-    if(v==="0 2 1 * *")    return "monthly on the 1st";
-    return v;
+  const buildConnCron = () => {
+    if(schedFreq==="once")   return "— run once —";
+    if(schedFreq==="hourly") return "0 * * * *";
+    if(schedFreq==="daily"){const[h,m]=schedTime.split(":");return `${m||"0"} ${h||"8"} * * *`;}
+    if(schedFreq==="weekly"){const days={monday:1,tuesday:2,wednesday:3,thursday:4,friday:5,saturday:6,sunday:0};const[h,m]=schedTime.split(":");return `${m||"0"} ${h||"8"} * * ${days[schedDay]||1}`;}
+    return schedCron||"0 8 * * *";
+  };
+  const nextRunLabel = () => {
+    if(schedFreq==="once") return "After saving — one time only";
+    const now=new Date();
+    if(schedFreq==="hourly") return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")} ${String(now.getHours()+1).padStart(2,"0")}:00 ${schedTz}`;
+    return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")} ${schedTime||"08:00"} ${schedTz}`;
   };
 
   const canNext = () => {
@@ -21702,89 +21698,78 @@ const AddServiceWizard = ({onClose, onDone}) => {
 
               {/* Sync Schedule */}
               <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
-                  <div style={{width:3,height:16,borderRadius:2,background:T.accent,flexShrink:0}}/>
-                  <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Sync Schedule</span>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
-                  {[{id:"once",label:"Run Once",desc:"Manual trigger only"},{id:"scheduled",label:"Scheduled",desc:"Repeats on a cron schedule"}].map(m=>{
-                    const sel=schedMode===m.id;
-                    return (
-                      <button key={m.id} onClick={()=>setSchedMode(m.id)} style={{padding:"11px 12px",borderRadius:10,textAlign:"left",border:`2px solid ${sel?T.accent:T.border}`,background:sel?T.accentDim:T.bgSurface,cursor:"pointer",transition:"all .15s"}}
-                        onMouseEnter={e=>{if(!sel)e.currentTarget.style.borderColor=`${T.accent}55`;}}
-                        onMouseLeave={e=>{if(!sel)e.currentTarget.style.borderColor=T.border;}}>
-                        <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4}}>
-                          <div style={{width:13,height:13,borderRadius:"50%",border:`2px solid ${sel?T.accent:T.border}`,background:sel?T.accent:"transparent",flexShrink:0}}/>
-                          <span style={{fontSize:12,fontWeight:700,color:sel?T.accent:T.textSub}}>{m.label}</span>
-                        </div>
-                        <div style={{fontSize:10.5,color:T.textMuted,paddingLeft:20}}>{m.desc}</div>
-                      </button>
-                    );
-                  })}
-                </div>
-                {schedMode==="scheduled"&&(()=>{
-                  const connFreq=(()=>{
-                    if(schedule==="*/15 * * * *"||schedule==="0 * * * *") return "hourly";
-                    if(schedule==="0 2 * * 0") return "weekly";
-                    if(schedule==="0 2 1 * *") return "monthly";
-                    const parts=schedule.split(" ");
-                    if(parts.length===5&&parts[2]==="*"&&parts[3]==="*"&&parts[4]==="*") return "daily";
-                    return "custom";
-                  })();
-                  const TZ_OPTS3=["UTC","US/Eastern","US/Central","US/Pacific","Europe/London","Asia/Kolkata","Asia/Singapore"];
-                  return (
-                    <div style={{display:"flex",flexDirection:"column",gap:12}}>
-                      <div>
-                        <div style={{fontSize:10.5,fontWeight:600,color:T.textMuted,marginBottom:7,textTransform:"uppercase",letterSpacing:"0.06em"}}>Frequency</div>
-                        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                          {SCHED_PRESETS.map(p=>(
-                            <button key={p.v} onClick={()=>setSchedule(p.v)} style={{padding:"5px 12px",borderRadius:99,fontSize:11.5,fontWeight:500,cursor:"pointer",transition:"all .12s",border:`1.5px solid ${schedule===p.v?T.accent:T.border}`,background:schedule===p.v?T.accentDim:"transparent",color:schedule===p.v?T.accent:T.textSub}}>{p.l}</button>
-                          ))}
-                        </div>
-                      </div>
-                      {(connFreq==="daily"||connFreq==="weekly")&&(
-                        <div>
-                          <div style={{fontSize:10.5,fontWeight:600,color:T.textMuted,marginBottom:7,textTransform:"uppercase",letterSpacing:"0.06em"}}>Run At</div>
-                          <input type="time" value={connTime} onChange={e=>{setConnTime(e.target.value);const[h,m]=e.target.value.split(":");if(connFreq==="daily")setSchedule(`${m||"0"} ${h||"2"} * * *`);else{const days={sunday:0,monday:1,tuesday:2,wednesday:3,thursday:4,friday:5,saturday:6};setSchedule(`${m||"0"} ${h||"2"} * * ${days[connDay]||0}`);}}}
-                            style={{padding:"8px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",fontFamily:"'Geist Mono',monospace",width:"100%",boxSizing:"border-box"}}
-                            onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                        </div>
-                      )}
-                      {connFreq==="weekly"&&(
-                        <div>
-                          <div style={{fontSize:10.5,fontWeight:600,color:T.textMuted,marginBottom:7,textTransform:"uppercase",letterSpacing:"0.06em"}}>Day of Week</div>
-                          <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                            {["sunday","monday","tuesday","wednesday","thursday","friday","saturday"].map(d=>{
-                              const selD=connDay===d;
-                              return <button key={d} onClick={()=>{setConnDay(d);const[h,m]=connTime.split(":");const days={sunday:0,monday:1,tuesday:2,wednesday:3,thursday:4,friday:5,saturday:6};setSchedule(`${m||"0"} ${h||"2"} * * ${days[d]}`);}}
-                                style={{padding:"5px 10px",borderRadius:6,border:`1.5px solid ${selD?T.accent:T.border}`,background:selD?T.accentDim:"transparent",color:selD?T.accent:T.textSub,fontSize:11,fontWeight:selD?600:400,cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize"}}>
-                                {d.slice(0,3)}
-                              </button>;
-                            })}
-                          </div>
-                        </div>
-                      )}
-                      <div>
-                        <div style={{fontSize:10.5,fontWeight:600,color:T.textMuted,marginBottom:5,textTransform:"uppercase",letterSpacing:"0.06em"}}>Cron Expression</div>
-                        <input value={schedule} onChange={e=>setSchedule(e.target.value)}
-                          style={{width:"100%",padding:"8px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box"}}
-                          onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                      </div>
-                      <div>
-                        <div style={{fontSize:10.5,fontWeight:600,color:T.textMuted,marginBottom:5,textTransform:"uppercase",letterSpacing:"0.06em"}}>Timezone</div>
-                        <select value={connTz} onChange={e=>setConnTz(e.target.value)}
-                          style={{width:"100%",padding:"8px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",cursor:"pointer",boxSizing:"border-box"}}
-                          onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}>
-                          {TZ_OPTS3.map(tz=><option key={tz} value={tz}>{tz}</option>)}
-                        </select>
-                      </div>
-                      <div style={{padding:"8px 12px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`}}>
-                        <div style={{fontSize:10.5,color:T.textMuted,marginBottom:3}}>Next sync</div>
-                        <div style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.accent}}>{schedLabel(schedule)} · {connTz}</div>
-                      </div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{width:3,height:16,borderRadius:2,background:T.accent,flexShrink:0}}/>
+                    <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Sync Schedule</span>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{fontSize:11,color:schedEnabled?T.accent:T.textMuted,fontWeight:600}}>{schedEnabled?"Enabled":"Paused"}</span>
+                    <div onClick={()=>setSchedEnabled(v=>!v)} style={{width:32,height:18,borderRadius:9,background:schedEnabled?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
+                      <div style={{position:"absolute",top:2,left:schedEnabled?14:2,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
                     </div>
-                  );
-                })()}
+                  </div>
+                </div>
+                <div style={{marginBottom:14}}>
+                  <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Frequency</div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6}}>
+                    {[{k:"once",l:"Run Once"},{k:"hourly",l:"Hourly"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"custom",l:"Custom"}].map(f=>(
+                      <button key={f.k} onClick={()=>setSchedFreq(f.k)}
+                        style={{padding:"8px 4px",borderRadius:8,border:`1.5px solid ${schedFreq===f.k?T.accent:T.border}`,background:schedFreq===f.k?T.accentDim:"transparent",color:schedFreq===f.k?T.accent:T.textSub,fontSize:11.5,fontWeight:schedFreq===f.k?600:400,cursor:"pointer",fontFamily:"inherit",transition:"all .12s"}}>
+                        {f.l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {(schedFreq==="daily"||schedFreq==="weekly")&&(
+                  <div style={{marginBottom:14}}>
+                    <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Run At</div>
+                    <input type="time" value={schedTime} onChange={e=>setSchedTime(e.target.value)}
+                      style={{padding:"8px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",fontFamily:"'Geist Mono',monospace",width:"100%",boxSizing:"border-box"}}/>
+                  </div>
+                )}
+                {schedFreq==="weekly"&&(
+                  <div style={{marginBottom:14}}>
+                    <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Day of Week</div>
+                    <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                      {["monday","tuesday","wednesday","thursday","friday","saturday","sunday"].map(d=>(
+                        <button key={d} onClick={()=>setSchedDay(d)}
+                          style={{padding:"5px 10px",borderRadius:6,border:`1.5px solid ${schedDay===d?T.accent:T.border}`,background:schedDay===d?T.accentDim:"transparent",color:schedDay===d?T.accent:T.textSub,fontSize:11,fontWeight:schedDay===d?600:400,cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize"}}>
+                          {d.slice(0,3)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {schedFreq==="custom"&&(
+                  <div style={{marginBottom:14}}>
+                    <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Cron Expression</div>
+                    <input value={schedCron} onChange={e=>setSchedCron(e.target.value)} placeholder="0 8 * * 1-5"
+                      style={{width:"100%",padding:"8px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box"}}/>
+                    <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>Standard 5-field cron: minute hour day month weekday</div>
+                  </div>
+                )}
+                {schedFreq!=="once"&&(
+                  <div style={{marginBottom:14}}>
+                    <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Timezone</div>
+                    <select value={schedTz} onChange={e=>setSchedTz(e.target.value)}
+                      style={{width:"100%",padding:"8px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
+                      {["UTC","US/Eastern","US/Central","US/Pacific","Europe/London","Asia/Kolkata","Asia/Singapore"].map(tz=><option key={tz} value={tz}>{tz}</option>)}
+                    </select>
+                  </div>
+                )}
+                {schedFreq!=="once"&&(
+                  <div style={{padding:"10px 14px",borderRadius:8,background:T.bgSurface,border:`1px solid ${T.border}`}}>
+                    <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Cron preview</div>
+                    <div style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.accent,marginBottom:4}}>{buildConnCron()}</div>
+                    <div style={{fontSize:11,color:T.textMuted}}>Next run: <strong style={{color:T.text}}>{nextRunLabel()}</strong></div>
+                  </div>
+                )}
+                {schedFreq==="once"&&(
+                  <div style={{padding:"10px 14px",borderRadius:8,background:"rgba(245,158,11,.06)",border:"1px solid rgba(245,158,11,.25)",fontSize:11.5,color:T.textSub,lineHeight:1.5}}>
+                    This connection will run one time immediately after saving. No recurring schedule will be set.
+                  </div>
+                )}
               </div>
 
               {/* Launch summary */}
@@ -21800,7 +21785,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
                 <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:9}}>
                   {[
                     {l:"Owner",    v:svcOwner},
-                    {l:"Schedule", v:schedMode==="once"?"Run Once":schedLabel(schedule), mono:true},
+                    {l:"Schedule", v:schedFreq==="once"?"Run Once":buildConnCron(), mono:true},
                     {l:"Object Types", v:objTypes.length>0?objTypes.slice(0,3).join(", ")+(objTypes.length>3?` +${objTypes.length-3}`:""):"All"},
                   ].map(({l,v,mono})=>(
                     <div key={l} style={{padding:"10px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
