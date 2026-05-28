@@ -1916,8 +1916,8 @@ const GlossaryView = ({onToast}) => {
             )}
           </div>
         </div>
-        {/* RIGHT metadata panel */}
-        {(()=>{
+        {/* RIGHT metadata panel — Overview tab only */}
+        {termTab==="overview"&&(()=>{
           const stewards = stewardsG;
           const tagColor = gTagColor;
           const SideLabel = ({ch,onEdit})=>(
