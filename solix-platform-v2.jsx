@@ -19044,7 +19044,7 @@ const SearchView = ({onAsset})=>{
   const toggleTag = tid => setSelTagIds(prev=>{const n=new Set(prev);n.has(tid)?n.delete(tid):n.add(tid);return n;});
 
   const baseAssets = ASSETS.filter(a=>{
-    const mq = q.length<2||a.name.toLowerCase().includes(q.toLowerCase())||a.domain.toLowerCase().includes(q.toLowerCase())||a.tags.some(t=>t.toLowerCase().includes(q.toLowerCase()));
+    const mq = q.length<2||a.name.toLowerCase().includes(q.toLowerCase())||(a.db&&a.db.toLowerCase().includes(q.toLowerCase()))||a.tags.some(t=>t.toLowerCase().includes(q.toLowerCase()));
     if(!mq) return false;
     if(selTagIds.size===0) return true;
     const aids = assetTagIds(a);
@@ -19100,7 +19100,7 @@ const SearchView = ({onAsset})=>{
       {/* Main results */}
       <div style={{flex:1,overflowY:"auto",padding:28}}>
         <div style={{marginBottom:20}}>
-          <Input2 placeholder="Search assets, columns, owners, tags, glossary…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(16)}/>
+          <Input2 placeholder="Search by name, path, or tag…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(16)}/>
           {(q.length>0||selTagIds.size>0)&&<div style={{fontSize:11,color:T.textMuted,marginTop:6}}>{baseAssets.length+gResults.length} result{baseAssets.length+gResults.length!==1?"s":""}{q.length>1?` for "${q}"`:""}</div>}
         </div>
 
