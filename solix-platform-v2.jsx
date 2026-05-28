@@ -13531,6 +13531,102 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
                     </div>
                   </div>
 
+                  {/* Stats — rendered from COL_PROFILES */}
+                  {prof&&(
+                    <div>
+                      <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Stats</div>
+                      <div style={{background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden"}}>
+
+                        {/* Null % */}
+                        <div style={{padding:"9px 12px",borderBottom:`1px solid ${T.border}`}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                            <span style={{fontSize:11,color:T.textMuted}}>Null %</span>
+                            <div style={{display:"flex",alignItems:"baseline",gap:5}}>
+                              <span style={{fontSize:11,fontWeight:700,color:prof.nullPct>5?T.rose:T.green}}>{prof.nullPct}%</span>
+                              {prof.nullCount&&prof.nullCount!=="0"&&<span style={{fontSize:9.5,color:T.textMuted}}>{prof.nullCount} rows</span>}
+                            </div>
+                          </div>
+                          <div style={{height:4,background:T.bgHover,borderRadius:2,overflow:"hidden"}}>
+                            <div style={{width:`${Math.min(100,prof.nullPct)}%`,height:"100%",background:prof.nullPct>5?T.rose:T.green,borderRadius:2,transition:"width .3s"}}/>
+                          </div>
+                        </div>
+
+                        {/* Distinct % */}
+                        <div style={{padding:"9px 12px",borderBottom:(prof.dataType==="numeric"&&prof.min!=null)||prof.topValues||prof.samples?`1px solid ${T.border}`:"none"}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                            <span style={{fontSize:11,color:T.textMuted}}>Distinct %</span>
+                            <div style={{display:"flex",alignItems:"baseline",gap:5}}>
+                              <span style={{fontSize:11,fontWeight:700,color:T.blue}}>{prof.distinctPct}%</span>
+                              {prof.distinctCount&&<span style={{fontSize:9.5,color:T.textMuted}}>{prof.distinctCount} values</span>}
+                            </div>
+                          </div>
+                          <div style={{height:4,background:T.bgHover,borderRadius:2,overflow:"hidden"}}>
+                            <div style={{width:`${Math.min(100,prof.distinctPct)}%`,height:"100%",background:T.blue,borderRadius:2,transition:"width .3s"}}/>
+                          </div>
+                        </div>
+
+                        {/* Min / Max / Avg — numeric only */}
+                        {prof.dataType==="numeric"&&prof.min!=null&&(
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:prof.topValues?`1px solid ${T.border}`:"none"}}>
+                            {[{l:"Min",v:prof.min},{l:"Max",v:prof.max},{l:"Avg",v:prof.avg||"—"}].map((s,i)=>(
+                              <div key={s.l} style={{padding:"9px 10px",borderRight:i<2?`1px solid ${T.border}`:"none",textAlign:"center"}}>
+                                <div style={{fontSize:9,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>{s.l}</div>
+                                <div style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600}}>{s.v}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Top Values — categorical and string columns with topValues */}
+                        {prof.topValues&&(
+                          <div style={{padding:"9px 12px",borderBottom:prof.samples?`1px solid ${T.border}`:"none"}}>
+                            <div style={{fontSize:9,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Top Values</div>
+                            {prof.topValues.map((v,i)=>{
+                              const pct=parseFloat(v.match(/\((\d+)/)?.[1]||0);
+                              const label=v.replace(/\s*\(.*\)/,"");
+                              return(
+                                <div key={i} style={{marginBottom:i<prof.topValues.length-1?7:0}}>
+                                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                                    <span style={{fontSize:10.5,color:T.textSub,fontWeight:500}}>{label}</span>
+                                    <span style={{fontSize:10,color:T.textMuted}}>{pct}%</span>
+                                  </div>
+                                  <div style={{height:3,background:T.bgHover,borderRadius:2,overflow:"hidden"}}>
+                                    <div style={{width:`${pct}%`,height:"100%",background:T.violet,borderRadius:2,transition:"width .3s"}}/>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* Length Stats — string columns only */}
+                        {prof.samples&&(
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:`1px solid ${T.border}`}}>
+                            {[{l:"Min Len",v:prof.minLen},{l:"Max Len",v:prof.maxLen},{l:"Avg Len",v:prof.avgLen}].map((s,i)=>(
+                              <div key={s.l} style={{padding:"9px 10px",borderRight:i<2?`1px solid ${T.border}`:"none",textAlign:"center"}}>
+                                <div style={{fontSize:9,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>{s.l}</div>
+                                <div style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600}}>{s.v}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Sample Values — string columns only */}
+                        {prof.samples&&(
+                          <div style={{padding:"9px 12px"}}>
+                            <div style={{fontSize:9,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Sample Values</div>
+                            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                              {prof.samples.map((s,i)=>(
+                                <span key={i} style={{fontSize:10.5,padding:"3px 9px",borderRadius:5,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{s}</span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                      </div>
+                    </div>
+                  )}
+
                   {/* Certificate — inherited from parent table, read-only */}
                   {(()=>{
                     const cert = data.cert||asset.cert||"Draft";
@@ -13727,102 +13823,6 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
                       </div>
                     );
                   })()}
-
-                  {/* Profile Stats — rendered from COL_PROFILES */}
-                  {prof&&(
-                    <div>
-                      <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Profile Stats</div>
-                      <div style={{background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden"}}>
-
-                        {/* Null % */}
-                        <div style={{padding:"9px 12px",borderBottom:`1px solid ${T.border}`}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
-                            <span style={{fontSize:11,color:T.textMuted}}>Null %</span>
-                            <div style={{display:"flex",alignItems:"baseline",gap:5}}>
-                              <span style={{fontSize:11,fontWeight:700,color:prof.nullPct>5?T.rose:T.green}}>{prof.nullPct}%</span>
-                              {prof.nullCount&&prof.nullCount!=="0"&&<span style={{fontSize:9.5,color:T.textMuted}}>{prof.nullCount} rows</span>}
-                            </div>
-                          </div>
-                          <div style={{height:4,background:T.bgHover,borderRadius:2,overflow:"hidden"}}>
-                            <div style={{width:`${Math.min(100,prof.nullPct)}%`,height:"100%",background:prof.nullPct>5?T.rose:T.green,borderRadius:2,transition:"width .3s"}}/>
-                          </div>
-                        </div>
-
-                        {/* Distinct % */}
-                        <div style={{padding:"9px 12px",borderBottom:(prof.dataType==="numeric"&&prof.min!=null)||prof.topValues||prof.samples?`1px solid ${T.border}`:"none"}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
-                            <span style={{fontSize:11,color:T.textMuted}}>Distinct %</span>
-                            <div style={{display:"flex",alignItems:"baseline",gap:5}}>
-                              <span style={{fontSize:11,fontWeight:700,color:T.blue}}>{prof.distinctPct}%</span>
-                              {prof.distinctCount&&<span style={{fontSize:9.5,color:T.textMuted}}>{prof.distinctCount} values</span>}
-                            </div>
-                          </div>
-                          <div style={{height:4,background:T.bgHover,borderRadius:2,overflow:"hidden"}}>
-                            <div style={{width:`${Math.min(100,prof.distinctPct)}%`,height:"100%",background:T.blue,borderRadius:2,transition:"width .3s"}}/>
-                          </div>
-                        </div>
-
-                        {/* Min / Max / Avg — numeric only */}
-                        {prof.dataType==="numeric"&&prof.min!=null&&(
-                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:prof.topValues?`1px solid ${T.border}`:"none"}}>
-                            {[{l:"Min",v:prof.min},{l:"Max",v:prof.max},{l:"Avg",v:prof.avg||"—"}].map((s,i)=>(
-                              <div key={s.l} style={{padding:"9px 10px",borderRight:i<2?`1px solid ${T.border}`:"none",textAlign:"center"}}>
-                                <div style={{fontSize:9,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>{s.l}</div>
-                                <div style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600}}>{s.v}</div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Top Values — categorical and string columns with topValues */}
-                        {prof.topValues&&(
-                          <div style={{padding:"9px 12px",borderBottom:prof.samples?`1px solid ${T.border}`:"none"}}>
-                            <div style={{fontSize:9,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Top Values</div>
-                            {prof.topValues.map((v,i)=>{
-                              const pct=parseFloat(v.match(/\((\d+)/)?.[1]||0);
-                              const label=v.replace(/\s*\(.*\)/,"");
-                              return(
-                                <div key={i} style={{marginBottom:i<prof.topValues.length-1?7:0}}>
-                                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                                    <span style={{fontSize:10.5,color:T.textSub,fontWeight:500}}>{label}</span>
-                                    <span style={{fontSize:10,color:T.textMuted}}>{pct}%</span>
-                                  </div>
-                                  <div style={{height:3,background:T.bgHover,borderRadius:2,overflow:"hidden"}}>
-                                    <div style={{width:`${pct}%`,height:"100%",background:T.violet,borderRadius:2,transition:"width .3s"}}/>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-
-                        {/* Length Stats — string columns only */}
-                        {prof.samples&&(
-                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:`1px solid ${T.border}`}}>
-                            {[{l:"Min Len",v:prof.minLen},{l:"Max Len",v:prof.maxLen},{l:"Avg Len",v:prof.avgLen}].map((s,i)=>(
-                              <div key={s.l} style={{padding:"9px 10px",borderRight:i<2?`1px solid ${T.border}`:"none",textAlign:"center"}}>
-                                <div style={{fontSize:9,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>{s.l}</div>
-                                <div style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600}}>{s.v}</div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Sample Values — string columns only */}
-                        {prof.samples&&(
-                          <div style={{padding:"9px 12px"}}>
-                            <div style={{fontSize:9,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Sample Values</div>
-                            <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                              {prof.samples.map((s,i)=>(
-                                <span key={i} style={{fontSize:10.5,padding:"3px 9px",borderRadius:5,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{s}</span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                      </div>
-                    </div>
-                  )}
 
                 </div>
               )}
