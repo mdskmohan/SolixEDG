@@ -1869,6 +1869,7 @@ const GlossaryView = ({onToast}) => {
               ))}
             </div>
           </div>
+          <div style={{flex:1,display:"flex",overflow:"hidden"}}>
           <div style={{flex:1,overflowY:"auto",padding:"28px"}}>
             {termTab==="overview"&&(
               <div style={{maxWidth:720}}>
@@ -1915,7 +1916,6 @@ const GlossaryView = ({onToast}) => {
               </div>
             )}
           </div>
-        </div>
         {/* RIGHT metadata panel — Overview tab only */}
         {termTab==="overview"&&(()=>{
           const stewards = stewardsG;
@@ -2030,6 +2030,8 @@ const GlossaryView = ({onToast}) => {
           </div>
           );
         })()}
+          </div>
+        </div>
       </div>
       {/* GLOSS EDIT MODAL */}
       {glossEditModal&&(
