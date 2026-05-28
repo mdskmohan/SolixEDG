@@ -21050,6 +21050,9 @@ const AddServiceWizard = ({onClose, onDone}) => {
   const [svcAdminOpen, setSvcAdminOpen]= useState(false);
   const [schedule,     setSchedule]    = useState("0 2 * * *");
   const [schedMode,    setSchedMode]   = useState("scheduled");
+  const [connTime,     setConnTime]    = useState("02:00");
+  const [connDay,      setConnDay]     = useState("sunday");
+  const [connTz,       setConnTz]      = useState("UTC");
   const [authType,     setAuthType]    = useState("userpass"); // userpass|oauth|keypair|token
   const [fields,       setFields]      = useState({});
   const [objTypes,     setObjTypes]    = useState([]);
@@ -21546,9 +21549,6 @@ const AddServiceWizard = ({onClose, onDone}) => {
                     if(parts.length===5&&parts[2]==="*"&&parts[3]==="*"&&parts[4]==="*") return "daily";
                     return "custom";
                   })();
-                  const [connTime,setConnTime]=React.useState("02:00");
-                  const [connDay,setConnDay]=React.useState("sunday");
-                  const [connTz,setConnTz]=React.useState("UTC");
                   const TZ_OPTS3=["UTC","US/Eastern","US/Central","US/Pacific","Europe/London","Asia/Kolkata","Asia/Singapore"];
                   return (
                     <div style={{display:"flex",flexDirection:"column",gap:12}}>
