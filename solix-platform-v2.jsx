@@ -12769,8 +12769,8 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
           )}
         </div>
 
-        {/* ── Right metadata sidebar ── */}
-        <div style={{width:260,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto"}}>
+        {/* ── Right metadata sidebar — Overview tab only ── */}
+        {tab==="overview"&&<div style={{width:260,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto"}}>
 
           {/* DETAILS */}
           <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
@@ -13002,7 +13002,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
             ))}
           </div>
 
-        </div>
+        </div>}
       </div>
 
       {/* Certificate edit modal (centered — cert is a single-step action) */}
@@ -13491,8 +13491,8 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
         {tab==="activity"  && <AuditLogTable entries={ASSET_AUDIT_ENTRIES}/>}
       </div>
 
-      {/* ── Column detail panel (tabbed: Overview | Quality) ── */}
-      {selCol&&(()=>{
+      {/* ── Column detail panel — Schema tab only ── */}
+      {tab==="schema"&&selCol&&(()=>{
         const prof=COL_PROFILES[selCol.name]||null;
         const colTests=colTestsMap[selCol.name]!==undefined?colTestsMap[selCol.name]:DQ_TEST_CASES.filter(tc=>tc.col&&selCol.name&&tc.col.toLowerCase()===selCol.name.toLowerCase());
         const setColTests=(updater)=>setColTestsMap(p=>{const cur=p[selCol.name]!==undefined?p[selCol.name]:DQ_TEST_CASES.filter(tc=>tc.col&&selCol.name&&tc.col.toLowerCase()===selCol.name.toLowerCase());const next=typeof updater==="function"?updater(cur):updater;return{...p,[selCol.name]:next};});
@@ -13977,8 +13977,8 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
         document.body
       )}
 
-      {/* ── Right metadata sidebar ── */}
-      {!selCol&&<div style={{width:260,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto"}}>
+      {/* ── Right metadata sidebar — Overview tab only ── */}
+      {tab==="overview"&&<div style={{width:260,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto"}}>
 
         {/* DETAILS */}
         <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
