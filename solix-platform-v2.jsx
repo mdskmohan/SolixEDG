@@ -21875,6 +21875,15 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
   const [cfgAuthType,   setCfgAuthType]   = useState("userpass");
   const [cfgAdminOpen,  setCfgAdminOpen]  = useState(false);
   const [cfgAdmins,     setCfgAdmins]     = useState([]);
+  // Schedule modal state
+  const [svcSchedModal,   setSvcSchedModal]   = useState(false);
+  const [svcSchedFreq,    setSvcSchedFreq]    = useState("daily");
+  const [svcSchedTime,    setSvcSchedTime]    = useState("08:00");
+  const [svcSchedDay,     setSvcSchedDay]     = useState("monday");
+  const [svcSchedCron,    setSvcSchedCron]    = useState("");
+  const [svcSchedTz,      setSvcSchedTz]      = useState("UTC");
+  const [svcSchedEnabled, setSvcSchedEnabled] = useState(true);
+  const [svcCurrentSched, setSvcCurrentSched] = useState(svc.schedule||null);
   const [svcFilterMode,   setSvcFilterMode]   = useState("selection");
   const [svcInclSchemas,  setSvcInclSchemas]  = useState([]);
   const [svcExclSchemas,  setSvcExclSchemas]  = useState([]);
@@ -22005,11 +22014,27 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
           </div>
 
           {/* quick actions */}
-          <div style={{display:"flex",gap:6,marginBottom:20}}>
+          <div style={{display:"flex",gap:6,marginBottom:12}}>
             {svc.status!=="disconnected"&&<button onClick={()=>onToast(`${svc.displayName} ingestion triggered`,"success")} style={{flex:1,padding:"8px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>▶ Run Now</button>}
             <Btn small ghost onClick={()=>setCfgTab("configuration")}>Configure</Btn>
             {svc.status==="connected"&&<Btn small variant="danger" onClick={()=>onToast("Service paused","success")}>Pause</Btn>}
           </div>
+          {/* Schedule button — matches Policy pattern */}
+          <button
+            onClick={()=>{setSvcSchedFreq("daily");setSvcSchedTime("08:00");setSvcSchedDay("monday");setSvcSchedCron("");setSvcSchedTz("UTC");setSvcSchedEnabled(true);setSvcSchedModal(true);}}
+            style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"8px 12px",borderRadius:8,background:"transparent",border:`1.5px solid ${T.border}`,color:T.textSub,fontSize:12.5,fontWeight:500,cursor:"pointer",transition:"all .15s",fontFamily:"inherit",marginBottom:8}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>
+            {svcCurrentSched?"Edit Schedule":"Set Schedule"}
+          </button>
+          {svcCurrentSched&&(
+            <div style={{marginBottom:16,padding:"8px 12px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+              <div style={{fontSize:10,color:T.textMuted,marginBottom:3}}>Current schedule</div>
+              <div style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace",marginBottom:2}}>{svcCurrentSched}</div>
+              <div style={{fontSize:10.5,color:T.textMuted}}>Next run: <strong style={{color:T.textSub}}>{svc.nextRun}</strong></div>
+            </div>
+          )}
 
           {/* ── Run History (inline) ── */}
           <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Run History</div>
@@ -22301,48 +22326,25 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
           {/* ── Schedule ── */}
           <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Schedule</div>
           <div style={{padding:14,background:T.bgElevated,borderRadius:9,border:`1px solid ${T.border}`,marginBottom:16}}>
-            {/* Mode + toggle row */}
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-              <div style={{display:"flex",gap:6}}>
-                {["Manual","Scheduled"].map(opt=>{
-                  const isSched=opt==="Scheduled";
-                  return (
-                    <button key={opt} onClick={()=>onToast(`Trigger set to ${opt}`,"success")} style={{padding:"6px 14px",borderRadius:7,
-                      border:`1px solid ${isSched?T.accent:T.border}`,
-                      background:isSched?T.accentDim:"transparent",
-                      color:isSched?T.accent:T.textSub,
-                      fontSize:11.5,fontWeight:isSched?600:400,cursor:"pointer",transition:"all .12s"}}>
-                      {opt}
-                    </button>
-                  );
-                })}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+              <div>
+                <div style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600,marginBottom:3}}>{svcCurrentSched||svc.schedule}</div>
+                <div style={{fontSize:11,color:T.textMuted}}>Next run: <strong style={{color:T.textSub}}>{svc.nextRun}</strong></div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
                 <span style={{fontSize:10.5,color:T.accent,fontWeight:600}}>Enabled</span>
-                <div onClick={()=>onToast("Schedule toggled","success")} style={{width:28,height:16,borderRadius:8,background:T.accent,cursor:"pointer",position:"relative",flexShrink:0}}>
+                <div style={{width:28,height:16,borderRadius:8,background:T.accent,position:"relative",flexShrink:0}}>
                   <div style={{position:"absolute",top:2,left:12,width:12,height:12,borderRadius:"50%",background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
                 </div>
               </div>
             </div>
-            {/* Cron + Timezone + Next Run */}
-            <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              <div>
-                <div style={{fontSize:11,fontWeight:600,color:T.textMuted,marginBottom:5}}>Cron Expression</div>
-                <Input2 value={svc.schedule.startsWith("0")||svc.schedule.startsWith("*")?svc.schedule:"0 0 * * *"} style={{width:"100%",fontFamily:"'Geist Mono',monospace"}} onChange={()=>{}}/>
-                <div style={{fontSize:10.5,color:T.textMuted,marginTop:3}}>Standard cron syntax: minute hour day month weekday</div>
-              </div>
-              <div>
-                <div style={{fontSize:11,fontWeight:600,color:T.textMuted,marginBottom:5}}>Timezone</div>
-                <select defaultValue="UTC" style={{width:"100%",padding:"7px 10px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",cursor:"pointer",boxSizing:"border-box"}}
-                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}>
-                  {["UTC","US/Eastern","US/Central","US/Pacific","Europe/London","Asia/Kolkata","Asia/Singapore"].map(tz=><option key={tz} value={tz}>{tz}</option>)}
-                </select>
-              </div>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 10px",background:T.bgSurface,borderRadius:7,border:`1px solid ${T.border}`}}>
-                <span style={{fontSize:10.5,color:T.textMuted}}>Next sync</span>
-                <span style={{fontSize:11,color:T.accent,fontFamily:"'Geist Mono',monospace",fontWeight:600}}>{svc.nextRun}</span>
-              </div>
-            </div>
+            <button onClick={()=>{setSvcSchedFreq("daily");setSvcSchedTime("08:00");setSvcSchedDay("monday");setSvcSchedCron("");setSvcSchedTz("UTC");setSvcSchedEnabled(true);setSvcSchedModal(true);}}
+              style={{width:"100%",padding:"7px",borderRadius:7,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,fontSize:12,fontWeight:500,cursor:"pointer",transition:"all .12s",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>
+              Edit Schedule
+            </button>
           </div>
           {/* ── Test Connection — always visible ── */}
           <div style={{padding:"14px 16px",background:T.bgElevated,border:`1px solid ${T.accent}28`,borderRadius:10,marginBottom:4,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
@@ -22465,6 +22467,124 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
         </div>
       </div>
     )}
+
+    {/* ══ Connector Schedule Modal — same pattern as Policy ══ */}
+    {svcSchedModal&&(()=>{
+      const SVC_FREQS=[{k:"once",l:"Run Once"},{k:"hourly",l:"Hourly"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"custom",l:"Custom"}];
+      const TZ_OPTS=["UTC","US/Eastern","US/Central","US/Pacific","Europe/London","Asia/Kolkata","Asia/Singapore"];
+      const buildCron=()=>{
+        if(svcSchedFreq==="once")   return "— run once —";
+        if(svcSchedFreq==="hourly") return "0 * * * *";
+        if(svcSchedFreq==="daily"){const[h,m]=svcSchedTime.split(":");return `${m||"0"} ${h||"8"} * * *`;}
+        if(svcSchedFreq==="weekly"){const days={monday:1,tuesday:2,wednesday:3,thursday:4,friday:5,saturday:6,sunday:0};const[h,m]=svcSchedTime.split(":");return `${m||"0"} ${h||"8"} * * ${days[svcSchedDay]||1}`;}
+        return svcSchedCron||"0 8 * * *";
+      };
+      const nextRunLabel=()=>{
+        if(svcSchedFreq==="once") return "After saving — one time only";
+        if(svcSchedFreq==="hourly") return `Next run in ~1 hour (${svcSchedTz})`;
+        return `Next sync: 2026-05-28 ${svcSchedTime} ${svcSchedTz}`;
+      };
+      const saveSvcSchedule=()=>{
+        const cron=buildCron();
+        setSvcCurrentSched(svcSchedFreq==="once"?"once":cron);
+        setSvcSchedModal(false);
+        onToast(svcSchedEnabled?"Sync schedule saved":"Sync schedule saved (paused)","success");
+      };
+      return (
+        <>
+          <div onClick={()=>setSvcSchedModal(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:1300}}/>
+          <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:460,background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:14,zIndex:1301,boxShadow:"0 20px 60px rgba(0,0,0,.4)",padding:"24px 24px 20px"}}>
+            {/* Header */}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
+              <div>
+                <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:4}}>Sync Schedule</div>
+                <div style={{fontSize:12,color:T.textMuted}}>{svc.displayName}</div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontSize:11,color:svcSchedEnabled?T.accent:T.textMuted,fontWeight:600}}>{svcSchedEnabled?"Enabled":"Paused"}</span>
+                  <div onClick={()=>setSvcSchedEnabled(v=>!v)} style={{width:32,height:18,borderRadius:9,background:svcSchedEnabled?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
+                    <div style={{position:"absolute",top:2,left:svcSchedEnabled?14:2,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
+                  </div>
+                </div>
+                <button onClick={()=>setSvcSchedModal(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:18,lineHeight:1,padding:2}}>×</button>
+              </div>
+            </div>
+            {/* Frequency */}
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Frequency</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6}}>
+                {SVC_FREQS.map(f=>(
+                  <button key={f.k} onClick={()=>setSvcSchedFreq(f.k)}
+                    style={{padding:"8px 4px",borderRadius:8,border:`1.5px solid ${svcSchedFreq===f.k?T.accent:T.border}`,background:svcSchedFreq===f.k?T.accentDim:"transparent",color:svcSchedFreq===f.k?T.accent:T.textSub,fontSize:11.5,fontWeight:svcSchedFreq===f.k?600:400,cursor:"pointer",fontFamily:"inherit",transition:"all .12s"}}>
+                    {f.l}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Time picker */}
+            {(svcSchedFreq==="daily"||svcSchedFreq==="weekly")&&(
+              <div style={{marginBottom:14}}>
+                <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Run At</div>
+                <input type="time" value={svcSchedTime} onChange={e=>setSvcSchedTime(e.target.value)}
+                  style={{padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",fontFamily:"'Geist Mono',monospace",width:"100%",boxSizing:"border-box"}}/>
+              </div>
+            )}
+            {/* Day picker */}
+            {svcSchedFreq==="weekly"&&(
+              <div style={{marginBottom:14}}>
+                <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Day of Week</div>
+                <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                  {["monday","tuesday","wednesday","thursday","friday","saturday","sunday"].map(d=>(
+                    <button key={d} onClick={()=>setSvcSchedDay(d)}
+                      style={{padding:"5px 10px",borderRadius:6,border:`1.5px solid ${svcSchedDay===d?T.accent:T.border}`,background:svcSchedDay===d?T.accentDim:"transparent",color:svcSchedDay===d?T.accent:T.textSub,fontSize:11,fontWeight:svcSchedDay===d?600:400,cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize"}}>
+                      {d.slice(0,3)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* Custom cron */}
+            {svcSchedFreq==="custom"&&(
+              <div style={{marginBottom:14}}>
+                <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Cron Expression</div>
+                <input value={svcSchedCron} onChange={e=>setSvcSchedCron(e.target.value)} placeholder="0 2 * * 1-5"
+                  style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box"}}/>
+                <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>Standard 5-field cron: minute hour day month weekday</div>
+              </div>
+            )}
+            {/* Timezone */}
+            {svcSchedFreq!=="once"&&(
+              <div style={{marginBottom:14}}>
+                <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Timezone</div>
+                <select value={svcSchedTz} onChange={e=>setSvcSchedTz(e.target.value)}
+                  style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
+                  {TZ_OPTS.map(tz=><option key={tz} value={tz}>{tz}</option>)}
+                </select>
+              </div>
+            )}
+            {/* Preview */}
+            {svcSchedFreq!=="once"&&(
+              <div style={{padding:"10px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,marginBottom:18}}>
+                <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Cron preview</div>
+                <div style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.accent,marginBottom:4}}>{buildCron()}</div>
+                <div style={{fontSize:11,color:T.textMuted}}>Next run: <strong style={{color:T.text}}>{nextRunLabel()}</strong></div>
+              </div>
+            )}
+            {svcSchedFreq==="once"&&(
+              <div style={{padding:"10px 14px",borderRadius:8,background:`${T.amber}0a`,border:`1px solid ${T.amber}30`,marginBottom:18,fontSize:11.5,color:T.textSub,lineHeight:1.5}}>
+                This connector will sync one time immediately after saving. No recurring schedule will be set.
+              </div>
+            )}
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              {svcCurrentSched&&<button onClick={()=>{setSvcCurrentSched(null);setSvcSchedModal(false);onToast("Schedule removed","info");}} style={{padding:"8px 14px",borderRadius:8,border:`1px solid ${T.rose}40`,background:"transparent",color:T.rose,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Remove</button>}
+              <button onClick={()=>setSvcSchedModal(false)} style={{padding:"8px 16px",borderRadius:8,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+              <button onClick={saveSvcSchedule} style={{padding:"8px 20px",borderRadius:8,border:"none",background:T.accent,color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Save Schedule</button>
+            </div>
+          </div>
+        </>
+      );
+    })()}
     </>
   );
 };
@@ -26137,10 +26257,16 @@ const SettingsView = ({onToast})=>{
                       <div style={{display:"flex",gap:5,flexShrink:0}} onClick={e=>e.stopPropagation()}>
                         {svc.status==="disconnected"
                           ?<button onClick={()=>onToast(`Reconnecting ${svc.displayName}…`,"success")} style={{padding:"5px 10px",borderRadius:7,background:T.rose,border:"none",color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer"}}>Reconnect</button>
-                          :<><button onClick={()=>onToast(`${svc.displayName} triggered`,"success")} title="Run now" style={{width:28,height:28,borderRadius:7,border:`1px solid ${T.border}`,background:T.bgHover,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.textSub,transition:"all .12s"}}
+                          :<>
+                            <button onClick={()=>onToast(`${svc.displayName} triggered`,"success")} title="Run now" style={{width:28,height:28,borderRadius:7,border:`1px solid ${T.border}`,background:T.bgHover,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.textSub,transition:"all .12s"}}
                               onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
                               onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
                               <svg width="9" height="10" viewBox="0 0 9 10" fill="none"><polygon points="1,1 8,5 1,9" fill="currentColor"/></svg>
+                            </button>
+                            <button onClick={()=>setSvcSel(svc.id)} title="Set schedule" style={{width:28,height:28,borderRadius:7,border:`1px solid ${T.border}`,background:T.bgHover,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.textSub,transition:"all .12s"}}
+                              onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                              onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+                              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>
                             </button>
                           </>
                         }
