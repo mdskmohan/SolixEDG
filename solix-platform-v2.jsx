@@ -13527,8 +13527,8 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
   },[certOpen]);
 
   const tabs=[
-    {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},
-    {key:"quality",label:"Quality"},{key:"usage",label:"Usage"},{key:"lineage",label:"Lineage"},
+    {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},{key:"lineage",label:"Lineage"},
+    {key:"quality",label:"Quality"},{key:"usage",label:"Usage"},
     {key:"activity",label:"Audit Logs"},
   ];
 
