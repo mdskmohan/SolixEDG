@@ -13334,6 +13334,9 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
   const [certNote,   setCertNote]  = useState("");
   const [colTagsMap,       setColTagsMap]       = useState({});
   const [colTagInput,      setColTagInput]       = useState("");
+  const [colGlTermsMap,    setColGlTermsMap]    = useState({});
+  const [colGlOpen,        setColGlOpen]        = useState(false);
+  const [colGlSearch,      setColGlSearch]      = useState("");
   const [colSelectTestOpen,setColSelectTestOpen] = useState(false);
   const [colSelectTestIds, setColSelectTestIds]  = useState(new Set());
   const [colTestsMap,      setColTestsMap]       = useState({});
@@ -13498,7 +13501,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
             {/* ── Tab content ── */}
             <div style={{overflowY:"auto",flex:1}}>
 
-              {/* ── Overview: metadata + profile stats + quality constraint ── */}
+              {/* ── Overview: metadata + profile stats ── */}
               {colPanelTab==="overview"&&(
                 <div style={{padding:14,display:"flex",flexDirection:"column",gap:14}}>
 
@@ -13526,7 +13529,84 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
                     </div>
                   </div>
 
-                  {/* Tags — same UI as asset right panel */}
+                  {/* Certificate — inherited from parent table, read-only */}
+                  {(()=>{
+                    const cert = data.cert||asset.cert||"Draft";
+                    const cm   = CERT_META[cert]||CERT_META.Draft;
+                    return (
+                      <div>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Certificate</div>
+                          <span style={{fontSize:9.5,color:T.textMuted,fontStyle:"italic"}}>Inherited</span>
+                        </div>
+                        <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px 4px 9px",borderRadius:5,background:cm.bg,borderTop:`1px solid ${cm.border}`,borderRight:`1px solid ${cm.border}`,borderBottom:`1px solid ${cm.border}`,borderLeft:`3px solid ${cm.color}`}}>
+                          <span style={{fontSize:12}}>{cm.icon}</span>
+                          <span style={{fontSize:12,color:cm.color,fontWeight:600}}>{cert}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Domain — inherited from parent table, read-only */}
+                  <div>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                      <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Domain</div>
+                      <span style={{fontSize:9.5,color:T.textMuted,fontStyle:"italic"}}>Inherited</span>
+                    </div>
+                    <div style={{display:"inline-flex",alignItems:"center",padding:"4px 12px 4px 9px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
+                      <span style={{fontSize:12,color:T.accent,fontWeight:600}}>{asset.domain||data.domain||"—"}</span>
+                    </div>
+                  </div>
+
+                  {/* Owners — inherited from parent table, read-only */}
+                  {(()=>{
+                    const colAva = name => (name||"").split(".").map(s=>s[0]?.toUpperCase()||"").join("");
+                    const owners = data.owners||[];
+                    return (
+                      <div>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Owners</div>
+                          <span style={{fontSize:9.5,color:T.textMuted,fontStyle:"italic"}}>Inherited</span>
+                        </div>
+                        {owners.length===0
+                          ? <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owners assigned</span>
+                          : <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                              {owners.map((o,i)=>(
+                                <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
+                                  <div style={{width:18,height:18,borderRadius:3,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:T.accent,flexShrink:0}}>{colAva(o)}</div>
+                                  <span style={{fontSize:12,color:T.accent,fontWeight:500}}>{o}</span>
+                                </div>
+                              ))}
+                            </div>}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Stewards — inherited from parent table, read-only */}
+                  {(()=>{
+                    const colAva = name => (name||"").split(".").map(s=>s[0]?.toUpperCase()||"").join("");
+                    const stewards = data.stewards||[];
+                    return (
+                      <div>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Stewards</div>
+                          <span style={{fontSize:9.5,color:T.textMuted,fontStyle:"italic"}}>Inherited</span>
+                        </div>
+                        {stewards.length===0
+                          ? <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards assigned</span>
+                          : <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                              {stewards.map((s,i)=>(
+                                <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:"rgba(217,119,6,.08)",borderTop:"1px solid rgba(217,119,6,.2)",borderRight:"1px solid rgba(217,119,6,.2)",borderBottom:"1px solid rgba(217,119,6,.2)",borderLeft:"3px solid #d97706"}}>
+                                  <div style={{width:18,height:18,borderRadius:"50%",background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#d97706",flexShrink:0}}>{colAva(s)}</div>
+                                  <span style={{fontSize:12,color:"#d97706",fontWeight:500}}>{s}</span>
+                                </div>
+                              ))}
+                            </div>}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Tags — column-level, user can add */}
                   {(()=>{
                     const COL_TAG_C={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},finance:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},KPI:{bg:"rgba(22,163,74,.08)",color:"#16a34a",border:"rgba(22,163,74,.2)"},sensitive:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"},events:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},model:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},etl:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"}};
                     const ctc=tag=>COL_TAG_C[tag]||{bg:T.bgElevated,color:T.textSub,border:T.border};
@@ -13535,6 +13615,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
                       <div style={{position:"relative"}}>
                         <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Tags</div>
                         <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:colTags.length?8:0}}>
+                          {colTags.length===0&&<p style={{fontSize:12,color:T.textMuted,fontStyle:"italic",margin:"0 0 6px"}}>No tags added</p>}
                           {colTags.map(t=>{const c=ctc(t);return(
                             <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"3px 10px",borderRadius:6,background:c.bg,color:c.color,border:`1px solid ${c.border}`,fontWeight:500}}>
                               {t}
@@ -13569,14 +13650,69 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
                     );
                   })()}
 
-                  {/* Domain — inherited from parent table */}
-                  <div>
-                    <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Domain</div>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 12px",background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`}}>
-                      <span style={{fontSize:12,fontWeight:600,color:T.accent}}>{asset.domain||data.domain||"—"}</span>
-                      <span style={{fontSize:10,color:T.textMuted,fontStyle:"italic"}}>Inherited</span>
-                    </div>
-                  </div>
+                  {/* Business Glossary — column-level, user can link terms */}
+                  {(()=>{
+                    const colGlTerms = colGlTermsMap[selCol.name]||[];
+                    return (
+                      <div style={{position:"relative"}}>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Business Glossary</div>
+                          <button onClick={()=>{setColGlOpen(true);setColGlSearch("");}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color="#8b5cf6";e.currentTarget.style.background="rgba(139,92,246,.08)";}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
+                            <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          </button>
+                        </div>
+                        {colGlTerms.length===0
+                          ? <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>
+                          : <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                              {colGlTerms.map((t,i)=>(
+                                <span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>
+                                  {t.length>12?t.slice(0,12)+"…":t}
+                                  <button onClick={()=>setColGlTermsMap(m=>({...m,[selCol.name]:(m[selCol.name]||[]).filter((_,j)=>j!==i)}))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button>
+                                </span>
+                              ))}
+                            </div>}
+                        {colGlOpen&&(
+                          <>
+                            <div onClick={()=>setColGlOpen(false)} style={{position:"fixed",inset:0,zIndex:499,background:"rgba(0,0,0,.35)"}}/>
+                            <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:320,display:"flex",flexDirection:"column",maxHeight:"80vh",overflow:"hidden"}}>
+                              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                                <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Business Glossary</span>
+                                <button onClick={()=>setColGlOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
+                                  <svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                                </button>
+                              </div>
+                              <div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                                <input autoFocus placeholder="Search glossary terms…" value={colGlSearch} onChange={e=>setColGlSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#8b5cf6"} onBlur={e=>e.target.style.borderColor=T.border}/>
+                              </div>
+                              <div style={{flex:1,overflowY:"auto"}}>
+                                {GLOSSARY_TERMS.filter(t=>!colGlSearch||t.term.toLowerCase().includes(colGlSearch.toLowerCase())||t.abbr?.toLowerCase().includes(colGlSearch.toLowerCase())).map(t=>{
+                                  const sel=colGlTerms.includes(t.term);
+                                  return(
+                                    <button key={t.id} onMouseDown={e=>{e.stopPropagation();setColGlTermsMap(m=>({...m,[selCol.name]:sel?(m[selCol.name]||[]).filter(x=>x!==t.term):[...(m[selCol.name]||[]),t.term]}));}}
+                                      style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:sel?"rgba(139,92,246,.06)":"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}}
+                                      onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
+                                      <div style={{flex:1,minWidth:0}}>
+                                        <div style={{fontSize:12.5,fontWeight:600,color:sel?"#8b5cf6":T.text}}>{t.term}</div>
+                                        <div style={{fontSize:11,color:T.textMuted,display:"flex",gap:6,marginTop:1}}>
+                                          {t.abbr&&t.abbr!=="—"&&<span style={{fontFamily:"'Geist Mono',monospace"}}>{t.abbr}</span>}
+                                          <span>{t.domain}</span>
+                                        </div>
+                                      </div>
+                                      {sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke="#8b5cf6" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                    </button>
+                                  );
+                                })}
+                                {GLOSSARY_TERMS.filter(t=>!colGlSearch||t.term.toLowerCase().includes(colGlSearch.toLowerCase())).length===0&&<div style={{padding:"16px 12px",fontSize:12,color:T.textMuted,textAlign:"center"}}>No terms match</div>}
+                              </div>
+                              <div style={{padding:"8px 10px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",flexShrink:0}}>
+                                <button onMouseDown={()=>setColGlOpen(false)} style={{padding:"5px 14px",borderRadius:6,background:"#8b5cf6",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Done</button>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Profile Stats — rendered from COL_PROFILES */}
                   {prof&&(
