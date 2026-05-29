@@ -25820,9 +25820,11 @@ const SettingsView = ({onToast})=>{
   const [localEnabled,  setLocalEnabled]  = useState(()=>Object.fromEntries(REGS_META.map(r=>[r.id,r.enabled])));
 
   // ── Audit Logs state (hoisted to avoid hook-in-conditional-IIFE crash) ──
-  const [auditSearch,    setAuditSearch]    = useState("");
-  const [auditCatFilter, setAuditCatFilter] = useState("All");
-  const [auditPage,      setAuditPage]      = useState(0);
+  const [auditSearch,      setAuditSearch]      = useState("");
+  const [auditCatFilter,   setAuditCatFilter]   = useState("All");
+  const [auditDateFilter,  setAuditDateFilter]  = useState("All time");
+  const [auditActorFilter, setAuditActorFilter] = useState("All");
+  const [auditPage,        setAuditPage]        = useState(0);
 
   // Simulate live progress for "running" services
   useEffect(()=>{
@@ -26956,10 +26958,14 @@ const SettingsView = ({onToast})=>{
               const CAT_COLOR = {Policy:T.violet,Asset:T.blue,Ingestion:T.amber,Quality:T.rose,Glossary:T.green,Access:"#0891b2",Domain:T.accent,Contract:"#7c3aed",Settings:T.textMuted,Tag:"#f97316",Lineage:"#06b6d4"};
               const PAGE_SIZE = 10;
               const cats = ["All","Policy","Asset","Ingestion","Quality","Glossary","Access","Domain","Contract","Settings"];
+              const dates = ["All time","Today","Yesterday"];
+              const actors = ["All",...new Set(ALL_AUDIT.map(r=>r.u))];
               const filtered = ALL_AUDIT.filter(r=>{
-                const matchSearch = !auditSearch || r.u.includes(auditSearch.toLowerCase()) || r.a.toLowerCase().includes(auditSearch.toLowerCase()) || r.r.toLowerCase().includes(auditSearch.toLowerCase()) || r.detail.toLowerCase().includes(auditSearch.toLowerCase());
-                const matchCat = auditCatFilter==="All" || r.cat===auditCatFilter;
-                return matchSearch && matchCat;
+                const matchSearch = !auditSearch || r.u.toLowerCase().includes(auditSearch.toLowerCase()) || r.a.toLowerCase().includes(auditSearch.toLowerCase()) || r.r.toLowerCase().includes(auditSearch.toLowerCase()) || r.detail.toLowerCase().includes(auditSearch.toLowerCase());
+                const matchCat    = auditCatFilter==="All" || r.cat===auditCatFilter;
+                const matchDate   = auditDateFilter==="All time" || (auditDateFilter==="Today" && r.ts.startsWith("2026-05-20")) || (auditDateFilter==="Yesterday" && r.ts.startsWith("2026-05-19"));
+                const matchActor  = auditActorFilter==="All" || r.u===auditActorFilter;
+                return matchSearch && matchCat && matchDate && matchActor;
               });
               const paged = filtered.slice(auditPage*PAGE_SIZE, (auditPage+1)*PAGE_SIZE);
               const totalPages = Math.ceil(filtered.length/PAGE_SIZE);
@@ -26973,8 +26979,16 @@ const SettingsView = ({onToast})=>{
                       <input value={auditSearch} onChange={e=>{setAuditSearch(e.target.value);setAuditPage(0);}} placeholder="Search user, action, resource…"
                         style={{width:"100%",padding:"7px 10px 7px 28px",background:T.bgElevated,border:`1.5px solid ${auditSearch?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                     </div>
+                    <select value={auditDateFilter} onChange={e=>{setAuditDateFilter(e.target.value);setAuditPage(0);}}
+                      style={{padding:"7px 10px",background:T.bgElevated,border:`1.5px solid ${auditDateFilter!=="All time"?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
+                      {dates.map(d=><option key={d} value={d}>{d}</option>)}
+                    </select>
+                    <select value={auditActorFilter} onChange={e=>{setAuditActorFilter(e.target.value);setAuditPage(0);}}
+                      style={{padding:"7px 10px",background:T.bgElevated,border:`1.5px solid ${auditActorFilter!=="All"?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",cursor:"pointer",fontFamily:"inherit",maxWidth:160}}>
+                      {actors.map(a=><option key={a} value={a}>{a}</option>)}
+                    </select>
                     <select value={auditCatFilter} onChange={e=>{setAuditCatFilter(e.target.value);setAuditPage(0);}}
-                      style={{padding:"7px 10px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
+                      style={{padding:"7px 10px",background:T.bgElevated,border:`1.5px solid ${auditCatFilter!=="All"?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
                       {cats.map(c=><option key={c} value={c}>{c}</option>)}
                     </select>
                     <button style={{padding:"7px 14px",borderRadius:8,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,fontSize:12,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>↓ Export CSV</button>
