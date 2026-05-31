@@ -2341,6 +2341,7 @@ const Ic = {
   workflow:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><circle cx="3" cy="4" r="2" stroke="currentColor" strokeWidth="1.3"/><circle cx="13" cy="4" r="2" stroke="currentColor" strokeWidth="1.3"/><circle cx="8" cy="12" r="2" stroke="currentColor" strokeWidth="1.3"/><path d="M5 4h6M9.5 5.5L10 10M6.5 5.5L6 10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>,
   persona:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><circle cx="8" cy="6" r="2.5" stroke="currentColor" strokeWidth="1.3"/><path d="M2 14c0-3 2.7-5 6-5s6 2 6 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><circle cx="13" cy="4" r="1.5" fill={T.accent} opacity=".8"/></svg>,
   audit:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><path d="M3 2h7l3 3v9H3V2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M10 2v3h3M5 7h6M5 10h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>,
+  help:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.3"/><path d="M6.2 6.2C6.2 5.1 7 4.5 8 4.5s1.8.7 1.8 1.7c0 .8-.5 1.3-1.1 1.7C8.1 8.2 8 8.5 8 9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><circle cx="8" cy="11.2" r=".7" fill="currentColor"/></svg>,
   bg_jobs:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5v3l2 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>,
   notifications:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><path d="M8 2C6 2 4.5 3.5 4.5 5.5V10l-1 2h9l-1-2V5.5C11.5 3.5 10 2 8 2z" stroke="currentColor" strokeWidth="1.3"/><path d="M6.5 12.5a1.5 1.5 0 003 0" stroke="currentColor" strokeWidth="1.3"/></svg>,
   preferences:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><path d="M3 5h10M3 11h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><circle cx="6" cy="5" r="1.5" fill={T.bgSurface} stroke="currentColor" strokeWidth="1.3"/><circle cx="10" cy="11" r="1.5" fill={T.bgSurface} stroke="currentColor" strokeWidth="1.3"/></svg>,
@@ -2549,8 +2550,6 @@ const Topbar = ({breadcrumb,actions})=>{
           ? <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/></svg>
           : <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/></svg>}
       </button>
-      {/* DocBot */}
-      <DocBot/>
       {/* Notifications */}
       <NotifBtn/>
       {/* User menu */}
@@ -2892,8 +2891,10 @@ const UserMenu = () => {
 // ─────────────────────────────────────────────
 // DOCBOT (Help & Support Drawer)
 // ─────────────────────────────────────────────
-const DocBot = () => {
-  const [open, setOpen] = useState(false);
+const DocBot = ({open:extOpen, setOpen:extSetOpen}) => {
+  const [intOpen, setIntOpen] = useState(false);
+  const open = extOpen !== undefined ? extOpen : intOpen;
+  const setOpen = extSetOpen || setIntOpen;
   const [tab, setTab] = useState("docs");
   const [search, setSearch] = useState("");
   const [messages, setMessages] = useState([
@@ -2932,12 +2933,6 @@ const DocBot = () => {
 
   return (
     <>
-      <button onClick={()=>setOpen(o=>!o)} title="Help & Support"
-        style={{width:32,height:32,borderRadius:8,background:open?T.bgHover:"transparent",border:`1px solid ${open?T.borderLight:T.border}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:open?T.text:T.textSub,transition:"all .15s"}}
-        onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;e.currentTarget.style.borderColor=T.borderLight;}}
-        onMouseLeave={e=>{if(!open){e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor=T.border;}}}>
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.3"/><path d="M6.2 6.2C6.2 5.1 7 4.5 8 4.5s1.8.7 1.8 1.7c0 .8-.5 1.3-1.1 1.7C8.1 8.2 8 8.5 8 9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><circle cx="8" cy="11.2" r=".7" fill="currentColor"/></svg>
-      </button>
       {open&&(
         <>
           <div onClick={()=>setOpen(false)} style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,.25)",backdropFilter:"blur(2px)"}}/>
@@ -3154,7 +3149,7 @@ const GROUPS = [
   ]},
 ];
 
-const Sidebar = ({active, onNav, exp, setExp}) => {
+const Sidebar = ({active, onNav, exp, setExp, onHelp}) => {
   const {roleCfg} = useRole();
   const inboxBadgeCount = INBOX_DATA.filter(i=>!i.readAt).length;
   const allowedNav = roleCfg?.nav || ["home","search","catalog","quality","contracts","policymanager","certifications","glossary","domains","dataproducts","settings","tags"];
@@ -3211,6 +3206,15 @@ const Sidebar = ({active, onNav, exp, setExp}) => {
             {exp&&<span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",textAlign:"left"}}>{item.label}</span>}
           </button>;
         })}
+        <button onClick={onHelp} title="Help & Support"
+          style={{width:"100%",display:"flex",alignItems:"center",gap:exp?10:0,height:36,padding:exp?"0 16px":"0",justifyContent:"center",background:"transparent",border:"none",borderLeft:"2.5px solid transparent",color:T.textSub,fontSize:12.5,fontWeight:400,cursor:"pointer",transition:"background .1s",whiteSpace:"nowrap",overflow:"hidden"}}
+          onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;}}
+          onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
+          <span style={{flexShrink:0,width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",opacity:0.65}}>
+            {Ic.help(15)}
+          </span>
+          {exp&&<span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",textAlign:"left"}}>Help & Support</span>}
+        </button>
       </div>
     </div>
   );
@@ -28542,6 +28546,7 @@ export default function App(){
   const [isDark,   setIsDark]   = useState(false);
   const [themeKey, setThemeKey] = useState(0);
   const [sideExp,  setSideExp]  = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [deepLinkPolicyId, setDeepLinkPolicyId] = useState(null);
 
   const roleCfg    = ROLES_CONFIG[role] || ROLES_CONFIG.analyst;
@@ -28613,10 +28618,11 @@ export default function App(){
     <ThemeCtx.Provider value={{isDark,toggleTheme}}>
       <style key={themeKey}>{makeG(T)}</style>
       <div key={themeKey} style={{display:"flex",height:"100vh",background:T.bg,overflow:"hidden"}}>
-        <Sidebar active={nav} onNav={handleNav} exp={sideExp} setExp={setSideExp} allowedNav={allowedNav} role={role}/>
+        <Sidebar active={nav} onNav={handleNav} exp={sideExp} setExp={setSideExp} allowedNav={allowedNav} role={role} onHelp={()=>setHelpOpen(true)}/>
         <main style={{flex:1,marginLeft:sideExp?EXPANDED_W:COLLAPSED_W,height:"100vh",overflowY:"auto",display:"flex",flexDirection:"column",background:T.bg,transition:"margin-left .2s ease"}}>
           {renderPage()}
         </main>
+        <DocBot open={helpOpen} setOpen={setHelpOpen}/>
       </div>
       {toast&&<Toast key={toast.key} msg={toast.msg} type={toast.type} onDone={()=>setToast(null)}/>}
     </ThemeCtx.Provider>
