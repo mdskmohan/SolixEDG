@@ -601,10 +601,10 @@ const DQ_TEST_CASES = [
   {id:"tc1", name:"orders.total_amount value range",    suiteId:"ts1",table:"commerce.orders",         col:"total_amount", defId:"td18",defName:"Column Values To Be Between",       dim:"Validity",     status:"Success", lastVal:"4,829.50",   expected:"0 — 100,000",                                         lastRun:"2h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{minValue:0,maxValue:100000},     failedReason:"",                                incidentId:null},
   {id:"tc2", name:"orders row count range",             suiteId:"ts1",table:"commerce.orders",         col:null,           defId:"td1", defName:"Table Row Count To Be Between",      dim:"Volume",       status:"Aborted", lastVal:"48,293",     expected:"50,000 — 80,000",                                     lastRun:"2h ago",  history:[1,1,1,1,1,1,0.5,1,1,0.5,0.5,0.5,0.5,0.5,0.5], params:{minValue:50000,maxValue:80000}, failedReason:"Row count 48,293 is below minimum threshold 50,000", incidentId:"inc3"},
   {id:"tc3", name:"orders.status value in set",         suiteId:"ts1",table:"commerce.orders",         col:"status",       defId:"td19",defName:"Column Values To Be In Set",         dim:"Validity",     status:"Failed",  lastVal:"refunded_pending", expected:"pending, confirmed, shipped, delivered, cancelled, refunded", lastRun:"2h ago",history:[1,1,1,1,1,1,1,1,1,1,0,0,0,0,0], params:{allowedValues:["pending","confirmed","shipped","delivered","cancelled","refunded"]}, failedReason:"Found unexpected value 'refunded_pending' in 847 rows", incidentId:"inc1"},
-  {id:"tc4", name:"orders.customer_id not null",        suiteId:"ts1",table:"commerce.orders",         col:"customer_id",  defId:"td21",defName:"Column Values To Be Not Null",       dim:"Completeness", status:"Success", lastVal:"0 nulls",    expected:"0 null values",                                       lastRun:"2h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{},                              failedReason:"",                                incidentId:null},
-  {id:"tc5", name:"users.email regex match",            suiteId:"ts2",table:"platform.users",          col:"email",        defId:"td23",defName:"Column Values To Match Regex Pattern",dim:"Validity",     status:"Success", lastVal:"100% match", expected:"^[^@]+@[^@]+\\.[^@]+$",                              lastRun:"1h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{regex:"^[^@]+@[^@]+\\.[^@]+$"}, failedReason:"",                                incidentId:null},
+  {id:"tc4", policyId:1, ruleName:"Mask PII for non-data-owners", name:"orders.customer_id not null",        suiteId:"ts1",table:"commerce.orders",         col:"customer_id",  defId:"td21",defName:"Column Values To Be Not Null",       dim:"Completeness", status:"Success", lastVal:"0 nulls",    expected:"0 null values",                                       lastRun:"2h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{},                              failedReason:"",                                incidentId:null},
+  {id:"tc5", policyId:1, ruleName:"Mask PII for non-data-owners", name:"users.email regex match",            suiteId:"ts2",table:"platform.users",          col:"email",        defId:"td23",defName:"Column Values To Match Regex Pattern",dim:"Validity",     status:"Success", lastVal:"100% match", expected:"^[^@]+@[^@]+\\.[^@]+$",                              lastRun:"1h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{regex:"^[^@]+@[^@]+\\.[^@]+$"}, failedReason:"",                                incidentId:null},
   {id:"tc6", name:"users.user_id unique",               suiteId:"ts2",table:"platform.users",          col:"user_id",      defId:"td22",defName:"Column Values To Be Unique",         dim:"Uniqueness",   status:"Success", lastVal:"100% unique",expected:"all values distinct",                                 lastRun:"1h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{},                              failedReason:"",                                incidentId:null},
-  {id:"tc7", name:"product_events row count",           suiteId:"ts3",table:"analytics.product_events",col:null,           defId:"td1", defName:"Table Row Count To Be Between",      dim:"Completeness", status:"Failed",  lastVal:"1,243",     expected:"500,000 — 2,000,000",                                 lastRun:"3h ago",  history:[1,1,1,1,1,0,0,0,0,0,0,0,0,0,0], params:{minValue:500000,maxValue:2000000},failedReason:"Row count 1,243 is critically below minimum 500,000", incidentId:"inc2"},
+  {id:"tc7", policyId:2, ruleName:"Delete user data after 90 days", name:"product_events row count",           suiteId:"ts3",table:"analytics.product_events",col:null,           defId:"td1", defName:"Table Row Count To Be Between",      dim:"Completeness", status:"Failed",  lastVal:"1,243",     expected:"500,000 — 2,000,000",                                 lastRun:"3h ago",  history:[1,1,1,1,1,0,0,0,0,0,0,0,0,0,0], params:{minValue:500000,maxValue:2000000},failedReason:"Row count 1,243 is critically below minimum 500,000", incidentId:"inc2"},
   {id:"tc8", name:"product_events.event_type not null", suiteId:"ts3",table:"analytics.product_events",col:"event_type",   defId:"td21",defName:"Column Values To Be Not Null",       dim:"Completeness", status:"Success", lastVal:"0 nulls",    expected:"0 null values",                                       lastRun:"3h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{},                              failedReason:"",                                incidentId:null},
   {id:"tc9", name:"fact_revenue.amount sum range",      suiteId:"ts4",table:"finance.fact_revenue",    col:"amount",       defId:"td25",defName:"Column Values Sum To Be Between",    dim:"Accuracy",     status:"Success", lastVal:"$18,429,304",expected:"$10M — $30M",                                        lastRun:"6h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{minValue:10000000,maxValue:30000000},failedReason:"",                              incidentId:null},
   {id:"tc10",name:"fact_revenue.amount not null",       suiteId:"ts4",table:"finance.fact_revenue",    col:"amount",       defId:"td21",defName:"Column Values To Be Not Null",       dim:"Completeness", status:"Success", lastVal:"0 nulls",    expected:"0 null values",                                       lastRun:"6h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{},                              failedReason:"",                                incidentId:null},
@@ -3137,6 +3137,7 @@ const GROUPS = [
   {section:"Catalog",items:[
     {key:"catalog",        icon:"catalog",       label:"Data Catalog"},
     {key:"quality",        icon:"quality",       label:"Data Quality"},
+    {key:"observability",  icon:"observability", label:"Observability"},
   ]},
   {section:"Governance",items:[
     {key:"policymanager",  icon:"policies",      label:"Policy Manager"},
@@ -3152,7 +3153,7 @@ const GROUPS = [
 const Sidebar = ({active, onNav, exp, setExp, onHelp}) => {
   const {roleCfg} = useRole();
   const inboxBadgeCount = INBOX_DATA.filter(i=>!i.readAt).length;
-  const allowedNav = roleCfg?.nav || ["home","search","catalog","quality","contracts","policymanager","certifications","glossary","domains","dataproducts","settings","tags"];
+  const allowedNav = roleCfg?.nav || ["home","search","catalog","quality","observability","contracts","policymanager","certifications","glossary","domains","dataproducts","settings","tags"];
   return (
     <div style={{position:"fixed",top:0,left:0,height:"100vh",width:exp?EXPANDED_W:COLLAPSED_W,background:T.bgSurface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:100,transition:"width .2s ease",overflow:"hidden"}}>
       {/* Logo */}
@@ -11487,6 +11488,602 @@ const AssetLineageFull=({asset})=>{
   );
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+// DATA OBSERVABILITY — the loop: Measure → Assert → Alert → Resolve
+//   (OpenMetadata-style: one asset tab, 4 sub-views) + EDG governance linkage
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Mock row-count time-series for the "Data Volume" chart (per asset)
+const OBS_VOLUME_SERIES = {
+  orders:         [47980,48010,48120,48090,48210,48250,48293],
+  product_events: [1240000,1180000,920000,12000,1243,1243,1243],
+  fact_revenue:   [18290000,18305000,18360000,18402000,18419000,18425000,18429304],
+};
+// Curated lineage impact radius (downstream consumers) by asset name
+const OBS_DOWNSTREAM = {
+  orders:         [{name:"Revenue Dashboard",type:"Dashboard",svc:"Tableau"},{name:"finance.fact_revenue",type:"Table",svc:"Snowflake"},{name:"Finance Summary",type:"Dashboard",svc:"Tableau"}],
+  product_events: [{name:"Product Analytics",type:"Dashboard",svc:"Looker"},{name:"ml_feature_store",type:"ML Model",svc:"Databricks"}],
+  fact_revenue:   [{name:"Finance Summary",type:"Dashboard",svc:"Tableau"},{name:"Board Reporting",type:"Dashboard",svc:"Power BI"}],
+};
+const obsDownstream = (name)=> OBS_DOWNSTREAM[name] || [{name:"Downstream consumers",type:"Dashboard",svc:"—"}];
+const OBS_OWNERS = ["maya.chen","dev.patel","arjun.sharma","sarah.kim","priya.nair"];
+
+// Numeric helpers for profile metrics
+function obsParseCount(s){ if(!s) return 0; const m=String(s).replace(/[, ]/g,"").match(/^([\d.]+)([KMB]?)/i); if(!m) return 0; const n=parseFloat(m[1]); const u=(m[2]||"").toUpperCase(); return Math.round(n*(u==="K"?1e3:u==="M"?1e6:u==="B"?1e9:1)); }
+function obsFmtCount(n){ if(n>=1e9) return (n/1e9).toFixed(2)+"B"; if(n>=1e6) return (n/1e6).toFixed(1)+"M"; if(n>=1e3) return (n/1e3).toFixed(1)+"K"; return String(n); }
+function obsVolumeSeries(asset){
+  const explicit = OBS_VOLUME_SERIES[asset.name];
+  if(explicit) return explicit;
+  const base = obsParseCount(asset.rows) || 1200;
+  return Array.from({length:7},(_,i)=>Math.round(base*(0.965+0.012*((i*7+3)%5)/4+0.006*i)));
+}
+
+// Policy linkage — maps a test case to the governance Policy › Rule it enforces
+function tcPolicyLink(tc){
+  if(!tc) return null;
+  if(tc.policyId){
+    const pol = (typeof POLICIES!=="undefined") ? POLICIES.find(p=>p.id===tc.policyId) : null;
+    return {policyId:tc.policyId, policyName:pol?.name||tc.policyName||"Policy", ruleName:tc.ruleName||""};
+  }
+  return null;
+}
+const PolicyChip = ({link,onNav,compact})=>{
+  if(!link) return null;
+  return <button onClick={e=>{e.stopPropagation();onNav&&onNav("policymanager",{policyId:link.policyId});}}
+    title={`Enforces policy: ${link.policyName}${link.ruleName?" › "+link.ruleName:""}`}
+    style={{display:"inline-flex",alignItems:"center",gap:5,padding:compact?"2px 8px":"3px 10px",borderRadius:6,background:"rgba(124,58,237,.1)",border:"1px solid rgba(124,58,237,.28)",color:"#7c3aed",fontSize:compact?10.5:11.5,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap",maxWidth:compact?260:"none",overflow:"hidden",textOverflow:"ellipsis",transition:"opacity .12s"}}
+    onMouseEnter={e=>e.currentTarget.style.opacity=".75"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+    <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 1.5l5 2v4c0 3.2-2.1 5.6-5 6.5-2.9-.9-5-3.3-5-6.5v-4l5-2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+    Enforces: {link.policyName}{!compact&&link.ruleName?` › ${link.ruleName}`:""}
+  </button>;
+};
+
+// Small profile-stat card (Row Count, Column Count, etc.)
+const ObsStat = ({icon,label,value,sub,color})=>(
+  <div style={{flex:1,minWidth:0,padding:"14px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,display:"flex",alignItems:"center",gap:12}}>
+    <div style={{width:36,height:36,borderRadius:9,background:(color||T.blue)+"18",display:"flex",alignItems:"center",justifyContent:"center",color:color||T.blue,flexShrink:0}}>{icon}</div>
+    <div style={{minWidth:0}}>
+      <div style={{fontSize:20,fontWeight:800,color:T.text,fontFamily:"'Geist Mono',monospace",lineHeight:1.1}}>{value}</div>
+      <div style={{fontSize:11,color:T.textMuted,marginTop:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}{sub?<span style={{opacity:.7}}> · {sub}</span>:null}</div>
+    </div>
+  </div>
+);
+
+// Area chart for the Data Volume view (line + filled area; HTML labels below)
+const ObsAreaChart = ({data})=>{
+  if(!data||data.length<2) return null;
+  const w=1000,h=210;
+  const max=Math.max(...data),min=Math.min(...data);
+  const top=max+(max-min||max*0.1)*0.25, bot=Math.max(0,min-(max-min||max*0.1)*0.25);
+  const span=(top-bot)||1;
+  const x=i=>(i/(data.length-1))*(w-24)+12;
+  const y=v=>h-((v-bot)/span)*(h-24)-12;
+  const line=data.map((v,i)=>`${i===0?"M":"L"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const area=`${line} L${x(data.length-1).toFixed(1)},${h} L${x(0).toFixed(1)},${h} Z`;
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} preserveAspectRatio="none" style={{display:"block"}}>
+      {[0.25,0.5,0.75].map(g=><line key={g} x1="0" x2={w} y1={h*g} y2={h*g} stroke={T.border} strokeWidth="1" strokeDasharray="4 5"/>)}
+      <path d={area} fill={T.blue} opacity="0.10"/>
+      <path d={line} fill="none" stroke={T.blue} strokeWidth="2" vectorEffect="non-scaling-stroke"/>
+    </svg>
+  );
+};
+
+// Synthesize a column profile when COL_PROFILES has no entry for the column
+function obsColProfile(name){
+  if(typeof COL_PROFILES!=="undefined" && COL_PROFILES[name]) return COL_PROFILES[name];
+  const n=(name||"").toLowerCase();
+  if(/(^id$|_id$)/.test(n))                                                  return {nullPct:0,nullCount:"0",distinctPct:100,distinctCount:"—",dataType:"numeric",min:"1",max:"—",avg:null,topValues:null};
+  if(/email/.test(n))                                                        return {nullPct:1.2,nullCount:"—",distinctPct:96,distinctCount:"—",dataType:"string",minLen:"12 chars",maxLen:"36 chars",avgLen:"23 chars",samples:["user@example.com","a.kim@corp.com"],topValues:null,min:null,max:null,avg:null};
+  if(/(date|_at$|time|timestamp)/.test(n))                                   return {nullPct:0,nullCount:"0",distinctPct:84,distinctCount:"—",dataType:"datetime",min:"2021-01-01",max:"2026-06-08",avg:null,topValues:null};
+  if(/(amount|price|cost|salary|revenue|total|balance|rate|score|qty|quantity|duration|count|pct|discount|num|unit)/.test(n)) return {nullPct:0.3,nullCount:"—",distinctPct:62,distinctCount:"—",dataType:"numeric",min:"0",max:"—",avg:"—",topValues:null};
+  if(/(status|type|category|segment|tier|country|region|currency|device|browser|platform|role|source)/.test(n)) return {nullPct:0,nullCount:"0",distinctPct:0.4,distinctCount:"—",dataType:"categorical",topValues:["primary (44%)","secondary (31%)","other (15%)"],min:null,max:null,avg:null};
+  return {nullPct:0.5,nullCount:"—",distinctPct:48,distinctCount:"—",dataType:"string",minLen:"—",maxLen:"—",avgLen:"—",samples:["—"],topValues:null,min:null,max:null,avg:null};
+}
+const OBS_DTYPE_COLOR = {numeric:"#3b82f6",string:"#10b981",categorical:"#8b5cf6",datetime:"#f59e0b",json:"#06b6d4"};
+
+// ── Table Profile sub-view ───────────────────────────────────────────────────
+const TableProfilePanel = ({asset})=>{
+  const cols = (typeof ASSET_COLUMNS!=="undefined" && ASSET_COLUMNS[asset.name]) || [];
+  const series = obsVolumeSeries(asset);
+  const rowCount = obsParseCount(asset.rows);
+  const dates = ["Jun 02","Jun 03","Jun 04","Jun 05","Jun 06","Jun 07","Jun 08"];
+  const mono = {fontFamily:"'Geist Mono',monospace"};
+  return <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:16}}>
+    {/* metric cards */}
+    <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+      <ObsStat color="#3b82f6" label="Row Count"      value={asset.rows||obsFmtCount(rowCount)} icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M2 6.5h12M2 9.5h12" stroke="currentColor" strokeWidth="1.1"/></svg>}/>
+      <ObsStat color="#10b981" label="Column Count"   value={String(cols.length||asset.columns||10)} icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M6 3v10M10 3v10" stroke="currentColor" strokeWidth="1.1"/></svg>}/>
+      <ObsStat color="#8b5cf6" label="Profile Sample" value="100%" sub="full scan" icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3"/><path d="M8 4v4l2.5 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>}/>
+      <ObsStat color="#f59e0b" label="Size"           value={asset.size||"—"} icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 4.5C3 3.7 5.2 3 8 3s5 .7 5 1.5v7C13 12.3 10.8 13 8 13s-5-.7-5-1.5v-7z" stroke="currentColor" strokeWidth="1.3"/><path d="M3 4.5C3 5.3 5.2 6 8 6s5-.7 5-1.5" stroke="currentColor" strokeWidth="1.3"/></svg>}/>
+      <ObsStat color={T.textSub} label="Last Profiled" value="Jun 8, 2026" sub="5:31 AM" icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2.5" y="3" width="11" height="10.5" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M2.5 6h11M5.5 1.8v2.4M10.5 1.8v2.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>}/>
+    </div>
+    {/* data volume chart */}
+    <Card2>
+      <div style={{padding:"16px 18px"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+          <div style={{fontSize:13,fontWeight:700,color:T.text}}>Data Volume</div>
+          <div style={{display:"flex",alignItems:"center",gap:7}}>
+            <span style={{width:9,height:9,borderRadius:2,background:T.blue}}/>
+            <span style={{fontSize:11.5,color:T.textMuted}}>Row Count</span>
+          </div>
+        </div>
+        <div style={{...mono,fontSize:22,fontWeight:800,color:T.text,marginBottom:8}}>{obsFmtCount(series[series.length-1])}</div>
+        <ObsAreaChart data={series}/>
+        <div style={{display:"flex",justifyContent:"space-between",marginTop:8,fontSize:10.5,color:T.textMuted,...mono}}>
+          {dates.map(d=><span key={d}>{d}</span>)}
+        </div>
+      </div>
+    </Card2>
+    {/* profiler config (read-only — the "measurement layer" story) */}
+    <Card2>
+      <div style={{padding:"16px 18px"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:T.text}}>Profiler Configuration</div>
+            <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>Runs scheduled queries against the source to measure data shape.</div>
+          </div>
+          <Badge color="#16a34a" bg="#16a34a15" border="#16a34a33">Enabled</Badge>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
+          {[
+            {l:"Scope",v:`${(asset.db||asset.name).split("/")[0].trim()}`,s:"schema filter"},
+            {l:"Sampling",v:"100%",s:"of rows scanned"},
+            {l:"Partitioning",v:"created_at",s:"last 30 days"},
+            {l:"Schedule",v:"0 5 * * *",s:"daily · 05:00"},
+          ].map(c=>(
+            <div key={c.l} style={{padding:"11px 13px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9}}>
+              <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".07em",marginBottom:5}}>{c.l}</div>
+              <div style={{...mono,fontSize:13,fontWeight:600,color:T.text}}>{c.v}</div>
+              <div style={{fontSize:10.5,color:T.textMuted,marginTop:2}}>{c.s}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card2>
+  </div>;
+};
+
+// ── Column Profile sub-view ──────────────────────────────────────────────────
+const ColumnProfilePanel = ({asset})=>{
+  const [q,setQ]=useState("");
+  const [openCol,setOpenCol]=useState(null);
+  const cols = (typeof ASSET_COLUMNS!=="undefined" && ASSET_COLUMNS[asset.name]) || [];
+  const cases = (typeof DQ_TEST_CASES!=="undefined"?DQ_TEST_CASES:[]).filter(t=>t.table.endsWith("."+asset.name)||t.table===asset.name);
+  const mono={fontFamily:"'Geist Mono',monospace"};
+  const filtered = cols.filter(c=>!q||c.toLowerCase().includes(q.toLowerCase()));
+  const PctBar = ({pct,color})=>(
+    <div style={{display:"flex",alignItems:"center",gap:8,minWidth:120}}>
+      <div style={{flex:1,height:6,borderRadius:99,background:T.bgElevated,overflow:"hidden"}}>
+        <div style={{width:`${Math.min(100,pct)}%`,height:"100%",background:color,borderRadius:99}}/>
+      </div>
+      <span style={{...mono,fontSize:11.5,color:T.textSub,minWidth:42,textAlign:"right"}}>{pct}%</span>
+    </div>
+  );
+  return <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div style={{position:"relative"}}>
+      <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:T.textMuted}}>{Ic.search?Ic.search(13):"⌕"}</span>
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Find a column…"
+        style={{width:"100%",boxSizing:"border-box",padding:"9px 12px 9px 34px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none"}}/>
+    </div>
+    <Card2 style={{padding:0,overflow:"hidden"}}>
+      <table style={{width:"100%",borderCollapse:"collapse"}}>
+        <thead><tr style={{background:T.bgElevated}}>
+          {["Name","Data Type","Null %","Distinct %","Value Count","Tests"].map(h=>(
+            <th key={h} style={{padding:"9px 14px",fontSize:10.5,fontWeight:600,color:T.textMuted,textAlign:"left",borderBottom:`1px solid ${T.border}`,textTransform:"uppercase",letterSpacing:".07em",whiteSpace:"nowrap"}}>{h}</th>
+          ))}
+        </tr></thead>
+        <tbody>
+          {filtered.length===0 && <tr><td colSpan={6} style={{padding:"30px",textAlign:"center",color:T.textMuted,fontSize:12.5}}>No columns match “{q}”.</td></tr>}
+          {filtered.map((c,i)=>{
+            const p=obsColProfile(c);
+            const dc=OBS_DTYPE_COLOR[p.dataType]||T.textSub;
+            const colTests=cases.filter(t=>t.col===c);
+            const ok=colTests.filter(t=>t.status==="Success").length, bad=colTests.filter(t=>t.status==="Failed").length, ab=colTests.filter(t=>t.status==="Aborted").length;
+            const open=openCol===c;
+            return <React.Fragment key={c}>
+              <tr className="row-hover" onClick={()=>setOpenCol(open?null:c)} style={{borderBottom:`1px solid ${T.border}`,cursor:"pointer",background:open?T.bgElevated:"transparent"}}>
+                <td style={{padding:"11px 14px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{color:T.textMuted,fontSize:10,transform:open?"rotate(90deg)":"none",transition:"transform .12s",display:"inline-block"}}>▶</span>
+                    <span style={{...mono,fontSize:12.5,fontWeight:600,color:T.text}}>{c}</span>
+                  </div>
+                </td>
+                <td style={{padding:"11px 14px"}}><span style={{fontSize:11,padding:"2px 8px",borderRadius:5,background:`${dc}15`,color:dc,fontWeight:600,border:`1px solid ${dc}28`}}>{p.dataType}</span></td>
+                <td style={{padding:"11px 14px",width:170}}><PctBar pct={p.nullPct||0} color={p.nullPct>3?T.amber:T.textMuted}/></td>
+                <td style={{padding:"11px 14px",width:170}}><PctBar pct={p.distinctPct||0} color={dc}/></td>
+                <td style={{padding:"11px 14px",...mono,fontSize:11.5,color:T.textSub,whiteSpace:"nowrap"}}>{p.distinctCount||"—"}</td>
+                <td style={{padding:"11px 14px"}}>
+                  {colTests.length===0?<span style={{color:T.textMuted,fontSize:12}}>—</span>:
+                    <div style={{display:"flex",gap:5}}>
+                      {ok>0&&<span style={{fontSize:11,fontWeight:700,color:"#16a34a"}}>✓{ok}</span>}
+                      {bad>0&&<span style={{fontSize:11,fontWeight:700,color:T.rose}}>✕{bad}</span>}
+                      {ab>0&&<span style={{fontSize:11,fontWeight:700,color:T.amber}}>!{ab}</span>}
+                    </div>}
+                </td>
+              </tr>
+              {open&&(
+                <tr><td colSpan={6} style={{padding:0,background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
+                  <div style={{padding:"16px 18px 18px 36px",display:"flex",gap:24,flexWrap:"wrap"}}>
+                    {/* distribution */}
+                    <div style={{flex:"1 1 280px",minWidth:240}}>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:10}}>Distribution</div>
+                      {p.topValues?(
+                        <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                          {p.topValues.map((tv,k)=>{const m=tv.match(/\(([\d.]+)%\)/);const pct=m?parseFloat(m[1]):0;return(
+                            <div key={k}>
+                              <div style={{display:"flex",justifyContent:"space-between",fontSize:11.5,marginBottom:3}}><span style={{color:T.textSub}}>{tv.replace(/\s*\([\d.]+%\)/,"")}</span><span style={{...mono,color:T.textMuted}}>{pct}%</span></div>
+                              <div style={{height:6,borderRadius:99,background:T.bgSurface}}><div style={{width:`${pct}%`,height:"100%",borderRadius:99,background:dc}}/></div>
+                            </div>);})}
+                        </div>
+                      ):p.dataType==="numeric"?(
+                        <div style={{display:"flex",gap:10}}>
+                          {[["Min",p.min],["Avg",p.avg||"—"],["Max",p.max]].map(([l,v])=>(
+                            <div key={l} style={{flex:1,padding:"10px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8}}>
+                              <div style={{fontSize:10,color:T.textMuted,marginBottom:3}}>{l}</div>
+                              <div style={{...mono,fontSize:13,fontWeight:700,color:T.text}}>{v||"—"}</div>
+                            </div>))}
+                        </div>
+                      ):(p.samples?(
+                        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                          {p.samples.map((s,k)=><span key={k} style={{...mono,fontSize:11.5,padding:"3px 9px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:6,color:T.textSub}}>{s}</span>)}
+                          {p.minLen&&<div style={{width:"100%",fontSize:11,color:T.textMuted,marginTop:4}}>Length: {p.minLen} – {p.maxLen} (avg {p.avgLen})</div>}
+                        </div>
+                      ):(p.min?(
+                        <div style={{fontSize:12,color:T.textSub}}>Range: <span style={mono}>{p.min}</span> → <span style={mono}>{p.max}</span></div>
+                      ):<div style={{fontSize:12,color:T.textMuted}}>No distribution captured for this column.</div>))}
+                    </div>
+                    {/* stats */}
+                    <div style={{flex:"0 0 200px"}}>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:10}}>Profile</div>
+                      {[["Null","%",p.nullPct,p.nullCount],["Distinct","%",p.distinctPct,p.distinctCount]].map(([l,u,v,cnt])=>(
+                        <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12,borderBottom:`1px solid ${T.border}`}}>
+                          <span style={{color:T.textMuted}}>{l} {u}</span><span style={{...mono,color:T.text,fontWeight:600}}>{v}{u==="%"?"%":""}{cnt&&cnt!=="—"?` (${cnt})`:""}</span>
+                        </div>
+                      ))}
+                      <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12}}>
+                        <span style={{color:T.textMuted}}>Tests</span><span style={{...mono,color:T.text,fontWeight:600}}>{colTests.length}</span>
+                      </div>
+                    </div>
+                  </div>
+                </td></tr>
+              )}
+            </React.Fragment>;
+          })}
+        </tbody>
+      </table>
+    </Card2>
+  </div>;
+};
+
+// ── Incidents sub-view (asset-scoped) ────────────────────────────────────────
+const OBS_INC_CFG = {
+  "Open":        {color:T.rose,      bg:T.roseDim,    label:"Open"},
+  "In Progress": {color:T.amber,     bg:T.amberDim,   label:"In Review"},
+  "In Review":   {color:T.amber,     bg:T.amberDim,   label:"In Review"},
+  "Resolved":    {color:"#16a34a",   bg:"#16a34a12",  label:"Resolved"},
+  "Dismissed":   {color:T.textMuted, bg:T.bgElevated, label:"Dismissed"},
+};
+const AssetIncidentsPanel = ({asset,onToast,onNav})=>{
+  const tbl=asset.name;
+  const [incidents,setIncidents]=useState(()=>(typeof DQ_INCIDENTS!=="undefined"?DQ_INCIDENTS:[]).filter(i=>i.table.endsWith("."+tbl)||i.table===tbl).map(i=>({...i})));
+  const [sel,setSel]=useState(null);
+  const [action,setAction]=useState(null); // {type:"resolve"|"assign", desc, assignee}
+  const mono={fontFamily:"'Geist Mono',monospace"};
+  const selInc = sel?incidents.find(i=>i.id===sel):null;
+  const downstream = obsDownstream(tbl);
+
+  const applyStatus=(inc,newStatus,note,assignee)=>{
+    setIncidents(prev=>prev.map(i=>{
+      if(i.id!==inc.id) return i;
+      const tl=[...(i.timeline||[]),{action:newStatus==="In Progress"?"Acknowledged":assignee?`Assigned to ${assignee}`:newStatus,by:"You",at:"Just now",note:note||undefined}];
+      return {...i,status:newStatus||i.status,assignee:assignee||i.assignee,resolutionReason:(newStatus==="Resolved"||newStatus==="Dismissed")?note:i.resolutionReason,timeline:tl};
+    }));
+  };
+
+  if(incidents.length===0) return (
+    <div className="fadeIn" style={{padding:"60px 20px",textAlign:"center"}}>
+      <div style={{width:48,height:48,borderRadius:12,background:"#16a34a15",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px"}}>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5 12l4.5 4.5L19 7" stroke="#16a34a" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </div>
+      <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:4}}>No active incidents</div>
+      <div style={{fontSize:12.5,color:T.textMuted}}>No data-quality incidents are currently affecting <span style={mono}>{tbl}</span>.</div>
+    </div>
+  );
+
+  return <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:14}}>
+    <Card2 style={{padding:0,overflow:"hidden"}}>
+      <table style={{width:"100%",borderCollapse:"collapse"}}>
+        <thead><tr style={{background:T.bgElevated}}>
+          {["Incident","Severity","Status","Assignee","Opened"].map(h=>(
+            <th key={h} style={{padding:"9px 14px",fontSize:10.5,fontWeight:600,color:T.textMuted,textAlign:"left",borderBottom:`1px solid ${T.border}`,textTransform:"uppercase",letterSpacing:".07em"}}>{h}</th>
+          ))}
+        </tr></thead>
+        <tbody>
+          {incidents.map((inc,i)=>{
+            const cfg=OBS_INC_CFG[inc.status]||OBS_INC_CFG.Open;
+            return <tr key={inc.id} className="row-hover" onClick={()=>setSel(inc.id)} style={{borderBottom:i<incidents.length-1?`1px solid ${T.border}`:"none",cursor:"pointer"}}>
+              <td style={{padding:"12px 14px"}}><div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{inc.title}</div><div style={{fontSize:11,color:T.textMuted,marginTop:2,...mono}}>{inc.table}{inc.col?"."+inc.col:""}</div></td>
+              <td style={{padding:"12px 14px"}}><DQSeverityBadge severity={inc.severity}/></td>
+              <td style={{padding:"12px 14px"}}><span style={{fontSize:11,fontWeight:700,padding:"2px 9px",borderRadius:6,background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.color}28`}}>{cfg.label}</span></td>
+              <td style={{padding:"12px 14px",fontSize:12,color:inc.assignee?T.textSub:T.textMuted,...mono}}>{inc.assignee||"Unassigned"}</td>
+              <td style={{padding:"12px 14px",fontSize:11.5,color:T.textMuted}}>{inc.opened}</td>
+            </tr>;
+          })}
+        </tbody>
+      </table>
+    </Card2>
+
+    {/* Incident detail drawer */}
+    {selInc&&createPortal(
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:900,backdropFilter:"blur(3px)"}} onClick={()=>{setSel(null);setAction(null);}}>
+        <div onClick={e=>e.stopPropagation()} className="slideIn" style={{position:"absolute",top:0,right:0,bottom:0,width:540,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
+          {/* header */}
+          <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexShrink:0,background:T.bgElevated}}>
+            <div>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                <DQSeverityBadge severity={selInc.severity}/>
+                {(()=>{const c=OBS_INC_CFG[selInc.status]||OBS_INC_CFG.Open;return <span style={{fontSize:11,fontWeight:700,padding:"2px 9px",borderRadius:6,background:c.bg,color:c.color,border:`1px solid ${c.color}28`}}>{c.label}</span>;})()}
+              </div>
+              <div style={{fontSize:15,fontWeight:700,color:T.text}}>{selInc.title}</div>
+              <div style={{fontSize:11.5,color:T.textMuted,marginTop:3,...mono}}>{selInc.table}{selInc.col?"."+selInc.col:""} · opened {selInc.opened}</div>
+            </div>
+            <button onClick={()=>{setSel(null);setAction(null);}} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.x(11)}</button>
+          </div>
+          {/* body */}
+          <div style={{flex:1,overflowY:"auto",padding:"18px 20px",display:"flex",flexDirection:"column",gap:18}}>
+            <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6}}>{selInc.desc}</div>
+
+            {/* lineage impact radius */}
+            <div>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:8,textTransform:"uppercase"}}>Downstream Impact</div>
+              <div style={{padding:"10px 12px",background:T.roseDim,border:`1px solid ${T.rose}28`,borderRadius:9,marginBottom:8,fontSize:11.5,color:T.rose,fontWeight:600}}>⚠ {downstream.length} downstream asset{downstream.length!==1?"s":""} may be affected</div>
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {downstream.map((d,k)=>(
+                  <div key={k} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+                    <span style={{fontSize:9,color:T.textMuted}}>↳</span>
+                    <span style={{...mono,fontSize:12,color:T.text,flex:1}}>{d.name}</span>
+                    <span style={{fontSize:10.5,color:T.textMuted}}>{d.type}</span>
+                    <span style={{fontSize:10.5,color:T.textMuted}}>· {d.svc}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* root cause + resolution */}
+            {selInc.rootCause&&<div><div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:6,textTransform:"uppercase"}}>Root Cause</div><div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6,padding:"10px 12px",background:T.bgElevated,borderRadius:9,border:`1px solid ${T.border}`}}>{selInc.rootCause}</div></div>}
+            {selInc.resolutionReason&&<div><div style={{fontSize:10.5,fontWeight:700,color:"#16a34a",letterSpacing:.5,marginBottom:6,textTransform:"uppercase"}}>Resolution</div><div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6,padding:"10px 12px",background:"#16a34a0c",borderRadius:9,border:`1px solid #16a34a28`}}>{selInc.resolutionReason}</div></div>}
+
+            {/* timeline */}
+            <div>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:10,textTransform:"uppercase"}}>Timeline</div>
+              <div style={{display:"flex",flexDirection:"column",gap:0}}>
+                {(selInc.timeline||[]).map((ev,k)=>(
+                  <div key={k} style={{display:"flex",gap:11,paddingBottom:14,position:"relative"}}>
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0}}>
+                      <span style={{width:9,height:9,borderRadius:"50%",background:T.accent,marginTop:3}}/>
+                      {k<(selInc.timeline.length-1)&&<span style={{width:1.5,flex:1,background:T.border,marginTop:2}}/>}
+                    </div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:12.5,color:T.text,fontWeight:500}}>{ev.action}</div>
+                      <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{ev.by} · {ev.at}</div>
+                      {ev.note&&<div style={{fontSize:11.5,color:T.textSub,marginTop:4,padding:"6px 9px",background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`}}>{ev.note}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* inline action form */}
+            {action&&(
+              <div style={{padding:"14px 16px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:T.text,marginBottom:10}}>{action.type==="assign"?"Assign incident":"Resolve incident"}</div>
+                {action.type==="assign"&&(
+                  <select value={action.assignee||""} onChange={e=>setAction(a=>({...a,assignee:e.target.value}))}
+                    style={{width:"100%",boxSizing:"border-box",padding:"8px 10px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,marginBottom:10,outline:"none"}}>
+                    <option value="">Select assignee…</option>
+                    {OBS_OWNERS.map(o=><option key={o} value={o}>{o}</option>)}
+                  </select>
+                )}
+                <textarea value={action.desc} onChange={e=>setAction(a=>({...a,desc:e.target.value}))} rows={3} placeholder={action.type==="assign"?"Add a note (optional)":"Resolution reason (required)"}
+                  style={{width:"100%",boxSizing:"border-box",padding:"9px 11px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",resize:"vertical",fontFamily:"inherit"}}/>
+                <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:10}}>
+                  <Btn small ghost onClick={()=>setAction(null)}>Cancel</Btn>
+                  <Btn small disabled={action.type==="assign"?!action.assignee:!action.desc.trim()}
+                    onClick={()=>{
+                      if(action.type==="assign"){applyStatus(selInc,selInc.status==="Open"?"In Progress":selInc.status,action.desc.trim(),action.assignee);onToast&&onToast(`Assigned to ${action.assignee}`,"success");}
+                      else{applyStatus(selInc,"Resolved",action.desc.trim());onToast&&onToast("Incident resolved","success");}
+                      setAction(null);
+                    }}>{action.type==="assign"?"Assign":"Resolve"}</Btn>
+                </div>
+              </div>
+            )}
+          </div>
+          {/* footer actions */}
+          {!action&&(
+            <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,flexShrink:0,flexWrap:"wrap"}}>
+              {(selInc.status==="Open")&&<Btn small ghost onClick={()=>{applyStatus(selInc,"In Progress");onToast&&onToast("Incident acknowledged","success");}}>Acknowledge</Btn>}
+              {selInc.status!=="Resolved"&&selInc.status!=="Dismissed"&&<Btn small ghost onClick={()=>setAction({type:"assign",desc:"",assignee:""})}>Assign</Btn>}
+              {selInc.status!=="Resolved"&&selInc.status!=="Dismissed"&&<Btn small onClick={()=>setAction({type:"resolve",desc:""})}>Resolve</Btn>}
+              <div style={{flex:1}}/>
+              <Btn small ghost onClick={()=>{onNav&&onNav("observability");onToast&&onToast("Open Alerts to create a subscription for this asset","success");}}>Create alert</Btn>
+            </div>
+          )}
+        </div>
+      </div>
+    ,document.body)}
+  </div>;
+};
+
+// ── Alert / EventSubscription wizard (used by ObsView) ───────────────────────
+const ALERT_SOURCES=["Table","Test Case","Test Suite","Pipeline","Container"];
+const ALERT_TRIGGERS=[
+  {id:"schemaChange",label:"Schema change"},
+  {id:"testFailed",label:"Test case failed"},
+  {id:"testAborted",label:"Test case aborted"},
+  {id:"pipelineStatus",label:"Pipeline status change"},
+  {id:"metricUpdate",label:"Metric / volume change"},
+];
+const ALERT_DEST_INTERNAL=["Owners","Followers","Teams","Admins"];
+const ALERT_DEST_EXTERNAL=[{id:"email",label:"Email"},{id:"slack",label:"Slack"},{id:"teams",label:"MS Teams"},{id:"webhook",label:"Webhook"}];
+const AlertWizard = ({open,onClose,onCreate,seedSource})=>{
+  const [step,setStep]=useState(0);
+  const [name,setName]=useState("");
+  const [source,setSource]=useState(seedSource||"Table");
+  const [filterText,setFilterText]=useState("");
+  const [filterMode,setFilterMode]=useState("include");
+  const [triggers,setTriggers]=useState(["testFailed"]);
+  const [internal,setInternal]=useState(["Owners"]);
+  const [external,setExternal]=useState([]);
+  const [extTarget,setExtTarget]=useState("");
+  if(!open) return null;
+  const steps=["Source","Filters","Triggers","Destinations"];
+  const toggle=(arr,set,v)=>set(arr.includes(v)?arr.filter(x=>x!==v):[...arr,v]);
+  const canNext = step===0?(!!name.trim()&&!!source): step===2?triggers.length>0: step===3?(internal.length>0||external.length>0):true;
+  const Lbl=({children})=><div style={{fontSize:11,fontWeight:700,color:T.textSub,marginBottom:8}}>{children}</div>;
+  const Pill=({active,onClick,children})=>(
+    <button onClick={onClick} style={{padding:"6px 13px",borderRadius:99,fontSize:12,fontWeight:active?600:400,cursor:"pointer",background:active?T.accent:T.bgElevated,color:active?"#fff":T.textSub,border:`1px solid ${active?T.accent:T.border}`,transition:"all .12s"}}>{children}</button>
+  );
+  return (
+    <Modal open={open} onClose={onClose} title="New Alert" width={560}>
+      {/* stepper */}
+      <div style={{display:"flex",alignItems:"center",gap:0,marginBottom:20}}>
+        {steps.map((s,i)=>(
+          <React.Fragment key={s}>
+            <div style={{display:"flex",alignItems:"center",gap:7}}>
+              <span style={{width:22,height:22,borderRadius:"50%",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",background:i<=step?T.accent:T.bgElevated,color:i<=step?"#fff":T.textMuted,border:`1px solid ${i<=step?T.accent:T.border}`}}>{i+1}</span>
+              <span style={{fontSize:11.5,fontWeight:i===step?700:500,color:i===step?T.text:T.textMuted,whiteSpace:"nowrap"}}>{s}</span>
+            </div>
+            {i<steps.length-1&&<div style={{flex:1,height:1,background:i<step?T.accent:T.border,margin:"0 8px"}}/>}
+          </React.Fragment>
+        ))}
+      </div>
+
+      <div style={{minHeight:200}}>
+        {step===0&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
+          <div><Lbl>Alert name <span style={{color:T.rose}}>*</span></Lbl>
+            <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Orders freshness breach"
+              style={{width:"100%",boxSizing:"border-box",padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none"}}/></div>
+          <div><Lbl>Source — what to watch</Lbl>
+            <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>{ALERT_SOURCES.map(s=><Pill key={s} active={source===s} onClick={()=>setSource(s)}>{s}</Pill>)}</div></div>
+        </div>}
+
+        {step===1&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
+          <div><Lbl>Filter scope</Lbl>
+            <div style={{display:"flex",gap:7,marginBottom:10}}>
+              <Pill active={filterMode==="include"} onClick={()=>setFilterMode("include")}>Include</Pill>
+              <Pill active={filterMode==="exclude"} onClick={()=>setFilterMode("exclude")}>Exclude</Pill>
+            </div>
+            <input value={filterText} onChange={e=>setFilterText(e.target.value)} placeholder="by name, owner, or domain (e.g. domain:Commerce)"
+              style={{width:"100%",boxSizing:"border-box",padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none"}}/>
+            <div style={{fontSize:11,color:T.textMuted,marginTop:8}}>Leave blank to apply to all {source.toLowerCase()}s. Filters narrow the signal to reduce noise.</div>
+          </div>
+        </div>}
+
+        {step===2&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
+          <Lbl>Trigger conditions — fire the alert when…</Lbl>
+          {ALERT_TRIGGERS.map(t=>(
+            <label key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:triggers.includes(t.id)?T.accentDim:T.bgElevated,border:`1px solid ${triggers.includes(t.id)?T.accent+"55":T.border}`,borderRadius:9,cursor:"pointer"}}>
+              <input type="checkbox" checked={triggers.includes(t.id)} onChange={()=>toggle(triggers,setTriggers,t.id)} style={{accentColor:T.accent,cursor:"pointer"}}/>
+              <span style={{fontSize:12.5,color:T.text}}>{t.label}</span>
+            </label>
+          ))}
+        </div>}
+
+        {step===3&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
+          <div><Lbl>Internal destinations</Lbl>
+            <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>{ALERT_DEST_INTERNAL.map(d=><Pill key={d} active={internal.includes(d)} onClick={()=>toggle(internal,setInternal,d)}>{d}</Pill>)}</div></div>
+          <div><Lbl>External destinations</Lbl>
+            <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:10}}>{ALERT_DEST_EXTERNAL.map(d=><Pill key={d.id} active={external.includes(d.id)} onClick={()=>toggle(external,setExternal,d.id)}>{d.label}</Pill>)}</div>
+            {external.length>0&&<input value={extTarget} onChange={e=>setExtTarget(e.target.value)} placeholder="endpoint (email address, channel, or webhook URL)"
+              style={{width:"100%",boxSizing:"border-box",padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none"}}/>}
+          </div>
+        </div>}
+      </div>
+
+      {/* footer */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:22,paddingTop:16,borderTop:`1px solid ${T.border}`}}>
+        <Btn small ghost onClick={()=>step===0?onClose():setStep(step-1)}>{step===0?"Cancel":"← Back"}</Btn>
+        {step<3
+          ? <Btn small disabled={!canNext} onClick={()=>canNext&&setStep(step+1)}>Next →</Btn>
+          : <Btn small disabled={!canNext} onClick={()=>{
+              const chan=[...internal,...external.map(e=>ALERT_DEST_EXTERNAL.find(x=>x.id===e)?.label||e)];
+              onCreate({rule:name.trim(),source,channel:(extTarget||chan.join(", ")||"Owners"),triggers:triggers.length,status:"Active",severity:triggers.includes("testFailed")?"Critical":"High"});
+            }}>Create alert</Btn>}
+      </div>
+    </Modal>
+  );
+};
+
+// ── Top-level asset tab: the connected loop ──────────────────────────────────
+const AssetObservabilityTab = ({asset,onToast,onNav})=>{
+  const [sub,setSub]=useState("table");
+  const [range,setRange]=useState("Last 7 days");
+  const tbl=asset.name;
+  const cases=(typeof DQ_TEST_CASES!=="undefined"?DQ_TEST_CASES:[]).filter(t=>t.table.endsWith("."+tbl)||t.table===tbl);
+  const eff=cases.length?cases:[];
+  const pass=eff.filter(t=>t.status==="Success").length;
+  const fail=eff.filter(t=>t.status==="Failed").length;
+  const abort=eff.filter(t=>t.status==="Aborted").length;
+  const incs=(typeof DQ_INCIDENTS!=="undefined"?DQ_INCIDENTS:[]).filter(i=>i.table.endsWith("."+tbl)||i.table===tbl);
+  const openIncs=incs.filter(i=>i.status!=="Resolved"&&i.status!=="Dismissed").length;
+  const cols=(typeof ASSET_COLUMNS!=="undefined" && ASSET_COLUMNS[tbl])||[];
+  const subs=[
+    {key:"table",label:"Table Profile"},
+    {key:"column",label:"Column Profile"},
+    {key:"quality",label:"Data Quality"},
+    {key:"incidents",label:`Incidents${openIncs?"  "+openIncs:""}`},
+  ];
+  const RANGES=["Last 7 days","Last 14 days","Last 30 days","Last 60 days"];
+
+  // The loop strip — Measure → Assert → Alert → Resolve
+  const steps=[
+    {target:"table",   phase:"1 · Measure", title:"Profile",   dot:"Success", line:`${cols.length||asset.columns||10} columns · 100% sampled`},
+    {target:"quality", phase:"2 · Assert",  title:"Tests",     dot:fail?"Failed":abort?"Aborted":"Success", line:`${pass} passing${fail?` · ${fail} failing`:""}`},
+    {target:"alerts",  phase:"3 · Alert",   title:"Alerts",    dot:"Success", line:`2 active subscriptions`},
+    {target:"incidents",phase:"4 · Resolve",title:"Incidents", dot:openIncs?"Failed":"Success", line:openIncs?`${openIncs} open`:"none open"},
+  ];
+
+  return <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:16}}>
+    {/* loop strip + date range */}
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
+      <div style={{display:"flex",alignItems:"stretch",flex:1,minWidth:520,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
+        {steps.map((s,i)=>(
+          <React.Fragment key={s.target}>
+            <button onClick={()=>s.target==="alerts"?(onNav&&onNav("observability")):setSub(s.target)}
+              style={{flex:1,minWidth:0,padding:"12px 14px",background:(sub===s.target)?T.bgElevated:"transparent",border:"none",borderBottom:`2px solid ${sub===s.target?T.accent:"transparent"}`,cursor:"pointer",textAlign:"left",transition:"background .12s"}}
+              onMouseEnter={e=>{if(sub!==s.target)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(sub!==s.target)e.currentTarget.style.background="transparent";}}>
+              <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".08em",marginBottom:5}}>{s.phase}</div>
+              <div style={{display:"flex",alignItems:"center",gap:7}}>
+                <DQStatusDot status={s.dot} size={8}/>
+                <span style={{fontSize:13,fontWeight:700,color:T.text}}>{s.title}</span>
+              </div>
+              <div style={{fontSize:10.5,color:T.textMuted,marginTop:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.line}</div>
+            </button>
+            {i<steps.length-1&&<div style={{display:"flex",alignItems:"center",padding:"0 2px",color:T.textMuted,fontSize:14}}>→</div>}
+          </React.Fragment>
+        ))}
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <span style={{fontSize:11.5,color:T.textMuted}}>Date:</span>
+        <select value={range} onChange={e=>setRange(e.target.value)}
+          style={{padding:"7px 10px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",cursor:"pointer"}}>
+          {RANGES.map(r=><option key={r} value={r}>{r}</option>)}
+        </select>
+      </div>
+    </div>
+
+    {/* sub tabs */}
+    <Tabs2 pill tabs={subs} active={sub} onChange={setSub}/>
+
+    {/* sub content */}
+    {sub==="table"     && <TableProfilePanel asset={asset}/>}
+    {sub==="column"    && <ColumnProfilePanel asset={asset}/>}
+    {sub==="quality"   && <AssetQualityTab asset={asset} onToast={onToast} onNav={onNav}/>}
+    {sub==="incidents" && <AssetIncidentsPanel asset={asset} onToast={onToast} onNav={onNav}/>}
+  </div>;
+};
+
 const AssetQualityTab = ({asset,onToast,onNav})=>{
   const [runningIds,setRunningIds]=useState(new Set());
   const [selectedIds,setSelectedIds]=useState(new Set());
@@ -11944,6 +12541,7 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
                     </td>
                     <td style={{padding:"10px 14px"}}>
                       <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{t.name}</div>
+                      {(()=>{const l=tcPolicyLink(t);return l?<div style={{marginTop:4}}><PolicyChip link={l} onNav={onNav} compact/></div>:null;})()}
                     </td>
                     <td style={{padding:"10px 14px"}}>
                       {t.col?<span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{t.col}</span>:<span style={{color:T.textMuted,fontSize:12}}>—</span>}
@@ -12057,6 +12655,13 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
                 <span>15 runs ago</span><span>Latest</span>
               </div>
             </div>
+            {(()=>{const l=tcPolicyLink(tcDetail);return l?(
+              <div>
+                <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:8,textTransform:"uppercase"}}>Governance</div>
+                <PolicyChip link={l} onNav={typeof onNav!=="undefined"?onNav:undefined}/>
+                <div style={{fontSize:11,color:T.textMuted,marginTop:6,lineHeight:1.5}}>A failure on this test traces up to the policy it enforces.</div>
+              </div>
+            ):null;})()}
             {/* Test Definition */}
             <div>
               <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:8,textTransform:"uppercase"}}>Test Definition</div>
@@ -13743,7 +14348,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
 
   const tabs=[
     {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},{key:"lineage",label:"Lineage"},
-    {key:"quality",label:"Quality"},{key:"usage",label:"Usage"},
+    {key:"observability",label:"Data Observability"},{key:"usage",label:"Usage"},
     {key:"activity",label:"Audit Logs"},
   ];
 
@@ -13823,7 +14428,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
       <div style={{flex:1,overflowY:"auto",padding:24,minWidth:0}}>
         {tab==="overview"  && <AssetOverview asset={asset} data={data} setData={setData} onToast={onToast}/>}
         {tab==="schema"    && <AssetSchema asset={asset} selCol={selCol} onColClick={c=>{ setSelCol(selCol?.name===c?.name?null:c); }} onToast={onToast}/>}
-        {tab==="quality"   && <AssetQualityTab asset={data} onToast={onToast} onNav={onNav}/>}
+        {tab==="observability" && <AssetObservabilityTab asset={data} onToast={onToast} onNav={onNav}/>}
         {tab==="usage"     && <AssetUsageTab/>}
         {tab==="lineage"   && <AssetLineageFull asset={data}/>}
         {tab==="activity"  && <AuditLogTable entries={ASSET_AUDIT_ENTRIES}/>}
@@ -15043,6 +15648,14 @@ const ContractDetail = ({contract,onBack,onToast})=>(
 // ─────────────────────────────────────────────
 const ObsView = ({onToast})=>{
   const [tab,setTab]=useState("pipelines");
+  const [alertWizard,setAlertWizard]=useState(false);
+  const [subs,setSubs]=useState([
+    {rule:"Pipeline failure rate > 5%",channel:"Slack #data-alerts",status:"Active",severity:"Critical"},
+    {rule:"Data freshness SLA breached",channel:"Email: data-team@solix.com",status:"Active",severity:"High"},
+    {rule:"Quality score drops > 10pt in 1h",channel:"PagerDuty",status:"Active",severity:"Critical"},
+    {rule:"Schema drift detected",channel:"Slack #schema-changes",status:"Active",severity:"Med"},
+    {rule:"Access denied spike > 10/hr",channel:"Email: security@solix.com",status:"Paused",severity:"High"},
+  ]);
   const pipelines=[
     {name:"etl_orders_pipeline",status:"passing",latency:"1.2s",runs:144,failures:0,last:"2m ago",freshness:"1h 45m"},
     {name:"crm_sync",status:"passing",latency:"3.4s",runs:48,failures:0,last:"15m ago",freshness:"4h 12m"},
@@ -15096,27 +15709,23 @@ const ObsView = ({onToast})=>{
         </div></Card2>
       </div>}
       {tab==="alerts"&&<>
-        <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:14}}>
-          <Btn small ghost onClick={()=>onToast("Alert config opened","success")}>Configure Alerts</Btn>
-          <Btn icon={Ic.plus(12)} onClick={()=>onToast("New alert rule dialog","success")}>Add Alert Rule</Btn>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:14}}>
+          <div style={{fontSize:12,color:T.textMuted}}>{subs.length} alert{subs.length!==1?"s":""} · {subs.filter(s=>s.status==="Active").length} active. Alerts subscribe to events across the observability loop — schema, tests, pipelines, metrics.</div>
+          <Btn icon={Ic.plus(12)} onClick={()=>setAlertWizard(true)}>Add Alert</Btn>
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {[
-            {rule:"Pipeline failure rate > 5%",channel:"Slack #data-alerts",status:"Active",severity:"Critical"},
-            {rule:"Data freshness SLA breached",channel:"Email: data-team@solix.com",status:"Active",severity:"High"},
-            {rule:"Quality score drops > 10pt in 1h",channel:"PagerDuty",status:"Active",severity:"Critical"},
-            {rule:"Schema drift detected",channel:"Slack #schema-changes",status:"Active",severity:"Med"},
-            {rule:"Access denied spike > 10/hr",channel:"Email: security@solix.com",status:"Paused",severity:"High"},
-          ].map((a,i)=>(
+          {subs.map((a,i)=>(
             <Card2 key={i}><div style={{padding:14,display:"flex",alignItems:"center",gap:14}}>
               <SDot status={a.status==="Active"?"Active":"Pending"}/>
-              <div style={{flex:1}}><div style={{fontSize:13,color:T.text,marginBottom:2}}>{a.rule}</div><div style={{fontSize:12,color:T.textMuted}}>→ {a.channel}</div></div>
+              <div style={{flex:1}}><div style={{fontSize:13,color:T.text,marginBottom:2}}>{a.rule}{a.source?<span style={{fontSize:11,color:T.textMuted,marginLeft:8}}>· on {a.source}</span>:null}</div><div style={{fontSize:12,color:T.textMuted}}>→ {a.channel}</div></div>
               <Badge color={a.severity==="Critical"?T.red:a.severity==="High"?T.amber:T.textSub}>{a.severity}</Badge>
-              <Btn small ghost>{a.status==="Active"?"Pause":"Resume"}</Btn>
-              <Btn small variant="danger">Delete</Btn>
+              <Btn small ghost onClick={()=>{setSubs(p=>p.map((x,j)=>j===i?{...x,status:x.status==="Active"?"Paused":"Active"}:x));onToast&&onToast(`Alert ${a.status==="Active"?"paused":"resumed"}`,"success");}}>{a.status==="Active"?"Pause":"Resume"}</Btn>
+              <Btn small variant="danger" onClick={()=>{setSubs(p=>p.filter((_,j)=>j!==i));onToast&&onToast("Alert deleted","error");}}>Delete</Btn>
             </div></Card2>
           ))}
         </div>
+        <AlertWizard open={alertWizard} onClose={()=>setAlertWizard(false)}
+          onCreate={(a)=>{setSubs(p=>[{...a},...p]);setAlertWizard(false);onToast&&onToast(`Alert “${a.rule}” created`,"success");}}/>
       </>}
     </div>
   </div>;
@@ -20456,7 +21065,7 @@ const ROLES_CONFIG = {
     badge: "rgba(238,36,36,0.15)",
     desc:  "Full platform access including settings, user management, and all configurations.",
     rbacRole: "admin",
-    nav: ["home","search","catalog","quality","contracts","policymanager","certifications","glossary","domains","dataproducts","settings","tags"],
+    nav: ["home","search","catalog","quality","observability","contracts","policymanager","certifications","glossary","domains","dataproducts","settings","tags"],
     homeWidgets: ["metrics","tasks","quality","recentAssets","services","activity"],
   },
   steward: {
@@ -20469,7 +21078,7 @@ const ROLES_CONFIG = {
     desc:  "Govern assets in your domain: certify data, manage glossary terms, resolve conflicts.",
     rbacRole: "steward",
     domain: "Commerce",
-    nav: ["home","search","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","tags"],
+    nav: ["home","search","catalog","quality","observability","policymanager","certifications","glossary","domains","dataproducts","tags"],
     homeWidgets: ["tasks","certQueue","qualityAlerts","recentAssets","activity"],
   },
   analyst: {
@@ -20481,7 +21090,7 @@ const ROLES_CONFIG = {
     badge: "rgba(2,132,199,0.12)",
     desc:  "Browse the catalog, explore lineage, run quality checks, and access approved datasets.",
     rbacRole: "analyst",
-    nav: ["home","search","catalog","quality","glossary","domains","dataproducts"],
+    nav: ["home","search","catalog","quality","observability","glossary","domains","dataproducts"],
     homeWidgets: ["metrics","recentAssets","quality","lineageSnippet","activity"],
   },
   engineer: {
@@ -20493,7 +21102,7 @@ const ROLES_CONFIG = {
     badge: "rgba(124,58,237,0.12)",
     desc:  "Manage pipelines, monitor ingestion health, trace lineage, and maintain data contracts.",
     rbacRole: "engineer",
-    nav: ["home","search","catalog","quality","contracts","settings"],
+    nav: ["home","search","catalog","quality","observability","contracts","settings"],
     homeWidgets: ["services","metrics","quality","lineageSnippet","recentAssets","activity"],
   },
   viewer: {
