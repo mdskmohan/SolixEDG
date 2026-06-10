@@ -11780,22 +11780,32 @@ const OBS_INC_CFG = {
   "Resolved":    {color:"#16a34a",   bg:"#16a34a12",  label:"Resolved"},
   "Dismissed":   {color:T.textMuted, bg:T.bgElevated, label:"Dismissed"},
 };
+const OBS_INC_NEXT = {
+  "Open":       ["In Progress","Resolved","Dismissed"],
+  "In Progress":["Open","Resolved","Dismissed"],
+  "In Review":  ["Open","Resolved","Dismissed"],
+  "Resolved":   ["Open","In Progress","Dismissed"],
+  "Dismissed":  ["Open","In Progress","Resolved"],
+};
+// Incident manager — same layout as the standalone Data Quality › Incidents view
 const AssetIncidentsPanel = ({asset,onToast,onNav})=>{
   const tbl=asset.name;
-  const [incidents,setIncidents]=useState(()=>(typeof DQ_INCIDENTS!=="undefined"?DQ_INCIDENTS:[]).filter(i=>i.table.endsWith("."+tbl)||i.table===tbl).map(i=>({...i})));
-  const [sel,setSel]=useState(null);
-  const [action,setAction]=useState(null); // {type:"resolve"|"assign", desc, assignee}
   const mono={fontFamily:"'Geist Mono',monospace"};
-  const selInc = sel?incidents.find(i=>i.id===sel):null;
-  const downstream = obsDownstream(tbl);
-
-  const applyStatus=(inc,newStatus,note,assignee)=>{
-    setIncidents(prev=>prev.map(i=>{
-      if(i.id!==inc.id) return i;
-      const tl=[...(i.timeline||[]),{action:newStatus==="In Progress"?"Acknowledged":assignee?`Assigned to ${assignee}`:newStatus,by:"You",at:"Just now",note:note||undefined}];
-      return {...i,status:newStatus||i.status,assignee:assignee||i.assignee,resolutionReason:(newStatus==="Resolved"||newStatus==="Dismissed")?note:i.resolutionReason,timeline:tl};
-    }));
-  };
+  const [incidents,setIncidents]=useState(()=>(typeof DQ_INCIDENTS!=="undefined"?DQ_INCIDENTS:[]).filter(i=>i.table.endsWith("."+tbl)||i.table===tbl).map(i=>({...i})));
+  const [tcF,setTcF]=useState("");
+  const [assigneeF,setAssigneeF]=useState("");
+  const [statusF,setStatusF]=useState("all");
+  const [expanded,setExpanded]=useState(null);
+  const [actionModal,setActionModal]=useState(null); // {id,newStatus,desc}
+  const cases=(typeof DQ_TEST_CASES!=="undefined"?DQ_TEST_CASES:[]);
+  const filtered=incidents.filter(i=>
+    (statusF==="all"||i.status===statusF)&&
+    (!tcF||i.title.toLowerCase().includes(tcF.toLowerCase())||(cases.find(t=>t.id===i.tcId)?.name||"").toLowerCase().includes(tcF.toLowerCase()))&&
+    (!assigneeF||(i.assignee||"").toLowerCase().includes(assigneeF.toLowerCase()))
+  );
+  const FPill=({active,onClick,color,children})=>(
+    <button onClick={onClick} style={{padding:"4px 11px",borderRadius:6,fontSize:11.5,fontWeight:active?600:400,border:`1.5px solid ${active?(color||T.accent):T.border}`,background:active?`${color||T.accent}12`:"transparent",color:active?(color||T.accent):T.textSub,cursor:"pointer",transition:"all .12s",whiteSpace:"nowrap"}}>{children}</button>
+  );
 
   if(incidents.length===0) return (
     <div className="fadeIn" style={{padding:"60px 20px",textAlign:"center"}}>
@@ -11807,129 +11817,195 @@ const AssetIncidentsPanel = ({asset,onToast,onNav})=>{
     </div>
   );
 
-  return <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:14}}>
+  return <div className="fadeIn">
+    {/* ── Filter bar ── */}
+    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden",marginBottom:16}}>
+      <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+        <div style={{flex:1,minWidth:180,position:"relative"}}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+          <input value={tcF} onChange={e=>setTcF(e.target.value)} placeholder="Filter by test case name…"
+            style={{width:"100%",padding:"8px 12px 8px 33px",background:T.bgElevated,border:`1.5px solid ${tcF?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+        </div>
+        <div style={{flex:1,minWidth:150}}>
+          <input value={assigneeF} onChange={e=>setAssigneeF(e.target.value)} placeholder="Filter by assignee…"
+            style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${assigneeF?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+        </div>
+        <span style={{fontSize:12,color:T.textMuted,whiteSpace:"nowrap"}}>{filtered.length} result{filtered.length!==1?"s":""}</span>
+      </div>
+      {/* ── Stat summary bar ── */}
+      <div style={{padding:"12px 16px 0",display:"flex",gap:8,flexWrap:"wrap"}}>
+        {[
+          {key:"Open",label:"Open",color:T.rose,bg:`${T.rose}12`},
+          {key:"In Progress",label:"In Review",color:T.amber,bg:`${T.amber}12`},
+          {key:"Resolved",label:"Resolved",color:"#16a34a",bg:"#16a34a12"},
+          {key:"Dismissed",label:"Dismissed",color:T.textMuted,bg:T.bgElevated},
+        ].map(s=>{
+          const cnt=incidents.filter(i=>i.status===s.key).length;
+          return (
+            <div key={s.key} onClick={()=>setStatusF(s.key)} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 12px",borderRadius:7,background:s.bg,border:`1px solid ${s.color}30`,cursor:"pointer",transition:"opacity .1s"}} onMouseEnter={e=>e.currentTarget.style.opacity=".75"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+              <span style={{width:6,height:6,borderRadius:"50%",background:s.color,display:"block",flexShrink:0}}/>
+              <span style={{fontSize:11,fontWeight:700,color:s.color}}>{cnt}</span>
+              <span style={{fontSize:11,color:s.color,opacity:.85}}>{s.label}</span>
+            </div>
+          );
+        })}
+        <div style={{marginLeft:"auto",alignSelf:"center",fontSize:11,color:T.textMuted}}>{incidents.length} total</div>
+      </div>
+      {/* ── Filter pills ── */}
+      <div style={{padding:"8px 16px 10px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+        {["all","Open","In Progress","Resolved","Dismissed"].map(s=>{
+          const cfg=s==="all"?null:(OBS_INC_CFG[s]||OBS_INC_CFG["In Review"]);
+          const label=s==="all"?"All":s==="In Progress"?"In Review":s;
+          return <FPill key={s} active={statusF===s} onClick={()=>setStatusF(s)} color={cfg?cfg.color:undefined}>
+            {label}<span style={{fontSize:10,opacity:.7,marginLeft:4}}>{s==="all"?incidents.length:incidents.filter(i=>i.status===s).length}</span>
+          </FPill>;
+        })}
+      </div>
+    </div>
+
+    {/* ── Incidents Table ── */}
     <Card2 style={{padding:0,overflow:"hidden"}}>
       <table style={{width:"100%",borderCollapse:"collapse"}}>
-        <thead><tr style={{background:T.bgElevated}}>
-          {["Incident","Severity","Status","Assignee","Opened"].map(h=>(
-            <th key={h} style={{padding:"9px 14px",fontSize:10.5,fontWeight:600,color:T.textMuted,textAlign:"left",borderBottom:`1px solid ${T.border}`,textTransform:"uppercase",letterSpacing:".07em"}}>{h}</th>
+        <thead><tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
+          {["Test Case Name","Table","Last Updated","Status","Severity","Assignee"].map(l=>(
+            <th key={l} style={{padding:"9px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textAlign:"left",letterSpacing:.5,textTransform:"uppercase",whiteSpace:"nowrap"}}>{l}</th>
           ))}
         </tr></thead>
         <tbody>
-          {incidents.map((inc,i)=>{
-            const cfg=OBS_INC_CFG[inc.status]||OBS_INC_CFG.Open;
-            return <tr key={inc.id} className="row-hover" onClick={()=>setSel(inc.id)} style={{borderBottom:i<incidents.length-1?`1px solid ${T.border}`:"none",cursor:"pointer"}}>
-              <td style={{padding:"12px 14px"}}><div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{inc.title}</div><div style={{fontSize:11,color:T.textMuted,marginTop:2,...mono}}>{inc.table}{inc.col?"."+inc.col:""}</div></td>
-              <td style={{padding:"12px 14px"}}><DQSeverityBadge severity={inc.severity}/></td>
-              <td style={{padding:"12px 14px"}}><span style={{fontSize:11,fontWeight:700,padding:"2px 9px",borderRadius:6,background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.color}28`}}>{cfg.label}</span></td>
-              <td style={{padding:"12px 14px",fontSize:12,color:inc.assignee?T.textSub:T.textMuted,...mono}}>{inc.assignee||"Unassigned"}</td>
-              <td style={{padding:"12px 14px",fontSize:11.5,color:T.textMuted}}>{inc.opened}</td>
-            </tr>;
+          {filtered.map((inc,i)=>{
+            const sCfg=OBS_INC_CFG[inc.status]||OBS_INC_CFG.Open;
+            const isExp=expanded===inc.id;
+            const linkedTC=cases.find(t=>t.id===inc.tcId);
+            return (
+              <React.Fragment key={inc.id}>
+                <tr onClick={()=>setExpanded(isExp?null:inc.id)}
+                  style={{borderBottom:(!isExp&&i<filtered.length-1)?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"background .1s",
+                    background:inc.status==="Resolved"?"#16a34a07":isExp?`${T.accent}06`:"transparent",
+                    boxShadow:inc.status==="Resolved"?"inset 3px 0 0 #16a34a":inc.status==="Dismissed"?`inset 3px 0 0 ${T.textMuted}`:"none",
+                    opacity:inc.status==="Dismissed"?0.6:1}}
+                  onMouseEnter={e=>e.currentTarget.style.background=inc.status==="Resolved"?"#16a34a12":isExp?`${T.accent}06`:T.bgHover}
+                  onMouseLeave={e=>e.currentTarget.style.background=inc.status==="Resolved"?"#16a34a07":isExp?`${T.accent}06`:"transparent"}>
+                  <td style={{padding:"10px 14px",maxWidth:220}}>
+                    <div style={{fontSize:13,fontWeight:700,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:2}}>{inc.title}</div>
+                    {linkedTC&&<div style={{fontSize:11,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{linkedTC.name}</div>}
+                  </td>
+                  <td style={{padding:"10px 14px"}}><span style={{fontSize:11.5,...mono,color:T.textSub,whiteSpace:"nowrap"}}>{inc.table}{inc.col?`.${inc.col}`:""}</span></td>
+                  <td style={{padding:"10px 14px",fontSize:11.5,...mono,color:T.textMuted,whiteSpace:"nowrap"}}>{inc.opened}</td>
+                  <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
+                    <button onClick={()=>setActionModal({id:inc.id,newStatus:null,desc:""})} style={{fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:6,background:sCfg.bg,color:sCfg.color,border:`1.5px solid ${sCfg.color}45`,whiteSpace:"nowrap",cursor:"pointer",transition:"all .12s",display:"inline-flex",alignItems:"center",gap:5}} onMouseEnter={e=>{e.currentTarget.style.background=`${sCfg.color}20`;e.currentTarget.style.borderColor=sCfg.color;}} onMouseLeave={e=>{e.currentTarget.style.background=sCfg.bg;e.currentTarget.style.borderColor=`${sCfg.color}45`;}}>{sCfg.label}<svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{opacity:.7}}><path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+                  </td>
+                  <td style={{padding:"10px 14px"}}><DQSeverityBadge severity={inc.severity}/></td>
+                  <td style={{padding:"10px 14px"}}>{inc.assignee?<span style={{fontSize:12,color:T.textSub,fontWeight:500}}>{inc.assignee}</span>:<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>Unassigned</span>}</td>
+                </tr>
+                {isExp&&(
+                  <tr style={{borderBottom:i<filtered.length-1?`1px solid ${T.border}`:"none"}}>
+                    <td colSpan={6} style={{padding:0}}>
+                      <div style={{background:T.bgElevated,borderTop:`1px solid ${T.border}`}}>
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0}}>
+                          <div style={{padding:"16px 20px",borderRight:`1px solid ${T.border}`}}>
+                            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:.6,marginBottom:8,textTransform:"uppercase"}}>Root Cause</div>
+                            {inc.desc?<div style={{fontSize:12.5,color:T.textSub,lineHeight:1.7}}>{inc.desc}</div>:<div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>Not yet provided.</div>}
+                          </div>
+                          <div style={{padding:"16px 20px"}}>
+                            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:.6,marginBottom:8,textTransform:"uppercase"}}>{inc.status==="Resolved"?"Resolution Note":inc.status==="Dismissed"?"Dismissal Note":"Description"}</div>
+                            {(inc.status==="Resolved"||inc.status==="Dismissed")&&inc.resolutionReason?<div style={{fontSize:12.5,color:T.textSub,lineHeight:1.7,padding:"10px 12px",background:inc.status==="Resolved"?"#16a34a08":T.bgSurface,borderRadius:8,border:`1px solid ${inc.status==="Resolved"?"#16a34a22":T.border}`}}>{inc.resolutionReason}</div>:<div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>—</div>}
+                          </div>
+                        </div>
+                        {/* Downstream impact (lineage) */}
+                        <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`}}>
+                          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:.6,marginBottom:8,textTransform:"uppercase"}}>Downstream Impact</div>
+                          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                            {obsDownstream(tbl).map((d,k)=>(
+                              <div key={k} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 11px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8}}>
+                                <span style={{fontSize:9,color:T.textMuted}}>↳</span>
+                                <span style={{...mono,fontSize:12,color:T.text}}>{d.name}</span>
+                                <span style={{fontSize:10.5,color:T.textMuted}}>· {d.type}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            );
           })}
         </tbody>
       </table>
+      {filtered.length===0&&(
+        <div style={{textAlign:"center",padding:"56px 0"}}>
+          <div style={{fontSize:42,marginBottom:12,opacity:.15}}>✓</div>
+          <div style={{fontSize:14,fontWeight:600,color:T.textSub,marginBottom:4}}>No incidents found</div>
+          <div style={{fontSize:12.5,color:T.textMuted}}>No incidents match the current filters.</div>
+        </div>
+      )}
     </Card2>
 
-    {/* Incident detail drawer */}
-    {selInc&&createPortal(
-      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:900,backdropFilter:"blur(3px)"}} onClick={()=>{setSel(null);setAction(null);}}>
-        <div onClick={e=>e.stopPropagation()} className="slideIn" style={{position:"absolute",top:0,right:0,bottom:0,width:540,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
-          {/* header */}
-          <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexShrink:0,background:T.bgElevated}}>
-            <div>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                <DQSeverityBadge severity={selInc.severity}/>
-                {(()=>{const c=OBS_INC_CFG[selInc.status]||OBS_INC_CFG.Open;return <span style={{fontSize:11,fontWeight:700,padding:"2px 9px",borderRadius:6,background:c.bg,color:c.color,border:`1px solid ${c.color}28`}}>{c.label}</span>;})()}
-              </div>
-              <div style={{fontSize:15,fontWeight:700,color:T.text}}>{selInc.title}</div>
-              <div style={{fontSize:11.5,color:T.textMuted,marginTop:3,...mono}}>{selInc.table}{selInc.col?"."+selInc.col:""} · opened {selInc.opened}</div>
+    {/* ── Status action modal (same as Data Quality section) ── */}
+    {actionModal&&(()=>{
+      const inc=incidents.find(i=>i.id===actionModal.id);
+      if(!inc) return null;
+      const sCfg=OBS_INC_CFG[inc.status]||{label:inc.status,color:T.textMuted,bg:T.bgElevated};
+      const nextStates=OBS_INC_NEXT[inc.status]||[];
+      const terminalTarget=actionModal.newStatus==="Resolved"||actionModal.newStatus==="Dismissed";
+      const noDescNeeded=actionModal.newStatus==="In Progress"||actionModal.newStatus==="Open";
+      const canSubmit=actionModal.newStatus&&(noDescNeeded||actionModal.desc.trim().length>0);
+      const submit=()=>{
+        if(!canSubmit) return;
+        const ns=actionModal.newStatus;
+        const tl=[...(inc.timeline||[]),{action:ns==="In Progress"?"Moved to In Review":ns==="Open"?"Re-opened":ns,by:"You",at:"Just now",note:actionModal.desc.trim()||undefined}];
+        setIncidents(prev=>prev.map(i=>i.id===inc.id?{...i,status:ns,resolutionReason:terminalTarget?actionModal.desc.trim():i.resolutionReason,timeline:tl}:i));
+        setStatusF("all");setActionModal(null);
+        onToast&&onToast(`Incident moved to ${OBS_INC_CFG[ns]?.label||ns}`,"success");
+      };
+      return createPortal(
+        <>
+          <div onClick={()=>setActionModal(null)} style={{position:"fixed",inset:0,zIndex:1100,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}/>
+          <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:1101,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:16,boxShadow:"0 32px 80px rgba(0,0,0,.45)",width:400,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${T.border}`}}>
+              <span style={{fontSize:14,fontWeight:700,color:T.text}}>Update Status</span>
+              <button onClick={()=>setActionModal(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:4,display:"flex",borderRadius:6}}>{Ic.x(13)}</button>
             </div>
-            <button onClick={()=>{setSel(null);setAction(null);}} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.x(11)}</button>
-          </div>
-          {/* body */}
-          <div style={{flex:1,overflowY:"auto",padding:"18px 20px",display:"flex",flexDirection:"column",gap:18}}>
-            <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6}}>{selInc.desc}</div>
-
-            {/* lineage impact radius */}
-            <div>
-              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:8,textTransform:"uppercase"}}>Downstream Impact</div>
-              <div style={{padding:"10px 12px",background:T.roseDim,border:`1px solid ${T.rose}28`,borderRadius:9,marginBottom:8,fontSize:11.5,color:T.rose,fontWeight:600}}>⚠ {downstream.length} downstream asset{downstream.length!==1?"s":""} may be affected</div>
-              <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                {downstream.map((d,k)=>(
-                  <div key={k} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
-                    <span style={{fontSize:9,color:T.textMuted}}>↳</span>
-                    <span style={{...mono,fontSize:12,color:T.text,flex:1}}>{d.name}</span>
-                    <span style={{fontSize:10.5,color:T.textMuted}}>{d.type}</span>
-                    <span style={{fontSize:10.5,color:T.textMuted}}>· {d.svc}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* root cause + resolution */}
-            {selInc.rootCause&&<div><div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:6,textTransform:"uppercase"}}>Root Cause</div><div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6,padding:"10px 12px",background:T.bgElevated,borderRadius:9,border:`1px solid ${T.border}`}}>{selInc.rootCause}</div></div>}
-            {selInc.resolutionReason&&<div><div style={{fontSize:10.5,fontWeight:700,color:"#16a34a",letterSpacing:.5,marginBottom:6,textTransform:"uppercase"}}>Resolution</div><div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6,padding:"10px 12px",background:"#16a34a0c",borderRadius:9,border:`1px solid #16a34a28`}}>{selInc.resolutionReason}</div></div>}
-
-            {/* timeline */}
-            <div>
-              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:10,textTransform:"uppercase"}}>Timeline</div>
-              <div style={{display:"flex",flexDirection:"column",gap:0}}>
-                {(selInc.timeline||[]).map((ev,k)=>(
-                  <div key={k} style={{display:"flex",gap:11,paddingBottom:14,position:"relative"}}>
-                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0}}>
-                      <span style={{width:9,height:9,borderRadius:"50%",background:T.accent,marginTop:3}}/>
-                      {k<(selInc.timeline.length-1)&&<span style={{width:1.5,flex:1,background:T.border,marginTop:2}}/>}
-                    </div>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:12.5,color:T.text,fontWeight:500}}>{ev.action}</div>
-                      <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{ev.by} · {ev.at}</div>
-                      {ev.note&&<div style={{fontSize:11.5,color:T.textSub,marginTop:4,padding:"6px 9px",background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`}}>{ev.note}</div>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* inline action form */}
-            {action&&(
-              <div style={{padding:"14px 16px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10}}>
-                <div style={{fontSize:12.5,fontWeight:700,color:T.text,marginBottom:10}}>{action.type==="assign"?"Assign incident":"Resolve incident"}</div>
-                {action.type==="assign"&&(
-                  <select value={action.assignee||""} onChange={e=>setAction(a=>({...a,assignee:e.target.value}))}
-                    style={{width:"100%",boxSizing:"border-box",padding:"8px 10px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,marginBottom:10,outline:"none"}}>
-                    <option value="">Select assignee…</option>
-                    {OBS_OWNERS.map(o=><option key={o} value={o}>{o}</option>)}
-                  </select>
-                )}
-                <textarea value={action.desc} onChange={e=>setAction(a=>({...a,desc:e.target.value}))} rows={3} placeholder={action.type==="assign"?"Add a note (optional)":"Resolution reason (required)"}
-                  style={{width:"100%",boxSizing:"border-box",padding:"9px 11px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",resize:"vertical",fontFamily:"inherit"}}/>
-                <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:10}}>
-                  <Btn small ghost onClick={()=>setAction(null)}>Cancel</Btn>
-                  <Btn small disabled={action.type==="assign"?!action.assignee:!action.desc.trim()}
-                    onClick={()=>{
-                      if(action.type==="assign"){applyStatus(selInc,selInc.status==="Open"?"In Progress":selInc.status,action.desc.trim(),action.assignee);onToast&&onToast(`Assigned to ${action.assignee}`,"success");}
-                      else{applyStatus(selInc,"Resolved",action.desc.trim());onToast&&onToast("Incident resolved","success");}
-                      setAction(null);
-                    }}>{action.type==="assign"?"Assign":"Resolve"}</Btn>
+            <div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:18}}>
+              <div>
+                <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:6}}>Incident</div>
+                <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:5}}>{inc.title}</div>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontSize:11,color:T.textMuted}}>Current status:</span>
+                  <span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:5,background:sCfg.bg,color:sCfg.color,border:`1px solid ${sCfg.color}28`}}>{sCfg.label}</span>
                 </div>
               </div>
-            )}
-          </div>
-          {/* footer actions */}
-          {!action&&(
-            <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,flexShrink:0,flexWrap:"wrap"}}>
-              {(selInc.status==="Open")&&<Btn small ghost onClick={()=>{applyStatus(selInc,"In Progress");onToast&&onToast("Incident acknowledged","success");}}>Acknowledge</Btn>}
-              {selInc.status!=="Resolved"&&selInc.status!=="Dismissed"&&<Btn small ghost onClick={()=>setAction({type:"assign",desc:"",assignee:""})}>Assign</Btn>}
-              {selInc.status!=="Resolved"&&selInc.status!=="Dismissed"&&<Btn small onClick={()=>setAction({type:"resolve",desc:""})}>Resolve</Btn>}
-              <div style={{flex:1}}/>
-              <Btn small ghost onClick={()=>{onNav&&onNav("observability");onToast&&onToast("Open Alerts to create a subscription for this asset","success");}}>Create alert</Btn>
+              <div>
+                <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Move to</div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  {nextStates.map(ns=>{
+                    const nc=OBS_INC_CFG[ns]||{label:ns,color:T.textMuted,bg:T.bgElevated};
+                    const sel=actionModal.newStatus===ns;
+                    return <button key={ns} onClick={()=>setActionModal(p=>({...p,newStatus:ns}))} style={{padding:"7px 16px",borderRadius:8,border:`2px solid ${sel?nc.color:T.border}`,background:sel?nc.bg:"transparent",color:sel?nc.color:T.textSub,fontSize:12.5,fontWeight:sel?700:500,cursor:"pointer",transition:"all .12s"}}>{nc.label}</button>;
+                  })}
+                </div>
+              </div>
+              {!noDescNeeded&&(
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:6}}>Description <span style={{color:T.rose,fontWeight:700}}>*</span></div>
+                  <textarea value={actionModal.desc} onChange={e=>setActionModal(p=>({...p,desc:e.target.value}))} rows={3} placeholder={terminalTarget?"Describe the outcome — required to close this incident…":"Provide context for this status change…"}
+                    style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${actionModal.desc.trim()?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12.5,lineHeight:1.6,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box"}}/>
+                  {!actionModal.desc.trim()&&<div style={{fontSize:11,color:T.rose,marginTop:4}}>Required to proceed.</div>}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </div>
-    ,document.body)}
+            <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8}}>
+              <button onClick={()=>setActionModal(null)} style={{padding:"8px 18px",borderRadius:8,background:"none",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer"}}>Cancel</button>
+              <button onClick={submit} disabled={!canSubmit} style={{padding:"8px 20px",borderRadius:8,background:canSubmit?T.accent:"rgba(99,102,241,.3)",border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:canSubmit?"pointer":"not-allowed"}}>Submit →</button>
+            </div>
+          </div>
+        </>
+      ,document.body);
+    })()}
   </div>;
 };
+
 
 // ── Alert / EventSubscription wizard (used by ObsView) ───────────────────────
 const ALERT_SOURCES=["Table","Test Case","Test Suite","Pipeline","Container"];
@@ -12052,16 +12128,8 @@ const AssetObservabilityTab = ({asset,onToast,onNav})=>{
   ];
   const RANGES=["Last 7 days","Last 14 days","Last 30 days","Last 60 days"];
 
-  // Health-loop summary — Measure → Assert → Alert → Resolve
-  const steps=[
-    {target:"table",   phase:"Measure", title:"Profile",   dot:"Success", line:`${cols.length||asset.columns||10} columns · 100% sampled`},
-    {target:"quality", phase:"Assert",  title:"Tests",     dot:fail?"Failed":abort?"Aborted":"Success", line:`${pass} passing${fail?` · ${fail} failing`:abort?` · ${abort} aborted`:""}`},
-    {target:"alerts",  phase:"Alert",   title:"Alerts",    dot:"Success", line:`2 active subscriptions`},
-    {target:"incidents",phase:"Resolve",title:"Incidents", dot:openIncs?"Failed":"Success", line:openIncs?`${openIncs} open`:"none open"},
-  ];
-
   return <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:16}}>
-    {/* Row 1 — sub-tabs (left) + date range (right), OpenMetadata layout */}
+    {/* Sub-tabs (left) + date range (right) — OpenMetadata layout */}
     <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",gap:14,flexWrap:"wrap",borderBottom:`1px solid ${T.border}`}}>
       <div style={{display:"flex",gap:2}}>
         {subs.map(t=>(
@@ -12079,25 +12147,6 @@ const AssetObservabilityTab = ({asset,onToast,onNav})=>{
           {RANGES.map(r=><option key={r} value={r}>{r}</option>)}
         </select>
       </div>
-    </div>
-
-    {/* Health-loop summary ribbon (the connected loop, at a glance) */}
-    <div style={{display:"flex",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
-      {steps.map((s,i)=>{
-        const active=sub===s.target;
-        return (
-          <button key={s.target} onClick={()=>s.target==="alerts"?(onNav&&onNav("observability")):setSub(s.target)}
-            style={{flex:1,minWidth:0,padding:"15px 18px",background:active?T.bgElevated:"transparent",border:"none",borderLeft:i>0?`1px solid ${T.border}`:"none",borderTop:active?`2px solid ${T.accent}`:"2px solid transparent",cursor:"pointer",textAlign:"left",transition:"background .12s",display:"flex",flexDirection:"column",gap:7}}
-            onMouseEnter={e=>{if(!active)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!active)e.currentTarget.style.background="transparent";}}>
-            <span style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".11em"}}>{s.phase}</span>
-            <span style={{display:"flex",alignItems:"center",gap:8}}>
-              <DQStatusDot status={s.dot} size={9}/>
-              <span style={{fontSize:14.5,fontWeight:700,color:T.text}}>{s.title}</span>
-            </span>
-            <span style={{fontSize:11.5,color:T.textSub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.line}</span>
-          </button>
-        );
-      })}
     </div>
 
     {/* sub content */}
@@ -14372,7 +14421,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
 
   const tabs=[
     {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},{key:"lineage",label:"Lineage"},
-    {key:"observability",label:"Data Observability"},{key:"usage",label:"Usage"},
+    {key:"observability",label:"Observability"},{key:"usage",label:"Usage"},
     {key:"activity",label:"Audit Logs"},
   ];
 
