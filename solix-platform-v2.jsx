@@ -11540,32 +11540,51 @@ const PolicyChip = ({link,onNav,compact})=>{
 
 // Small profile-stat card (Row Count, Column Count, etc.)
 const ObsStat = ({icon,label,value,sub,color})=>(
-  <div style={{flex:1,minWidth:0,padding:"14px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,display:"flex",alignItems:"center",gap:12}}>
-    <div style={{width:36,height:36,borderRadius:9,background:(color||T.blue)+"18",display:"flex",alignItems:"center",justifyContent:"center",color:color||T.blue,flexShrink:0}}>{icon}</div>
+  <div style={{flex:"1 1 0",minWidth:150,padding:"15px 18px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,display:"flex",alignItems:"center",gap:13}}>
+    <div style={{width:38,height:38,borderRadius:10,background:(color||T.blue)+"18",display:"flex",alignItems:"center",justifyContent:"center",color:color||T.blue,flexShrink:0}}>{icon}</div>
     <div style={{minWidth:0}}>
-      <div style={{fontSize:20,fontWeight:800,color:T.text,fontFamily:"'Geist Mono',monospace",lineHeight:1.1}}>{value}</div>
-      <div style={{fontSize:11,color:T.textMuted,marginTop:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{label}{sub?<span style={{opacity:.7}}> · {sub}</span>:null}</div>
+      <div style={{fontSize:21,fontWeight:800,color:T.text,fontFamily:"'Geist Mono',monospace",lineHeight:1.1,whiteSpace:"nowrap"}}>{value}</div>
+      <div style={{fontSize:11,fontWeight:600,color:T.textMuted,marginTop:4}}>{label}{sub?<span style={{fontWeight:400,opacity:.75}}> · {sub}</span>:null}</div>
     </div>
   </div>
 );
 
-// Area chart for the Data Volume view (line + filled area; HTML labels below)
-const ObsAreaChart = ({data})=>{
+// Area chart for the Data Volume view — y-axis ticks, gridlines, gradient fill, x labels
+const ObsAreaChart = ({data,labels,color})=>{
   if(!data||data.length<2) return null;
-  const w=1000,h=210;
+  const c=color||T.blue;
+  const w=1000,h=200;
   const max=Math.max(...data),min=Math.min(...data);
-  const top=max+(max-min||max*0.1)*0.25, bot=Math.max(0,min-(max-min||max*0.1)*0.25);
+  const pad=(max-min)||max*0.1||1;
+  const top=max+pad*0.3, bot=Math.max(0,min-pad*0.3);
   const span=(top-bot)||1;
-  const x=i=>(i/(data.length-1))*(w-24)+12;
-  const y=v=>h-((v-bot)/span)*(h-24)-12;
+  const x=i=>(i/(data.length-1))*(w-12)+6;
+  const y=v=>h-((v-bot)/span)*(h-20)-10;
   const line=data.map((v,i)=>`${i===0?"M":"L"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
   const area=`${line} L${x(data.length-1).toFixed(1)},${h} L${x(0).toFixed(1)},${h} Z`;
+  const ticks=[top,(top*2+bot)/3,(top+bot*2)/3,bot];
+  const gid="obsg"+Math.round(top);
+  const mono={fontFamily:"'Geist Mono',monospace"};
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} preserveAspectRatio="none" style={{display:"block"}}>
-      {[0.25,0.5,0.75].map(g=><line key={g} x1="0" x2={w} y1={h*g} y2={h*g} stroke={T.border} strokeWidth="1" strokeDasharray="4 5"/>)}
-      <path d={area} fill={T.blue} opacity="0.10"/>
-      <path d={line} fill="none" stroke={T.blue} strokeWidth="2" vectorEffect="non-scaling-stroke"/>
-    </svg>
+    <div style={{display:"flex",gap:10}}>
+      {/* y axis */}
+      <div style={{display:"flex",flexDirection:"column",justifyContent:"space-between",height:h,flexShrink:0,paddingTop:2,paddingBottom:2}}>
+        {ticks.map((t,i)=><span key={i} style={{...mono,fontSize:10,color:T.textMuted,lineHeight:1}}>{obsFmtCount(Math.round(t))}</span>)}
+      </div>
+      <div style={{flex:1,minWidth:0}}>
+        <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} preserveAspectRatio="none" style={{display:"block"}}>
+          <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={c} stopOpacity="0.22"/><stop offset="100%" stopColor={c} stopOpacity="0.01"/>
+          </linearGradient></defs>
+          {ticks.map((t,i)=><line key={i} x1="0" x2={w} y1={y(t)} y2={y(t)} stroke={T.border} strokeWidth="1" strokeDasharray="3 6"/>)}
+          <path d={area} fill={`url(#${gid})`}/>
+          <path d={line} fill="none" stroke={c} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke"/>
+        </svg>
+        {labels&&<div style={{display:"flex",justifyContent:"space-between",marginTop:8,fontSize:10,color:T.textMuted,...mono}}>
+          {labels.map((l,i)=><span key={i}>{l}</span>)}
+        </div>}
+      </div>
+    </div>
   );
 };
 
@@ -11608,11 +11627,8 @@ const TableProfilePanel = ({asset})=>{
             <span style={{fontSize:11.5,color:T.textMuted}}>Row Count</span>
           </div>
         </div>
-        <div style={{...mono,fontSize:22,fontWeight:800,color:T.text,marginBottom:8}}>{obsFmtCount(series[series.length-1])}</div>
-        <ObsAreaChart data={series}/>
-        <div style={{display:"flex",justifyContent:"space-between",marginTop:8,fontSize:10.5,color:T.textMuted,...mono}}>
-          {dates.map(d=><span key={d}>{d}</span>)}
-        </div>
+        <div style={{...mono,fontSize:24,fontWeight:800,color:T.text,marginBottom:14}}>{obsFmtCount(series[series.length-1])}</div>
+        <ObsAreaChart data={series} labels={dates}/>
       </div>
     </Card2>
     {/* profiler config (read-only — the "measurement layer" story) */}
@@ -12036,45 +12052,53 @@ const AssetObservabilityTab = ({asset,onToast,onNav})=>{
   ];
   const RANGES=["Last 7 days","Last 14 days","Last 30 days","Last 60 days"];
 
-  // The loop strip — Measure → Assert → Alert → Resolve
+  // Health-loop summary — Measure → Assert → Alert → Resolve
   const steps=[
-    {target:"table",   phase:"1 · Measure", title:"Profile",   dot:"Success", line:`${cols.length||asset.columns||10} columns · 100% sampled`},
-    {target:"quality", phase:"2 · Assert",  title:"Tests",     dot:fail?"Failed":abort?"Aborted":"Success", line:`${pass} passing${fail?` · ${fail} failing`:""}`},
-    {target:"alerts",  phase:"3 · Alert",   title:"Alerts",    dot:"Success", line:`2 active subscriptions`},
-    {target:"incidents",phase:"4 · Resolve",title:"Incidents", dot:openIncs?"Failed":"Success", line:openIncs?`${openIncs} open`:"none open"},
+    {target:"table",   phase:"Measure", title:"Profile",   dot:"Success", line:`${cols.length||asset.columns||10} columns · 100% sampled`},
+    {target:"quality", phase:"Assert",  title:"Tests",     dot:fail?"Failed":abort?"Aborted":"Success", line:`${pass} passing${fail?` · ${fail} failing`:abort?` · ${abort} aborted`:""}`},
+    {target:"alerts",  phase:"Alert",   title:"Alerts",    dot:"Success", line:`2 active subscriptions`},
+    {target:"incidents",phase:"Resolve",title:"Incidents", dot:openIncs?"Failed":"Success", line:openIncs?`${openIncs} open`:"none open"},
   ];
 
   return <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:16}}>
-    {/* loop strip + date range */}
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
-      <div style={{display:"flex",alignItems:"stretch",flex:1,minWidth:520,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
-        {steps.map((s,i)=>(
-          <React.Fragment key={s.target}>
-            <button onClick={()=>s.target==="alerts"?(onNav&&onNav("observability")):setSub(s.target)}
-              style={{flex:1,minWidth:0,padding:"12px 14px",background:(sub===s.target)?T.bgElevated:"transparent",border:"none",borderBottom:`2px solid ${sub===s.target?T.accent:"transparent"}`,cursor:"pointer",textAlign:"left",transition:"background .12s"}}
-              onMouseEnter={e=>{if(sub!==s.target)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(sub!==s.target)e.currentTarget.style.background="transparent";}}>
-              <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".08em",marginBottom:5}}>{s.phase}</div>
-              <div style={{display:"flex",alignItems:"center",gap:7}}>
-                <DQStatusDot status={s.dot} size={8}/>
-                <span style={{fontSize:13,fontWeight:700,color:T.text}}>{s.title}</span>
-              </div>
-              <div style={{fontSize:10.5,color:T.textMuted,marginTop:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.line}</div>
-            </button>
-            {i<steps.length-1&&<div style={{display:"flex",alignItems:"center",padding:"0 2px",color:T.textMuted,fontSize:14}}>→</div>}
-          </React.Fragment>
+    {/* Row 1 — sub-tabs (left) + date range (right), OpenMetadata layout */}
+    <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",gap:14,flexWrap:"wrap",borderBottom:`1px solid ${T.border}`}}>
+      <div style={{display:"flex",gap:2}}>
+        {subs.map(t=>(
+          <button key={t.key} onClick={()=>setSub(t.key)}
+            style={{padding:"9px 16px",background:"transparent",border:"none",borderBottom:`2px solid ${sub===t.key?T.accent:"transparent"}`,color:sub===t.key?T.text:T.textMuted,fontSize:13,fontWeight:sub===t.key?700:500,cursor:"pointer",marginBottom:-1,transition:"all .12s",whiteSpace:"nowrap"}}
+            onMouseEnter={e=>{if(sub!==t.key)e.currentTarget.style.color=T.textSub;}} onMouseLeave={e=>{if(sub!==t.key)e.currentTarget.style.color=T.textMuted;}}>
+            {t.label}
+          </button>
         ))}
       </div>
-      <div style={{display:"flex",alignItems:"center",gap:8}}>
-        <span style={{fontSize:11.5,color:T.textMuted}}>Date:</span>
+      <div style={{display:"flex",alignItems:"center",gap:8,paddingBottom:8}}>
+        <span style={{fontSize:11.5,color:T.textMuted}}>Date</span>
         <select value={range} onChange={e=>setRange(e.target.value)}
-          style={{padding:"7px 10px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",cursor:"pointer"}}>
+          style={{padding:"6px 10px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",cursor:"pointer"}}>
           {RANGES.map(r=><option key={r} value={r}>{r}</option>)}
         </select>
       </div>
     </div>
 
-    {/* sub tabs */}
-    <Tabs2 pill tabs={subs} active={sub} onChange={setSub}/>
+    {/* Health-loop summary ribbon (the connected loop, at a glance) */}
+    <div style={{display:"flex",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden"}}>
+      {steps.map((s,i)=>{
+        const active=sub===s.target;
+        return (
+          <button key={s.target} onClick={()=>s.target==="alerts"?(onNav&&onNav("observability")):setSub(s.target)}
+            style={{flex:1,minWidth:0,padding:"15px 18px",background:active?T.bgElevated:"transparent",border:"none",borderLeft:i>0?`1px solid ${T.border}`:"none",borderTop:active?`2px solid ${T.accent}`:"2px solid transparent",cursor:"pointer",textAlign:"left",transition:"background .12s",display:"flex",flexDirection:"column",gap:7}}
+            onMouseEnter={e=>{if(!active)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!active)e.currentTarget.style.background="transparent";}}>
+            <span style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".11em"}}>{s.phase}</span>
+            <span style={{display:"flex",alignItems:"center",gap:8}}>
+              <DQStatusDot status={s.dot} size={9}/>
+              <span style={{fontSize:14.5,fontWeight:700,color:T.text}}>{s.title}</span>
+            </span>
+            <span style={{fontSize:11.5,color:T.textSub,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.line}</span>
+          </button>
+        );
+      })}
+    </div>
 
     {/* sub content */}
     {sub==="table"     && <TableProfilePanel asset={asset}/>}
@@ -15673,11 +15697,11 @@ const ObsView = ({onToast})=>{
         <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}>
           <Btn small ghost icon={Ic.refresh(12)}>Refresh</Btn>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
-          <Metric label="Total Pipelines" value={String(pipelines.length)} color={T.blue}/>
-          <Metric label="Healthy" value={String(pipelines.filter(p=>p.status==="passing").length)} color={T.green}/>
-          <Metric label="Warnings" value={String(pipelines.filter(p=>p.status==="warning").length)} color={T.amber}/>
-          <Metric label="Failing" value={String(pipelines.filter(p=>p.status==="failing").length)} color={T.red}/>
+        <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
+          <ObsStat color="#3b82f6" label="Total Pipelines" value={String(pipelines.length)} icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="4" cy="4" r="2" stroke="currentColor" strokeWidth="1.3"/><circle cx="12" cy="12" r="2" stroke="currentColor" strokeWidth="1.3"/><path d="M6 4h4a2 2 0 012 2v4" stroke="currentColor" strokeWidth="1.3"/></svg>}/>
+          <ObsStat color="#16a34a" label="Healthy" value={String(pipelines.filter(p=>p.status==="passing").length)} icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5l3 3 6-6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}/>
+          <ObsStat color="#f59e0b" label="Warnings" value={String(pipelines.filter(p=>p.status==="warning").length)} icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2l6 11H2L8 2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M8 7v3M8 11.5v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>}/>
+          <ObsStat color={T.rose} label="Failing" value={String(pipelines.filter(p=>p.status==="failing").length)} icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3"/><path d="M6 6l4 4M10 6l-4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>}/>
         </div>
         <Card2 style={{overflow:"hidden",padding:0}}>
           <DataTable cols={[
@@ -15688,7 +15712,7 @@ const ObsView = ({onToast})=>{
             {key:"runs",label:"Runs/day",render:v=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.textMuted}}>{v}</span>},
             {key:"failures",label:"Failures",render:v=><span style={{color:v>0?T.red:T.green,fontFamily:"'Geist Mono',monospace",fontSize:12}}>{v}</span>},
             {key:"last",label:"Last Run",render:v=><span style={{fontSize:11,color:T.textMuted}}>{v}</span>},
-            {key:"name",label:"",render:()=><Btn small ghost>Logs</Btn>},
+            {key:"logs",label:"",render:()=><Btn small ghost>Logs</Btn>},
           ]} rows={pipelines}/>
         </Card2>
       </>}
