@@ -12226,13 +12226,14 @@ const AssetObservabilityTab = ({asset,onToast,onNav})=>{
 //   · Quality · SLA · Terms of Use · Status), attached to a table asset.
 // ═══════════════════════════════════════════════════════════════════════════
 const CONTRACT_STATUS = {
-  Active:   {label:"Active",   color:"#16a34a",   bg:"#16a34a14", border:"#16a34a40"},
-  Violated: {label:"Violated", color:T.rose,      bg:T.roseDim,   border:`${T.rose}40`},
-  Draft:    {label:"Draft",    color:T.amber,     bg:T.amberDim,  border:`${T.amber}40`},
+  Draft:      {label:"Draft",     color:T.amber,     bg:T.amberDim,  border:`${T.amber}40`},
+  "In Review":{label:"In Review", color:T.blue,      bg:`${T.blue}1a`,border:`${T.blue}55`},
+  Active:     {label:"Active",    color:"#16a34a",   bg:"#16a34a14", border:"#16a34a40"},
+  Violated:   {label:"Violated",  color:T.rose,      bg:T.roseDim,   border:`${T.rose}40`},
 };
 const CONTRACT_BY_ASSET = {
   orders:{
-    name:"orders_contract", version:"2.1.0", status:"Violated", owners:["maya.chen","dev.patel"],
+    name:"orders_contract", version:"2.1.0", status:"Violated", owners:["maya.chen","dev.patel"], approvedBy:"sarah.kim",
     description:"Governance agreement for the commerce.orders fact table between the Commerce data team (producer) and Finance/BI consumers.",
     updated:"2d ago", lastRun:"Today, 05:30 AM",
     schema:[
@@ -12242,57 +12243,109 @@ const CONTRACT_BY_ASSET = {
       {name:"status",type:"VARCHAR",constraint:"IN allowed set",required:true},
       {name:"created_at",type:"TIMESTAMP",constraint:"NOT NULL",required:true},
     ],
+    // semantics carry a `key` so validation can check the asset's live metadata
     semantics:[
-      {rule:"Owners must be set",pass:true},
-      {rule:"Description required",pass:true},
-      {rule:"Domain assigned",pass:true},
-      {rule:"Tier defined",pass:true},
+      {key:"owners",rule:"Owners must be set"},
+      {key:"description",rule:"Description required"},
+      {key:"domain",rule:"Domain assigned"},
+      {key:"tier",rule:"Tier defined"},
     ],
-    security:{classification:"PII",policy:"Customer Data Policy",access:"Restricted — authorized roles only",pass:true},
+    security:{classification:"PII",policy:"Customer Data Policy",access:"Restricted — authorized roles only"},
+    // quality assertions link to live DQ test cases by id — pass is computed from the test's real status
     quality:[
-      {name:"order_id unique",pass:true},
-      {name:"customer_id not null",pass:true},
-      {name:"total_amount in range 0–100,000",pass:true},
-      {name:"status in allowed set",pass:false},
-      {name:"row count 50k–80k",pass:false},
+      {tcId:"tc14",name:"order_id unique"},
+      {tcId:"tc4", name:"customer_id not null"},
+      {tcId:"tc1", name:"total_amount in range 0–100,000"},
+      {tcId:"tc3", name:"status in allowed set"},
+      {tcId:"tc2", name:"row count 50k–80k"},
     ],
     sla:{refresh:"Daily",availability:"08:00 UTC",latency:"≤ 2 hours",retention:"365 days"},
     terms:{allowed:["Internal analytics","Reporting","Business intelligence"],disallowed:["Third-party sharing","External redistribution","AI model training"],compliance:["GDPR","SOC2"]},
     history:[
-      {at:"Today, 05:30 AM",result:"Violated",note:"2 quality tests failed (status set, row count)"},
-      {at:"Yesterday, 05:30 AM",result:"Active",note:"All validations passed"},
-      {at:"Jun 6, 05:30 AM",result:"Active",note:"All validations passed"},
+      {at:"Today, 05:30 AM",by:"system",action:"Validation run",result:"Violated",note:"Failed: Quality (status set, row count)"},
+      {at:"3d ago",by:"sarah.kim",action:"Approved",result:"Active",note:"Approved & activated v2.1.0"},
+      {at:"3d ago",by:"maya.chen",action:"Submitted for review",note:"Awaiting approver sign-off"},
+      {at:"4d ago",by:"maya.chen",action:"New version v2.1.0 drafted"},
     ],
   },
 };
 
+// ── Session persistence: contracts live in a module store, seeded from the mocks ──
+const CONTRACT_STORE = {};
+const getStoredContract = (name)=>{
+  if(!(name in CONTRACT_STORE)) CONTRACT_STORE[name]=CONTRACT_BY_ASSET[name]?JSON.parse(JSON.stringify(CONTRACT_BY_ASSET[name])):null;
+  return CONTRACT_STORE[name];
+};
+
+// ── Live validation: checks the contract against the asset's real metadata + tests ──
+function validateContract(contract,asset){
+  const assetCols=(typeof ASSET_COLUMNS!=="undefined" && ASSET_COLUMNS[asset.name])||[];
+  const liveCases=(typeof DQ_TEST_CASES!=="undefined"?DQ_TEST_CASES:[]).filter(t=>t.table.endsWith("."+asset.name)||t.table===asset.name);
+  const schema=(contract.schema||[]).map(c=>({...c,exists:assetCols.length===0||assetCols.includes(c.name)}));
+  const schemaPass=schema.every(c=>!c.required||c.exists);
+  const semantics=(contract.semantics||[]).map(s=>{
+    let pass=s.pass!==false;
+    if(s.key==="owners")      pass=!!((asset.owners&&asset.owners.length)||asset.owner);
+    else if(s.key==="description") pass=!!(asset.description&&asset.description.length>5);
+    else if(s.key==="domain") pass=!!asset.domain;
+    else if(s.key==="tier")   pass=asset.tier!=null;
+    else if(s.key==="tags")   pass=!!(asset.tags&&asset.tags.length);
+    return {...s,pass};
+  });
+  const cls=contract.security?.classification;
+  const needsSensitive=["PII","Confidential","Restricted","PHI"].includes(cls);
+  const secPass=needsSensitive ? (asset.tags||[]).some(t=>/PII|sensitive|GDPR|PHI|PCI|confidential/i.test(t)) : true;
+  const quality=(contract.quality||[]).map(q=>{
+    const tc=q.tcId&&liveCases.find(t=>t.id===q.tcId);
+    return {...q, pass: tc ? tc.status==="Success" : (q.pass!==false), status: tc?tc.status:null};
+  });
+  const sections={Schema:schemaPass,Semantics:semantics.every(s=>s.pass),Security:secPass,Quality:quality.every(q=>q.pass),SLA:true,"Terms of Use":true};
+  const failedSections=Object.entries(sections).filter(([,v])=>!v).map(([k])=>k);
+  return {schema,semantics,security:{...contract.security,pass:secPass},quality,sections,failedSections,allPass:failedSections.length===0};
+}
+
+const CONTRACT_LIFECYCLE_HELP = {
+  Draft:      "Editable. Live validation is previewed below. Submit for review when ready — contracts must be approved before they're enforced.",
+  "In Review":"Awaiting approver sign-off. Approving runs validation and activates the contract; requesting changes returns it to Draft.",
+  Active:     "Enforced. Run Now re-validates schema, semantics, security and quality against the live asset. Editing the definition requires re-approval.",
+  Violated:   "One or more validations are failing (see red sections). Fix the underlying data/tests or revise the contract, then re-validate.",
+};
+
 const AssetContractTab = ({asset,onToast})=>{
   const mono={fontFamily:"'Geist Mono',monospace"};
-  const [contract,setContract]=useState(()=>CONTRACT_BY_ASSET[asset.name]?{...CONTRACT_BY_ASSET[asset.name]}:null);
-  const [wizard,setWizard]=useState(false);
+  const [contract,setContractState]=useState(()=>getStoredContract(asset.name));
+  const [wizard,setWizard]=useState(false);   // false | "create" | "edit"
   const [running,setRunning]=useState(false);
+  const [reviewModal,setReviewModal]=useState(null); // {action:"approve"|"reject", note}
+  const setContract=(u)=>setContractState(prev=>{const next=typeof u==="function"?u(prev):u; CONTRACT_STORE[asset.name]=next; return next;});
+  const addHist=(c,entry)=>({...c,history:[{at:"Just now",by:"You",...entry},...(c.history||[])]});
 
-  const sectionPass=(c)=>({
-    Schema:true,
-    Semantics:(c.semantics||[]).every(s=>s.pass),
-    Security:c.security?.pass!==false,
-    Quality:(c.quality||[]).every(q=>q.pass),
-    SLA:true,
-    "Terms of Use":true,
-  });
   const runValidation=()=>{
-    if(!contract) return;
     setRunning(true);
     setTimeout(()=>{
-      const sp=sectionPass(contract);
-      const ok=Object.values(sp).every(Boolean);
-      const status=ok?"Active":"Violated";
-      const failed=Object.entries(sp).filter(([,v])=>!v).map(([k])=>k);
-      setContract(c=>({...c,status,lastRun:"Just now",history:[{at:"Just now",result:status,note:ok?"All validations passed":`Failed: ${failed.join(", ")}`},...(c.history||[])]}));
+      const res=validateContract(contract,asset);
+      const status=res.allPass?"Active":"Violated";
+      setContract(c=>addHist({...c,status,lastRun:"Just now"},{action:"Validation run",result:status,note:res.allPass?"All sections passed":`Failed: ${res.failedSections.join(", ")}`}));
       setRunning(false);
-      onToast&&onToast(ok?"Contract validation passed":"Contract validation failed — status set to Violated",ok?"success":"error");
-    },1200);
+      onToast&&onToast(res.allPass?"Validation passed — contract is Active":"Validation failed — contract is Violated",res.allPass?"success":"error");
+    },1100);
   };
+  const submitForReview=()=>{ setContract(c=>addHist({...c,status:"In Review"},{action:"Submitted for review",note:"Awaiting approver sign-off"})); onToast&&onToast("Submitted for review","success"); };
+  const doApprove=(note)=>{
+    const res=validateContract(contract,asset);
+    const status=res.allPass?"Active":"Violated";
+    setContract(c=>addHist({...c,status,lastRun:"Just now",approvedBy:"You"},{action:"Approved",result:status,note:note||(res.allPass?"Approved & activated":"Approved — validation failed, marked Violated")}));
+    setReviewModal(null);
+    onToast&&onToast(res.allPass?"Contract approved & activated":"Approved, but validation failed — Violated",res.allPass?"success":"error");
+  };
+  const doReject=(note)=>{ setContract(c=>addHist({...c,status:"Draft"},{action:"Changes requested",note:note||"Returned to Draft"})); setReviewModal(null); onToast&&onToast("Changes requested — back to Draft","success"); };
+  const newVersion=()=>{
+    const parts=(contract.version||"1.0.0").split(".").map(n=>parseInt(n)||0);
+    const nv=`${parts[0]}.${parts[1]+1}.0`;
+    setContract(c=>addHist({...c,version:nv,status:"Draft"},{action:`New version v${nv} drafted`,note:"Revise and resubmit for approval"}));
+    onToast&&onToast(`Drafted v${nv}`,"success");
+  };
+  const saveEdit=(updated)=>{ setContract(c=>addHist({...updated,version:contract.version,history:contract.history,status:"Draft"},{action:"Contract edited",note:"Edits require re-approval — status set to Draft"})); setWizard(false); onToast&&onToast("Contract updated — re-approval required","success"); };
 
   // ── Empty state ──
   if(!contract) return (
@@ -12302,15 +12355,34 @@ const AssetContractTab = ({asset,onToast})=>{
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M7 3h7l5 5v13a0 0 0 01 0 0H7a2 2 0 01-2-2V5a2 2 0 012-2z" stroke="currentColor" strokeWidth="1.6"/><path d="M13 3v6h6M9 13l2 2 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </div>
         <div style={{fontSize:16,fontWeight:700,color:T.text,marginBottom:6}}>No data contract yet</div>
-        <div style={{fontSize:13,color:T.textMuted,lineHeight:1.6,marginBottom:20}}>A data contract formalizes the agreement between producers and consumers — schema, semantics, security, quality, SLAs and terms of use — and is continuously validated.</div>
-        <Btn variant="primary" icon={Ic.plus(13)} onClick={()=>setWizard(true)}>Add Contract</Btn>
+        <div style={{fontSize:13,color:T.textMuted,lineHeight:1.6,marginBottom:20}}>A data contract formalizes the agreement between producers and consumers — schema, semantics, security, quality, SLAs and terms of use — and is continuously validated. New contracts start as a Draft and must be approved before enforcement.</div>
+        <Btn variant="primary" icon={Ic.plus(13)} onClick={()=>setWizard("create")}>Add Contract</Btn>
       </div>
-      {wizard&&<ContractWizard asset={asset} onClose={()=>setWizard(false)} onCreate={(c)=>{setContract(c);setWizard(false);onToast&&onToast(`Contract “${c.name}” created as Draft`,"success");}}/>}
+      {wizard&&<ContractWizard asset={asset} onClose={()=>setWizard(false)} onSubmit={(c)=>{setContract(c);setWizard(false);onToast&&onToast(`Contract “${c.name}” created as Draft`,"success");}}/>}
     </>
   );
 
-  const sp=sectionPass(contract);
+  const v=validateContract(contract,asset);
+  const sp=v.sections;
   const sc=CONTRACT_STATUS[contract.status]||CONTRACT_STATUS.Draft;
+  const status=contract.status;
+  // lifecycle action bar (contextual to status)
+  const actionBar=(()=>{
+    if(status==="Draft") return [
+      <Btn key="e" small ghost onClick={()=>setWizard("edit")}>Edit</Btn>,
+      <Btn key="s" small variant="primary" onClick={submitForReview}>Submit for Review →</Btn>,
+    ];
+    if(status==="In Review") return [
+      <Btn key="r" small ghost onClick={()=>setReviewModal({action:"reject",note:""})}>Request Changes</Btn>,
+      <Btn key="a" small variant="primary" onClick={()=>setReviewModal({action:"approve",note:""})}>Approve &amp; Activate</Btn>,
+    ];
+    return [
+      <Btn key="e" small ghost onClick={()=>setWizard("edit")}>Edit</Btn>,
+      <Btn key="nv" small ghost onClick={newVersion}>New Version</Btn>,
+      <Btn key="run" small variant="primary" disabled={running} onClick={runValidation}>{running?"Running…":"Run Now"}</Btn>,
+    ];
+  })();
+
   const Section=({title,pass,children,action})=>(
     <Card2><div style={{padding:"15px 18px"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
@@ -12340,15 +12412,31 @@ const AssetContractTab = ({asset,onToast})=>{
             <span style={{fontSize:11,...mono,color:T.textMuted}}>v{contract.version}</span>
           </div>
           <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6,maxWidth:680}}>{contract.description}</div>
-          <div style={{fontSize:11,color:T.textMuted,marginTop:8}}>Owners: <span style={{color:T.textSub}}>{(contract.owners||[]).join(", ")}</span> · Last validated: {contract.lastRun}</div>
+          <div style={{fontSize:11,color:T.textMuted,marginTop:8}}>Owners: <span style={{color:T.textSub}}>{(contract.owners||[]).join(", ")}</span>{contract.approvedBy?<> · Approved by <span style={{color:T.textSub}}>{contract.approvedBy}</span></>:null} · Last validated: {contract.lastRun}</div>
         </div>
-        <div style={{display:"flex",gap:8,flexShrink:0}}>
-          <Btn small ghost onClick={()=>onToast&&onToast("Contract editor coming soon","success")}>Edit</Btn>
-          <Btn small variant="primary" disabled={running} onClick={runValidation}>{running?"Running…":"Run Now"}</Btn>
-        </div>
+        <div style={{display:"flex",gap:8,flexShrink:0,flexWrap:"wrap"}}>{actionBar}</div>
       </div>
-      {/* validation chips */}
-      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:14}}>
+
+      {/* lifecycle state machine */}
+      <div style={{display:"flex",alignItems:"center",gap:0,marginTop:16,marginBottom:4}}>
+        {["Draft","In Review",status==="Violated"?"Violated":"Active"].map((st,i,arr)=>{
+          const c=CONTRACT_STATUS[st];
+          const on=status===st;
+          const done=(["Draft","In Review","Active","Violated"].indexOf(status))>=(["Draft","In Review","Active","Violated"].indexOf(st));
+          return <React.Fragment key={st}>
+            <div style={{display:"flex",alignItems:"center",gap:7}}>
+              <span style={{width:20,height:20,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,background:on?c.color:done?`${c.color}22`:T.bgElevated,color:on?"#fff":done?c.color:T.textMuted,border:`1px solid ${on||done?c.color:T.border}`}}>{i+1}</span>
+              <span style={{fontSize:11.5,fontWeight:on?700:500,color:on?c.color:T.textMuted}}>{c.label}</span>
+            </div>
+            {i<arr.length-1&&<div style={{flex:1,minWidth:24,height:1.5,background:done&&status!==st?CONTRACT_STATUS[arr[i+1]]?.color+"55":T.border,margin:"0 10px"}}/>}
+          </React.Fragment>;
+        })}
+      </div>
+      <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.5,marginTop:8,padding:"9px 12px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>{CONTRACT_LIFECYCLE_HELP[status]}</div>
+
+      {/* live validation chips */}
+      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginTop:12}}>
+        <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.5,marginRight:2}}>Live validation</span>
         {["Schema","Semantics","Security","Quality","SLA","Terms of Use"].map(s=>{
           const ok=sp[s];
           return <div key={s} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 11px",borderRadius:7,background:ok?"#16a34a0e":T.roseDim,border:`1px solid ${ok?"#16a34a33":T.rose+"33"}`}}>
@@ -12367,9 +12455,9 @@ const AssetContractTab = ({asset,onToast})=>{
           {["Column","Data Type","Constraint","Required"].map(h=><th key={h} style={{padding:"7px 10px",fontSize:10,fontWeight:700,color:T.textMuted,textAlign:"left",textTransform:"uppercase",letterSpacing:.5}}>{h}</th>)}
         </tr></thead>
         <tbody>
-          {contract.schema.map((c,i)=>(
-            <tr key={c.name} style={{borderBottom:i<contract.schema.length-1?`1px solid ${T.border}`:"none"}}>
-              <td style={{padding:"8px 10px",...mono,fontSize:12,fontWeight:600,color:T.text}}>{c.name}</td>
+          {v.schema.map((c,i)=>(
+            <tr key={c.name} style={{borderBottom:i<v.schema.length-1?`1px solid ${T.border}`:"none"}}>
+              <td style={{padding:"8px 10px",...mono,fontSize:12,fontWeight:600,color:T.text}}>{c.name}{c.required&&!c.exists&&<span style={{fontSize:9.5,fontWeight:700,color:T.rose,marginLeft:7,padding:"1px 6px",borderRadius:4,background:T.roseDim,border:`1px solid ${T.rose}33`}}>MISSING</span>}</td>
               <td style={{padding:"8px 10px",...mono,fontSize:11.5,color:T.blue}}>{c.type}</td>
               <td style={{padding:"8px 10px",fontSize:11.5,color:T.textSub}}>{c.constraint}</td>
               <td style={{padding:"8px 10px"}}>{c.required?<span style={{fontSize:10.5,fontWeight:700,color:"#16a34a"}}>Required</span>:<span style={{fontSize:10.5,color:T.textMuted}}>Optional</span>}</td>
@@ -12382,19 +12470,22 @@ const AssetContractTab = ({asset,onToast})=>{
     {/* ── 2 & 4: Quality + Semantics ── */}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
       <Section title="4 · Quality Assertions" pass={sp.Quality}>
+        <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>Linked to live data-quality test cases — status reflects the latest run.</div>
         <div style={{display:"flex",flexDirection:"column",gap:7}}>
-          {contract.quality.map((qa,i)=>(
+          {v.quality.length===0&&<div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No quality tests attached.</div>}
+          {v.quality.map((qa,i)=>(
             <div key={i} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 10px",background:T.bgElevated,borderRadius:8,border:`1px solid ${qa.pass?T.border:T.rose+"33"}`}}>
               <span style={{color:qa.pass?"#16a34a":T.rose,display:"flex",flexShrink:0}}>{qa.pass?<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5l3 3 6-6.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>}</span>
-              <span style={{fontSize:12.5,color:T.text}}>{qa.name}</span>
+              <span style={{fontSize:12.5,color:T.text,flex:1}}>{qa.name}</span>
+              {qa.status&&<span style={{fontSize:10,fontWeight:700,color:qa.status==="Success"?"#16a34a":qa.status==="Failed"?T.rose:T.amber}}>{qa.status}</span>}
             </div>
           ))}
         </div>
       </Section>
       <Section title="2 · Semantics" pass={sp.Semantics}>
-        <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>Mandatory business-metadata governance rules.</div>
+        <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>Mandatory metadata — validated against this asset's live metadata.</div>
         <div style={{display:"flex",flexDirection:"column",gap:7}}>
-          {contract.semantics.map((s,i)=>(
+          {v.semantics.map((s,i)=>(
             <div key={i} style={{display:"flex",alignItems:"center",gap:9}}>
               <span style={{color:s.pass?"#16a34a":T.rose,display:"flex"}}>{s.pass?<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5l3 3 6-6.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>}</span>
               <span style={{fontSize:12.5,color:T.textSub}}>{s.rule}</span>
@@ -12443,54 +12534,88 @@ const AssetContractTab = ({asset,onToast})=>{
     <Section title="7 · Status & Validation History">
       <div style={{display:"flex",flexDirection:"column",gap:0}}>
         {(contract.history||[]).map((h,i)=>{
-          const c=CONTRACT_STATUS[h.result]||CONTRACT_STATUS.Draft;
-          return <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"9px 0",borderBottom:i<contract.history.length-1?`1px solid ${T.border}`:"none"}}>
-            <span style={{fontSize:11,fontWeight:700,padding:"2px 9px",borderRadius:5,background:c.bg,color:c.color,border:`1px solid ${c.border}`,minWidth:70,textAlign:"center"}}>{c.label}</span>
-            <span style={{fontSize:12,...mono,color:T.textMuted,minWidth:140}}>{h.at}</span>
-            <span style={{fontSize:12,color:T.textSub}}>{h.note}</span>
+          const c=h.result?(CONTRACT_STATUS[h.result]||CONTRACT_STATUS.Draft):null;
+          return <div key={i} style={{display:"flex",alignItems:"flex-start",gap:11,padding:"10px 0",borderBottom:i<contract.history.length-1?`1px solid ${T.border}`:"none"}}>
+            <span style={{width:7,height:7,borderRadius:"50%",background:c?c.color:T.textMuted,marginTop:5,flexShrink:0}}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{h.action||h.note}</span>
+                {c&&<span style={{fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:5,background:c.bg,color:c.color,border:`1px solid ${c.border}`}}>{c.label}</span>}
+              </div>
+              {h.action&&h.note&&<div style={{fontSize:11.5,color:T.textSub,marginTop:2}}>{h.note}</div>}
+              <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{h.by||"system"} · {h.at}</div>
+            </div>
           </div>;
         })}
       </div>
     </Section>
+
+    {/* ── Edit wizard ── */}
+    {wizard&&<ContractWizard asset={asset} existing={wizard==="edit"?contract:null} onClose={()=>setWizard(false)} onSubmit={(c)=>{ wizard==="edit"?saveEdit(c):setContract(c); setWizard(false); }}/>}
+
+    {/* ── Approve / Request-changes modal ── */}
+    {reviewModal&&createPortal(
+      <>
+        <div onClick={()=>setReviewModal(null)} style={{position:"fixed",inset:0,zIndex:1100,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:1101,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:16,boxShadow:"0 32px 80px rgba(0,0,0,.45)",width:420,overflow:"hidden"}}>
+          <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,fontSize:14,fontWeight:700,color:T.text}}>{reviewModal.action==="approve"?"Approve & Activate":"Request Changes"}</div>
+          <div style={{padding:"18px 20px"}}>
+            <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6,marginBottom:14}}>{reviewModal.action==="approve"?"Approving runs validation against the live asset and activates the contract. If any section fails it will be marked Violated.":"This returns the contract to Draft so the producer can revise it."}</div>
+            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Note {reviewModal.action==="reject"&&<span style={{color:T.rose}}>*</span>}</div>
+            <textarea value={reviewModal.note} onChange={e=>setReviewModal(m=>({...m,note:e.target.value}))} rows={3} placeholder={reviewModal.action==="approve"?"Optional approval note…":"Reason for requesting changes…"}
+              style={{width:"100%",boxSizing:"border-box",padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",resize:"vertical",fontFamily:"inherit"}}/>
+          </div>
+          <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8}}>
+            <Btn small ghost onClick={()=>setReviewModal(null)}>Cancel</Btn>
+            {reviewModal.action==="approve"
+              ? <Btn small variant="primary" onClick={()=>doApprove(reviewModal.note.trim())}>Approve &amp; Activate</Btn>
+              : <Btn small variant="primary" disabled={!reviewModal.note.trim()} onClick={()=>doReject(reviewModal.note.trim())}>Request Changes</Btn>}
+          </div>
+        </div>
+      </>
+    ,document.body)}
   </div>;
 };
 
-// Add-contract wizard (UI-based, no YAML — mirrors OpenMetadata)
+// Add/Edit-contract wizard (UI-based, no YAML — mirrors OpenMetadata)
 const CONTRACT_SEMANTIC_RULES=["Owners must be set","Description required","Domain assigned","Tier defined","Tags present"];
+const SEMANTIC_KEY={"Owners must be set":"owners","Description required":"description","Domain assigned":"domain","Tier defined":"tier","Tags present":"tags"};
 const CONTRACT_COMPLIANCE=["GDPR","HIPAA","SOC2","PCI-DSS","CCPA"];
-const ContractWizard = ({asset,onClose,onCreate})=>{
+const ContractWizard = ({asset,existing,onClose,onSubmit})=>{
   const cols=(typeof ASSET_COLUMNS!=="undefined" && ASSET_COLUMNS[asset.name])||[];
   const assetCases=(typeof DQ_TEST_CASES!=="undefined"?DQ_TEST_CASES:[]).filter(t=>t.table.endsWith("."+asset.name)||t.table===asset.name);
+  const isEdit=!!existing;
   const [step,setStep]=useState(0);
-  const [name,setName]=useState(`${asset.name}_contract`);
-  const [desc,setDesc]=useState("");
-  const [schemaCols,setSchemaCols]=useState(cols.slice(0,5));
-  const [semantics,setSemantics]=useState(["Owners must be set","Description required"]);
-  const [classification,setClassification]=useState("Internal");
-  const [quality,setQuality]=useState(assetCases.slice(0,4).map(t=>t.id));
-  const [refresh,setRefresh]=useState("Daily");
-  const [latency,setLatency]=useState("≤ 4 hours");
-  const [compliance,setCompliance]=useState(["GDPR"]);
+  const [name,setName]=useState(existing?.name||`${asset.name}_contract`);
+  const [desc,setDesc]=useState(existing?.description||"");
+  const [schemaCols,setSchemaCols]=useState(existing?existing.schema.map(c=>c.name):cols.slice(0,5));
+  const [semantics,setSemantics]=useState(existing?existing.semantics.map(s=>s.rule):["Owners must be set","Description required"]);
+  const [classification,setClassification]=useState(existing?.security?.classification||"Internal");
+  const [quality,setQuality]=useState(existing?existing.quality.map(q=>q.tcId).filter(Boolean):assetCases.slice(0,4).map(t=>t.id));
+  const [refresh,setRefresh]=useState(existing?.sla?.refresh||"Daily");
+  const [latency,setLatency]=useState(existing?.sla?.latency||"≤ 4 hours");
+  const [compliance,setCompliance]=useState(existing?.terms?.compliance||["GDPR"]);
   const steps=["Basics","Schema","Semantics & Security","Quality","SLA & Terms"];
   const toggle=(arr,set,v)=>set(arr.includes(v)?arr.filter(x=>x!==v):[...arr,v]);
   const Lbl=({children})=><div style={{fontSize:11,fontWeight:700,color:T.textSub,marginBottom:8}}>{children}</div>;
   const Pill=({active,onClick,children})=><button onClick={onClick} style={{padding:"6px 13px",borderRadius:99,fontSize:12,fontWeight:active?600:400,cursor:"pointer",background:active?T.accent:T.bgElevated,color:active?"#fff":T.textSub,border:`1px solid ${active?T.accent:T.border}`}}>{children}</button>;
   const canNext=step===0?!!name.trim():true;
   const create=()=>{
-    onCreate({
-      name:name.trim(),version:"1.0.0",status:"Draft",owners:asset.owners||[asset.owner].filter(Boolean),
-      description:desc.trim()||`Data contract for ${asset.name}.`,updated:"Just now",lastRun:"Not yet run",
-      schema:schemaCols.map(c=>({name:c,type:"—",constraint:"NOT NULL",required:true})),
-      semantics:semantics.map(r=>({rule:r,pass:true})),
-      security:{classification,policy:`${asset.name} Access Policy`,access:"Restricted — authorized roles only",pass:true},
-      quality:assetCases.filter(t=>quality.includes(t.id)).map(t=>({name:t.name,pass:t.status==="Success"})),
-      sla:{refresh,availability:"08:00 UTC",latency,retention:"365 days"},
-      terms:{allowed:["Internal analytics","Reporting"],disallowed:["Third-party sharing","External redistribution"],compliance},
-      history:[{at:"Just now",result:"Draft",note:"Contract created — not yet validated"}],
+    const exCol=(c)=>existing?.schema?.find(s=>s.name===c);
+    onSubmit({
+      name:name.trim(),version:existing?.version||"1.0.0",status:"Draft",owners:existing?.owners||asset.owners||[asset.owner].filter(Boolean),
+      description:desc.trim()||`Data contract for ${asset.name}.`,updated:"Just now",lastRun:existing?.lastRun||"Not yet run",
+      schema:schemaCols.map(c=>({name:c,type:exCol(c)?.type||"—",constraint:exCol(c)?.constraint||"NOT NULL",required:true})),
+      semantics:semantics.map(r=>({key:SEMANTIC_KEY[r],rule:r})),
+      security:{classification,policy:existing?.security?.policy||`${asset.name} Access Policy`,access:"Restricted — authorized roles only"},
+      quality:assetCases.filter(t=>quality.includes(t.id)).map(t=>({tcId:t.id,name:t.name})),
+      sla:{refresh,availability:existing?.sla?.availability||"08:00 UTC",latency,retention:existing?.sla?.retention||"365 days"},
+      terms:existing?.terms?{...existing.terms,compliance}:{allowed:["Internal analytics","Reporting"],disallowed:["Third-party sharing","External redistribution"],compliance},
+      history:existing?existing.history:[{at:"Just now",by:"You",action:"Contract created",note:"Draft — submit for review to enforce"}],
     });
   };
   return (
-    <Modal open={true} onClose={onClose} title={`New Data Contract · ${asset.name}`} width={600}>
+    <Modal open={true} onClose={onClose} title={`${isEdit?"Edit":"New"} Data Contract · ${asset.name}`} width={600}>
       <div style={{display:"flex",alignItems:"center",gap:0,marginBottom:20}}>
         {steps.map((s,i)=>(
           <React.Fragment key={s}>
@@ -12550,7 +12675,7 @@ const ContractWizard = ({asset,onClose,onCreate})=>{
         <Btn small ghost onClick={()=>step===0?onClose():setStep(step-1)}>{step===0?"Cancel":"← Back"}</Btn>
         {step<steps.length-1
           ? <Btn small disabled={!canNext} onClick={()=>canNext&&setStep(step+1)}>Next →</Btn>
-          : <Btn small variant="primary" onClick={create}>Create Contract</Btn>}
+          : <Btn small variant="primary" onClick={create}>{isEdit?"Save Changes":"Create Contract"}</Btn>}
       </div>
     </Modal>
   );
