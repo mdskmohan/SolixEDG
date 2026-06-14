@@ -708,9 +708,9 @@ const REGULATIONS = [
    requirements:[{id:"CC6.1",  title:"Logical access security measures",     linked:true},{id:"CC6.2",  title:"New user access provisioning",          linked:true},{id:"A1.2",   title:"System availability monitoring",        linked:false}]},
   {id:"ccpa",  name:"CCPA",  fullName:"California Consumer Privacy Act",          region:"US-CA",score:91,status:"Compliant",   controls:12,passing:11,lastAudit:"3d ago",linkedPolicies:[1],
    requirements:[{id:"§1798.100",title:"Right to know about data collected",  linked:true},{id:"§1798.105",title:"Right to deletion",                   linked:true},{id:"§1798.120",title:"Right to opt-out of data sale",         linked:false}]},
-  {id:"hipaa", name:"HIPAA", fullName:"Health Insurance Portability Act",          region:"US",   score:78,status:"In Progress", controls:20,passing:16,lastAudit:"2w ago",linkedPolicies:[],
+  {id:"hipaa", name:"HIPAA", fullName:"Health Insurance Portability and Accountability Act",          region:"US",   score:78,status:"In Progress", controls:20,passing:16,lastAudit:"2w ago",linkedPolicies:[],
    requirements:[{id:"164.308", title:"Administrative safeguards",            linked:false},{id:"164.312", title:"Technical safeguards",                linked:false},{id:"164.514", title:"De-identification of PHI",            linked:false}]},
-  {id:"pci",   name:"PCI DSS",fullName:"Payment Card Industry Data Security Std",region:"Global",score:96,status:"Compliant",   controls:15,passing:15,lastAudit:"1d ago",linkedPolicies:[4],
+  {id:"pci",   name:"PCI DSS",fullName:"Payment Card Industry Data Security Standard",region:"Global",score:96,status:"Compliant",   controls:15,passing:15,lastAudit:"1d ago",linkedPolicies:[4],
    requirements:[{id:"Req.7",   title:"Restrict access to system components",  linked:true},{id:"Req.8",   title:"Identify users and authenticate access",linked:true}]},
 ];
 
@@ -2597,6 +2597,23 @@ const Tabs2 = ({tabs,active,onChange,pill})=>{
   );
 };
 
+
+// Segmented control tabs — same style as Settings › Teams & Users
+const SegTabs = ({tabs,active,onChange})=>(
+  <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,width:"fit-content",flexWrap:"wrap"}}>
+    {tabs.map(t=>{
+      const k=typeof t==="string"?t:t.key;
+      const label=typeof t==="string"?t:t.label;
+      const on=active===k;
+      return (
+        <button key={k} onClick={()=>onChange(k)} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 14px",borderRadius:6,fontSize:12,fontWeight:on?700:500,cursor:"pointer",transition:"all .12s",background:on?T.bgSurface:"transparent",border:on?`1px solid ${T.border}`:"1px solid transparent",color:on?T.text:T.textMuted,boxShadow:on?"0 1px 3px rgba(0,0,0,.08)":"none",whiteSpace:"nowrap"}}>
+          {label}
+          {t.count!=null&&<span style={{fontSize:10,background:on?T.accent:T.bgHover,color:on?"#fff":T.textMuted,padding:"0 5px",borderRadius:99,minWidth:16,textAlign:"center"}}>{t.count}</span>}
+        </button>
+      );
+    })}
+  </div>
+);
 
 // ─────────────────────────────────────────────
 // NOTIFICATIONS + USER MENU + DOCBOT DATA
@@ -5506,27 +5523,27 @@ const CatFieldDropdown = ({label, required, options, selected, onChange, placeho
 };
 
 const REGS_META = [
-  {id:"gdpr",name:"GDPR",enabled:true,fullName:"General Data Protection Regulation",jurisdiction:"EU",type:"Privacy",industry:"All",effective:"2018-05-25",penalty:"€20M or 4% global revenue",covers:["Personal data","Special categories","Behavioral data"],score:68,status:"Partial",lastAudit:"2026-03-01",requirements:[{id:"gdpr-art5",ref:"Art. 5",title:"Data minimisation — collect only what is necessary",linkedPolicies:[]},{id:"gdpr-art5b",ref:"Art. 5(b)",title:"Purpose limitation — data used only as declared",linkedPolicies:[]},{id:"gdpr-art5e",ref:"Art. 5(e)",title:"Storage limitation — enforce retention periods",linkedPolicies:[]},{id:"gdpr-art17",ref:"Art. 17",title:"Right to erasure — honour deletion requests within 30 days",linkedPolicies:[]},{id:"gdpr-art32",ref:"Art. 32",title:"Security of processing — technical controls documented",linkedPolicies:[]},{id:"gdpr-art30",ref:"Art. 30",title:"Records of processing activities maintained",linkedPolicies:[]}]},
-  {id:"ukgdpr",name:"UK GDPR",enabled:true,fullName:"UK General Data Protection Regulation",jurisdiction:"UK",type:"Privacy",industry:"All",effective:"2021-01-01",penalty:"£17.5M or 4% global revenue",covers:["Personal data","Special categories"],score:70,status:"Partial",lastAudit:"2026-03-15",requirements:[{id:"ukgdpr-1",ref:"Art. 5",title:"Lawful basis for processing — documented and maintained",linkedPolicies:[]},{id:"ukgdpr-2",ref:"Art. 13-14",title:"Transparency — privacy notices provided to data subjects",linkedPolicies:[]},{id:"ukgdpr-3",ref:"Art. 25",title:"Data protection by design and by default",linkedPolicies:[]},{id:"ukgdpr-4",ref:"Art. 35",title:"Data Protection Impact Assessment for high-risk processing",linkedPolicies:[]},{id:"ukgdpr-5",ref:"Art. 33",title:"Breach notification — 72-hour reporting to ICO",linkedPolicies:[]}]},
-  {id:"ccpa",name:"CCPA / CPRA",enabled:true,fullName:"California Consumer Privacy Act / Privacy Rights Act",jurisdiction:"US-CA",type:"Privacy",industry:"All",effective:"2020-01-01",penalty:"$7,500 per intentional violation",covers:["Personal information","Sensitive personal information","Consumer data"],score:74,status:"Partial",lastAudit:"2026-01-20",requirements:[{id:"ccpa-1",ref:"§1798.100",title:"Right to know — disclose personal data collected",linkedPolicies:[]},{id:"ccpa-2",ref:"§1798.105",title:"Right to delete — honour deletion requests",linkedPolicies:[]},{id:"ccpa-3",ref:"§1798.120",title:"Right to opt-out — do not sell or share personal information",linkedPolicies:[]},{id:"ccpa-4",ref:"§1798.150",title:"Data breach liability — reasonable security measures required",linkedPolicies:[]},{id:"ccpa-5",ref:"§1798.100(d)",title:"Sensitive personal information — limit use and disclosure",linkedPolicies:[]}]},
-  {id:"lgpd",name:"LGPD",enabled:false,fullName:"Lei Geral de Proteção de Dados (Brazil)",jurisdiction:"Brazil",type:"Privacy",industry:"All",effective:"2020-09-18",penalty:"R$50M or 2% Brazil revenue",covers:["Personal data","Sensitive data","Children's data"],score:45,status:"Not Started",lastAudit:null,requirements:[{id:"lgpd-1",ref:"Art. 6",title:"Legal basis for processing — one of 10 bases required",linkedPolicies:[]},{id:"lgpd-2",ref:"Art. 18",title:"Data subject rights — access, correction, deletion",linkedPolicies:[]},{id:"lgpd-3",ref:"Art. 46",title:"Security measures — technical controls to protect personal data",linkedPolicies:[]},{id:"lgpd-4",ref:"Art. 48",title:"Breach notification — ANPD and affected parties notified",linkedPolicies:[]}]},
-  {id:"pipl",name:"PIPL",enabled:false,fullName:"Personal Information Protection Law (China)",jurisdiction:"China",type:"Privacy",industry:"All",effective:"2021-11-01",penalty:"¥50M or 5% prior year revenue",covers:["Personal information","Sensitive personal information","Biometric data"],score:40,status:"Not Started",lastAudit:null,requirements:[{id:"pipl-1",ref:"Art. 13",title:"Legal basis — consent or other lawful basis required",linkedPolicies:[]},{id:"pipl-2",ref:"Art. 17",title:"Notice — inform individuals of processing purpose and method",linkedPolicies:[]},{id:"pipl-3",ref:"Art. 28",title:"Sensitive data — heightened consent for biometric, health, financial data",linkedPolicies:[]},{id:"pipl-4",ref:"Art. 38",title:"Cross-border transfer — security assessment required",linkedPolicies:[]},{id:"pipl-5",ref:"Art. 51",title:"Organisational measures — DPO designated for large-scale processing",linkedPolicies:[]}]},
+  {id:"gdpr",name:"GDPR",enabled:true,fullName:"General Data Protection Regulation",jurisdiction:"EU",type:"Privacy",industry:"All",effective:"2018-05-25",penalty:"€20M or 4% global revenue",covers:["Personal data","Special categories","Behavioral data"],score:68,status:"Partial",lastAudit:"2026-03-01",requirements:[{id:"gdpr-art5",ref:"Art. 5(1)(c)",title:"Data minimisation — collect only what is necessary",linkedPolicies:[]},{id:"gdpr-art5b",ref:"Art. 5(1)(b)",title:"Purpose limitation — data used only as declared",linkedPolicies:[]},{id:"gdpr-art5e",ref:"Art. 5(1)(e)",title:"Storage limitation — enforce retention periods",linkedPolicies:[]},{id:"gdpr-art17",ref:"Art. 17",title:"Right to erasure — honour deletion requests without undue delay (within one month)",linkedPolicies:[]},{id:"gdpr-art32",ref:"Art. 32",title:"Security of processing — technical controls documented",linkedPolicies:[]},{id:"gdpr-art30",ref:"Art. 30",title:"Records of processing activities maintained",linkedPolicies:[]}]},
+  {id:"ukgdpr",name:"UK GDPR",enabled:true,fullName:"UK General Data Protection Regulation",jurisdiction:"UK",type:"Privacy",industry:"All",effective:"2021-01-01",penalty:"£17.5M or 4% global revenue",covers:["Personal data","Special categories"],score:70,status:"Partial",lastAudit:"2026-03-15",requirements:[{id:"ukgdpr-1",ref:"Art. 6",title:"Lawful basis for processing — documented and maintained",linkedPolicies:[]},{id:"ukgdpr-2",ref:"Art. 13-14",title:"Transparency — privacy notices provided to data subjects",linkedPolicies:[]},{id:"ukgdpr-3",ref:"Art. 25",title:"Data protection by design and by default",linkedPolicies:[]},{id:"ukgdpr-4",ref:"Art. 35",title:"Data Protection Impact Assessment for high-risk processing",linkedPolicies:[]},{id:"ukgdpr-5",ref:"Art. 33",title:"Breach notification — 72-hour reporting to ICO",linkedPolicies:[]}]},
+  {id:"ccpa",name:"CCPA / CPRA",enabled:true,fullName:"California Consumer Privacy Act / Privacy Rights Act",jurisdiction:"US-CA",type:"Privacy",industry:"All",effective:"2020-01-01 (CPRA: 2023-01-01)",penalty:"$7,500 per intentional violation",covers:["Personal information","Sensitive personal information","Consumer data"],score:74,status:"Partial",lastAudit:"2026-01-20",requirements:[{id:"ccpa-1",ref:"§1798.100",title:"Right to know — disclose personal data collected",linkedPolicies:[]},{id:"ccpa-2",ref:"§1798.105",title:"Right to delete — honour deletion requests",linkedPolicies:[]},{id:"ccpa-3",ref:"§1798.120",title:"Right to opt-out — do not sell or share personal information",linkedPolicies:[]},{id:"ccpa-4",ref:"§1798.150",title:"Data breach liability — reasonable security measures required",linkedPolicies:[]},{id:"ccpa-5",ref:"§1798.121",title:"Sensitive personal information — limit use and disclosure",linkedPolicies:[]}]},
+  {id:"lgpd",name:"LGPD",enabled:false,fullName:"Lei Geral de Proteção de Dados (Brazil)",jurisdiction:"Brazil",type:"Privacy",industry:"All",effective:"2020-09-18",penalty:"R$50M or 2% Brazil revenue",covers:["Personal data","Sensitive data","Children's data"],score:45,status:"Not Started",lastAudit:null,requirements:[{id:"lgpd-1",ref:"Art. 7",title:"Legal basis for processing — one of 10 bases required",linkedPolicies:[]},{id:"lgpd-2",ref:"Art. 18",title:"Data subject rights — access, correction, deletion",linkedPolicies:[]},{id:"lgpd-3",ref:"Art. 46",title:"Security measures — technical controls to protect personal data",linkedPolicies:[]},{id:"lgpd-4",ref:"Art. 48",title:"Breach notification — ANPD and affected parties notified",linkedPolicies:[]}]},
+  {id:"pipl",name:"PIPL",enabled:false,fullName:"Personal Information Protection Law (China)",jurisdiction:"China",type:"Privacy",industry:"All",effective:"2021-11-01",penalty:"¥50M or 5% prior year revenue",covers:["Personal information","Sensitive personal information","Biometric data"],score:40,status:"Not Started",lastAudit:null,requirements:[{id:"pipl-1",ref:"Art. 13",title:"Legal basis — consent or other lawful basis required",linkedPolicies:[]},{id:"pipl-2",ref:"Art. 17",title:"Notice — inform individuals of processing purpose and method",linkedPolicies:[]},{id:"pipl-3",ref:"Art. 28",title:"Sensitive data — heightened consent for biometric, health, financial data",linkedPolicies:[]},{id:"pipl-4",ref:"Art. 38",title:"Cross-border transfer — security assessment required",linkedPolicies:[]},{id:"pipl-5",ref:"Art. 52",title:"Organisational measures — DPO designated for large-scale processing",linkedPolicies:[]}]},
   {id:"pipeda",name:"PIPEDA",enabled:false,fullName:"Personal Information Protection and Electronic Documents Act",jurisdiction:"Canada",type:"Privacy",industry:"All",effective:"2001-01-01",penalty:"CAD $100,000 per violation",covers:["Personal information","Employee data","Health information"],score:60,status:"Partial",lastAudit:null,requirements:[{id:"pipeda-1",ref:"Sched 1 §4.1",title:"Accountability — designated person responsible for compliance",linkedPolicies:[]},{id:"pipeda-2",ref:"Sched 1 §4.3",title:"Consent — meaningful consent obtained for collection and use",linkedPolicies:[]},{id:"pipeda-3",ref:"Sched 1 §4.5",title:"Limiting use — data used only for stated purpose",linkedPolicies:[]},{id:"pipeda-4",ref:"Sched 1 §4.7",title:"Safeguards — security appropriate to sensitivity of information",linkedPolicies:[]}]},
-  {id:"pdpa_sg",name:"PDPA (Singapore)",enabled:false,fullName:"Personal Data Protection Act (Singapore)",jurisdiction:"Singapore",type:"Privacy",industry:"All",effective:"2012-10-15",penalty:"SGD $1M",covers:["Personal data","Contact data"],score:55,status:"Partial",lastAudit:null,requirements:[{id:"pdpa_sg-1",ref:"Part III",title:"Consent obligation — collect with knowledge and consent",linkedPolicies:[]},{id:"pdpa_sg-2",ref:"Part IV",title:"Purpose limitation — data used only for disclosed purpose",linkedPolicies:[]},{id:"pdpa_sg-3",ref:"Part V",title:"Access and correction — respond to requests within 30 days",linkedPolicies:[]},{id:"pdpa_sg-4",ref:"Part VI",title:"Protection obligation — reasonable security arrangements",linkedPolicies:[]},{id:"pdpa_sg-5",ref:"Part VIA",title:"Data breach notification — PDPC within 3 business days",linkedPolicies:[]}]},
+  {id:"pdpa_sg",name:"PDPA (Singapore)",enabled:false,fullName:"Personal Data Protection Act (Singapore)",jurisdiction:"Singapore",type:"Privacy",industry:"All",effective:"2012-10-15",penalty:"Higher of S$1M or 10% of annual Singapore turnover",covers:["Personal data","Contact data"],score:55,status:"Partial",lastAudit:null,requirements:[{id:"pdpa_sg-1",ref:"Part III",title:"Consent obligation — collect with knowledge and consent",linkedPolicies:[]},{id:"pdpa_sg-2",ref:"Part IV",title:"Purpose limitation — data used only for disclosed purpose",linkedPolicies:[]},{id:"pdpa_sg-3",ref:"Part V",title:"Access and correction — respond to requests within 30 days",linkedPolicies:[]},{id:"pdpa_sg-4",ref:"Part VI",title:"Protection obligation — reasonable security arrangements",linkedPolicies:[]},{id:"pdpa_sg-5",ref:"Part VIA",title:"Data breach notification — PDPC within 3 business days",linkedPolicies:[]}]},
   {id:"appi",name:"APPI",enabled:false,fullName:"Act on the Protection of Personal Information (Japan)",jurisdiction:"Japan",type:"Privacy",industry:"All",effective:"2003-05-30",penalty:"JPY 100M (entity)",covers:["Personal information","Sensitive personal information","Anonymised data"],score:50,status:"Not Started",lastAudit:null,requirements:[{id:"appi-1",ref:"Art. 17",title:"Purpose specification — specific purpose of use defined",linkedPolicies:[]},{id:"appi-2",ref:"Art. 20",title:"Appropriate acquisition — no false or deceptive means",linkedPolicies:[]},{id:"appi-3",ref:"Art. 27",title:"Restriction on third-party provision without consent",linkedPolicies:[]},{id:"appi-4",ref:"Art. 23",title:"Security control measures — prevent leakage and loss",linkedPolicies:[]}]},
-  {id:"popia",name:"POPIA",enabled:false,fullName:"Protection of Personal Information Act (South Africa)",jurisdiction:"South Africa",type:"Privacy",industry:"All",effective:"2021-07-01",penalty:"ZAR 10M or imprisonment",covers:["Personal information","Special personal information","Children's data"],score:42,status:"Not Started",lastAudit:null,requirements:[{id:"popia-1",ref:"Condition 1",title:"Accountability — responsible party accountable for conditions",linkedPolicies:[]},{id:"popia-2",ref:"Condition 2",title:"Processing limitation — lawful and minimal processing",linkedPolicies:[]},{id:"popia-3",ref:"Condition 6",title:"Security safeguards — integrity and confidentiality of data",linkedPolicies:[]},{id:"popia-4",ref:"Condition 8",title:"Data subject participation — access and correction rights",linkedPolicies:[]}]},
-  {id:"dpdp",name:"DPDP Act",enabled:false,fullName:"Digital Personal Data Protection Act (India)",jurisdiction:"India",type:"Privacy",industry:"All",effective:"2023-08-11",penalty:"₹250 crore per breach",covers:["Digital personal data","Children's data","Cross-border data"],score:35,status:"Not Started",lastAudit:null,requirements:[{id:"dpdp-1",ref:"§6",title:"Consent — free, specific, informed, unconditional consent required",linkedPolicies:[]},{id:"dpdp-2",ref:"§8",title:"General obligations of data fiduciary — accuracy and security",linkedPolicies:[]},{id:"dpdp-3",ref:"§11",title:"Right to information — data principal's right to access data",linkedPolicies:[]},{id:"dpdp-4",ref:"§9",title:"Processing of children's data — verifiable parental consent",linkedPolicies:[]},{id:"dpdp-5",ref:"§8(6)",title:"Data breach notification — Board and data principal notified",linkedPolicies:[]}]},
+  {id:"popia",name:"POPIA",enabled:false,fullName:"Protection of Personal Information Act (South Africa)",jurisdiction:"South Africa",type:"Privacy",industry:"All",effective:"2021-07-01",penalty:"ZAR 10M or imprisonment",covers:["Personal information","Special personal information","Children's data"],score:42,status:"Not Started",lastAudit:null,requirements:[{id:"popia-1",ref:"Condition 1",title:"Accountability — responsible party accountable for conditions",linkedPolicies:[]},{id:"popia-2",ref:"Condition 2",title:"Processing limitation — lawful and minimal processing",linkedPolicies:[]},{id:"popia-3",ref:"Condition 7",title:"Security safeguards — integrity and confidentiality of data",linkedPolicies:[]},{id:"popia-4",ref:"Condition 8",title:"Data subject participation — access and correction rights",linkedPolicies:[]}]},
+  {id:"dpdp",name:"DPDP Act",enabled:false,fullName:"Digital Personal Data Protection Act (India)",jurisdiction:"India",type:"Privacy",industry:"All",effective:"2023-08-11 (enacted; rules notified 2025, phased to 2027)",penalty:"₹250 crore per breach",covers:["Digital personal data","Children's data","Cross-border data"],score:35,status:"Not Started",lastAudit:null,requirements:[{id:"dpdp-1",ref:"§6",title:"Consent — free, specific, informed, unconditional consent required",linkedPolicies:[]},{id:"dpdp-2",ref:"§8",title:"General obligations of data fiduciary — accuracy and security",linkedPolicies:[]},{id:"dpdp-3",ref:"§11",title:"Right to information — data principal's right to access data",linkedPolicies:[]},{id:"dpdp-4",ref:"§9",title:"Processing of children's data — verifiable parental consent",linkedPolicies:[]},{id:"dpdp-5",ref:"§8(6)",title:"Data breach notification — Board and data principal notified",linkedPolicies:[]}]},
   {id:"hipaa",name:"HIPAA",enabled:true,fullName:"Health Insurance Portability and Accountability Act",jurisdiction:"US",type:"Healthcare",industry:"Healthcare",effective:"1996-08-21",penalty:"$100–$50,000 per violation, max $1.9M/year",covers:["Protected Health Information","Electronic PHI","Medical records"],score:91,status:"Passing",lastAudit:"2026-04-10",requirements:[{id:"hipaa-1",ref:"§164.308",title:"Administrative safeguards — policies and procedures for PHI",linkedPolicies:[]},{id:"hipaa-2",ref:"§164.310",title:"Physical safeguards — facility and workstation controls",linkedPolicies:[]},{id:"hipaa-3",ref:"§164.312",title:"Technical safeguards — access controls and audit controls",linkedPolicies:[]},{id:"hipaa-4",ref:"§164.502",title:"Use and disclosure limitations — minimum necessary standard",linkedPolicies:[]},{id:"hipaa-5",ref:"§164.524",title:"Right of access — patients can request copies of PHI",linkedPolicies:[]}]},
-  {id:"hitech",name:"HITECH",enabled:true,fullName:"Health Information Technology for Economic and Clinical Health Act",jurisdiction:"US",type:"Healthcare",industry:"Healthcare",effective:"2009-02-17",penalty:"Up to $1.9M per violation category",covers:["Electronic PHI","EHR data","Business associate data"],score:84,status:"Passing",lastAudit:"2026-04-10",requirements:[{id:"hitech-1",ref:"§13402",title:"Breach notification — notify affected individuals and HHS",linkedPolicies:[]},{id:"hitech-2",ref:"§13401",title:"Business associate liability — direct HIPAA obligations apply",linkedPolicies:[]},{id:"hitech-3",ref:"§13405",title:"Restrictions on disclosures — honour patient restrictions",linkedPolicies:[]},{id:"hitech-4",ref:"§13408",title:"Audit controls — EHR audit logging requirements",linkedPolicies:[]}]},
+  {id:"hitech",name:"HITECH",enabled:true,fullName:"Health Information Technology for Economic and Clinical Health Act",jurisdiction:"US",type:"Healthcare",industry:"Healthcare",effective:"2009-02-17",penalty:"Up to $1.9M per violation category",covers:["Electronic PHI","EHR data","Business associate data"],score:84,status:"Passing",lastAudit:"2026-04-10",requirements:[{id:"hitech-1",ref:"§13402",title:"Breach notification — notify affected individuals and HHS",linkedPolicies:[]},{id:"hitech-2",ref:"§13401",title:"Business associate liability — direct HIPAA obligations apply",linkedPolicies:[]},{id:"hitech-3",ref:"§13405",title:"Restrictions on disclosures — honour patient restrictions",linkedPolicies:[]},{id:"hitech-4",ref:"§13405(c)",title:"Accounting of disclosures — track disclosures made through an EHR",linkedPolicies:[]}]},
   {id:"pci_dss",name:"PCI DSS",enabled:true,fullName:"Payment Card Industry Data Security Standard",jurisdiction:"Global",type:"Financial",industry:"Financial Services",effective:"2022-03-31",penalty:"$5,000–$100,000/month by card networks",covers:["Cardholder data","Sensitive auth data","Payment records"],score:79,status:"Partial",lastAudit:"2026-03-25",requirements:[{id:"pci-1",ref:"Req. 3",title:"Protect stored cardholder data — encryption required",linkedPolicies:[]},{id:"pci-2",ref:"Req. 7",title:"Restrict access to cardholder data by business need-to-know",linkedPolicies:[]},{id:"pci-3",ref:"Req. 8",title:"Identify users and authenticate access to system components",linkedPolicies:[]},{id:"pci-4",ref:"Req. 10",title:"Log and monitor all access to network resources and cardholder data",linkedPolicies:[]},{id:"pci-5",ref:"Req. 12",title:"Support information security with organisational policies",linkedPolicies:[]}]},
   {id:"sox",name:"SOX",enabled:true,fullName:"Sarbanes-Oxley Act",jurisdiction:"US",type:"Financial",industry:"Public Companies",effective:"2002-07-30",penalty:"Fines and up to 20 years imprisonment",covers:["Financial records","Audit data","Internal controls"],score:76,status:"Partial",lastAudit:"2026-02-28",requirements:[{id:"sox-1",ref:"§302",title:"CEO/CFO certification of financial statement accuracy",linkedPolicies:[]},{id:"sox-2",ref:"§404",title:"Internal control assessment — ICFR documented annually",linkedPolicies:[]},{id:"sox-3",ref:"§802",title:"Records retention — audit records retained 7 years",linkedPolicies:[]},{id:"sox-4",ref:"§409",title:"Real-time disclosure of material changes to financial condition",linkedPolicies:[]}]},
-  {id:"glba",name:"GLBA",enabled:false,fullName:"Gramm-Leach-Bliley Act",jurisdiction:"US",type:"Financial",industry:"Financial Services",effective:"1999-11-12",penalty:"Up to $100,000 per violation (institution)",covers:["Non-public personal information","Consumer financial data"],score:65,status:"Partial",lastAudit:null,requirements:[{id:"glba-1",ref:"§6801",title:"Financial privacy rule — notice and opt-out requirements",linkedPolicies:[]},{id:"glba-2",ref:"§6805",title:"Safeguards rule — written information security program required",linkedPolicies:[]},{id:"glba-3",ref:"§6821",title:"Pretexting protection — prohibit false pretenses for customer data",linkedPolicies:[]},{id:"glba-4",ref:"16 CFR §314",title:"Safeguards — designate qualified individual to oversee program",linkedPolicies:[]}]},
-  {id:"dora",name:"DORA",enabled:false,fullName:"Digital Operational Resilience Act",jurisdiction:"EU",type:"Financial",industry:"Financial Services",effective:"2025-01-17",penalty:"1% daily average global turnover for up to 6 months",covers:["ICT risk data","Incident data","Third-party risk data"],score:52,status:"Partial",lastAudit:null,requirements:[{id:"dora-1",ref:"Art. 6",title:"ICT risk management framework — documented and maintained",linkedPolicies:[]},{id:"dora-2",ref:"Art. 17",title:"ICT incident classification and reporting to competent authority",linkedPolicies:[]},{id:"dora-3",ref:"Art. 28",title:"Third-party risk management — contractual arrangements",linkedPolicies:[]},{id:"dora-4",ref:"Art. 24",title:"Digital operational resilience testing — TLPT for critical entities",linkedPolicies:[]},{id:"dora-5",ref:"Art. 45",title:"Information sharing — voluntary cyber threat intelligence exchange",linkedPolicies:[]}]},
+  {id:"glba",name:"GLBA",enabled:false,fullName:"Gramm-Leach-Bliley Act",jurisdiction:"US",type:"Financial",industry:"Financial Services",effective:"1999-11-12",penalty:"Up to $100,000 per violation (institution)",covers:["Non-public personal information","Consumer financial data"],score:65,status:"Partial",lastAudit:null,requirements:[{id:"glba-1",ref:"§6801",title:"Financial privacy rule — notice and opt-out requirements",linkedPolicies:[]},{id:"glba-2",ref:"§6801(b)",title:"Safeguards rule — written information security program required",linkedPolicies:[]},{id:"glba-3",ref:"§6821",title:"Pretexting protection — prohibit false pretenses for customer data",linkedPolicies:[]},{id:"glba-4",ref:"16 CFR §314",title:"Safeguards — designate qualified individual to oversee program",linkedPolicies:[]}]},
+  {id:"dora",name:"DORA",enabled:false,fullName:"Digital Operational Resilience Act",jurisdiction:"EU",type:"Financial",industry:"Financial Services",effective:"2025-01-17",penalty:"1% daily average global turnover for up to 6 months",covers:["ICT risk data","Incident data","Third-party risk data"],score:52,status:"Partial",lastAudit:null,requirements:[{id:"dora-1",ref:"Art. 6",title:"ICT risk management framework — documented and maintained",linkedPolicies:[]},{id:"dora-2",ref:"Art. 17",title:"ICT incident classification and reporting to competent authority",linkedPolicies:[]},{id:"dora-3",ref:"Art. 28",title:"Third-party risk management — contractual arrangements",linkedPolicies:[]},{id:"dora-4",ref:"Art. 26",title:"Digital operational resilience testing — TLPT for critical entities",linkedPolicies:[]},{id:"dora-5",ref:"Art. 45",title:"Information sharing — voluntary cyber threat intelligence exchange",linkedPolicies:[]}]},
   {id:"soc2",name:"SOC 2",enabled:true,fullName:"Service Organisation Control 2",jurisdiction:"Global",type:"Security",industry:"Technology / SaaS",effective:"Ongoing",penalty:"Loss of certification / customer trust",covers:["Customer data","System logs","Access records"],score:82,status:"Passing",lastAudit:"2026-02-15",requirements:[{id:"soc2-1",ref:"CC6.1",title:"Logical access security measures — RBAC and MFA enforced",linkedPolicies:[]},{id:"soc2-2",ref:"CC7.1",title:"System monitoring — anomaly detection and alerting",linkedPolicies:[]},{id:"soc2-3",ref:"CC8.1",title:"Change management — authorised change process documented",linkedPolicies:[]},{id:"soc2-4",ref:"A1.1",title:"Data backup and recovery — tested RTO/RPO targets",linkedPolicies:[]},{id:"soc2-5",ref:"CC9.2",title:"Vendor risk management — third-party assessments conducted",linkedPolicies:[]}]},
-  {id:"iso27001",name:"ISO 27001",enabled:true,fullName:"ISO/IEC 27001 — Information Security Management",jurisdiction:"Global",type:"Security",industry:"All",effective:"2022-10-25",penalty:"Loss of certification",covers:["Information assets","ICT systems","Supplier data"],score:77,status:"Partial",lastAudit:"2026-01-30",requirements:[{id:"iso27001-1",ref:"Clause 6.1",title:"Information security risk assessment and treatment",linkedPolicies:[]},{id:"iso27001-2",ref:"Annex A 8.2",title:"Information classification — asset classification scheme",linkedPolicies:[]},{id:"iso27001-3",ref:"Annex A 9.1",title:"Access control policy — documented and implemented",linkedPolicies:[]},{id:"iso27001-4",ref:"Annex A 12.4",title:"Logging and monitoring — event logs retained and reviewed",linkedPolicies:[]},{id:"iso27001-5",ref:"Annex A 17.1",title:"Information security continuity — BCP/DR aligned",linkedPolicies:[]}]},
+  {id:"iso27001",name:"ISO 27001",enabled:true,fullName:"ISO/IEC 27001 — Information Security Management",jurisdiction:"Global",type:"Security",industry:"All",effective:"2022-10-25",penalty:"Loss of certification",covers:["Information assets","ICT systems","Supplier data"],score:77,status:"Partial",lastAudit:"2026-01-30",requirements:[{id:"iso27001-1",ref:"Clause 6.1",title:"Information security risk assessment and treatment",linkedPolicies:[]},{id:"iso27001-2",ref:"Annex A 5.12",title:"Information classification — asset classification scheme",linkedPolicies:[]},{id:"iso27001-3",ref:"Annex A 5.15",title:"Access control policy — documented and implemented",linkedPolicies:[]},{id:"iso27001-4",ref:"Annex A 8.15",title:"Logging and monitoring — event logs retained and reviewed",linkedPolicies:[]},{id:"iso27001-5",ref:"Annex A 5.29",title:"Information security continuity — BCP/DR aligned",linkedPolicies:[]}]},
   {id:"iso27701",name:"ISO 27701",enabled:false,fullName:"ISO/IEC 27701 — Privacy Information Management",jurisdiction:"Global",type:"Privacy",industry:"All",effective:"2019-08-06",penalty:"Loss of certification",covers:["Personally identifiable information","Processing records"],score:58,status:"Partial",lastAudit:null,requirements:[{id:"iso27701-1",ref:"§6.2.1",title:"Understand organisation and its context for privacy",linkedPolicies:[]},{id:"iso27701-2",ref:"§7.2.1",title:"PII controller — define and document processing purposes",linkedPolicies:[]},{id:"iso27701-3",ref:"§7.3.1",title:"Privacy by design — PII considerations during development",linkedPolicies:[]},{id:"iso27701-4",ref:"§8.2.1",title:"PII processor — processing under controller instructions only",linkedPolicies:[]}]},
-  {id:"nistcsf",name:"NIST CSF",enabled:true,fullName:"NIST Cybersecurity Framework",jurisdiction:"US (Global Adoption)",type:"Security",industry:"All",effective:"2014-02-12",penalty:"Voluntary framework — no direct penalty",covers:["Cyber assets","System data","Threat data"],score:80,status:"Passing",lastAudit:"2026-03-20",requirements:[{id:"nistcsf-1",ref:"ID.AM",title:"Asset management — catalogue of data assets maintained",linkedPolicies:[]},{id:"nistcsf-2",ref:"PR.AC",title:"Identity management and access control implemented",linkedPolicies:[]},{id:"nistcsf-3",ref:"PR.DS",title:"Data security — data-at-rest and in-transit protection",linkedPolicies:[]},{id:"nistcsf-4",ref:"DE.CM",title:"Continuous monitoring — security events detected",linkedPolicies:[]},{id:"nistcsf-5",ref:"RS.RP",title:"Response planning — incident response plan executed",linkedPolicies:[]}]},
-  {id:"nis2",name:"NIS2",enabled:false,fullName:"Network and Information Security Directive 2",jurisdiction:"EU",type:"Security",industry:"Critical Infrastructure",effective:"2024-10-17",penalty:"€10M or 2% global revenue (essential entities)",covers:["Network systems","ICT infrastructure","Incident data"],score:48,status:"Not Started",lastAudit:null,requirements:[{id:"nis2-1",ref:"Art. 21",title:"Cybersecurity risk management measures — policies documented",linkedPolicies:[]},{id:"nis2-2",ref:"Art. 23",title:"Incident reporting — significant incidents reported within 24h",linkedPolicies:[]},{id:"nis2-3",ref:"Art. 21(2)(d)",title:"Supply chain security — third-party risk measures",linkedPolicies:[]},{id:"nis2-4",ref:"Art. 21(2)(j)",title:"Business continuity — backup, disaster recovery, crisis management",linkedPolicies:[]}]},
+  {id:"nistcsf",name:"NIST CSF",enabled:true,fullName:"NIST Cybersecurity Framework",jurisdiction:"US (Global Adoption)",type:"Security",industry:"All",effective:"2014-02-12 (CSF 1.1; v2.0 issued 2024)",penalty:"Voluntary framework — no direct penalty",covers:["Cyber assets","System data","Threat data"],score:80,status:"Passing",lastAudit:"2026-03-20",requirements:[{id:"nistcsf-1",ref:"ID.AM",title:"Asset management — catalogue of data assets maintained",linkedPolicies:[]},{id:"nistcsf-2",ref:"PR.AC",title:"Identity management and access control implemented",linkedPolicies:[]},{id:"nistcsf-3",ref:"PR.DS",title:"Data security — data-at-rest and in-transit protection",linkedPolicies:[]},{id:"nistcsf-4",ref:"DE.CM",title:"Continuous monitoring — security events detected",linkedPolicies:[]},{id:"nistcsf-5",ref:"RS.RP",title:"Response planning — incident response plan executed",linkedPolicies:[]}]},
+  {id:"nis2",name:"NIS2",enabled:false,fullName:"Network and Information Security Directive 2",jurisdiction:"EU",type:"Security",industry:"Critical Infrastructure",effective:"2024-10-17",penalty:"€10M or 2% global revenue (essential entities)",covers:["Network systems","ICT infrastructure","Incident data"],score:48,status:"Not Started",lastAudit:null,requirements:[{id:"nis2-1",ref:"Art. 21",title:"Cybersecurity risk management measures — policies documented",linkedPolicies:[]},{id:"nis2-2",ref:"Art. 23",title:"Incident reporting — 24h early warning, 72h notification",linkedPolicies:[]},{id:"nis2-3",ref:"Art. 21(2)(d)",title:"Supply chain security — third-party risk measures",linkedPolicies:[]},{id:"nis2-4",ref:"Art. 21(2)(c)",title:"Business continuity — backup, disaster recovery, crisis management",linkedPolicies:[]}]},
   {id:"fedramp",name:"FedRAMP",enabled:false,fullName:"Federal Risk and Authorization Management Program",jurisdiction:"US Federal",type:"Security",industry:"Government / Cloud",effective:"2011-12-08",penalty:"Loss of ATO / contract termination",covers:["Federal data","Cloud system data","CUI"],score:62,status:"Partial",lastAudit:null,requirements:[{id:"fedramp-1",ref:"AC-2",title:"Account management — authorised users and access tracked",linkedPolicies:[]},{id:"fedramp-2",ref:"AU-2",title:"Audit events — defined set of events logged continuously",linkedPolicies:[]},{id:"fedramp-3",ref:"SC-28",title:"Protection of information at rest — encryption required",linkedPolicies:[]},{id:"fedramp-4",ref:"IR-4",title:"Incident handling — federal incident response procedures",linkedPolicies:[]},{id:"fedramp-5",ref:"CA-7",title:"Continuous monitoring — ongoing authorisation program",linkedPolicies:[]}]},
 ];
 
@@ -11787,11 +11804,12 @@ const OBS_INC_NEXT = {
   "Resolved":   ["Open","In Progress","Dismissed"],
   "Dismissed":  ["Open","In Progress","Resolved"],
 };
-// Incident manager — same layout as the standalone Data Quality › Incidents view
+// Incident manager — same layout as the standalone Data Quality › Incidents view.
+// If `asset` is omitted, shows all incidents (cross-asset hub view).
 const AssetIncidentsPanel = ({asset,onToast,onNav})=>{
-  const tbl=asset.name;
+  const tbl=asset?.name;
   const mono={fontFamily:"'Geist Mono',monospace"};
-  const [incidents,setIncidents]=useState(()=>(typeof DQ_INCIDENTS!=="undefined"?DQ_INCIDENTS:[]).filter(i=>i.table.endsWith("."+tbl)||i.table===tbl).map(i=>({...i})));
+  const [incidents,setIncidents]=useState(()=>{const src=(typeof DQ_INCIDENTS!=="undefined"?DQ_INCIDENTS:[]);return (asset?src.filter(i=>i.table.endsWith("."+tbl)||i.table===tbl):src).map(i=>({...i}));});
   const [tcF,setTcF]=useState("");
   const [assigneeF,setAssigneeF]=useState("");
   const [statusF,setStatusF]=useState("all");
@@ -11813,7 +11831,7 @@ const AssetIncidentsPanel = ({asset,onToast,onNav})=>{
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5 12l4.5 4.5L19 7" stroke="#16a34a" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </div>
       <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:4}}>No active incidents</div>
-      <div style={{fontSize:12.5,color:T.textMuted}}>No data-quality incidents are currently affecting <span style={mono}>{tbl}</span>.</div>
+      <div style={{fontSize:12.5,color:T.textMuted}}>No data-quality incidents are currently affecting {asset?<span style={mono}>{tbl}</span>:"any monitored assets"}.</div>
     </div>
   );
 
@@ -11915,7 +11933,7 @@ const AssetIncidentsPanel = ({asset,onToast,onNav})=>{
                         <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`}}>
                           <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:.6,marginBottom:8,textTransform:"uppercase"}}>Downstream Impact</div>
                           <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                            {obsDownstream(tbl).map((d,k)=>(
+                            {obsDownstream((inc.table||"").split(".").pop()).map((d,k)=>(
                               <div key={k} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 11px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8}}>
                                 <span style={{fontSize:9,color:T.textMuted}}>↳</span>
                                 <span style={{...mono,fontSize:12,color:T.text}}>{d.name}</span>
@@ -12006,6 +12024,60 @@ const AssetIncidentsPanel = ({asset,onToast,onNav})=>{
   </div>;
 };
 
+
+// ── Cross-asset Data Quality panel (Observability hub) ───────────────────────
+const DataQualityPanel = ({onNav,onToast})=>{
+  const [q,setQ]=useState("");
+  const [statusF,setStatusF]=useState("all");
+  const mono={fontFamily:"'Geist Mono',monospace"};
+  const all=(typeof DQ_TEST_CASES!=="undefined"?DQ_TEST_CASES:[]);
+  const total=all.length, ok=all.filter(t=>t.status==="Success").length, bad=all.filter(t=>t.status==="Failed").length, ab=all.filter(t=>t.status==="Aborted").length;
+  const dimColor=(dim)=>({Accuracy:"#8b5cf6",Completeness:"#3b82f6",Consistency:"#06b6d4",Timeliness:"#f59e0b",Validity:"#10b981",Uniqueness:"#ec4899",Volume:"#6366f1"}[dim]||T.textMuted);
+  const rows=all.filter(t=>(statusF==="all"||t.status===statusF)&&(!q||t.name.toLowerCase().includes(q.toLowerCase())||t.table.toLowerCase().includes(q.toLowerCase())));
+  return <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:16}}>
+    {/* summary cards */}
+    <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+      <ObsStat color="#3b82f6" label="Total Tests" value={String(total)} icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M3 4h10M3 12h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>}/>
+      <ObsStat color="#16a34a" label="Successful" value={String(ok)} icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5l3 3 6-6.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}/>
+      <ObsStat color={T.rose} label="Failed" value={String(bad)} icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>}/>
+      <ObsStat color="#f59e0b" label="Aborted" value={String(ab)} icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5v3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="11" r=".6" fill="currentColor"/></svg>}/>
+    </div>
+    {/* filters */}
+    <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+      <div style={{flex:1,minWidth:200,position:"relative"}}>
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+        <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search test cases or tables…"
+          style={{width:"100%",padding:"8px 12px 8px 33px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+      </div>
+      <SegTabs tabs={[{key:"all",label:"All"},{key:"Success",label:"Success"},{key:"Failed",label:"Failed"},{key:"Aborted",label:"Aborted"}]} active={statusF} onChange={setStatusF}/>
+    </div>
+    {/* table */}
+    <Card2 style={{padding:0,overflow:"hidden"}}>
+      <table style={{width:"100%",borderCollapse:"collapse"}}>
+        <thead><tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
+          {["","Test Case","Table","Dimension","Last Run","History","Enforces"].map((l,i)=>(
+            <th key={i} style={{padding:"9px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textAlign:"left",letterSpacing:.5,textTransform:"uppercase",whiteSpace:"nowrap"}}>{l}</th>
+          ))}
+        </tr></thead>
+        <tbody>
+          {rows.map((t,i)=>{
+            const link=tcPolicyLink(t);
+            return <tr key={t.id} style={{borderBottom:i<rows.length-1?`1px solid ${T.border}`:"none"}}>
+              <td style={{padding:"10px 14px",width:40}}><DQStatusDot status={t.status}/></td>
+              <td style={{padding:"10px 14px"}}><div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{t.name}</div>{t.col&&<div style={{fontSize:11,...mono,color:T.textMuted,marginTop:2}}>{t.col}</div>}</td>
+              <td style={{padding:"10px 14px",fontSize:11.5,...mono,color:T.textSub,whiteSpace:"nowrap"}}>{t.table}</td>
+              <td style={{padding:"10px 14px"}}><span style={{fontSize:11,padding:"2px 8px",borderRadius:5,background:`${dimColor(t.dim)}12`,color:dimColor(t.dim),fontWeight:600,border:`1px solid ${dimColor(t.dim)}22`}}>{t.dim}</span></td>
+              <td style={{padding:"10px 14px",fontSize:11.5,...mono,color:T.textMuted,whiteSpace:"nowrap"}}>{t.lastRun}</td>
+              <td style={{padding:"10px 14px"}}><DQSparkline data={t.history} w={56} h={18}/></td>
+              <td style={{padding:"10px 14px"}}>{link?<PolicyChip link={link} onNav={onNav} compact/>:<span style={{color:T.textMuted,fontSize:12}}>—</span>}</td>
+            </tr>;
+          })}
+        </tbody>
+      </table>
+      {rows.length===0&&<div style={{textAlign:"center",padding:"48px 0",color:T.textMuted,fontSize:13}}>No test cases match your filters.</div>}
+    </Card2>
+  </div>;
+};
 
 // ── Alert / EventSubscription wizard (used by ObsView) ───────────────────────
 const ALERT_SOURCES=["Table","Test Case","Test Suite","Pipeline","Container"];
@@ -12123,24 +12195,16 @@ const AssetObservabilityTab = ({asset,onToast,onNav})=>{
   const subs=[
     {key:"table",label:"Table Profile"},
     {key:"column",label:"Column Profile"},
-    {key:"quality",label:"Data Quality"},
-    {key:"incidents",label:`Incidents${openIncs?"  "+openIncs:""}`},
+    {key:"quality",label:"Data Quality",count:eff.length||undefined},
+    {key:"incidents",label:"Incidents",count:openIncs||undefined},
   ];
   const RANGES=["Last 7 days","Last 14 days","Last 30 days","Last 60 days"];
 
   return <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:16}}>
-    {/* Sub-tabs (left) + date range (right) — OpenMetadata layout */}
-    <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",gap:14,flexWrap:"wrap",borderBottom:`1px solid ${T.border}`}}>
-      <div style={{display:"flex",gap:2}}>
-        {subs.map(t=>(
-          <button key={t.key} onClick={()=>setSub(t.key)}
-            style={{padding:"9px 16px",background:"transparent",border:"none",borderBottom:`2px solid ${sub===t.key?T.accent:"transparent"}`,color:sub===t.key?T.text:T.textMuted,fontSize:13,fontWeight:sub===t.key?700:500,cursor:"pointer",marginBottom:-1,transition:"all .12s",whiteSpace:"nowrap"}}
-            onMouseEnter={e=>{if(sub!==t.key)e.currentTarget.style.color=T.textSub;}} onMouseLeave={e=>{if(sub!==t.key)e.currentTarget.style.color=T.textMuted;}}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-      <div style={{display:"flex",alignItems:"center",gap:8,paddingBottom:8}}>
+    {/* Sub-tabs (left) + date range (right) */}
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
+      <SegTabs tabs={subs} active={sub} onChange={setSub}/>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
         <span style={{fontSize:11.5,color:T.textMuted}}>Date</span>
         <select value={range} onChange={e=>setRange(e.target.value)}
           style={{padding:"6px 10px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",cursor:"pointer"}}>
@@ -12155,6 +12219,341 @@ const AssetObservabilityTab = ({asset,onToast,onNav})=>{
     {sub==="quality"   && <AssetQualityTab asset={asset} onToast={onToast} onNav={onNav}/>}
     {sub==="incidents" && <AssetIncidentsPanel asset={asset} onToast={onToast} onNav={onNav}/>}
   </div>;
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DATA CONTRACTS — OpenMetadata 7-section model (Schema · Semantics · Security
+//   · Quality · SLA · Terms of Use · Status), attached to a table asset.
+// ═══════════════════════════════════════════════════════════════════════════
+const CONTRACT_STATUS = {
+  Active:   {label:"Active",   color:"#16a34a",   bg:"#16a34a14", border:"#16a34a40"},
+  Violated: {label:"Violated", color:T.rose,      bg:T.roseDim,   border:`${T.rose}40`},
+  Draft:    {label:"Draft",    color:T.amber,     bg:T.amberDim,  border:`${T.amber}40`},
+};
+const CONTRACT_BY_ASSET = {
+  orders:{
+    name:"orders_contract", version:"2.1.0", status:"Violated", owners:["maya.chen","dev.patel"],
+    description:"Governance agreement for the commerce.orders fact table between the Commerce data team (producer) and Finance/BI consumers.",
+    updated:"2d ago", lastRun:"Today, 05:30 AM",
+    schema:[
+      {name:"order_id",type:"BIGINT",constraint:"NOT NULL · UNIQUE",required:true},
+      {name:"customer_id",type:"BIGINT",constraint:"NOT NULL",required:true},
+      {name:"total_amount",type:"DECIMAL(12,2)",constraint:"≥ 0",required:true},
+      {name:"status",type:"VARCHAR",constraint:"IN allowed set",required:true},
+      {name:"created_at",type:"TIMESTAMP",constraint:"NOT NULL",required:true},
+    ],
+    semantics:[
+      {rule:"Owners must be set",pass:true},
+      {rule:"Description required",pass:true},
+      {rule:"Domain assigned",pass:true},
+      {rule:"Tier defined",pass:true},
+    ],
+    security:{classification:"PII",policy:"Customer Data Policy",access:"Restricted — authorized roles only",pass:true},
+    quality:[
+      {name:"order_id unique",pass:true},
+      {name:"customer_id not null",pass:true},
+      {name:"total_amount in range 0–100,000",pass:true},
+      {name:"status in allowed set",pass:false},
+      {name:"row count 50k–80k",pass:false},
+    ],
+    sla:{refresh:"Daily",availability:"08:00 UTC",latency:"≤ 2 hours",retention:"365 days"},
+    terms:{allowed:["Internal analytics","Reporting","Business intelligence"],disallowed:["Third-party sharing","External redistribution","AI model training"],compliance:["GDPR","SOC2"]},
+    history:[
+      {at:"Today, 05:30 AM",result:"Violated",note:"2 quality tests failed (status set, row count)"},
+      {at:"Yesterday, 05:30 AM",result:"Active",note:"All validations passed"},
+      {at:"Jun 6, 05:30 AM",result:"Active",note:"All validations passed"},
+    ],
+  },
+};
+
+const AssetContractTab = ({asset,onToast})=>{
+  const mono={fontFamily:"'Geist Mono',monospace"};
+  const [contract,setContract]=useState(()=>CONTRACT_BY_ASSET[asset.name]?{...CONTRACT_BY_ASSET[asset.name]}:null);
+  const [wizard,setWizard]=useState(false);
+  const [running,setRunning]=useState(false);
+
+  const sectionPass=(c)=>({
+    Schema:true,
+    Semantics:(c.semantics||[]).every(s=>s.pass),
+    Security:c.security?.pass!==false,
+    Quality:(c.quality||[]).every(q=>q.pass),
+    SLA:true,
+    "Terms of Use":true,
+  });
+  const runValidation=()=>{
+    if(!contract) return;
+    setRunning(true);
+    setTimeout(()=>{
+      const sp=sectionPass(contract);
+      const ok=Object.values(sp).every(Boolean);
+      const status=ok?"Active":"Violated";
+      const failed=Object.entries(sp).filter(([,v])=>!v).map(([k])=>k);
+      setContract(c=>({...c,status,lastRun:"Just now",history:[{at:"Just now",result:status,note:ok?"All validations passed":`Failed: ${failed.join(", ")}`},...(c.history||[])]}));
+      setRunning(false);
+      onToast&&onToast(ok?"Contract validation passed":"Contract validation failed — status set to Violated",ok?"success":"error");
+    },1200);
+  };
+
+  // ── Empty state ──
+  if(!contract) return (
+    <>
+      <div className="fadeIn" style={{padding:"64px 20px",textAlign:"center",maxWidth:520,margin:"0 auto"}}>
+        <div style={{width:54,height:54,borderRadius:14,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",color:T.accent}}>
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M7 3h7l5 5v13a0 0 0 01 0 0H7a2 2 0 01-2-2V5a2 2 0 012-2z" stroke="currentColor" strokeWidth="1.6"/><path d="M13 3v6h6M9 13l2 2 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </div>
+        <div style={{fontSize:16,fontWeight:700,color:T.text,marginBottom:6}}>No data contract yet</div>
+        <div style={{fontSize:13,color:T.textMuted,lineHeight:1.6,marginBottom:20}}>A data contract formalizes the agreement between producers and consumers — schema, semantics, security, quality, SLAs and terms of use — and is continuously validated.</div>
+        <Btn variant="primary" icon={Ic.plus(13)} onClick={()=>setWizard(true)}>Add Contract</Btn>
+      </div>
+      {wizard&&<ContractWizard asset={asset} onClose={()=>setWizard(false)} onCreate={(c)=>{setContract(c);setWizard(false);onToast&&onToast(`Contract “${c.name}” created as Draft`,"success");}}/>}
+    </>
+  );
+
+  const sp=sectionPass(contract);
+  const sc=CONTRACT_STATUS[contract.status]||CONTRACT_STATUS.Draft;
+  const Section=({title,pass,children,action})=>(
+    <Card2><div style={{padding:"15px 18px"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:13,fontWeight:700,color:T.text}}>{title}</span>
+          {pass!=null&&<span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:5,background:pass?"#16a34a14":T.roseDim,color:pass?"#16a34a":T.rose,border:`1px solid ${pass?"#16a34a40":T.rose+"40"}`}}>{pass?"PASS":"FAIL"}</span>}
+        </div>
+        {action}
+      </div>
+      {children}
+    </div></Card2>
+  );
+  const KV=({k,v})=>(
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${T.border}`,fontSize:12.5}}>
+      <span style={{color:T.textMuted}}>{k}</span><span style={{...mono,color:T.text,fontWeight:600}}>{v}</span>
+    </div>
+  );
+
+  return <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:16}}>
+    {/* ── Status banner ── */}
+    <Card2 style={{borderColor:sc.border}}><div style={{padding:"16px 18px"}}>
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+            <span style={{...mono,fontSize:16,fontWeight:700,color:T.text}}>{contract.name}</span>
+            <span style={{fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:6,background:sc.bg,color:sc.color,border:`1px solid ${sc.border}`}}>{sc.label}</span>
+            <span style={{fontSize:11,...mono,color:T.textMuted}}>v{contract.version}</span>
+          </div>
+          <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6,maxWidth:680}}>{contract.description}</div>
+          <div style={{fontSize:11,color:T.textMuted,marginTop:8}}>Owners: <span style={{color:T.textSub}}>{(contract.owners||[]).join(", ")}</span> · Last validated: {contract.lastRun}</div>
+        </div>
+        <div style={{display:"flex",gap:8,flexShrink:0}}>
+          <Btn small ghost onClick={()=>onToast&&onToast("Contract editor coming soon","success")}>Edit</Btn>
+          <Btn small variant="primary" disabled={running} onClick={runValidation}>{running?"Running…":"Run Now"}</Btn>
+        </div>
+      </div>
+      {/* validation chips */}
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:14}}>
+        {["Schema","Semantics","Security","Quality","SLA","Terms of Use"].map(s=>{
+          const ok=sp[s];
+          return <div key={s} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 11px",borderRadius:7,background:ok?"#16a34a0e":T.roseDim,border:`1px solid ${ok?"#16a34a33":T.rose+"33"}`}}>
+            <span style={{color:ok?"#16a34a":T.rose,display:"flex"}}>{ok?<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5l3 3 6-6.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>:<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>}</span>
+            <span style={{fontSize:11.5,fontWeight:600,color:ok?"#16a34a":T.rose}}>{s}</span>
+          </div>;
+        })}
+      </div>
+    </div></Card2>
+
+    {/* ── 1. Schema ── */}
+    <Section title="1 · Schema Contract">
+      <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>Producers cannot change these columns without an approved contract revision.</div>
+      <table style={{width:"100%",borderCollapse:"collapse"}}>
+        <thead><tr style={{borderBottom:`1px solid ${T.border}`}}>
+          {["Column","Data Type","Constraint","Required"].map(h=><th key={h} style={{padding:"7px 10px",fontSize:10,fontWeight:700,color:T.textMuted,textAlign:"left",textTransform:"uppercase",letterSpacing:.5}}>{h}</th>)}
+        </tr></thead>
+        <tbody>
+          {contract.schema.map((c,i)=>(
+            <tr key={c.name} style={{borderBottom:i<contract.schema.length-1?`1px solid ${T.border}`:"none"}}>
+              <td style={{padding:"8px 10px",...mono,fontSize:12,fontWeight:600,color:T.text}}>{c.name}</td>
+              <td style={{padding:"8px 10px",...mono,fontSize:11.5,color:T.blue}}>{c.type}</td>
+              <td style={{padding:"8px 10px",fontSize:11.5,color:T.textSub}}>{c.constraint}</td>
+              <td style={{padding:"8px 10px"}}>{c.required?<span style={{fontSize:10.5,fontWeight:700,color:"#16a34a"}}>Required</span>:<span style={{fontSize:10.5,color:T.textMuted}}>Optional</span>}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Section>
+
+    {/* ── 2 & 4: Quality + Semantics ── */}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+      <Section title="4 · Quality Assertions" pass={sp.Quality}>
+        <div style={{display:"flex",flexDirection:"column",gap:7}}>
+          {contract.quality.map((qa,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 10px",background:T.bgElevated,borderRadius:8,border:`1px solid ${qa.pass?T.border:T.rose+"33"}`}}>
+              <span style={{color:qa.pass?"#16a34a":T.rose,display:"flex",flexShrink:0}}>{qa.pass?<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5l3 3 6-6.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>}</span>
+              <span style={{fontSize:12.5,color:T.text}}>{qa.name}</span>
+            </div>
+          ))}
+        </div>
+      </Section>
+      <Section title="2 · Semantics" pass={sp.Semantics}>
+        <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>Mandatory business-metadata governance rules.</div>
+        <div style={{display:"flex",flexDirection:"column",gap:7}}>
+          {contract.semantics.map((s,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:9}}>
+              <span style={{color:s.pass?"#16a34a":T.rose,display:"flex"}}>{s.pass?<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5l3 3 6-6.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>}</span>
+              <span style={{fontSize:12.5,color:T.textSub}}>{s.rule}</span>
+            </div>
+          ))}
+        </div>
+      </Section>
+    </div>
+
+    {/* ── 3 & 5: Security + SLA ── */}
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+      <Section title="3 · Security" pass={sp.Security}>
+        <KV k="Classification" v={contract.security.classification}/>
+        <KV k="Access Policy" v={contract.security.policy}/>
+        <div style={{fontSize:11.5,color:T.textSub,marginTop:10,lineHeight:1.5}}>{contract.security.access}</div>
+      </Section>
+      <Section title="5 · SLA">
+        <KV k="Refresh Frequency" v={contract.sla.refresh}/>
+        <KV k="Availability" v={contract.sla.availability}/>
+        <KV k="Max Latency" v={contract.sla.latency}/>
+        <KV k="Retention" v={contract.sla.retention}/>
+      </Section>
+    </div>
+
+    {/* ── 6. Terms of Use ── */}
+    <Section title="6 · Terms of Use">
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16}}>
+        <div>
+          <div style={{fontSize:10.5,fontWeight:700,color:"#16a34a",textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Allowed</div>
+          {contract.terms.allowed.map((a,i)=><div key={i} style={{fontSize:12,color:T.textSub,marginBottom:5}}>✓ {a}</div>)}
+        </div>
+        <div>
+          <div style={{fontSize:10.5,fontWeight:700,color:T.rose,textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Disallowed</div>
+          {contract.terms.disallowed.map((a,i)=><div key={i} style={{fontSize:12,color:T.textSub,marginBottom:5}}>✕ {a}</div>)}
+        </div>
+        <div>
+          <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Compliance</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {contract.terms.compliance.map((c,i)=><span key={i} style={{fontSize:11,fontWeight:600,padding:"2px 9px",borderRadius:99,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}33`}}>{c}</span>)}
+          </div>
+        </div>
+      </div>
+    </Section>
+
+    {/* ── 7. Status / execution history ── */}
+    <Section title="7 · Status & Validation History">
+      <div style={{display:"flex",flexDirection:"column",gap:0}}>
+        {(contract.history||[]).map((h,i)=>{
+          const c=CONTRACT_STATUS[h.result]||CONTRACT_STATUS.Draft;
+          return <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"9px 0",borderBottom:i<contract.history.length-1?`1px solid ${T.border}`:"none"}}>
+            <span style={{fontSize:11,fontWeight:700,padding:"2px 9px",borderRadius:5,background:c.bg,color:c.color,border:`1px solid ${c.border}`,minWidth:70,textAlign:"center"}}>{c.label}</span>
+            <span style={{fontSize:12,...mono,color:T.textMuted,minWidth:140}}>{h.at}</span>
+            <span style={{fontSize:12,color:T.textSub}}>{h.note}</span>
+          </div>;
+        })}
+      </div>
+    </Section>
+  </div>;
+};
+
+// Add-contract wizard (UI-based, no YAML — mirrors OpenMetadata)
+const CONTRACT_SEMANTIC_RULES=["Owners must be set","Description required","Domain assigned","Tier defined","Tags present"];
+const CONTRACT_COMPLIANCE=["GDPR","HIPAA","SOC2","PCI-DSS","CCPA"];
+const ContractWizard = ({asset,onClose,onCreate})=>{
+  const cols=(typeof ASSET_COLUMNS!=="undefined" && ASSET_COLUMNS[asset.name])||[];
+  const assetCases=(typeof DQ_TEST_CASES!=="undefined"?DQ_TEST_CASES:[]).filter(t=>t.table.endsWith("."+asset.name)||t.table===asset.name);
+  const [step,setStep]=useState(0);
+  const [name,setName]=useState(`${asset.name}_contract`);
+  const [desc,setDesc]=useState("");
+  const [schemaCols,setSchemaCols]=useState(cols.slice(0,5));
+  const [semantics,setSemantics]=useState(["Owners must be set","Description required"]);
+  const [classification,setClassification]=useState("Internal");
+  const [quality,setQuality]=useState(assetCases.slice(0,4).map(t=>t.id));
+  const [refresh,setRefresh]=useState("Daily");
+  const [latency,setLatency]=useState("≤ 4 hours");
+  const [compliance,setCompliance]=useState(["GDPR"]);
+  const steps=["Basics","Schema","Semantics & Security","Quality","SLA & Terms"];
+  const toggle=(arr,set,v)=>set(arr.includes(v)?arr.filter(x=>x!==v):[...arr,v]);
+  const Lbl=({children})=><div style={{fontSize:11,fontWeight:700,color:T.textSub,marginBottom:8}}>{children}</div>;
+  const Pill=({active,onClick,children})=><button onClick={onClick} style={{padding:"6px 13px",borderRadius:99,fontSize:12,fontWeight:active?600:400,cursor:"pointer",background:active?T.accent:T.bgElevated,color:active?"#fff":T.textSub,border:`1px solid ${active?T.accent:T.border}`}}>{children}</button>;
+  const canNext=step===0?!!name.trim():true;
+  const create=()=>{
+    onCreate({
+      name:name.trim(),version:"1.0.0",status:"Draft",owners:asset.owners||[asset.owner].filter(Boolean),
+      description:desc.trim()||`Data contract for ${asset.name}.`,updated:"Just now",lastRun:"Not yet run",
+      schema:schemaCols.map(c=>({name:c,type:"—",constraint:"NOT NULL",required:true})),
+      semantics:semantics.map(r=>({rule:r,pass:true})),
+      security:{classification,policy:`${asset.name} Access Policy`,access:"Restricted — authorized roles only",pass:true},
+      quality:assetCases.filter(t=>quality.includes(t.id)).map(t=>({name:t.name,pass:t.status==="Success"})),
+      sla:{refresh,availability:"08:00 UTC",latency,retention:"365 days"},
+      terms:{allowed:["Internal analytics","Reporting"],disallowed:["Third-party sharing","External redistribution"],compliance},
+      history:[{at:"Just now",result:"Draft",note:"Contract created — not yet validated"}],
+    });
+  };
+  return (
+    <Modal open={true} onClose={onClose} title={`New Data Contract · ${asset.name}`} width={600}>
+      <div style={{display:"flex",alignItems:"center",gap:0,marginBottom:20}}>
+        {steps.map((s,i)=>(
+          <React.Fragment key={s}>
+            <div style={{display:"flex",alignItems:"center",gap:7}}>
+              <span style={{width:22,height:22,borderRadius:"50%",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",background:i<=step?T.accent:T.bgElevated,color:i<=step?"#fff":T.textMuted,border:`1px solid ${i<=step?T.accent:T.border}`}}>{i+1}</span>
+              <span style={{fontSize:11,fontWeight:i===step?700:500,color:i===step?T.text:T.textMuted,whiteSpace:"nowrap"}}>{s}</span>
+            </div>
+            {i<steps.length-1&&<div style={{flex:1,height:1,background:i<step?T.accent:T.border,margin:"0 8px"}}/>}
+          </React.Fragment>
+        ))}
+      </div>
+      <div style={{minHeight:230}}>
+        {step===0&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
+          <div><Lbl>Contract name *</Lbl><input value={name} onChange={e=>setName(e.target.value)} style={{width:"100%",boxSizing:"border-box",padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none"}}/></div>
+          <div><Lbl>Description</Lbl><textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={3} placeholder="What this contract guarantees, and for whom…" style={{width:"100%",boxSizing:"border-box",padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",resize:"vertical",fontFamily:"inherit"}}/></div>
+        </div>}
+        {step===1&&<div><Lbl>Required columns ({schemaCols.length} of {cols.length})</Lbl>
+          <div style={{display:"flex",flexWrap:"wrap",gap:7}}>{cols.map(c=><Pill key={c} active={schemaCols.includes(c)} onClick={()=>toggle(schemaCols,setSchemaCols,c)}>{c}</Pill>)}</div>
+          <div style={{fontSize:11,color:T.textMuted,marginTop:10}}>Selected columns and their types become locked by the contract.</div>
+        </div>}
+        {step===2&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
+          <div><Lbl>Semantic rules (mandatory metadata)</Lbl>
+            <div style={{display:"flex",flexDirection:"column",gap:7}}>{CONTRACT_SEMANTIC_RULES.map(r=>(
+              <label key={r} style={{display:"flex",alignItems:"center",gap:9,padding:"8px 11px",background:semantics.includes(r)?T.accentDim:T.bgElevated,border:`1px solid ${semantics.includes(r)?T.accent+"55":T.border}`,borderRadius:8,cursor:"pointer"}}>
+                <input type="checkbox" checked={semantics.includes(r)} onChange={()=>toggle(semantics,setSemantics,r)} style={{accentColor:T.accent}}/>
+                <span style={{fontSize:12.5,color:T.text}}>{r}</span>
+              </label>))}</div>
+          </div>
+          <div><Lbl>Security classification</Lbl>
+            <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>{["Internal","Confidential","Restricted","PII"].map(c=><Pill key={c} active={classification===c} onClick={()=>setClassification(c)}>{c}</Pill>)}</div>
+          </div>
+        </div>}
+        {step===3&&<div><Lbl>Attach quality tests ({quality.length} selected)</Lbl>
+          {assetCases.length===0?<div style={{fontSize:12.5,color:T.textMuted,padding:"20px 0"}}>No test cases exist for this asset yet. Add tests in the Observability › Data Quality tab first.</div>:
+          <div style={{display:"flex",flexDirection:"column",gap:7}}>{assetCases.map(t=>(
+            <label key={t.id} style={{display:"flex",alignItems:"center",gap:9,padding:"8px 11px",background:quality.includes(t.id)?T.accentDim:T.bgElevated,border:`1px solid ${quality.includes(t.id)?T.accent+"55":T.border}`,borderRadius:8,cursor:"pointer"}}>
+              <input type="checkbox" checked={quality.includes(t.id)} onChange={()=>toggle(quality,setQuality,t.id)} style={{accentColor:T.accent}}/>
+              <DQStatusDot status={t.status}/>
+              <span style={{fontSize:12.5,color:T.text}}>{t.name}</span>
+            </label>))}</div>}
+        </div>}
+        {step===4&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div><Lbl>Refresh frequency</Lbl>
+              <select value={refresh} onChange={e=>setRefresh(e.target.value)} style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none"}}>{["Hourly","Daily","Weekly","Monthly"].map(o=><option key={o}>{o}</option>)}</select>
+            </div>
+            <div><Lbl>Max latency</Lbl>
+              <select value={latency} onChange={e=>setLatency(e.target.value)} style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none"}}>{["≤ 1 hour","≤ 2 hours","≤ 4 hours","≤ 24 hours"].map(o=><option key={o}>{o}</option>)}</select>
+            </div>
+          </div>
+          <div><Lbl>Compliance requirements</Lbl>
+            <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>{CONTRACT_COMPLIANCE.map(c=><Pill key={c} active={compliance.includes(c)} onClick={()=>toggle(compliance,setCompliance,c)}>{c}</Pill>)}</div>
+          </div>
+        </div>}
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:22,paddingTop:16,borderTop:`1px solid ${T.border}`}}>
+        <Btn small ghost onClick={()=>step===0?onClose():setStep(step-1)}>{step===0?"Cancel":"← Back"}</Btn>
+        {step<steps.length-1
+          ? <Btn small disabled={!canNext} onClick={()=>canNext&&setStep(step+1)}>Next →</Btn>
+          : <Btn small variant="primary" onClick={create}>Create Contract</Btn>}
+      </div>
+    </Modal>
+  );
 };
 
 const AssetQualityTab = ({asset,onToast,onNav})=>{
@@ -14421,7 +14820,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
 
   const tabs=[
     {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},{key:"lineage",label:"Lineage"},
-    {key:"observability",label:"Observability"},{key:"usage",label:"Usage"},
+    {key:"observability",label:"Observability"},{key:"contract",label:"Contract"},{key:"usage",label:"Usage"},
     {key:"activity",label:"Audit Logs"},
   ];
 
@@ -14502,6 +14901,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
         {tab==="overview"  && <AssetOverview asset={asset} data={data} setData={setData} onToast={onToast}/>}
         {tab==="schema"    && <AssetSchema asset={asset} selCol={selCol} onColClick={c=>{ setSelCol(selCol?.name===c?.name?null:c); }} onToast={onToast}/>}
         {tab==="observability" && <AssetObservabilityTab asset={data} onToast={onToast} onNav={onNav}/>}
+        {tab==="contract"      && <AssetContractTab asset={data} onToast={onToast}/>}
         {tab==="usage"     && <AssetUsageTab/>}
         {tab==="lineage"   && <AssetLineageFull asset={data}/>}
         {tab==="activity"  && <AuditLogTable entries={ASSET_AUDIT_ENTRIES}/>}
@@ -15719,8 +16119,8 @@ const ContractDetail = ({contract,onBack,onToast})=>(
 // ─────────────────────────────────────────────
 // OBSERVABILITY
 // ─────────────────────────────────────────────
-const ObsView = ({onToast})=>{
-  const [tab,setTab]=useState("pipelines");
+const ObsView = ({onToast,onNav})=>{
+  const [tab,setTab]=useState("quality");
   const [alertWizard,setAlertWizard]=useState(false);
   const [subs,setSubs]=useState([
     {rule:"Pipeline failure rate > 5%",channel:"Slack #data-alerts",status:"Active",severity:"Critical"},
@@ -15736,12 +16136,23 @@ const ObsView = ({onToast})=>{
     {name:"ml_feature_store",status:"failing",latency:"—",runs:24,failures:5,last:"2h ago",freshness:"Stale"},
     {name:"dbt_transform",status:"passing",latency:"4.2m",runs:24,failures:0,last:"30m ago",freshness:"28m"},
   ];
+  const dqAll=(typeof DQ_TEST_CASES!=="undefined"?DQ_TEST_CASES:[]);
+  const incAll=(typeof DQ_INCIDENTS!=="undefined"?DQ_INCIDENTS:[]);
+  const openInc=incAll.filter(i=>i.status!=="Resolved"&&i.status!=="Dismissed").length;
   return <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
     <Topbar breadcrumb={[{label:"Observability"}]}/>
-    <div style={{padding:"0 28px",borderBottom:`1px solid ${T.border}`,flexShrink:0,paddingTop:18}}>
-      <Tabs2 tabs={[{key:"pipelines",label:"Pipelines"},{key:"freshness",label:"Data Freshness"},{key:"alerts",label:"Alert Rules"}]} active={tab} onChange={setTab}/>
+    <div style={{padding:"18px 28px 0",flexShrink:0}}>
+      <SegTabs active={tab} onChange={setTab} tabs={[
+        {key:"quality",label:"Data Quality",count:dqAll.length},
+        {key:"incidents",label:"Incident Manager",count:openInc||undefined},
+        {key:"pipelines",label:"Pipelines"},
+        {key:"freshness",label:"Data Freshness"},
+        {key:"alerts",label:"Alerts"},
+      ]}/>
     </div>
     <div style={{flex:1,overflowY:"auto",padding:28}}>
+      {tab==="quality"&&<DataQualityPanel onNav={onNav} onToast={onToast}/>}
+      {tab==="incidents"&&<AssetIncidentsPanel onToast={onToast} onNav={onNav}/>}
       {tab==="pipelines"&&<>
         <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}>
           <Btn small ghost icon={Ic.refresh(12)}>Refresh</Btn>
@@ -29274,7 +29685,7 @@ export default function App(){
       case "glossary":      return <GlossaryView onToast={showToast}/>;
       case "domains":       return <DomainsView onAsset={handleAsset} onNav={handleNav}/>;
       case "dataproducts":  return <DataProductsView onAsset={handleAsset} onNav={handleNav}/>;
-      case "observability": return <ObsView onToast={showToast}/>;
+      case "observability": return <ObsView onToast={showToast} onNav={handleNav}/>;
       case "analytics":     return <AnalyticsView/>;
       case "teams":         return <TeamsView onToast={showToast}/>;
       case "integrations":  return <IntegrationsView onToast={showToast}/>;
