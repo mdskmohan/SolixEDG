@@ -12425,9 +12425,15 @@ function validateContract(contract,asset){
     const tc=q.tcId&&liveCases.find(t=>t.id===q.tcId);
     return {...q, pass: tc ? tc.status==="Success" : (q.pass!==false), status: tc?tc.status:null};
   });
-  const sections={Schema:schemaPass,Semantics:semantics.every(s=>s.pass),Quality:quality.every(q=>q.pass),SLA:true};
+  const allPolicies=(typeof POLICIES!=="undefined"?POLICIES:[]);
+  const policies=(contract.policies||[]).map(p=>{
+    const pol=allPolicies.find(x=>x.id===p.policyId);
+    const pass=pol?((pol.violations||0)===0&&pol.lifecycle!=="Deprecated"):true;
+    return {...p,pass,category:pol?.category,lifecycle:pol?.lifecycle,violations:pol?.violations||0};
+  });
+  const sections={Schema:schemaPass,Semantics:semantics.every(s=>s.pass),Quality:quality.every(q=>q.pass),Policies:policies.every(p=>p.pass),SLA:true};
   const failedSections=Object.entries(sections).filter(([,v])=>!v).map(([k])=>k);
-  return {schema,semantics,quality,sections,failedSections,allPass:failedSections.length===0};
+  return {schema,semantics,quality,policies,sections,failedSections,allPass:failedSections.length===0};
 }
 
 const AssetContractTab = ({asset,onToast})=>{
@@ -12461,7 +12467,7 @@ const AssetContractTab = ({asset,onToast})=>{
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M7 3h7l5 5v13a0 0 0 01 0 0H7a2 2 0 01-2-2V5a2 2 0 012-2z" stroke="currentColor" strokeWidth="1.6"/><path d="M13 3v6h6M9 13l2 2 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </div>
         <div style={{fontSize:16,fontWeight:700,color:T.text,marginBottom:6}}>No data contract yet</div>
-        <div style={{fontSize:13,color:T.textMuted,lineHeight:1.6,marginBottom:20}}>A data contract formalizes the agreement between producers and consumers — schema, semantics, security, quality, SLAs and terms of use — and is continuously validated against the live asset.</div>
+        <div style={{fontSize:13,color:T.textMuted,lineHeight:1.6,marginBottom:20}}>A data contract formalizes the agreement between producers and consumers — schema, semantics, quality tests, governance policies and SLAs — and is continuously validated against the live asset.</div>
         <Btn variant="primary" icon={Ic.plus(13)} onClick={()=>setWizard("create")}>Add Contract</Btn>
       </div>
       {wizard&&<ContractWizard asset={asset} onToast={onToast} onClose={()=>setWizard(false)} onSubmit={(c)=>{setContract({...c,versions:[]});setWizard(false);onToast&&onToast(`Contract “${c.name}” created`,"success");}}/>}
@@ -12516,10 +12522,10 @@ const AssetContractTab = ({asset,onToast})=>{
               <div onClick={()=>setSettingsOpen(false)} style={{position:"fixed",inset:0,zIndex:50}}/>
               <div style={{position:"absolute",top:"calc(100% + 5px)",right:0,zIndex:51,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 14px 36px rgba(0,0,0,.28)",padding:5,minWidth:170}}>
                 {[
-                  {k:"edit",label:"Edit",icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M10.5 2.5l3 3L6 13H3v-3l7.5-7.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>,fn:()=>{setSettingsOpen(false);setWizard("edit");}},
-                  {k:"run",label:"Run now",icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>,fn:runNow},
-                  {k:"sched",label:"Schedule",icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5.5v3l2 1.2M8 1.2V2.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,fn:()=>{setSettingsOpen(false);setScheduleModal(true);}},
-                  {k:"del",label:"Delete",danger:true,icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M6.5 4V2.8h3V4M5 4.5l.5 8.5h5l.5-8.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>,fn:()=>{setSettingsOpen(false);setDeleteConfirm(true);}},
+                  {k:"edit",label:"Edit contract",icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M10.5 2.5l3 3L6 13H3v-3l7.5-7.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>,fn:()=>{setSettingsOpen(false);setWizard("edit");}},
+                  {k:"run",label:"Run validation now",icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>,fn:runNow},
+                  {k:"sched",label:"Schedule validation",icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5.5v3l2 1.2M8 1.2V2.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,fn:()=>{setSettingsOpen(false);setScheduleModal(true);}},
+                  {k:"del",label:"Delete contract",danger:true,icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M6.5 4V2.8h3V4M5 4.5l.5 8.5h5l.5-8.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>,fn:()=>{setSettingsOpen(false);setDeleteConfirm(true);}},
                 ].map(it=>(
                   <button key={it.k} onClick={it.fn} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 10px",borderRadius:7,background:"transparent",border:"none",cursor:"pointer",textAlign:"left",color:it.danger?T.rose:T.text,fontSize:12.5,fontWeight:500}}
                     onMouseEnter={e=>e.currentTarget.style.background=it.danger?T.roseDim:T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
@@ -12576,7 +12582,7 @@ const AssetContractTab = ({asset,onToast})=>{
       {/* validation checks (explain Health) */}
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginTop:14}}>
         <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.6,marginRight:2}}>Checks</span>
-        {["Schema","Semantics","Quality","SLA"].map(s=>{
+        {["Schema","Semantics","Quality","Policies","SLA"].map(s=>{
           const ok=sp[s];
           return <div key={s} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 11px",borderRadius:7,background:ok?"#16a34a0e":T.roseDim,border:`1px solid ${ok?"#16a34a33":T.rose+"33"}`}}>
             <span style={{color:ok?"#16a34a":T.rose,display:"flex"}}>{ok?<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5l3 3 6-6.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>:<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>}</span>
@@ -12635,20 +12641,19 @@ const AssetContractTab = ({asset,onToast})=>{
     </div>
 
     {/* ── Policies (governance from Policy Manager) ── */}
-    <Section title="Policies">
-      <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>Governance policies from Policy Manager that this contract enforces.</div>
-      {(contract.policies||[]).length===0
+    <Section title="Policies" pass={(contract.policies||[]).length?sp.Policies:null}>
+      <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>Governance policies from Policy Manager that this contract enforces — a policy with open violations fails the check.</div>
+      {(v.policies||[]).length===0
         ? <div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No policies attached.</div>
         : <div style={{display:"flex",flexDirection:"column",gap:7}}>
-            {(contract.policies||[]).map((p,i)=>{
-              const pol=(typeof POLICIES!=="undefined"?POLICIES:[]).find(x=>x.id===p.policyId);
-              return <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 11px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>
-                <span style={{display:"flex",color:"#7c3aed"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 1.5l5 2v4c0 3.2-2.1 5.6-5 6.5-2.9-.9-5-3.3-5-6.5v-4l5-2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg></span>
+            {(v.policies||[]).map((p,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 11px",background:T.bgElevated,borderRadius:8,border:`1px solid ${p.pass?T.border:T.rose+"33"}`}}>
+                <span style={{display:"flex",color:p.pass?"#16a34a":T.rose,flexShrink:0}}>{p.pass?<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5l3 3 6-6.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>}</span>
                 <span style={{fontSize:12.5,fontWeight:600,color:T.text,flex:1}}>{p.name}</span>
-                {pol&&<span style={{fontSize:10.5,color:T.textMuted}}>{pol.category}</span>}
-                {pol&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:5,background:pol.lifecycle==="Active"?"#16a34a14":T.amberDim,color:pol.lifecycle==="Active"?"#16a34a":T.amber}}>{pol.lifecycle||"Active"}</span>}
-              </div>;
-            })}
+                {p.category&&<span style={{fontSize:10.5,color:T.textMuted}}>{p.category}</span>}
+                {p.violations>0&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:5,background:T.roseDim,color:T.rose}}>{p.violations} violation{p.violations>1?"s":""}</span>}
+              </div>
+            ))}
           </div>}
     </Section>
 
@@ -12830,6 +12835,7 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
     return {
       name:name.trim()||`${asset.name}_contract`,version:existing?.version||"1.0.0",status:existing?.status||"Draft",
       owners:existing?.owners||asset.owners||[asset.owner].filter(Boolean),
+      stewards:existing?.stewards||asset.stewards||[asset.steward].filter(Boolean),
       description:desc.trim()||`Data contract for ${asset.name}.`,updated:"Just now",lastRun:existing?.lastRun||"Not yet run",
       validationMode,
       schedule: validationMode==="scheduled" ? {frequency:schedFreq,time:schedTime,tz:schedTz} : null,
@@ -12859,9 +12865,9 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
         <div style={{flex:1,display:"flex",minHeight:0}}>
           <div style={{width:212,flexShrink:0,borderRight:`1px solid ${T.border}`,overflowY:"auto",padding:"14px 10px",display:"flex",flexDirection:"column",gap:3,background:T.bg}}>
             {CONTRACT_SECTIONS.map(s=>{
-              const on=sec===s.key, done=complete[s.key], req=required.includes(s.key);
+              const on=sec===s.key, done=doneSet.has(s.key), req=required.includes(s.key);
               return <button key={s.key} onClick={()=>setSec(s.key)} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 11px",borderRadius:8,background:on?T.bgSurface:"transparent",border:`1px solid ${on?T.border:"transparent"}`,color:on?T.text:T.textMuted,fontSize:12.5,fontWeight:on?700:500,cursor:"pointer",textAlign:"left",boxShadow:on?"0 1px 2px rgba(0,0,0,.06)":"none"}}>
-                <span style={{width:8,height:8,borderRadius:"50%",flexShrink:0,background:done?T.accent:"transparent",border:done?"none":`1.5px solid ${T.borderLight}`}}/>
+                <span style={{width:8,height:8,borderRadius:"50%",flexShrink:0,background:done?T.accent:T.borderLight}}/>
                 <span style={{flex:1}}>{s.label}</span>
                 {req&&!done&&<span style={{fontSize:13,color:T.textMuted,lineHeight:1}}>*</span>}
               </button>;
@@ -12872,7 +12878,17 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
               <div><div style={{fontSize:15,fontWeight:700,color:T.text}}>Contract Details</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>The key information that identifies this contract.</div></div>
               <div><Lbl>Contract name <span style={{color:T.rose}}>*</span></Lbl><input value={name} onChange={e=>setName(e.target.value)} style={inp}/></div>
               <div><Lbl>Description</Lbl><textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={4} placeholder="What this contract guarantees, and for whom…" style={{...inp,resize:"vertical",fontFamily:"inherit"}}/></div>
-              <div><Lbl>Owners</Lbl><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{(existing?.owners||asset.owners||[asset.owner].filter(Boolean)).map(o=><span key={o} style={{fontSize:12,fontFamily:"'Geist Mono',monospace",padding:"4px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,color:T.textSub}}>{o}</span>)}</div></div>
+              {(()=>{
+                const personChip=(u)=>(<span key={u} style={{display:"inline-flex",alignItems:"center",gap:7,padding:"3px 11px 3px 4px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,color:T.textSub,fontSize:12}}>
+                  <span style={{width:20,height:20,borderRadius:6,background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:T.accent,flexShrink:0}}>{(u||"").split(".").map(x=>x[0]?.toUpperCase()||"").join("").slice(0,2)}</span>{u}
+                </span>);
+                const owners=(existing?.owners||asset.owners||[asset.owner]).filter(Boolean);
+                const stewards=(existing?.stewards||asset.stewards||[asset.steward]).filter(Boolean);
+                return <div style={{display:"flex",gap:32,flexWrap:"wrap"}}>
+                  <div><Lbl>Owners</Lbl><div style={{display:"flex",gap:7,flexWrap:"wrap"}}>{owners.length?owners.map(personChip):<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>None</span>}</div></div>
+                  <div><Lbl>Stewards</Lbl><div style={{display:"flex",gap:7,flexWrap:"wrap"}}>{stewards.length?stewards.map(personChip):<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>None</span>}</div></div>
+                </div>;
+              })()}
             </div>}
 
             {sec==="schema"&&<div style={{maxWidth:620}}>
@@ -12982,8 +12998,8 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             {!complete[sec]&&required.includes(sec)&&<span style={{fontSize:11,color:T.textMuted}}>Complete this section to continue</span>}
             {isLast
-              ? <Btn small variant="primary" disabled={!allComplete} onClick={()=>onSubmit(build())}>{isEdit?"Save changes":"Save contract"}</Btn>
-              : <Btn small variant="primary" disabled={!complete[sec]} onClick={()=>setSec(nextKey)}>Next →</Btn>}
+              ? <Btn small variant="primary" disabled={!allComplete} onClick={()=>{setDoneSet(d=>new Set([...d,sec]));onSubmit(build());}}>{isEdit?"Save changes":"Save contract"}</Btn>
+              : <Btn small variant="primary" disabled={!complete[sec]} onClick={()=>{setDoneSet(d=>new Set([...d,sec]));setSec(nextKey);}}>Next →</Btn>}
           </div>
         </div>
       </div>
