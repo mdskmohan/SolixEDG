@@ -12257,7 +12257,6 @@ const CONTRACT_BY_ASSET = {
       {key:"domain",rule:"Domain assigned"},
       {key:"tier",rule:"Tier defined"},
     ],
-    security:{classification:"PII",policy:"Customer Data Policy",access:"Restricted — authorized roles only"},
     // quality assertions link to live DQ test cases by id — pass is computed from the test's real status
     quality:[
       {tcId:"tc14",name:"order_id unique"},
@@ -12269,25 +12268,21 @@ const CONTRACT_BY_ASSET = {
     // governance policies enforced by this contract (from Policy Manager)
     policies:[{policyId:1,name:"PII Data Handling"},{policyId:3,name:"GDPR Compliance"}],
     sla:{refreshInterval:1,refreshUnit:"Day",latencyValue:2,latencyUnit:"Hours",availabilityTime:"08:00",availabilityTz:"UTC",retentionPeriod:365,retentionUnit:"Days",refreshColumn:"updated_at"},
-    terms:{allowed:["Internal analytics","Reporting","Business intelligence"],disallowed:["Third-party sharing","External redistribution","AI model training"],compliance:["GDPR","SOC2"]},
+    validationMode:"scheduled",
     // prior versions (full definition snapshots) — newest first
     versions:[
-      {version:"2.0.0", at:"3 weeks ago", by:"maya.chen", note:"Tightened SLA latency, added SOC2 and GDPR policy",
+      {version:"2.0.0", at:"3 weeks ago", by:"maya.chen", note:"Tightened SLA latency, added GDPR policy",
         schema:[{name:"order_id",type:"BIGINT",constraint:"NOT NULL · UNIQUE",required:true},{name:"customer_id",type:"BIGINT",constraint:"NOT NULL",required:true},{name:"amount",type:"DECIMAL(12,2)",constraint:"≥ 0",required:true},{name:"created_at",type:"TIMESTAMP",constraint:"NOT NULL",required:true}],
         semantics:[{key:"owners",rule:"Owners must be set"},{key:"description",rule:"Description required"},{key:"domain",rule:"Domain assigned"}],
-        security:{classification:"PII",policy:"Customer Data Policy"},
         quality:[{tcId:"tc14",name:"order_id unique"},{tcId:"tc4",name:"customer_id not null"},{tcId:"tc1",name:"total_amount in range 0–100,000"},{tcId:"tc3",name:"status in allowed set"}],
         policies:[{policyId:1,name:"PII Data Handling"}],
-        sla:{refreshInterval:1,refreshUnit:"Day",latencyValue:2,latencyUnit:"Hours",availabilityTime:"08:00",availabilityTz:"UTC",retentionPeriod:365,retentionUnit:"Days",refreshColumn:"updated_at"},
-        terms:{allowed:["Internal analytics","Reporting","Business intelligence"],disallowed:["Third-party sharing","External redistribution"],compliance:["GDPR","SOC2"]}},
+        sla:{refreshInterval:1,refreshUnit:"Day",latencyValue:2,latencyUnit:"Hours",availabilityTime:"08:00",availabilityTz:"UTC",retentionPeriod:365,retentionUnit:"Days",refreshColumn:"updated_at"}},
       {version:"1.0.0", at:"3 months ago", by:"dev.patel", note:"Initial contract",
         schema:[{name:"order_id",type:"BIGINT",constraint:"NOT NULL",required:true},{name:"amount",type:"DECIMAL(12,2)",constraint:"≥ 0",required:true},{name:"created_at",type:"TIMESTAMP",constraint:"NOT NULL",required:true}],
         semantics:[{key:"owners",rule:"Owners must be set"},{key:"description",rule:"Description required"}],
-        security:{classification:"Confidential",policy:"Customer Data Policy"},
         quality:[{tcId:"tc14",name:"order_id unique"},{tcId:"tc1",name:"total_amount in range 0–100,000"}],
         policies:[],
-        sla:{refreshInterval:1,refreshUnit:"Day",latencyValue:4,latencyUnit:"Hours",availabilityTime:"09:00",availabilityTz:"UTC",retentionPeriod:365,retentionUnit:"Days",refreshColumn:"updated_at"},
-        terms:{allowed:["Internal analytics","Reporting"],disallowed:["Third-party sharing"],compliance:["GDPR"]}},
+        sla:{refreshInterval:1,refreshUnit:"Day",latencyValue:4,latencyUnit:"Hours",availabilityTime:"09:00",availabilityTz:"UTC",retentionPeriod:365,retentionUnit:"Days",refreshColumn:"updated_at"}},
     ],
   },
 };
@@ -12304,9 +12299,7 @@ function diffContracts(prev,cur){
   addrem(prev.semantics,cur.semantics,"rule","Rule");
   addrem(prev.quality,cur.quality,"name","Quality test");
   addrem(prev.policies,cur.policies,"name","Policy");
-  if(prev.security?.classification!==cur.security?.classification) ch.push({t:"change",label:`Classification: ${prev.security?.classification} → ${cur.security?.classification}`});
   [["refreshInterval","Refresh interval"],["refreshUnit","Refresh unit"],["latencyValue","Max latency"],["latencyUnit","Latency unit"],["availabilityTime","Availability time"],["availabilityTz","Timezone"],["retentionPeriod","Retention period"],["retentionUnit","Retention unit"],["refreshColumn","Refresh column"]].forEach(([k,label])=>{ if((prev.sla?.[k])!==(cur.sla?.[k])) ch.push({t:"change",label:`${label}: ${prev.sla?.[k]??"—"} → ${cur.sla?.[k]??"—"}`}); });
-  addrem(prev.terms?.compliance,cur.terms?.compliance,null,"Compliance");
   return ch;
 }
 
@@ -12332,16 +12325,13 @@ function validateContract(contract,asset){
     else if(s.key==="tags")   pass=!!(asset.tags&&asset.tags.length);
     return {...s,pass};
   });
-  const cls=contract.security?.classification;
-  const needsSensitive=["PII","Confidential","Restricted","PHI"].includes(cls);
-  const secPass=needsSensitive ? (asset.tags||[]).some(t=>/PII|sensitive|GDPR|PHI|PCI|confidential/i.test(t)) : true;
   const quality=(contract.quality||[]).map(q=>{
     const tc=q.tcId&&liveCases.find(t=>t.id===q.tcId);
     return {...q, pass: tc ? tc.status==="Success" : (q.pass!==false), status: tc?tc.status:null};
   });
-  const sections={Schema:schemaPass,Semantics:semantics.every(s=>s.pass),Security:secPass,Quality:quality.every(q=>q.pass),SLA:true,"Terms of Use":true};
+  const sections={Schema:schemaPass,Semantics:semantics.every(s=>s.pass),Quality:quality.every(q=>q.pass),SLA:true};
   const failedSections=Object.entries(sections).filter(([,v])=>!v).map(([k])=>k);
-  return {schema,semantics,security:{...contract.security,pass:secPass},quality,sections,failedSections,allPass:failedSections.length===0};
+  return {schema,semantics,quality,sections,failedSections,allPass:failedSections.length===0};
 }
 
 const AssetContractTab = ({asset,onToast})=>{
@@ -12355,10 +12345,11 @@ const AssetContractTab = ({asset,onToast})=>{
   const setContract=(u)=>setContractState(prev=>{const next=typeof u==="function"?u(prev):u; CONTRACT_STORE[asset.name]=next; return next;});
 
   const changeStatus=(st)=>{ setStatusOpen(false); if(st===contract.status) return; setContract(c=>({...c,status:st,updated:"Just now"})); onToast&&onToast(`Status set to ${st}`,"success"); };
+  const runNow=()=>{ setSettingsOpen(false); const res=validateContract(contract,asset); setContract(c=>({...c,lastRun:"Just now"})); onToast&&onToast(res.allPass?"Validation passed — all checks green":`Validation found ${res.failedSections.length} failing check(s)`,res.allPass?"success":"error"); };
   const newVersion=()=>{
     const parts=(contract.version||"1.0.0").split(".").map(n=>parseInt(n)||0);
     const nv=`${parts[0]}.${parts[1]+1}.0`;
-    const snap={version:contract.version,at:contract.updated||"earlier",by:(contract.owners||[])[0]||"—",note:`Superseded by v${nv}`,schema:contract.schema,semantics:contract.semantics,security:contract.security,quality:contract.quality,sla:contract.sla,terms:contract.terms};
+    const snap={version:contract.version,at:contract.updated||"earlier",by:(contract.owners||[])[0]||"—",note:`Superseded by v${nv}`,schema:contract.schema,semantics:contract.semantics,quality:contract.quality,policies:contract.policies,sla:contract.sla};
     setContract(c=>({...c,version:nv,status:"Draft",updated:"Just now",versions:[snap,...(c.versions||[])]}));
     onToast&&onToast(`Created draft v${nv} — previous version archived in history`,"success");
   };
@@ -12386,8 +12377,8 @@ const AssetContractTab = ({asset,onToast})=>{
   const sc=CONTRACT_STATUS[contract.status]||CONTRACT_STATUS.Draft;
   const health=v.allPass?CONTRACT_HEALTH.Passing:CONTRACT_HEALTH.Violated;
   const failCount=v.failedSections.length;
-  const TOTAL_CHECKS=6;
-  const allVersions=[{version:contract.version,at:contract.updated,by:(contract.owners||[])[0]||"—",current:true,schema:contract.schema,semantics:contract.semantics,security:contract.security,quality:contract.quality,sla:contract.sla,terms:contract.terms},...(contract.versions||[])];
+  const TOTAL_CHECKS=Object.keys(v.sections).length;
+  const allVersions=[{version:contract.version,at:contract.updated,by:(contract.owners||[])[0]||"—",current:true,schema:contract.schema,semantics:contract.semantics,quality:contract.quality,policies:contract.policies,sla:contract.sla},...(contract.versions||[])];
 
   const Section=({title,pass,children,action})=>(
     <Card2><div style={{padding:"15px 18px"}}>
@@ -12429,9 +12420,10 @@ const AssetContractTab = ({asset,onToast})=>{
               <div onClick={()=>setSettingsOpen(false)} style={{position:"fixed",inset:0,zIndex:50}}/>
               <div style={{position:"absolute",top:"calc(100% + 5px)",right:0,zIndex:51,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 14px 36px rgba(0,0,0,.28)",padding:5,minWidth:170}}>
                 {[
-                  {k:"edit",label:"Edit contract",icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M10.5 2.5l3 3L6 13H3v-3l7.5-7.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>,fn:()=>{setSettingsOpen(false);setWizard("edit");}},
-                  {k:"sched",label:"Schedule validation",icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5.5v3l2 1.2M8 1.2V2.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,fn:()=>{setSettingsOpen(false);setScheduleModal(true);}},
-                  {k:"del",label:"Delete contract",danger:true,icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M6.5 4V2.8h3V4M5 4.5l.5 8.5h5l.5-8.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>,fn:()=>{setSettingsOpen(false);setDeleteConfirm(true);}},
+                  {k:"edit",label:"Edit",icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M10.5 2.5l3 3L6 13H3v-3l7.5-7.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>,fn:()=>{setSettingsOpen(false);setWizard("edit");}},
+                  {k:"run",label:"Run now",icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>,fn:runNow},
+                  {k:"sched",label:"Schedule",icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5.5v3l2 1.2M8 1.2V2.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,fn:()=>{setSettingsOpen(false);setScheduleModal(true);}},
+                  {k:"del",label:"Delete",danger:true,icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M6.5 4V2.8h3V4M5 4.5l.5 8.5h5l.5-8.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>,fn:()=>{setSettingsOpen(false);setDeleteConfirm(true);}},
                 ].map(it=>(
                   <button key={it.k} onClick={it.fn} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 10px",borderRadius:7,background:"transparent",border:"none",cursor:"pointer",textAlign:"left",color:it.danger?T.rose:T.text,fontSize:12.5,fontWeight:500}}
                     onMouseEnter={e=>e.currentTarget.style.background=it.danger?T.roseDim:T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
@@ -12477,7 +12469,7 @@ const AssetContractTab = ({asset,onToast})=>{
           </div>
           <div style={{fontSize:10.5,color:T.textMuted,marginTop:8,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
             <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><circle cx="8" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5.5v3l2 1.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-            {contract.schedule?<span>Auto-validates {contract.schedule.frequency.toLowerCase()} at {contract.schedule.time} {contract.schedule.tz}</span>:<span>No schedule — <button onClick={()=>setScheduleModal(true)} style={{background:"none",border:"none",padding:0,color:T.accent,cursor:"pointer",fontSize:10.5,fontWeight:600}}>set one</button></span>}
+            {(contract.validationMode==="scheduled"&&contract.schedule)?<span>Auto-validates {contract.schedule.frequency.toLowerCase()} at {contract.schedule.time} {contract.schedule.tz}</span>:<span>On-demand validation — run from the ⋯ menu</span>}
             <span style={{opacity:.6}}>·</span><span>Last validated {contract.lastRun}</span>
           </div>
         </div>
@@ -12488,7 +12480,7 @@ const AssetContractTab = ({asset,onToast})=>{
       {/* validation checks (explain Health) */}
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginTop:14}}>
         <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.6,marginRight:2}}>Checks</span>
-        {["Schema","Semantics","Security","Quality","SLA","Terms of Use"].map(s=>{
+        {["Schema","Semantics","Quality","SLA"].map(s=>{
           const ok=sp[s];
           return <div key={s} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 11px",borderRadius:7,background:ok?"#16a34a0e":T.roseDim,border:`1px solid ${ok?"#16a34a33":T.rose+"33"}`}}>
             <span style={{color:ok?"#16a34a":T.rose,display:"flex"}}>{ok?<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5l3 3 6-6.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>:<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>}</span>
@@ -12564,39 +12556,14 @@ const AssetContractTab = ({asset,onToast})=>{
           </div>}
     </Section>
 
-    {/* ── Security + SLA ── */}
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-      <Section title="Security" pass={sp.Security}>
-        <KV k="Classification" v={contract.security.classification}/>
-        <KV k="Access Policy" v={contract.security.policy}/>
-        <div style={{fontSize:11.5,color:T.textSub,marginTop:10,lineHeight:1.5}}>{contract.security.access}</div>
-      </Section>
-      <Section title="SLA">
+    {/* ── SLA ── */}
+    <Section title="SLA">
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 28px"}}>
         <KV k="Refresh Frequency" v={contract.sla.refreshInterval?`Every ${contract.sla.refreshInterval} ${contract.sla.refreshUnit}${contract.sla.refreshInterval>1?"s":""}`:"—"}/>
         <KV k="Max Latency" v={contract.sla.latencyValue!=null?`${contract.sla.latencyValue} ${contract.sla.latencyUnit}`:"—"}/>
         <KV k="Availability" v={contract.sla.availabilityTime?`${contract.sla.availabilityTime} ${contract.sla.availabilityTz}`:"—"}/>
         <KV k="Retention" v={contract.sla.retentionPeriod!=null?`${contract.sla.retentionPeriod} ${contract.sla.retentionUnit}`:"—"}/>
         <KV k="Refresh Column" v={contract.sla.refreshColumn||"—"}/>
-      </Section>
-    </div>
-
-    {/* ── 6. Terms of Use ── */}
-    <Section title="Terms of Use">
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16}}>
-        <div>
-          <div style={{fontSize:10.5,fontWeight:700,color:"#16a34a",textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Allowed</div>
-          {contract.terms.allowed.map((a,i)=><div key={i} style={{fontSize:12,color:T.textSub,marginBottom:5}}>✓ {a}</div>)}
-        </div>
-        <div>
-          <div style={{fontSize:10.5,fontWeight:700,color:T.rose,textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Disallowed</div>
-          {contract.terms.disallowed.map((a,i)=><div key={i} style={{fontSize:12,color:T.textSub,marginBottom:5}}>✕ {a}</div>)}
-        </div>
-        <div>
-          <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Compliance</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-            {contract.terms.compliance.map((c,i)=><span key={i} style={{fontSize:11,fontWeight:600,padding:"2px 9px",borderRadius:99,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}33`}}>{c}</span>)}
-          </div>
-        </div>
       </div>
     </Section>
 
@@ -12711,23 +12678,19 @@ const CONTRACT_SECTIONS=[
   {key:"semantics",label:"Semantics"},
   {key:"quality",label:"Quality"},
   {key:"policies",label:"Policies"},
-  {key:"security",label:"Security"},
   {key:"sla",label:"SLA"},
-  {key:"terms",label:"Terms of Service"},
+  {key:"validation",label:"Validation"},
 ];
-const slaSummary=(s)=> s?`every ${s.refreshInterval} ${s.refreshUnit}${(s.refreshInterval>1)?"s":""} · ≤ ${s.latencyValue} ${s.latencyUnit} latency`:"—";
 const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
   const cols=(typeof ASSET_COLUMNS!=="undefined" && ASSET_COLUMNS[asset.name])||[];
   const assetCases=(typeof DQ_TEST_CASES!=="undefined"?DQ_TEST_CASES:[]).filter(t=>t.table.endsWith("."+asset.name)||t.table===asset.name);
   const allPolicies=(typeof POLICIES!=="undefined"?POLICIES:[]);
   const isEdit=!!existing;
   const [sec,setSec]=useState("details");
-  const [schedOpen,setSchedOpen]=useState(false);
   const [name,setName]=useState(existing?.name||`${asset.name}_contract`);
   const [desc,setDesc]=useState(existing?.description||"");
   const [schemaCols,setSchemaCols]=useState(existing?existing.schema.map(c=>c.name):cols.slice(0,5));
   const [semantics,setSemantics]=useState(existing?existing.semantics.map(s=>s.rule):["Owners must be set","Description required"]);
-  const [classification,setClassification]=useState(existing?.security?.classification||"Internal");
   const [quality,setQuality]=useState(existing?existing.quality.map(q=>q.tcId).filter(Boolean):assetCases.slice(0,4).map(t=>t.id));
   const [policies,setPolicies]=useState(existing?.policies?existing.policies.map(p=>p.policyId):[]);
   const [refreshInterval,setRefreshInterval]=useState(existing?.sla?.refreshInterval??1);
@@ -12739,67 +12702,80 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
   const [retentionPeriod,setRetentionPeriod]=useState(existing?.sla?.retentionPeriod??365);
   const [retentionUnit,setRetentionUnit]=useState(existing?.sla?.retentionUnit||"Days");
   const [refreshColumn,setRefreshColumn]=useState(existing?.sla?.refreshColumn||"");
-  const [compliance,setCompliance]=useState(existing?.terms?.compliance||["GDPR"]);
-  const [schedule,setSchedule]=useState(existing?.schedule||null);
+  const [validationMode,setValidationMode]=useState(existing?.validationMode||(existing?.schedule?"scheduled":"ondemand"));
+  const [schedFreq,setSchedFreq]=useState(existing?.schedule?.frequency||"Daily");
+  const [schedTime,setSchedTime]=useState(existing?.schedule?.time||"05:00");
+  const [schedTz,setSchedTz]=useState(existing?.schedule?.tz||"UTC");
   const toggle=(arr,set,v)=>set(arr.includes(v)?arr.filter(x=>x!==v):[...arr,v]);
   const Lbl=({children,sub})=><div style={{marginBottom:8}}><div style={{fontSize:11.5,fontWeight:700,color:T.text}}>{children}</div>{sub&&<div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{sub}</div>}</div>;
   const Pill=({active,onClick,children})=><button onClick={onClick} style={{padding:"6px 13px",borderRadius:99,fontSize:12,fontWeight:active?600:400,cursor:"pointer",background:active?T.accent:T.bgElevated,color:active?"#fff":T.textSub,border:`1px solid ${active?T.accent:T.border}`}}>{children}</button>;
   const inp={width:"100%",boxSizing:"border-box",padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none"};
+
+  // ── per-section completeness drives the rail dots, Next, and Save ──
+  const complete={
+    details: !!name.trim(),
+    schema: schemaCols.length>0,
+    semantics: semantics.length>0,
+    quality: true,   // optional
+    policies: true,  // optional
+    sla: String(refreshInterval).trim()!=="" && String(latencyValue).trim()!=="" && String(retentionPeriod).trim()!=="",
+    validation: validationMode==="ondemand" || (validationMode==="scheduled" && !!schedTime.trim()),
+  };
+  const required=["details","schema","semantics","sla","validation"];
+  const allComplete=required.every(k=>complete[k]);
+  const curIdx=CONTRACT_SECTIONS.findIndex(s=>s.key===sec);
+  const isLast=curIdx===CONTRACT_SECTIONS.length-1;
+  const nextKey=CONTRACT_SECTIONS[curIdx+1]?.key;
+  const prevKey=CONTRACT_SECTIONS[curIdx-1]?.key;
+
   const build=()=>{
     const exCol=(c)=>existing?.schema?.find(s=>s.name===c);
     return {
       name:name.trim()||`${asset.name}_contract`,version:existing?.version||"1.0.0",status:existing?.status||"Draft",
       owners:existing?.owners||asset.owners||[asset.owner].filter(Boolean),
       description:desc.trim()||`Data contract for ${asset.name}.`,updated:"Just now",lastRun:existing?.lastRun||"Not yet run",
-      schedule,
+      validationMode,
+      schedule: validationMode==="scheduled" ? {frequency:schedFreq,time:schedTime,tz:schedTz} : null,
       schema:schemaCols.map(c=>({name:c,type:exCol(c)?.type||"—",constraint:exCol(c)?.constraint||"NOT NULL",required:true})),
       semantics:semantics.map(r=>({key:SEMANTIC_KEY[r],rule:r})),
-      security:{classification,policy:existing?.security?.policy||`${asset.name} Access Policy`,access:"Restricted — authorized roles only"},
       quality:assetCases.filter(t=>quality.includes(t.id)).map(t=>({tcId:t.id,name:t.name})),
       policies:allPolicies.filter(p=>policies.includes(p.id)).map(p=>({policyId:p.id,name:p.name})),
       sla:{refreshInterval:Number(refreshInterval)||1,refreshUnit,latencyValue:Number(latencyValue)||0,latencyUnit,availabilityTime:availTime,availabilityTz:availTz,retentionPeriod:Number(retentionPeriod)||0,retentionUnit,refreshColumn},
-      terms:existing?.terms?{...existing.terms,compliance}:{allowed:["Internal analytics","Reporting"],disallowed:["Third-party sharing","External redistribution"],compliance},
       history:existing?existing.history:[{at:"Just now",by:"You",action:"Contract created",note:"Draft"}],
       versions:existing?.versions,
     };
   };
-  const runValidation=()=>{ const res=validateContract(build(),asset); onToast&&onToast(res.allPass?`Validation passed — all ${Object.keys(res.sections).length} checks green`:`Validation: ${res.failedSections.length} failing — ${res.failedSections.join(", ")}`,res.allPass?"success":"error"); };
-
-  const RailItem=({s})=>(
-    <button onClick={()=>setSec(s.key)} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 11px",borderRadius:8,background:sec===s.key?T.bgSurface:"transparent",border:`1px solid ${sec===s.key?T.border:"transparent"}`,color:sec===s.key?T.text:T.textMuted,fontSize:12.5,fontWeight:sec===s.key?700:500,cursor:"pointer",textAlign:"left",boxShadow:sec===s.key?"0 1px 2px rgba(0,0,0,.06)":"none"}}>
-      <span style={{width:6,height:6,borderRadius:"50%",background:sec===s.key?T.accent:T.borderLight,flexShrink:0}}/>{s.label}
-    </button>
-  );
+  const runCheck=()=>{ const res=validateContract(build(),asset); onToast&&onToast(res.allPass?`Validation passed — all ${Object.keys(res.sections).length} checks green`:`Validation: ${res.failedSections.length} failing — ${res.failedSections.join(", ")}`,res.allPass?"success":"error"); };
 
   return createPortal(
-    <>
     <div onClick={onClose} className="fadeIn" style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}>
-      <div onClick={e=>e.stopPropagation()} className="slideInRight" style={{position:"absolute",top:0,right:0,bottom:0,width:860,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,boxShadow:"-12px 0 48px rgba(0,0,0,.32)",display:"flex",flexDirection:"column"}}>
-        {/* header with actions (OpenMetadata style) */}
+      <div onClick={e=>e.stopPropagation()} className="slideInRight" style={{position:"absolute",top:0,right:0,bottom:0,width:880,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,boxShadow:"-12px 0 48px rgba(0,0,0,.32)",display:"flex",flexDirection:"column"}}>
+        {/* header */}
         <div style={{padding:"14px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexShrink:0,background:T.bgElevated}}>
           <div style={{minWidth:0}}>
             <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{isEdit?"Edit Data Contract":"Add Contract Details"}</div>
             <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Define the agreement for <span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{asset.name}</span></div>
           </div>
-          <div style={{display:"flex",gap:8,flexShrink:0,alignItems:"center"}}>
-            <Btn small ghost onClick={onClose}>Cancel</Btn>
-            <Btn small ghost onClick={runValidation}>Run</Btn>
-            <Btn small ghost onClick={()=>setSchedOpen(true)}>{schedule?"Edit schedule":"Schedule"}</Btn>
-            <Btn small variant="primary" onClick={()=>onSubmit(build())}>{isEdit?"Save changes":"Save"}</Btn>
-          </div>
+          <button onClick={onClose} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.x(12)}</button>
         </div>
         {/* body: section rail + content */}
         <div style={{flex:1,display:"flex",minHeight:0}}>
-          <div style={{width:208,flexShrink:0,borderRight:`1px solid ${T.border}`,overflowY:"auto",padding:"14px 10px",display:"flex",flexDirection:"column",gap:3,background:T.bg}}>
-            {CONTRACT_SECTIONS.map(s=><RailItem key={s.key} s={s}/>)}
-            {schedule&&<div style={{margintop:8,marginTop:10,padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}><div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.5,marginBottom:3}}>Validation schedule</div><div style={{fontSize:11.5,color:T.textSub}}>{schedule.frequency} at {schedule.time} {schedule.tz}</div></div>}
+          <div style={{width:212,flexShrink:0,borderRight:`1px solid ${T.border}`,overflowY:"auto",padding:"14px 10px",display:"flex",flexDirection:"column",gap:3,background:T.bg}}>
+            {CONTRACT_SECTIONS.map(s=>{
+              const on=sec===s.key, done=complete[s.key], req=required.includes(s.key);
+              return <button key={s.key} onClick={()=>setSec(s.key)} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 11px",borderRadius:8,background:on?T.bgSurface:"transparent",border:`1px solid ${on?T.border:"transparent"}`,color:on?T.text:T.textMuted,fontSize:12.5,fontWeight:on?700:500,cursor:"pointer",textAlign:"left",boxShadow:on?"0 1px 2px rgba(0,0,0,.06)":"none"}}>
+                <span style={{width:8,height:8,borderRadius:"50%",flexShrink:0,background:done?T.accent:"transparent",border:done?"none":`1.5px solid ${T.borderLight}`}}/>
+                <span style={{flex:1}}>{s.label}</span>
+                {req&&!done&&<span style={{fontSize:13,color:T.textMuted,lineHeight:1}}>*</span>}
+              </button>;
+            })}
           </div>
           <div style={{flex:1,overflowY:"auto",padding:"22px 26px"}}>
             {sec==="details"&&<div style={{display:"flex",flexDirection:"column",gap:18,maxWidth:560}}>
               <div><div style={{fontSize:15,fontWeight:700,color:T.text}}>Contract Details</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>The key information that identifies this contract.</div></div>
               <div><Lbl>Contract name <span style={{color:T.rose}}>*</span></Lbl><input value={name} onChange={e=>setName(e.target.value)} style={inp}/></div>
               <div><Lbl>Description</Lbl><textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={4} placeholder="What this contract guarantees, and for whom…" style={{...inp,resize:"vertical",fontFamily:"inherit"}}/></div>
-              <div><Lbl>Owners</Lbl><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{(existing?.owners||asset.owners||[asset.owner].filter(Boolean)).map(o=><span key={o} style={{fontSize:12,...{fontFamily:"'Geist Mono',monospace"},padding:"4px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,color:T.textSub}}>{o}</span>)}</div></div>
+              <div><Lbl>Owners</Lbl><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{(existing?.owners||asset.owners||[asset.owner].filter(Boolean)).map(o=><span key={o} style={{fontSize:12,fontFamily:"'Geist Mono',monospace",padding:"4px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,color:T.textSub}}>{o}</span>)}</div></div>
             </div>}
 
             {sec==="schema"&&<div style={{maxWidth:620}}>
@@ -12817,7 +12793,7 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
             </div>}
 
             {sec==="quality"&&<div style={{maxWidth:620}}>
-              <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Quality Assertions</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>Attach existing data-quality test cases ({quality.length} selected).</div></div>
+              <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Quality Assertions</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>Attach existing data-quality test cases ({quality.length} selected). Optional.</div></div>
               {assetCases.length===0?<div style={{fontSize:12.5,color:T.textMuted,padding:"16px 0"}}>No test cases exist for this asset yet. Create them in Observability › Data Quality first.</div>:
               <div style={{display:"flex",flexDirection:"column",gap:8}}>{assetCases.map(t=>(
                 <label key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:quality.includes(t.id)?T.accentDim:T.bgElevated,border:`1px solid ${quality.includes(t.id)?T.accent+"55":T.border}`,borderRadius:9,cursor:"pointer"}}>
@@ -12829,7 +12805,7 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
             </div>}
 
             {sec==="policies"&&<div style={{maxWidth:640}}>
-              <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Governance Policies</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>Attach policies from Policy Manager that this contract enforces ({policies.length} selected).</div></div>
+              <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Governance Policies</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>Attach policies from Policy Manager that this contract enforces ({policies.length} selected). Optional.</div></div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>{allPolicies.map(p=>(
                 <label key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:policies.includes(p.id)?T.accentDim:T.bgElevated,border:`1px solid ${policies.includes(p.id)?T.accent+"55":T.border}`,borderRadius:9,cursor:"pointer"}}>
                   <input type="checkbox" checked={policies.includes(p.id)} onChange={()=>toggle(policies,setPolicies,p.id)} style={{accentColor:T.accent}}/>
@@ -12837,12 +12813,6 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
                   <span style={{fontSize:10.5,color:T.textMuted}}>{p.category}</span>
                   <span style={{fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:5,background:p.severity==="Critical"?T.roseDim:T.bgHover,color:p.severity==="Critical"?T.rose:T.textMuted}}>{p.severity}</span>
                 </label>))}</div>
-            </div>}
-
-            {sec==="security"&&<div style={{maxWidth:560}}>
-              <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Security</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>Classification and access policy expectations.</div></div>
-              <div style={{marginBottom:16}}><Lbl>Classification</Lbl><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{["Internal","Confidential","Restricted","PII"].map(c=><Pill key={c} active={classification===c} onClick={()=>setClassification(c)}>{c}</Pill>)}</div></div>
-              <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6,padding:"10px 12px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>Sensitive classifications (PII/Confidential/Restricted) require the asset to carry a matching sensitivity tag — checked during validation.</div>
             </div>}
 
             {sec==="sla"&&<div style={{maxWidth:760}}>
@@ -12883,17 +12853,44 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
               </div>
             </div>}
 
-            {sec==="terms"&&<div style={{maxWidth:560}}>
-              <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Terms of Service</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>How this data may be used, and compliance requirements.</div></div>
-              <div style={{marginBottom:16}}><Lbl>Compliance requirements</Lbl><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{CONTRACT_COMPLIANCE.map(c=><Pill key={c} active={compliance.includes(c)} onClick={()=>toggle(compliance,setCompliance,c)}>{c}</Pill>)}</div></div>
-              <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6,padding:"10px 12px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>Allowed uses (internal analytics, reporting) and disallowed uses (third-party sharing, external redistribution) are recorded with the contract.</div>
+            {sec==="validation"&&<div style={{maxWidth:620}}>
+              <div style={{marginBottom:16}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Validation</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>Choose how this contract is validated against the live asset.</div></div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+                {[{k:"ondemand",t:"On demand",d:"Validate manually with Run now whenever you need to."},{k:"scheduled",t:"Scheduled",d:"Validate automatically on a recurring schedule."}].map(o=>{
+                  const on=validationMode===o.k;
+                  return <button key={o.k} onClick={()=>setValidationMode(o.k)} style={{textAlign:"left",padding:"14px 16px",borderRadius:11,cursor:"pointer",background:on?T.accentDim:T.bgElevated,border:`1.5px solid ${on?T.accent:T.border}`}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
+                      <span style={{width:15,height:15,borderRadius:"50%",border:`1.5px solid ${on?T.accent:T.borderLight}`,display:"flex",alignItems:"center",justifyContent:"center"}}>{on&&<span style={{width:7,height:7,borderRadius:"50%",background:T.accent}}/>}</span>
+                      <span style={{fontSize:13,fontWeight:700,color:T.text}}>{o.t}</span>
+                    </div>
+                    <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.5,paddingLeft:23}}>{o.d}</div>
+                  </button>;
+                })}
+              </div>
+              {validationMode==="scheduled"&&<div style={{padding:"14px 16px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+                <div><div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Frequency</div><select value={schedFreq} onChange={e=>setSchedFreq(e.target.value)} style={inp}>{["Hourly","Daily","Weekly","Monthly"].map(o=><option key={o}>{o}</option>)}</select></div>
+                <div><div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Time</div><input value={schedTime} onChange={e=>setSchedTime(e.target.value)} placeholder="05:00" style={inp}/></div>
+                <div><div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Timezone</div><select value={schedTz} onChange={e=>setSchedTz(e.target.value)} style={inp}>{["UTC","America/New_York","Europe/London","Asia/Kolkata"].map(o=><option key={o}>{o}</option>)}</select></div>
+              </div>}
+              <div style={{marginTop:16,display:"flex",alignItems:"center",gap:10}}>
+                <Btn small ghost onClick={runCheck}>Run check now</Btn>
+                <span style={{fontSize:11,color:T.textMuted}}>Dry-run the validation against the live asset before saving.</span>
+              </div>
             </div>}
+          </div>
+        </div>
+        {/* footer: Back / Next / Save */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgSurface}}>
+          <Btn small ghost onClick={()=>prevKey?setSec(prevKey):onClose()}>{prevKey?"← Back":"Cancel"}</Btn>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            {!complete[sec]&&required.includes(sec)&&<span style={{fontSize:11,color:T.textMuted}}>Complete this section to continue</span>}
+            {isLast
+              ? <Btn small variant="primary" disabled={!allComplete} onClick={()=>onSubmit(build())}>{isEdit?"Save changes":"Save contract"}</Btn>
+              : <Btn small variant="primary" disabled={!complete[sec]} onClick={()=>setSec(nextKey)}>Next →</Btn>}
           </div>
         </div>
       </div>
     </div>
-    {schedOpen&&<ContractScheduleModal schedule={schedule} onClose={()=>setSchedOpen(false)} onSave={(s)=>{setSchedule(s);setSchedOpen(false);onToast&&onToast("Validation schedule set","success");}}/>}
-    </>
   ,document.body);
 };
 
