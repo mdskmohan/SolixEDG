@@ -3152,6 +3152,7 @@ const GROUPS = [
   {section:"Workspace",items:[
     {key:"home",           icon:"home",          label:"Home"},
     {key:"search",         icon:"search",        label:"Search"},
+    {key:"stewardship",    icon:"steward",       label:"My Workspace"},
   ]},
   {section:"Catalog",items:[
     {key:"catalog",        icon:"catalog",       label:"Data Catalog"},
@@ -3172,7 +3173,7 @@ const GROUPS = [
 const Sidebar = ({active, onNav, exp, setExp, onHelp}) => {
   const {roleCfg} = useRole();
   const inboxBadgeCount = INBOX_DATA.filter(i=>!i.readAt).length;
-  const allowedNav = roleCfg?.nav || ["home","search","catalog","quality","observability","contracts","policymanager","certifications","glossary","domains","dataproducts","settings","tags"];
+  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","observability","contracts","policymanager","certifications","glossary","domains","dataproducts","settings","tags"];
   return (
     <div style={{position:"fixed",top:0,left:0,height:"100vh",width:exp?EXPANDED_W:COLLAPSED_W,background:T.bgSurface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:100,transition:"width .2s ease",overflow:"hidden"}}>
       {/* Logo */}
@@ -12687,6 +12688,7 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
   const allPolicies=(typeof POLICIES!=="undefined"?POLICIES:[]);
   const isEdit=!!existing;
   const [sec,setSec]=useState("details");
+  const [doneSet,setDoneSet]=useState(()=>new Set());  // sections confirmed via Next — drives the rail dots
   const [name,setName]=useState(existing?.name||`${asset.name}_contract`);
   const [desc,setDesc]=useState(existing?.description||"");
   const [schemaCols,setSchemaCols]=useState(existing?existing.schema.map(c=>c.name):cols.slice(0,5));
@@ -21887,7 +21889,7 @@ const ROLES_CONFIG = {
     badge: "rgba(238,36,36,0.15)",
     desc:  "Full platform access including settings, user management, and all configurations.",
     rbacRole: "admin",
-    nav: ["home","search","catalog","quality","observability","contracts","policymanager","certifications","glossary","domains","dataproducts","settings","tags"],
+    nav: ["home","search","stewardship","catalog","quality","observability","contracts","policymanager","certifications","glossary","domains","dataproducts","settings","tags"],
     homeWidgets: ["metrics","tasks","quality","recentAssets","services","activity"],
   },
   steward: {
@@ -21900,7 +21902,7 @@ const ROLES_CONFIG = {
     desc:  "Govern assets in your domain: certify data, manage glossary terms, resolve conflicts.",
     rbacRole: "steward",
     domain: "Commerce",
-    nav: ["home","search","catalog","quality","observability","policymanager","certifications","glossary","domains","dataproducts","tags"],
+    nav: ["home","search","stewardship","catalog","quality","observability","policymanager","certifications","glossary","domains","dataproducts","tags"],
     homeWidgets: ["tasks","certQueue","qualityAlerts","recentAssets","activity"],
   },
   analyst: {
