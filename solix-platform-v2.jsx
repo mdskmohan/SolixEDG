@@ -12266,23 +12266,27 @@ const CONTRACT_BY_ASSET = {
       {tcId:"tc3", name:"status in allowed set"},
       {tcId:"tc2", name:"row count 50k–80k"},
     ],
-    sla:{refresh:"Daily",availability:"08:00 UTC",latency:"≤ 2 hours",retention:"365 days"},
+    // governance policies enforced by this contract (from Policy Manager)
+    policies:[{policyId:1,name:"PII Data Handling"},{policyId:3,name:"GDPR Compliance"}],
+    sla:{refreshInterval:1,refreshUnit:"Day",latencyValue:2,latencyUnit:"Hours",availabilityTime:"08:00",availabilityTz:"UTC",retentionPeriod:365,retentionUnit:"Days",refreshColumn:"updated_at"},
     terms:{allowed:["Internal analytics","Reporting","Business intelligence"],disallowed:["Third-party sharing","External redistribution","AI model training"],compliance:["GDPR","SOC2"]},
     // prior versions (full definition snapshots) — newest first
     versions:[
-      {version:"2.0.0", at:"3 weeks ago", by:"maya.chen", note:"Tightened SLA latency and added SOC2",
+      {version:"2.0.0", at:"3 weeks ago", by:"maya.chen", note:"Tightened SLA latency, added SOC2 and GDPR policy",
         schema:[{name:"order_id",type:"BIGINT",constraint:"NOT NULL · UNIQUE",required:true},{name:"customer_id",type:"BIGINT",constraint:"NOT NULL",required:true},{name:"amount",type:"DECIMAL(12,2)",constraint:"≥ 0",required:true},{name:"created_at",type:"TIMESTAMP",constraint:"NOT NULL",required:true}],
         semantics:[{key:"owners",rule:"Owners must be set"},{key:"description",rule:"Description required"},{key:"domain",rule:"Domain assigned"}],
         security:{classification:"PII",policy:"Customer Data Policy"},
         quality:[{tcId:"tc14",name:"order_id unique"},{tcId:"tc4",name:"customer_id not null"},{tcId:"tc1",name:"total_amount in range 0–100,000"},{tcId:"tc3",name:"status in allowed set"}],
-        sla:{refresh:"Daily",availability:"08:00 UTC",latency:"≤ 2 hours",retention:"365 days"},
+        policies:[{policyId:1,name:"PII Data Handling"}],
+        sla:{refreshInterval:1,refreshUnit:"Day",latencyValue:2,latencyUnit:"Hours",availabilityTime:"08:00",availabilityTz:"UTC",retentionPeriod:365,retentionUnit:"Days",refreshColumn:"updated_at"},
         terms:{allowed:["Internal analytics","Reporting","Business intelligence"],disallowed:["Third-party sharing","External redistribution"],compliance:["GDPR","SOC2"]}},
       {version:"1.0.0", at:"3 months ago", by:"dev.patel", note:"Initial contract",
         schema:[{name:"order_id",type:"BIGINT",constraint:"NOT NULL",required:true},{name:"amount",type:"DECIMAL(12,2)",constraint:"≥ 0",required:true},{name:"created_at",type:"TIMESTAMP",constraint:"NOT NULL",required:true}],
         semantics:[{key:"owners",rule:"Owners must be set"},{key:"description",rule:"Description required"}],
         security:{classification:"Confidential",policy:"Customer Data Policy"},
         quality:[{tcId:"tc14",name:"order_id unique"},{tcId:"tc1",name:"total_amount in range 0–100,000"}],
-        sla:{refresh:"Daily",availability:"09:00 UTC",latency:"≤ 4 hours",retention:"365 days"},
+        policies:[],
+        sla:{refreshInterval:1,refreshUnit:"Day",latencyValue:4,latencyUnit:"Hours",availabilityTime:"09:00",availabilityTz:"UTC",retentionPeriod:365,retentionUnit:"Days",refreshColumn:"updated_at"},
         terms:{allowed:["Internal analytics","Reporting"],disallowed:["Third-party sharing"],compliance:["GDPR"]}},
     ],
   },
@@ -12299,8 +12303,9 @@ function diffContracts(prev,cur){
   addrem(prev.schema,cur.schema,"name","Column");
   addrem(prev.semantics,cur.semantics,"rule","Rule");
   addrem(prev.quality,cur.quality,"name","Quality test");
+  addrem(prev.policies,cur.policies,"name","Policy");
   if(prev.security?.classification!==cur.security?.classification) ch.push({t:"change",label:`Classification: ${prev.security?.classification} → ${cur.security?.classification}`});
-  ["refresh","availability","latency","retention"].forEach(k=>{ if(prev.sla?.[k]!==cur.sla?.[k]) ch.push({t:"change",label:`SLA ${k}: ${prev.sla?.[k]} → ${cur.sla?.[k]}`}); });
+  [["refreshInterval","Refresh interval"],["refreshUnit","Refresh unit"],["latencyValue","Max latency"],["latencyUnit","Latency unit"],["availabilityTime","Availability time"],["availabilityTz","Timezone"],["retentionPeriod","Retention period"],["retentionUnit","Retention unit"],["refreshColumn","Refresh column"]].forEach(([k,label])=>{ if((prev.sla?.[k])!==(cur.sla?.[k])) ch.push({t:"change",label:`${label}: ${prev.sla?.[k]??"—"} → ${cur.sla?.[k]??"—"}`}); });
   addrem(prev.terms?.compliance,cur.terms?.compliance,null,"Compliance");
   return ch;
 }
@@ -12357,7 +12362,7 @@ const AssetContractTab = ({asset,onToast})=>{
     setContract(c=>({...c,version:nv,status:"Draft",updated:"Just now",versions:[snap,...(c.versions||[])]}));
     onToast&&onToast(`Created draft v${nv} — previous version archived in history`,"success");
   };
-  const saveEdit=(updated)=>{ setContract(c=>({...updated,version:c.version,status:c.status,versions:c.versions,schedule:c.schedule,updated:"Just now"})); setWizard(false); onToast&&onToast("Contract updated","success"); };
+  const saveEdit=(updated)=>{ setContract(c=>({...updated,version:c.version,status:c.status,versions:c.versions,schedule:updated.schedule??c.schedule,updated:"Just now"})); setWizard(false); onToast&&onToast("Contract updated","success"); };
   const doDelete=()=>{ setContractState(null); CONTRACT_STORE[asset.name]=null; setDeleteConfirm(false); onToast&&onToast("Contract deleted","error"); };
   const saveSchedule=(sched)=>{ setContract(c=>({...c,schedule:sched})); setScheduleModal(false); onToast&&onToast("Validation schedule updated","success"); };
 
@@ -12372,7 +12377,7 @@ const AssetContractTab = ({asset,onToast})=>{
         <div style={{fontSize:13,color:T.textMuted,lineHeight:1.6,marginBottom:20}}>A data contract formalizes the agreement between producers and consumers — schema, semantics, security, quality, SLAs and terms of use — and is continuously validated against the live asset.</div>
         <Btn variant="primary" icon={Ic.plus(13)} onClick={()=>setWizard("create")}>Add Contract</Btn>
       </div>
-      {wizard&&<ContractWizard asset={asset} onClose={()=>setWizard(false)} onSubmit={(c)=>{setContract({...c,versions:[]});setWizard(false);onToast&&onToast(`Contract “${c.name}” created`,"success");}}/>}
+      {wizard&&<ContractWizard asset={asset} onToast={onToast} onClose={()=>setWizard(false)} onSubmit={(c)=>{setContract({...c,versions:[]});setWizard(false);onToast&&onToast(`Contract “${c.name}” created`,"success");}}/>}
     </>
   );
 
@@ -12494,7 +12499,7 @@ const AssetContractTab = ({asset,onToast})=>{
     </div></Card2>
 
     {/* ── 1. Schema ── */}
-    <Section title="1 · Schema Contract">
+    <Section title="Schema">
       <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>Producers cannot change these columns without publishing a new contract version.</div>
       <table style={{width:"100%",borderCollapse:"collapse"}}>
         <thead><tr style={{borderBottom:`1px solid ${T.border}`}}>
@@ -12515,7 +12520,7 @@ const AssetContractTab = ({asset,onToast})=>{
 
     {/* ── 2 & 4: Quality + Semantics ── */}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-      <Section title="4 · Quality Assertions" pass={sp.Quality}>
+      <Section title="Quality Assertions" pass={sp.Quality}>
         <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>Linked to live data-quality test cases — status reflects the latest run.</div>
         <div style={{display:"flex",flexDirection:"column",gap:7}}>
           {v.quality.length===0&&<div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No quality tests attached.</div>}
@@ -12528,7 +12533,7 @@ const AssetContractTab = ({asset,onToast})=>{
           ))}
         </div>
       </Section>
-      <Section title="2 · Semantics" pass={sp.Semantics}>
+      <Section title="Semantics" pass={sp.Semantics}>
         <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>Mandatory metadata — validated against this asset's live metadata.</div>
         <div style={{display:"flex",flexDirection:"column",gap:7}}>
           {v.semantics.map((s,i)=>(
@@ -12541,23 +12546,42 @@ const AssetContractTab = ({asset,onToast})=>{
       </Section>
     </div>
 
-    {/* ── 3 & 5: Security + SLA ── */}
+    {/* ── Policies (governance from Policy Manager) ── */}
+    <Section title="Policies">
+      <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>Governance policies from Policy Manager that this contract enforces.</div>
+      {(contract.policies||[]).length===0
+        ? <div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No policies attached.</div>
+        : <div style={{display:"flex",flexDirection:"column",gap:7}}>
+            {(contract.policies||[]).map((p,i)=>{
+              const pol=(typeof POLICIES!=="undefined"?POLICIES:[]).find(x=>x.id===p.policyId);
+              return <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 11px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>
+                <span style={{display:"flex",color:"#7c3aed"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 1.5l5 2v4c0 3.2-2.1 5.6-5 6.5-2.9-.9-5-3.3-5-6.5v-4l5-2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg></span>
+                <span style={{fontSize:12.5,fontWeight:600,color:T.text,flex:1}}>{p.name}</span>
+                {pol&&<span style={{fontSize:10.5,color:T.textMuted}}>{pol.category}</span>}
+                {pol&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:5,background:pol.lifecycle==="Active"?"#16a34a14":T.amberDim,color:pol.lifecycle==="Active"?"#16a34a":T.amber}}>{pol.lifecycle||"Active"}</span>}
+              </div>;
+            })}
+          </div>}
+    </Section>
+
+    {/* ── Security + SLA ── */}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-      <Section title="3 · Security" pass={sp.Security}>
+      <Section title="Security" pass={sp.Security}>
         <KV k="Classification" v={contract.security.classification}/>
         <KV k="Access Policy" v={contract.security.policy}/>
         <div style={{fontSize:11.5,color:T.textSub,marginTop:10,lineHeight:1.5}}>{contract.security.access}</div>
       </Section>
-      <Section title="5 · SLA">
-        <KV k="Refresh Frequency" v={contract.sla.refresh}/>
-        <KV k="Availability" v={contract.sla.availability}/>
-        <KV k="Max Latency" v={contract.sla.latency}/>
-        <KV k="Retention" v={contract.sla.retention}/>
+      <Section title="SLA">
+        <KV k="Refresh Frequency" v={contract.sla.refreshInterval?`Every ${contract.sla.refreshInterval} ${contract.sla.refreshUnit}${contract.sla.refreshInterval>1?"s":""}`:"—"}/>
+        <KV k="Max Latency" v={contract.sla.latencyValue!=null?`${contract.sla.latencyValue} ${contract.sla.latencyUnit}`:"—"}/>
+        <KV k="Availability" v={contract.sla.availabilityTime?`${contract.sla.availabilityTime} ${contract.sla.availabilityTz}`:"—"}/>
+        <KV k="Retention" v={contract.sla.retentionPeriod!=null?`${contract.sla.retentionPeriod} ${contract.sla.retentionUnit}`:"—"}/>
+        <KV k="Refresh Column" v={contract.sla.refreshColumn||"—"}/>
       </Section>
     </div>
 
     {/* ── 6. Terms of Use ── */}
-    <Section title="6 · Terms of Use">
+    <Section title="Terms of Use">
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16}}>
         <div>
           <div style={{fontSize:10.5,fontWeight:700,color:"#16a34a",textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Allowed</div>
@@ -12577,7 +12601,7 @@ const AssetContractTab = ({asset,onToast})=>{
     </Section>
 
     {/* ── 7. Version history (with diffs vs the previous version) ── */}
-    <Section title="7 · Version History">
+    <Section title="Version History">
       <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>Every revision is kept. Each entry shows what changed from the previous version.</div>
       <div style={{display:"flex",flexDirection:"column",gap:0}}>
         {allVersions.map((ver,i)=>{
@@ -12618,7 +12642,7 @@ const AssetContractTab = ({asset,onToast})=>{
     </Section>
 
     {/* ── Edit / create wizard (left drawer) ── */}
-    {wizard&&<ContractWizard asset={asset} existing={wizard==="edit"?contract:null} onClose={()=>setWizard(false)} onSubmit={(c)=>{ wizard==="edit"?saveEdit(c):setContract({...c,versions:[]}); setWizard(false); }}/>}
+    {wizard&&<ContractWizard asset={asset} onToast={onToast} existing={wizard==="edit"?contract:null} onClose={()=>setWizard(false)} onSubmit={(c)=>{ wizard==="edit"?saveEdit(c):setContract({...c,versions:[]}); setWizard(false); }}/>}
 
     {/* ── Schedule validation modal ── */}
     {scheduleModal&&createPortal(<ContractScheduleModal schedule={contract.schedule} onClose={()=>setScheduleModal(false)} onSave={saveSchedule}/>,document.body)}
@@ -12681,111 +12705,195 @@ const ContractScheduleModal = ({schedule,onClose,onSave})=>{
 const CONTRACT_SEMANTIC_RULES=["Owners must be set","Description required","Domain assigned","Tier defined","Tags present"];
 const SEMANTIC_KEY={"Owners must be set":"owners","Description required":"description","Domain assigned":"domain","Tier defined":"tier","Tags present":"tags"};
 const CONTRACT_COMPLIANCE=["GDPR","HIPAA","SOC2","PCI-DSS","CCPA"];
-const ContractWizard = ({asset,existing,onClose,onSubmit})=>{
+const CONTRACT_SECTIONS=[
+  {key:"details",label:"Contract Details"},
+  {key:"schema",label:"Schema"},
+  {key:"semantics",label:"Semantics"},
+  {key:"quality",label:"Quality"},
+  {key:"policies",label:"Policies"},
+  {key:"security",label:"Security"},
+  {key:"sla",label:"SLA"},
+  {key:"terms",label:"Terms of Service"},
+];
+const slaSummary=(s)=> s?`every ${s.refreshInterval} ${s.refreshUnit}${(s.refreshInterval>1)?"s":""} · ≤ ${s.latencyValue} ${s.latencyUnit} latency`:"—";
+const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
   const cols=(typeof ASSET_COLUMNS!=="undefined" && ASSET_COLUMNS[asset.name])||[];
   const assetCases=(typeof DQ_TEST_CASES!=="undefined"?DQ_TEST_CASES:[]).filter(t=>t.table.endsWith("."+asset.name)||t.table===asset.name);
+  const allPolicies=(typeof POLICIES!=="undefined"?POLICIES:[]);
   const isEdit=!!existing;
-  const [step,setStep]=useState(0);
+  const [sec,setSec]=useState("details");
+  const [schedOpen,setSchedOpen]=useState(false);
   const [name,setName]=useState(existing?.name||`${asset.name}_contract`);
   const [desc,setDesc]=useState(existing?.description||"");
   const [schemaCols,setSchemaCols]=useState(existing?existing.schema.map(c=>c.name):cols.slice(0,5));
   const [semantics,setSemantics]=useState(existing?existing.semantics.map(s=>s.rule):["Owners must be set","Description required"]);
   const [classification,setClassification]=useState(existing?.security?.classification||"Internal");
   const [quality,setQuality]=useState(existing?existing.quality.map(q=>q.tcId).filter(Boolean):assetCases.slice(0,4).map(t=>t.id));
-  const [refresh,setRefresh]=useState(existing?.sla?.refresh||"Daily");
-  const [latency,setLatency]=useState(existing?.sla?.latency||"≤ 4 hours");
+  const [policies,setPolicies]=useState(existing?.policies?existing.policies.map(p=>p.policyId):[]);
+  const [refreshInterval,setRefreshInterval]=useState(existing?.sla?.refreshInterval??1);
+  const [refreshUnit,setRefreshUnit]=useState(existing?.sla?.refreshUnit||"Day");
+  const [latencyValue,setLatencyValue]=useState(existing?.sla?.latencyValue??2);
+  const [latencyUnit,setLatencyUnit]=useState(existing?.sla?.latencyUnit||"Hours");
+  const [availTime,setAvailTime]=useState(existing?.sla?.availabilityTime||"09:00");
+  const [availTz,setAvailTz]=useState(existing?.sla?.availabilityTz||"UTC");
+  const [retentionPeriod,setRetentionPeriod]=useState(existing?.sla?.retentionPeriod??365);
+  const [retentionUnit,setRetentionUnit]=useState(existing?.sla?.retentionUnit||"Days");
+  const [refreshColumn,setRefreshColumn]=useState(existing?.sla?.refreshColumn||"");
   const [compliance,setCompliance]=useState(existing?.terms?.compliance||["GDPR"]);
-  const steps=["Basics","Schema","Semantics & Security","Quality","SLA & Terms"];
+  const [schedule,setSchedule]=useState(existing?.schedule||null);
   const toggle=(arr,set,v)=>set(arr.includes(v)?arr.filter(x=>x!==v):[...arr,v]);
-  const Lbl=({children})=><div style={{fontSize:11,fontWeight:700,color:T.textSub,marginBottom:8}}>{children}</div>;
+  const Lbl=({children,sub})=><div style={{marginBottom:8}}><div style={{fontSize:11.5,fontWeight:700,color:T.text}}>{children}</div>{sub&&<div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{sub}</div>}</div>;
   const Pill=({active,onClick,children})=><button onClick={onClick} style={{padding:"6px 13px",borderRadius:99,fontSize:12,fontWeight:active?600:400,cursor:"pointer",background:active?T.accent:T.bgElevated,color:active?"#fff":T.textSub,border:`1px solid ${active?T.accent:T.border}`}}>{children}</button>;
-  const canNext=step===0?!!name.trim():true;
-  const create=()=>{
+  const inp={width:"100%",boxSizing:"border-box",padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none"};
+  const build=()=>{
     const exCol=(c)=>existing?.schema?.find(s=>s.name===c);
-    onSubmit({
-      name:name.trim(),version:existing?.version||"1.0.0",status:"Draft",owners:existing?.owners||asset.owners||[asset.owner].filter(Boolean),
+    return {
+      name:name.trim()||`${asset.name}_contract`,version:existing?.version||"1.0.0",status:existing?.status||"Draft",
+      owners:existing?.owners||asset.owners||[asset.owner].filter(Boolean),
       description:desc.trim()||`Data contract for ${asset.name}.`,updated:"Just now",lastRun:existing?.lastRun||"Not yet run",
+      schedule,
       schema:schemaCols.map(c=>({name:c,type:exCol(c)?.type||"—",constraint:exCol(c)?.constraint||"NOT NULL",required:true})),
       semantics:semantics.map(r=>({key:SEMANTIC_KEY[r],rule:r})),
       security:{classification,policy:existing?.security?.policy||`${asset.name} Access Policy`,access:"Restricted — authorized roles only"},
       quality:assetCases.filter(t=>quality.includes(t.id)).map(t=>({tcId:t.id,name:t.name})),
-      sla:{refresh,availability:existing?.sla?.availability||"08:00 UTC",latency,retention:existing?.sla?.retention||"365 days"},
+      policies:allPolicies.filter(p=>policies.includes(p.id)).map(p=>({policyId:p.id,name:p.name})),
+      sla:{refreshInterval:Number(refreshInterval)||1,refreshUnit,latencyValue:Number(latencyValue)||0,latencyUnit,availabilityTime:availTime,availabilityTz:availTz,retentionPeriod:Number(retentionPeriod)||0,retentionUnit,refreshColumn},
       terms:existing?.terms?{...existing.terms,compliance}:{allowed:["Internal analytics","Reporting"],disallowed:["Third-party sharing","External redistribution"],compliance},
-      history:existing?existing.history:[{at:"Just now",by:"You",action:"Contract created",note:"Draft — submit for review to enforce"}],
-    });
+      history:existing?existing.history:[{at:"Just now",by:"You",action:"Contract created",note:"Draft"}],
+      versions:existing?.versions,
+    };
   };
+  const runValidation=()=>{ const res=validateContract(build(),asset); onToast&&onToast(res.allPass?`Validation passed — all ${Object.keys(res.sections).length} checks green`:`Validation: ${res.failedSections.length} failing — ${res.failedSections.join(", ")}`,res.allPass?"success":"error"); };
+
+  const RailItem=({s})=>(
+    <button onClick={()=>setSec(s.key)} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 11px",borderRadius:8,background:sec===s.key?T.bgSurface:"transparent",border:`1px solid ${sec===s.key?T.border:"transparent"}`,color:sec===s.key?T.text:T.textMuted,fontSize:12.5,fontWeight:sec===s.key?700:500,cursor:"pointer",textAlign:"left",boxShadow:sec===s.key?"0 1px 2px rgba(0,0,0,.06)":"none"}}>
+      <span style={{width:6,height:6,borderRadius:"50%",background:sec===s.key?T.accent:T.borderLight,flexShrink:0}}/>{s.label}
+    </button>
+  );
+
   return createPortal(
+    <>
     <div onClick={onClose} className="fadeIn" style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}>
-      <div onClick={e=>e.stopPropagation()} className="slideInLeft" style={{position:"absolute",top:0,left:0,bottom:0,width:580,maxWidth:"94vw",background:T.bgSurface,borderRight:`1px solid ${T.border}`,boxShadow:"12px 0 48px rgba(0,0,0,.32)",display:"flex",flexDirection:"column"}}>
-        <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,background:T.bgElevated}}>
-          <span style={{fontSize:14,fontWeight:700,color:T.text}}>{isEdit?"Edit Data Contract":"New Data Contract"} · <span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{asset.name}</span></span>
-          <button onClick={onClose} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(12)}</button>
+      <div onClick={e=>e.stopPropagation()} className="slideInRight" style={{position:"absolute",top:0,right:0,bottom:0,width:860,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,boxShadow:"-12px 0 48px rgba(0,0,0,.32)",display:"flex",flexDirection:"column"}}>
+        {/* header with actions (OpenMetadata style) */}
+        <div style={{padding:"14px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexShrink:0,background:T.bgElevated}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{isEdit?"Edit Data Contract":"Add Contract Details"}</div>
+            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Define the agreement for <span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{asset.name}</span></div>
+          </div>
+          <div style={{display:"flex",gap:8,flexShrink:0,alignItems:"center"}}>
+            <Btn small ghost onClick={onClose}>Cancel</Btn>
+            <Btn small ghost onClick={runValidation}>Run</Btn>
+            <Btn small ghost onClick={()=>setSchedOpen(true)}>{schedule?"Edit schedule":"Schedule"}</Btn>
+            <Btn small variant="primary" onClick={()=>onSubmit(build())}>{isEdit?"Save changes":"Save"}</Btn>
+          </div>
         </div>
-        <div style={{flex:1,overflowY:"auto",padding:"20px"}}>
-      <div style={{display:"flex",alignItems:"center",gap:0,marginBottom:20}}>
-        {steps.map((s,i)=>(
-          <React.Fragment key={s}>
-            <div style={{display:"flex",alignItems:"center",gap:7}}>
-              <span style={{width:22,height:22,borderRadius:"50%",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",background:i<=step?T.accent:T.bgElevated,color:i<=step?"#fff":T.textMuted,border:`1px solid ${i<=step?T.accent:T.border}`}}>{i+1}</span>
-              <span style={{fontSize:11,fontWeight:i===step?700:500,color:i===step?T.text:T.textMuted,whiteSpace:"nowrap"}}>{s}</span>
-            </div>
-            {i<steps.length-1&&<div style={{flex:1,height:1,background:i<step?T.accent:T.border,margin:"0 8px"}}/>}
-          </React.Fragment>
-        ))}
-      </div>
-      <div style={{minHeight:230}}>
-        {step===0&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
-          <div><Lbl>Contract name *</Lbl><input value={name} onChange={e=>setName(e.target.value)} style={{width:"100%",boxSizing:"border-box",padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none"}}/></div>
-          <div><Lbl>Description</Lbl><textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={3} placeholder="What this contract guarantees, and for whom…" style={{width:"100%",boxSizing:"border-box",padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",resize:"vertical",fontFamily:"inherit"}}/></div>
-        </div>}
-        {step===1&&<div><Lbl>Required columns ({schemaCols.length} of {cols.length})</Lbl>
-          <div style={{display:"flex",flexWrap:"wrap",gap:7}}>{cols.map(c=><Pill key={c} active={schemaCols.includes(c)} onClick={()=>toggle(schemaCols,setSchemaCols,c)}>{c}</Pill>)}</div>
-          <div style={{fontSize:11,color:T.textMuted,marginTop:10}}>Selected columns and their types become locked by the contract.</div>
-        </div>}
-        {step===2&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
-          <div><Lbl>Semantic rules (mandatory metadata)</Lbl>
-            <div style={{display:"flex",flexDirection:"column",gap:7}}>{CONTRACT_SEMANTIC_RULES.map(r=>(
-              <label key={r} style={{display:"flex",alignItems:"center",gap:9,padding:"8px 11px",background:semantics.includes(r)?T.accentDim:T.bgElevated,border:`1px solid ${semantics.includes(r)?T.accent+"55":T.border}`,borderRadius:8,cursor:"pointer"}}>
-                <input type="checkbox" checked={semantics.includes(r)} onChange={()=>toggle(semantics,setSemantics,r)} style={{accentColor:T.accent}}/>
-                <span style={{fontSize:12.5,color:T.text}}>{r}</span>
-              </label>))}</div>
+        {/* body: section rail + content */}
+        <div style={{flex:1,display:"flex",minHeight:0}}>
+          <div style={{width:208,flexShrink:0,borderRight:`1px solid ${T.border}`,overflowY:"auto",padding:"14px 10px",display:"flex",flexDirection:"column",gap:3,background:T.bg}}>
+            {CONTRACT_SECTIONS.map(s=><RailItem key={s.key} s={s}/>)}
+            {schedule&&<div style={{margintop:8,marginTop:10,padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}><div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.5,marginBottom:3}}>Validation schedule</div><div style={{fontSize:11.5,color:T.textSub}}>{schedule.frequency} at {schedule.time} {schedule.tz}</div></div>}
           </div>
-          <div><Lbl>Security classification</Lbl>
-            <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>{["Internal","Confidential","Restricted","PII"].map(c=><Pill key={c} active={classification===c} onClick={()=>setClassification(c)}>{c}</Pill>)}</div>
+          <div style={{flex:1,overflowY:"auto",padding:"22px 26px"}}>
+            {sec==="details"&&<div style={{display:"flex",flexDirection:"column",gap:18,maxWidth:560}}>
+              <div><div style={{fontSize:15,fontWeight:700,color:T.text}}>Contract Details</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>The key information that identifies this contract.</div></div>
+              <div><Lbl>Contract name <span style={{color:T.rose}}>*</span></Lbl><input value={name} onChange={e=>setName(e.target.value)} style={inp}/></div>
+              <div><Lbl>Description</Lbl><textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={4} placeholder="What this contract guarantees, and for whom…" style={{...inp,resize:"vertical",fontFamily:"inherit"}}/></div>
+              <div><Lbl>Owners</Lbl><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{(existing?.owners||asset.owners||[asset.owner].filter(Boolean)).map(o=><span key={o} style={{fontSize:12,...{fontFamily:"'Geist Mono',monospace"},padding:"4px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,color:T.textSub}}>{o}</span>)}</div></div>
+            </div>}
+
+            {sec==="schema"&&<div style={{maxWidth:620}}>
+              <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Schema</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>Required columns locked by the contract ({schemaCols.length} of {cols.length}).</div></div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:8}}>{cols.map(c=><Pill key={c} active={schemaCols.includes(c)} onClick={()=>toggle(schemaCols,setSchemaCols,c)}>{c}</Pill>)}</div>
+            </div>}
+
+            {sec==="semantics"&&<div style={{maxWidth:560}}>
+              <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Semantics</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>Mandatory metadata rules, validated against the live asset.</div></div>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>{CONTRACT_SEMANTIC_RULES.map(r=>(
+                <label key={r} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:semantics.includes(r)?T.accentDim:T.bgElevated,border:`1px solid ${semantics.includes(r)?T.accent+"55":T.border}`,borderRadius:9,cursor:"pointer"}}>
+                  <input type="checkbox" checked={semantics.includes(r)} onChange={()=>toggle(semantics,setSemantics,r)} style={{accentColor:T.accent}}/>
+                  <span style={{fontSize:12.5,color:T.text}}>{r}</span>
+                </label>))}</div>
+            </div>}
+
+            {sec==="quality"&&<div style={{maxWidth:620}}>
+              <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Quality Assertions</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>Attach existing data-quality test cases ({quality.length} selected).</div></div>
+              {assetCases.length===0?<div style={{fontSize:12.5,color:T.textMuted,padding:"16px 0"}}>No test cases exist for this asset yet. Create them in Observability › Data Quality first.</div>:
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>{assetCases.map(t=>(
+                <label key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:quality.includes(t.id)?T.accentDim:T.bgElevated,border:`1px solid ${quality.includes(t.id)?T.accent+"55":T.border}`,borderRadius:9,cursor:"pointer"}}>
+                  <input type="checkbox" checked={quality.includes(t.id)} onChange={()=>toggle(quality,setQuality,t.id)} style={{accentColor:T.accent}}/>
+                  <DQStatusDot status={t.status}/>
+                  <span style={{fontSize:12.5,color:T.text,flex:1}}>{t.name}</span>
+                  <span style={{fontSize:10.5,color:T.textMuted}}>{t.dim}</span>
+                </label>))}</div>}
+            </div>}
+
+            {sec==="policies"&&<div style={{maxWidth:640}}>
+              <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Governance Policies</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>Attach policies from Policy Manager that this contract enforces ({policies.length} selected).</div></div>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>{allPolicies.map(p=>(
+                <label key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:policies.includes(p.id)?T.accentDim:T.bgElevated,border:`1px solid ${policies.includes(p.id)?T.accent+"55":T.border}`,borderRadius:9,cursor:"pointer"}}>
+                  <input type="checkbox" checked={policies.includes(p.id)} onChange={()=>toggle(policies,setPolicies,p.id)} style={{accentColor:T.accent}}/>
+                  <span style={{fontSize:12.5,color:T.text,flex:1}}>{p.name}</span>
+                  <span style={{fontSize:10.5,color:T.textMuted}}>{p.category}</span>
+                  <span style={{fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:5,background:p.severity==="Critical"?T.roseDim:T.bgHover,color:p.severity==="Critical"?T.rose:T.textMuted}}>{p.severity}</span>
+                </label>))}</div>
+            </div>}
+
+            {sec==="security"&&<div style={{maxWidth:560}}>
+              <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Security</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>Classification and access policy expectations.</div></div>
+              <div style={{marginBottom:16}}><Lbl>Classification</Lbl><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{["Internal","Confidential","Restricted","PII"].map(c=><Pill key={c} active={classification===c} onClick={()=>setClassification(c)}>{c}</Pill>)}</div></div>
+              <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6,padding:"10px 12px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>Sensitive classifications (PII/Confidential/Restricted) require the asset to carry a matching sensitivity tag — checked during validation.</div>
+            </div>}
+
+            {sec==="sla"&&<div style={{maxWidth:760}}>
+              <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>SLA</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>Service-level agreement expectations.</div></div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+                <div style={{padding:"14px 16px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10}}>
+                  <Lbl sub="Expected frequency of data updates">Refresh Frequency</Lbl>
+                  <div style={{display:"flex",gap:10}}>
+                    <div style={{flex:1}}><div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Interval *</div><input type="number" min="1" value={refreshInterval} onChange={e=>setRefreshInterval(e.target.value)} style={inp}/></div>
+                    <div style={{flex:1}}><div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Unit *</div><select value={refreshUnit} onChange={e=>setRefreshUnit(e.target.value)} style={inp}>{["Hour","Day","Week","Month"].map(o=><option key={o}>{o}</option>)}</select></div>
+                  </div>
+                </div>
+                <div style={{padding:"14px 16px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10}}>
+                  <Lbl sub="Max delay between generation & availability">Max Latency</Lbl>
+                  <div style={{display:"flex",gap:10}}>
+                    <div style={{flex:1}}><div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Value *</div><input type="number" min="0" value={latencyValue} onChange={e=>setLatencyValue(e.target.value)} style={inp}/></div>
+                    <div style={{flex:1}}><div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Unit *</div><select value={latencyUnit} onChange={e=>setLatencyUnit(e.target.value)} style={inp}>{["Minutes","Hours","Days"].map(o=><option key={o}>{o}</option>)}</select></div>
+                  </div>
+                </div>
+                <div style={{padding:"14px 16px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10}}>
+                  <Lbl sub="Time of day data should be available">Availability Time</Lbl>
+                  <div style={{display:"flex",gap:10}}>
+                    <div style={{flex:1}}><div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Time</div><input value={availTime} onChange={e=>setAvailTime(e.target.value)} placeholder="09:00" style={inp}/></div>
+                    <div style={{flex:1}}><div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Timezone</div><select value={availTz} onChange={e=>setAvailTz(e.target.value)} style={inp}>{["UTC","America/New_York","Europe/London","Asia/Kolkata"].map(o=><option key={o}>{o}</option>)}</select></div>
+                  </div>
+                </div>
+                <div style={{padding:"14px 16px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10}}>
+                  <Lbl sub="How long data is retained">Retention</Lbl>
+                  <div style={{display:"flex",gap:10}}>
+                    <div style={{flex:1}}><div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Period *</div><input type="number" min="0" value={retentionPeriod} onChange={e=>setRetentionPeriod(e.target.value)} style={inp}/></div>
+                    <div style={{flex:1}}><div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Unit *</div><select value={retentionUnit} onChange={e=>setRetentionUnit(e.target.value)} style={inp}>{["Days","Months","Years"].map(o=><option key={o}>{o}</option>)}</select></div>
+                  </div>
+                </div>
+                <div style={{gridColumn:"1 / -1",padding:"14px 16px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10}}>
+                  <Lbl sub="Column that represents the refresh time of the data">Column</Lbl>
+                  <select value={refreshColumn} onChange={e=>setRefreshColumn(e.target.value)} style={inp}><option value="">Select a column…</option>{cols.map(c=><option key={c} value={c}>{c}</option>)}</select>
+                </div>
+              </div>
+            </div>}
+
+            {sec==="terms"&&<div style={{maxWidth:560}}>
+              <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Terms of Service</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>How this data may be used, and compliance requirements.</div></div>
+              <div style={{marginBottom:16}}><Lbl>Compliance requirements</Lbl><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{CONTRACT_COMPLIANCE.map(c=><Pill key={c} active={compliance.includes(c)} onClick={()=>toggle(compliance,setCompliance,c)}>{c}</Pill>)}</div></div>
+              <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6,padding:"10px 12px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>Allowed uses (internal analytics, reporting) and disallowed uses (third-party sharing, external redistribution) are recorded with the contract.</div>
+            </div>}
           </div>
-        </div>}
-        {step===3&&<div><Lbl>Attach quality tests ({quality.length} selected)</Lbl>
-          {assetCases.length===0?<div style={{fontSize:12.5,color:T.textMuted,padding:"20px 0"}}>No test cases exist for this asset yet. Add tests in the Observability › Data Quality tab first.</div>:
-          <div style={{display:"flex",flexDirection:"column",gap:7}}>{assetCases.map(t=>(
-            <label key={t.id} style={{display:"flex",alignItems:"center",gap:9,padding:"8px 11px",background:quality.includes(t.id)?T.accentDim:T.bgElevated,border:`1px solid ${quality.includes(t.id)?T.accent+"55":T.border}`,borderRadius:8,cursor:"pointer"}}>
-              <input type="checkbox" checked={quality.includes(t.id)} onChange={()=>toggle(quality,setQuality,t.id)} style={{accentColor:T.accent}}/>
-              <DQStatusDot status={t.status}/>
-              <span style={{fontSize:12.5,color:T.text}}>{t.name}</span>
-            </label>))}</div>}
-        </div>}
-        {step===4&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-            <div><Lbl>Refresh frequency</Lbl>
-              <select value={refresh} onChange={e=>setRefresh(e.target.value)} style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none"}}>{["Hourly","Daily","Weekly","Monthly"].map(o=><option key={o}>{o}</option>)}</select>
-            </div>
-            <div><Lbl>Max latency</Lbl>
-              <select value={latency} onChange={e=>setLatency(e.target.value)} style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none"}}>{["≤ 1 hour","≤ 2 hours","≤ 4 hours","≤ 24 hours"].map(o=><option key={o}>{o}</option>)}</select>
-            </div>
-          </div>
-          <div><Lbl>Compliance requirements</Lbl>
-            <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>{CONTRACT_COMPLIANCE.map(c=><Pill key={c} active={compliance.includes(c)} onClick={()=>toggle(compliance,setCompliance,c)}>{c}</Pill>)}</div>
-          </div>
-        </div>}
-      </div>
-        </div>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgSurface}}>
-          <Btn small ghost onClick={()=>step===0?onClose():setStep(step-1)}>{step===0?"Cancel":"← Back"}</Btn>
-          {step<steps.length-1
-            ? <Btn small disabled={!canNext} onClick={()=>canNext&&setStep(step+1)}>Next →</Btn>
-            : <Btn small variant="primary" onClick={create}>{isEdit?"Save Changes":"Create Contract"}</Btn>}
         </div>
       </div>
     </div>
+    {schedOpen&&<ContractScheduleModal schedule={schedule} onClose={()=>setSchedOpen(false)} onSave={(s)=>{setSchedule(s);setSchedOpen(false);onToast&&onToast("Validation schedule set","success");}}/>}
+    </>
   ,document.body);
 };
 
