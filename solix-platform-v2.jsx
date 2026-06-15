@@ -26461,8 +26461,26 @@ const WF_DATA = [
 const WF_CATS = ["All", "Ingestion", "Quality", "Lineage", "Governance", "Analytics"];
 
 const TASK_TYPES = ["field_updated","stewardship_request","needs_attention","tag_review","certification_review","orphan_assignment"];
+// Phase 3 — work-item categories (color-coded grouping by kind of work)
+const TYPE_CATEGORY = {
+  policy_violation:"violation", dq_alert:"violation",
+  tag_review:"approval", certification_review:"approval",
+  assigned:"ownership", stewardship_request:"ownership", needs_attention:"ownership", orphan_assignment:"ownership",
+  field_updated:"curation",
+};
+const CATEGORY_META = {
+  violation:     {label:"Violation",      color:"#dc2626"},
+  approval:      {label:"Approval",       color:"#2563eb"},
+  ownership:     {label:"Ownership",      color:"#0d9488"},
+  curation:      {label:"Curation",       color:"#8b5cf6"},
+  classification:{label:"Classification", color:"#d97706"},
+};
+const itemCategory = (item) => TYPE_CATEGORY[item?.type] || "curation";
 const InboxView = ({onToast}) => {
   const onNav = useNav();
+  const {roleCfg} = useRole();
+  const me = (roleCfg?.email||"").split("@")[0];
+  const [zone, setZone] = useState("inbox"); // inbox | portfolio | activity
   const [items,      setItems]      = useState([...POLICY_VIOLATION_INBOX, ...TAG_REVIEW_INBOX, ...CERT_REVIEW_INBOX, ...ORPHAN_INBOX, ...INBOX_DATA]);
   const [filter,     setFilter]     = useState("all");
   const [viewMode,   setViewMode]   = useState("list"); // "list" | "kanban"
@@ -26654,7 +26672,8 @@ const InboxView = ({onToast}) => {
     const labelColor = done ? T.textMuted : sev.c;
     const titleColor = done ? T.textMuted : T.text;
     const titleWeight= done ? 400 : 600;
-    const borderLeft = done ? `3px solid ${T.textMuted}33` : `3px solid ${sev.c}`;
+    const catColor   = (CATEGORY_META[itemCategory(item)]||CATEGORY_META.curation).color;
+    const borderLeft = done ? `3px solid ${T.textMuted}33` : `3px solid ${catColor}`;
     return (
       <div onClick={()=>{ setSel(isSel?null:item.id); setAssignOpen(false); }}
         style={{display:"flex",alignItems:"stretch",background:isSel?`${T.accent}08`:T.bgSurface,border:`1px solid ${isSel?T.accent+"44":T.border}`,borderLeft,borderRadius:8,cursor:"pointer",transition:"all .12s",overflow:"hidden",minHeight:64,opacity:done?0.58:1}}
@@ -26725,6 +26744,79 @@ const InboxView = ({onToast}) => {
     {id:"alerts",     label:"Alerts",           c:T.rose,    types:["dq_alert"]},
   ];
 
+  /* ── My Portfolio + Activity zones (Phase 5) ── */
+  const myRole = (o) => { const own=getOwners(o).includes(me), stw=getStewards(o).includes(me); return own&&stw?"Owner · Steward":own?"Owner":stw?"Steward":null; };
+  const mine = (arr) => arr.filter(o=>myRole(o));
+  const PORTFOLIO = [
+    {kind:"Assets",        items:mine(ASSETS)},
+    {kind:"Policies",      items:mine(POLICIES)},
+    {kind:"Domains",       items:mine(DOMAIN_LIST_DATA)},
+    {kind:"Data Products", items:mine(DATA_PRODUCTS_DATA)},
+    {kind:"Tags",          items:mine(INITIAL_TAG_DEFS)},
+  ];
+  const portfolioTotal = PORTFOLIO.reduce((n,g)=>n+g.items.length,0);
+  const healthDot = (q)=> q==null ? null : <span style={{width:8,height:8,borderRadius:"50%",background:q>=80?T.green:q>=60?T.amber:T.rose,flexShrink:0}}/>;
+  const PortfolioZone = () => (
+    <div style={{flex:1,overflowY:"auto",padding:"22px 28px"}}>
+      {portfolioTotal===0 ? (
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:260,gap:12}}>
+          <div style={{width:46,height:46,borderRadius:12,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted}}>{Ic.steward(20)}</div>
+          <div style={{fontSize:13.5,fontWeight:600,color:T.textSub}}>Nothing in your portfolio yet</div>
+          <div style={{fontSize:12,color:T.textMuted,maxWidth:360,textAlign:"center",lineHeight:1.5}}>You don't own or steward any governed objects as <b>{me||"this user"}</b>. Switch to the Data Steward role to see a populated portfolio.</div>
+        </div>
+      ) : PORTFOLIO.filter(g=>g.items.length>0).map(group=>(
+        <div key={group.kind} style={{marginBottom:26}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+            <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{group.kind}</span>
+            <span style={{fontSize:11,fontWeight:700,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"1px 8px"}}>{group.items.length}</span>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:10}}>
+            {group.items.map((o,i)=>{
+              const name=o.displayName||o.name; const role=myRole(o);
+              return (
+                <div key={o.id||name||i} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,padding:"12px 13px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:7}}>
+                    {healthDot(o.quality)}
+                    <span style={{fontSize:12.5,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,fontFamily:"'Geist Mono',monospace"}}>{name}</span>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                    {o.type&&<TypeBadge type={o.type}/>}
+                    <span style={{fontSize:10,fontWeight:600,color:T.accent,background:T.accentDim,border:`1px solid ${T.accent}33`,borderRadius:5,padding:"1px 7px"}}>{role}</span>
+                    {o.quality!=null&&<span style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>Q{o.quality}</span>}
+                    {o.cert&&<span style={{fontSize:10.5,color:T.textMuted}}>{o.cert}</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+  const ActivityZone = () => (
+    <div style={{flex:1,overflowY:"auto",padding:"22px 28px"}}>
+      <div style={{maxWidth:740}}>
+        <div style={{fontSize:11,color:T.textMuted,marginBottom:14}}>Recent governance activity across your assets and the platform.</div>
+        {ASSET_AUDIT_ENTRIES.slice(0,14).map(e=>{
+          const cm = AUDIT_CAT_META[e.category]||AUDIT_CAT_META.SYSTEM;
+          return (
+            <div key={e.id} style={{display:"flex",gap:12,padding:"11px 0",borderBottom:`1px solid ${T.border}`}}>
+              <span style={{width:9,height:9,borderRadius:"50%",background:cm.color,flexShrink:0,marginTop:5}}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3,flexWrap:"wrap"}}>
+                  <span style={{fontSize:9.5,fontWeight:700,color:cm.color,background:cm.bg,border:`1px solid ${cm.border}`,borderRadius:4,padding:"1px 6px",letterSpacing:"0.04em"}}>{e.category}</span>
+                  <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{e.action}</span>
+                </div>
+                <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.5}}>{e.details}</div>
+                <div style={{fontSize:10.5,color:T.textMuted,marginTop:3}}>{e.actor} · {e.timestamp}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   /* ── Detail panel header — matches ServicePanel pattern ── */
   const DetailHeader = () => {
     if(!selItem) return null;
@@ -26773,8 +26865,22 @@ const InboxView = ({onToast}) => {
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
       {/* Topbar — breadcrumb only */}
-      <Topbar breadcrumb={[{label:"Inbox"}]}/>
+      <Topbar breadcrumb={[{label:"My Workspace"}]}/>
 
+      {/* Zone switcher — Action Center | My Portfolio | Activity */}
+      <div style={{display:"flex",gap:2,padding:"0 28px",borderBottom:`1px solid ${T.border}`,background:T.bgBase,flexShrink:0}}>
+        {[["inbox","Action Center"],["portfolio","My Portfolio"],["activity","Activity"]].map(([z,l])=>(
+          <button key={z} onClick={()=>{setZone(z);setSel(null);setAssignOpen(false);setFilterOpen(false);}}
+            style={{padding:"11px 16px",background:"transparent",border:"none",borderBottom:`2.5px solid ${zone===z?T.accent:"transparent"}`,color:zone===z?T.accent:T.textMuted,fontSize:13,fontWeight:zone===z?600:500,cursor:"pointer",marginBottom:-1,transition:"all .12s",whiteSpace:"nowrap"}}>
+            {l}{z==="inbox"&&unread.length>0&&<span style={{fontSize:10,fontWeight:700,marginLeft:6,background:T.bgHover,color:T.textMuted,borderRadius:10,padding:"1px 6px"}}>{unread.length}</span>}
+          </button>
+        ))}
+      </div>
+
+      {zone==="portfolio" && <PortfolioZone/>}
+      {zone==="activity"  && <ActivityZone/>}
+
+      {zone==="inbox" && (<>
       {/* Tab bar — tabs (list only) + filter icon + view toggle + mark all read */}
       <div style={{padding:"0 20px 0 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",flexShrink:0,background:T.bgSurface,minHeight:44}}>
 
@@ -26965,6 +27071,7 @@ const InboxView = ({onToast}) => {
         )}
 
       </div>
+      </>)}
     </div>
   );
 };
