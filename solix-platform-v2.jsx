@@ -5615,6 +5615,52 @@ const POLICY_VIOLATION_INBOX = POLICY_VIOLATIONS
     readAt:null,
   }));
 
+// Tag governance work (Phase 2b): open tag inbox items → My Workspace.
+const _TAG_REVIEW_LABELS = {pending_approval:"Tag approval", sync_conflict:"Tag conflict", new_source_tag:"New source tag", propagation_review:"Propagation review"};
+const TAG_REVIEW_INBOX = INITIAL_INBOX
+  .filter(t => !t.resolvedAt)
+  .map(t => ({
+    id:"tg-"+t.id,
+    type:"tag_review",
+    severity: t.type==="sync_conflict" ? "high" : t.type==="new_source_tag" ? "low" : "medium",
+    section:"tags",
+    timeAgo:_relAgo(t.createdAt),
+    title:`${_TAG_REVIEW_LABELS[t.type]||"Tag review"}: ${t.tagName}${t.assetName?` on ${t.assetName}`:""}`,
+    asset:{name:t.assetName||t.tagName, path:t.assetName||t.tagName, type:"Tag"},
+    body:t.note, tagName:t.tagName, tagType:t.type,
+    readAt:null,
+  }));
+
+// Certification work (Phase 2b): certs awaiting review → My Workspace.
+const CERT_REVIEW_INBOX = CERTIFICATIONS
+  .filter(c => c.status==="In Review")
+  .map(c => ({
+    id:"ct-"+c.id,
+    type:"certification_review",
+    severity:"medium",
+    section:"catalog",
+    timeAgo:"",
+    title:`Certification review: ${c.asset}`,
+    asset:{name:c.asset, path:c.asset, type:c.type},
+    body:c.notes||"Awaiting steward certification review.", score:c.score,
+    readAt:null,
+  }));
+
+// Ownership work (Phase 2b): orphaned (unowned) assets → My Workspace.
+const ORPHAN_INBOX = ORPHANED_ASSETS_DATA
+  .filter(a => a.issue==="No Owner")
+  .map((a,i) => ({
+    id:"or-"+i,
+    type:"orphan_assignment",
+    severity:"medium",
+    section:"catalog",
+    timeAgo:"",
+    title:`${a.name} has no owner — assign or deprecate`,
+    asset:{name:a.name, path:`${(a.domain||"").toLowerCase()}.${a.name}`, type:a.type},
+    body:`This ${a.type.toLowerCase()} in ${a.domain} has no assigned owner. Assign an owner or deprecate it.`,
+    readAt:null,
+  }));
+
 const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   // ─── palette & constants ──────────────────────────────────────────────
   const LC_COLORS  = {"Draft":T.textMuted,"In Review":T.amber,"Approved":T.green,"Active":T.blue,"Deprecated":T.rose};
@@ -26414,9 +26460,10 @@ const WF_DATA = [
 
 const WF_CATS = ["All", "Ingestion", "Quality", "Lineage", "Governance", "Analytics"];
 
+const TASK_TYPES = ["field_updated","stewardship_request","needs_attention","tag_review","certification_review","orphan_assignment"];
 const InboxView = ({onToast}) => {
   const onNav = useNav();
-  const [items,      setItems]      = useState([...POLICY_VIOLATION_INBOX, ...INBOX_DATA]);
+  const [items,      setItems]      = useState([...POLICY_VIOLATION_INBOX, ...TAG_REVIEW_INBOX, ...CERT_REVIEW_INBOX, ...ORPHAN_INBOX, ...INBOX_DATA]);
   const [filter,     setFilter]     = useState("all");
   const [viewMode,   setViewMode]   = useState("list"); // "list" | "kanban"
   const [sel,          setSel]          = useState(null);
@@ -26428,7 +26475,7 @@ const InboxView = ({onToast}) => {
   const read   = items.filter(i=>!!i.readAt);
   const counts = {
     all:        unread.length,
-    tasks:      unread.filter(i=>["field_updated","stewardship_request","needs_attention"].includes(i.type)).length,
+    tasks:      unread.filter(i=>TASK_TYPES.includes(i.type)).length,
     alerts:     unread.filter(i=>i.type==="dq_alert").length,
     violations: unread.filter(i=>i.type==="policy_violation").length,
     assigned:   unread.filter(i=>i.type==="assigned").length,
@@ -26437,7 +26484,7 @@ const InboxView = ({onToast}) => {
   const secFilterActive = secFilters.size > 0;
   const shown = unread.filter(i=>{
     // tab filter
-    if(filter==="tasks"     &&!["field_updated","stewardship_request","needs_attention"].includes(i.type)) return false;
+    if(filter==="tasks"     &&!TASK_TYPES.includes(i.type)) return false;
     if(filter==="alerts"    &&i.type!=="dq_alert")          return false;
     if(filter==="violations"&&i.type!=="policy_violation")  return false;
     if(filter==="assigned"  &&i.type!=="assigned")          return false;
@@ -26479,6 +26526,9 @@ const InboxView = ({onToast}) => {
     needs_attention:     {icon:sz=>Ic.alert(sz||12),    label:"Needs Steward",  shortLabel:"Action"},
     stewardship_request: {icon:sz=>Ic.persona(sz||12),  label:"Access Request", shortLabel:"Request"},
     policy_violation:    {icon:sz=>Ic.policies(sz||12), label:"Policy Violation",shortLabel:"Violation"},
+    tag_review:          {icon:sz=>Ic.tag(sz||12),     label:"Tag Review",     shortLabel:"Tag"},
+    certification_review:{icon:sz=>Ic.cert(sz||12),    label:"Certification",  shortLabel:"Cert"},
+    orphan_assignment:   {icon:sz=>Ic.steward(sz||12), label:"Orphan — Assign Owner", shortLabel:"Orphan"},
   };
 
   /* ── Action row — only inside detail panel ── */
@@ -26501,6 +26551,12 @@ const InboxView = ({onToast}) => {
       return <>{btn("Assign Steward",()=>setAssignOpen(a=>!a),true)}{btn("Dismiss",()=>dism(item.id))}</>;
     if(item.type==="policy_violation")
       return <>{btn("View Policy",()=>{onNav&&onNav("policymanager",{policyId:item.policyId});},true)}{btn("Mark In Progress",()=>ack(item.id,"Violation moved to In Progress"))}</>;
+    if(item.type==="tag_review")
+      return <>{btn("Review in Tags",()=>{onNav&&onNav("tags");},true)}{btn("Approve",()=>ack(item.id,"Tag change approved"))}{btn("Dismiss",()=>dism(item.id))}</>;
+    if(item.type==="certification_review")
+      return <>{btn("Review & Certify",()=>ack(item.id,"Certification approved"),true)}{btn("Defer",()=>dism(item.id))}</>;
+    if(item.type==="orphan_assignment")
+      return <>{btn("Assign Owner",()=>setAssignOpen(a=>!a),true)}{btn("Deprecate",()=>ack(item.id,"Asset deprecated"),false,true)}</>;
     return null;
   };
 
@@ -26664,7 +26720,7 @@ const InboxView = ({onToast}) => {
   const KANBAN_COLS = [
     {id:"assigned",   label:"New Assignments",  c:"#8b5cf6", types:["assigned"]},
     {id:"review",     label:"Pending Review",   c:T.blue,    types:["field_updated"]},
-    {id:"action",     label:"Action Required",  c:T.amber,   types:["needs_attention","stewardship_request"]},
+    {id:"action",     label:"Action Required",  c:T.amber,   types:["needs_attention","stewardship_request","tag_review","certification_review","orphan_assignment"]},
     {id:"violations", label:"Policy Violations",c:"#dc2626", types:["policy_violation"]},
     {id:"alerts",     label:"Alerts",           c:T.rose,    types:["dq_alert"]},
   ];
