@@ -5559,6 +5559,62 @@ const DEMO_POLICIES_GLOBAL = [
   {id:"pol-6",name:"Engineering Pipeline Governance",category:"Data",severity:"Medium",lifecycle:"Deprecated",regulations:["SOC2"],scope:{domains:["Engineering"]},links:[]},
 ];
 
+// ─────────────────────────────────────────────
+// STEWARDSHIP & OWNERSHIP — shared foundation (Phase 1)
+// Uniform ownership accessors: read whichever field a governed object uses.
+//   asset/term  → owners[]/stewards[]   policy → owner/stewards
+//   domain/product → owners[]/experts[] tag    → managedBy (string)
+// ─────────────────────────────────────────────
+const getOwners = (obj) => {
+  if(!obj) return [];
+  if(Array.isArray(obj.owners)) return obj.owners;
+  if(obj.owner) return [obj.owner];
+  if(obj.managedBy) return [obj.managedBy];
+  return [];
+};
+const getStewards = (obj) => {
+  if(!obj) return [];
+  if(Array.isArray(obj.stewards)) return obj.stewards;
+  if(obj.steward) return [obj.steward];
+  if(Array.isArray(obj.experts)) return obj.experts;
+  return [];
+};
+const _relAgo = (dateStr) => {
+  if(!dateStr) return "";
+  const d = new Date(dateStr), now = new Date();
+  const days = Math.max(0, Math.floor((now - d)/86400000));
+  if(days===0) return "today";
+  if(days===1) return "1d ago";
+  if(days<7)   return days+"d ago";
+  const w = Math.floor(days/7); return w+(w===1?"w ago":"w ago");
+};
+
+// Module-level so both Policy Manager and My Workspace (InboxView) read the same source.
+const POLICY_VIOLATIONS = [
+  {id:"viol-1",policyId:"pol-1",assetName:"orders",assetType:"Table",domain:"Commerce",rule:"PII classification required",severity:"Critical",status:"Open",detectedAt:"2026-05-15",description:"The orders table is missing a pii.customer tag required before promotion to downstream analytics."},
+  {id:"viol-2",policyId:"pol-1",assetName:"transactions",assetType:"Table",domain:"Finance",rule:"Certification gate",severity:"Critical",status:"In Progress",detectedAt:"2026-05-14",description:"transactions table does not hold Approved certification and is currently queryable by 3 downstream pipelines."},
+  {id:"viol-3",policyId:"pol-2",assetName:"payments",assetType:"Table",domain:"Finance",rule:"Quality threshold enforcement",severity:"High",status:"Open",detectedAt:"2026-05-16",description:"payments table quality score is 67, below the required threshold of 80 for use in financial reporting."},
+  {id:"viol-4",policyId:"pol-4",assetName:"patient_events",assetType:"Table",domain:"Commerce",rule:"PHI quality gate",severity:"Critical",status:"Open",detectedAt:"2026-05-13",description:"patient_events contains PHI but quality score is 84 — below the required 90 threshold."},
+  {id:"viol-5",policyId:"pol-4",assetName:"user_health_data",assetType:"Table",domain:"Finance",rule:"Access restriction",severity:"Critical",status:"Open",detectedAt:"2026-05-12",description:"user_health_data is accessible to roles without healthcare.phi_read scope. 2 roles in violation."},
+  {id:"viol-6",policyId:"pol-4",assetName:"audit_records",assetType:"Table",domain:"Commerce",rule:"Audit logging",severity:"High",status:"Open",detectedAt:"2026-05-10",description:"audit_records retention period is set to 3 years; HIPAA requires immutable audit logs retained for 7 years."},
+];
+
+// Adapter (Phase 2): open policy violations → My Workspace inbox items.
+const POLICY_VIOLATION_INBOX = POLICY_VIOLATIONS
+  .filter(v => v.status==="Open" || v.status==="In Progress")
+  .map(v => ({
+    id:"pv-"+v.id,
+    type:"policy_violation",
+    severity: v.severity==="Critical" ? "high" : v.severity==="High" ? "medium" : "low",
+    section:"policy",
+    timeAgo:_relAgo(v.detectedAt),
+    title:`${v.rule} — ${v.assetName}`,
+    asset:{name:v.assetName, path:`${(v.domain||"").toLowerCase()}.${v.assetName}`, type:v.assetType},
+    body:v.description,
+    policyId:v.policyId, rule:v.rule, domain:v.domain, vstatus:v.status,
+    readAt:null,
+  }));
+
 const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   // ─── palette & constants ──────────────────────────────────────────────
   const LC_COLORS  = {"Draft":T.textMuted,"In Review":T.amber,"Approved":T.green,"Active":T.blue,"Deprecated":T.rose};
@@ -5717,14 +5773,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
 
   const [regulations, setRegulations] = useState(REGS_META);
 
-  const [violations, setViolations] = useState([
-    {id:"viol-1",policyId:"pol-1",assetName:"orders",assetType:"Table",domain:"Commerce",rule:"PII classification required",severity:"Critical",status:"Open",detectedAt:"2026-05-15",description:"The orders table is missing a pii.customer tag required before promotion to downstream analytics."},
-    {id:"viol-2",policyId:"pol-1",assetName:"transactions",assetType:"Table",domain:"Finance",rule:"Certification gate",severity:"Critical",status:"In Progress",detectedAt:"2026-05-14",description:"transactions table does not hold Approved certification and is currently queryable by 3 downstream pipelines."},
-    {id:"viol-3",policyId:"pol-2",assetName:"payments",assetType:"Table",domain:"Finance",rule:"Quality threshold enforcement",severity:"High",status:"Open",detectedAt:"2026-05-16",description:"payments table quality score is 67, below the required threshold of 80 for use in financial reporting."},
-    {id:"viol-4",policyId:"pol-4",assetName:"patient_events",assetType:"Table",domain:"Commerce",rule:"PHI quality gate",severity:"Critical",status:"Open",detectedAt:"2026-05-13",description:"patient_events contains PHI but quality score is 84 — below the required 90 threshold."},
-    {id:"viol-5",policyId:"pol-4",assetName:"user_health_data",assetType:"Table",domain:"Finance",rule:"Access restriction",severity:"Critical",status:"Open",detectedAt:"2026-05-12",description:"user_health_data is accessible to roles without healthcare.phi_read scope. 2 roles in violation."},
-    {id:"viol-6",policyId:"pol-4",assetName:"audit_records",assetType:"Table",domain:"Commerce",rule:"Audit logging",severity:"High",status:"Open",detectedAt:"2026-05-10",description:"audit_records retention period is set to 3 years; HIPAA requires immutable audit logs retained for 7 years."},
-  ]);
+  const [violations, setViolations] = useState(POLICY_VIOLATIONS);
 
   const [policyCategories, setPolicyCategories] = useState([
     {id:"data",name:"Data",      color:T.violet},
@@ -26366,7 +26415,8 @@ const WF_DATA = [
 const WF_CATS = ["All", "Ingestion", "Quality", "Lineage", "Governance", "Analytics"];
 
 const InboxView = ({onToast}) => {
-  const [items,      setItems]      = useState(INBOX_DATA);
+  const onNav = useNav();
+  const [items,      setItems]      = useState([...POLICY_VIOLATION_INBOX, ...INBOX_DATA]);
   const [filter,     setFilter]     = useState("all");
   const [viewMode,   setViewMode]   = useState("list"); // "list" | "kanban"
   const [sel,          setSel]          = useState(null);
@@ -26377,19 +26427,21 @@ const InboxView = ({onToast}) => {
   const unread = items.filter(i=>!i.readAt);
   const read   = items.filter(i=>!!i.readAt);
   const counts = {
-    all:      unread.length,
-    tasks:    unread.filter(i=>["field_updated","stewardship_request","needs_attention"].includes(i.type)).length,
-    alerts:   unread.filter(i=>i.type==="dq_alert").length,
-    assigned: unread.filter(i=>i.type==="assigned").length,
-    done:     read.length,
+    all:        unread.length,
+    tasks:      unread.filter(i=>["field_updated","stewardship_request","needs_attention"].includes(i.type)).length,
+    alerts:     unread.filter(i=>i.type==="dq_alert").length,
+    violations: unread.filter(i=>i.type==="policy_violation").length,
+    assigned:   unread.filter(i=>i.type==="assigned").length,
+    done:       read.length,
   };
   const secFilterActive = secFilters.size > 0;
   const shown = unread.filter(i=>{
     // tab filter
-    if(filter==="tasks"   &&!["field_updated","stewardship_request","needs_attention"].includes(i.type)) return false;
-    if(filter==="alerts"  &&i.type!=="dq_alert")  return false;
-    if(filter==="assigned"&&i.type!=="assigned")   return false;
-    if(filter==="done")                            return false;
+    if(filter==="tasks"     &&!["field_updated","stewardship_request","needs_attention"].includes(i.type)) return false;
+    if(filter==="alerts"    &&i.type!=="dq_alert")          return false;
+    if(filter==="violations"&&i.type!=="policy_violation")  return false;
+    if(filter==="assigned"  &&i.type!=="assigned")          return false;
+    if(filter==="done")                                     return false;
     // section multiselect filter
     if(secFilterActive && !secFilters.has(i.section)) return false;
     return true;
@@ -26398,6 +26450,7 @@ const InboxView = ({onToast}) => {
   const SECTIONS = [
     {k:"catalog",  l:"Catalog"},
     {k:"quality",  l:"Data Quality"},
+    {k:"policy",   l:"Policy"},
     {k:"glossary", l:"Glossary"},
     {k:"tags",     l:"Tags"},
     {k:"connections", l:"Connections"},
@@ -26425,6 +26478,7 @@ const InboxView = ({onToast}) => {
     assigned:            {icon:sz=>Ic.steward(sz||12),  label:"New Assignment", shortLabel:"Assigned"},
     needs_attention:     {icon:sz=>Ic.alert(sz||12),    label:"Needs Steward",  shortLabel:"Action"},
     stewardship_request: {icon:sz=>Ic.persona(sz||12),  label:"Access Request", shortLabel:"Request"},
+    policy_violation:    {icon:sz=>Ic.policies(sz||12), label:"Policy Violation",shortLabel:"Violation"},
   };
 
   /* ── Action row — only inside detail panel ── */
@@ -26445,6 +26499,8 @@ const InboxView = ({onToast}) => {
       return <>{btn("Accept",()=>ack(item.id,`${item.requestedBy} added as ${item.requestedRole}`),true)}{btn("Decline",()=>ack(item.id,"Request declined"),false,true)}</>;
     if(item.type==="needs_attention")
       return <>{btn("Assign Steward",()=>setAssignOpen(a=>!a),true)}{btn("Dismiss",()=>dism(item.id))}</>;
+    if(item.type==="policy_violation")
+      return <>{btn("View Policy",()=>{onNav&&onNav("policymanager",{policyId:item.policyId});},true)}{btn("Mark In Progress",()=>ack(item.id,"Violation moved to In Progress"))}</>;
     return null;
   };
 
@@ -26606,10 +26662,11 @@ const InboxView = ({onToast}) => {
 
   /* ── Kanban columns ── */
   const KANBAN_COLS = [
-    {id:"assigned", label:"New Assignments", c:"#8b5cf6", types:["assigned"]},
-    {id:"review",   label:"Pending Review",  c:T.blue,    types:["field_updated"]},
-    {id:"action",   label:"Action Required", c:T.amber,   types:["needs_attention","stewardship_request"]},
-    {id:"alerts",   label:"Alerts",          c:T.rose,    types:["dq_alert"]},
+    {id:"assigned",   label:"New Assignments",  c:"#8b5cf6", types:["assigned"]},
+    {id:"review",     label:"Pending Review",   c:T.blue,    types:["field_updated"]},
+    {id:"action",     label:"Action Required",  c:T.amber,   types:["needs_attention","stewardship_request"]},
+    {id:"violations", label:"Policy Violations",c:"#dc2626", types:["policy_violation"]},
+    {id:"alerts",     label:"Alerts",           c:T.rose,    types:["dq_alert"]},
   ];
 
   /* ── Detail panel header — matches ServicePanel pattern ── */
@@ -26668,13 +26725,13 @@ const InboxView = ({onToast}) => {
         {/* Underline tabs — list view only */}
         {viewMode==="list"&&(
           <div style={{display:"flex",alignItems:"center"}}>
-            {[["all","All"],["tasks","Tasks"],["alerts","Alerts"],["assigned","Assigned"],["done","Done"]].map(([k,l])=>(
+            {[["all","All"],["tasks","Tasks"],["alerts","Alerts"],["violations","Violations"],["assigned","Assigned"],["done","Done"]].map(([k,l])=>(
               <button key={k} onClick={()=>{ setFilter(k); setSel(null); setAssignOpen(false); setFilterOpen(false); }}
                 style={{padding:"11px 14px",background:"transparent",border:"none",borderBottom:`2px solid ${filter===k?T.accent:"transparent"}`,color:filter===k?T.text:T.textMuted,fontSize:12.5,fontWeight:filter===k?600:400,cursor:"pointer",display:"flex",alignItems:"center",gap:5,transition:"all .12s",whiteSpace:"nowrap"}}>
                 {l}
                 {counts[k]>0&&<span style={{fontSize:10,fontWeight:700,borderRadius:10,padding:"1px 6px",
-                  background: k==="done"?"rgba(22,163,74,.1)":k==="alerts"?`${T.rose}18`:T.bgHover,
-                  color:      k==="done"?"#16a34a"           :k==="alerts"?T.rose        :T.textMuted}}>
+                  background: k==="done"?"rgba(22,163,74,.1)":(k==="alerts"||k==="violations")?`${T.rose}18`:T.bgHover,
+                  color:      k==="done"?"#16a34a"           :(k==="alerts"||k==="violations")?T.rose        :T.textMuted}}>
                   {counts[k]}
                 </span>}
               </button>
