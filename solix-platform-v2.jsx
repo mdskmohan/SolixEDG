@@ -97,6 +97,7 @@ input,textarea,select{font-family:inherit;font-size:inherit;transition:backgroun
 @keyframes scaleIn{from{opacity:0;transform:scale(.96);}to{opacity:1;}}
 @keyframes slideIn{from{opacity:0;transform:translateX(-8px);}to{opacity:1;}}
 @keyframes slideInRight{from{opacity:0;transform:translateX(32px);}to{opacity:1;transform:translateX(0);}}
+@keyframes slideInLeft{from{opacity:0;transform:translateX(-32px);}to{opacity:1;transform:translateX(0);}}
 @keyframes pulse2{0%,100%{opacity:1;}50%{opacity:.4;}}
 @keyframes spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
 .fadeUp{animation:fadeUp .2s ease both;}
@@ -104,6 +105,7 @@ input,textarea,select{font-family:inherit;font-size:inherit;transition:backgroun
 .scaleIn{animation:scaleIn .18s ease both;}
 .slideIn{animation:slideIn .15s ease both;}
 .slideInRight{animation:slideInRight .22s ease both;}
+.slideInLeft{animation:slideInLeft .22s ease both;}
 .row-hover:hover{background:${t.bgHover}!important;cursor:pointer;}
 .btn-hover:hover{opacity:.8;}
 *{transition:background-color .2s,border-color .2s,color .15s,box-shadow .2s;}
@@ -12241,7 +12243,7 @@ const CONTRACT_BY_ASSET = {
   orders:{
     name:"orders_contract", version:"2.1.0", status:"Active", owners:["maya.chen","dev.patel"],
     description:"Governance agreement for the commerce.orders fact table between the Commerce data team (producer) and Finance/BI consumers.",
-    updated:"2d ago", lastRun:"Today, 05:30 AM",
+    updated:"2d ago", lastRun:"Today, 05:30 AM", schedule:{frequency:"Daily",time:"05:00",tz:"UTC"},
     schema:[
       {name:"order_id",type:"BIGINT",constraint:"NOT NULL · UNIQUE",required:true},
       {name:"customer_id",type:"BIGINT",constraint:"NOT NULL",required:true},
@@ -12342,11 +12344,12 @@ const AssetContractTab = ({asset,onToast})=>{
   const [contract,setContractState]=useState(()=>getStoredContract(asset.name));
   const [wizard,setWizard]=useState(false);   // false | "create" | "edit"
   const [statusOpen,setStatusOpen]=useState(false);
-  const [running,setRunning]=useState(false);
+  const [settingsOpen,setSettingsOpen]=useState(false);
+  const [scheduleModal,setScheduleModal]=useState(false);
+  const [deleteConfirm,setDeleteConfirm]=useState(false);
   const setContract=(u)=>setContractState(prev=>{const next=typeof u==="function"?u(prev):u; CONTRACT_STORE[asset.name]=next; return next;});
 
   const changeStatus=(st)=>{ setStatusOpen(false); if(st===contract.status) return; setContract(c=>({...c,status:st,updated:"Just now"})); onToast&&onToast(`Status set to ${st}`,"success"); };
-  const revalidate=()=>{ setRunning(true); setTimeout(()=>{ const res=validateContract(contract,asset); setContract(c=>({...c,lastRun:"Just now"})); setRunning(false); onToast&&onToast(res.allPass?"Validation passed — all checks green":`Validation found ${res.failedSections.length} failing check(s)`,res.allPass?"success":"error"); },900); };
   const newVersion=()=>{
     const parts=(contract.version||"1.0.0").split(".").map(n=>parseInt(n)||0);
     const nv=`${parts[0]}.${parts[1]+1}.0`;
@@ -12354,7 +12357,9 @@ const AssetContractTab = ({asset,onToast})=>{
     setContract(c=>({...c,version:nv,status:"Draft",updated:"Just now",versions:[snap,...(c.versions||[])]}));
     onToast&&onToast(`Created draft v${nv} — previous version archived in history`,"success");
   };
-  const saveEdit=(updated)=>{ setContract(c=>({...updated,version:c.version,status:c.status,versions:c.versions,updated:"Just now"})); setWizard(false); onToast&&onToast("Contract updated","success"); };
+  const saveEdit=(updated)=>{ setContract(c=>({...updated,version:c.version,status:c.status,versions:c.versions,schedule:c.schedule,updated:"Just now"})); setWizard(false); onToast&&onToast("Contract updated","success"); };
+  const doDelete=()=>{ setContractState(null); CONTRACT_STORE[asset.name]=null; setDeleteConfirm(false); onToast&&onToast("Contract deleted","error"); };
+  const saveSchedule=(sched)=>{ setContract(c=>({...c,schedule:sched})); setScheduleModal(false); onToast&&onToast("Validation schedule updated","success"); };
 
   // ── Empty state ──
   if(!contract) return (
@@ -12408,9 +12413,29 @@ const AssetContractTab = ({asset,onToast})=>{
           </div>
           <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6,maxWidth:680}}>{contract.description}</div>
         </div>
-        <div style={{display:"flex",gap:8,flexShrink:0}}>
-          <Btn small ghost onClick={()=>setWizard("edit")}>Edit</Btn>
+        <div style={{display:"flex",gap:8,flexShrink:0,alignItems:"center"}}>
           <Btn small ghost onClick={newVersion}>New Version</Btn>
+          <div style={{position:"relative"}}>
+            <button onClick={()=>setSettingsOpen(o=>!o)} title="Contract settings" style={{width:30,height:30,borderRadius:8,background:settingsOpen?T.bgHover:"transparent",border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
+              onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;e.currentTarget.style.color=T.text;}} onMouseLeave={e=>{if(!settingsOpen){e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textSub;}}}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="3" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="8" cy="13" r="1.4"/></svg>
+            </button>
+            {settingsOpen&&<>
+              <div onClick={()=>setSettingsOpen(false)} style={{position:"fixed",inset:0,zIndex:50}}/>
+              <div style={{position:"absolute",top:"calc(100% + 5px)",right:0,zIndex:51,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 14px 36px rgba(0,0,0,.28)",padding:5,minWidth:170}}>
+                {[
+                  {k:"edit",label:"Edit contract",icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M10.5 2.5l3 3L6 13H3v-3l7.5-7.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>,fn:()=>{setSettingsOpen(false);setWizard("edit");}},
+                  {k:"sched",label:"Schedule validation",icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5.5v3l2 1.2M8 1.2V2.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,fn:()=>{setSettingsOpen(false);setScheduleModal(true);}},
+                  {k:"del",label:"Delete contract",danger:true,icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M6.5 4V2.8h3V4M5 4.5l.5 8.5h5l.5-8.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>,fn:()=>{setSettingsOpen(false);setDeleteConfirm(true);}},
+                ].map(it=>(
+                  <button key={it.k} onClick={it.fn} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 10px",borderRadius:7,background:"transparent",border:"none",cursor:"pointer",textAlign:"left",color:it.danger?T.rose:T.text,fontSize:12.5,fontWeight:500}}
+                    onMouseEnter={e=>e.currentTarget.style.background=it.danger?T.roseDim:T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <span style={{display:"flex",color:it.danger?T.rose:T.textMuted}}>{it.icon}</span>{it.label}
+                  </button>
+                ))}
+              </div>
+            </>}
+          </div>
         </div>
       </div>
 
@@ -12445,9 +12470,10 @@ const AssetContractTab = ({asset,onToast})=>{
             <span style={{fontSize:13,fontWeight:700,color:health.color}}>{health.label}</span>
             <span style={{fontSize:11.5,color:T.textMuted}}>· {failCount?`${failCount} of ${TOTAL_CHECKS} checks failing`:`all ${TOTAL_CHECKS} checks passing`}</span>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginTop:8}}>
-            <Btn small ghost disabled={running} onClick={revalidate}>{running?"Checking…":"Re-validate"}</Btn>
-            <span style={{fontSize:10.5,color:T.textMuted}}>Last validated: {contract.lastRun}</span>
+          <div style={{fontSize:10.5,color:T.textMuted,marginTop:8,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><circle cx="8" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5.5v3l2 1.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+            {contract.schedule?<span>Auto-validates {contract.schedule.frequency.toLowerCase()} at {contract.schedule.time} {contract.schedule.tz}</span>:<span>No schedule — <button onClick={()=>setScheduleModal(true)} style={{background:"none",border:"none",padding:0,color:T.accent,cursor:"pointer",fontSize:10.5,fontWeight:600}}>set one</button></span>}
+            <span style={{opacity:.6}}>·</span><span>Last validated {contract.lastRun}</span>
           </div>
         </div>
       </div>
@@ -12591,9 +12617,64 @@ const AssetContractTab = ({asset,onToast})=>{
       </div>
     </Section>
 
-    {/* ── Edit / create wizard ── */}
+    {/* ── Edit / create wizard (left drawer) ── */}
     {wizard&&<ContractWizard asset={asset} existing={wizard==="edit"?contract:null} onClose={()=>setWizard(false)} onSubmit={(c)=>{ wizard==="edit"?saveEdit(c):setContract({...c,versions:[]}); setWizard(false); }}/>}
+
+    {/* ── Schedule validation modal ── */}
+    {scheduleModal&&createPortal(<ContractScheduleModal schedule={contract.schedule} onClose={()=>setScheduleModal(false)} onSave={saveSchedule}/>,document.body)}
+
+    {/* ── Delete confirm ── */}
+    {deleteConfirm&&createPortal(
+      <>
+        <div onClick={()=>setDeleteConfirm(false)} style={{position:"fixed",inset:0,zIndex:1100,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:1101,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:16,boxShadow:"0 32px 80px rgba(0,0,0,.45)",width:420,overflow:"hidden"}}>
+          <div style={{padding:"18px 20px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+              <span style={{width:34,height:34,borderRadius:9,background:T.roseDim,display:"flex",alignItems:"center",justifyContent:"center",color:T.rose,flexShrink:0}}><svg width="17" height="17" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M6.5 4V2.8h3V4M5 4.5l.5 8.5h5l.5-8.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg></span>
+              <div style={{fontSize:15,fontWeight:700,color:T.text}}>Delete contract?</div>
+            </div>
+            <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6}}>This permanently removes <span style={{...mono,color:T.text}}>{contract.name}</span> and its entire version history. This cannot be undone.</div>
+          </div>
+          <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8}}>
+            <Btn small ghost onClick={()=>setDeleteConfirm(false)}>Cancel</Btn>
+            <Btn small variant="danger" onClick={doDelete}>Delete contract</Btn>
+          </div>
+        </div>
+      </>
+    ,document.body)}
   </div>;
+};
+
+// Schedule validation modal — when the contract is auto-validated
+const ContractScheduleModal = ({schedule,onClose,onSave})=>{
+  const [frequency,setFrequency]=useState(schedule?.frequency||"Daily");
+  const [time,setTime]=useState(schedule?.time||"05:00");
+  const [tz,setTz]=useState(schedule?.tz||"UTC");
+  const Lbl=({children})=><div style={{fontSize:11,fontWeight:700,color:T.textSub,marginBottom:7}}>{children}</div>;
+  const sel={width:"100%",boxSizing:"border-box",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none"};
+  return (
+    <>
+      <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:1100,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}/>
+      <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:1101,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:16,boxShadow:"0 32px 80px rgba(0,0,0,.45)",width:440,overflow:"hidden"}}>
+        <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,fontSize:14,fontWeight:700,color:T.text}}>Schedule validation</div>
+        <div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:16}}>
+          <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6}}>Choose how often this contract is automatically validated against the live asset. Results update the contract's Health.</div>
+          <div><Lbl>Frequency</Lbl>
+            <select value={frequency} onChange={e=>setFrequency(e.target.value)} style={sel}>{["Hourly","Daily","Weekly","Monthly"].map(o=><option key={o}>{o}</option>)}</select>
+          </div>
+          {frequency!=="Hourly"&&<div style={{display:"flex",gap:12}}>
+            <div style={{flex:1}}><Lbl>Time</Lbl><input value={time} onChange={e=>setTime(e.target.value)} placeholder="05:00" style={sel}/></div>
+            <div style={{flex:1}}><Lbl>Timezone</Lbl><select value={tz} onChange={e=>setTz(e.target.value)} style={sel}>{["UTC","America/New_York","Europe/London","Asia/Kolkata"].map(o=><option key={o}>{o}</option>)}</select></div>
+          </div>}
+          <div style={{fontSize:11.5,color:T.textSub,padding:"9px 12px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>Validates <b style={{color:T.text}}>{frequency.toLowerCase()}</b>{frequency!=="Hourly"?<> at <b style={{color:T.text}}>{time} {tz}</b></>:""}.</div>
+        </div>
+        <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8}}>
+          <Btn small ghost onClick={onClose}>Cancel</Btn>
+          <Btn small variant="primary" onClick={()=>onSave({frequency,time,tz})}>Save schedule</Btn>
+        </div>
+      </div>
+    </>
+  );
 };
 
 // Add/Edit-contract wizard (UI-based, no YAML — mirrors OpenMetadata)
@@ -12633,8 +12714,14 @@ const ContractWizard = ({asset,existing,onClose,onSubmit})=>{
       history:existing?existing.history:[{at:"Just now",by:"You",action:"Contract created",note:"Draft — submit for review to enforce"}],
     });
   };
-  return (
-    <Modal open={true} onClose={onClose} title={`${isEdit?"Edit":"New"} Data Contract · ${asset.name}`} width={600}>
+  return createPortal(
+    <div onClick={onClose} className="fadeIn" style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}>
+      <div onClick={e=>e.stopPropagation()} className="slideInLeft" style={{position:"absolute",top:0,left:0,bottom:0,width:580,maxWidth:"94vw",background:T.bgSurface,borderRight:`1px solid ${T.border}`,boxShadow:"12px 0 48px rgba(0,0,0,.32)",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,background:T.bgElevated}}>
+          <span style={{fontSize:14,fontWeight:700,color:T.text}}>{isEdit?"Edit Data Contract":"New Data Contract"} · <span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{asset.name}</span></span>
+          <button onClick={onClose} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(12)}</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"20px"}}>
       <div style={{display:"flex",alignItems:"center",gap:0,marginBottom:20}}>
         {steps.map((s,i)=>(
           <React.Fragment key={s}>
@@ -12690,14 +12777,16 @@ const ContractWizard = ({asset,existing,onClose,onSubmit})=>{
           </div>
         </div>}
       </div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:22,paddingTop:16,borderTop:`1px solid ${T.border}`}}>
-        <Btn small ghost onClick={()=>step===0?onClose():setStep(step-1)}>{step===0?"Cancel":"← Back"}</Btn>
-        {step<steps.length-1
-          ? <Btn small disabled={!canNext} onClick={()=>canNext&&setStep(step+1)}>Next →</Btn>
-          : <Btn small variant="primary" onClick={create}>{isEdit?"Save Changes":"Create Contract"}</Btn>}
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgSurface}}>
+          <Btn small ghost onClick={()=>step===0?onClose():setStep(step-1)}>{step===0?"Cancel":"← Back"}</Btn>
+          {step<steps.length-1
+            ? <Btn small disabled={!canNext} onClick={()=>canNext&&setStep(step+1)}>Next →</Btn>
+            : <Btn small variant="primary" onClick={create}>{isEdit?"Save Changes":"Create Contract"}</Btn>}
+        </div>
       </div>
-    </Modal>
-  );
+    </div>
+  ,document.body);
 };
 
 const AssetQualityTab = ({asset,onToast,onNav})=>{
