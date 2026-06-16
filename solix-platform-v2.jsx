@@ -26714,6 +26714,18 @@ const CATEGORY_META = {
   classification:{label:"Classification", color:"#d97706"},
 };
 const itemCategory = (item) => TYPE_CATEGORY[item?.type] || "curation";
+// Role model — every work item is whose job: Steward DOES, Owner DECIDES, FYI = awareness.
+const ITEM_ROLE = {
+  tag_review:"steward", dq_alert:"steward", policy_violation:"steward",
+  certification_review:"owner", stewardship_request:"owner", orphan_assignment:"owner", needs_attention:"owner",
+  field_updated:"fyi", assigned:"fyi",
+};
+const ROLE_META = {
+  steward:{label:"STEWARD", color:"#0d9488", bg:"rgba(13,148,136,0.12)"},
+  owner:  {label:"OWNER",   color:"#b45309", bg:"rgba(180,83,9,0.12)"},
+  fyi:    {label:"FYI",     color:"#64748b", bg:"rgba(100,116,139,0.12)"},
+};
+const itemRole = (item) => ITEM_ROLE[item?.type] || "steward";
 // Phase 4 — work-item actions that actually write ownership fields on the asset.
 const assignOwnership = (assetName, handle, role) => {
   const a = ASSETS.find(x => x.name===assetName);
@@ -26727,9 +26739,6 @@ const assignOwnership = (assetName, handle, role) => {
 const certifyAsset = (assetName) => { const a=ASSETS.find(x=>x.name===assetName); if(a) a.cert="Approved"; return !!a; };
 const InboxView = ({onToast}) => {
   const onNav = useNav();
-  const {roleCfg} = useRole();
-  const me = (roleCfg?.email||"").split("@")[0];
-  const [zone, setZone] = useState("inbox"); // inbox | portfolio | activity
   const [items,      setItems]      = useState([...POLICY_VIOLATION_INBOX, ...TAG_REVIEW_INBOX, ...CERT_REVIEW_INBOX, ...ORPHAN_INBOX, ...INBOX_DATA]);
   const [filter,     setFilter]     = useState("all");
   const [viewMode,   setViewMode]   = useState("list"); // "list" | "kanban"
@@ -26920,25 +26929,27 @@ const InboxView = ({onToast}) => {
     const sev  = SEV[item.severity]||SEV.low;
     const meta = TYPE_META[item.type]||TYPE_META.field_updated;
     const isSel = sel===item.id;
-    /* done = read/completed — same shape, visually quieted */
-    const iconColor  = done ? T.textMuted : sev.c;
-    const labelColor = done ? T.textMuted : sev.c;
-    const titleColor = done ? T.textMuted : T.text;
-    const titleWeight= done ? 400 : 600;
+    const rm = ROLE_META[itemRole(item)]||ROLE_META.steward;
+    /* done = reviewed/completed — shown with a green indicator */
+    const iconColor  = done ? T.green : sev.c;
+    const labelColor = done ? T.green : sev.c;
+    const titleColor = done ? T.textSub : T.text;
+    const titleWeight= done ? 500 : 600;
     const catColor   = (CATEGORY_META[itemCategory(item)]||CATEGORY_META.curation).color;
-    const borderLeft = done ? `3px solid ${T.textMuted}33` : `3px solid ${catColor}`;
+    const borderLeft = done ? `3px solid ${T.green}` : `3px solid ${catColor}`;
     return (
       <div onClick={()=>{ setSel(isSel?null:item.id); setAssignOpen(false); }}
-        style={{display:"flex",alignItems:"stretch",background:isSel?`${T.accent}08`:T.bgSurface,border:`1px solid ${isSel?T.accent+"44":T.border}`,borderLeft,borderRadius:8,cursor:"pointer",transition:"all .12s",overflow:"hidden",minHeight:64,opacity:done?0.58:1}}
-        onMouseEnter={e=>{ if(!isSel){e.currentTarget.style.background=T.bgElevated; e.currentTarget.style.opacity=done?"0.8":"1";}}}
-        onMouseLeave={e=>{ if(!isSel){e.currentTarget.style.background=T.bgSurface; e.currentTarget.style.opacity=done?"0.58":"1";}}}>
+        style={{display:"flex",alignItems:"stretch",background:isSel?`${T.accent}08`:T.bgSurface,border:`1px solid ${isSel?T.accent+"44":T.border}`,borderLeft,borderRadius:8,cursor:"pointer",transition:"all .12s",overflow:"hidden",minHeight:64,opacity:1}}
+        onMouseEnter={e=>{ if(!isSel)e.currentTarget.style.background=T.bgElevated; }}
+        onMouseLeave={e=>{ if(!isSel)e.currentTarget.style.background=T.bgSurface; }}>
         <div style={{flex:1,padding:"10px 14px",minWidth:0}}>
-          {/* Row 1: type label + done chip + time */}
+          {/* Row 1: role chip + type label + done chip + time */}
           <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}>
+            {!done&&<span style={{fontSize:8.5,fontWeight:800,letterSpacing:"0.04em",color:rm.color,background:rm.bg,borderRadius:4,padding:"1.5px 5px",flexShrink:0}}>{rm.label}</span>}
             <span style={{color:iconColor,display:"flex",alignItems:"center",flexShrink:0}}>{meta.icon()}</span>
             <span style={{fontSize:10.5,fontWeight:600,color:labelColor}}>{meta.label}</span>
             {done&&(
-              <span style={{display:"flex",alignItems:"center",gap:3,fontSize:9.5,fontWeight:600,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:4,padding:"1px 5px"}}>
+              <span style={{display:"flex",alignItems:"center",gap:3,fontSize:9.5,fontWeight:700,color:T.green,background:`${T.green}14`,border:`1px solid ${T.green}40`,borderRadius:4,padding:"1px 5px"}}>
                 <svg width="8" height="8" viewBox="0 0 10 10" fill="none"><path d="M1.5 5.5L3.8 7.8L8.5 2.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 Done
               </span>
@@ -26964,6 +26975,7 @@ const InboxView = ({onToast}) => {
   const KCard = ({item,colC}) => {
     const sev  = SEV[item.severity]||SEV.low;
     const meta = TYPE_META[item.type]||TYPE_META.field_updated;
+    const rm   = ROLE_META[itemRole(item)]||ROLE_META.steward;
     const isSel = sel===item.id;
     return (
       <div onClick={()=>{ setSel(isSel?null:item.id); setAssignOpen(false); }}
@@ -26975,6 +26987,7 @@ const InboxView = ({onToast}) => {
           <div style={{display:"flex",alignItems:"center",gap:5}}>
             <div style={{width:16,height:16,borderRadius:4,background:sev.bg,display:"flex",alignItems:"center",justifyContent:"center",color:sev.c,flexShrink:0}}>{meta.icon()}</div>
             <span style={{fontSize:10,fontWeight:700,color:sev.c}}>{meta.shortLabel}</span>
+            <span style={{fontSize:8,fontWeight:800,letterSpacing:"0.03em",color:rm.color,background:rm.bg,borderRadius:3,padding:"1px 4px"}}>{rm.label}</span>
           </div>
           <span style={{fontSize:10,color:T.textMuted}}>{item.timeAgo}</span>
         </div>
@@ -26997,79 +27010,6 @@ const InboxView = ({onToast}) => {
     {id:"alerts",     label:"Alerts",           c:T.rose,    types:["dq_alert"]},
   ];
 
-  /* ── My Portfolio + Activity zones (Phase 5) ── */
-  const myRole = (o) => { const own=getOwners(o).includes(me), stw=getStewards(o).includes(me); return own&&stw?"Owner · Steward":own?"Owner":stw?"Steward":null; };
-  const mine = (arr) => arr.filter(o=>myRole(o));
-  const PORTFOLIO = [
-    {kind:"Assets",        items:mine(ASSETS)},
-    {kind:"Policies",      items:mine(POLICIES)},
-    {kind:"Domains",       items:mine(DOMAIN_LIST_DATA)},
-    {kind:"Data Products", items:mine(DATA_PRODUCTS_DATA)},
-    {kind:"Tags",          items:mine(INITIAL_TAG_DEFS)},
-  ];
-  const portfolioTotal = PORTFOLIO.reduce((n,g)=>n+g.items.length,0);
-  const healthDot = (q)=> q==null ? null : <span style={{width:8,height:8,borderRadius:"50%",background:q>=80?T.green:q>=60?T.amber:T.rose,flexShrink:0}}/>;
-  const PortfolioZone = () => (
-    <div style={{flex:1,overflowY:"auto",padding:"22px 28px"}}>
-      {portfolioTotal===0 ? (
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:260,gap:12}}>
-          <div style={{width:46,height:46,borderRadius:12,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted}}>{Ic.steward(20)}</div>
-          <div style={{fontSize:13.5,fontWeight:600,color:T.textSub}}>Nothing in your portfolio yet</div>
-          <div style={{fontSize:12,color:T.textMuted,maxWidth:360,textAlign:"center",lineHeight:1.5}}>You don't own or steward any governed objects as <b>{me||"this user"}</b>. Switch to the Data Steward role to see a populated portfolio.</div>
-        </div>
-      ) : PORTFOLIO.filter(g=>g.items.length>0).map(group=>(
-        <div key={group.kind} style={{marginBottom:26}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-            <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{group.kind}</span>
-            <span style={{fontSize:11,fontWeight:700,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"1px 8px"}}>{group.items.length}</span>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:10}}>
-            {group.items.map((o,i)=>{
-              const name=o.displayName||o.name; const role=myRole(o);
-              return (
-                <div key={o.id||name||i} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,padding:"12px 13px"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:7}}>
-                    {healthDot(o.quality)}
-                    <span style={{fontSize:12.5,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,fontFamily:"'Geist Mono',monospace"}}>{name}</span>
-                  </div>
-                  <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                    {o.type&&<TypeBadge type={o.type}/>}
-                    <span style={{fontSize:10,fontWeight:600,color:T.accent,background:T.accentDim,border:`1px solid ${T.accent}33`,borderRadius:5,padding:"1px 7px"}}>{role}</span>
-                    {o.quality!=null&&<span style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>Q{o.quality}</span>}
-                    {o.cert&&<span style={{fontSize:10.5,color:T.textMuted}}>{o.cert}</span>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-  const ActivityZone = () => (
-    <div style={{flex:1,overflowY:"auto",padding:"22px 28px"}}>
-      <div style={{maxWidth:740}}>
-        <div style={{fontSize:11,color:T.textMuted,marginBottom:14}}>Recent governance activity across your assets and the platform.</div>
-        {ASSET_AUDIT_ENTRIES.slice(0,14).map(e=>{
-          const cm = AUDIT_CAT_META[e.category]||AUDIT_CAT_META.SYSTEM;
-          return (
-            <div key={e.id} style={{display:"flex",gap:12,padding:"11px 0",borderBottom:`1px solid ${T.border}`}}>
-              <span style={{width:9,height:9,borderRadius:"50%",background:cm.color,flexShrink:0,marginTop:5}}/>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3,flexWrap:"wrap"}}>
-                  <span style={{fontSize:9.5,fontWeight:700,color:cm.color,background:cm.bg,border:`1px solid ${cm.border}`,borderRadius:4,padding:"1px 6px",letterSpacing:"0.04em"}}>{e.category}</span>
-                  <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{e.action}</span>
-                </div>
-                <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.5}}>{e.details}</div>
-                <div style={{fontSize:10.5,color:T.textMuted,marginTop:3}}>{e.actor} · {e.timestamp}</div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-
   /* ── Detail panel header — matches ServicePanel pattern ── */
   const DetailHeader = () => {
     if(!selItem) return null;
@@ -27085,7 +27025,10 @@ const InboxView = ({onToast}) => {
             </div>
             <div style={{minWidth:0}}>
               <div style={{fontSize:13,fontWeight:700,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{selItem.title}</div>
-              <div style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{selItem.asset.path} · {meta.label}</div>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3}}>
+                {(()=>{const rm=ROLE_META[itemRole(selItem)]||ROLE_META.steward;return <span style={{fontSize:8.5,fontWeight:800,letterSpacing:"0.04em",color:rm.color,background:rm.bg,borderRadius:4,padding:"1.5px 5px",flexShrink:0}}>{rm.label}</span>;})()}
+                <span style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{meta.label} · {selItem.asset.path}</span>
+              </div>
             </div>
           </div>
           {/* Right: severity badge + prev/next + close */}
@@ -27120,21 +27063,7 @@ const InboxView = ({onToast}) => {
       {/* Topbar — breadcrumb only */}
       <Topbar breadcrumb={[{label:"My Workspace"}]}/>
 
-      {/* Zone switcher — Action Center | My Portfolio | Activity */}
-      <div style={{display:"flex",gap:2,padding:"0 28px",borderBottom:`1px solid ${T.border}`,background:T.bgBase,flexShrink:0}}>
-        {[["inbox","Action Center"],["portfolio","My Portfolio"],["activity","Activity"]].map(([z,l])=>(
-          <button key={z} onClick={()=>{setZone(z);setSel(null);setAssignOpen(false);setFilterOpen(false);}}
-            style={{padding:"11px 16px",background:"transparent",border:"none",borderBottom:`2.5px solid ${zone===z?T.accent:"transparent"}`,color:zone===z?T.accent:T.textMuted,fontSize:13,fontWeight:zone===z?600:500,cursor:"pointer",marginBottom:-1,transition:"all .12s",whiteSpace:"nowrap"}}>
-            {l}{z==="inbox"&&unread.length>0&&<span style={{fontSize:10,fontWeight:700,marginLeft:6,background:T.bgHover,color:T.textMuted,borderRadius:10,padding:"1px 6px"}}>{unread.length}</span>}
-          </button>
-        ))}
-      </div>
-
-      {zone==="portfolio" && <PortfolioZone/>}
-      {zone==="activity"  && <ActivityZone/>}
-
-      {zone==="inbox" && (<>
-      {/* Tab bar — tabs (list only) + filter icon + view toggle + mark all read */}
+      {/* Tab bar — tabs (list only) + filter icon + view toggle */}
       <div style={{padding:"0 20px 0 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",flexShrink:0,background:T.bgSurface,minHeight:44}}>
 
         {/* Underline tabs — list view only */}
@@ -27156,9 +27085,8 @@ const InboxView = ({onToast}) => {
 
         <div style={{flex:1}}/>
 
-        {/* Filter icon — list view only */}
-        {viewMode==="list"&&(
-          <div style={{position:"relative",marginRight:10}}>
+        {/* Filter icon — list + kanban */}
+        <div style={{position:"relative",marginRight:10}}>
             <button onClick={()=>setFilterOpen(o=>!o)}
               style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,background:filterOpen||secFilterActive?T.accentDim:"transparent",border:`1px solid ${filterOpen||secFilterActive?T.accent:T.border}`,color:filterOpen||secFilterActive?T.accent:T.textSub,cursor:"pointer",fontSize:12,fontWeight:500,transition:"all .12s"}}>
               <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M1 3h12M3 7h8M5 11h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
@@ -27190,7 +27118,6 @@ const InboxView = ({onToast}) => {
               </div>
             )}
           </div>
-        )}
 
         {/* View toggle */}
         <div style={{display:"flex",gap:1,background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,padding:2,marginRight:12}}>
@@ -27203,16 +27130,6 @@ const InboxView = ({onToast}) => {
             </button>
           ))}
         </div>
-
-        {/* Mark all read */}
-        {viewMode==="list"&&unread.length>0&&(
-          <button onClick={markAll}
-            style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:11.5,textDecoration:"underline",textUnderlineOffset:2,padding:0,transition:"color .12s"}}
-            onMouseEnter={e=>e.currentTarget.style.color=T.text}
-            onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
-            Mark all read
-          </button>
-        )}
       </div>
 
       {/* ── Main content + unified detail panel ── */}
@@ -27270,18 +27187,6 @@ const InboxView = ({onToast}) => {
                 ):(
                   <div style={{display:"flex",flexDirection:"column",gap:5,maxWidth:sel?9999:820}}>
                     {shown.map(item=><Tile key={item.id} item={item}/>)}
-                    {read.length>0&&(
-                      <div style={{marginTop:16}}>
-                        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-                          <div style={{flex:1,height:1,background:T.border}}/>
-                          <span style={{fontSize:10,fontWeight:600,color:T.textMuted,letterSpacing:"0.07em"}}>COMPLETED</span>
-                          <div style={{flex:1,height:1,background:T.border}}/>
-                        </div>
-                        <div style={{display:"flex",flexDirection:"column",gap:5}}>
-                          {read.map(item=><Tile key={item.id} item={item} done={true}/>)}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )
               )}
@@ -27292,7 +27197,7 @@ const InboxView = ({onToast}) => {
           {viewMode==="kanban"&&(
             <div style={{flex:1,overflowX:"auto",overflowY:"hidden",padding:"18px 20px",display:"flex",gap:12,alignItems:"flex-start"}}>
               {KANBAN_COLS.map(col=>{
-                const colItems = unread.filter(i=>col.types.includes(i.type));
+                const colItems = unread.filter(i=>col.types.includes(i.type) && (!secFilterActive || secFilters.has(i.section)));
                 return (
                   <div key={col.id} style={{width:248,flexShrink:0,display:"flex",flexDirection:"column",height:"100%"}}>
                     <div style={{display:"flex",alignItems:"center",gap:7,padding:"9px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderTop:`3px solid ${col.c}`,borderRadius:"8px 8px 0 0",flexShrink:0}}>
@@ -27324,7 +27229,6 @@ const InboxView = ({onToast}) => {
         )}
 
       </div>
-      </>)}
     </div>
   );
 };
