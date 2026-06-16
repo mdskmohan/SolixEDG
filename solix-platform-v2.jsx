@@ -2631,7 +2631,7 @@ const NOTIFS = [
   {id:8,type:"conflict_resolved",unread:false,title:"Conflict Resolved",         body:"Conflict between 'Attribution Window' and 'UTM Window' has been resolved",   time:"6h ago",  nav:"glossary"},
   {id:9,type:"policy",          unread:false,title:"New policy applied",         body:"PII Masking policy applied to 'user_events'",                                 time:"8h ago",  nav:"policymanager"},
   {id:10,type:"schema",         unread:false,title:"Schema drift detected",      body:"Column 'user_id' type changed in product_events",                            time:"12h ago", nav:"observability"},
-  {id:11,type:"contract",       unread:false,title:"Data contract updated",      body:"'orders-v2' contract version 2.1 published",                                 time:"1d ago",  nav:"contracts"},
+  {id:11,type:"contract",       unread:false,title:"Data contract updated",      body:"orders_contract v2.1.0 published on commerce.orders",                        time:"1d ago",  nav:"catalog"},
   {id:12,type:"new_dataset",    unread:false,title:"Unowned Dataset Detected",   body:"New table 'ml_feature_store_v3' has no owner or steward assigned",            time:"2d ago",  nav:"stewardship"},
 ];
 
@@ -3173,7 +3173,7 @@ const GROUPS = [
 const Sidebar = ({active, onNav, exp, setExp, onHelp}) => {
   const {roleCfg} = useRole();
   const inboxBadgeCount = INBOX_DATA.filter(i=>!i.readAt).length;
-  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","observability","contracts","policymanager","certifications","glossary","domains","dataproducts","settings","tags"];
+  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","observability","policymanager","certifications","glossary","domains","dataproducts","settings","tags"];
   return (
     <div style={{position:"fixed",top:0,left:0,height:"100vh",width:exp?EXPANDED_W:COLLAPSED_W,background:T.bgSurface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:100,transition:"width .2s ease",overflow:"hidden"}}>
       {/* Logo */}
@@ -12365,6 +12365,14 @@ const CONTRACT_BY_ASSET = {
     policies:[{policyId:1,name:"PII Data Handling"},{policyId:3,name:"GDPR Compliance"}],
     sla:{refreshInterval:1,refreshUnit:"Day",latencyValue:2,latencyUnit:"Hours",availabilityTime:"08:00",availabilityTz:"UTC",retentionPeriod:365,retentionUnit:"Days",refreshColumn:"updated_at"},
     validationMode:"scheduled",
+    // every validation run + its per-check results (newest first)
+    runs:[
+      {at:"Today, 05:30 AM",      by:"system",    trigger:"Scheduled", result:"Violated", total:5, passed:3, failed:["Quality","Policies"]},
+      {at:"Yesterday, 05:30 AM",  by:"system",    trigger:"Scheduled", result:"Violated", total:5, passed:4, failed:["Quality"]},
+      {at:"Jun 12, 05:30 AM",     by:"maya.chen", trigger:"Manual",    result:"Passing",  total:5, passed:5, failed:[]},
+      {at:"Jun 11, 05:30 AM",     by:"system",    trigger:"Scheduled", result:"Passing",  total:5, passed:5, failed:[]},
+      {at:"Jun 10, 05:30 AM",     by:"system",    trigger:"Scheduled", result:"Passing",  total:5, passed:5, failed:[]},
+    ],
     // prior versions (full definition snapshots) — newest first
     versions:[
       {version:"2.0.0", at:"3 weeks ago", by:"maya.chen", note:"Tightened SLA latency, added GDPR policy",
@@ -12440,6 +12448,7 @@ const AssetContractTab = ({asset,onToast})=>{
   const mono={fontFamily:"'Geist Mono',monospace"};
   const [contract,setContractState]=useState(()=>getStoredContract(asset.name));
   const [wizard,setWizard]=useState(false);   // false | "create" | "edit"
+  const [tab,setTab]=useState("contract");    // contract | runs | versions
   const [statusOpen,setStatusOpen]=useState(false);
   const [settingsOpen,setSettingsOpen]=useState(false);
   const [scheduleModal,setScheduleModal]=useState(false);
@@ -12447,7 +12456,7 @@ const AssetContractTab = ({asset,onToast})=>{
   const setContract=(u)=>setContractState(prev=>{const next=typeof u==="function"?u(prev):u; CONTRACT_STORE[asset.name]=next; return next;});
 
   const changeStatus=(st)=>{ setStatusOpen(false); if(st===contract.status) return; setContract(c=>({...c,status:st,updated:"Just now"})); onToast&&onToast(`Status set to ${st}`,"success"); };
-  const runNow=()=>{ setSettingsOpen(false); const res=validateContract(contract,asset); setContract(c=>({...c,lastRun:"Just now"})); onToast&&onToast(res.allPass?"Validation passed — all checks green":`Validation found ${res.failedSections.length} failing check(s)`,res.allPass?"success":"error"); };
+  const runNow=()=>{ setSettingsOpen(false); const res=validateContract(contract,asset); const total=Object.keys(res.sections).length; const passed=total-res.failedSections.length; const run={at:"Just now",by:"You",trigger:"Manual",result:res.allPass?"Passing":"Violated",total,passed,failed:res.failedSections}; setContract(c=>({...c,lastRun:"Just now",runs:[run,...(c.runs||[])]})); setTab("runs"); onToast&&onToast(res.allPass?"Validation passed — all checks green":`Validation found ${res.failedSections.length} failing check(s)`,res.allPass?"success":"error"); };
   const newVersion=()=>{
     const parts=(contract.version||"1.0.0").split(".").map(n=>parseInt(n)||0);
     const nv=`${parts[0]}.${parts[1]+1}.0`;
@@ -12592,6 +12601,42 @@ const AssetContractTab = ({asset,onToast})=>{
       </div>
     </div></Card2>
 
+    {/* ── Tabs: Contract · Runs · Version History (segmented, like Observability) ── */}
+    <SegTabs active={tab} onChange={setTab} tabs={[
+      {key:"contract",label:"Contract"},
+      {key:"runs",label:"Runs",count:(contract.runs||[]).length||undefined},
+      {key:"versions",label:"Version History",count:allVersions.length||undefined},
+    ]}/>
+
+    {/* ── Runs tab ── */}
+    {tab==="runs"&&(()=>{ const runs=contract.runs||[]; return (
+      <Card2 style={{padding:0,overflow:"hidden"}}>
+        <div style={{padding:"13px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+          <div><div style={{fontSize:13,fontWeight:700,color:T.text}}>Validation Runs</div><div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Every validation of this contract against the live asset, with per-check results.</div></div>
+          <Btn small variant="primary" onClick={runNow}>Run validation now</Btn>
+        </div>
+        {runs.length===0
+          ? <div style={{padding:"44px 20px",textAlign:"center",color:T.textMuted,fontSize:13}}>No validation runs yet. Run one from the button above.</div>
+          : <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead><tr style={{background:T.bgElevated}}>
+                {["Result","Run","Trigger","Checks","Failed checks"].map(h=><th key={h} style={{padding:"9px 16px",fontSize:10.5,fontWeight:700,color:T.textMuted,textAlign:"left",textTransform:"uppercase",letterSpacing:.5,whiteSpace:"nowrap"}}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {runs.map((r,i)=>{const hc=CONTRACT_HEALTH[r.result]||CONTRACT_HEALTH.Passing;return (
+                  <tr key={i} style={{borderBottom:i<runs.length-1?`1px solid ${T.border}`:"none"}}>
+                    <td style={{padding:"11px 16px"}}><span style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,fontWeight:700,color:hc.color}}><span style={{width:8,height:8,borderRadius:"50%",background:hc.color}}/>{hc.label}</span></td>
+                    <td style={{padding:"11px 16px",fontSize:12,...mono,color:T.textSub,whiteSpace:"nowrap"}}>{r.at}<span style={{color:T.textMuted}}> · {r.by}</span></td>
+                    <td style={{padding:"11px 16px"}}><span style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>{r.trigger}</span></td>
+                    <td style={{padding:"11px 16px",fontSize:12,...mono,color:r.passed===r.total?"#16a34a":T.textSub,whiteSpace:"nowrap"}}>{r.passed}/{r.total} passed</td>
+                    <td style={{padding:"11px 16px"}}>{(r.failed&&r.failed.length)?<div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{r.failed.map(f=><span key={f} style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:5,background:T.roseDim,color:T.rose,border:`1px solid ${T.rose}33`}}>{f}</span>)}</div>:<span style={{color:T.textMuted,fontSize:12}}>—</span>}</td>
+                  </tr>);})}
+              </tbody>
+            </table>}
+      </Card2>
+    );})()}
+
+    {/* ── Contract tab (definition) ── */}
+    {tab==="contract"&&<>
     {/* ── 1. Schema ── */}
     <Section title="Schema">
       <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>Producers cannot change these columns without publishing a new contract version.</div>
@@ -12667,9 +12712,11 @@ const AssetContractTab = ({asset,onToast})=>{
         <KV k="Refresh Column" v={contract.sla.refreshColumn||"—"}/>
       </div>
     </Section>
+    </>}
 
-    {/* ── 7. Version history (with diffs vs the previous version) ── */}
-    <Section title="Version History">
+    {/* ── Version History tab ── */}
+    {tab==="versions"&&(
+      <Section title="Version History">
       <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>Every revision is kept. Each entry shows what changed from the previous version.</div>
       <div style={{display:"flex",flexDirection:"column",gap:0}}>
         {allVersions.map((ver,i)=>{
@@ -12708,6 +12755,7 @@ const AssetContractTab = ({asset,onToast})=>{
         })}
       </div>
     </Section>
+    )}
 
     {/* ── Edit / create wizard (left drawer) ── */}
     {wizard&&<ContractWizard asset={asset} onToast={onToast} existing={wizard==="edit"?contract:null} onClose={()=>setWizard(false)} onSubmit={(c)=>{ wizard==="edit"?saveEdit(c):setContract({...c,versions:[]}); setWizard(false); }}/>}
@@ -22000,7 +22048,7 @@ const ROLES_CONFIG = {
     badge: "rgba(238,36,36,0.15)",
     desc:  "Full platform access including settings, user management, and all configurations.",
     rbacRole: "admin",
-    nav: ["home","search","stewardship","catalog","quality","observability","contracts","policymanager","certifications","glossary","domains","dataproducts","settings","tags"],
+    nav: ["home","search","stewardship","catalog","quality","observability","policymanager","certifications","glossary","domains","dataproducts","settings","tags"],
     homeWidgets: ["metrics","tasks","quality","recentAssets","services","activity"],
   },
   steward: {
@@ -22037,7 +22085,7 @@ const ROLES_CONFIG = {
     badge: "rgba(124,58,237,0.12)",
     desc:  "Manage pipelines, monitor ingestion health, trace lineage, and maintain data contracts.",
     rbacRole: "engineer",
-    nav: ["home","search","catalog","quality","observability","contracts","settings"],
+    nav: ["home","search","catalog","quality","observability","settings"],
     homeWidgets: ["services","metrics","quality","lineageSnippet","recentAssets","activity"],
   },
   viewer: {
@@ -26250,8 +26298,8 @@ const PersonasSection = ({onToast}) => {
   ]);
   const [editPersona,    setEditPersona]    = useState(null);
   const [editingNavFor,  setEditingNavFor]  = useState(null);
-  const NAV_ITEMS = ["home","search","catalog","lineage","quality","contracts","policymanager","access","certifications","stewardship","glossary","domains","observability","analytics","settings"];
-  const NAV_LABELS = {home:"Home",search:"Search",catalog:"Catalog",lineage:"Lineage",quality:"Data Quality",contracts:"Contracts",policymanager:"Policy Manager",access:"Access Gov.",certifications:"Certifications",stewardship:"Stewardship",glossary:"Glossary",domains:"Domains",observability:"Observability",analytics:"Analytics",settings:"Settings"};
+  const NAV_ITEMS = ["home","search","catalog","lineage","quality","policymanager","access","certifications","stewardship","glossary","domains","observability","analytics","settings"];
+  const NAV_LABELS = {home:"Home",search:"Search",catalog:"Catalog",lineage:"Lineage",quality:"Data Quality",policymanager:"Policy Manager",access:"Access Gov.",certifications:"Certifications",stewardship:"Stewardship",glossary:"Glossary",domains:"Domains",observability:"Observability",analytics:"Analytics",settings:"Settings"};
   const WIDGET_LABELS = {metrics:"Platform Metrics",tasks:"My Tasks",certQueue:"Cert. Queue",qualityAlerts:"Quality Alerts",recentAssets:"Recently Viewed",certifiedAssets:"Certified Assets",services:"Service Health",lineageSnippet:"Certifications",activity:"Activity Feed"};
 
   const toggleNav = (personaId, navKey) => {
@@ -30251,7 +30299,6 @@ export default function App(){
       case "search":        return <SearchView onAsset={handleAsset}/>;
       case "catalog":       return <CatalogView onAsset={handleAsset}/>;
       case "quality":       return <QualityView/>;
-      case "contracts":     return <ContractsView onToast={showToast}/>;
       case "policymanager": return <PolicyManagerView onToast={showToast} onNav={handleNav} deepLinkPolicyId={deepLinkPolicyId}/>;
       case "access":        return <AccessView onToast={showToast}/>;
       case "certifications":return <CertificationsView onToast={showToast}/>;
