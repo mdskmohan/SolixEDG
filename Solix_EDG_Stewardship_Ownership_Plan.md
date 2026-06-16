@@ -131,8 +131,6 @@ Legend: ✅ live today · ⚠️ gap (object has owners/stewards but emits no wo
 | Asset | orphaned list (`issue`: No Owner/Deprecated) | ORPHANED_ASSETS_DATA:840 | ✅ list only |
 | Asset/Term | `new_dataset` (unowned detected) | NOTIFS:2635 | ✅ notification |
 | All 6 | `transfer` / handoff single object | — | 🆕 gap |
-| All 6 | `bulk_reassign` on offboarding | — | 🆕 gap |
-| All 6 | `attestation` (quarterly owner confirm) | — | 🆕 gap |
 
 **Honest state:** real stewardship work exists today only for assets, terms, tags. Policies/products/domains are gaps. DQ + policy violations exist but live in other modules — folding them in is the headline of this version. Request/orphan actions are cosmetic — wiring them to write fields is core to Phase 4.
 
@@ -146,7 +144,7 @@ Unassigned(orphan) ──assign──▶ Assigned ──request change──▶ 
        └──────── vacated ◀────────┴──────────── transfer / handoff ─────────────────┘
 ```
 
-Workflows: Assign (picker) · Request (owner approves → **writes field**) · Transfer · **Bulk-reassign on offboarding** (whole portfolio, all 6 types) · Orphan detection (→ domain owner → admin) · **Attestation** (quarterly owner confirm).
+Workflows: Assign (picker) · Request (owner approves → **writes field**) · Transfer / handoff · Orphan detection (→ domain owner → admin). _(Bulk-reassign and attestation are out of scope for now.)_
 
 ---
 
@@ -189,7 +187,7 @@ Left-border color by category: Classification=amber · Approval=blue · Violatio
 | **1** | `getOwners`/`getStewards` accessors + normalize the 6 data sets incrementally | uniform model |
 | **2** | Global work-item store + adapters feeding **`InboxView`** (fold all sources incl. **DQ + policy violations**, tag approvals, certs, orphans) | one data spine |
 | **3** | Extend `InboxView`: category model + WorkItem card variants + cross-object filters (List/Kanban already exist) | the visible win |
-| **4** | Ownership lifecycle wired to **actually write fields** (+ make request/orphan real; bulk-reassign; attestation) | real ownership workflow |
+| **4** | Ownership actions wired to **actually write fields** (assign owner/steward, accept request, certify) | real ownership workflow |
 | **5** | My Portfolio + Activity zones + Owner lens | full workspace |
 | **6** | Board view + graph routing + SLA escalation | enterprise rigor |
 

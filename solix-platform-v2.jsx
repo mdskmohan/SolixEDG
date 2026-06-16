@@ -12949,6 +12949,8 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
   const cols=(typeof ASSET_COLUMNS!=="undefined" && ASSET_COLUMNS[asset.name])||[];
   const assetCases=(typeof DQ_TEST_CASES!=="undefined"?DQ_TEST_CASES:[]).filter(t=>t.table.endsWith("."+asset.name)||t.table===asset.name);
   const allPolicies=(typeof POLICIES!=="undefined"?POLICIES:[]);
+  const tagCtx=useTagCtx();
+  const classDefs=((tagCtx&&tagCtx.tagDefs)||(typeof INITIAL_TAG_DEFS!=="undefined"?INITIAL_TAG_DEFS:[])).filter(t=>t.category==="sensitivity");
   const isEdit=!!existing;
   const [sec,setSec]=useState("details");
   const [doneSet,setDoneSet]=useState(()=>new Set());  // sections confirmed via Next — drives the rail dots
@@ -26712,6 +26714,17 @@ const CATEGORY_META = {
   classification:{label:"Classification", color:"#d97706"},
 };
 const itemCategory = (item) => TYPE_CATEGORY[item?.type] || "curation";
+// Phase 4 — work-item actions that actually write ownership fields on the asset.
+const assignOwnership = (assetName, handle, role) => {
+  const a = ASSETS.find(x => x.name===assetName);
+  if(!a || !handle) return false;
+  const field = role==="owner" ? "owners" : "stewards";
+  if(!Array.isArray(a[field])) a[field] = a[field] ? [a[field]] : [];
+  if(!a[field].includes(handle)) a[field].push(handle);
+  if(role==="owner") a.owner = a.owners[0]; else a.steward = a.stewards[0];
+  return true;
+};
+const certifyAsset = (assetName) => { const a=ASSETS.find(x=>x.name===assetName); if(a) a.cert="Approved"; return !!a; };
 const InboxView = ({onToast}) => {
   const onNav = useNav();
   const {roleCfg} = useRole();
@@ -26800,7 +26813,7 @@ const InboxView = ({onToast}) => {
     if(item.type==="assigned")
       return <>{btn("View Asset",()=>onToast("Opening asset","success"),true)}{btn("Acknowledge",()=>ack(item.id))}</>;
     if(item.type==="stewardship_request")
-      return <>{btn("Accept",()=>ack(item.id,`${item.requestedBy} added as ${item.requestedRole}`),true)}{btn("Decline",()=>ack(item.id,"Request declined"),false,true)}</>;
+      return <>{btn("Accept",()=>{const role=item.requestedRole==="Owner"?"owner":"steward";assignOwnership(item.asset.name,item.requestedBy,role);ack(item.id,`${item.requestedBy} added as ${item.requestedRole} of ${item.asset.name}`);},true)}{btn("Decline",()=>ack(item.id,"Request declined"),false,true)}</>;
     if(item.type==="needs_attention")
       return <>{btn("Assign Steward",()=>setAssignOpen(a=>!a),true)}{btn("Dismiss",()=>dism(item.id))}</>;
     if(item.type==="policy_violation")
@@ -26808,7 +26821,7 @@ const InboxView = ({onToast}) => {
     if(item.type==="tag_review")
       return <>{btn("Review in Tags",()=>{onNav&&onNav("tags");},true)}{btn("Approve",()=>ack(item.id,"Tag change approved"))}{btn("Dismiss",()=>dism(item.id))}</>;
     if(item.type==="certification_review")
-      return <>{btn("Review & Certify",()=>ack(item.id,"Certification approved"),true)}{btn("Defer",()=>dism(item.id))}</>;
+      return <>{btn("Review & Certify",()=>{certifyAsset(item.asset.name);ack(item.id,`${item.asset.name} certified as Approved`);},true)}{btn("Defer",()=>dism(item.id))}</>;
     if(item.type==="orphan_assignment")
       return <>{btn("Assign Owner",()=>setAssignOpen(a=>!a),true)}{btn("Deprecate",()=>ack(item.id,"Asset deprecated"),false,true)}</>;
     return null;
@@ -26872,13 +26885,16 @@ const InboxView = ({onToast}) => {
             </div>
           )}
 
-          {/* Assign picker — needs_attention */}
-          {item.type==="needs_attention"&&assignOpen&&(
+          {/* Assign picker — needs_attention (steward) + orphan_assignment (owner) */}
+          {(item.type==="needs_attention"||item.type==="orphan_assignment")&&assignOpen&&(()=>{
+            const role = item.type==="orphan_assignment" ? "owner" : "steward";
+            const roleL = role==="owner" ? "Owner" : "Steward";
+            return (
             <div style={{marginBottom:16,background:T.bgElevated,borderRadius:8,padding:"12px 14px",border:`1px solid ${T.border}`}}>
-              <div style={{fontSize:11,color:T.textSub,marginBottom:10}}>Assign steward to <b style={{color:T.text}}>{item.asset.name}</b></div>
+              <div style={{fontSize:11,color:T.textSub,marginBottom:10}}>Assign {role} to <b style={{color:T.text}}>{item.asset.name}</b></div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                {["priya.nair","arjun.sharma","dev.patel","maya.chen"].map(u=>(
-                  <button key={u} onClick={()=>{setAssignOpen(false);ack(item.id,`${u} assigned as Steward`);}}
+                {["priya.nair","dev.patel","maya.chen","sarah.kim","alex.wu","james.oh"].map(u=>(
+                  <button key={u} onClick={()=>{const ok=assignOwnership(item.asset.name,u,role);setAssignOpen(false);ack(item.id,ok?`${u} assigned as ${roleL} of ${item.asset.name}`:`${u} assigned as ${roleL}`);}}
                     style={{padding:"5px 13px",borderRadius:6,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",transition:"all .1s"}}
                     onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
                     onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
@@ -26887,7 +26903,8 @@ const InboxView = ({onToast}) => {
                 ))}
               </div>
             </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* Sticky action footer */}
