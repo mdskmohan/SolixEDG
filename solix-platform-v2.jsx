@@ -5676,6 +5676,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   // ─── state ──────────────────────────────────────────────────────────
   const [policies, setPolicies] = useState([
     {id:"pol-1",name:"Commerce PII Sensitivity",fqn:"policies.data.commerce_pii",version:2,
+     enforcement:{enabled:true,action:"Legal hold",ptype:"Retention",field:"legalHold",engine:"CDP",maturity:"GA",inPlace:true,approvalRequired:true,dryRun:true,status:"Applied",runId:"CDP-48213",lastApplied:"2026-05-20 14:40",prefilled:{object:"kb.customers",scope:"sales · customers",period:"7y · basis archive_date",approver:"M. Chen (Records/Legal)"}},
      category:"Data",severity:"Critical",lifecycle:"Active",cert:"Approved",owner:"maya.chen",stewards:["dev.patel","sarah.kim"],tags:["PII","sensitive"],
      created:"2026-02-10",updated:"2026-05-01",regulations:["GDPR","CCPA"],
      violations:2,compliancePct:78,lastEvaluated:"2026-05-17",assetsInScope:12,schedule:"0 */6 * * *",nextRun:"2026-05-20 20:00",
@@ -5831,6 +5832,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   const [tab,           setTab]         = useState("policies");
   const [selPolicyId,   setSelPolicyId] = useState(null);
   const [pdTab,         setPdTab]       = useState("overview");
+  const [enfRun,        setEnfRun]      = useState({});
+  const [violEnf,       setViolEnf]     = useState({});
   const [polSearch,     setPolSearch]   = useState("");
   const [lcFilter,      setLcFilter]    = useState("All");
   const [expandedReg,   setExpandedReg] = useState(null);
@@ -6712,6 +6715,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       {k:"rules",      l:"Rules",            badge:(p.rules||[]).length},
                       {k:"violations", l:"Violations",       badge:openViolsForPol(p.id).length||null, danger:openViolsForPol(p.id).length>0},
                       {k:"runs",       l:"Runs",             badge:(p.runs||[]).length||null},
+                      {k:"enforcement",l:"Enforcement",      badge:p.enforcement&&p.enforcement.enabled?1:null},
                       {k:"assets",     l:"Assets",           badge:(p.governedAssets||[]).length||[...new Set((p.rules||[]).filter(r=>r.table).map(r=>r.table))].length||null},
                       {k:"activity",   l:"Audit Logs",       badge:(p.history||[]).length},
                     ].map(({k,l,badge,danger})=>(
@@ -7458,6 +7462,48 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                     })()}
 
                     {/* ── Governed Assets ── */}
+                    {pdTab==="enforcement"&&(()=>{
+                      const enf = p.enforcement || {action:"Mask",ptype:"Security",field:"maskingStatus",engine:"CDP",maturity:"MVP",inPlace:false,approvalRequired:true,dryRun:true,status:"Not dispatched",prefilled:{object:"kb."+((p.governedAssets&&p.governedAssets[0]&&p.governedAssets[0].name)||"asset"),scope:"—",period:"—",approver:"—"}};
+                      const st = (enfRun[p.id]&&enfRun[p.id].status)||enf.status;
+                      const runId = (enfRun[p.id]&&enfRun[p.id].runId)||enf.runId;
+                      const matColor = enf.maturity==="GA"?T.green:enf.maturity==="MVP"?T.amber:T.textMuted;
+                      const stColor = st==="Applied"?T.green:st==="Pending approval"?T.amber:st==="Failed"?T.rose:T.textMuted;
+                      const chip=(txt,c)=>(<span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:10,background:c+"18",color:c}}>{txt}</span>);
+                      const dispatch=()=>{ setEnfRun(prev=>({...prev,[p.id]:{status:"Pending approval"}})); onToast("Sent to "+enf.engine+" approver — pending approval","info"); setTimeout(()=>{ setEnfRun(prev=>({...prev,[p.id]:{status:"Applied",runId:enf.engine+"-"+Math.floor(40000+Math.random()*9000)}})); onToast("Enforced in "+enf.engine+" — applied in place","success"); },1300); };
+                      return (
+                        <div style={{padding:"16px 18px"}}>
+                          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
+                            <span style={{fontSize:14,fontWeight:600,color:T.text}}>Enforce in place · {enf.action}</span>
+                            {chip(enf.engine,T.blue)}
+                            {chip(enf.maturity,matColor)}
+                            {enf.inPlace&&chip("Federated Governance · in place",T.green)}
+                          </div>
+                          <div style={{fontSize:11,color:T.textMuted,marginBottom:14}}>Write-twin of <code>{enf.field||"—"}</code> · source-aware from scope, so the fields and data below are scoped to {enf.engine}.</div>
+
+                          <div style={{border:"1px solid "+T.border,borderRadius:8,padding:"12px 14px",marginBottom:12,background:T.bgElevated}}>
+                            <div style={{fontSize:10,color:T.textMuted,letterSpacing:".06em",marginBottom:8}}>{enf.engine} ENGINE FIELDS · PRE-FILLED FROM CATALOG</div>
+                            {[["Object",enf.prefilled&&enf.prefilled.object],["Scope",enf.prefilled&&enf.prefilled.scope],["Retention / basis",(enf.prefilled&&(enf.prefilled.period||enf.prefilled.basis))||"—"],["Approver",enf.prefilled&&enf.prefilled.approver]].map((kv,i)=>(
+                              <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:12}}>
+                                <span style={{color:T.textMuted}}>{kv[0]}</span><span style={{color:T.text}}>{kv[1]||"—"}</span>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+                            <span style={{fontSize:11,color:T.textMuted}}>Status</span>
+                            <span style={{fontSize:12,fontWeight:600,color:stColor}}>{st}</span>
+                            {runId&&<span style={{fontSize:11,color:T.textMuted}}>· Run {runId}</span>}
+                            {enf.approvalRequired&&<span style={{fontSize:10,color:T.textMuted,marginLeft:"auto"}}>approval-gated · dry-run on</span>}
+                          </div>
+
+                          <div style={{display:"flex",gap:8}}>
+                            <button onClick={()=>onToast("Dry-run on "+enf.engine+": changes previewed, nothing applied","info")} style={{fontSize:11.5,padding:"7px 14px",borderRadius:7,border:"1px solid "+T.border,background:"none",color:T.text,cursor:"pointer"}}>Preview (dry-run)</button>
+                            {st!=="Applied"&&<button onClick={dispatch} style={{fontSize:11.5,padding:"7px 14px",borderRadius:7,border:"none",background:T.accent,color:"#fff",cursor:"pointer",fontWeight:600}}>Dispatch to {enf.engine}</button>}
+                            {st==="Applied"&&<span style={{fontSize:11.5,padding:"7px 14px",color:T.green,fontWeight:600}}>✓ Enforced in {enf.engine}</span>}
+                          </div>
+                        </div>
+                      );
+                    })()}
                     {pdTab==="assets"&&(()=>{
                       const SVC_ICON_MAP = {"snowflake":"❄️","databricks":"🧱","postgres":"🐘","postgresql":"🐘","oracle":"🔴","bigquery":"🔷","redshift":"🌀"};
                       // Use enriched governedAssets if available, else fall back to rule targets
@@ -7911,6 +7957,38 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                   </td>
                                 </tr>
                               )}
+                              {isExp&&(()=>{
+                                const enf = pol&&pol.enforcement;
+                                const eng = enf&&enf.engine ? enf.engine : (["File","Object","Blob","Container","Folder"].includes(v.assetType)?"ECS":"CDP");
+                                const action = enf&&enf.action ? enf.action : "Mask";
+                                const ve = violEnf[v.id];
+                                const vst = (ve&&ve.status) || (enf&&enf.status==="Applied"?"Applied":"Not dispatched");
+                                const runId = (ve&&ve.runId) || (enf&&enf.runId);
+                                const stC = vst==="Applied"?"#16a34a":vst==="Pending approval"?T.amber:T.textMuted;
+                                const sendApproval=()=>{ setViolEnf(pp=>({...pp,[v.id]:{status:"Pending approval"}})); onToast("Remediation sent to "+eng+" approver — pending approval","info"); };
+                                const applyNow=()=>{ const rid=eng+"-"+Math.floor(40000+Math.random()*9000); setViolEnf(pp=>({...pp,[v.id]:{status:"Applied",runId:rid}})); setViolations(prev=>prev.map(x=>x.id===v.id?{...x,status:"Resolved",resolutionNote:"Enforced in "+eng+" ("+action+") · Run "+rid}:x)); onToast("Enforced in "+eng+" — applied in place","success"); };
+                                return (
+                                  <tr style={{borderBottom:vi<displayViols.length-1?`1px solid ${T.border}`:"none"}}>
+                                    <td colSpan={5} style={{padding:0}}>
+                                      <div style={{padding:"14px 20px",background:T.bgElevated,borderTop:`1px solid ${T.border}`}}>
+                                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,flexWrap:"wrap"}}>
+                                          <span style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:.6,textTransform:"uppercase"}}>Remediate in place</span>
+                                          <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,background:T.blue+"18",color:T.blue}}>{eng}</span>
+                                          <span style={{fontSize:11,color:T.textSub}}>{action}{enf&&enf.inPlace?" · Federated Governance":""}</span>
+                                          <span style={{marginLeft:"auto",fontSize:11,fontWeight:700,color:stC}}>{vst}{runId?" · Run "+runId:""}</span>
+                                        </div>
+                                        <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10,lineHeight:1.6}}>Routed to {eng} by the asset&apos;s source. Approval-gated · dry-run available. Status reconciles back to this violation.</div>
+                                        <div style={{display:"flex",gap:8}}>
+                                          <button onClick={()=>onToast("Dry-run on "+eng+": change previewed, nothing applied","info")} style={{fontSize:11,padding:"6px 12px",borderRadius:7,border:`1px solid ${T.border}`,background:"none",color:T.text,cursor:"pointer"}}>Preview (dry-run)</button>
+                                          {vst==="Not dispatched"&&<button onClick={sendApproval} style={{fontSize:11,padding:"6px 12px",borderRadius:7,border:"none",background:T.accent,color:"#fff",fontWeight:600,cursor:"pointer"}}>Remediate in {eng}</button>}
+                                          {vst==="Pending approval"&&<button onClick={applyNow} style={{fontSize:11,padding:"6px 12px",borderRadius:7,border:"none",background:T.amber,color:"#fff",fontWeight:600,cursor:"pointer"}}>Approve &amp; apply</button>}
+                                          {vst==="Applied"&&<span style={{fontSize:11,padding:"6px 12px",color:"#16a34a",fontWeight:600}}>✓ Enforced in {eng}</span>}
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })()}
                             </React.Fragment>
                           );
                         })}
@@ -30344,9 +30422,7 @@ const StewardInboxView = ({onToast}) => {
   );
 };
 
-// ─────────────────────────────────────────────
-// ROOT APP
-// ─────────────────────────────────────────────
+// ──────────────────────────────────────
 export default function App(){
   const [loggedIn, setLoggedIn] = useState(false);
   const [role,     setRole]     = useState("analyst");
