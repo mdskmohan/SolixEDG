@@ -12436,7 +12436,7 @@ const AssetObservabilityTab = ({asset,onToast,onNav})=>{
   const subs=[
     {key:"table",label:"Table Profile"},
     {key:"column",label:"Column Profile"},
-    {key:"quality",label:"Data Quality",count:eff.length||undefined},
+    {key:"quality",label:"Tests",count:eff.length||undefined},
     {key:"incidents",label:"Incidents",count:openIncs||undefined},
   ];
   const RANGES=["Last 7 days","Last 14 days","Last 30 days","Last 60 days"];
@@ -13252,7 +13252,7 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
 
             {sec==="quality"&&<div style={{maxWidth:620}}>
               <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Quality Assertions</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>Attach existing data-quality test cases ({quality.length} selected). Optional.</div></div>
-              {assetCases.length===0?<div style={{fontSize:12.5,color:T.textMuted,padding:"16px 0"}}>No test cases exist for this asset yet. Create them in Observability › Data Quality first.</div>:
+              {assetCases.length===0?<div style={{fontSize:12.5,color:T.textMuted,padding:"16px 0"}}>No test cases exist for this asset yet. Create them in Data Quality › Tests first.</div>:
               <div style={{display:"flex",flexDirection:"column",gap:8}}>{assetCases.map(t=>(
                 <label key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:quality.includes(t.id)?T.accentDim:T.bgElevated,border:`1px solid ${quality.includes(t.id)?T.accent+"55":T.border}`,borderRadius:9,cursor:"pointer"}}>
                   <input type="checkbox" checked={quality.includes(t.id)} onChange={()=>toggle(quality,setQuality,t.id)} style={{accentColor:T.accent}}/>
@@ -15636,7 +15636,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
 
   const tabs=[
     {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},{key:"lineage",label:"Lineage"},
-    {key:"observability",label:"Observability"},{key:"contract",label:"Contract"},{key:"usage",label:"Usage"},
+    {key:"observability",label:"Data Quality"},{key:"contract",label:"Contract"},{key:"usage",label:"Usage"},
     {key:"activity",label:"Audit Logs"},
   ];
 
