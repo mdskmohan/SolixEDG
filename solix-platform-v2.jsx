@@ -8893,16 +8893,6 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       {divider}
 
                       {/* ── Policy Type ── */}
-                      <div style={{marginBottom:14,padding:"10px 12px",background:T.bgElevated,borderRadius:10,border:`1px solid ${T.border}`}}>
-                        <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".6px",marginBottom:8}}>Enforcement capability by source</div>
-                        <div style={{display:"grid",gridTemplateColumns:"1.5fr repeat(4,1fr)",gap:4,fontSize:10.5}}>
-                          {["Action","CDP","ECS","Snowflake/DBX","EDG"].map((h,i)=><div key={"h"+i} style={{fontWeight:700,color:T.textSub,padding:"2px 4px"}}>{h}</div>)}
-                          {[["Retain","native","native","limited","MVP"],["Legal hold","FG","native","—","MVP"],["Mask","60 algos","redact","native","—"],["Purge / erase","native","native","native","—"],["Restrict access","native","native","native","MVP"]].map((row,ri)=>row.map((c,ci)=>(
-                            <div key={ri+"-"+ci} style={{padding:"2px 4px",color:ci===0?T.text:(c==="—"?T.textMuted:c==="MVP"||c==="limited"?T.amber:T.green),fontWeight:ci===0?600:500}}>{c}</div>
-                          )))}
-                        </div>
-                        <div style={{fontSize:9.5,color:T.textMuted,marginTop:6}}>FG = Federated Governance (enforced in place) · MVP = EDG-native roadmap · — not supported</div>
-                      </div>
                       {secHead("Policy Type","Select the type(s) this policy governs.")}
                       <div style={{marginBottom:4}}>
                         <CatFieldDropdown
@@ -9151,18 +9141,42 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                           onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
                                           onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>×</button>
                                       </div>
-                                      {fd.action&&(
-                                        <div style={{borderTop:`1px solid ${T.border}`,padding:"8px 11px",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",background:`${T.accent}06`}}>
-                                          <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".5px"}}>Enforce twin</span>
-                                          <span style={{fontSize:11,fontWeight:600,color:T.text}}>{fd.action.verb}</span>
-                                          <span style={{fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:10,background:`${T.blue}18`,color:T.blue}}>{fd.action.engine}</span>
-                                          <span style={{fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:10,background:fd.action.maturity==="GA"?`${T.green}18`:fd.action.maturity==="MVP"?`${T.amber}18`:`${T.textMuted}22`,color:fd.action.maturity==="GA"?T.green:fd.action.maturity==="MVP"?T.amber:T.textMuted}}>{fd.action.maturity}</span>
-                                          <label style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:5,fontSize:11,color:T.textSub,cursor:"pointer"}}>
-                                            <input type="checkbox" checked={!!r.enforce} onChange={e=>updRule(r.id,"enforce",e.target.checked)} style={{cursor:"pointer"}}/>
-                                            Enforce in place
-                                          </label>
+                                      {fd.action&&(()=>{
+                                        const _src=newPol.scope?.sources||[];
+                                        const enfEngine = fd.action.engine!=="CDP" ? fd.action.engine : (_src.includes("ECS")&&!_src.includes("CDP")?"ECS":"CDP");
+                                        const matC = fd.action.maturity==="GA"?T.green:fd.action.maturity==="MVP"?T.amber:T.textMuted;
+                                        const FS = {"Mask":[["Rule type",["Mask data","Null out","Encryption","Substitute","Shuffle"]],["Algorithm language",["Java","SQL","Oracle","Python"]],["Algorithm",["EMAIL","SSN","CREDIT_CARD","REDACT","HASHMASKING","CONSISTENT_HASH"]],["Process type",["Masking","Masking preview","Xpress masking"]],["Approver",["M. Chen","Records / Legal","Data Office"]]],"Legal hold":[["Hold type",["Rule-based","Search-based"]],["Scope",["Whole asset","Match criteria"]],["Federated Governance",["On — enforce in place","Off"]],["Approver",["Records / Legal","M. Chen"]]],"Set disposition":[["Retention period",["30d","90d","1y","7y","Indefinite"]],["Date basis",["archive_date","created_date","last_modified"]],["On expiry",["Retention purge","Archive tier","Review"]],["Approver",["Records / Legal","M. Chen"]]],"Restrict access":[["Mechanism",["RBAC entity","Row-level security"]],["Entity / role",null],["Access level",["Controlled","Restricted"]],["Approver",["Security","M. Chen"]]],"Restrict (row-level)":[["Filter column",null],["Operator",["=","in","!="]],["Value",null],["Approver",["Security","M. Chen"]]],"Encrypt":[["Algorithm",["AES-256","CHAR_ENCRYPT","NUMERIC_ENCRYPT"]],["Key scope",["Per-column","Per-table"]],["Approver",["Security"]]],"Erase / redact":[["Action",["Purge","Obfuscate","Redact"]],["Regulation",["GDPR","CCPA","HIPAA"]],["Identity scope",null],["Approver",["Records / Legal","Privacy Office"]]],"Classify":[["Label to write",["PII","PHI","PCI","Confidential"]],["Apply to",["Column","Table"]]],"Set sensitivity":[["Sensitivity",["Low","Medium","High","Critical"]],["Apply to",["Column","Table"]]]};
+                                        const fields = FS[fd.action.verb] || [["Approver",["Records / Legal"]]];
+                                        return (
+                                        <div style={{borderTop:`1px solid ${T.border}`,padding:"8px 11px",background:`${T.accent}06`}}>
+                                          <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
+                                            <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".5px"}}>On match, enforce</span>
+                                            <span style={{fontSize:11,fontWeight:600,color:T.text}}>{fd.action.verb}</span>
+                                            <span style={{fontSize:9.5,color:T.textMuted}}>via</span>
+                                            <span style={{fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:10,background:`${T.blue}18`,color:T.blue}}>{enfEngine}</span>
+                                            <span title="GA = live today; MVP/Planned = roadmap" style={{fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:10,background:`${matC}22`,color:matC}}>{fd.action.maturity}</span>
+                                            <label style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:5,fontSize:11,color:T.textSub,cursor:"pointer"}}>
+                                              <input type="checkbox" checked={!!r.enforce} onChange={e=>updRule(r.id,"enforce",e.target.checked)} style={{cursor:"pointer"}}/>
+                                              Enforce in place
+                                            </label>
+                                          </div>
+                                          {r.enforce&&(
+                                            <div style={{marginTop:8,paddingTop:8,borderTop:`1px dashed ${T.border}`}}>
+                                              <div style={{fontSize:9.5,color:T.textMuted,marginBottom:6,letterSpacing:".3px"}}>{enfEngine} ENGINE FIELDS — pre-filled where known</div>
+                                              {fields.map((ff,fi)=>(
+                                                <div key={fi} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                                                  <span style={{fontSize:10.5,color:T.textMuted,width:120,flexShrink:0}}>{ff[0]}</span>
+                                                  {ff[1]
+                                                    ? <select value={(r.enf||{})[ff[0]]||""} onChange={e=>updRule(r.id,"enf",{...(r.enf||{}),[ff[0]]:e.target.value})} style={{...sel_s,flex:1,minWidth:120}}><option value="">— select —</option>{ff[1].map(o=><option key={o} value={o}>{o}</option>)}</select>
+                                                    : <input value={(r.enf||{})[ff[0]]||""} onChange={e=>updRule(r.id,"enf",{...(r.enf||{}),[ff[0]]:e.target.value})} placeholder="—" style={{...sel_s,flex:1,minWidth:120}}/>}
+                                                </div>
+                                              ))}
+                                              <button onClick={()=>onToast("Dry-run on "+enfEngine+": previewed, nothing applied","info")} style={{fontSize:10.5,padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"none",color:T.text,cursor:"pointer",marginTop:2}}>Preview (dry-run)</button>
+                                            </div>
+                                          )}
                                         </div>
-                                      )}
+                                        );
+                                      })()}
                                       {/* Table + Column pickers for Quality/Retention rules */}
                                       {(fd.types.includes("Quality")||fd.types.includes("Retention"))&&(
                                         <div style={{borderTop:`1px solid ${T.border}`,padding:"10px 11px 11px",display:"flex",flexDirection:"column",gap:8,background:`${T.bgBase}88`}}>
