@@ -3162,7 +3162,7 @@ const GROUPS = [
   ]},
   {section:"Catalog",items:[
     {key:"catalog",        icon:"catalog",       label:"Catalog"},
-    {key:"quality",        icon:"observability", label:"Observability"},
+    {key:"quality",        icon:"quality",       label:"Data Quality"},
   ]},
   {section:"Governance",items:[
     {key:"policymanager",  icon:"policies",      label:"Policies"},
@@ -3882,7 +3882,7 @@ const QualityView = () => {
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <Topbar breadcrumb={[{label:"Observability"}]}/>
+      <Topbar breadcrumb={[{label:"Data Quality"}]}/>
       {/* Tab bar + primary action */}
       <div style={{padding:"0 28px",borderBottom:`1px solid ${T.border}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between",minHeight:48}}>
         <div style={{display:"flex",height:"100%"}}>
