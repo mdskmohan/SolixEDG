@@ -117,6 +117,10 @@ input,textarea,select{font-family:inherit;font-size:inherit;transition:backgroun
 // MOCK DATA
 // ─────────────────────────────────────────────
 const ASSETS = [
+  {id:9001, name:"orders_archive",    type:"Table",  domain:"Commerce", owner:"maya.chen", owners:["maya.chen"], steward:"dev.patel", stewards:["dev.patel"], cert:"Approved", quality:88, usage:"Low", updated:"3d ago", service:"cdp", connectionLabel:"Solix CDP — Archive", db:"cdp / kb.commerce / orders_archive", tier:2, rows:"412M", size:"96 GB", tags:["PII","GDPR","archived"], description:"Archived historical orders retired from Snowflake into CDP. Governed in place; retention 7y.", slaFreshness:"—"},
+  {id:9002, name:"customers_archive", type:"Table",  domain:"Finance",  owner:"dev.patel", owners:["dev.patel"], steward:"sarah.kim", stewards:["sarah.kim"], cert:"Approved", quality:90, usage:"Low", updated:"1w ago", service:"cdp", connectionLabel:"Solix CDP — Archive", db:"cdp / kb.commerce / customers_archive", tier:1, rows:"28M", size:"14 GB", tags:["PII","legal-hold"], description:"Archived customer records under legal hold via Federated Governance.", slaFreshness:"—"},
+  {id:9003, name:"contracts_2025.pdf",type:"Object", domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"sarah.kim", stewards:["sarah.kim"], cert:"Approved", quality:0, usage:"Med", updated:"2d ago", service:"ecs", connectionLabel:"Solix ECS — Content", db:"ecs / legal / contracts_2025.pdf", tier:2, rows:"—", size:"4.2 MB", tags:["confidential"], description:"Executed vendor contracts in ECS. Retention + legal hold enforced in place.", slaFreshness:"—", assetLevel:"object", fileFormat:"PDF"},
+  {id:9004, name:"hr_records",        type:"Folder", domain:"Platform", owner:"james.oh",  owners:["james.oh"],  steward:"james.oh",  stewards:["james.oh"],  cert:"Approved", quality:0, usage:"Low", updated:"5d ago", service:"ecs", connectionLabel:"Solix ECS — Content", db:"ecs / hr / hr_records", tier:1, rows:"—", size:"1.1 GB", tags:["PII","confidential"], description:"HR document folder in ECS. Access-restricted; retention governed by EDG.", slaFreshness:"—", assetLevel:"folder", childCount:240},
   {id:1, name:"orders",              type:"Table",     domain:"Commerce",  owner:"maya.chen",  owners:["maya.chen"],               steward:"dev.patel",  stewards:["dev.patel","sarah.kim"],  cert:"Approved",   quality:94, usage:"High", updated:"2h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",   db:"snowflake_prod / COMMERCE / orders",       tier:1, rows:"48.2M",  size:"12.4 GB", tags:["PII","revenue"],          description:"Core transactional orders table. Source of truth for all order data.",     slaFreshness:"2h"},
   {id:2, name:"customers",           type:"Table",     domain:"Commerce",  owner:"dev.patel",  owners:["dev.patel","maya.chen"],    steward:"dev.patel",  stewards:["dev.patel"],              cert:"Approved",   quality:91, usage:"High", updated:"1d ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",   db:"snowflake_prod / COMMERCE / customers",    tier:1, rows:"3.1M",   size:"2.8 GB",  tags:["PII"],                    description:"Master customer dimension table from Salesforce CRM.",                     slaFreshness:"6h"},
   {id:4, name:"product_events",      type:"Table",     domain:"Product",   owner:"alex.wu",    owners:["alex.wu"],                 steward:"alex.wu",    stewards:["alex.wu"],                cert:"Draft", quality:72, usage:"Med",  updated:"5d ago",  service:"postgres",   connectionLabel:"PostgreSQL Prod",  db:"postgresql_prod / PRODUCT / events",        tier:3, rows:"210M",   size:"38 GB",   tags:["events"],                 description:"Raw product analytics events from web and mobile.",                         slaFreshness:"1h"},
@@ -2369,6 +2373,8 @@ const Ic = {
 // SERVICE LOGOS + ICONS
 // ─────────────────────────────────────────────
 const SERVICE_LOGOS = {
+  cdp: <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#b11116"/><text x="16" y="20" fontSize="10" fontWeight="bold" fill="white" textAnchor="middle" fontFamily="Arial">CDP</text></svg>,
+  ecs: <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#0f6e56"/><text x="16" y="20" fontSize="10" fontWeight="bold" fill="white" textAnchor="middle" fontFamily="Arial">ECS</text></svg>,
   snowflake:  <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#29b5e8"/><path d="M16 6v20M6 16h20M9.2 9.2l13.6 13.6M22.8 9.2L9.2 22.8" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>,
   postgres:   <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#336791"/><text x="16" y="21" textAnchor="middle" fill="white" fontSize="9" fontWeight="700" fontFamily="monospace">PG</text></svg>,
   databricks: <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#FF3621"/><path d="M7 20l9 5 9-5v-4l-9 5-9-5v4z" fill="white" opacity=".9"/><path d="M7 16l9 5 9-5-9-5-9 5z" fill="white"/></svg>,
@@ -7505,7 +7511,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       );
                     })()}
                     {pdTab==="assets"&&(()=>{
-                      const SVC_ICON_MAP = {"snowflake":"❄️","databricks":"🧱","postgres":"🐘","postgresql":"🐘","oracle":"🔴","bigquery":"🔷","redshift":"🌀"};
+                      const SVC_ICON_MAP = {"cdp":"🗄️","ecs":"📁","snowflake":"❄️","databricks":"🧱","postgres":"🐘","postgresql":"🐘","oracle":"🔴","bigquery":"🔷","redshift":"🌀"};
                       // Use enriched governedAssets if available, else fall back to rule targets
                       const govAssets = p.governedAssets||[];
                       const ruleTargets = (p.rules||[]).filter(r=>r.table);
@@ -7631,7 +7637,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   const bd = polBulkDraft;
                   const lbl3 = {fontSize:11,fontWeight:600,color:T.textMuted,marginBottom:5,display:"block"};
                   const inp3 = {width:"100%",padding:"7px 10px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box"};
-                  const ALL_SOURCES3 = ["Snowflake","Databricks","PostgreSQL","Oracle","BigQuery","Redshift"];
+                  const ALL_SOURCES3 = ["CDP","ECS","Snowflake","Databricks","PostgreSQL","Oracle","BigQuery","Redshift"];
                   const ALL_DOMAINS3 = ["Finance","HR","Operations","Legal","Technology","Marketing"];
                   return (
                     <div style={{width:340,flexShrink:0,display:"flex",flexDirection:"column",borderLeft:`1px solid ${T.border}`,background:T.bgSurface,height:"100%"}}>
@@ -8600,7 +8606,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   const scopeDoms  = newPol.scope?.domains||[];
                   const scopeSrcs  = newPol.scope?.sources||[];
                   const assetType  = newPol.scope?.assetType||"both";
-                  const ALL_SOURCES = ["Snowflake","Databricks","PostgreSQL","Oracle","BigQuery","Redshift"];
+                  const ALL_SOURCES = ["CDP","ECS","Snowflake","Databricks","PostgreSQL","Oracle","BigQuery","Redshift"];
                   return (
                     <div style={{display:"flex",flexDirection:"column",gap:20}}>
                       {secHead("Policy Scope","Define which sources and asset types this policy governs. Specific tables and columns are selected per rule in the next step.")}
@@ -16513,7 +16519,7 @@ const CatalogView = ({onAsset})=>{
 
   const CERT_COLORS = {"Approved":"#16a34a","In Review":"#d97706","Draft":"#6b7280","Rejected":"#e11d48","Deprecated":"#7c3aed"};
   const TIER_META   = {"1":{color:"#ee2424",label:"Critical"},"2":{color:"#d97706",label:"Important"},"3":{color:"#4b4b60",label:"Exploratory"}};
-  const CONN_TYPE_LABELS = {snowflake:"Snowflake",databricks:"Databricks",oracle:"Oracle",postgres:"PostgreSQL",mysql:"MySQL",s3:"Amazon S3",azureblob:"Azure Blob",airflow:"Airflow"};
+  const CONN_TYPE_LABELS = {cdp:"Solix CDP",ecs:"Solix ECS",snowflake:"Snowflake",databricks:"Databricks",oracle:"Oracle",postgres:"PostgreSQL",mysql:"MySQL",s3:"Amazon S3",azureblob:"Azure Blob",airflow:"Airflow"};
   const allConnTypes = [...new Set(ASSETS.map(a=>a.service))];
   const visibleConns = selConnTypes.size===0 ? [...new Set(ASSETS.map(a=>a.connectionLabel))] : [...new Set(ASSETS.filter(a=>selConnTypes.has(a.service)).map(a=>a.connectionLabel))];
   const ALL_ASSET_TYPES = selConnTypes.size===0
@@ -17372,7 +17378,7 @@ const PortsTab=({pd,allAssets,onPatch})=>{
     else                onPatch({outputPortIds:outputPortIds.filter(x=>x!==id)});
   };
 
-  const SVC_ICON={snowflake:"❄️",postgres:"🐘",databricks:"🔷",oracle:"🔶",mysql:"🐬",airflow:"🌀",s3:"🪣"};
+  const SVC_ICON={cdp:"🗄️",ecs:"📁",snowflake:"❄️",postgres:"🐘",databricks:"🔷",oracle:"🔶",mysql:"🐬",airflow:"🌀",s3:"🪣"};
 
   /* OM-style port card — matches screenshot exactly */
   const PortAssetCard=({asset,color,kind})=>{
