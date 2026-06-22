@@ -5834,6 +5834,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
     {id:"ret", name:"Retention", color:T.amber},
     {id:"acc", name:"Access",    color:T.blue},
     {id:"qual",name:"Quality",   color:T.green},
+    {id:"priv",name:"Privacy",   color:"#0ea5e9"},
   ]);
   const [tab,           setTab]         = useState("policies");
   const [selPolicyId,   setSelPolicyId] = useState(null);
@@ -8672,18 +8673,30 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                     "Schema":     ["Governance","Retention","Access"],
                     "Database":   ["Governance","Retention","Access"],
                   };
-                  const ALL_PTYPES = ["Governance","Quality","Retention","Access"];
+                  const ALL_PTYPES = ["Governance","Security","Quality","Retention","Access","Privacy"];
                   const availPTypes = scopeTypes.length>0
                     ? [...new Set(scopeTypes.flatMap(t=>TYPE_BY_ASSET[t]||ALL_PTYPES))]
                     : ALL_PTYPES;
                   const PTYPE_META = {
                     Governance: {color:T.violet, icon:"🏛️", desc:"Classification, tagging & naming standards"},
+                    Security:   {color:T.rose,   icon:"🛡️", desc:"Classification, masking, encryption & row security"},
                     Quality:    {color:T.green,  icon:"✅", desc:"Completeness, freshness & accuracy thresholds"},
                     Retention:  {color:T.amber,  icon:"🕒", desc:"Storage lifetime, archival & deletion periods"},
                     Access:     {color:T.blue,   icon:"🔑", desc:"Role-based access, approval gates & export rules"},
+                    Privacy:    {color:"#0ea5e9", icon:"🔒", desc:"PII/PHI handling, GDPR erasure & redaction"},
                   };
                   // scope: "table" = no column input | "column" = column required | "both" = column optional
                   const W_RULE_FIELDS = [
+                    {id:"classification",   label:"Classification",          scope:"both",   type:"enum",       ops:["is","is not","is one of","is not one of"], vals:["PII","PHI","PCI","Confidential","Internal","Public","Not Set"], types:["Security","Privacy","Governance"], action:{verb:"Classify",engine:"EDG",maturity:"GA"}},
+                    {id:"sensitivity",      label:"Sensitivity",             scope:"both",   type:"enum",       ops:["is","is not"],                             vals:["Low","Medium","High","Critical","Not Set"], types:["Security","Access"], action:{verb:"Set sensitivity",engine:"EDG",maturity:"MVP"}},
+                    {id:"masking_status",   label:"Masking Status",          scope:"column", type:"enum",       ops:["is","is not"],                             vals:["Applied","Partial","Not Applied","Unknown"], types:["Security"], action:{verb:"Mask",engine:"CDP",maturity:"GA"}},
+                    {id:"encryption_status",label:"Encryption Status",       scope:"both",   type:"enum",       ops:["is","is not"],                             vals:["Enabled","Disabled","Unknown"], types:["Security"], action:{verb:"Encrypt",engine:"source",maturity:"Planned"}},
+                    {id:"row_security",     label:"Row Security",            scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Enabled","Disabled","Unknown"], types:["Security","Access"], action:{verb:"Restrict (row-level)",engine:"CDP",maturity:"GA"}},
+                    {id:"exposure",         label:"Exposure",                scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Public","Internal","Restricted","Not Set"], types:["Security","Access"], action:{verb:"Restrict access",engine:"CDP",maturity:"GA"}},
+                    {id:"legal_hold",       label:"Legal Hold",              scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["true","false"], types:["Retention"], action:{verb:"Legal hold",engine:"CDP",maturity:"GA"}},
+                    {id:"retention_class",  label:"Retention Class",         scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Operational","Regulatory","Archive","Legal Hold","Not Set"], types:["Retention"], action:{verb:"Set disposition",engine:"CDP",maturity:"GA"}},
+                    {id:"access_level",     label:"Access Level",            scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Open","Controlled","Restricted","Not Set"], types:["Access"], action:{verb:"Restrict access",engine:"CDP",maturity:"GA"}},
+                    {id:"gdpr_erasure",     label:"GDPR Erasure Eligible",   scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Yes","No"], types:["Privacy"], action:{verb:"Erase / redact",engine:"CDP",maturity:"GA"}},
                     // ── Governance — all table-level catalog attributes ──
                     {id:"certification",  label:"Certification Status",    scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Draft","In Review","Approved","Rejected","Deprecated"],  types:["Governance","Quality","Access"]},
                     {id:"domain",         label:"Domain",                  scope:"table",  type:"enum_multi", ops:["is","is not","is one of","is not one of"], vals:ALL_DOMAINS,                                               types:["Governance","Retention"]},
@@ -8880,6 +8893,16 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       {divider}
 
                       {/* ── Policy Type ── */}
+                      <div style={{marginBottom:14,padding:"10px 12px",background:T.bgElevated,borderRadius:10,border:`1px solid ${T.border}`}}>
+                        <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".6px",marginBottom:8}}>Enforcement capability by source</div>
+                        <div style={{display:"grid",gridTemplateColumns:"1.5fr repeat(4,1fr)",gap:4,fontSize:10.5}}>
+                          {["Action","CDP","ECS","Snowflake/DBX","EDG"].map((h,i)=><div key={"h"+i} style={{fontWeight:700,color:T.textSub,padding:"2px 4px"}}>{h}</div>)}
+                          {[["Retain","native","native","limited","MVP"],["Legal hold","FG","native","—","MVP"],["Mask","60 algos","redact","native","—"],["Purge / erase","native","native","native","—"],["Restrict access","native","native","native","MVP"]].map((row,ri)=>row.map((c,ci)=>(
+                            <div key={ri+"-"+ci} style={{padding:"2px 4px",color:ci===0?T.text:(c==="—"?T.textMuted:c==="MVP"||c==="limited"?T.amber:T.green),fontWeight:ci===0?600:500}}>{c}</div>
+                          )))}
+                        </div>
+                        <div style={{fontSize:9.5,color:T.textMuted,marginTop:6}}>FG = Federated Governance (enforced in place) · MVP = EDG-native roadmap · — not supported</div>
+                      </div>
                       {secHead("Policy Type","Select the type(s) this policy governs.")}
                       <div style={{marginBottom:4}}>
                         <CatFieldDropdown
@@ -9128,6 +9151,18 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                           onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
                                           onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>×</button>
                                       </div>
+                                      {fd.action&&(
+                                        <div style={{borderTop:`1px solid ${T.border}`,padding:"8px 11px",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",background:`${T.accent}06`}}>
+                                          <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".5px"}}>Enforce twin</span>
+                                          <span style={{fontSize:11,fontWeight:600,color:T.text}}>{fd.action.verb}</span>
+                                          <span style={{fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:10,background:`${T.blue}18`,color:T.blue}}>{fd.action.engine}</span>
+                                          <span style={{fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:10,background:fd.action.maturity==="GA"?`${T.green}18`:fd.action.maturity==="MVP"?`${T.amber}18`:`${T.textMuted}22`,color:fd.action.maturity==="GA"?T.green:fd.action.maturity==="MVP"?T.amber:T.textMuted}}>{fd.action.maturity}</span>
+                                          <label style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:5,fontSize:11,color:T.textSub,cursor:"pointer"}}>
+                                            <input type="checkbox" checked={!!r.enforce} onChange={e=>updRule(r.id,"enforce",e.target.checked)} style={{cursor:"pointer"}}/>
+                                            Enforce in place
+                                          </label>
+                                        </div>
+                                      )}
                                       {/* Table + Column pickers for Quality/Retention rules */}
                                       {(fd.types.includes("Quality")||fd.types.includes("Retention"))&&(
                                         <div style={{borderTop:`1px solid ${T.border}`,padding:"10px 11px 11px",display:"flex",flexDirection:"column",gap:8,background:`${T.bgBase}88`}}>
