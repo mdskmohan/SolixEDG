@@ -3162,8 +3162,7 @@ const GROUPS = [
   ]},
   {section:"Catalog",items:[
     {key:"catalog",        icon:"catalog",       label:"Data Catalog"},
-    {key:"quality",        icon:"quality",       label:"Data Quality"},
-    {key:"observability",  icon:"observability", label:"Observability"},
+    {key:"quality",        icon:"observability", label:"Observability"},
   ]},
   {section:"Governance",items:[
     {key:"policymanager",  icon:"policies",      label:"Policy Manager"},
@@ -3179,7 +3178,7 @@ const GROUPS = [
 const Sidebar = ({active, onNav, exp, setExp, onHelp}) => {
   const {roleCfg} = useRole();
   const inboxBadgeCount = INBOX_DATA.filter(i=>!i.readAt).length;
-  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","observability","policymanager","certifications","glossary","domains","dataproducts","settings","tags"];
+  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","settings","tags"];
   return (
     <div style={{position:"fixed",top:0,left:0,height:"100vh",width:exp?EXPANDED_W:COLLAPSED_W,background:T.bgSurface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:100,transition:"width .2s ease",overflow:"hidden"}}>
       {/* Logo */}
@@ -3883,7 +3882,7 @@ const QualityView = () => {
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <Topbar breadcrumb={[{label:"Data Quality"}]}/>
+      <Topbar breadcrumb={[{label:"Observability"}]}/>
       {/* Tab bar + primary action */}
       <div style={{padding:"0 28px",borderBottom:`1px solid ${T.border}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between",minHeight:48}}>
         <div style={{display:"flex",height:"100%"}}>
@@ -22366,7 +22365,7 @@ const ROLES_CONFIG = {
     badge: "rgba(238,36,36,0.15)",
     desc:  "Full platform access including settings, user management, and all configurations.",
     rbacRole: "admin",
-    nav: ["home","search","stewardship","catalog","quality","observability","policymanager","certifications","glossary","domains","dataproducts","settings","tags"],
+    nav: ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","settings","tags"],
     homeWidgets: ["metrics","tasks","quality","recentAssets","services","activity"],
   },
   steward: {
@@ -22379,7 +22378,7 @@ const ROLES_CONFIG = {
     desc:  "Govern assets in your domain: certify data, manage glossary terms, resolve conflicts.",
     rbacRole: "steward",
     domain: "Commerce",
-    nav: ["home","search","stewardship","catalog","quality","observability","policymanager","certifications","glossary","domains","dataproducts","tags"],
+    nav: ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","tags"],
     homeWidgets: ["tasks","certQueue","qualityAlerts","recentAssets","activity"],
   },
   analyst: {
@@ -22391,7 +22390,7 @@ const ROLES_CONFIG = {
     badge: "rgba(2,132,199,0.12)",
     desc:  "Browse the catalog, explore lineage, run quality checks, and access approved datasets.",
     rbacRole: "analyst",
-    nav: ["home","search","catalog","quality","observability","glossary","domains","dataproducts"],
+    nav: ["home","search","catalog","quality","glossary","domains","dataproducts"],
     homeWidgets: ["metrics","recentAssets","quality","lineageSnippet","activity"],
   },
   engineer: {
@@ -22403,7 +22402,7 @@ const ROLES_CONFIG = {
     badge: "rgba(124,58,237,0.12)",
     desc:  "Manage pipelines, monitor ingestion health, trace lineage, and maintain data contracts.",
     rbacRole: "engineer",
-    nav: ["home","search","catalog","quality","observability","settings"],
+    nav: ["home","search","catalog","quality","settings"],
     homeWidgets: ["services","metrics","quality","lineageSnippet","recentAssets","activity"],
   },
   viewer: {
@@ -30543,7 +30542,7 @@ export default function App(){
       case "glossary":      return <GlossaryView onToast={showToast}/>;
       case "domains":       return <DomainsView onAsset={handleAsset} onNav={handleNav}/>;
       case "dataproducts":  return <DataProductsView onAsset={handleAsset} onNav={handleNav}/>;
-      case "observability": return <ObsView onToast={showToast} onNav={handleNav}/>;
+      case "observability": return <QualityView/>;
       case "analytics":     return <AnalyticsView/>;
       case "teams":         return <TeamsView onToast={showToast}/>;
       case "integrations":  return <IntegrationsView onToast={showToast}/>;
