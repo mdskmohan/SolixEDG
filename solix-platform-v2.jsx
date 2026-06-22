@@ -2287,7 +2287,7 @@ const GlossaryView = ({onToast}) => {
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <Topbar breadcrumb={[{label:"Business Glossary"}]}/>
+      <Topbar breadcrumb={[{label:"Glossary"}]}/>
       <div style={{flex:1,display:"flex",overflow:"hidden"}}>
         {renderSidebar()}
         {selTerm ? renderTermDetail() : selCat ? renderCategoryDetail() : renderGlossaryOverview()}
@@ -2322,6 +2322,7 @@ const Ic = {
   glossary:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><path d="M4 2h8a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.3"/><path d="M6 6h4M6 9h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
   domains:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 2.5C8 2.5 6 5 6 8s2 5.5 2 5.5M8 2.5C8 2.5 10 5 10 8s-2 5.5-2 5.5M2.5 8h11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>,
   observability:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><path d="M2 12l3-4 3 2 3-5 3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  inbox:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><path d="M2.5 9.5L4 3h8l1.5 6.5V13a.5.5 0 01-.5.5h-10A.5.5 0 012.5 13V9.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M2.5 9.5H5l1 2h4l1-2h2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>,
   analytics:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><rect x="2" y="9" width="3" height="5" rx=".5" stroke="currentColor" strokeWidth="1.3"/><rect x="6.5" y="6" width="3" height="8" rx=".5" stroke="currentColor" strokeWidth="1.3"/><rect x="11" y="3" width="3" height="11" rx=".5" stroke="currentColor" strokeWidth="1.3"/></svg>,
   settings:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
   contracts:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><path d="M3 2h7l3 3v9H3V2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M10 2v3h3M5 7h6M5 10h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>,
@@ -3157,20 +3158,19 @@ const DocBot = ({open:extOpen, setOpen:extSetOpen}) => {
 const GROUPS = [
   {section:"Workspace",items:[
     {key:"home",           icon:"home",          label:"Home"},
-    {key:"search",         icon:"search",        label:"Search"},
-    {key:"stewardship",    icon:"steward",       label:"My Workspace"},
+    {key:"stewardship",    icon:"inbox",         label:"Inbox"},
   ]},
   {section:"Catalog",items:[
-    {key:"catalog",        icon:"catalog",       label:"Data Catalog"},
+    {key:"catalog",        icon:"catalog",       label:"Catalog"},
     {key:"quality",        icon:"observability", label:"Observability"},
   ]},
   {section:"Governance",items:[
-    {key:"policymanager",  icon:"policies",      label:"Policy Manager"},
-    {key:"tags",           icon:"tag",           label:"Tag Management"},
+    {key:"policymanager",  icon:"policies",      label:"Policies"},
+    {key:"tags",           icon:"tag",           label:"Classifications"},
   ]},
   {section:"Knowledge",items:[
-    {key:"glossary",       icon:"glossary",      label:"Business Glossary"},
-    {key:"domains",        icon:"domains",       label:"Data Domains"},
+    {key:"glossary",       icon:"glossary",      label:"Glossary"},
+    {key:"domains",        icon:"domains",       label:"Domains"},
     {key:"dataproducts",   icon:"dataproducts",  label:"Data Products"},
   ]},
 ];
@@ -6442,7 +6442,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   };
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <Topbar breadcrumb={[{label:"Policy Manager"}]}>
+      <Topbar breadcrumb={[{label:"Policies"}]}>
         <Btn icon={Ic.plus(12)} variant="primary" onClick={()=>setCreateOpen(true)}>New Policy</Btn>
       </Topbar>
 
@@ -10294,7 +10294,7 @@ const StewardshipView = ({onToast, initialTab}) => {
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <Topbar breadcrumb={[{label:"My Workspace"}]}/>
+      <Topbar breadcrumb={[{label:"Inbox"}]}/>
       {/* Header metrics */}
       <div style={{padding:"12px 28px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:20,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
         {[
@@ -15327,7 +15327,7 @@ const FileAssetDetail = ({asset, onBack, onToast}) => {
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <Topbar breadcrumb={[{label:"Data Catalog",onClick:onBack},{label:asset.name}]}/>
+      <Topbar breadcrumb={[{label:"Catalog",onClick:onBack},{label:asset.name}]}/>
 
       {/* ── Hero header ── */}
       <div style={{background:T.bgSurface,borderBottom:`1px solid ${T.border}`,flexShrink:0,padding:"20px 28px 0"}}>
@@ -15670,7 +15670,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
   );
 
   return <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-    <Topbar breadcrumb={[{label:"Data Catalog",onClick:onBack},{label:asset.name}]}/>
+    <Topbar breadcrumb={[{label:"Catalog",onClick:onBack},{label:asset.name}]}/>
 
     {/* ── Asset header ── */}
     <div style={{background:T.bgSurface,borderBottom:`1px solid ${T.border}`,flexShrink:0,padding:"16px 28px 0"}}>
@@ -16657,7 +16657,7 @@ const CatalogView = ({onAsset})=>{
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <Topbar breadcrumb={[{label:"Data Catalog"}]}/>
+      <Topbar breadcrumb={[{label:"Catalog"}]}/>
       <div style={{flex:1,display:"flex",overflow:"hidden"}}>
         {/* Filter panel */}
         <div style={{width:panelOpen?212:0,minWidth:panelOpen?212:0,flexShrink:0,overflow:"hidden",borderRight:`1px solid ${T.border}`,background:T.bgSurface,display:"flex",flexDirection:"column",transition:"width .2s ease,min-width .2s ease"}}>
@@ -19398,7 +19398,7 @@ const DomainsView = ({onAsset, onNav}) => {
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <Topbar breadcrumb={[{label:"Data Domains"}]}/>
+      <Topbar breadcrumb={[{label:"Domains"}]}/>
       <div style={{flex:1,overflowY:"auto",padding:28}}>
         {/* Summary stats */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12,marginBottom:24}}>
@@ -27204,7 +27204,7 @@ const InboxView = ({onToast}) => {
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
       {/* Topbar — breadcrumb only */}
-      <Topbar breadcrumb={[{label:"My Workspace"}]}/>
+      <Topbar breadcrumb={[{label:"Inbox"}]}/>
 
       {/* Tab bar — tabs (list only) + filter icon + view toggle */}
       <div style={{padding:"0 20px 0 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",flexShrink:0,background:T.bgSurface,minHeight:44}}>
@@ -29314,7 +29314,7 @@ const TagManagementView = ({onToast}) => {
 
   return (
     <div className="fadeUp" style={{height:'100%',display:'flex',flexDirection:'column'}}>
-      <Topbar breadcrumb={[{label:'Tag Management'}]}/>
+      <Topbar breadcrumb={[{label:'Classifications'}]}/>
 
       <div style={{flex:1,display:'flex',overflow:'hidden',position:'relative'}}>
 
