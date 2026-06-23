@@ -5623,7 +5623,8 @@ const POLICY_VIOLATION_INBOX = POLICY_VIOLATIONS
 // Tag governance work (Phase 2b): open tag inbox items → My Workspace.
 const _TAG_REVIEW_LABELS = {pending_approval:"Tag approval", sync_conflict:"Tag conflict", new_source_tag:"New source tag", propagation_review:"Propagation review"};
 const TAG_REVIEW_INBOX = INITIAL_INBOX
-  .filter(t => !t.resolvedAt)
+  // "sync_conflict" (tag conflict) dropped — not a real concept in this product.
+  .filter(t => !t.resolvedAt && t.type!=="sync_conflict")
   .map(t => ({
     id:"tg-"+t.id,
     type:"tag_review",
@@ -26883,36 +26884,38 @@ const certifyAsset = (assetName) => { const a=ASSETS.find(x=>x.name===assetName)
 const InboxView = ({onToast}) => {
   const onNav = useNav();
   const [items,      setItems]      = useState([...POLICY_VIOLATION_INBOX, ...TAG_REVIEW_INBOX, ...CERT_REVIEW_INBOX, ...ORPHAN_INBOX, ...INBOX_DATA]);
-  const [filter,     setFilter]     = useState("all");
-  const [viewMode,   setViewMode]   = useState("list"); // "list" | "kanban"
+  const [filter,     setFilter]     = useState("action"); // action | activity | done
+  const [viewMode,   setViewMode]   = useState("list");   // list | kanban
+  const [roleScope,  setRoleScope]  = useState("all");    // all | steward | owner
   const [sel,          setSel]          = useState(null);
   const [assignOpen,   setAssignOpen]   = useState(false);
   const [filterOpen,   setFilterOpen]   = useState(false);
   const [secFilters,   setSecFilters]   = useState(new Set()); // section multiselect
 
-  const unread = items.filter(i=>!i.readAt);
-  const read   = items.filter(i=>!!i.readAt);
-  const counts = {
-    all:        unread.length,
-    tasks:      unread.filter(i=>TASK_TYPES.includes(i.type)).length,
-    alerts:     unread.filter(i=>i.type==="dq_alert").length,
-    violations: unread.filter(i=>i.type==="policy_violation").length,
-    assigned:   unread.filter(i=>i.type==="assigned").length,
-    done:       read.length,
-  };
+  // ── Two questions: things to DO vs things to KNOW ──
+  // action   = open work needing a decision (steward fixes / owner sign-offs)
+  // activity = passive FYI feed (field changes, assignments) — no action needed
+  // done     = resolved action items (the archive)
   const secFilterActive = secFilters.size > 0;
-  const shown = unread.filter(i=>{
-    // tab filter
-    if(filter==="tasks"     &&!TASK_TYPES.includes(i.type)) return false;
-    if(filter==="alerts"    &&i.type!=="dq_alert")          return false;
-    if(filter==="violations"&&i.type!=="policy_violation")  return false;
-    if(filter==="assigned"  &&i.type!=="assigned")          return false;
-    if(filter==="done")                                     return false;
-    // section multiselect filter
-    if(secFilterActive && !secFilters.has(i.section)) return false;
-    return true;
-  });
+  const isActionItem   = i => itemRole(i)!=="fyi" && !i.readAt;
+  const isActivityItem = i => itemRole(i)==="fyi";
+  const isDoneItem     = i => itemRole(i)!=="fyi" && !!i.readAt;
+  const actionItems   = items.filter(isActionItem);
+  const activityItems = items.filter(isActivityItem);
+  const doneItems     = items.filter(isDoneItem);
+  const roleMatch = i => roleScope==="all" || itemRole(i)===roleScope;
+  const secMatch  = i => !secFilterActive || secFilters.has(i.section);
+  const counts = {
+    action:   actionItems.length,
+    activity: activityItems.filter(i=>!i.readAt).length,
+    done:     doneItems.length,
+  };
   const isDoneFilter = filter==="done";
+  const shown =
+      filter==="activity" ? activityItems.filter(secMatch)
+    : filter==="done"     ? []
+    :                       actionItems.filter(roleMatch).filter(secMatch);
+  const doneShown = doneItems.filter(secMatch);
   const SECTIONS = [
     {k:"catalog",  l:"Catalog"},
     {k:"quality",  l:"Data Quality"},
@@ -27146,11 +27149,9 @@ const InboxView = ({onToast}) => {
 
   /* ── Kanban columns ── */
   const KANBAN_COLS = [
-    {id:"assigned",   label:"New Assignments",  c:"#8b5cf6", types:["assigned"]},
-    {id:"review",     label:"Pending Review",   c:T.blue,    types:["field_updated"]},
-    {id:"action",     label:"Action Required",  c:T.amber,   types:["needs_attention","stewardship_request","tag_review","certification_review","orphan_assignment"]},
-    {id:"violations", label:"Policy Violations",c:"#dc2626", types:["policy_violation"]},
-    {id:"alerts",     label:"Alerts",           c:T.rose,    types:["dq_alert"]},
+    {id:"violation", label:"Violations", c:"#dc2626", cats:["violation"]},
+    {id:"approval",  label:"Approvals",  c:"#2563eb", cats:["approval"]},
+    {id:"ownership", label:"Ownership",  c:"#0d9488", cats:["ownership"]},
   ];
 
   /* ── Detail panel header — matches ServicePanel pattern ── */
@@ -27209,20 +27210,37 @@ const InboxView = ({onToast}) => {
       {/* Tab bar — tabs (list only) + filter icon + view toggle */}
       <div style={{padding:"0 20px 0 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",flexShrink:0,background:T.bgSurface,minHeight:44}}>
 
-        {/* Underline tabs — list view only */}
+        {/* Underline tabs — list view only: two questions + archive */}
         {viewMode==="list"&&(
           <div style={{display:"flex",alignItems:"center"}}>
-            {[["all","All"],["tasks","Tasks"],["alerts","Alerts"],["violations","Violations"],["assigned","Assigned"],["done","Done"]].map(([k,l])=>(
+            {[["action","Needs my action"],["activity","Activity"],["done","Done"]].map(([k,l])=>(
               <button key={k} onClick={()=>{ setFilter(k); setSel(null); setAssignOpen(false); setFilterOpen(false); }}
                 style={{padding:"11px 14px",background:"transparent",border:"none",borderBottom:`2px solid ${filter===k?T.accent:"transparent"}`,color:filter===k?T.text:T.textMuted,fontSize:12.5,fontWeight:filter===k?600:400,cursor:"pointer",display:"flex",alignItems:"center",gap:5,transition:"all .12s",whiteSpace:"nowrap"}}>
                 {l}
                 {counts[k]>0&&<span style={{fontSize:10,fontWeight:700,borderRadius:10,padding:"1px 6px",
-                  background: k==="done"?"rgba(22,163,74,.1)":(k==="alerts"||k==="violations")?`${T.rose}18`:T.bgHover,
-                  color:      k==="done"?"#16a34a"           :(k==="alerts"||k==="violations")?T.rose        :T.textMuted}}>
+                  background: k==="done"?"rgba(22,163,74,.1)":k==="action"?`${T.rose}18`:T.bgHover,
+                  color:      k==="done"?"#16a34a"           :k==="action"?T.rose        :T.textMuted}}>
                   {counts[k]}
                 </span>}
               </button>
             ))}
+          </div>
+        )}
+
+        {/* Steward / Owner lens — only over action items (list action tab + kanban) */}
+        {(viewMode==="kanban"||filter==="action")&&(
+          <div style={{display:"flex",gap:1,background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,padding:2,marginLeft:16}}>
+            {[["all","All"],["steward","As Steward"],["owner","As Owner"]].map(([k,l])=>{
+              const on = roleScope===k;
+              const accent = k==="owner"?"#b45309":k==="steward"?"#0d9488":T.text;
+              const onBg   = k==="owner"?"rgba(180,83,9,0.12)":k==="steward"?"rgba(13,148,136,0.12)":T.bgSurface;
+              return (
+                <button key={k} onClick={()=>{ setRoleScope(k); setSel(null); }}
+                  style={{padding:"4px 11px",borderRadius:5,background:on?onBg:"transparent",border:`1px solid ${on?(k==="all"?T.border:accent):"transparent"}`,color:on?accent:T.textMuted,fontSize:11.5,fontWeight:on?700:500,cursor:"pointer",transition:"all .12s",whiteSpace:"nowrap"}}>
+                  {l}
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -27304,7 +27322,7 @@ const InboxView = ({onToast}) => {
 
               {/* Done tab */}
               {isDoneFilter&&(
-                read.length===0?(
+                doneShown.length===0?(
                   <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:220,gap:12}}>
                     <div style={{width:44,height:44,borderRadius:12,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted}}>
                       <svg width="20" height="20" viewBox="0 0 22 22" fill="none"><path d="M3 12L8 17L19 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -27314,7 +27332,7 @@ const InboxView = ({onToast}) => {
                   </div>
                 ):(
                   <div style={{display:"flex",flexDirection:"column",gap:5,maxWidth:sel?9999:820}}>
-                    {read.map(item=><Tile key={item.id} item={item} done={true}/>)}
+                    {doneShown.map(item=><Tile key={item.id} item={item} done={true}/>)}
                   </div>
                 )
               )}
@@ -27340,7 +27358,7 @@ const InboxView = ({onToast}) => {
           {viewMode==="kanban"&&(
             <div style={{flex:1,overflowX:"auto",overflowY:"hidden",padding:"18px 20px",display:"flex",gap:12,alignItems:"flex-start"}}>
               {KANBAN_COLS.map(col=>{
-                const colItems = unread.filter(i=>col.types.includes(i.type) && (!secFilterActive || secFilters.has(i.section)));
+                const colItems = actionItems.filter(i=>col.cats.includes(itemCategory(i)) && roleMatch(i) && secMatch(i));
                 return (
                   <div key={col.id} style={{width:248,flexShrink:0,display:"flex",flexDirection:"column",height:"100%"}}>
                     <div style={{display:"flex",alignItems:"center",gap:7,padding:"9px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderTop:`3px solid ${col.c}`,borderRadius:"8px 8px 0 0",flexShrink:0}}>
