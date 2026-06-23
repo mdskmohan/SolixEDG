@@ -5702,7 +5702,7 @@ const TAG_REVIEW_INBOX = INITIAL_INBOX
     timeAgo:_relAgo(t.createdAt),
     title:`${_TAG_REVIEW_LABELS[t.type]||"Tag review"}: ${t.tagName}${t.assetName?` on ${t.assetName}`:""}`,
     asset:{name:t.assetName||t.tagName, path:t.assetName||t.tagName, type:"Tag"},
-    body:t.note, tagName:t.tagName, tagType:t.type,
+    body:t.note, tagName:t.tagName, tagType:t.type, tagInboxId:t.id,
     readAt:null,
   }));
 
@@ -26971,6 +26971,7 @@ const assignOwnership = (assetName, handle, role) => {
 const certifyAsset = (assetName) => { const a=ASSETS.find(x=>x.name===assetName); if(a) a.cert="Approved"; return !!a; };
 const InboxView = ({onToast}) => {
   const onNav = useNav();
+  const tagCtx = useTagCtx(); // tags live in TagProvider context — the tags "shared store"
   const [items,      setItems]      = useState([...POLICY_VIOLATION_INBOX, ...TAG_REVIEW_INBOX, ...CERT_REVIEW_INBOX, ...ORPHAN_INBOX, ...TERM_REVIEW_INBOX, ...INBOX_DATA]);
   const [filter,     setFilter]     = useState("action"); // action | activity | done
   const [viewMode,   setViewMode]   = useState("list");   // list | kanban
@@ -27063,7 +27064,11 @@ const InboxView = ({onToast}) => {
     if(item.type==="policy_violation")
       return <>{btn("Remediate",()=>{pvSet(prev=>prev.map(v=>v.id===item.violId?{...v,status:"Resolved",resolutionNote:"Remediated from Inbox"}:v));ack(item.id,`${item.asset.name} violation remediated`);},true)}{btn("Request exception",()=>{pvSet(prev=>prev.map(v=>v.id===item.violId?{...v,status:"Exception Requested"}:v));ack(item.id,"Exception requested — sent to owner");})}{btn("View Policy",()=>{onNav&&onNav("policymanager",{policyId:item.policyId});})}</>;
     if(item.type==="tag_review")
-      return <>{btn("Review in Tags",()=>{onNav&&onNav("tags");},true)}{btn("Approve",()=>ack(item.id,"Tag change approved"))}{btn("Dismiss",()=>dism(item.id))}</>;
+      return <>{btn(item.tagType==="new_source_tag"?"Approve (add to vocabulary)":"Approve",()=>{
+        if(item.tagType==="new_source_tag"){ tagCtx?.createTagDef({name:item.tagName,category:'business',description:'Promoted from source tag via Inbox.',propagationMode:'hierarchy',governanceRequired:false,managedBy:'Current User',color:'#fbbf24',sourceAliases:[item.tagName]}); tagCtx?.resolveInboxItem(item.tagInboxId,'promoted'); }
+        else { tagCtx?.resolveInboxItem(item.tagInboxId,'approve'); }
+        ack(item.id,`${item.tagName} approved`);
+      },true)}{btn("Reject",()=>{tagCtx?.resolveInboxItem(item.tagInboxId,'reject');ack(item.id,"Tag rejected");},false,true)}{btn("View in Tags",()=>{onNav&&onNav("tags");})}</>;
     if(item.type==="term_review")
       return <>{btn("Approve",()=>{setTermStatus(item.termId,"Approved");ack(item.id,`${item.asset.name} approved & published`);},true)}{btn("Send back",()=>{setTermStatus(item.termId,"Draft");ack(item.id,"Sent back to draft");})}{btn("View in Glossary",()=>{onNav&&onNav("glossary");})}</>;
     if(item.type==="certification_review")
