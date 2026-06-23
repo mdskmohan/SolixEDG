@@ -1084,6 +1084,22 @@ const CERT_META = {
 };
 const STATUS_META = CERT_META;
 
+// ── Shared reactive store for glossary terms ──
+// One source the Glossary view and the Inbox share, so approving a submitted term
+// from the inbox publishes it (status → Approved) in the Glossary section.
+const _gtSubs = new Set();
+let _gtState = GLOSSARY_TERMS.map(t => ({...t}));
+const gtSet = (updater) => {
+  _gtState = typeof updater === "function" ? updater(_gtState) : updater;
+  _gtSubs.forEach(fn => fn());
+};
+const setTermStatus = (termId, status) => gtSet(prev => prev.map(t => t.id === termId ? {...t, cert:status, status} : t));
+const useGlossaryTerms = () => {
+  const [, force] = useState(0);
+  useEffect(() => { const fn = () => force(n => n + 1); _gtSubs.add(fn); return () => { _gtSubs.delete(fn); }; }, []);
+  return [_gtState, gtSet];
+};
+
 // Term lifecycle valid transitions — Draft → In Review → Approved → Deprecated
 // Rejected is a terminal state from In Review only
 const LIFECYCLE_TRANSITIONS = {
@@ -1096,7 +1112,7 @@ const LIFECYCLE_TRANSITIONS = {
 
 const GlossaryView = ({onToast}) => {
   const [glossaries, setGlossaries] = useState(GLOSSARY_DATA);
-  const [terms,      setTerms]      = useState(GLOSSARY_TERMS);
+  const [terms,      setTerms]      = useGlossaryTerms(); // shared store — synced with Inbox
   const [selG,       setSelG]       = useState("g1");
   const [selCat,     setSelCat]     = useState(null);
   const [selTerm,    setSelTerm]    = useState(null);
@@ -5719,6 +5735,25 @@ const ORPHAN_INBOX = ORPHANED_ASSETS_DATA
     body:`This ${a.type.toLowerCase()} in ${a.domain} has no assigned owner. Assign an owner or deprecate it.`,
     readAt:null,
   }));
+
+// Glossary work: terms awaiting steward review → My Workspace inbox items.
+const TERM_REVIEW_INBOX = GLOSSARY_TERMS
+  .filter(t => (t.status || t.cert) === "In Review")
+  .map(t => {
+    const sub = (t.auditLog || []).find(a => /submitted/i.test(a.action));
+    return {
+      id:"tm-"+t.id,
+      type:"term_review",
+      severity:"medium",
+      section:"glossary",
+      timeAgo: sub ? _relAgo(sub.at) : "",
+      title:`Term review: ${t.term}${t.abbr && t.abbr !== "—" ? ` (${t.abbr})` : ""}`,
+      asset:{name:t.term, path:`${t.domain || "Glossary"} · Business Glossary`, type:"Glossary Term"},
+      body:t.definition,
+      termId:t.id,
+      readAt:null,
+    };
+  });
 
 const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   // ─── palette & constants ──────────────────────────────────────────────
@@ -26895,11 +26930,11 @@ const WF_DATA = [
 
 const WF_CATS = ["All", "Ingestion", "Quality", "Lineage", "Governance", "Analytics"];
 
-const TASK_TYPES = ["field_updated","stewardship_request","needs_attention","tag_review","certification_review","orphan_assignment"];
+const TASK_TYPES = ["field_updated","stewardship_request","needs_attention","tag_review","certification_review","orphan_assignment","term_review"];
 // Phase 3 — work-item categories (color-coded grouping by kind of work)
 const TYPE_CATEGORY = {
   policy_violation:"violation", dq_alert:"violation",
-  tag_review:"approval", certification_review:"approval",
+  tag_review:"approval", certification_review:"approval", term_review:"approval",
   assigned:"ownership", stewardship_request:"ownership", needs_attention:"ownership", orphan_assignment:"ownership",
   field_updated:"curation",
 };
@@ -26913,7 +26948,7 @@ const CATEGORY_META = {
 const itemCategory = (item) => TYPE_CATEGORY[item?.type] || "curation";
 // Role model — every work item is whose job: Steward DOES, Owner DECIDES, FYI = awareness.
 const ITEM_ROLE = {
-  tag_review:"steward", dq_alert:"steward", policy_violation:"steward",
+  tag_review:"steward", dq_alert:"steward", policy_violation:"steward", term_review:"steward",
   certification_review:"owner", stewardship_request:"owner", orphan_assignment:"owner", needs_attention:"owner",
   field_updated:"fyi", assigned:"fyi",
 };
@@ -26936,7 +26971,7 @@ const assignOwnership = (assetName, handle, role) => {
 const certifyAsset = (assetName) => { const a=ASSETS.find(x=>x.name===assetName); if(a) a.cert="Approved"; return !!a; };
 const InboxView = ({onToast}) => {
   const onNav = useNav();
-  const [items,      setItems]      = useState([...POLICY_VIOLATION_INBOX, ...TAG_REVIEW_INBOX, ...CERT_REVIEW_INBOX, ...ORPHAN_INBOX, ...INBOX_DATA]);
+  const [items,      setItems]      = useState([...POLICY_VIOLATION_INBOX, ...TAG_REVIEW_INBOX, ...CERT_REVIEW_INBOX, ...ORPHAN_INBOX, ...TERM_REVIEW_INBOX, ...INBOX_DATA]);
   const [filter,     setFilter]     = useState("action"); // action | activity | done
   const [viewMode,   setViewMode]   = useState("list");   // list | kanban
   const [roleScope,  setRoleScope]  = useState("all");    // all | steward | owner
@@ -27004,6 +27039,7 @@ const InboxView = ({onToast}) => {
     tag_review:          {icon:sz=>Ic.tag(sz||12),     label:"Tag Review",     shortLabel:"Tag"},
     certification_review:{icon:sz=>Ic.cert(sz||12),    label:"Certification",  shortLabel:"Cert"},
     orphan_assignment:   {icon:sz=>Ic.steward(sz||12), label:"Orphan — Assign Owner", shortLabel:"Orphan"},
+    term_review:         {icon:sz=>Ic.glossary(sz||12),label:"Term Review",     shortLabel:"Term"},
   };
 
   /* ── Action row — only inside detail panel ── */
@@ -27028,6 +27064,8 @@ const InboxView = ({onToast}) => {
       return <>{btn("Remediate",()=>{pvSet(prev=>prev.map(v=>v.id===item.violId?{...v,status:"Resolved",resolutionNote:"Remediated from Inbox"}:v));ack(item.id,`${item.asset.name} violation remediated`);},true)}{btn("Request exception",()=>{pvSet(prev=>prev.map(v=>v.id===item.violId?{...v,status:"Exception Requested"}:v));ack(item.id,"Exception requested — sent to owner");})}{btn("View Policy",()=>{onNav&&onNav("policymanager",{policyId:item.policyId});})}</>;
     if(item.type==="tag_review")
       return <>{btn("Review in Tags",()=>{onNav&&onNav("tags");},true)}{btn("Approve",()=>ack(item.id,"Tag change approved"))}{btn("Dismiss",()=>dism(item.id))}</>;
+    if(item.type==="term_review")
+      return <>{btn("Approve",()=>{setTermStatus(item.termId,"Approved");ack(item.id,`${item.asset.name} approved & published`);},true)}{btn("Send back",()=>{setTermStatus(item.termId,"Draft");ack(item.id,"Sent back to draft");})}{btn("View in Glossary",()=>{onNav&&onNav("glossary");})}</>;
     if(item.type==="certification_review")
       return <>{btn("Certify",()=>{certifyByAsset(item.asset.name);certifyAsset(item.asset.name);ack(item.id,`${item.asset.name} certified`);},true)}{btn("Decline",()=>{certSet(prev=>prev.map(c=>c.asset===item.asset.name?{...c,status:"Rejected",certifier:null,date:null}:c));ack(item.id,"Certification declined");},false,true)}{btn("Defer",()=>dism(item.id))}</>;
     if(item.type==="orphan_assignment")
