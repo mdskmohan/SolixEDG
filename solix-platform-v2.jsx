@@ -858,6 +858,23 @@ const CERTIFICATIONS = [
   {id:7,asset:"product_events",   type:"Table",    certifier:null,         date:null,        expires:null,        status:"Rejected", score:61,notes:"Quality score below threshold. Null rate on event_type exceeds 12%. Resubmit after fixing pipeline."},
 ];
 
+// ── Shared reactive store for certifications ──
+// One source the Inbox (certify action), Certifications view, and Home widget all read,
+// so certifying from the inbox flips the badge everywhere instead of firing a toast.
+const _certSubs = new Set();
+let _certState = CERTIFICATIONS.map(c => ({...c}));
+const certSet = (updater) => {
+  _certState = typeof updater === "function" ? updater(_certState) : updater;
+  _certSubs.forEach(fn => fn());
+};
+const certifyByAsset = (assetName, certifier = "maya.chen") =>
+  certSet(prev => prev.map(c => c.asset === assetName ? {...c, status:"Approved", certifier, date:new Date().toISOString().slice(0,10)} : c));
+const useCertifications = () => {
+  const [, force] = useState(0);
+  useEffect(() => { const fn = () => force(n => n + 1); _certSubs.add(fn); return () => { _certSubs.delete(fn); }; }, []);
+  return [_certState, certSet];
+};
+
 const TEAMS_DATA = [
   {id:"u1",name:"Maya Chen",   email:"maya.chen@jnj.com",   role:"Data Steward",  team:"Governance",       status:"Active",  joined:"Jan 2023"},
   {id:"u2",name:"Dev Patel",   email:"dev.patel@jnj.com",   role:"Data Analyst",  team:"Analytics",        status:"Active",  joined:"Mar 2023"},
@@ -3163,6 +3180,7 @@ const GROUPS = [
   {section:"Catalog",items:[
     {key:"catalog",        icon:"catalog",       label:"Catalog"},
     {key:"quality",        icon:"quality",       label:"Data Quality"},
+    {key:"certifications", icon:"cert",          label:"Certifications"},
   ]},
   {section:"Governance",items:[
     {key:"policymanager",  icon:"policies",      label:"Policies"},
@@ -3257,6 +3275,7 @@ const HomeView = ({onNav, onToast}) => {
   const onNavCtx = useNav();
   const nav = onNav || onNavCtx;
   const unreadNotifs = NOTIFS.filter(n=>n.unread).length;
+  const [certList] = useCertifications(); // live cert store for the home widget
 
   const WIDGET_MAP = {
     metrics: (
@@ -3313,7 +3332,7 @@ const HomeView = ({onNav, onToast}) => {
     certQueue: (
       <Card2 style={{marginBottom:20}}><div style={{padding:16}}>
         <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:14}}>Certification Queue</div>
-        {CERTIFICATIONS.filter(c=>c.status==="In Review").concat(CERTIFICATIONS.filter(c=>c.status==="Approved").slice(0,2)).map((c,i)=>(
+        {certList.filter(c=>c.status==="In Review").concat(certList.filter(c=>c.status==="Approved").slice(0,2)).map((c,i)=>(
           <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:i<2?`1px solid ${T.border}`:"none"}}>
             <SDot status={c.status==="Approved"?"passing":"warning"}/>
             <span style={{flex:1,fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text}}>{c.asset}</span>
@@ -10161,7 +10180,7 @@ const ComplianceView = () => {
 
 const CertificationsView = ({onToast}) => {
   const [selected, setSelected] = useState(null);
-  const [certs, setCerts] = useState(CERTIFICATIONS.map(c=>({...c})));
+  const [certs, setCerts] = useCertifications(); // shared store — synced with Inbox
   const [filter, setFilter] = useState("All");
 
   const filtered = filter==="All" ? certs : certs.filter(c=>c.status===filter);
@@ -26991,7 +27010,7 @@ const InboxView = ({onToast}) => {
     if(item.type==="tag_review")
       return <>{btn("Review in Tags",()=>{onNav&&onNav("tags");},true)}{btn("Approve",()=>ack(item.id,"Tag change approved"))}{btn("Dismiss",()=>dism(item.id))}</>;
     if(item.type==="certification_review")
-      return <>{btn("Review & Certify",()=>{certifyAsset(item.asset.name);ack(item.id,`${item.asset.name} certified as Approved`);},true)}{btn("Defer",()=>dism(item.id))}</>;
+      return <>{btn("Certify",()=>{certifyByAsset(item.asset.name);certifyAsset(item.asset.name);ack(item.id,`${item.asset.name} certified`);},true)}{btn("Decline",()=>{certSet(prev=>prev.map(c=>c.asset===item.asset.name?{...c,status:"Rejected",certifier:null,date:null}:c));ack(item.id,"Certification declined");},false,true)}{btn("Defer",()=>dism(item.id))}</>;
     if(item.type==="orphan_assignment")
       return <>{btn("Assign Owner",()=>setAssignOpen(a=>!a),true)}{btn("Deprecate",()=>ack(item.id,"Asset deprecated"),false,true)}</>;
     return null;
