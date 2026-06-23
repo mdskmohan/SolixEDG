@@ -680,6 +680,25 @@ const DQ_INCIDENTS = [
   },
 ];
 
+// ── Shared reactive store for DQ incidents ──
+// One source the Data Quality view and the Inbox share, so resolving a dq_alert
+// from the inbox actually closes the matching incident in the Data Quality section.
+const _dqiSubs = new Set();
+let _dqiState = DQ_INCIDENTS.map(i => ({...i}));
+const dqiSet = (updater) => {
+  _dqiState = typeof updater === "function" ? updater(_dqiState) : updater;
+  _dqiSubs.forEach(fn => fn());
+};
+const resolveIncidentsForAsset = (assetPath, assetName) => dqiSet(prev => prev.map(i =>
+  ((i.table === assetPath || (assetName && i.table.endsWith("." + assetName))) && (i.status === "Open" || i.status === "In Progress"))
+    ? {...i, status:"Resolved", resolutionReason:i.resolutionReason || "Resolved from Inbox", resolved:"just now"}
+    : i));
+const useDQIncidents = () => {
+  const [, force] = useState(0);
+  useEffect(() => { const fn = () => force(n => n + 1); _dqiSubs.add(fn); return () => { _dqiSubs.delete(fn); }; }, []);
+  return [_dqiState, dqiSet];
+};
+
 const POLICIES = [
   {id:1,name:"PII Data Handling",     category:"Data Privacy",  lifecycle:"Active", scope:"All Tables",    severity:"Critical",status:"Active",assets:23,violations:2,owner:"maya.chen",  updated:"3d ago",conformity:91,regulations:["GDPR","CCPA"],  description:"Governs handling of personally identifiable information across all data assets."},
   {id:2,name:"Data Retention 90d",    category:"Data Lifecycle",lifecycle:"Active", scope:"Events Tables", severity:"High",    status:"Active",assets:12,violations:0,owner:"dev.patel",   updated:"1w ago",conformity:84,regulations:["GDPR"],          description:"Events data must be purged or archived after 90 days per policy."},
@@ -3639,7 +3658,7 @@ const QualityView = () => {
   // mutable state
   const [testCases,  setTestCases]  = useState(DQ_TEST_CASES);
   const [suites,     setSuites]     = useState(DQ_SUITES);
-  const [incidents,  setIncidents]  = useState(DQ_INCIDENTS);
+  const [incidents,  setIncidents]  = useDQIncidents(); // shared store — synced with Inbox
   const [definitions,setDefinitions]= useState(DQ_TEST_DEFINITIONS);
   const [toast,      setToast]      = useState(null);
   const [runningSuites, setRunningSuites] = useState(new Set());
@@ -26996,7 +27015,7 @@ const InboxView = ({onToast}) => {
       </button>
     );
     if(item.type==="dq_alert")
-      return <>{btn("View DQ Dashboard",()=>onToast("Opening Data Quality","success"),true)}{btn("Dismiss",()=>dism(item.id))}</>;
+      return <>{btn("Resolve",()=>{resolveIncidentsForAsset(item.asset.path,item.asset.name);ack(item.id,`${item.asset.name} quality incidents resolved`);},true)}{btn("View in Data Quality",()=>{onNav&&onNav("quality");})}{btn("Dismiss",()=>dism(item.id))}</>;
     if(item.type==="field_updated")
       return <>{btn("Acknowledge",()=>ack(item.id),true)}{btn("Open Asset",()=>onToast("Opening asset","success"))}</>;
     if(item.type==="assigned")
