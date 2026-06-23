@@ -689,9 +689,10 @@ const dqiSet = (updater) => {
   _dqiState = typeof updater === "function" ? updater(_dqiState) : updater;
   _dqiSubs.forEach(fn => fn());
 };
-const resolveIncidentsForAsset = (assetPath, assetName) => dqiSet(prev => prev.map(i =>
+const resolveIncidentsForAsset = (assetPath, assetName, note="") => dqiSet(prev => prev.map(i =>
   ((i.table === assetPath || (assetName && i.table.endsWith("." + assetName))) && (i.status === "Open" || i.status === "In Progress"))
-    ? {...i, status:"Resolved", resolutionReason:i.resolutionReason || "Resolved from Inbox", resolved:"just now"}
+    ? {...i, status:"Resolved", resolutionReason: note || i.resolutionReason || "Resolved from Inbox", resolved:"just now",
+        timeline:[...(i.timeline||[]), {action:"Resolved from Inbox", by:"You", at:"Just now", note: note || undefined}]}
     : i));
 const useDQIncidents = () => {
   const [, force] = useState(0);
@@ -3215,7 +3216,6 @@ const GROUPS = [
   {section:"Catalog",items:[
     {key:"catalog",        icon:"catalog",       label:"Catalog"},
     {key:"quality",        icon:"quality",       label:"Data Quality"},
-    {key:"certifications", icon:"cert",          label:"Certifications"},
   ]},
   {section:"Governance",items:[
     {key:"policymanager",  icon:"policies",      label:"Policies"},
@@ -4683,7 +4683,7 @@ const QualityView = () => {
                         </td>
                         <td style={{padding:"10px 14px",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{inc.opened}</td>
                         <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
-                          <button onClick={()=>setIncActionModal({id:inc.id,newStatus:null,desc:""})} style={{fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:6,background:sCfg.bg,color:sCfg.color,border:`1.5px solid ${sCfg.color}45`,whiteSpace:"nowrap",cursor:"pointer",transition:"all .12s",display:"inline-flex",alignItems:"center",gap:5}} onMouseEnter={e=>{e.currentTarget.style.background=`${sCfg.color}20`;e.currentTarget.style.borderColor=sCfg.color;}} onMouseLeave={e=>{e.currentTarget.style.background=sCfg.bg;e.currentTarget.style.borderColor=`${sCfg.color}45`;}}>{sCfg.label}<svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{opacity:.7}}><path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+                          <button onClick={undefined} title="Resolve from your Inbox — Data Quality is read-only" style={{fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:6,background:sCfg.bg,color:sCfg.color,border:`1.5px solid ${sCfg.color}45`,whiteSpace:"nowrap",cursor:"default",transition:"all .12s",display:"inline-flex",alignItems:"center",gap:5}} onMouseEnter={e=>{e.currentTarget.style.background=`${sCfg.color}20`;e.currentTarget.style.borderColor=sCfg.color;}} onMouseLeave={e=>{e.currentTarget.style.background=sCfg.bg;e.currentTarget.style.borderColor=`${sCfg.color}45`;}}>{sCfg.label}<svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{opacity:.7}}><path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
                         </td>
                         <td style={{padding:"10px 14px"}}>
                           <DQSeverityBadge severity={inc.severity}/>
@@ -7353,7 +7353,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
 
                       const VIOL_STATUS_CFG = {"Open":{color:T.rose,bg:T.roseDim,label:"Open"},"In Progress":{color:T.amber,bg:T.amberDim,label:"In Review"},"In Review":{color:T.amber,bg:T.amberDim,label:"In Review"},"Resolved":{color:"#16a34a",bg:"#16a34a12",label:"Resolved"},"Dismissed":{color:T.textMuted,bg:T.bgElevated,label:"Dismissed"},"Waived":{color:T.textMuted,bg:T.bgElevated,label:"Dismissed"}};
                       const VIOL_NEXT = {"Open":["In Progress","Resolved","Dismissed"],"In Progress":["Open","Resolved","Dismissed"],"In Review":["Open","Resolved","Dismissed"],"Resolved":["Open","In Progress","Dismissed"],"Dismissed":["Open","In Progress","Resolved"],"Waived":["Open","In Progress","Resolved"]};
-                      const openViolActionModal = (id) => setViolActionModal({id,newStatus:null,desc:""});
+                      const openViolActionModal = (id) => onToast&&onToast("Remediate this from your Inbox — Policy Manager is read-only","info");
 
                       const statusStyle = (s) => ({
                         "Open":       {bg:`${T.rose}14`,   color:T.rose,   dot:T.rose},
@@ -8023,7 +8023,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                   <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:5,background:SEV_BG[v.severity],color:SEV_COLOR[v.severity]||T.textMuted,textTransform:"uppercase",letterSpacing:"0.05em"}}>{v.severity}</span>
                                 </td>
                                 <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
-                                  <button onClick={()=>setViolActionModal({id:v.id,newStatus:null,desc:""})} style={{fontSize:10.5,fontWeight:700,padding:"3px 10px",borderRadius:6,background:sc.bg,color:sc.color,border:`1.5px solid ${sc.color}45`,whiteSpace:"nowrap",cursor:"pointer",transition:"all .12s",display:"inline-flex",alignItems:"center",gap:5}} onMouseEnter={e=>{e.currentTarget.style.background=`${sc.color}20`;e.currentTarget.style.borderColor=sc.color;}} onMouseLeave={e=>{e.currentTarget.style.background=sc.bg;e.currentTarget.style.borderColor=`${sc.color}45`;}}>
+                                  <button onClick={()=>onToast&&onToast("Remediate this from your Inbox — Policy Manager is read-only","info")} title="Remediate from your Inbox" style={{fontSize:10.5,fontWeight:700,padding:"3px 10px",borderRadius:6,background:sc.bg,color:sc.color,border:`1.5px solid ${sc.color}45`,whiteSpace:"nowrap",cursor:"default",transition:"all .12s",display:"inline-flex",alignItems:"center",gap:5}} onMouseEnter={e=>{e.currentTarget.style.background=`${sc.color}20`;e.currentTarget.style.borderColor=sc.color;}} onMouseLeave={e=>{e.currentTarget.style.background=sc.bg;e.currentTarget.style.borderColor=`${sc.color}45`;}}>
                                     {sc.label}
                                     <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{opacity:.7}}><path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                                   </button>
@@ -26978,8 +26978,11 @@ const InboxView = ({onToast}) => {
   const [roleScope,  setRoleScope]  = useState("all");    // all | steward | owner
   const [sel,          setSel]          = useState(null);
   const [assignOpen,   setAssignOpen]   = useState(false);
+  const [resolveOpen,  setResolveOpen]  = useState(false);  // inline resolve form (DQ + violations)
+  const [resolveNote,  setResolveNote]  = useState("");     // resolution reason captured in the inbox
   const [filterOpen,   setFilterOpen]   = useState(false);
   const [secFilters,   setSecFilters]   = useState(new Set()); // section multiselect
+  const closeForms = ()=>{ [setAssignOpen,setResolveOpen].forEach(f=>f(false)); setResolveNote(""); };
 
   // ── Two questions: things to DO vs things to KNOW ──
   // action   = open work needing a decision (steward fixes / owner sign-offs)
@@ -27017,12 +27020,12 @@ const InboxView = ({onToast}) => {
 
   const selItem = items.find(i=>i.id===sel)||null;
   const selIdx  = shown.findIndex(i=>i.id===sel);
-  const navPrev = ()=>{ if(selIdx>0) { setSel(shown[selIdx-1].id); setAssignOpen(false); }};
-  const navNext = ()=>{ if(selIdx<shown.length-1) { setSel(shown[selIdx+1].id); setAssignOpen(false); }};
+  const navPrev = ()=>{ if(selIdx>0) { setSel(shown[selIdx-1].id); closeForms(); }};
+  const navNext = ()=>{ if(selIdx<shown.length-1) { setSel(shown[selIdx+1].id); closeForms(); }};
 
-  const ack     = (id,msg)=>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); setSel(null); setAssignOpen(false); onToast(msg||"Acknowledged","success"); };
-  const dism    = id      =>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); setSel(null); setAssignOpen(false); };
-  const markAll = ()      =>{ setItems(p=>p.map(i=>({...i,readAt:i.readAt||new Date().toISOString()}))); setSel(null); setAssignOpen(false); onToast("All caught up","success"); };
+  const ack     = (id,msg)=>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); setSel(null); closeForms(); onToast(msg||"Acknowledged","success"); };
+  const dism    = id      =>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); setSel(null); closeForms(); };
+  const markAll = ()      =>{ setItems(p=>p.map(i=>({...i,readAt:i.readAt||new Date().toISOString()}))); setSel(null); closeForms(); onToast("All caught up","success"); };
 
   const SEV = {
     high:  {c:T.rose,    bg:`${T.rose}12`,         label:"HIGH"},
@@ -27052,7 +27055,7 @@ const InboxView = ({onToast}) => {
       </button>
     );
     if(item.type==="dq_alert")
-      return <>{btn("Resolve",()=>{resolveIncidentsForAsset(item.asset.path,item.asset.name);ack(item.id,`${item.asset.name} quality incidents resolved`);},true)}{btn("View in Data Quality",()=>{onNav&&onNav("quality");})}{btn("Dismiss",()=>dism(item.id))}</>;
+      return <>{btn("Resolve",()=>setResolveOpen(true),true)}{btn("View in Data Quality",()=>{onNav&&onNav("quality");})}{btn("Dismiss",()=>dism(item.id))}</>;
     if(item.type==="field_updated")
       return <>{btn("Acknowledge",()=>ack(item.id),true)}{btn("Open Asset",()=>onToast("Opening asset","success"))}</>;
     if(item.type==="assigned")
@@ -27062,7 +27065,7 @@ const InboxView = ({onToast}) => {
     if(item.type==="needs_attention")
       return <>{btn("Assign Steward",()=>setAssignOpen(a=>!a),true)}{btn("Dismiss",()=>dism(item.id))}</>;
     if(item.type==="policy_violation")
-      return <>{btn("Remediate",()=>{pvSet(prev=>prev.map(v=>v.id===item.violId?{...v,status:"Resolved",resolutionNote:"Remediated from Inbox"}:v));ack(item.id,`${item.asset.name} violation remediated`);},true)}{btn("Request exception",()=>{pvSet(prev=>prev.map(v=>v.id===item.violId?{...v,status:"Exception Requested"}:v));ack(item.id,"Exception requested — sent to owner");})}{btn("View Policy",()=>{onNav&&onNav("policymanager",{policyId:item.policyId});})}</>;
+      return <>{btn("Remediate",()=>setResolveOpen(true),true)}{btn("Request exception",()=>{pvSet(prev=>prev.map(v=>v.id===item.violId?{...v,status:"Exception Requested"}:v));ack(item.id,"Exception requested — sent to owner");})}{btn("View Policy",()=>{onNav&&onNav("policymanager",{policyId:item.policyId});})}</>;
     if(item.type==="tag_review")
       return <>{btn(item.tagType==="new_source_tag"?"Approve (add to vocabulary)":"Approve",()=>{
         if(item.tagType==="new_source_tag"){ tagCtx?.createTagDef({name:item.tagName,category:'business',description:'Promoted from source tag via Inbox.',propagationMode:'hierarchy',governanceRequired:false,managedBy:'Current User',color:'#fbbf24',sourceAliases:[item.tagName]}); tagCtx?.resolveInboxItem(item.tagInboxId,'promoted'); }
@@ -27145,7 +27148,7 @@ const InboxView = ({onToast}) => {
               <div style={{fontSize:11,color:T.textSub,marginBottom:10}}>Assign {role} to <b style={{color:T.text}}>{item.asset.name}</b></div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                 {["priya.nair","dev.patel","maya.chen","sarah.kim","alex.wu","james.oh"].map(u=>(
-                  <button key={u} onClick={()=>{const ok=assignOwnership(item.asset.name,u,role);setAssignOpen(false);ack(item.id,ok?`${u} assigned as ${roleL} of ${item.asset.name}`:`${u} assigned as ${roleL}`);}}
+                  <button key={u} onClick={()=>{const ok=assignOwnership(item.asset.name,u,role);closeForms();ack(item.id,ok?`${u} assigned as ${roleL} of ${item.asset.name}`:`${u} assigned as ${roleL}`);}}
                     style={{padding:"5px 13px",borderRadius:6,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",transition:"all .1s"}}
                     onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
                     onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
@@ -27154,6 +27157,29 @@ const InboxView = ({onToast}) => {
                 ))}
               </div>
             </div>
+            );
+          })()}
+
+          {/* Inline resolution form — DQ incidents + policy violations capture the reason HERE (the work happens in the inbox) */}
+          {(item.type==="dq_alert"||item.type==="policy_violation")&&resolveOpen&&(()=>{
+            const isViol = item.type==="policy_violation";
+            const ok = resolveNote.trim().length>0;
+            return (
+              <div style={{marginBottom:16,background:T.bgElevated,borderRadius:8,padding:"12px 14px",border:`1px solid ${T.border}`}}>
+                <div style={{fontSize:11,fontWeight:700,color:T.textSub,marginBottom:8}}>{isViol?"Remediation note":"Resolution reason"} <span style={{color:T.rose}}>*</span></div>
+                <textarea value={resolveNote} onChange={e=>setResolveNote(e.target.value)} rows={3} placeholder={isViol?"Describe how the violation was remediated…":"Describe the root cause and how it was resolved…"}
+                  style={{width:"100%",padding:"9px 11px",background:T.bgSurface,border:`1.5px solid ${ok?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:12.5,lineHeight:1.6,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box"}}/>
+                <div style={{display:"flex",gap:8,marginTop:10}}>
+                  <button disabled={!ok} onClick={()=>{
+                    if(!ok) return;
+                    if(isViol){ pvSet(prev=>prev.map(v=>v.id===item.violId?{...v,status:"Resolved",resolutionNote:resolveNote.trim()}:v)); }
+                    else { resolveIncidentsForAsset(item.asset.path,item.asset.name,resolveNote.trim()); }
+                    ack(item.id, isViol?`${item.asset.name} violation remediated`:`${item.asset.name} quality incident resolved`);
+                  }} style={{padding:"7px 16px",borderRadius:7,background:ok?T.accent:T.bgHover,border:"none",color:ok?"#fff":T.textMuted,fontSize:12,fontWeight:600,cursor:ok?"pointer":"default"}}>Confirm resolution</button>
+                  <button onClick={()=>{setResolveOpen(false);setResolveNote("");}} style={{padding:"7px 16px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+                </div>
+                <div style={{fontSize:10.5,color:T.textMuted,marginTop:8}}>Recorded on the {isViol?"violation":"incident"} and shown in {isViol?"Policy Manager":"Data Quality"} as history.</div>
+              </div>
             );
           })()}
         </div>
@@ -27180,7 +27206,7 @@ const InboxView = ({onToast}) => {
     const catColor   = (CATEGORY_META[itemCategory(item)]||CATEGORY_META.curation).color;
     const borderLeft = done ? `3px solid ${T.green}` : `3px solid ${catColor}`;
     return (
-      <div onClick={()=>{ setSel(isSel?null:item.id); setAssignOpen(false); }}
+      <div onClick={()=>{ setSel(isSel?null:item.id); closeForms(); }}
         style={{display:"flex",alignItems:"stretch",background:isSel?`${T.accent}08`:T.bgSurface,border:`1px solid ${isSel?T.accent+"44":T.border}`,borderLeft,borderRadius:8,cursor:"pointer",transition:"all .12s",overflow:"hidden",minHeight:64,opacity:1}}
         onMouseEnter={e=>{ if(!isSel)e.currentTarget.style.background=T.bgElevated; }}
         onMouseLeave={e=>{ if(!isSel)e.currentTarget.style.background=T.bgSurface; }}>
@@ -27220,7 +27246,7 @@ const InboxView = ({onToast}) => {
     const rm   = ROLE_META[itemRole(item)]||ROLE_META.steward;
     const isSel = sel===item.id;
     return (
-      <div onClick={()=>{ setSel(isSel?null:item.id); setAssignOpen(false); }}
+      <div onClick={()=>{ setSel(isSel?null:item.id); closeForms(); }}
         style={{background:isSel?`${T.accent}0d`:T.bgSurface,border:`1px solid ${isSel?T.accent+"55":T.border}`,borderTop:`2px solid ${colC}`,borderRadius:8,padding:"11px 12px",marginBottom:7,cursor:"pointer",transition:"all .12s"}}
         onMouseEnter={e=>{ if(!isSel){e.currentTarget.style.boxShadow=`0 3px 12px rgba(0,0,0,.09)`;e.currentTarget.style.transform="translateY(-1px)";}}}
         onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.transform="none";}}>
@@ -27286,7 +27312,7 @@ const InboxView = ({onToast}) => {
               onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
               <svg width="7" height="10" viewBox="0 0 7 10" fill="none"><path d="M2 1.5L5 5 2 8.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </button>
-            <button onClick={()=>{setSel(null);setAssignOpen(false);}}
+            <button onClick={()=>{setSel(null);closeForms();}}
               style={{width:26,height:26,borderRadius:6,background:T.bgHover,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:T.textMuted,transition:"all .1s"}}
               onMouseEnter={e=>{e.currentTarget.style.borderColor=T.rose+"66";e.currentTarget.style.color=T.rose;}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
@@ -27310,7 +27336,7 @@ const InboxView = ({onToast}) => {
         {viewMode==="list"&&(
           <div style={{display:"flex",alignItems:"center"}}>
             {[["action","Needs my action"],["activity","Activity"],["done","Done"]].map(([k,l])=>(
-              <button key={k} onClick={()=>{ setFilter(k); setSel(null); setAssignOpen(false); setFilterOpen(false); }}
+              <button key={k} onClick={()=>{ setFilter(k); setSel(null); closeForms(); setFilterOpen(false); }}
                 style={{padding:"11px 14px",background:"transparent",border:"none",borderBottom:`2px solid ${filter===k?T.accent:"transparent"}`,color:filter===k?T.text:T.textMuted,fontSize:12.5,fontWeight:filter===k?600:400,cursor:"pointer",display:"flex",alignItems:"center",gap:5,transition:"all .12s",whiteSpace:"nowrap"}}>
                 {l}
                 {counts[k]>0&&<span style={{fontSize:10,fontWeight:700,borderRadius:10,padding:"1px 6px",
@@ -27381,7 +27407,7 @@ const InboxView = ({onToast}) => {
           {[["list",<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 4h10M2 7h10M2 10h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>],
             ["kanban",<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="3.5" height="10" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="5.25" y="2" width="3.5" height="7" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="9.5" y="2" width="3.5" height="8.5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>]
           ].map(([mode,icon])=>(
-            <button key={mode} onClick={()=>{setViewMode(mode);setSel(null);setAssignOpen(false);setFilterOpen(false);}}
+            <button key={mode} onClick={()=>{setViewMode(mode);setSel(null);closeForms();setFilterOpen(false);}}
               style={{width:28,height:26,borderRadius:5,background:viewMode===mode?T.bgSurface:"transparent",border:viewMode===mode?`1px solid ${T.border}`:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:viewMode===mode?T.text:T.textMuted,boxShadow:viewMode===mode?"0 1px 3px rgba(0,0,0,.08)":"none",transition:"all .12s"}}>
               {icon}
             </button>
