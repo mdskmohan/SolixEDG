@@ -5604,6 +5604,21 @@ const POLICY_VIOLATIONS = [
   {id:"viol-6",policyId:"pol-4",assetName:"audit_records",assetType:"Table",domain:"Commerce",rule:"Audit logging",severity:"High",status:"Open",detectedAt:"2026-05-10",description:"audit_records retention period is set to 3 years; HIPAA requires immutable audit logs retained for 7 years."},
 ];
 
+// ── Shared reactive store for policy violations ──
+// One source of truth that BOTH the Inbox and the Policy Manager read & write,
+// so a "Remediate" in the inbox closes the loop and the section updates itself.
+const _pvSubs = new Set();
+let _pvState = POLICY_VIOLATIONS;
+const pvSet = (updater) => {
+  _pvState = typeof updater === "function" ? updater(_pvState) : updater;
+  _pvSubs.forEach(fn => fn());
+};
+const usePolicyViolations = () => {
+  const [, force] = useState(0);
+  useEffect(() => { const fn = () => force(n => n + 1); _pvSubs.add(fn); return () => { _pvSubs.delete(fn); }; }, []);
+  return [_pvState, pvSet];
+};
+
 // Adapter (Phase 2): open policy violations → My Workspace inbox items.
 const POLICY_VIOLATION_INBOX = POLICY_VIOLATIONS
   .filter(v => v.status==="Open" || v.status==="In Progress")
@@ -5616,7 +5631,7 @@ const POLICY_VIOLATION_INBOX = POLICY_VIOLATIONS
     title:`${v.rule} — ${v.assetName}`,
     asset:{name:v.assetName, path:`${(v.domain||"").toLowerCase()}.${v.assetName}`, type:v.assetType},
     body:v.description,
-    policyId:v.policyId, rule:v.rule, domain:v.domain, vstatus:v.status,
+    policyId:v.policyId, rule:v.rule, domain:v.domain, vstatus:v.status, violId:v.id,
     readAt:null,
   }));
 
@@ -5826,7 +5841,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
 
   const [regulations, setRegulations] = useState(REGS_META);
 
-  const [violations, setViolations] = useState(POLICY_VIOLATIONS);
+  const [violations, setViolations] = usePolicyViolations(); // shared store — synced with Inbox
 
   const [policyCategories, setPolicyCategories] = useState([
     {id:"data",name:"Data",      color:T.violet},
@@ -26972,7 +26987,7 @@ const InboxView = ({onToast}) => {
     if(item.type==="needs_attention")
       return <>{btn("Assign Steward",()=>setAssignOpen(a=>!a),true)}{btn("Dismiss",()=>dism(item.id))}</>;
     if(item.type==="policy_violation")
-      return <>{btn("View Policy",()=>{onNav&&onNav("policymanager",{policyId:item.policyId});},true)}{btn("Mark In Progress",()=>ack(item.id,"Violation moved to In Progress"))}</>;
+      return <>{btn("Remediate",()=>{pvSet(prev=>prev.map(v=>v.id===item.violId?{...v,status:"Resolved",resolutionNote:"Remediated from Inbox"}:v));ack(item.id,`${item.asset.name} violation remediated`);},true)}{btn("Request exception",()=>{pvSet(prev=>prev.map(v=>v.id===item.violId?{...v,status:"Exception Requested"}:v));ack(item.id,"Exception requested — sent to owner");})}{btn("View Policy",()=>{onNav&&onNav("policymanager",{policyId:item.policyId});})}</>;
     if(item.type==="tag_review")
       return <>{btn("Review in Tags",()=>{onNav&&onNav("tags");},true)}{btn("Approve",()=>ack(item.id,"Tag change approved"))}{btn("Dismiss",()=>dism(item.id))}</>;
     if(item.type==="certification_review")
