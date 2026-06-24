@@ -3674,7 +3674,10 @@ const QualityView = () => {
   // mutable state
   const [testCases,  setTestCases]  = useState(DQ_TEST_CASES);
   const [suites,     setSuites]     = useState(DQ_SUITES);
-  const [incidents,  setIncidents]  = useDQIncidents(); // shared store — synced with Inbox
+  const [incidents]  = useDQIncidents(); // shared store — read-only in this section
+  // Read-only: incident state changes happen in the Inbox, not here. Every section
+  // mutation routes through this guarded setter so the view only displays state + history.
+  const setIncidents = () => showT && showT("Data Quality is read-only — resolve incidents from your Inbox","info");
   const [definitions,setDefinitions]= useState(DQ_TEST_DEFINITIONS);
   const [toast,      setToast]      = useState(null);
   const [runningSuites, setRunningSuites] = useState(new Set());
@@ -5914,7 +5917,10 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
 
   const [regulations, setRegulations] = useState(REGS_META);
 
-  const [violations, setViolations] = usePolicyViolations(); // shared store — synced with Inbox
+  const [violations] = usePolicyViolations(); // shared store — read-only in this section
+  // Read-only: violation state changes happen in the Inbox, not here. Every section
+  // mutation routes through this guarded setter so the view only displays state + history.
+  const setViolations = () => onToast && onToast("Policy Manager is read-only — remediate violations from your Inbox","info");
 
   const [policyCategories, setPolicyCategories] = useState([
     {id:"data",name:"Data",      color:T.violet},
@@ -26978,6 +26984,7 @@ const InboxView = ({onToast}) => {
   const [filter,     setFilter]     = useState("action"); // action | activity | done
   const [viewMode,   setViewMode]   = useState("list");   // list | kanban
   const [roleScope,  setRoleScope]  = useState("all");    // all | steward | owner
+  const [search,     setSearch]     = useState("");       // inbox search — applies to list + kanban
   const [sel,          setSel]          = useState(null);
   const [assignOpen,   setAssignOpen]   = useState(false);
   const [resolveOpen,  setResolveOpen]  = useState(false);  // inline resolve form (DQ + violations)
@@ -26999,6 +27006,8 @@ const InboxView = ({onToast}) => {
   const doneItems     = items.filter(isDoneItem);
   const roleMatch = i => roleScope==="all" || itemRole(i)===roleScope;
   const secMatch  = i => !secFilterActive || secFilters.has(i.section);
+  const _q = search.trim().toLowerCase();
+  const searchMatch = i => !_q || ((i.title||"")+" "+(i.asset?.name||"")+" "+(i.asset?.path||"")).toLowerCase().includes(_q);
   const counts = {
     action:   actionItems.length,
     activity: activityItems.filter(i=>!i.readAt).length,
@@ -27006,10 +27015,10 @@ const InboxView = ({onToast}) => {
   };
   const isDoneFilter = filter==="done";
   const shown =
-      filter==="activity" ? activityItems.filter(secMatch)
+      filter==="activity" ? activityItems.filter(secMatch).filter(searchMatch)
     : filter==="done"     ? []
-    :                       actionItems.filter(roleMatch).filter(secMatch);
-  const doneShown = doneItems.filter(secMatch);
+    :                       actionItems.filter(roleMatch).filter(secMatch).filter(searchMatch);
+  const doneShown = doneItems.filter(secMatch).filter(searchMatch);
   const SECTIONS = [
     {k:"catalog",  l:"Catalog"},
     {k:"quality",  l:"Data Quality"},
@@ -27351,23 +27360,6 @@ const InboxView = ({onToast}) => {
           </div>
         )}
 
-        {/* Steward / Owner lens — only over action items (list action tab + kanban) */}
-        {(viewMode==="kanban"||filter==="action")&&(
-          <div style={{display:"flex",gap:1,background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,padding:2,marginLeft:16}}>
-            {[["all","All"],["steward","As Steward"],["owner","As Owner"]].map(([k,l])=>{
-              const on = roleScope===k;
-              const accent = k==="owner"?"#b45309":k==="steward"?"#0d9488":T.text;
-              const onBg   = k==="owner"?"rgba(180,83,9,0.12)":k==="steward"?"rgba(13,148,136,0.12)":T.bgSurface;
-              return (
-                <button key={k} onClick={()=>{ setRoleScope(k); setSel(null); }}
-                  style={{padding:"4px 11px",borderRadius:5,background:on?onBg:"transparent",border:`1px solid ${on?(k==="all"?T.border:accent):"transparent"}`,color:on?accent:T.textMuted,fontSize:11.5,fontWeight:on?700:500,cursor:"pointer",transition:"all .12s",whiteSpace:"nowrap"}}>
-                  {l}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
         <div style={{flex:1}}/>
 
         {/* Filter icon — list + kanban */}
@@ -27414,6 +27406,36 @@ const InboxView = ({onToast}) => {
               {icon}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Secondary toolbar — role lens (below the tabs) + search (both views) */}
+      <div style={{padding:"8px 20px 8px 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:12,flexShrink:0,background:T.bgSurface,minHeight:40}}>
+        {(viewMode==="kanban"||filter==="action")?(
+          <div style={{display:"flex",gap:1,background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,padding:2}}>
+            {[["all","All"],["steward","As Steward"],["owner","As Owner"]].map(([k,l])=>{
+              const on = roleScope===k;
+              const accent = k==="owner"?"#b45309":k==="steward"?"#0d9488":T.text;
+              const onBg   = k==="owner"?"rgba(180,83,9,0.12)":k==="steward"?"rgba(13,148,136,0.12)":T.bgSurface;
+              return (
+                <button key={k} onClick={()=>{ setRoleScope(k); setSel(null); }}
+                  style={{padding:"4px 11px",borderRadius:5,background:on?onBg:"transparent",border:`1px solid ${on?(k==="all"?T.border:accent):"transparent"}`,color:on?accent:T.textMuted,fontSize:11.5,fontWeight:on?700:500,cursor:"pointer",transition:"all .12s",whiteSpace:"nowrap"}}>
+                  {l}
+                </button>
+              );
+            })}
+          </div>
+        ):<div/>}
+        <div style={{flex:1}}/>
+        {/* Search — applies to list + kanban */}
+        <div style={{position:"relative",width:260}}>
+          <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,display:"flex",pointerEvents:"none"}}>
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.4"/><path d="M9.5 9.5l3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+          </span>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search inbox…"
+            style={{width:"100%",boxSizing:"border-box",padding:"6px 28px 6px 30px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12.5,outline:"none"}}
+            onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+          {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex",padding:2}}><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>}
         </div>
       </div>
 
@@ -27482,7 +27504,7 @@ const InboxView = ({onToast}) => {
           {viewMode==="kanban"&&(
             <div style={{flex:1,overflowX:"auto",overflowY:"hidden",padding:"18px 20px",display:"flex",gap:12,alignItems:"flex-start"}}>
               {KANBAN_COLS.map(col=>{
-                const colItems = actionItems.filter(i=>col.cats.includes(itemCategory(i)) && roleMatch(i) && secMatch(i));
+                const colItems = actionItems.filter(i=>col.cats.includes(itemCategory(i)) && roleMatch(i) && secMatch(i) && searchMatch(i));
                 return (
                   <div key={col.id} style={{width:248,flexShrink:0,display:"flex",flexDirection:"column",height:"100%"}}>
                     <div style={{display:"flex",alignItems:"center",gap:7,padding:"9px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderTop:`3px solid ${col.c}`,borderRadius:"8px 8px 0 0",flexShrink:0}}>
