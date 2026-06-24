@@ -15731,6 +15731,8 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
 
   const handleCertify=()=>{
     setData(d=>({...d,cert:"Approved"}));
+    certifyAsset(asset.name);    // module ASSETS → Catalog badge reflects
+    certifyByAsset(asset.name);  // shared certification store
     setCertModal(false);
     onToast(`${asset.name} certified successfully`,"success");
   };
