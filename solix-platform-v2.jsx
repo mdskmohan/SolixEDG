@@ -4686,7 +4686,7 @@ const QualityView = () => {
                         </td>
                         <td style={{padding:"10px 14px",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{inc.opened}</td>
                         <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
-                          <button onClick={undefined} title="Resolve from your Inbox — Data Quality is read-only" style={{fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:6,background:sCfg.bg,color:sCfg.color,border:`1.5px solid ${sCfg.color}45`,whiteSpace:"nowrap",cursor:"default",transition:"all .12s",display:"inline-flex",alignItems:"center",gap:5}} onMouseEnter={e=>{e.currentTarget.style.background=`${sCfg.color}20`;e.currentTarget.style.borderColor=sCfg.color;}} onMouseLeave={e=>{e.currentTarget.style.background=sCfg.bg;e.currentTarget.style.borderColor=`${sCfg.color}45`;}}>{sCfg.label}<svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{opacity:.7}}><path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+                          <span title="Status is read-only — resolve from your Inbox" style={{fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:6,background:sCfg.bg,color:sCfg.color,border:`1.5px solid ${sCfg.color}45`,whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:5}}>{sCfg.label}</span>
                         </td>
                         <td style={{padding:"10px 14px"}}>
                           <DQSeverityBadge severity={inc.severity}/>
@@ -8029,10 +8029,9 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                   <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:5,background:SEV_BG[v.severity],color:SEV_COLOR[v.severity]||T.textMuted,textTransform:"uppercase",letterSpacing:"0.05em"}}>{v.severity}</span>
                                 </td>
                                 <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
-                                  <button onClick={()=>onToast&&onToast("Remediate this from your Inbox — Policy Manager is read-only","info")} title="Remediate from your Inbox" style={{fontSize:10.5,fontWeight:700,padding:"3px 10px",borderRadius:6,background:sc.bg,color:sc.color,border:`1.5px solid ${sc.color}45`,whiteSpace:"nowrap",cursor:"default",transition:"all .12s",display:"inline-flex",alignItems:"center",gap:5}} onMouseEnter={e=>{e.currentTarget.style.background=`${sc.color}20`;e.currentTarget.style.borderColor=sc.color;}} onMouseLeave={e=>{e.currentTarget.style.background=sc.bg;e.currentTarget.style.borderColor=`${sc.color}45`;}}>
+                                  <span title="Status is read-only — remediate from your Inbox" style={{fontSize:10.5,fontWeight:700,padding:"3px 10px",borderRadius:6,background:sc.bg,color:sc.color,border:`1.5px solid ${sc.color}45`,whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:5}}>
                                     {sc.label}
-                                    <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{opacity:.7}}><path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                                  </button>
+                                  </span>
                                 </td>
                                 <td style={{padding:"10px 14px",fontSize:11,color:T.textMuted,whiteSpace:"nowrap"}}>{v.detectedAt}</td>
                               </tr>
@@ -12145,7 +12144,9 @@ const OBS_INC_NEXT = {
 const AssetIncidentsPanel = ({asset,onToast,onNav})=>{
   const tbl=asset?.name;
   const mono={fontFamily:"'Geist Mono',monospace"};
-  const [incidents,setIncidents]=useState(()=>{const src=(typeof DQ_INCIDENTS!=="undefined"?DQ_INCIDENTS:[]);return (asset?src.filter(i=>i.table.endsWith("."+tbl)||i.table===tbl):src).map(i=>({...i}));});
+  const [incidents]=useState(()=>{const src=(typeof DQ_INCIDENTS!=="undefined"?DQ_INCIDENTS:[]);return (asset?src.filter(i=>i.table.endsWith("."+tbl)||i.table===tbl):src).map(i=>({...i}));});
+  // Read-only: incident state changes happen in the Inbox, not on the asset profile.
+  const setIncidents=()=>onToast&&onToast("Read-only — resolve incidents from your Inbox","info");
   const [tcF,setTcF]=useState("");
   const [assigneeF,setAssigneeF]=useState("");
   const [statusF,setStatusF]=useState("all");
@@ -26977,6 +26978,10 @@ const assignOwnership = (assetName, handle, role) => {
   return true;
 };
 const certifyAsset = (assetName) => { const a=ASSETS.find(x=>x.name===assetName); if(a) a.cert="Approved"; return !!a; };
+// Assignee = who's responsible for a work item. Defaults to the asset's steward.
+const STEWARD_POOL = ["maya.chen","dev.patel","sarah.kim","alex.wu","priya.nair","james.oh"];
+const stewardOf = (assetName) => { const a=ASSETS.find(x=>x.name===assetName); return a ? (a.steward || (Array.isArray(a.stewards)&&a.stewards[0]) || null) : null; };
+const itemAssignee = (item) => item.assignee || stewardOf(item.asset?.name) || null;
 const InboxView = ({onToast}) => {
   const onNav = useNav();
   const tagCtx = useTagCtx(); // tags live in TagProvider context — the tags "shared store"
@@ -26989,9 +26994,11 @@ const InboxView = ({onToast}) => {
   const [assignOpen,   setAssignOpen]   = useState(false);
   const [resolveOpen,  setResolveOpen]  = useState(false);  // inline resolve form (DQ + violations)
   const [resolveNote,  setResolveNote]  = useState("");     // resolution reason captured in the inbox
+  const [reassignOpen, setReassignOpen] = useState(false);  // inline reassign picker
+  const [reassignMap,  setReassignMap]  = useState({});     // {itemId: handle} assignee overrides
   const [filterOpen,   setFilterOpen]   = useState(false);
   const [secFilters,   setSecFilters]   = useState(new Set()); // section multiselect
-  const closeForms = ()=>{ [setAssignOpen,setResolveOpen].forEach(f=>f(false)); setResolveNote(""); };
+  const closeForms = ()=>{ [setAssignOpen,setResolveOpen,setReassignOpen].forEach(f=>f(false)); setResolveNote(""); };
 
   // ── Two questions: things to DO vs things to KNOW ──
   // action   = open work needing a decision (steward fixes / owner sign-offs)
@@ -27037,6 +27044,9 @@ const InboxView = ({onToast}) => {
   const ack     = (id,msg)=>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); setSel(null); closeForms(); onToast(msg||"Acknowledged","success"); };
   const dism    = id      =>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); setSel(null); closeForms(); };
   const markAll = ()      =>{ setItems(p=>p.map(i=>({...i,readAt:i.readAt||new Date().toISOString()}))); setSel(null); closeForms(); onToast("All caught up","success"); };
+  // Assignee + reassignment (steward hands off; owner can override — task handoff, not role change).
+  const effAssignee = (item)=> reassignMap[item.id] || itemAssignee(item) || "unassigned";
+  const reassign    = (id,handle)=>{ setReassignMap(m=>({...m,[id]:handle})); setReassignOpen(false); onToast(`Reassigned to ${handle}`,"success"); };
 
   const SEV = {
     high:  {c:T.rose,    bg:`${T.rose}12`,         label:"HIGH"},
@@ -27121,6 +27131,30 @@ const InboxView = ({onToast}) => {
 
           {/* Body text */}
           {item.body&&<div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65,marginBottom:16}}>{item.body}</div>}
+
+          {/* Assignee + reassign — task handoff (steward → steward; owner can override) */}
+          {itemRole(item)!=="fyi"&&(()=>{const a=effAssignee(item);const ini=a==="unassigned"?"?":a.split(".").map(s=>s[0]?.toUpperCase()||"").join("").slice(0,2);return (
+            <div style={{marginBottom:16,background:T.bgElevated,borderRadius:8,padding:"10px 13px",border:`1px solid ${T.border}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:28,height:28,borderRadius:"50%",background:T.accent+"22",border:`1px solid ${T.accent}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:T.accent,flexShrink:0}}>{ini}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:9.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:700}}>Assignee</div>
+                  <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{a}</div>
+                </div>
+                <button onClick={()=>setReassignOpen(o=>!o)} style={{padding:"5px 12px",borderRadius:7,background:reassignOpen?T.accentDim:"transparent",border:`1px solid ${reassignOpen?T.accent:T.border}`,color:reassignOpen?T.accent:T.textSub,fontSize:11.5,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>Reassign</button>
+              </div>
+              {reassignOpen&&(
+                <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${T.border}`}}>
+                  <div style={{fontSize:11,color:T.textSub,marginBottom:8}}>Hand off to another steward — the owner can reassign anytime:</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {STEWARD_POOL.map(u=>(
+                      <button key={u} onClick={()=>reassign(item.id,u)} style={{padding:"5px 12px",borderRadius:6,background:a===u?T.accentDim:T.bgSurface,border:`1px solid ${a===u?T.accent:T.border}`,color:a===u?T.accent:T.textSub,fontSize:12,cursor:"pointer"}}>{u}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );})()}
 
           {/* DQ failures */}
           {item.failures&&(
@@ -27238,9 +27272,10 @@ const InboxView = ({onToast}) => {
           </div>
           {/* Row 2: title */}
           <div style={{fontSize:12.5,fontWeight:titleWeight,color:titleColor,lineHeight:1.35,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
-          {/* Row 3: asset path + type badge */}
+          {/* Row 3: asset path + assignee + type badge */}
           <div style={{display:"flex",alignItems:"center",gap:6}}>
             <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{item.asset.path}</span>
+            {(()=>{const a=effAssignee(item);return (a&&a!=="unassigned")?<span title={`Assignee: ${a}`} style={{display:"flex",alignItems:"center",gap:3,flexShrink:0}}><span style={{width:15,height:15,borderRadius:"50%",background:T.accent+"22",color:T.accent,fontSize:7.5,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>{a.split(".").map(s=>s[0]?.toUpperCase()||"").join("").slice(0,2)}</span><span style={{fontSize:10,color:T.textMuted}}>{a}</span></span>:null;})()}
             <TypeBadge type={item.asset.type}/>
           </div>
         </div>
@@ -27274,6 +27309,7 @@ const InboxView = ({onToast}) => {
         <div style={{fontSize:12,fontWeight:600,color:T.text,lineHeight:1.4,marginBottom:5,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{item.title}</div>
         {/* Asset path */}
         <div style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.asset.path}</div>
+        {(()=>{const a=effAssignee(item);return (a&&a!=="unassigned")?<div style={{display:"flex",alignItems:"center",gap:4,marginTop:6}}><span style={{width:15,height:15,borderRadius:"50%",background:T.accent+"22",color:T.accent,fontSize:7.5,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>{a.split(".").map(s=>s[0]?.toUpperCase()||"").join("").slice(0,2)}</span><span style={{fontSize:10,color:T.textMuted}}>{a}</span></div>:null;})()}
         {/* Failure count badge */}
         {item.failures&&<div style={{marginTop:6,fontSize:10.5,color:T.rose,fontWeight:500}}>{item.failures.length} failed check{item.failures.length!==1?"s":""}</div>}
       </div>
