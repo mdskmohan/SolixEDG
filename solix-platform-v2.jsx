@@ -3355,7 +3355,7 @@ const HomeView = ({onNav, onToast}) => {
             <div key={item.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:i<3?`1px solid ${T.border}`:"none"}}>
               <span style={{width:7,height:7,borderRadius:"50%",background:c,flexShrink:0}}/>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:12,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
+                <div style={{fontSize:12,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{itemTitle(item)}</div>
                 <div style={{fontSize:10.5,color:T.textMuted}}>{item.asset.path} · {item.timeAgo}</div>
               </div>
               <span style={{fontSize:10,color:c,background:`${c}18`,borderRadius:4,padding:"1px 6px",fontWeight:600,flexShrink:0}}>{item.severity==="high"?"HIGH":item.severity==="medium"?"MED":"INFO"}</span>
@@ -26972,6 +26972,16 @@ const ROLE_META = {
   fyi:    {label:"FYI",     color:"#64748b", bg:"rgba(100,116,139,0.12)"},
 };
 const itemRole = (item) => ITEM_ROLE[item?.type] || "steward";
+// Standard inbox title template: one fixed action phrase per type + the subject.
+// No bespoke per-item text — only the subject value changes.
+const TYPE_ACTION = {
+  dq_alert:"Resolve quality incident", policy_violation:"Remediate violation",
+  tag_review:"Review tag", certification_review:"Certify asset",
+  orphan_assignment:"Assign owner", needs_attention:"Assign steward",
+  stewardship_request:"Review access request", term_review:"Approve term",
+  field_updated:"Field updated", assigned:"Assigned to you",
+};
+const itemTitle = (item) => { if(!item) return ""; const act=TYPE_ACTION[item.type]; const subj=item.asset&&item.asset.name; return (act&&subj)?`${act} · ${subj}`:(item.title||""); };
 // Phase 4 — work-item actions that actually write ownership fields on the asset.
 const assignOwnership = (assetName, handle, role) => {
   const a = ASSETS.find(x => x.name===assetName);
@@ -27276,7 +27286,7 @@ const InboxView = ({onToast}) => {
             <span style={{fontSize:10.5,color:T.textMuted,flexShrink:0}}>{item.timeAgo}</span>
           </div>
           {/* Row 2: title */}
-          <div style={{fontSize:12.5,fontWeight:titleWeight,color:titleColor,lineHeight:1.35,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.title}</div>
+          <div style={{fontSize:12.5,fontWeight:titleWeight,color:titleColor,lineHeight:1.35,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{itemTitle(item)}</div>
           {/* Row 3: asset path + assignee + type badge */}
           <div style={{display:"flex",alignItems:"center",gap:6}}>
             <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{item.asset.path}</span>
@@ -27311,7 +27321,7 @@ const InboxView = ({onToast}) => {
           <span style={{fontSize:10,color:T.textMuted}}>{item.timeAgo}</span>
         </div>
         {/* Title */}
-        <div style={{fontSize:12,fontWeight:600,color:T.text,lineHeight:1.4,marginBottom:5,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{item.title}</div>
+        <div style={{fontSize:12,fontWeight:600,color:T.text,lineHeight:1.4,marginBottom:5,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{itemTitle(item)}</div>
         {/* Asset path */}
         <div style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.asset.path}</div>
         {(()=>{const a=effAssignee(item);return (a&&a!=="unassigned")?<div style={{display:"flex",alignItems:"center",gap:4,marginTop:6}}><span style={{width:15,height:15,borderRadius:"50%",background:T.accent+"22",color:T.accent,fontSize:7.5,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>{a.split(".").map(s=>s[0]?.toUpperCase()||"").join("").slice(0,2)}</span><span style={{fontSize:10,color:T.textMuted}}>{a}</span></div>:null;})()}
@@ -27342,7 +27352,7 @@ const InboxView = ({onToast}) => {
               {meta.icon(15)}
             </div>
             <div style={{minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:700,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{selItem.title}</div>
+              <div style={{fontSize:13,fontWeight:700,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{itemTitle(selItem)}</div>
               <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3}}>
                 {(()=>{const rm=ROLE_META[itemRole(selItem)]||ROLE_META.steward;return <span style={{fontSize:8.5,fontWeight:800,letterSpacing:"0.04em",color:rm.color,background:rm.bg,borderRadius:4,padding:"1.5px 5px",flexShrink:0}}>{rm.label}</span>;})()}
                 <span style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{meta.label} · {selItem.asset.path}</span>
