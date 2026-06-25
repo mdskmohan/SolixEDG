@@ -22609,20 +22609,22 @@ const LoginScreen = ({onLogin}) => {
           Trusted data.<br/>
           <span style={{color:"#ee2424"}}>Governed</span> together.
         </div>
-        <div style={{fontSize:14,color:"rgba(255,255,255,0.5)",lineHeight:1.7,marginBottom:40}}>
-          One platform to discover, govern, and trust your data across every team and domain at Johnson &amp; Johnson.
+        <div style={{fontSize:14,color:"rgba(255,255,255,0.5)",lineHeight:1.65,marginBottom:22}}>
+          Five core governance outcomes — one platform to discover, understand, govern, trust, and protect your enterprise data.
         </div>
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {[
-            {icon:Ic.catalog(15), title:"Discover & catalog", sub:"Every dataset with its owner, lineage, and trust status."},
-            {icon:Ic.inbox(15),   title:"Governance that gets done", sub:"Quality, policy & approvals resolved in one workspace."},
-            {icon:Ic.cert(15),    title:"Trusted by design", sub:"Certified, owned, and compliant — provably, not on paper."},
+            {icon:Ic.catalog(15),    title:"Discover Data",   sub:"Catalog, search & usage analytics across every asset."},
+            {icon:Ic.glossary(15),   title:"Understand Data", sub:"Shared business context via glossary, classifications & tags."},
+            {icon:Ic.steward(15),    title:"Govern Data",     sub:"Ownership, stewardship & certification across domains."},
+            {icon:Ic.quality(15),    title:"Trust Data",      sub:"Quality, profiling, certification & lineage you can rely on."},
+            {icon:Ic.compliance(15), title:"Protect Data",    sub:"Policy, access controls & compliance — fully audited."},
           ].map((f,i)=>(
-            <div key={i} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 14px",background:"rgba(255,255,255,0.05)",borderRadius:9,border:"1px solid rgba(255,255,255,0.07)"}}>
+            <div key={i} style={{display:"flex",alignItems:"flex-start",gap:11,padding:"9px 13px",background:"rgba(255,255,255,0.05)",borderRadius:9,border:"1px solid rgba(255,255,255,0.07)"}}>
               <span style={{color:"#ee2424",display:"flex",flexShrink:0,marginTop:1}}>{f.icon}</span>
               <div>
                 <div style={{fontSize:12.5,fontWeight:600,color:"#f4f4f5"}}>{f.title}</div>
-                <div style={{fontSize:11.5,color:"rgba(255,255,255,0.5)",marginTop:2,lineHeight:1.5}}>{f.sub}</div>
+                <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:1,lineHeight:1.45}}>{f.sub}</div>
               </div>
             </div>
           ))}
