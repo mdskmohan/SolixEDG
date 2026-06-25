@@ -3209,7 +3209,7 @@ const DocBot = ({open:extOpen, setOpen:extSetOpen}) => {
 // SIDEBAR
 // ─────────────────────────────────────────────
 const GROUPS = [
-  {section:"Workspace",items:[
+  {section:"",items:[
     {key:"home",           icon:"home",          label:"Home"},
     {key:"stewardship",    icon:"inbox",         label:"Inbox"},
   ]},
@@ -3250,7 +3250,7 @@ const Sidebar = ({active, onNav, exp, setExp, onHelp}) => {
       <div style={{flex:1,overflowY:"auto",padding:"6px 0"}}>
         {GROUPS.map(group=>(
           <div key={group.section} style={{marginBottom:4}}>
-            {exp&&<div style={{padding:"8px 16px 3px",fontSize:9.5,fontWeight:700,color:T.textMuted,letterSpacing:"0.1em",textTransform:"uppercase"}}>{group.section}</div>}
+            {exp&&group.section&&<div style={{padding:"8px 16px 3px",fontSize:9.5,fontWeight:700,color:T.textMuted,letterSpacing:"0.1em",textTransform:"uppercase"}}>{group.section}</div>}
             {group.items.filter(item=>allowedNav.includes(item.key)).map(item=>{
               const isA = active===item.key;
               return (
@@ -22614,13 +22614,16 @@ const LoginScreen = ({onLogin}) => {
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:10}}>
           {[
-            {icon:Ic.catalog(14), text:"6,724 assets indexed across 5 domains"},
-            {icon:Ic.quality(14), text:"87.3% average data quality score"},
-            {icon:Ic.compliance(14), text:"GDPR & HIPAA compliance tracked"},
+            {icon:Ic.catalog(15), title:"Discover & catalog", sub:"Every dataset with its owner, lineage, and trust status."},
+            {icon:Ic.inbox(15),   title:"Governance that gets done", sub:"Quality, policy & approvals resolved in one workspace."},
+            {icon:Ic.cert(15),    title:"Trusted by design", sub:"Certified, owned, and compliant — provably, not on paper."},
           ].map((f,i)=>(
-            <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"rgba(255,255,255,0.05)",borderRadius:9,border:"1px solid rgba(255,255,255,0.07)"}}>
-              <span style={{color:"#ee2424",display:"flex",flexShrink:0}}>{f.icon}</span>
-              <span style={{fontSize:12,color:"rgba(255,255,255,0.6)"}}>{f.text}</span>
+            <div key={i} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 14px",background:"rgba(255,255,255,0.05)",borderRadius:9,border:"1px solid rgba(255,255,255,0.07)"}}>
+              <span style={{color:"#ee2424",display:"flex",flexShrink:0,marginTop:1}}>{f.icon}</span>
+              <div>
+                <div style={{fontSize:12.5,fontWeight:600,color:"#f4f4f5"}}>{f.title}</div>
+                <div style={{fontSize:11.5,color:"rgba(255,255,255,0.5)",marginTop:2,lineHeight:1.5}}>{f.sub}</div>
+              </div>
             </div>
           ))}
         </div>
