@@ -22616,7 +22616,7 @@ const LoginScreen = ({onLogin}) => {
           {[
             {icon:Ic.catalog(15),    title:"Discover Data",   sub:"Catalog, search & usage analytics across every asset."},
             {icon:Ic.glossary(15),   title:"Understand Data", sub:"Shared business context via glossary, classifications & tags."},
-            {icon:Ic.steward(15),    title:"Govern Data",     sub:"Ownership, stewardship & certification across domains."},
+            {icon:Ic.steward(15),    title:"Govern Data",     sub:"Clear owners & stewards on every asset, domain & product."},
             {icon:Ic.quality(15),    title:"Trust Data",      sub:"Quality, profiling, certification & lineage you can rely on."},
             {icon:Ic.compliance(15), title:"Protect Data",    sub:"Policy, access controls & compliance — fully audited."},
           ].map((f,i)=>(
