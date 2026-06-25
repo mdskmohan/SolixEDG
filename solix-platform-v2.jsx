@@ -27090,30 +27090,33 @@ const InboxView = ({onToast}) => {
         {label}
       </button>
     );
+    // Consistent action template for every event:
+    //   [ Primary action ] · [ Secondary: Reject (approvals) / Dismiss (alerts) / domain action ] · [ Open in {section} ]
+    const openIn = (label,nav,arg)=>btn(label,()=>{onNav&&onNav(nav,arg);});
     if(item.type==="dq_alert")
-      return <>{btn("Resolve",()=>setResolveOpen(true),true)}{btn("View in Data Quality",()=>{onNav&&onNav("quality");})}{btn("Dismiss",()=>dism(item.id))}</>;
-    if(item.type==="field_updated")
-      return <>{btn("Acknowledge",()=>ack(item.id),true)}{btn("Open Asset",()=>onToast("Opening asset","success"))}</>;
-    if(item.type==="assigned")
-      return <>{btn("View Asset",()=>onToast("Opening asset","success"),true)}{btn("Acknowledge",()=>ack(item.id))}</>;
-    if(item.type==="stewardship_request")
-      return <>{btn("Accept",()=>{const role=item.requestedRole==="Owner"?"owner":"steward";assignOwnership(item.asset.name,item.requestedBy,role);ack(item.id,`${item.requestedBy} added as ${item.requestedRole} of ${item.asset.name}`);},true)}{btn("Decline",()=>ack(item.id,"Request declined"),false,true)}</>;
-    if(item.type==="needs_attention")
-      return <>{btn("Assign Steward",()=>setAssignOpen(a=>!a),true)}{btn("Dismiss",()=>dism(item.id))}</>;
+      return <>{btn("Resolve",()=>setResolveOpen(true),true)}{btn("Dismiss",()=>dism(item.id))}{openIn("Open in Data Quality","quality")}</>;
     if(item.type==="policy_violation")
-      return <>{btn("Remediate",()=>setResolveOpen(true),true)}{btn("Request exception",()=>{pvSet(prev=>prev.map(v=>v.id===item.violId?{...v,status:"Exception Requested"}:v));ack(item.id,"Exception requested — sent to owner");})}{btn("View Policy",()=>{onNav&&onNav("policymanager",{policyId:item.policyId});})}</>;
+      return <>{btn("Remediate",()=>setResolveOpen(true),true)}{btn("Request exception",()=>{pvSet(prev=>prev.map(v=>v.id===item.violId?{...v,status:"Exception Requested"}:v));ack(item.id,"Exception requested — sent to owner");})}{openIn("Open in Policy Manager","policymanager",{policyId:item.policyId})}</>;
     if(item.type==="tag_review")
-      return <>{btn(item.tagType==="new_source_tag"?"Approve (add to vocabulary)":"Approve",()=>{
+      return <>{btn("Approve",()=>{
         if(item.tagType==="new_source_tag"){ tagCtx?.createTagDef({name:item.tagName,category:'business',description:'Promoted from source tag via Inbox.',propagationMode:'hierarchy',governanceRequired:false,managedBy:'Current User',color:'#fbbf24',sourceAliases:[item.tagName]}); tagCtx?.resolveInboxItem(item.tagInboxId,'promoted'); }
         else { tagCtx?.resolveInboxItem(item.tagInboxId,'approve'); }
         ack(item.id,`${item.tagName} approved`);
-      },true)}{btn("Reject",()=>{tagCtx?.resolveInboxItem(item.tagInboxId,'reject');ack(item.id,"Tag rejected");},false,true)}{btn("View in Tags",()=>{onNav&&onNav("tags");})}</>;
+      },true)}{btn("Reject",()=>{tagCtx?.resolveInboxItem(item.tagInboxId,'reject');ack(item.id,"Tag rejected");},false,true)}{openIn("Open in Classifications","tags")}</>;
     if(item.type==="term_review")
-      return <>{btn("Approve",()=>{setTermStatus(item.termId,"Approved");ack(item.id,`${item.asset.name} approved & published`);},true)}{btn("Send back",()=>{setTermStatus(item.termId,"Draft");ack(item.id,"Sent back to draft");})}{btn("View in Glossary",()=>{onNav&&onNav("glossary");})}</>;
+      return <>{btn("Approve",()=>{setTermStatus(item.termId,"Approved");ack(item.id,`${item.asset.name} approved & published`);},true)}{btn("Reject",()=>{setTermStatus(item.termId,"Draft");ack(item.id,"Term sent back to draft");},false,true)}{openIn("Open in Glossary","glossary")}</>;
     if(item.type==="certification_review")
-      return <>{btn("Certify",()=>{certifyByAsset(item.asset.name);certifyAsset(item.asset.name);ack(item.id,`${item.asset.name} certified`);},true)}{btn("Decline",()=>{certSet(prev=>prev.map(c=>c.asset===item.asset.name?{...c,status:"Rejected",certifier:null,date:null}:c));ack(item.id,"Certification declined");},false,true)}{btn("Defer",()=>dism(item.id))}</>;
+      return <>{btn("Certify",()=>{certifyByAsset(item.asset.name);certifyAsset(item.asset.name);ack(item.id,`${item.asset.name} certified`);},true)}{btn("Reject",()=>{certSet(prev=>prev.map(c=>c.asset===item.asset.name?{...c,status:"Rejected",certifier:null,date:null}:c));ack(item.id,"Certification rejected");},false,true)}{openIn("Open in Catalog","catalog")}</>;
+    if(item.type==="stewardship_request")
+      return <>{btn("Approve",()=>{const role=item.requestedRole==="Owner"?"owner":"steward";assignOwnership(item.asset.name,item.requestedBy,role);ack(item.id,`${item.requestedBy} added as ${item.requestedRole} of ${item.asset.name}`);},true)}{btn("Reject",()=>ack(item.id,"Request rejected"),false,true)}{openIn("Open in Catalog","catalog")}</>;
     if(item.type==="orphan_assignment")
-      return <>{btn("Assign Owner",()=>setAssignOpen(a=>!a),true)}{btn("Deprecate",()=>ack(item.id,"Asset deprecated"),false,true)}</>;
+      return <>{btn("Assign owner",()=>setAssignOpen(a=>!a),true)}{btn("Deprecate",()=>ack(item.id,"Asset deprecated"),false,true)}{openIn("Open in Catalog","catalog")}</>;
+    if(item.type==="needs_attention")
+      return <>{btn("Assign steward",()=>setAssignOpen(a=>!a),true)}{btn("Dismiss",()=>dism(item.id))}{openIn("Open in Catalog","catalog")}</>;
+    if(item.type==="field_updated")
+      return <>{btn("Acknowledge",()=>ack(item.id),true)}{openIn("Open in Catalog","catalog")}</>;
+    if(item.type==="assigned")
+      return <>{btn("Acknowledge",()=>ack(item.id),true)}{openIn("Open in Catalog","catalog")}</>;
     return null;
   };
 
