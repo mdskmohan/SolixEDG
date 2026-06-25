@@ -27376,30 +27376,38 @@ const InboxView = ({onToast}) => {
       {/* Topbar — breadcrumb only */}
       <Topbar breadcrumb={[{label:"Inbox"}]}/>
 
-      {/* Tab bar — tabs (list only) + filter icon + view toggle */}
-      <div style={{padding:"0 20px 0 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",flexShrink:0,background:T.bgSurface,minHeight:44}}>
-
-        {/* Underline tabs — list view only: two questions + archive */}
-        {viewMode==="list"&&(
-          <div style={{display:"flex",alignItems:"center"}}>
-            {[["action","Needs my action"],["activity","Activity"],["done","Done"]].map(([k,l])=>(
-              <button key={k} onClick={()=>{ setFilter(k); setSel(null); closeForms(); setFilterOpen(false); }}
-                style={{padding:"11px 14px",background:"transparent",border:"none",borderBottom:`2px solid ${filter===k?T.accent:"transparent"}`,color:filter===k?T.text:T.textMuted,fontSize:12.5,fontWeight:filter===k?600:400,cursor:"pointer",display:"flex",alignItems:"center",gap:5,transition:"all .12s",whiteSpace:"nowrap"}}>
+      {/* Primary toolbar — role lens (main filter) + search up top, then filter + view toggle */}
+      <div style={{padding:"8px 20px 8px 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:12,flexShrink:0,background:T.bgSurface,minHeight:46}}>
+        {/* Role lens — the main filter */}
+        <div style={{display:"flex",gap:1,background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,padding:2}}>
+          {[["all","All"],["steward","As Steward"],["owner","As Owner"]].map(([k,l])=>{
+            const on = roleScope===k;
+            const accent = k==="owner"?"#b45309":k==="steward"?"#0d9488":T.text;
+            const onBg   = k==="owner"?"rgba(180,83,9,0.12)":k==="steward"?"rgba(13,148,136,0.12)":T.bgSurface;
+            return (
+              <button key={k} onClick={()=>{ setRoleScope(k); setSel(null); }}
+                style={{padding:"5px 13px",borderRadius:5,background:on?onBg:"transparent",border:`1px solid ${on?(k==="all"?T.border:accent):"transparent"}`,color:on?accent:T.textMuted,fontSize:12,fontWeight:on?700:500,cursor:"pointer",transition:"all .12s",whiteSpace:"nowrap"}}>
                 {l}
-                {counts[k]>0&&<span style={{fontSize:10,fontWeight:700,borderRadius:10,padding:"1px 6px",
-                  background: k==="done"?"rgba(22,163,74,.1)":k==="action"?`${T.rose}18`:T.bgHover,
-                  color:      k==="done"?"#16a34a"           :k==="action"?T.rose        :T.textMuted}}>
-                  {counts[k]}
-                </span>}
               </button>
-            ))}
-          </div>
-        )}
+            );
+          })}
+        </div>
+
+        {/* Search — applies to list + kanban */}
+        <div style={{position:"relative",width:280}}>
+          <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,display:"flex",pointerEvents:"none"}}>
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.4"/><path d="M9.5 9.5l3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+          </span>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search inbox…"
+            style={{width:"100%",boxSizing:"border-box",padding:"6px 28px 6px 30px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12.5,outline:"none"}}
+            onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+          {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex",padding:2}}><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>}
+        </div>
 
         <div style={{flex:1}}/>
 
         {/* Filter icon — list + kanban */}
-        <div style={{position:"relative",marginRight:10}}>
+        <div style={{position:"relative"}}>
             <button onClick={()=>setFilterOpen(o=>!o)}
               style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,background:filterOpen||secFilterActive?T.accentDim:"transparent",border:`1px solid ${filterOpen||secFilterActive?T.accent:T.border}`,color:filterOpen||secFilterActive?T.accent:T.textSub,cursor:"pointer",fontSize:12,fontWeight:500,transition:"all .12s"}}>
               <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M1 3h12M3 7h8M5 11h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
@@ -27433,7 +27441,7 @@ const InboxView = ({onToast}) => {
           </div>
 
         {/* View toggle */}
-        <div style={{display:"flex",gap:1,background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,padding:2,marginRight:12}}>
+        <div style={{display:"flex",gap:1,background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,padding:2}}>
           {[["list",<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 4h10M2 7h10M2 10h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>],
             ["kanban",<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="3.5" height="10" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="5.25" y="2" width="3.5" height="7" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="9.5" y="2" width="3.5" height="8.5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>]
           ].map(([mode,icon])=>(
@@ -27445,35 +27453,22 @@ const InboxView = ({onToast}) => {
         </div>
       </div>
 
-      {/* Secondary toolbar — role lens (below the tabs) + search (both views) */}
-      <div style={{padding:"8px 20px 8px 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:12,flexShrink:0,background:T.bgSurface,minHeight:40}}>
-        {(viewMode==="kanban"||filter==="action")?(
-          <div style={{display:"flex",gap:1,background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,padding:2}}>
-            {[["all","All"],["steward","As Steward"],["owner","As Owner"]].map(([k,l])=>{
-              const on = roleScope===k;
-              const accent = k==="owner"?"#b45309":k==="steward"?"#0d9488":T.text;
-              const onBg   = k==="owner"?"rgba(180,83,9,0.12)":k==="steward"?"rgba(13,148,136,0.12)":T.bgSurface;
-              return (
-                <button key={k} onClick={()=>{ setRoleScope(k); setSel(null); }}
-                  style={{padding:"4px 11px",borderRadius:5,background:on?onBg:"transparent",border:`1px solid ${on?(k==="all"?T.border:accent):"transparent"}`,color:on?accent:T.textMuted,fontSize:11.5,fontWeight:on?700:500,cursor:"pointer",transition:"all .12s",whiteSpace:"nowrap"}}>
-                  {l}
-                </button>
-              );
-            })}
-          </div>
-        ):<div/>}
-        <div style={{flex:1}}/>
-        {/* Search — applies to list + kanban */}
-        <div style={{position:"relative",width:260}}>
-          <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,display:"flex",pointerEvents:"none"}}>
-            <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.4"/><path d="M9.5 9.5l3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-          </span>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search inbox…"
-            style={{width:"100%",boxSizing:"border-box",padding:"6px 28px 6px 30px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12.5,outline:"none"}}
-            onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-          {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex",padding:2}}><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>}
+      {/* Tabs — two questions + archive (below the filter, list view only) */}
+      {viewMode==="list"&&(
+        <div style={{padding:"0 20px 0 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",flexShrink:0,background:T.bgSurface,minHeight:42}}>
+          {[["action","Action needed"],["activity","Activity"],["done","Done"]].map(([k,l])=>(
+            <button key={k} onClick={()=>{ setFilter(k); setSel(null); closeForms(); setFilterOpen(false); }}
+              style={{padding:"11px 14px",background:"transparent",border:"none",borderBottom:`2px solid ${filter===k?T.accent:"transparent"}`,color:filter===k?T.text:T.textMuted,fontSize:12.5,fontWeight:filter===k?600:400,cursor:"pointer",display:"flex",alignItems:"center",gap:5,transition:"all .12s",whiteSpace:"nowrap"}}>
+              {l}
+              {counts[k]>0&&<span style={{fontSize:10,fontWeight:700,borderRadius:10,padding:"1px 6px",
+                background: k==="done"?"rgba(22,163,74,.1)":k==="action"?`${T.rose}18`:T.bgHover,
+                color:      k==="done"?"#16a34a"           :k==="action"?T.rose        :T.textMuted}}>
+                {counts[k]}
+              </span>}
+            </button>
+          ))}
         </div>
-      </div>
+      )}
 
       {/* ── Main content + unified detail panel ── */}
       <div style={{flex:1,display:"flex",overflow:"hidden"}}>
