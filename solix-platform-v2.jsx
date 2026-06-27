@@ -12597,7 +12597,7 @@ const CONTRACT_BY_ASSET = {
   orders:{
     name:"orders_contract", version:"2.1.0", status:"Active", owners:["maya.chen","dev.patel"],
     description:"Governance agreement for the commerce.orders fact table between the Commerce data team (producer) and Finance/BI consumers.",
-    updated:"2d ago", lastRun:"Today, 05:30 AM", schedule:{frequency:"Daily",time:"05:00",tz:"UTC"},
+    updated:"2d ago", lastRun:"Today, 05:30 AM", schedule:{freq:"daily",time:"05:00",tz:"UTC",enabled:true},
     schema:[
       {name:"order_id",type:"BIGINT",constraint:"NOT NULL · UNIQUE",required:true},
       {name:"customer_id",type:"BIGINT",constraint:"NOT NULL",required:true},
@@ -12606,10 +12606,11 @@ const CONTRACT_BY_ASSET = {
       {name:"created_at",type:"TIMESTAMP",constraint:"NOT NULL",required:true},
     ],
     semantics:[
-      {key:"owners",rule:"Owners must be set"},
-      {key:"description",rule:"Description required"},
-      {key:"domain",rule:"Domain assigned"},
-      {key:"tier",rule:"Tier defined"},
+      {key:"owners",rule:"Owners must be assigned"},
+      {key:"stewards",rule:"Stewards must be assigned"},
+      {key:"description",rule:"Description must be provided"},
+      {key:"domain",rule:"Domain must be assigned"},
+      {key:"tier",rule:"Tier must be classified"},
     ],
     // quality assertions link to live DQ test cases by id — pass is computed from the test's real status
     quality:[
@@ -12639,13 +12640,13 @@ const CONTRACT_BY_ASSET = {
     versions:[
       {version:"2.0.0", at:"3 weeks ago", by:"maya.chen", note:"Tightened SLA latency, added GDPR policy",
         schema:[{name:"order_id",type:"BIGINT",constraint:"NOT NULL · UNIQUE",required:true},{name:"customer_id",type:"BIGINT",constraint:"NOT NULL",required:true},{name:"amount",type:"DECIMAL(12,2)",constraint:"≥ 0",required:true},{name:"created_at",type:"TIMESTAMP",constraint:"NOT NULL",required:true}],
-        semantics:[{key:"owners",rule:"Owners must be set"},{key:"description",rule:"Description required"},{key:"domain",rule:"Domain assigned"}],
+        semantics:[{key:"owners",rule:"Owners must be assigned"},{key:"description",rule:"Description must be provided"},{key:"domain",rule:"Domain must be assigned"}],
         quality:[{tcId:"tc14",name:"order_id unique"},{tcId:"tc4",name:"customer_id not null"},{tcId:"tc1",name:"total_amount in range 0–100,000"},{tcId:"tc3",name:"status in allowed set"}],
         policies:[{policyId:1,name:"PII Data Handling"}],
         sla:{refreshInterval:1,refreshUnit:"Day",latencyValue:2,latencyUnit:"Hours",availabilityTime:"08:00",availabilityTz:"UTC",retentionPeriod:365,retentionUnit:"Days",refreshColumn:"updated_at"}},
       {version:"1.0.0", at:"3 months ago", by:"dev.patel", note:"Initial contract",
         schema:[{name:"order_id",type:"BIGINT",constraint:"NOT NULL",required:true},{name:"amount",type:"DECIMAL(12,2)",constraint:"≥ 0",required:true},{name:"created_at",type:"TIMESTAMP",constraint:"NOT NULL",required:true}],
-        semantics:[{key:"owners",rule:"Owners must be set"},{key:"description",rule:"Description required"}],
+        semantics:[{key:"owners",rule:"Owners must be assigned"},{key:"description",rule:"Description must be provided"}],
         quality:[{tcId:"tc14",name:"order_id unique"},{tcId:"tc1",name:"total_amount in range 0–100,000"}],
         policies:[],
         sla:{refreshInterval:1,refreshUnit:"Day",latencyValue:4,latencyUnit:"Hours",availabilityTime:"09:00",availabilityTz:"UTC",retentionPeriod:365,retentionUnit:"Days",refreshColumn:"updated_at"}},
@@ -12685,6 +12686,7 @@ function validateContract(contract,asset){
   const semantics=(contract.semantics||[]).map(s=>{
     let pass=s.pass!==false;
     if(s.key==="owners")      pass=!!((asset.owners&&asset.owners.length)||asset.owner);
+    else if(s.key==="stewards") pass=!!((asset.stewards&&asset.stewards.length)||asset.steward);
     else if(s.key==="description") pass=!!(asset.description&&asset.description.length>5);
     else if(s.key==="domain") pass=!!asset.domain;
     else if(s.key==="tier")   pass=asset.tier!=null;
@@ -12759,16 +12761,10 @@ const AssetContractTab = ({asset,onToast})=>{
     if(res.allPass) onToast&&onToast("Validation passed — all checks green","success");
     else onToast&&onToast(`Validation ${status==="Failed"?"failed":"partially failed"} — ${res.failedSections.length} check(s) failing${incidentOpened?" · incident opened + alert sent":""}`,"error");
   };
-  const newVersion=()=>{
-    const parts=(contract.version||"1.0.0").split(".").map(n=>parseInt(n)||0);
-    const nv=`${parts[0]}.${parts[1]+1}.0`;
-    const snap={version:contract.version,at:contract.updated||"earlier",by:(contract.owners||[])[0]||"—",note:`Superseded by v${nv}`,schema:contract.schema,semantics:contract.semantics,quality:contract.quality,policies:contract.policies,sla:contract.sla};
-    setContract(c=>({...c,version:nv,status:"Draft",updated:"Just now",versions:[snap,...(c.versions||[])]}));
-    onToast&&onToast(`Created draft v${nv} — previous version archived in history`,"success");
-  };
   const saveEdit=(updated)=>{ setContract(c=>({...updated,version:c.version,status:c.status,versions:c.versions,schedule:updated.schedule??c.schedule,updated:"Just now"})); setWizard(false); onToast&&onToast("Contract updated","success"); };
   const doDelete=()=>{ setContractState(null); CONTRACT_STORE[asset.name]=null; setDeleteConfirm(false); onToast&&onToast("Contract deleted","error"); };
-  const saveSchedule=(sched)=>{ setContract(c=>({...c,schedule:sched})); setScheduleModal(false); onToast&&onToast("Validation schedule updated","success"); };
+  const saveSchedule=(sched)=>{ setContract(c=>({...c,schedule:sched,validationMode:sched.freq==="once"?"ondemand":"scheduled"})); setScheduleModal(false); onToast&&onToast(sched.enabled===false?"Validation schedule saved (paused)":"Validation schedule updated","success"); };
+  const removeSchedule=()=>{ setContract(c=>({...c,schedule:null,validationMode:"ondemand"})); setScheduleModal(false); onToast&&onToast("Schedule removed — validate on demand","info"); };
 
   // ── Empty state ──
   if(!contract) return (
@@ -12823,7 +12819,6 @@ const AssetContractTab = ({asset,onToast})=>{
           <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6,maxWidth:680}}>{contract.description}</div>
         </div>
         <div style={{display:"flex",gap:8,flexShrink:0,alignItems:"center"}}>
-          <Btn small ghost onClick={newVersion}>New Version</Btn>
           <div style={{position:"relative"}}>
             <button onClick={()=>setSettingsOpen(o=>!o)} title="Contract settings" style={{width:30,height:30,borderRadius:8,background:settingsOpen?T.bgHover:"transparent",border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
               onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;e.currentTarget.style.color=T.text;}} onMouseLeave={e=>{if(!settingsOpen){e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textSub;}}}>
@@ -12882,7 +12877,7 @@ const AssetContractTab = ({asset,onToast})=>{
           </div>
           <div style={{fontSize:10.5,color:T.textMuted,marginTop:8,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
             <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><circle cx="8" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5.5v3l2 1.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-            {(contract.validationMode==="scheduled"&&contract.schedule)?<span>Auto-validates {contract.schedule.frequency.toLowerCase()} at {contract.schedule.time} {contract.schedule.tz}</span>:<span>On-demand validation — run from the ⋯ menu</span>}
+            {(contract.validationMode==="scheduled"&&contract.schedule&&contract.schedule.enabled!==false)?<span>Auto-validates {contractScheduleLabel(contract.schedule)}</span>:(contract.validationMode==="scheduled"&&contract.schedule)?<span>Schedule paused — run on demand from the ⋯ menu</span>:<span>On-demand validation — run from the ⋯ menu</span>}
             <span style={{opacity:.6}}>·</span><span>Last validated {contract.lastRun}</span>
           </div>
         </div>
@@ -13022,44 +13017,42 @@ const AssetContractTab = ({asset,onToast})=>{
           </div>}
     </Section>
 
-    {/* ── Security / classification ── */}
-    <Section title="Security">
-      <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>Data classification and access expectations for this dataset.</div>
-      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:contract.security?.accessNote?10:0}}>
-        <span style={{fontSize:11,color:T.textMuted,minWidth:90}}>Classification</span>
-        {(()=>{const cls=contract.security?.classification;const sens=["PII","PHI","PCI-DSS","Confidential","Restricted"].includes(cls);return <span style={{fontSize:11.5,fontWeight:700,padding:"3px 10px",borderRadius:6,background:sens?T.roseDim:T.bgElevated,color:sens?T.rose:T.textSub,border:`1px solid ${sens?T.rose+"33":T.border}`}}>{cls||"Unclassified"}</span>;})()}
-      </div>
-      {contract.security?.accessNote&&<div style={{fontSize:12,color:T.textSub,lineHeight:1.5}}>{contract.security.accessNote}</div>}
-    </Section>
-
-    {/* ── SLA ── */}
+    {/* ── SLA — each metric explained ── */}
     <Section title="SLA">
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 28px"}}>
-        <KV k="Refresh Frequency" v={contract.sla.refreshInterval?`Every ${contract.sla.refreshInterval} ${contract.sla.refreshUnit}${contract.sla.refreshInterval>1?"s":""}`:"—"}/>
-        <KV k="Max Latency" v={contract.sla.latencyValue!=null?`${contract.sla.latencyValue} ${contract.sla.latencyUnit}`:"—"}/>
-        <KV k="Availability" v={contract.sla.availabilityTime?`${contract.sla.availabilityTime} ${contract.sla.availabilityTz}`:"—"}/>
-        <KV k="Retention" v={contract.sla.retentionPeriod!=null?`${contract.sla.retentionPeriod} ${contract.sla.retentionUnit}`:"—"}/>
-        <KV k="Refresh Column" v={contract.sla.refreshColumn||"—"}/>
+      <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>The service-level guarantees consumers can rely on. Each metric is explained below.</div>
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {[
+          {k:"Refresh Frequency", v:contract.sla.refreshInterval?`Every ${contract.sla.refreshInterval} ${contract.sla.refreshUnit}${contract.sla.refreshInterval>1?"s":""}`:"—", d:"How often the producer promises to update this data."},
+          {k:"Max Latency", v:contract.sla.latencyValue!=null?`${contract.sla.latencyValue} ${contract.sla.latencyUnit}`:"—", d:"The longest acceptable delay between data being generated at the source and becoming available here."},
+          {k:"Availability", v:contract.sla.availabilityTime?`${contract.sla.availabilityTime} ${contract.sla.availabilityTz}`:"—", d:"The time of day by which the refreshed data is guaranteed to be ready for consumers."},
+          {k:"Retention", v:contract.sla.retentionPeriod!=null?`${contract.sla.retentionPeriod} ${contract.sla.retentionUnit}`:"—", d:"How long the data is kept before it is archived or purged."},
+          {k:"Refresh Column", v:contract.sla.refreshColumn||"—", d:"The timestamp column used to measure freshness and detect whether a refresh actually landed."},
+        ].map(row=>(
+          <div key={row.k} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16,paddingBottom:10,borderBottom:`1px solid ${T.border}`}}>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{row.k}</div>
+              <div style={{fontSize:11,color:T.textMuted,marginTop:2,lineHeight:1.5,maxWidth:520}}>{row.d}</div>
+            </div>
+            <span style={{...mono,fontSize:12.5,fontWeight:600,color:T.text,whiteSpace:"nowrap",flexShrink:0}}>{row.v}</span>
+          </div>
+        ))}
       </div>
     </Section>
 
     {/* ── Terms of Use ── */}
     {contract.terms&&<Section title="Terms of Use">
-      {contract.terms.purpose&&<div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6,marginBottom:14}}>{contract.terms.purpose}</div>}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16}}>
+      {contract.terms.purpose&&<div style={{marginBottom:14}}>
+        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.5,marginBottom:5}}>Purpose</div>
+        <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6}}>{contract.terms.purpose}</div>
+      </div>}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
         <div>
-          <div style={{fontSize:10.5,fontWeight:700,color:"#16a34a",textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Allowed</div>
+          <div style={{fontSize:10.5,fontWeight:700,color:"#16a34a",textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Allowed use cases</div>
           {(contract.terms.allowed||[]).map((a,i)=><div key={i} style={{fontSize:12,color:T.textSub,marginBottom:5}}>✓ {a}</div>)}
         </div>
         <div>
-          <div style={{fontSize:10.5,fontWeight:700,color:T.rose,textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Disallowed</div>
+          <div style={{fontSize:10.5,fontWeight:700,color:T.rose,textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Disallowed use cases</div>
           {(contract.terms.disallowed||[]).map((a,i)=><div key={i} style={{fontSize:12,color:T.textSub,marginBottom:5}}>✕ {a}</div>)}
-        </div>
-        <div>
-          <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Compliance</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-            {(contract.terms.compliance||[]).map((c,i)=><span key={i} style={{fontSize:11,fontWeight:600,padding:"2px 9px",borderRadius:99,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}33`}}>{c}</span>)}
-          </div>
         </div>
       </div>
     </Section>}
@@ -13068,38 +13061,60 @@ const AssetContractTab = ({asset,onToast})=>{
     {/* ── Version History tab ── */}
     {tab==="versions"&&(
       <Section title="Version History">
-      <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>Every revision is kept. Each entry shows what changed from the previous version.</div>
+      <div style={{fontSize:11.5,color:T.textMuted,marginBottom:14}}>Every revision is kept as a full snapshot. The newest version is current; each card shows what changed from the version before it.</div>
       <div style={{display:"flex",flexDirection:"column",gap:0}}>
         {allVersions.map((ver,i)=>{
           const older=allVersions[i+1];
           const changes=older?diffContracts(older,ver):[];
           const isLast=i===allVersions.length-1;
-          const dc={add:{c:"#16a34a",s:"+"},remove:{c:T.rose,s:"−"},change:{c:T.amber,s:"~"}};
-          return <div key={ver.version+i} style={{display:"flex",gap:12,paddingBottom:isLast?0:16}}>
+          const dc={add:{c:"#16a34a",s:"+",label:"added"},remove:{c:T.rose,s:"−",label:"removed"},change:{c:T.amber,s:"~",label:"changed"}};
+          const counts={add:changes.filter(c=>c.t==="add").length,remove:changes.filter(c=>c.t==="remove").length,change:changes.filter(c=>c.t==="change").length};
+          const snap=[
+            {label:"Schema",val:`${(ver.schema||[]).length} columns`},
+            {label:"Quality",val:`${(ver.quality||[]).length} tests`},
+            {label:"Policies",val:`${(ver.policies||[]).length} policies`},
+            {label:"SLA refresh",val:ver.sla?.refreshInterval?`every ${ver.sla.refreshInterval} ${ver.sla.refreshUnit}${ver.sla.refreshInterval>1?"s":""}`:"—"},
+          ];
+          return <div key={ver.version+i} style={{display:"flex",gap:14,paddingBottom:isLast?0:18}}>
             {/* rail */}
             <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0}}>
-              <span style={{width:11,height:11,borderRadius:"50%",background:ver.current?T.accent:T.bgElevated,border:`2px solid ${ver.current?T.accent:T.borderLight}`,marginTop:3}}/>
-              {!isLast&&<span style={{width:1.5,flex:1,background:T.border,marginTop:3}}/>}
+              <span style={{width:13,height:13,borderRadius:"50%",background:ver.current?T.accent:T.bgSurface,border:`2px solid ${ver.current?T.accent:T.borderLight}`,marginTop:5}}/>
+              {!isLast&&<span style={{width:2,flex:1,background:T.border,marginTop:4}}/>}
             </div>
-            <div style={{flex:1,minWidth:0,paddingBottom:8}}>
+            {/* card */}
+            <div style={{flex:1,minWidth:0,background:T.bgElevated,border:`1px solid ${ver.current?T.accent+"44":T.border}`,borderRadius:11,padding:"13px 15px"}}>
               <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                <span style={{...mono,fontSize:13,fontWeight:700,color:T.text}}>v{ver.version}</span>
+                <span style={{...mono,fontSize:14,fontWeight:700,color:T.text}}>v{ver.version}</span>
                 {ver.current&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}33`}}>CURRENT</span>}
+                <span style={{flex:1}}/>
                 <span style={{fontSize:11,color:T.textMuted}}>{ver.by} · {ver.at}</span>
               </div>
-              {ver.note&&<div style={{fontSize:11.5,color:T.textSub,marginTop:3}}>{ver.note}</div>}
-              {/* diff */}
-              <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:4}}>
+              {ver.note&&<div style={{fontSize:12,color:T.textSub,marginTop:5,lineHeight:1.5}}>{ver.note}</div>}
+              {/* change summary chips */}
+              {!isLast&&changes.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:9}}>
+                {["add","remove","change"].map(t=>counts[t]>0?<span key={t} style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:5,background:dc[t].c+"14",color:dc[t].c,border:`1px solid ${dc[t].c}33`}}>{counts[t]} {dc[t].label}</span>:null)}
+              </div>}
+              {/* detailed diff */}
+              <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:4}}>
                 {isLast
-                  ? <div style={{fontSize:11.5,color:T.textMuted,fontStyle:"italic"}}>Initial version</div>
+                  ? <div style={{fontSize:11.5,color:T.textMuted,fontStyle:"italic"}}>Initial version — baseline of the contract.</div>
                   : changes.length===0
-                    ? <div style={{fontSize:11.5,color:T.textMuted,fontStyle:"italic"}}>No definition changes</div>
+                    ? <div style={{fontSize:11.5,color:T.textMuted,fontStyle:"italic"}}>No definition changes from the previous version.</div>
                     : changes.map((ch,k)=>(
                       <div key={k} style={{display:"flex",alignItems:"center",gap:8,fontSize:12}}>
                         <span style={{...mono,fontWeight:800,color:dc[ch.t].c,width:12,textAlign:"center",flexShrink:0}}>{dc[ch.t].s}</span>
                         <span style={{color:T.textSub}}>{ch.label}</span>
                       </div>
                     ))}
+              </div>
+              {/* snapshot summary */}
+              <div style={{display:"flex",gap:20,flexWrap:"wrap",marginTop:12,paddingTop:11,borderTop:`1px solid ${T.border}`}}>
+                {snap.map(s=>(
+                  <div key={s.label}>
+                    <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.5}}>{s.label}</div>
+                    <div style={{fontSize:11.5,color:T.textSub,marginTop:2}}>{s.val}</div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>;
@@ -13112,7 +13127,7 @@ const AssetContractTab = ({asset,onToast})=>{
     {wizard&&<ContractWizard asset={asset} onToast={onToast} existing={wizard==="edit"?contract:null} onClose={()=>setWizard(false)} onSubmit={(c)=>{ wizard==="edit"?saveEdit(c):setContract({...c,versions:[]}); setWizard(false); }}/>}
 
     {/* ── Schedule validation modal ── */}
-    {scheduleModal&&createPortal(<ContractScheduleModal schedule={contract.schedule} onClose={()=>setScheduleModal(false)} onSave={saveSchedule}/>,document.body)}
+    {scheduleModal&&createPortal(<ContractScheduleModal schedule={contract.schedule} onClose={()=>setScheduleModal(false)} onSave={saveSchedule} onRemove={removeSchedule}/>,document.body)}
 
     {/* ── Delete confirm ── */}
     {deleteConfirm&&createPortal(
@@ -13136,32 +13151,110 @@ const AssetContractTab = ({asset,onToast})=>{
   </div>;
 };
 
-// Schedule validation modal — when the contract is auto-validated
-const ContractScheduleModal = ({schedule,onClose,onSave})=>{
-  const [frequency,setFrequency]=useState(schedule?.frequency||"Daily");
+// Schedule validation modal — identical pattern to the Connectors “Sync Schedule”
+const ContractScheduleModal = ({schedule,onClose,onSave,onRemove})=>{
+  const [freq,setFreq]=useState(schedule?.freq||"daily");
   const [time,setTime]=useState(schedule?.time||"05:00");
+  const [day,setDay]=useState(schedule?.day||"monday");
+  const [cron,setCron]=useState(schedule?.cron||"0 5 * * *");
   const [tz,setTz]=useState(schedule?.tz||"UTC");
-  const Lbl=({children})=><div style={{fontSize:11,fontWeight:700,color:T.textSub,marginBottom:7}}>{children}</div>;
-  const sel={width:"100%",boxSizing:"border-box",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none"};
+  const [enabled,setEnabled]=useState(schedule?.enabled!==false);
+  const sched={freq,time,day,cron,tz,enabled};
+  const cronStr=contractCron(sched);
+  const nextRunLabel=()=>{
+    if(freq==="once") return "After saving — one time only";
+    if(freq==="hourly") return `Next run in ~1 hour (${tz})`;
+    return `Next run: tomorrow ${freq==="weekly"?`(${day})`:""} ${time} ${tz}`;
+  };
   return (
     <>
-      <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:1100,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}/>
-      <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:1101,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:16,boxShadow:"0 32px 80px rgba(0,0,0,.45)",width:440,overflow:"hidden"}}>
-        <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,fontSize:14,fontWeight:700,color:T.text}}>Schedule validation</div>
-        <div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:16}}>
-          <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6}}>Choose how often this contract is automatically validated against the live asset. Results update the contract's Health.</div>
-          <div><Lbl>Frequency</Lbl>
-            <select value={frequency} onChange={e=>setFrequency(e.target.value)} style={sel}>{["Hourly","Daily","Weekly","Monthly"].map(o=><option key={o}>{o}</option>)}</select>
+      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:1300}}/>
+      <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:460,maxWidth:"94vw",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:14,zIndex:1301,boxShadow:"0 20px 60px rgba(0,0,0,.4)",padding:"24px 24px 20px"}}>
+        {/* Header */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:4}}>Validation Schedule</div>
+            <div style={{fontSize:12,color:T.textMuted}}>How often this contract is automatically validated against the live asset.</div>
           </div>
-          {frequency!=="Hourly"&&<div style={{display:"flex",gap:12}}>
-            <div style={{flex:1}}><Lbl>Time</Lbl><input value={time} onChange={e=>setTime(e.target.value)} placeholder="05:00" style={sel}/></div>
-            <div style={{flex:1}}><Lbl>Timezone</Lbl><select value={tz} onChange={e=>setTz(e.target.value)} style={sel}>{["UTC","America/New_York","Europe/London","Asia/Kolkata"].map(o=><option key={o}>{o}</option>)}</select></div>
-          </div>}
-          <div style={{fontSize:11.5,color:T.textSub,padding:"9px 12px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>Validates <b style={{color:T.text}}>{frequency.toLowerCase()}</b>{frequency!=="Hourly"?<> at <b style={{color:T.text}}>{time} {tz}</b></>:""}.</div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:11,color:enabled?T.accent:T.textMuted,fontWeight:600}}>{enabled?"Enabled":"Paused"}</span>
+              <div onClick={()=>setEnabled(v=>!v)} style={{width:32,height:18,borderRadius:9,background:enabled?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
+                <div style={{position:"absolute",top:2,left:enabled?14:2,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
+              </div>
+            </div>
+            <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:18,lineHeight:1,padding:2}}>×</button>
+          </div>
         </div>
-        <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8}}>
-          <Btn small ghost onClick={onClose}>Cancel</Btn>
-          <Btn small variant="primary" onClick={()=>onSave({frequency,time,tz})}>Save schedule</Btn>
+        {/* Frequency */}
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Frequency</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6}}>
+            {CONTRACT_SCHED_FREQS.map(f=>(
+              <button key={f.k} onClick={()=>setFreq(f.k)}
+                style={{padding:"8px 4px",borderRadius:8,border:`1.5px solid ${freq===f.k?T.accent:T.border}`,background:freq===f.k?T.accentDim:"transparent",color:freq===f.k?T.accent:T.textSub,fontSize:11.5,fontWeight:freq===f.k?600:400,cursor:"pointer",fontFamily:"inherit",transition:"all .12s"}}>
+                {f.l}
+              </button>
+            ))}
+          </div>
+        </div>
+        {/* Time picker */}
+        {(freq==="daily"||freq==="weekly")&&(
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Run At</div>
+            <input type="time" value={time} onChange={e=>setTime(e.target.value)}
+              style={{padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",fontFamily:"'Geist Mono',monospace",width:"100%",boxSizing:"border-box"}}/>
+          </div>
+        )}
+        {/* Day picker */}
+        {freq==="weekly"&&(
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Day of Week</div>
+            <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+              {CONTRACT_WEEKDAYS.map(d=>(
+                <button key={d} onClick={()=>setDay(d)}
+                  style={{padding:"5px 10px",borderRadius:6,border:`1.5px solid ${day===d?T.accent:T.border}`,background:day===d?T.accentDim:"transparent",color:day===d?T.accent:T.textSub,fontSize:11,fontWeight:day===d?600:400,cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize"}}>
+                  {d.slice(0,3)}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {/* Custom cron */}
+        {freq==="custom"&&(
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Cron Expression</div>
+            <input value={cron} onChange={e=>setCron(e.target.value)} placeholder="0 5 * * 1-5"
+              style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box"}}/>
+            <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>Standard 5-field cron: minute hour day month weekday</div>
+          </div>
+        )}
+        {/* Timezone */}
+        {freq!=="once"&&(
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Timezone</div>
+            <select value={tz} onChange={e=>setTz(e.target.value)}
+              style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
+              {CONTRACT_TZ_OPTS.map(z=><option key={z} value={z}>{z}</option>)}
+            </select>
+          </div>
+        )}
+        {/* Preview */}
+        {freq!=="once"?(
+          <div style={{padding:"10px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,marginBottom:18}}>
+            <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Cron preview</div>
+            <div style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.accent,marginBottom:4}}>{cronStr}</div>
+            <div style={{fontSize:11,color:T.textMuted}}>Next run: <strong style={{color:T.text}}>{nextRunLabel()}</strong></div>
+          </div>
+        ):(
+          <div style={{padding:"10px 14px",borderRadius:8,background:`${T.amber}0a`,border:`1px solid ${T.amber}30`,marginBottom:18,fontSize:11.5,color:T.textSub,lineHeight:1.5}}>
+            This contract will validate one time immediately after saving. No recurring schedule will be set.
+          </div>
+        )}
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+          {schedule&&onRemove&&<button onClick={onRemove} style={{padding:"8px 14px",borderRadius:8,border:`1px solid ${T.rose}40`,background:"transparent",color:T.rose,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Remove</button>}
+          <button onClick={onClose} style={{padding:"8px 16px",borderRadius:8,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+          <button onClick={()=>onSave(sched)} style={{padding:"8px 20px",borderRadius:8,border:"none",background:T.accent,color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Save Schedule</button>
         </div>
       </div>
     </>
@@ -13169,21 +13262,40 @@ const ContractScheduleModal = ({schedule,onClose,onSave})=>{
 };
 
 // Add/Edit-contract wizard (UI-based, no YAML — mirrors OpenMetadata)
-const CONTRACT_SEMANTIC_RULES=["Owners must be set","Description required","Domain assigned","Tier defined","Tags present"];
-const SEMANTIC_KEY={"Owners must be set":"owners","Description required":"description","Domain assigned":"domain","Tier defined":"tier","Tags present":"tags"};
-const CONTRACT_COMPLIANCE=["GDPR","HIPAA","SOC2","PCI-DSS","CCPA"];
-const CONTRACT_CLASSIFICATIONS=["Internal","Confidential","Restricted","PII","PHI","PCI-DSS"];
+// Standard governance metadata rules — consistent "<field> must be <verb>" wording, covering the full set we validate.
+const CONTRACT_SEMANTIC_RULES=["Owners must be assigned","Stewards must be assigned","Description must be provided","Domain must be assigned","Tier must be classified","Tags must be applied"];
+const SEMANTIC_KEY={"Owners must be assigned":"owners","Stewards must be assigned":"stewards","Description must be provided":"description","Domain must be assigned":"domain","Tier must be classified":"tier","Tags must be applied":"tags"};
 const CONTRACT_SECTIONS=[
   {key:"details",label:"Contract Details"},
   {key:"schema",label:"Schema"},
   {key:"semantics",label:"Semantics"},
   {key:"quality",label:"Quality"},
   {key:"policies",label:"Policies"},
-  {key:"security",label:"Security"},
   {key:"sla",label:"SLA"},
   {key:"terms",label:"Terms of Use"},
   {key:"validation",label:"Validation"},
 ];
+// ── Validation schedule — same vocabulary & cron builder as the Connectors “Sync Schedule” ──
+const CONTRACT_SCHED_FREQS=[{k:"once",l:"Run Once"},{k:"hourly",l:"Hourly"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"custom",l:"Custom"}];
+const CONTRACT_TZ_OPTS=["UTC","US/Eastern","US/Central","US/Pacific","Europe/London","Asia/Kolkata","Asia/Singapore"];
+const CONTRACT_WEEKDAYS=["monday","tuesday","wednesday","thursday","friday","saturday","sunday"];
+function contractCron(s){
+  if(!s) return "";
+  if(s.freq==="once")   return "— run once —";
+  if(s.freq==="hourly") return "0 * * * *";
+  const [h,m]=(s.time||"05:00").split(":");
+  if(s.freq==="daily")  return `${m||"0"} ${h||"5"} * * *`;
+  if(s.freq==="weekly"){const days={monday:1,tuesday:2,wednesday:3,thursday:4,friday:5,saturday:6,sunday:0};return `${m||"0"} ${h||"5"} * * ${days[s.day]??1}`;}
+  return s.cron||"0 5 * * *";
+}
+function contractScheduleLabel(s){
+  if(!s) return "";
+  if(s.freq==="once")   return "once, on demand";
+  if(s.freq==="hourly") return `hourly (${s.tz||"UTC"})`;
+  if(s.freq==="custom") return `on cron ${s.cron||"0 5 * * *"} (${s.tz||"UTC"})`;
+  if(s.freq==="weekly") return `every ${s.day||"monday"} at ${s.time||"05:00"} ${s.tz||"UTC"}`;
+  return `daily at ${s.time||"05:00"} ${s.tz||"UTC"}`;
+}
 const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
   const cols=(typeof ASSET_COLUMNS!=="undefined" && ASSET_COLUMNS[asset.name])||[];
   const assetCases=(typeof DQ_TEST_CASES!=="undefined"?DQ_TEST_CASES:[]).filter(t=>t.table.endsWith("."+asset.name)||t.table===asset.name);
@@ -13196,17 +13308,14 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
   const [name,setName]=useState(existing?.name||`${asset.name}_contract`);
   const [desc,setDesc]=useState(existing?.description||"");
   const [schemaCols,setSchemaCols]=useState(existing?existing.schema.map(c=>c.name):cols.slice(0,5));
-  const [semantics,setSemantics]=useState(existing?existing.semantics.filter(s=>s.key!=="custom").map(s=>s.rule):["Owners must be set","Description required"]);
-  const [customRules,setCustomRules]=useState(existing?existing.semantics.filter(s=>s.key==="custom").map(s=>s.rule):[]);
-  const [customInput,setCustomInput]=useState("");
+  const [semantics,setSemantics]=useState(existing?existing.semantics.filter(s=>s.key&&s.key!=="custom"&&CONTRACT_SEMANTIC_RULES.includes(s.rule)).map(s=>s.rule):["Owners must be assigned","Description must be provided"]);
   const [quality,setQuality]=useState(existing?existing.quality.map(q=>q.tcId).filter(Boolean):assetCases.slice(0,4).map(t=>t.id));
+  const [qualitySearch,setQualitySearch]=useState("");
   const [policies,setPolicies]=useState(existing?.policies?existing.policies.map(p=>p.policyId):[]);
-  const [classification,setClassification]=useState(existing?.security?.classification||"Internal");
-  const [accessNote,setAccessNote]=useState(existing?.security?.accessNote||"");
+  const [policySearch,setPolicySearch]=useState("");
   const [termsPurpose,setTermsPurpose]=useState(existing?.terms?.purpose||"");
   const [termsAllowed,setTermsAllowed]=useState(existing?.terms?.allowed||["Internal analytics","Reporting"]);
   const [termsDisallowed,setTermsDisallowed]=useState(existing?.terms?.disallowed||["External redistribution"]);
-  const [compliance,setCompliance]=useState(existing?.terms?.compliance||["GDPR"]);
   const [refreshInterval,setRefreshInterval]=useState(existing?.sla?.refreshInterval??1);
   const [refreshUnit,setRefreshUnit]=useState(existing?.sla?.refreshUnit||"Day");
   const [latencyValue,setLatencyValue]=useState(existing?.sla?.latencyValue??2);
@@ -13217,9 +13326,12 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
   const [retentionUnit,setRetentionUnit]=useState(existing?.sla?.retentionUnit||"Days");
   const [refreshColumn,setRefreshColumn]=useState(existing?.sla?.refreshColumn||"");
   const [validationMode,setValidationMode]=useState(existing?.validationMode||(existing?.schedule?"scheduled":"ondemand"));
-  const [schedFreq,setSchedFreq]=useState(existing?.schedule?.frequency||"Daily");
+  const [schedFreq,setSchedFreq]=useState(existing?.schedule?.freq||"daily");
   const [schedTime,setSchedTime]=useState(existing?.schedule?.time||"05:00");
+  const [schedDay,setSchedDay]=useState(existing?.schedule?.day||"monday");
+  const [schedCron,setSchedCron]=useState(existing?.schedule?.cron||"0 5 * * *");
   const [schedTz,setSchedTz]=useState(existing?.schedule?.tz||"UTC");
+  const [schedEnabled,setSchedEnabled]=useState(existing?.schedule?.enabled!==false);
   const toggle=(arr,set,v)=>set(arr.includes(v)?arr.filter(x=>x!==v):[...arr,v]);
   const Lbl=({children,sub})=><div style={{marginBottom:8}}><div style={{fontSize:11.5,fontWeight:700,color:T.text}}>{children}</div>{sub&&<div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{sub}</div>}</div>;
   const Pill=({active,onClick,children})=><button onClick={onClick} style={{padding:"6px 13px",borderRadius:99,fontSize:12,fontWeight:active?600:400,cursor:"pointer",background:active?T.accent:T.bgElevated,color:active?"#fff":T.textSub,border:`1px solid ${active?T.accent:T.border}`}}>{children}</button>;
@@ -13232,10 +13344,9 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
     semantics: semantics.length>0,
     quality: true,   // optional
     policies: true,  // optional
-    security: !!classification,
     sla: String(refreshInterval).trim()!=="" && String(latencyValue).trim()!=="" && String(retentionPeriod).trim()!=="",
     terms: true,     // optional
-    validation: validationMode==="ondemand" || (validationMode==="scheduled" && !!schedTime.trim()),
+    validation: validationMode==="ondemand" || (validationMode==="scheduled" && (schedFreq==="hourly" || schedFreq==="custom" ? true : !!schedTime.trim())),
   };
   const required=["details","schema","semantics","sla","validation"];
   const allComplete=required.every(k=>complete[k]);
@@ -13252,14 +13363,13 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
       stewards:existing?.stewards||asset.stewards||[asset.steward].filter(Boolean),
       description:desc.trim()||`Data contract for ${asset.name}.`,updated:"Just now",lastRun:existing?.lastRun||"Not yet run",
       validationMode,
-      schedule: validationMode==="scheduled" ? {frequency:schedFreq,time:schedTime,tz:schedTz} : null,
+      schedule: validationMode==="scheduled" ? {freq:schedFreq,time:schedTime,day:schedDay,cron:schedCron,tz:schedTz,enabled:schedEnabled} : null,
       schema:schemaCols.map(c=>({name:c,type:exCol(c)?.type||"—",constraint:exCol(c)?.constraint||"NOT NULL",required:true})),
-      semantics:[...semantics.map(r=>({key:SEMANTIC_KEY[r],rule:r})),...customRules.map(r=>({key:"custom",rule:r}))],
+      semantics:semantics.map(r=>({key:SEMANTIC_KEY[r],rule:r})),
       quality:assetCases.filter(t=>quality.includes(t.id)).map(t=>({tcId:t.id,name:t.name})),
       policies:allPolicies.filter(p=>policies.includes(p.id)).map(p=>({policyId:p.id,name:p.name})),
-      security:{classification,accessNote:accessNote.trim()},
       sla:{refreshInterval:Number(refreshInterval)||1,refreshUnit,latencyValue:Number(latencyValue)||0,latencyUnit,availabilityTime:availTime,availabilityTz:availTz,retentionPeriod:Number(retentionPeriod)||0,retentionUnit,refreshColumn},
-      terms:{purpose:termsPurpose.trim(),allowed:termsAllowed,disallowed:termsDisallowed,compliance},
+      terms:{purpose:termsPurpose.trim(),allowed:termsAllowed,disallowed:termsDisallowed},
       runs:existing?.runs,
       history:existing?existing.history:[{at:"Just now",by:"You",action:"Contract created",note:"Draft"}],
       versions:existing?.versions,
@@ -13314,60 +13424,46 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
             </div>}
 
             {sec==="semantics"&&<div style={{maxWidth:560}}>
-              <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Semantics</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>Mandatory metadata rules, validated against the live asset.</div></div>
+              <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Semantics</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>The standard governance-metadata rules this contract requires. Each is validated against the live asset.</div></div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>{CONTRACT_SEMANTIC_RULES.map(r=>(
                 <label key={r} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:semantics.includes(r)?T.accentDim:T.bgElevated,border:`1px solid ${semantics.includes(r)?T.accent+"55":T.border}`,borderRadius:9,cursor:"pointer"}}>
                   <input type="checkbox" checked={semantics.includes(r)} onChange={()=>toggle(semantics,setSemantics,r)} style={{accentColor:T.accent}}/>
                   <span style={{fontSize:12.5,color:T.text}}>{r}</span>
                 </label>))}</div>
-              {/* custom rules */}
-              <div style={{marginTop:16}}>
-                <div style={{fontSize:11.5,fontWeight:700,color:T.text,marginBottom:8}}>Custom rules</div>
-                {customRules.length>0&&<div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:8}}>{customRules.map((r,i)=>(
-                  <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:T.accentDim,border:`1px solid ${T.accent}55`,borderRadius:9}}>
-                    <span style={{fontSize:12.5,color:T.text,flex:1}}>{r}</span>
-                    <button onClick={()=>setCustomRules(cr=>cr.filter((_,k)=>k!==i))} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex"}}>{Ic.x(11)}</button>
-                  </div>))}</div>}
-                <div style={{display:"flex",gap:8}}>
-                  <input value={customInput} onChange={e=>setCustomInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&customInput.trim()){setCustomRules(cr=>[...cr,customInput.trim()]);setCustomInput("");}}} placeholder="e.g. region must be a valid ISO country code" style={{...inp,flex:1}}/>
-                  <Btn small ghost disabled={!customInput.trim()} onClick={()=>{if(customInput.trim()){setCustomRules(cr=>[...cr,customInput.trim()]);setCustomInput("");}}}>Add rule</Btn>
-                </div>
-                <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Custom rules are recorded on the contract and shown in runs, but aren't auto-validated.</div>
-              </div>
             </div>}
 
-            {sec==="security"&&<div style={{maxWidth:560}}>
-              <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Security</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>Classify the data and note access expectations.</div></div>
-              <div style={{marginBottom:16}}><div style={{fontSize:11.5,fontWeight:700,color:T.text,marginBottom:8}}>Data classification</div>
-                <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>{CONTRACT_CLASSIFICATIONS.map(c=><Pill key={c} active={classification===c} onClick={()=>setClassification(c)}>{c}</Pill>)}</div>
-              </div>
-              <div><div style={{fontSize:11.5,fontWeight:700,color:T.text,marginBottom:8}}>Access note</div>
-                <textarea value={accessNote} onChange={e=>setAccessNote(e.target.value)} rows={2} placeholder="e.g. Restricted — authorized roles only via the Customer Data Policy." style={{...inp,resize:"vertical",fontFamily:"inherit"}}/>
-              </div>
-            </div>}
-
-            {sec==="quality"&&<div style={{maxWidth:620}}>
-              <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Quality Assertions</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>Attach existing data-quality test cases ({quality.length} selected). Optional.</div></div>
-              {assetCases.length===0?<div style={{fontSize:12.5,color:T.textMuted,padding:"16px 0"}}>No test cases exist for this asset yet. Create them in Data Quality › Tests first.</div>:
-              <div style={{display:"flex",flexDirection:"column",gap:8}}>{assetCases.map(t=>(
+            {sec==="quality"&&(()=>{
+              const filtered=assetCases.filter(t=>t.name.toLowerCase().includes(qualitySearch.toLowerCase().trim())||(t.dim||"").toLowerCase().includes(qualitySearch.toLowerCase().trim()));
+              return <div style={{maxWidth:620}}>
+              <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Quality Assertions</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>Search and attach data-quality tests already assigned to <span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{asset.name}</span> ({quality.length} selected). Optional.</div></div>
+              {assetCases.length===0?<div style={{fontSize:12.5,color:T.textMuted,padding:"16px 0"}}>No test cases exist for this asset yet. Create them in Data Quality › Tests first.</div>:<>
+              <input value={qualitySearch} onChange={e=>setQualitySearch(e.target.value)} placeholder="Search this table's quality tests…" style={{...inp,marginBottom:10}}/>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {filtered.length===0&&<div style={{fontSize:12,color:T.textMuted,fontStyle:"italic",padding:"8px 0"}}>No tests match “{qualitySearch}”.</div>}
+                {filtered.map(t=>(
                 <label key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:quality.includes(t.id)?T.accentDim:T.bgElevated,border:`1px solid ${quality.includes(t.id)?T.accent+"55":T.border}`,borderRadius:9,cursor:"pointer"}}>
                   <input type="checkbox" checked={quality.includes(t.id)} onChange={()=>toggle(quality,setQuality,t.id)} style={{accentColor:T.accent}}/>
                   <DQStatusDot status={t.status}/>
                   <span style={{fontSize:12.5,color:T.text,flex:1}}>{t.name}</span>
                   <span style={{fontSize:10.5,color:T.textMuted}}>{t.dim}</span>
-                </label>))}</div>}
-            </div>}
+                </label>))}</div></>}
+            </div>;})()}
 
-            {sec==="policies"&&<div style={{maxWidth:640}}>
-              <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Governance Policies</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>Attach policies from Policy Manager that this contract enforces ({policies.length} selected). Optional.</div></div>
-              <div style={{display:"flex",flexDirection:"column",gap:8}}>{allPolicies.map(p=>(
+            {sec==="policies"&&(()=>{
+              const filtered=allPolicies.filter(p=>p.name.toLowerCase().includes(policySearch.toLowerCase().trim())||(p.category||"").toLowerCase().includes(policySearch.toLowerCase().trim()));
+              return <div style={{maxWidth:640}}>
+              <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Governance Policies</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>Search and attach governance policies that apply to <span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{asset.name}</span> ({policies.length} selected). Optional.</div></div>
+              <input value={policySearch} onChange={e=>setPolicySearch(e.target.value)} placeholder="Search policies assigned to this table…" style={{...inp,marginBottom:10}}/>
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {filtered.length===0&&<div style={{fontSize:12,color:T.textMuted,fontStyle:"italic",padding:"8px 0"}}>No policies match “{policySearch}”.</div>}
+                {filtered.map(p=>(
                 <label key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:policies.includes(p.id)?T.accentDim:T.bgElevated,border:`1px solid ${policies.includes(p.id)?T.accent+"55":T.border}`,borderRadius:9,cursor:"pointer"}}>
                   <input type="checkbox" checked={policies.includes(p.id)} onChange={()=>toggle(policies,setPolicies,p.id)} style={{accentColor:T.accent}}/>
                   <span style={{fontSize:12.5,color:T.text,flex:1}}>{p.name}</span>
                   <span style={{fontSize:10.5,color:T.textMuted}}>{p.category}</span>
                   <span style={{fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:5,background:p.severity==="Critical"?T.roseDim:T.bgHover,color:p.severity==="Critical"?T.rose:T.textMuted}}>{p.severity}</span>
                 </label>))}</div>
-            </div>}
+            </div>;})()}
 
             {sec==="sla"&&<div style={{maxWidth:760}}>
               <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>SLA</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>Service-level agreement expectations.</div></div>
@@ -13409,28 +13505,28 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
 
             {sec==="terms"&&<div style={{maxWidth:620}}>
               <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Terms of Use</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>How consumers may and may not use this data. Declarative — not auto-validated.</div></div>
-              <div style={{marginBottom:16}}><div style={{fontSize:11.5,fontWeight:700,color:T.text,marginBottom:8}}>Purpose</div>
-                <textarea value={termsPurpose} onChange={e=>setTermsPurpose(e.target.value)} rows={2} placeholder="What this data is approved for…" style={{...inp,resize:"vertical",fontFamily:"inherit"}}/>
+              <div style={{marginBottom:16}}><div style={{fontSize:11.5,fontWeight:700,color:T.text,marginBottom:4}}>Purpose</div>
+                <div style={{fontSize:11,color:T.textMuted,marginBottom:8,lineHeight:1.5}}>One sentence on <b>why</b> this data exists and the business intent it serves. The specific scenarios go in the use cases below.</div>
+                <textarea value={termsPurpose} onChange={e=>setTermsPurpose(e.target.value)} rows={2} placeholder="e.g. Powers revenue, retention and BI reporting for the Commerce and Finance teams." style={{...inp,resize:"vertical",fontFamily:"inherit"}}/>
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:16}}>
-                <div><div style={{fontSize:11.5,fontWeight:700,color:T.text,marginBottom:8}}>Allowed uses</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+                <div><div style={{fontSize:11.5,fontWeight:700,color:T.text,marginBottom:4}}>Allowed use cases</div>
+                  <div style={{fontSize:11,color:T.textMuted,marginBottom:8,lineHeight:1.5}}>Specific scenarios this data <b>may</b> be used for.</div>
                   {termsAllowed.map((a,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6}}><span style={{fontSize:12,color:T.textSub,flex:1}}>{a}</span><button onClick={()=>setTermsAllowed(x=>x.filter((_,k)=>k!==i))} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex"}}>{Ic.x(10)}</button></div>))}
-                  <input placeholder="Add allowed use + Enter" onKeyDown={e=>{if(e.key==="Enter"&&e.target.value.trim()){setTermsAllowed(x=>[...x,e.target.value.trim()]);e.target.value="";}}} style={inp}/>
+                  <input placeholder="Add allowed use case + Enter" onKeyDown={e=>{if(e.key==="Enter"&&e.target.value.trim()){setTermsAllowed(x=>[...x,e.target.value.trim()]);e.target.value="";}}} style={inp}/>
                 </div>
-                <div><div style={{fontSize:11.5,fontWeight:700,color:T.text,marginBottom:8}}>Disallowed uses</div>
+                <div><div style={{fontSize:11.5,fontWeight:700,color:T.text,marginBottom:4}}>Disallowed use cases</div>
+                  <div style={{fontSize:11,color:T.textMuted,marginBottom:8,lineHeight:1.5}}>Specific scenarios this data <b>must not</b> be used for.</div>
                   {termsDisallowed.map((a,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6}}><span style={{fontSize:12,color:T.textSub,flex:1}}>{a}</span><button onClick={()=>setTermsDisallowed(x=>x.filter((_,k)=>k!==i))} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex"}}>{Ic.x(10)}</button></div>))}
-                  <input placeholder="Add disallowed use + Enter" onKeyDown={e=>{if(e.key==="Enter"&&e.target.value.trim()){setTermsDisallowed(x=>[...x,e.target.value.trim()]);e.target.value="";}}} style={inp}/>
+                  <input placeholder="Add disallowed use case + Enter" onKeyDown={e=>{if(e.key==="Enter"&&e.target.value.trim()){setTermsDisallowed(x=>[...x,e.target.value.trim()]);e.target.value="";}}} style={inp}/>
                 </div>
-              </div>
-              <div><div style={{fontSize:11.5,fontWeight:700,color:T.text,marginBottom:8}}>Compliance</div>
-                <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>{CONTRACT_COMPLIANCE.map(c=><Pill key={c} active={compliance.includes(c)} onClick={()=>toggle(compliance,setCompliance,c)}>{c}</Pill>)}</div>
               </div>
             </div>}
 
             {sec==="validation"&&<div style={{maxWidth:620}}>
               <div style={{marginBottom:16}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Validation</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>Choose how this contract is validated against the live asset.</div></div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
-                {[{k:"ondemand",t:"On demand",d:"Validate manually with Run now whenever you need to."},{k:"scheduled",t:"Scheduled",d:"Validate automatically on a recurring schedule."}].map(o=>{
+                {[{k:"ondemand",t:"On demand only",d:"No automatic schedule. You validate manually with “Run now” whenever you need to."},{k:"scheduled",t:"Scheduled",d:"Validate automatically on a recurring schedule. “Run now” still stays available any time."}].map(o=>{
                   const on=validationMode===o.k;
                   return <button key={o.k} onClick={()=>setValidationMode(o.k)} style={{textAlign:"left",padding:"14px 16px",borderRadius:11,cursor:"pointer",background:on?T.accentDim:T.bgElevated,border:`1.5px solid ${on?T.accent:T.border}`}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
@@ -13441,10 +13537,35 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
                   </button>;
                 })}
               </div>
-              {validationMode==="scheduled"&&<div style={{padding:"14px 16px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
-                <div><div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Frequency</div><select value={schedFreq} onChange={e=>setSchedFreq(e.target.value)} style={inp}>{["Hourly","Daily","Weekly","Monthly"].map(o=><option key={o}>{o}</option>)}</select></div>
-                <div><div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Time</div><input value={schedTime} onChange={e=>setSchedTime(e.target.value)} placeholder="05:00" style={inp}/></div>
-                <div><div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Timezone</div><select value={schedTz} onChange={e=>setSchedTz(e.target.value)} style={inp}>{["UTC","America/New_York","Europe/London","Asia/Kolkata"].map(o=><option key={o}>{o}</option>)}</select></div>
+              {validationMode==="scheduled"&&<div style={{padding:"16px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10}}>
+                {/* Frequency — same control as the Connectors Sync Schedule */}
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                  <div style={{fontSize:11,fontWeight:600,color:T.textSub,textTransform:"uppercase",letterSpacing:"0.06em"}}>Frequency</div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{fontSize:11,color:schedEnabled?T.accent:T.textMuted,fontWeight:600}}>{schedEnabled?"Enabled":"Paused"}</span>
+                    <div onClick={()=>setSchedEnabled(v=>!v)} style={{width:32,height:18,borderRadius:9,background:schedEnabled?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
+                      <div style={{position:"absolute",top:2,left:schedEnabled?14:2,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
+                    </div>
+                  </div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6,marginBottom:12}}>
+                  {CONTRACT_SCHED_FREQS.map(f=>(
+                    <button key={f.k} onClick={()=>setSchedFreq(f.k)}
+                      style={{padding:"8px 4px",borderRadius:8,border:`1.5px solid ${schedFreq===f.k?T.accent:T.border}`,background:schedFreq===f.k?T.accentDim:T.bgSurface,color:schedFreq===f.k?T.accent:T.textSub,fontSize:11.5,fontWeight:schedFreq===f.k?600:400,cursor:"pointer",fontFamily:"inherit",transition:"all .12s"}}>
+                      {f.l}
+                    </button>
+                  ))}
+                </div>
+                <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+                  {(schedFreq==="daily"||schedFreq==="weekly")&&<div style={{flex:1,minWidth:140}}><div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Run at</div><input type="time" value={schedTime} onChange={e=>setSchedTime(e.target.value)} style={{...inp,fontFamily:"'Geist Mono',monospace"}}/></div>}
+                  {schedFreq!=="once"&&<div style={{flex:1,minWidth:140}}><div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Timezone</div><select value={schedTz} onChange={e=>setSchedTz(e.target.value)} style={inp}>{CONTRACT_TZ_OPTS.map(z=><option key={z} value={z}>{z}</option>)}</select></div>}
+                </div>
+                {schedFreq==="weekly"&&<div style={{marginTop:12}}><div style={{fontSize:10.5,color:T.textMuted,marginBottom:6}}>Day of week</div><div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{CONTRACT_WEEKDAYS.map(d=>(<button key={d} onClick={()=>setSchedDay(d)} style={{padding:"5px 10px",borderRadius:6,border:`1.5px solid ${schedDay===d?T.accent:T.border}`,background:schedDay===d?T.accentDim:T.bgSurface,color:schedDay===d?T.accent:T.textSub,fontSize:11,fontWeight:schedDay===d?600:400,cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize"}}>{d.slice(0,3)}</button>))}</div></div>}
+                {schedFreq==="custom"&&<div style={{marginTop:12}}><div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Cron expression</div><input value={schedCron} onChange={e=>setSchedCron(e.target.value)} placeholder="0 5 * * 1-5" style={{...inp,fontFamily:"'Geist Mono',monospace"}}/><div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>Standard 5-field cron: minute hour day month weekday</div></div>}
+                {schedFreq!=="once"&&<div style={{marginTop:12,padding:"9px 12px",borderRadius:8,background:T.bgSurface,border:`1px solid ${T.border}`}}>
+                  <div style={{fontSize:10.5,color:T.textMuted,marginBottom:3}}>Cron preview</div>
+                  <div style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.accent}}>{contractCron({freq:schedFreq,time:schedTime,day:schedDay,cron:schedCron})}</div>
+                </div>}
               </div>}
               <div style={{marginTop:16,display:"flex",alignItems:"center",gap:10}}>
                 <Btn small ghost onClick={runCheck}>Run check now</Btn>
