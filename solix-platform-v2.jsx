@@ -3849,16 +3849,16 @@ const QualityView = () => {
   const addIncComment    = (id)=>{const txt=(incCommentText[id]||"").trim();if(!txt)return;setIncidents(prev=>prev.map(i=>i.id===id?{...i,comments:[...(i.comments||[]),{text:txt,by:"dev.patel",at:"Just now"}]}:i));setIncCommentText(prev=>({...prev,[id]:""}));};
 
   const openTCModal = ()=>{setNewTCModal(true);setTcLevel("table");setTcSelTable("");setTcSelCol("");setTcSelType(null);setTcName("");setTcDesc("");setTcTags([]);setTcGlossary([]);setTcCustomSQL(false);setTcSQLQuery("");setTcParams({});setTcDim("");};
-  const handleAddTC = ()=>{
+  const handleAddTC = (runImmediately)=>{
     if(!tcSelType||!tcSelTable) return;
     const level = tcLevel;
     const autoName = tcName||(level==="column"&&tcSelCol?`${tcSelTable}.${tcSelCol}_${tcSelType.fn}`:level==="table"?`${tcSelTable}_${tcSelType.fn}`:tcSelType.name);
     const matchedSuite = suites.find(s=>s.type==="table"&&s.table===tcSelTable);
     const sId = matchedSuite?.id||"ts1";
-    const newCase = {id:`tc${Date.now()}`,name:autoName,suiteId:sId,table:tcSelTable,col:level!=="table"?tcSelCol:null,defId:tcSelType.id,defName:tcSelType.name,dim:tcSelType.dim,status:"Success",lastVal:"—",expected:Object.entries(tcParams).map(([k,v])=>`${k}: ${v}`).join(", ")||"—",lastRun:"Never",history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],params:tcParams,failedReason:"",incidentId:null};
+    const newCase = {id:`tc${Date.now()}`,name:autoName,suiteId:sId,table:tcSelTable,col:level!=="table"?tcSelCol:null,defId:tcSelType.id,defName:tcSelType.name,dim:tcSelType.dim,status:"Success",lastVal:"—",expected:Object.entries(tcParams).map(([k,v])=>`${k}: ${v}`).join(", ")||"—",lastRun:runImmediately?"just now":"Never",history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],params:tcParams,failedReason:"",incidentId:null};
     setTestCases(prev=>[...prev,newCase]);
     setSuites(prev=>prev.map(s=>s.id===sId?{...s,testCount:s.testCount+1,success:s.success+1}:s));
-    setNewTCModal(false);setTab("testcases");showT("Test case created — will run on next pipeline execution");
+    setNewTCModal(false);setTab("testcases");showT(runImmediately?"Test case created — running now…":"Test case created");
   };
 
   const handleCreateBundleSuite = ()=>{
@@ -5290,9 +5290,9 @@ const QualityView = () => {
             {/* Footer */}
             <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgElevated,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
               <button onClick={()=>setNewTCModal(false)} style={{padding:"8px 18px",borderRadius:9,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer",fontWeight:500}}>Cancel</button>
-              <button onClick={handleAddTC} disabled={(!tcSelType&&!tcCustomSQL)||!tcSelTable||(tcLevel==="column"&&!tcSelCol)||(tcCustomSQL&&!tcSQLQuery.trim())}
-                style={{padding:"9px 22px",borderRadius:9,background:(tcSelType||tcCustomSQL)&&tcSelTable&&(tcLevel!=="column"||tcSelCol)&&(!tcCustomSQL||tcSQLQuery.trim())?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:(tcSelType||tcCustomSQL)&&tcSelTable?"pointer":"default"}}>
-                Add Test Case
+              <button onClick={()=>handleAddTC(true)} disabled={(!tcSelType&&!tcCustomSQL)||!tcSelTable||(tcLevel==="column"&&!tcSelCol)||(tcCustomSQL&&!tcSQLQuery.trim())}
+                style={{display:"flex",alignItems:"center",gap:7,padding:"9px 22px",borderRadius:9,background:(tcSelType||tcCustomSQL)&&tcSelTable&&(tcLevel!=="column"||tcSelCol)&&(!tcCustomSQL||tcSQLQuery.trim())?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:(tcSelType||tcCustomSQL)&&tcSelTable?"pointer":"default"}}>
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>Run now
               </button>
             </div>
           </div>
@@ -6201,9 +6201,9 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
       }
       return `${m} ${h} * * *`; // daily
     };
-    const schedObj = runMode==="schedule" ? buildCron() : null;
-    const lifecycle = runMode==="draft"?"Draft":"Active";
-    const histAction = runMode==="draft"?"Created draft v1": runMode==="run"?"Created & ran immediately":"Created with schedule";
+    const schedObj = null;  // schedule is set afterwards via the Schedule modal (consistent with the other sections)
+    const lifecycle = runMode==="run"?"Active":"Draft";
+    const histAction = runMode==="run"?"Created & ran immediately":runMode==="schedule"?"Created — scheduling":"Created draft v1";
     const p = {...newPol,
       id:`pol-${Date.now()}`,fqn:`policies.${cat}.${nm}`,version:1,
       owner:ownerArr[0]||"", owners:ownerArr,
@@ -6236,7 +6236,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
       },2200);
       onToast("Policy created — running evaluation now…","success");
     } else if(runMode==="schedule"){
-      onToast(`Policy created — scheduled (${schedObj||"0 8 * * *"})`,"success");
+      setScheduleModal(p.id);   // open the schedule modal for the new policy
+      onToast("Policy created — set its schedule","success");
     } else {
       onToast("Policy created — now in Draft","success");
     }
@@ -9503,107 +9504,13 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                         </div>
                       ))}
 
-                      {/* ── Launch Mode ── */}
-                      {!isEditMode&&(<div>
-                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>How do you want to launch this policy?</div>
-                        <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                          {RUN_OPTS.map(opt=>{
-                            const sel=runMode===opt.id;
-                            return (
-                              <button key={opt.id} onClick={()=>setNewPol(p=>({...p,runMode:opt.id}))}
-                                style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 14px",borderRadius:10,border:`2px solid ${sel?T.accent:T.border}`,background:sel?T.accentDim:T.bgElevated,cursor:"pointer",textAlign:"left",transition:"all .12s",outline:"none"}}>
-                                <div>
-                                  <div style={{fontSize:13,fontWeight:sel?700:500,color:sel?T.accent:T.text,marginBottom:2}}>{opt.label}</div>
-                                  <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.5}}>{opt.desc}</div>
-                                </div>
-                                <div style={{marginLeft:"auto",width:16,height:16,borderRadius:"50%",border:`2px solid ${sel?T.accent:T.border}`,background:sel?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:2,transition:"all .12s"}}>
-                                  {sel&&<div style={{width:6,height:6,borderRadius:"50%",background:"#fff"}}/>}
-                                </div>
-                              </button>
-                            );
-                          })}
+                      {/* Launch hint — the footer's Run now / Schedule buttons do the launching */}
+                      {!isEditMode&&(
+                        <div style={{padding:"10px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textMuted,lineHeight:1.7}}>
+                          <strong style={{color:T.textSub}}>Launch:</strong> <strong style={{color:T.text}}>Run now</strong> creates the policy and evaluates it immediately. <strong style={{color:T.text}}>Schedule</strong> creates it and opens the schedule. Either one creates the policy.
                         </div>
-                      </div>)}
+                      )}
 
-                      {/* ── Inline schedule picker (shown only when runMode==="schedule") ── */}
-                      {!isEditMode&&runMode==="schedule"&&(()=>{
-                        const wFreq=newPol.wizardSchedFreq||"daily";
-                        const wTime=newPol.wizardSchedTime||"08:00";
-                        const wDay=newPol.wizardSchedDay||"monday";
-                        const wCron=newPol.wizardSchedCron||"";
-                        const wTz=newPol.wizardSchedTz||"UTC";
-                        const TZ_OPTS2=["UTC","US/Eastern","US/Central","US/Pacific","Europe/London","Asia/Kolkata","Asia/Singapore"];
-                        const buildWizCron=()=>{
-                          if(wFreq==="hourly") return "0 * * * *";
-                          if(wFreq==="daily"){const[h,m]=wTime.split(":");return `${m||"0"} ${h||"8"} * * *`;}
-                          if(wFreq==="weekly"){const days={monday:1,tuesday:2,wednesday:3,thursday:4,friday:5,saturday:6,sunday:0};const[h,m]=wTime.split(":");return `${m||"0"} ${h||"8"} * * ${days[wDay]||1}`;}
-                          return wCron||"0 8 * * *";
-                        };
-                        const nextWizRun=()=>{
-                          if(wFreq==="hourly") return `Next run in ~1 hour (${wTz})`;
-                          return `Next run: 2026-05-28 ${wTime} ${wTz}`;
-                        };
-                        return (
-                          <div style={{padding:"16px",background:T.bgElevated,border:`1.5px solid ${T.accent}40`,borderRadius:10,display:"flex",flexDirection:"column",gap:14}}>
-                            <div style={{fontSize:12,fontWeight:700,color:T.text}}>Evaluation Schedule</div>
-                            {/* Frequency */}
-                            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                              {["hourly","daily","weekly","custom"].map(f=>{
-                                const sel2=wFreq===f;
-                                return <button key={f} onClick={()=>setNewPol(p=>({...p,wizardSchedFreq:f}))}
-                                  style={{padding:"6px 14px",borderRadius:7,border:`1.5px solid ${sel2?T.accent:T.border}`,background:sel2?T.accentDim:T.bgSurface,color:sel2?T.accent:T.textSub,fontSize:12,fontWeight:sel2?700:400,cursor:"pointer",textTransform:"capitalize",transition:"all .1s"}}>{f}</button>;
-                              })}
-                            </div>
-                            {/* Time + Day */}
-                            {wFreq!=="custom"&&(
-                              <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
-                                {(wFreq==="daily"||wFreq==="weekly")&&(
-                                  <div style={{flex:1,minWidth:140}}>
-                                    <label style={{display:"block",fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em"}}>Time</label>
-                                    <input type="time" value={wTime} onChange={e=>setNewPol(p=>({...p,wizardSchedTime:e.target.value}))} style={{...inp_s,width:"100%",boxSizing:"border-box"}}
-                                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                                  </div>
-                                )}
-                                {wFreq==="weekly"&&(
-                                  <div style={{flex:1,minWidth:140}}>
-                                    <label style={{display:"block",fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em"}}>Day</label>
-                                    <select value={wDay} onChange={e=>setNewPol(p=>({...p,wizardSchedDay:e.target.value}))} style={{...inp_s,width:"100%",boxSizing:"border-box"}}>
-                                      {["monday","tuesday","wednesday","thursday","friday","saturday","sunday"].map(d=><option key={d} value={d}>{d.charAt(0).toUpperCase()+d.slice(1)}</option>)}
-                                    </select>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                            {/* Custom cron */}
-                            {wFreq==="custom"&&(
-                              <div>
-                                <label style={{display:"block",fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em"}}>Cron Expression</label>
-                                <input type="text" value={wCron} onChange={e=>setNewPol(p=>({...p,wizardSchedCron:e.target.value}))}
-                                  placeholder="e.g. 0 8 * * 1  (every Monday at 08:00)"
-                                  style={{...inp_s,width:"100%",boxSizing:"border-box",fontFamily:"'Geist Mono','Courier New',monospace"}}
-                                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                              </div>
-                            )}
-                            {/* Timezone */}
-                            <div>
-                              <label style={{display:"block",fontSize:10,fontWeight:600,color:T.textMuted,marginBottom:5,textTransform:"uppercase",letterSpacing:"0.05em"}}>Timezone</label>
-                              <select value={wTz} onChange={e=>setNewPol(p=>({...p,wizardSchedTz:e.target.value}))} style={{...inp_s,width:"100%",boxSizing:"border-box"}}>
-                                {TZ_OPTS2.map(tz=><option key={tz} value={tz}>{tz}</option>)}
-                              </select>
-                            </div>
-                            {/* Preview */}
-                            <div style={{padding:"8px 12px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`}}>
-                              <div style={{fontSize:10.5,color:T.textMuted,marginBottom:3}}>Cron preview</div>
-                              <div style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.accent,marginBottom:3}}>{buildWizCron()}</div>
-                              <div style={{fontSize:11,color:T.textMuted}}>{nextWizRun()}</div>
-                            </div>
-                            <div style={{fontSize:11,color:T.textMuted,display:"flex",alignItems:"center",gap:6}}>
-                              <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/><line x1="8" y1="5.5" x2="8" y2="8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="10.5" r=".6" fill="currentColor" stroke="none"/></svg>
-                              First run executes immediately after creation. Subsequent runs follow the schedule above.
-                            </div>
-                          </div>
-                        );
-                      })()}
                     </div>
                   );
                 }
@@ -9635,15 +9542,26 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       );
                     })()
                   : (()=>{
-                      const rm=newPol.runMode||"draft";
                       const canCreate=!!newPol.name.trim();
-                      const btnLabel = isEditMode?"Save" : rm==="draft"?"Save as Draft": rm==="run"?"Save & Run Now":"Save & Schedule";
-                      const btnColor = isEditMode?T.accent : rm==="run"?T.green: rm==="schedule"?T.violet:T.accent;
+                      if(isEditMode){
+                        return (
+                          <button onClick={()=>handleCreate("draft")} disabled={!canCreate}
+                            style={{padding:"7px 22px",borderRadius:7,background:canCreate?T.accent:T.bgElevated,border:`1px solid ${canCreate?T.accent:T.border}`,color:canCreate?"#fff":T.textMuted,fontSize:12,fontWeight:700,cursor:canCreate?"pointer":"not-allowed",transition:"all .15s"}}>
+                            Save
+                          </button>
+                        );
+                      }
                       return (
-                        <button onClick={()=>handleCreate(isEditMode?"draft":rm)} disabled={!canCreate}
-                          style={{padding:"7px 22px",borderRadius:7,background:canCreate?btnColor:T.bgElevated,border:`1px solid ${canCreate?btnColor:T.border}`,color:canCreate?"#fff":T.textMuted,fontSize:12,fontWeight:700,cursor:canCreate?"pointer":"not-allowed",transition:"all .15s"}}>
-                          {btnLabel}
-                        </button>
+                        <div style={{display:"flex",gap:8}}>
+                          <button onClick={()=>canCreate&&handleCreate("schedule")} disabled={!canCreate}
+                            style={{display:"flex",alignItems:"center",gap:6,padding:"7px 18px",borderRadius:7,background:"transparent",border:`1px solid ${canCreate?T.border:T.border}`,color:canCreate?T.textSub:T.textMuted,fontSize:12,fontWeight:600,cursor:canCreate?"pointer":"not-allowed",transition:"all .15s"}}>
+                            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>Schedule
+                          </button>
+                          <button onClick={()=>canCreate&&handleCreate("run")} disabled={!canCreate}
+                            style={{display:"flex",alignItems:"center",gap:6,padding:"7px 22px",borderRadius:7,background:canCreate?T.accent:T.bgElevated,border:`1px solid ${canCreate?T.accent:T.border}`,color:canCreate?"#fff":T.textMuted,fontSize:12,fontWeight:700,cursor:canCreate?"pointer":"not-allowed",transition:"all .15s"}}>
+                            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>Run now
+                          </button>
+                        </div>
                       );
                     })()
                 }
@@ -12731,9 +12649,10 @@ const AssetContractTab = ({asset,onToast})=>{
   const setContract=(u)=>setContractState(prev=>{const next=typeof u==="function"?u(prev):u; CONTRACT_STORE[asset.name]=next; return next;});
 
   const changeStatus=(st)=>{ setStatusOpen(false); if(st===contract.status) return; setContract(c=>({...c,status:st,updated:"Just now"})); onToast&&onToast(`Status set to ${st}`,"success"); };
-  const runNow=()=>{
+  const runNow=(contractArg)=>{
     setSettingsOpen(false);
-    const res=validateContract(contract,asset);
+    const target=(contractArg&&contractArg.name)?contractArg:contract;
+    const res=validateContract(target,asset);
     const total=Object.keys(res.sections).length, passed=total-res.failedSections.length;
     const status=contractRunStatus(res);
     // per-section detail (OpenMetadata-style failedFields/failedRules)
@@ -12772,6 +12691,15 @@ const AssetContractTab = ({asset,onToast})=>{
     else onToast&&onToast(`Validation ${status==="Failed"?"failed":"partially failed"} — ${res.failedSections.length} check(s) failing${incidentOpened?" · incident opened + alert sent":""}`,"error");
   };
   const saveEdit=(updated)=>{ setContract(c=>({...updated,version:c.version,status:c.status,versions:c.versions,schedule:updated.schedule??c.schedule,updated:"Just now"})); setWizard(false); onToast&&onToast("Contract updated","success"); };
+  // Wizard submit — the two footer buttons (Run now / Schedule) both finalize creation/edit, then act.
+  const submitWizard=(built,action)=>{
+    const editing = wizard==="edit";
+    if(editing) setContract(c=>({...built,version:c.version,status:c.status,versions:c.versions,schedule:built.schedule??c.schedule,updated:"Just now"}));
+    else setContract({...built,versions:[]});
+    setWizard(false);
+    if(action==="schedule"){ onToast&&onToast(editing?"Contract updated":`Contract “${built.name}” created`,"success"); setScheduleModal(true); }
+    else { runNow(built); }  // "run" (default) — validate immediately; runNow shows the result toast
+  };
   const doDelete=()=>{ setContractState(null); CONTRACT_STORE[asset.name]=null; setDeleteConfirm(false); onToast&&onToast("Contract deleted","error"); };
   const saveSchedule=(sched)=>{ setContract(c=>({...c,schedule:sched,validationMode:sched.freq==="once"?"ondemand":"scheduled"})); setScheduleModal(false); onToast&&onToast(sched.enabled===false?"Validation schedule saved (paused)":"Validation schedule updated","success"); };
   const removeSchedule=()=>{ setContract(c=>({...c,schedule:null,validationMode:"ondemand"})); setScheduleModal(false); onToast&&onToast("Schedule removed — validate on demand","info"); };
@@ -12787,7 +12715,7 @@ const AssetContractTab = ({asset,onToast})=>{
         <div style={{fontSize:13,color:T.textMuted,lineHeight:1.6,marginBottom:20}}>A data contract formalizes the agreement between producers and consumers — schema, semantics, quality tests, governance policies and SLAs — and is continuously validated against the live asset.</div>
         <Btn variant="primary" icon={Ic.plus(13)} onClick={()=>setWizard("create")}>Add Contract</Btn>
       </div>
-      {wizard&&<ContractWizard asset={asset} onToast={onToast} onClose={()=>setWizard(false)} onSubmit={(c)=>{setContract({...c,versions:[]});setWizard(false);onToast&&onToast(`Contract “${c.name}” created`,"success");}}/>}
+      {wizard&&<ContractWizard asset={asset} onToast={onToast} onClose={()=>setWizard(false)} onSubmit={submitWizard}/>}
     </>
   );
 
@@ -13134,7 +13062,7 @@ const AssetContractTab = ({asset,onToast})=>{
     )}
 
     {/* ── Edit / create wizard (left drawer) ── */}
-    {wizard&&<ContractWizard asset={asset} onToast={onToast} existing={wizard==="edit"?contract:null} onClose={()=>setWizard(false)} onSubmit={(c)=>{ wizard==="edit"?saveEdit(c):setContract({...c,versions:[]}); setWizard(false); }}/>}
+    {wizard&&<ContractWizard asset={asset} onToast={onToast} existing={wizard==="edit"?contract:null} onClose={()=>setWizard(false)} onSubmit={submitWizard}/>}
 
     {/* ── Schedule validation modal ── */}
     {scheduleModal&&createPortal(<ContractScheduleModal schedule={contract.schedule} onClose={()=>setScheduleModal(false)} onSave={saveSchedule} onRemove={removeSchedule}/>,document.body)}
@@ -13559,9 +13487,13 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgSurface}}>
           <Btn small ghost onClick={()=>prevKey?setSec(prevKey):onClose()}>{prevKey?"← Back":"Cancel"}</Btn>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            {!complete[sec]&&required.includes(sec)&&<span style={{fontSize:11,color:T.textMuted}}>Complete this section to continue</span>}
+            {!allComplete&&isLast&&<span style={{fontSize:11,color:T.textMuted}}>Complete the required sections (*)</span>}
+            {!complete[sec]&&required.includes(sec)&&!isLast&&<span style={{fontSize:11,color:T.textMuted}}>Complete this section to continue</span>}
             {isLast
-              ? <Btn small variant="primary" disabled={!allComplete} onClick={()=>{setDoneSet(d=>new Set([...d,sec]));onSubmit(build());}}>{isEdit?"Save changes":"Save contract"}</Btn>
+              ? <div style={{display:"flex",gap:8}}>
+                  <Btn small ghost disabled={!allComplete} icon={<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>} onClick={()=>{setDoneSet(d=>new Set([...d,sec]));onSubmit(build(),"schedule");}}>Schedule</Btn>
+                  <Btn small variant="primary" disabled={!allComplete} icon={<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>} onClick={()=>{setDoneSet(d=>new Set([...d,sec]));onSubmit(build(),"run");}}>Run now</Btn>
+                </div>
               : <Btn small variant="primary" disabled={!complete[sec]} onClick={()=>{setDoneSet(d=>new Set([...d,sec]));setSec(nextKey);}}>Next →</Btn>}
           </div>
         </div>
@@ -13916,13 +13848,14 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
               <button onClick={()=>{
                 if(!aqTcName.trim()) return;
                 const def=aqTcSelType||{id:"custom",name:"Custom SQL",dim:"Consistency"};
-                const newCase={id:`tc_new_${Date.now()}`,name:aqTcName.trim(),suiteId:"ts1",table:asset.name,col:aqTcLevel==="column"?aqTcSelCol||"column_name":null,defId:def.id,defName:def.name,dim:def.dim,status:"Success",lastVal:"—",expected:Object.entries(aqTcParams).map(([k,v])=>`${k}: ${v}`).join(", ")||"—",lastRun:"never",history:[],params:aqTcParams,failedReason:"",incidentId:null};
+                const newCase={id:`tc_new_${Date.now()}`,name:aqTcName.trim(),suiteId:"ts1",table:asset.name,col:aqTcLevel==="column"?aqTcSelCol||"column_name":null,defId:def.id,defName:def.name,dim:def.dim,status:"Success",lastVal:"—",expected:Object.entries(aqTcParams).map(([k,v])=>`${k}: ${v}`).join(", ")||"—",lastRun:"just now",history:[],params:aqTcParams,failedReason:"",incidentId:null};
                 setLocalCases(p=>[...p,newCase]);
                 setAddTestOpen(false);
+                onToast&&onToast("Test case created — running now…","success");
               }}
                 disabled={!aqTcName.trim()||(!aqTcSelType&&!aqTcCustomSQL)||(aqTcCustomSQL&&!aqTcSQLQuery.trim())}
-                style={{flex:1,padding:"9px",borderRadius:9,background:(aqTcName.trim()&&(aqTcSelType||(aqTcCustomSQL&&aqTcSQLQuery.trim())))?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:13,fontWeight:700,cursor:(aqTcName.trim()&&(aqTcSelType||(aqTcCustomSQL&&aqTcSQLQuery.trim())))?"pointer":"default",transition:"background .15s"}}>
-                Add Test Case
+                style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"9px",borderRadius:9,background:(aqTcName.trim()&&(aqTcSelType||(aqTcCustomSQL&&aqTcSQLQuery.trim())))?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:13,fontWeight:700,cursor:(aqTcName.trim()&&(aqTcSelType||(aqTcCustomSQL&&aqTcSQLQuery.trim())))?"pointer":"default",transition:"background .15s"}}>
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>Run now
               </button>
               <button onClick={()=>setAddTestOpen(false)} style={{padding:"9px 18px",borderRadius:9,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer"}}>Cancel</button>
             </div>
@@ -23935,26 +23868,35 @@ const AddServiceWizard = ({onClose, onDone}) => {
             <div style={{display:"flex",gap:5,alignItems:"center"}}>
               {STEPS.map((_,i)=><div key={i} style={{width:i===step?22:7,height:7,borderRadius:4,background:i===step?"#ee2424":i<step?"rgba(238,36,36,.4)":T.border,transition:"all .25s"}}/>)}
             </div>
-            <button onClick={handleNext} disabled={!canNext()||(step===2&&testState==="running")} style={{
-              display:"flex",alignItems:"center",gap:8,padding:"10px 24px",borderRadius:10,border:"none",
-              background:(!canNext()||(step===2&&testState==="running"))?"rgba(238,36,36,.2)":"#ee2424",
-              color:(!canNext()||(step===2&&testState==="running"))?"rgba(255,255,255,.35)":"#fff",
-              fontSize:13,fontWeight:700,
-              cursor:(!canNext()||(step===2&&testState==="running"))?"default":"pointer",
-              transition:"all .15s",
-              boxShadow:canNext()&&testState!=="running"?"0 4px 14px rgba(238,36,36,.38)":"none",
-            }}
-              onMouseEnter={e=>{if(canNext()&&testState!=="running"){e.currentTarget.style.opacity=".88";e.currentTarget.style.transform="translateY(-1px)";}}}
-              onMouseLeave={e=>{e.currentTarget.style.opacity="1";e.currentTarget.style.transform="none";}}>
-              {step===2&&testState==="running"&&<svg width="13" height="13" viewBox="0 0 12 12" fill="none" style={{animation:"spin 1s linear infinite"}}><circle cx="6" cy="6" r="4.5" stroke="rgba(255,255,255,.3)" strokeWidth="1.5"/><path d="M6 1.5A4.5 4.5 0 0110.5 6" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>}
-              {step===0
-                ? "Select Connector →"
-                : step===1
-                ? "Configure Connection →"
-                : step===2
-                ? (testState==="running"?"Testing…":testState==="success"?"Set Filters & Launch →":"Test Connection First")
-                : "🚀 Launch Connection"}
-            </button>
+            {step<3
+              ? <button onClick={handleNext} disabled={!canNext()||(step===2&&testState==="running")} style={{
+                  display:"flex",alignItems:"center",gap:8,padding:"10px 24px",borderRadius:10,border:"none",
+                  background:(!canNext()||(step===2&&testState==="running"))?"rgba(238,36,36,.2)":"#ee2424",
+                  color:(!canNext()||(step===2&&testState==="running"))?"rgba(255,255,255,.35)":"#fff",
+                  fontSize:13,fontWeight:700,
+                  cursor:(!canNext()||(step===2&&testState==="running"))?"default":"pointer",
+                  transition:"all .15s",
+                  boxShadow:canNext()&&testState!=="running"?"0 4px 14px rgba(238,36,36,.38)":"none",
+                }}
+                  onMouseEnter={e=>{if(canNext()&&testState!=="running"){e.currentTarget.style.opacity=".88";e.currentTarget.style.transform="translateY(-1px)";}}}
+                  onMouseLeave={e=>{e.currentTarget.style.opacity="1";e.currentTarget.style.transform="none";}}>
+                  {step===2&&testState==="running"&&<svg width="13" height="13" viewBox="0 0 12 12" fill="none" style={{animation:"spin 1s linear infinite"}}><circle cx="6" cy="6" r="4.5" stroke="rgba(255,255,255,.3)" strokeWidth="1.5"/><path d="M6 1.5A4.5 4.5 0 0110.5 6" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+                  {step===0
+                    ? "Select Connector →"
+                    : step===1
+                    ? "Configure Connection →"
+                    : (testState==="running"?"Testing…":testState==="success"?"Set Filters & Launch →":"Test Connection First")}
+                </button>
+              : <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>onDone(svcName,connector,category)} style={{display:"flex",alignItems:"center",gap:7,padding:"10px 18px",borderRadius:10,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,fontSize:13,fontWeight:600,cursor:"pointer",transition:"all .15s"}}
+                    onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>Schedule
+                  </button>
+                  <button onClick={()=>onDone(svcName,connector,category)} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 24px",borderRadius:10,border:"none",background:"#ee2424",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",transition:"all .15s",boxShadow:"0 4px 14px rgba(238,36,36,.38)"}}
+                    onMouseEnter={e=>{e.currentTarget.style.opacity=".88";e.currentTarget.style.transform="translateY(-1px)";}} onMouseLeave={e=>{e.currentTarget.style.opacity="1";e.currentTarget.style.transform="none";}}>
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>Run now
+                  </button>
+                </div>}
           </div>
         </div>
 
