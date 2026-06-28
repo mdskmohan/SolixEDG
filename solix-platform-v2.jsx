@@ -5530,9 +5530,9 @@ const CatFieldDropdown = ({label, required, options, selected, onChange, placeho
     document.addEventListener("mousedown",h);
     return()=>document.removeEventListener("mousedown",h);
   },[open]);
-  // normalise: internally always work with an array
-  const selArr = multi ? (selected||[]) : (selected ? [selected] : []);
-  const filtered = options.filter(o=>!search||o.toLowerCase().includes(search.toLowerCase()));
+  // normalise: internally always work with an array (tolerate a stray string/null from older data shapes)
+  const selArr = multi ? (Array.isArray(selected)?selected:(selected!=null&&selected!==""?[selected]:[])) : (selected ? [selected] : []);
+  const filtered = (options||[]).filter(o=>!search||String(o).toLowerCase().includes(search.toLowerCase()));
   const handleSelect = (o) => {
     if(multi){
       const isSel=selArr.includes(o);
@@ -6214,9 +6214,12 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
       violations:0, compliancePct:null, lastEvaluated:null, assetsInScope:scopeCount,
       history:[{when:today(),who:"You",action:histAction}]};
     if (isEditMode && selPolicyId) {
-      // Update existing policy, preserve id/created/history prefix
+      // Update existing policy — apply the edited definition but preserve id/created/history
+      // and all operational state (version, schedule, evaluation results, run history).
       setPolicies(prev=>prev.map(existing=>existing.id===selPolicyId
         ?{...p, id:selPolicyId, created:existing.created, lifecycle:existing.lifecycle||lifecycle,
+           version:existing.version, schedule:existing.schedule, schedEnabled:existing.schedEnabled, nextRun:existing.nextRun,
+           violations:existing.violations, compliancePct:existing.compliancePct, lastEvaluated:existing.lastEvaluated, runs:existing.runs,
            history:[{when:today(),who:"You",action:"Updated policy"},...(existing.history||[])]}
         :existing));
       closeWizard();
@@ -6295,7 +6298,10 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
       sources:   pol.scope?.sources   || [],
       assetType: pol.scope?.assetType || "both",
     };
-    setNewPol({...pol, scope: normalizedScope});
+    // owner/stewards must be arrays for the multi-select dropdowns (older policies store owner as a string)
+    const ownerArr = Array.isArray(pol.owner)?pol.owner:(pol.owner?[pol.owner]:(pol.owners||[]));
+    const stewardArr = Array.isArray(pol.stewards)?pol.stewards:(pol.steward?[pol.steward]:[]);
+    setNewPol({...pol, scope: normalizedScope, owner: ownerArr, stewards: stewardArr});
     // Convert existing rules back to wizard-compatible format
     const presetBack = (pol.rules||[]).filter(r=>r.type==="preset"||(!r.type&&!r.sql)).map(r=>({id:r.id||`wr-${Date.now()}`,field:r.field||"certification",operator:r.operator||"is",value:r.value||"",table:r.table||"",column:r.column||"",severity:r.severity||"Medium"}));
     const sqlBack    = (pol.rules||[]).filter(r=>r.type==="sql"||r.sql).map(r=>({id:r.id||`wsql-${Date.now()}`,label:r.label||r.name||"",table:r.table||"",sql:r.sql||"",strategy:r.strategy||"BINARY",operator:r.operator||"",threshold:r.threshold||"",partitionExpr:r.partitionExpr||"",severity:r.severity||"Medium"}));
