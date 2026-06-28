@@ -6202,7 +6202,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
       return `${m} ${h} * * *`; // daily
     };
     const schedObj = null;  // schedule is set afterwards via the Schedule modal (consistent with the other sections)
-    const lifecycle = runMode==="run"?"Active":"Draft";
+    const lifecycle = runMode==="draft"?"Draft":"Active";
     const histAction = runMode==="run"?"Created & ran immediately":runMode==="schedule"?"Created — scheduling":"Created draft v1";
     const p = {...newPol,
       id:`pol-${Date.now()}`,fqn:`policies.${cat}.${nm}`,version:1,
@@ -6236,6 +6236,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
       },2200);
       onToast("Policy created — running evaluation now…","success");
     } else if(runMode==="schedule"){
+      // reset the schedule-modal fields so a new policy opens with clean defaults
+      setSchedFreq("daily");setSchedTime("08:00");setSchedDay("monday");setSchedCron("");setSchedTz("UTC");setSchedEnabled(true);
       setScheduleModal(p.id);   // open the schedule modal for the new policy
       onToast("Policy created — set its schedule","success");
     } else {
@@ -22075,7 +22077,7 @@ const IntegrationsView = ({onToast})=>{
     )}
 
     {/* Add Connection Wizard */}
-    {wizardOpen&&<AddServiceWizard onClose={()=>setWizardOpen(false)} onDone={(name,_conn,cat)=>{setWizardOpen(false);onToast(`${name} (${cat}) added successfully`,"success");}}/>}
+    {wizardOpen&&<AddServiceWizard onClose={()=>setWizardOpen(false)} onDone={(name,_conn,cat,mode)=>{setWizardOpen(false);onToast(mode==="run"?`${name} connected — syncing now…`:mode==="schedule"?`${name} connected — runs on the schedule you set`:`${name} (${cat}) added successfully`,"success");}}/>}
   </div>;
 };
 
@@ -23888,11 +23890,11 @@ const AddServiceWizard = ({onClose, onDone}) => {
                     : (testState==="running"?"Testing…":testState==="success"?"Set Filters & Launch →":"Test Connection First")}
                 </button>
               : <div style={{display:"flex",gap:8}}>
-                  <button onClick={()=>onDone(svcName,connector,category)} style={{display:"flex",alignItems:"center",gap:7,padding:"10px 18px",borderRadius:10,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,fontSize:13,fontWeight:600,cursor:"pointer",transition:"all .15s"}}
+                  <button onClick={()=>onDone(svcName,connector,category,"schedule")} title="Create the connection and run only on the schedule set above" style={{display:"flex",alignItems:"center",gap:7,padding:"10px 18px",borderRadius:10,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,fontSize:13,fontWeight:600,cursor:"pointer",transition:"all .15s"}}
                     onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
                     <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>Schedule
                   </button>
-                  <button onClick={()=>onDone(svcName,connector,category)} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 24px",borderRadius:10,border:"none",background:"#ee2424",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",transition:"all .15s",boxShadow:"0 4px 14px rgba(238,36,36,.38)"}}
+                  <button onClick={()=>onDone(svcName,connector,category,"run")} title="Create the connection and sync immediately" style={{display:"flex",alignItems:"center",gap:8,padding:"10px 24px",borderRadius:10,border:"none",background:"#ee2424",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",transition:"all .15s",boxShadow:"0 4px 14px rgba(238,36,36,.38)"}}
                     onMouseEnter={e=>{e.currentTarget.style.opacity=".88";e.currentTarget.style.transform="translateY(-1px)";}} onMouseLeave={e=>{e.currentTarget.style.opacity="1";e.currentTarget.style.transform="none";}}>
                     <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>Run now
                   </button>
@@ -28333,7 +28335,7 @@ const SettingsView = ({onToast})=>{
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
       <Topbar breadcrumb={[{label:"Settings"}]}/>
       {appSel&&<AppConfigModal app={APPLICATIONS.find(a=>a.id===appSel)} onClose={()=>setAppSel(null)} onToast={onToast}/>}
-      {addSvcOpen&&<AddServiceWizard onClose={()=>setAddSvcOpen(false)} onDone={(name,conn,cat)=>{setAddSvcOpen(false);onToast(`${name} (${cat}) added successfully`,"success");}}/>}
+      {addSvcOpen&&<AddServiceWizard onClose={()=>setAddSvcOpen(false)} onDone={(name,conn,cat,mode)=>{setAddSvcOpen(false);onToast(mode==="run"?`${name} connected — syncing now…`:mode==="schedule"?`${name} connected — runs on the schedule you set`:`${name} (${cat}) added successfully`,"success");}}/>}
 
       <div style={{flex:1,display:"grid",gridTemplateColumns:"220px 1fr",overflow:"hidden"}}>
 
