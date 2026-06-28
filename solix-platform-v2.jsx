@@ -4322,16 +4322,22 @@ const QualityView = () => {
                             </td>
                             <td style={{padding:"10px 14px",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{isRunning?"Running…":s.lastRun}</td>
                             <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
-                              <div style={{display:"flex",alignItems:"center",gap:6}}>
-                                <code style={{fontSize:11,color:T.violet,background:`${T.violet}08`,padding:"2px 7px",borderRadius:5,border:`1px solid ${T.violet}18`,fontFamily:"'Geist Mono',monospace"}}>{s.schedule}</code>
-                                <button onClick={e=>{e.stopPropagation();setDqSchedFreq("daily");setDqSchedTime("08:00");setDqSchedDay("monday");setDqSchedCron("");setDqSchedTz("UTC");setDqSchedEnabled(true);setDqSchedModal(s.id);}}
-                                  style={{width:22,height:22,borderRadius:5,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .1s"}}
-                                  title="Edit schedule"
-                                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
-                                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
-                                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M8.5 1.5l2 2L3 11H1V9L8.5 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
-                                </button>
-                              </div>
+                              {(()=>{
+                                const has=!!s.schedule&&s.schedule!=="", paused=has&&s.schedEnabled===false;
+                                const openSched=e=>{e.stopPropagation();setDqSchedFreq("daily");setDqSchedTime("08:00");setDqSchedDay("monday");setDqSchedCron("");setDqSchedTz("UTC");setDqSchedEnabled(s.schedEnabled!==false);setDqSchedModal(s.id);};
+                                return <div style={{display:"flex",alignItems:"center",gap:6}}>
+                                  {has
+                                    ? <code style={{fontSize:11,color:paused?T.amber:T.violet,background:paused?T.amberDim:`${T.violet}08`,padding:"2px 7px",borderRadius:5,border:`1px solid ${paused?T.amber+"40":T.violet+"18"}`,fontFamily:"'Geist Mono',monospace"}}>{paused?"paused":s.schedule}</code>
+                                    : <span style={{fontSize:11,color:T.textMuted}}>—</span>}
+                                  <button onClick={openSched}
+                                    style={{width:22,height:22,borderRadius:5,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .1s"}}
+                                    title={has?"Edit schedule":"Set schedule"}
+                                    onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                                    onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
+                                    <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M8.5 1.5l2 2L3 11H1V9L8.5 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+                                  </button>
+                                </div>;
+                              })()}
                             </td>
                             <td style={{padding:"10px 14px",fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{isRunning?"Running…":(s.nextRun||"—")}</td>
                             <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
@@ -4339,7 +4345,7 @@ const QualityView = () => {
                                 onClick={e=>runSuite(s.id,e)}
                                 disabled={isRunning}
                                 style={{padding:"5px 12px",borderRadius:7,background:isRunning?T.bgElevated:T.accentDim,border:`1px solid ${isRunning?T.border:T.accent}33`,color:isRunning?T.textMuted:T.accent,fontSize:11.5,fontWeight:600,cursor:isRunning?"default":"pointer",transition:"all .15s",whiteSpace:"nowrap"}}
-                              >{isRunning?"Running…":"Run Now"}</button>
+                              >{isRunning?"Running…":"Run now"}</button>
                             </td>
                           </tr>
                           {isExp&&(
@@ -4446,7 +4452,7 @@ const QualityView = () => {
                                   onClick={e=>runSuite(s.id,e)}
                                   disabled={isRunning}
                                   style={{padding:"5px 12px",borderRadius:7,background:isRunning?T.bgElevated:T.accentDim,border:`1px solid ${isRunning?T.border:T.accent}33`,color:isRunning?T.textMuted:T.accent,fontSize:11.5,fontWeight:600,cursor:isRunning?"default":"pointer",transition:"all .15s",whiteSpace:"nowrap"}}
-                                >{isRunning?"Running…":"Run Now"}</button>
+                                >{isRunning?"Running…":"Run now"}</button>
                               </td>
                             </tr>
                           );
@@ -5049,7 +5055,7 @@ const QualityView = () => {
                   disabled={runningIds.has(tcDetail.id)}
                   style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 16px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent,fontSize:12,fontWeight:600,cursor:runningIds.has(tcDetail.id)?"not-allowed":"pointer",opacity:runningIds.has(tcDetail.id)?0.5:1,whiteSpace:"nowrap"}}>
                   <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
-                  {runningIds.has(tcDetail.id)?"Running…":"Run Now"}
+                  {runningIds.has(tcDetail.id)?"Running…":"Run now"}
                 </button>
                 <button onClick={()=>{setTcDetailEditing(true);setTcDetailDraft({name:tcDetail.name,params:{...(tcDetail.params||{})}});}}
                   style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 16px",borderRadius:8,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:500,cursor:"pointer",whiteSpace:"nowrap"}}>
@@ -7162,26 +7168,30 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                               style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"8px 12px",borderRadius:8,background:runningPolId===p.id?T.bgElevated:T.accentDim,border:`1.5px solid ${runningPolId===p.id?T.border:T.accent+"44"}`,color:runningPolId===p.id?T.textMuted:T.accent,fontSize:12.5,fontWeight:600,cursor:runningPolId===p.id?"not-allowed":"pointer",marginBottom:8,transition:"all .15s",fontFamily:"inherit"}}>
                               {runningPolId===p.id
                                 ? <><span style={{display:"inline-block",width:12,height:12,borderRadius:"50%",border:`1.5px solid ${T.accent}`,borderTopColor:"transparent",animation:"spin 0.7s linear infinite"}}/>Evaluating…</>
-                                : <><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><polygon points="5,3 14,8 5,13" fill="currentColor" stroke="none"/></svg>Run Now</>}
+                                : <><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><polygon points="5,3 14,8 5,13" fill="currentColor" stroke="none"/></svg>Run now</>}
                             </button>
-                            {/* Schedule button */}
-                            <button
-                              onClick={()=>{
-                                const sched = typeof p.schedule==="string" ? p.schedule : "";
-                                setSchedFreq(sched.startsWith("0 */")?"hourly":sched.includes("* * 1")?"weekly":sched?"daily":"daily");
-                                setSchedTime("08:00");
-                                setScheduleModal(p.id);
-                              }}
-                              style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"8px 12px",borderRadius:8,background:"transparent",border:`1.5px solid ${T.border}`,color:T.textSub,fontSize:12.5,fontWeight:500,cursor:"pointer",transition:"all .15s",fontFamily:"inherit"}}
-                              onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
-                              onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
-                              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>
-                              {p.schedule?"Edit Schedule":"Set Schedule"}
-                            </button>
+                            {/* Schedule button — stateful (active / paused / none) */}
+                            {(()=>{
+                              const on=!!p.schedule&&p.schedEnabled!==false, paused=!!p.schedule&&p.schedEnabled===false;
+                              const col=on?"#16a34a":paused?T.amber:T.textSub;
+                              const bd=on?"#16a34a55":paused?T.amber+"66":T.border;
+                              const bg=on?"#16a34a12":paused?T.amberDim:"transparent";
+                              return <button
+                                onClick={()=>{
+                                  const sched = typeof p.schedule==="string" ? p.schedule : "";
+                                  setSchedFreq(sched.startsWith("0 */")?"hourly":sched.includes("* * 1")?"weekly":sched?"daily":"daily");
+                                  setSchedTime("08:00");
+                                  setScheduleModal(p.id);
+                                }}
+                                style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"8px 12px",borderRadius:8,background:bg,border:`1.5px solid ${bd}`,color:col,fontSize:12.5,fontWeight:600,cursor:"pointer",transition:"all .15s",fontFamily:"inherit"}}>
+                                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>
+                                {on?"Scheduled":paused?"Schedule paused":"Schedule"}
+                              </button>;
+                            })()}
                             {p.schedule&&(
                               <div style={{marginTop:8,padding:"7px 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`}}>
-                                <div style={{fontSize:10.5,color:T.textMuted,marginBottom:2}}>Next run</div>
-                                <div style={{fontSize:11.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{p.nextRun||"—"}</div>
+                                <div style={{fontSize:10.5,color:T.textMuted,marginBottom:2}}>{p.schedEnabled===false?"Paused — next run when re-enabled":"Next run"}</div>
+                                <div style={{fontSize:11.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{p.schedEnabled===false?"—":(p.nextRun||"—")}</div>
                                 <div style={{fontSize:10,color:T.textMuted,marginTop:3,fontFamily:"'Geist Mono',monospace"}}>{typeof p.schedule==="string"?p.schedule:""}</div>
                               </div>
                             )}
@@ -7477,7 +7487,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                               <div style={{fontSize:28,marginBottom:10}}>▷</div>
                               <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:4}}>No runs yet</div>
                               <div style={{fontSize:12,color:T.textMuted,maxWidth:260,margin:"0 auto",lineHeight:1.7}}>
-                                {p.lifecycle==="Draft"?"Publish this policy first, then run it to see evaluation history.":'Click "Run Now" to evaluate this policy for the first time.'}
+                                {p.lifecycle==="Draft"?"Publish this policy first, then run it to see evaluation history.":'Click "Run now" to evaluate this policy for the first time.'}
                               </div>
                             </div>
                           ):(
@@ -12819,6 +12829,8 @@ const AssetContractTab = ({asset,onToast})=>{
           <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6,maxWidth:680}}>{contract.description}</div>
         </div>
         <div style={{display:"flex",gap:8,flexShrink:0,alignItems:"center"}}>
+          <ScheduleButton schedule={contract.schedule} onClick={()=>setScheduleModal(true)}/>
+          <Btn small variant="primary" icon={<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>} onClick={runNow}>Run now</Btn>
           <div style={{position:"relative"}}>
             <button onClick={()=>setSettingsOpen(o=>!o)} title="Contract settings" style={{width:30,height:30,borderRadius:8,background:settingsOpen?T.bgHover:"transparent",border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
               onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;e.currentTarget.style.color=T.text;}} onMouseLeave={e=>{if(!settingsOpen){e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textSub;}}}>
@@ -12829,8 +12841,6 @@ const AssetContractTab = ({asset,onToast})=>{
               <div style={{position:"absolute",top:"calc(100% + 5px)",right:0,zIndex:51,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 14px 36px rgba(0,0,0,.28)",padding:5,minWidth:170}}>
                 {[
                   {k:"edit",label:"Edit contract",icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M10.5 2.5l3 3L6 13H3v-3l7.5-7.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>,fn:()=>{setSettingsOpen(false);setWizard("edit");}},
-                  {k:"run",label:"Run validation now",icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>,fn:runNow},
-                  {k:"sched",label:"Schedule validation",icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5.5v3l2 1.2M8 1.2V2.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,fn:()=>{setSettingsOpen(false);setScheduleModal(true);}},
                   {k:"del",label:"Delete contract",danger:true,icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M6.5 4V2.8h3V4M5 4.5l.5 8.5h5l.5-8.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>,fn:()=>{setSettingsOpen(false);setDeleteConfirm(true);}},
                 ].map(it=>(
                   <button key={it.k} onClick={it.fn} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"8px 10px",borderRadius:7,background:"transparent",border:"none",cursor:"pointer",textAlign:"left",color:it.danger?T.rose:T.text,fontSize:12.5,fontWeight:500}}
@@ -13273,7 +13283,6 @@ const CONTRACT_SECTIONS=[
   {key:"policies",label:"Policies"},
   {key:"sla",label:"SLA"},
   {key:"terms",label:"Terms of Use"},
-  {key:"validation",label:"Validation"},
 ];
 // ── Validation schedule — same vocabulary & cron builder as the Connectors “Sync Schedule” ──
 const CONTRACT_SCHED_FREQS=[{k:"once",l:"Run Once"},{k:"hourly",l:"Hourly"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"custom",l:"Custom"}];
@@ -13296,6 +13305,35 @@ function contractScheduleLabel(s){
   if(s.freq==="weekly") return `every ${s.day||"monday"} at ${s.time||"05:00"} ${s.tz||"UTC"}`;
   return `daily at ${s.time||"05:00"} ${s.tz||"UTC"}`;
 }
+function contractScheduleShort(s){
+  if(!s) return "";
+  if(s.freq==="hourly") return "hourly";
+  if(s.freq==="weekly") return `weekly ${(s.day||"mon").slice(0,3)}`;
+  if(s.freq==="custom") return "custom";
+  if(s.freq==="once")   return "once";
+  return `daily ${s.time||"05:00"}`;
+}
+// ── Shared Run-now / Schedule pattern button — reused across Contracts, Policy, Data Quality, Connections.
+// Accepts either a structured contract `schedule` object, or explicit `state`/`label` (for cron-string sections).
+const ScheduleButton = ({schedule, state, label, onClick, title="Schedule", small})=>{
+  let st=state, lab=label;
+  if(!st && schedule!==undefined){
+    if(!schedule) st="none";
+    else if(schedule.enabled===false) st="paused";
+    else if(schedule.freq==="once"||!schedule.freq) st="none";
+    else { st="on"; lab=lab||`Scheduled · ${contractScheduleShort(schedule)}`; }
+  }
+  st=st||"none";
+  const on=st==="on", paused=st==="paused";
+  const bg=on?"#16a34a14":paused?T.amberDim:T.bgElevated;
+  const col=on?"#16a34a":paused?T.amber:T.textSub;
+  const bd=on?"#16a34a40":paused?T.amber+"55":T.border;
+  const text=lab||(on?"Scheduled":paused?"Schedule paused":"Schedule");
+  return <button onClick={onClick} title={title} style={{display:"inline-flex",alignItems:"center",gap:6,padding:small?"5px 11px":"6px 12px",borderRadius:8,background:bg,color:col,border:`1px solid ${bd}`,fontSize:small?11.5:12.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><circle cx="8" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5.5v3l2 1.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+    {text}
+  </button>;
+};
 const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
   const cols=(typeof ASSET_COLUMNS!=="undefined" && ASSET_COLUMNS[asset.name])||[];
   const assetCases=(typeof DQ_TEST_CASES!=="undefined"?DQ_TEST_CASES:[]).filter(t=>t.table.endsWith("."+asset.name)||t.table===asset.name);
@@ -13325,13 +13363,6 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
   const [retentionPeriod,setRetentionPeriod]=useState(existing?.sla?.retentionPeriod??365);
   const [retentionUnit,setRetentionUnit]=useState(existing?.sla?.retentionUnit||"Days");
   const [refreshColumn,setRefreshColumn]=useState(existing?.sla?.refreshColumn||"");
-  const [validationMode,setValidationMode]=useState(existing?.validationMode||(existing?.schedule?"scheduled":"ondemand"));
-  const [schedFreq,setSchedFreq]=useState(existing?.schedule?.freq||"daily");
-  const [schedTime,setSchedTime]=useState(existing?.schedule?.time||"05:00");
-  const [schedDay,setSchedDay]=useState(existing?.schedule?.day||"monday");
-  const [schedCron,setSchedCron]=useState(existing?.schedule?.cron||"0 5 * * *");
-  const [schedTz,setSchedTz]=useState(existing?.schedule?.tz||"UTC");
-  const [schedEnabled,setSchedEnabled]=useState(existing?.schedule?.enabled!==false);
   const toggle=(arr,set,v)=>set(arr.includes(v)?arr.filter(x=>x!==v):[...arr,v]);
   const Lbl=({children,sub})=><div style={{marginBottom:8}}><div style={{fontSize:11.5,fontWeight:700,color:T.text}}>{children}</div>{sub&&<div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{sub}</div>}</div>;
   const Pill=({active,onClick,children})=><button onClick={onClick} style={{padding:"6px 13px",borderRadius:99,fontSize:12,fontWeight:active?600:400,cursor:"pointer",background:active?T.accent:T.bgElevated,color:active?"#fff":T.textSub,border:`1px solid ${active?T.accent:T.border}`}}>{children}</button>;
@@ -13346,9 +13377,8 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
     policies: true,  // optional
     sla: String(refreshInterval).trim()!=="" && String(latencyValue).trim()!=="" && String(retentionPeriod).trim()!=="",
     terms: true,     // optional
-    validation: validationMode==="ondemand" || (validationMode==="scheduled" && (schedFreq==="hourly" || schedFreq==="custom" ? true : !!schedTime.trim())),
   };
-  const required=["details","schema","semantics","sla","validation"];
+  const required=["details","schema","semantics","sla"];
   const allComplete=required.every(k=>complete[k]);
   const curIdx=CONTRACT_SECTIONS.findIndex(s=>s.key===sec);
   const isLast=curIdx===CONTRACT_SECTIONS.length-1;
@@ -13362,8 +13392,8 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
       owners:existing?.owners||asset.owners||[asset.owner].filter(Boolean),
       stewards:existing?.stewards||asset.stewards||[asset.steward].filter(Boolean),
       description:desc.trim()||`Data contract for ${asset.name}.`,updated:"Just now",lastRun:existing?.lastRun||"Not yet run",
-      validationMode,
-      schedule: validationMode==="scheduled" ? {freq:schedFreq,time:schedTime,day:schedDay,cron:schedCron,tz:schedTz,enabled:schedEnabled} : null,
+      validationMode: existing?.schedule ? "scheduled" : "ondemand",
+      schedule: existing?.schedule||null,
       schema:schemaCols.map(c=>({name:c,type:exCol(c)?.type||"—",constraint:exCol(c)?.constraint||"NOT NULL",required:true})),
       semantics:semantics.map(r=>({key:SEMANTIC_KEY[r],rule:r})),
       quality:assetCases.filter(t=>quality.includes(t.id)).map(t=>({tcId:t.id,name:t.name})),
@@ -13523,55 +13553,6 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
               </div>
             </div>}
 
-            {sec==="validation"&&<div style={{maxWidth:620}}>
-              <div style={{marginBottom:16}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Validation</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>Choose how this contract is validated against the live asset.</div></div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
-                {[{k:"ondemand",t:"On demand only",d:"No automatic schedule. You validate manually with “Run now” whenever you need to."},{k:"scheduled",t:"Scheduled",d:"Validate automatically on a recurring schedule. “Run now” still stays available any time."}].map(o=>{
-                  const on=validationMode===o.k;
-                  return <button key={o.k} onClick={()=>setValidationMode(o.k)} style={{textAlign:"left",padding:"14px 16px",borderRadius:11,cursor:"pointer",background:on?T.accentDim:T.bgElevated,border:`1.5px solid ${on?T.accent:T.border}`}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
-                      <span style={{width:15,height:15,borderRadius:"50%",border:`1.5px solid ${on?T.accent:T.borderLight}`,display:"flex",alignItems:"center",justifyContent:"center"}}>{on&&<span style={{width:7,height:7,borderRadius:"50%",background:T.accent}}/>}</span>
-                      <span style={{fontSize:13,fontWeight:700,color:T.text}}>{o.t}</span>
-                    </div>
-                    <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.5,paddingLeft:23}}>{o.d}</div>
-                  </button>;
-                })}
-              </div>
-              {validationMode==="scheduled"&&<div style={{padding:"16px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10}}>
-                {/* Frequency — same control as the Connectors Sync Schedule */}
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                  <div style={{fontSize:11,fontWeight:600,color:T.textSub,textTransform:"uppercase",letterSpacing:"0.06em"}}>Frequency</div>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <span style={{fontSize:11,color:schedEnabled?T.accent:T.textMuted,fontWeight:600}}>{schedEnabled?"Enabled":"Paused"}</span>
-                    <div onClick={()=>setSchedEnabled(v=>!v)} style={{width:32,height:18,borderRadius:9,background:schedEnabled?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
-                      <div style={{position:"absolute",top:2,left:schedEnabled?14:2,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
-                    </div>
-                  </div>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6,marginBottom:12}}>
-                  {CONTRACT_SCHED_FREQS.map(f=>(
-                    <button key={f.k} onClick={()=>setSchedFreq(f.k)}
-                      style={{padding:"8px 4px",borderRadius:8,border:`1.5px solid ${schedFreq===f.k?T.accent:T.border}`,background:schedFreq===f.k?T.accentDim:T.bgSurface,color:schedFreq===f.k?T.accent:T.textSub,fontSize:11.5,fontWeight:schedFreq===f.k?600:400,cursor:"pointer",fontFamily:"inherit",transition:"all .12s"}}>
-                      {f.l}
-                    </button>
-                  ))}
-                </div>
-                <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
-                  {(schedFreq==="daily"||schedFreq==="weekly")&&<div style={{flex:1,minWidth:140}}><div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Run at</div><input type="time" value={schedTime} onChange={e=>setSchedTime(e.target.value)} style={{...inp,fontFamily:"'Geist Mono',monospace"}}/></div>}
-                  {schedFreq!=="once"&&<div style={{flex:1,minWidth:140}}><div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Timezone</div><select value={schedTz} onChange={e=>setSchedTz(e.target.value)} style={inp}>{CONTRACT_TZ_OPTS.map(z=><option key={z} value={z}>{z}</option>)}</select></div>}
-                </div>
-                {schedFreq==="weekly"&&<div style={{marginTop:12}}><div style={{fontSize:10.5,color:T.textMuted,marginBottom:6}}>Day of week</div><div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{CONTRACT_WEEKDAYS.map(d=>(<button key={d} onClick={()=>setSchedDay(d)} style={{padding:"5px 10px",borderRadius:6,border:`1.5px solid ${schedDay===d?T.accent:T.border}`,background:schedDay===d?T.accentDim:T.bgSurface,color:schedDay===d?T.accent:T.textSub,fontSize:11,fontWeight:schedDay===d?600:400,cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize"}}>{d.slice(0,3)}</button>))}</div></div>}
-                {schedFreq==="custom"&&<div style={{marginTop:12}}><div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Cron expression</div><input value={schedCron} onChange={e=>setSchedCron(e.target.value)} placeholder="0 5 * * 1-5" style={{...inp,fontFamily:"'Geist Mono',monospace"}}/><div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>Standard 5-field cron: minute hour day month weekday</div></div>}
-                {schedFreq!=="once"&&<div style={{marginTop:12,padding:"9px 12px",borderRadius:8,background:T.bgSurface,border:`1px solid ${T.border}`}}>
-                  <div style={{fontSize:10.5,color:T.textMuted,marginBottom:3}}>Cron preview</div>
-                  <div style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.accent}}>{contractCron({freq:schedFreq,time:schedTime,day:schedDay,cron:schedCron})}</div>
-                </div>}
-              </div>}
-              <div style={{marginTop:16,display:"flex",alignItems:"center",gap:10}}>
-                <Btn small ghost onClick={runCheck}>Run check now</Btn>
-                <span style={{fontSize:11,color:T.textMuted}}>Dry-run the validation against the live asset before saving.</span>
-              </div>
-            </div>}
           </div>
         </div>
         {/* footer: Back / Next / Save */}
@@ -14211,7 +14192,7 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
               <button disabled={runningIds.has(tcDetail.id)} onClick={()=>runTest(tcDetail.id)}
                 style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 16px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent,fontSize:12,fontWeight:600,cursor:runningIds.has(tcDetail.id)?"not-allowed":"pointer",opacity:runningIds.has(tcDetail.id)?0.5:1,whiteSpace:"nowrap"}}>
                 <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
-                {runningIds.has(tcDetail.id)?"Running…":"Run Now"}
+                {runningIds.has(tcDetail.id)?"Running…":"Run now"}
               </button>
               <button onClick={()=>{setTcDetailEditing(true);setTcDetailDraft({name:tcDetail.name,params:{...(tcDetail.params||{})}});}}
                 style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 16px",borderRadius:8,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:500,cursor:"pointer",whiteSpace:"nowrap"}}>
@@ -24134,19 +24115,21 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
 
           {/* quick actions */}
           <div style={{display:"flex",gap:6,marginBottom:12}}>
-            {svc.status!=="disconnected"&&<button onClick={()=>onToast(`${svc.displayName} ingestion triggered`,"success")} style={{flex:1,padding:"8px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>▶ Run Now</button>}
+            {svc.status!=="disconnected"&&<button onClick={()=>onToast(`${svc.displayName} ingestion triggered`,"success")} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"8px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>Run now</button>}
             <Btn small ghost onClick={()=>setCfgTab("configuration")}>Configure</Btn>
             {svc.status==="connected"&&<Btn small variant="danger" onClick={()=>onToast("Service paused","success")}>Pause</Btn>}
           </div>
-          {/* Schedule button — matches Policy pattern */}
-          <button
-            onClick={()=>{setSvcSchedFreq("daily");setSvcSchedTime("08:00");setSvcSchedDay("monday");setSvcSchedCron("");setSvcSchedTz("UTC");setSvcSchedEnabled(true);setSvcSchedModal(true);}}
-            style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"8px 12px",borderRadius:8,background:"transparent",border:`1.5px solid ${T.border}`,color:T.textSub,fontSize:12.5,fontWeight:500,cursor:"pointer",transition:"all .15s",fontFamily:"inherit",marginBottom:8}}
-            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
-            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>
-            {svcCurrentSched?"Edit Schedule":"Set Schedule"}
-          </button>
+          {/* Schedule button — stateful (matches the shared pattern) */}
+          {(()=>{
+            const on=!!svcCurrentSched&&svcCurrentSched!=="once"&&svcSchedEnabled!==false, paused=!!svcCurrentSched&&svcSchedEnabled===false;
+            const col=on?"#16a34a":paused?T.amber:T.textSub, bd=on?"#16a34a55":paused?T.amber+"66":T.border, bg=on?"#16a34a12":paused?T.amberDim:"transparent";
+            return <button
+              onClick={()=>{setSvcSchedFreq("daily");setSvcSchedTime("08:00");setSvcSchedDay("monday");setSvcSchedCron("");setSvcSchedTz("UTC");setSvcSchedModal(true);}}
+              style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"8px 12px",borderRadius:8,background:bg,border:`1.5px solid ${bd}`,color:col,fontSize:12.5,fontWeight:600,cursor:"pointer",transition:"all .15s",fontFamily:"inherit",marginBottom:8}}>
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>
+              {on?"Scheduled":paused?"Schedule paused":"Schedule"}
+            </button>;
+          })()}
           {svcCurrentSched&&(
             <div style={{marginBottom:16,padding:"8px 12px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`}}>
               <div style={{fontSize:10,color:T.textMuted,marginBottom:3}}>Current schedule</div>
@@ -27850,7 +27833,7 @@ const WorkflowView = ({onToast}) => {
                 <div style={{display:"flex",gap:8,flexShrink:0}}>
                   <Btn small ghost onClick={()=>onToast("Workflow paused","success")}>Pause</Btn>
                   <Btn small ghost onClick={()=>onToast("Schedule editor opened","success")}>Schedule</Btn>
-                  <Btn small variant="primary" icon={Ic.refresh(12)} onClick={()=>triggerRun(wf.id)}>Run Now</Btn>
+                  <Btn small variant="primary" icon={Ic.refresh(12)} onClick={()=>triggerRun(wf.id)}>Run now</Btn>
                 </div>
               </div>
 
