@@ -2680,22 +2680,22 @@ const SegTabs = ({tabs,active,onChange})=>(
 // ─────────────────────────────────────────────
 // NOTIFICATIONS + USER MENU + DOCBOT DATA
 // ─────────────────────────────────────────────
+// Notifications = awareness feed. Standard template per category: "{what happened} · {subject}".
 const NOTIFS = [
-  {id:1,type:"alert",          unread:true, title:"Quality rule failed",        body:"Rule 'orders.amount_not_null' failed on 847 rows (1.8%)",                    time:"2m ago",  nav:"quality"},
-  {id:2,type:"conflict_flagged",unread:true,title:"⚡ Conflict Detected",        body:"'Monthly Recurring Revenue' conflicts with 'Gross Margin' across domains",   time:"5m ago",  nav:"glossary"},
-  {id:3,type:"term_submitted",  unread:true,title:"Term Submitted for Review",   body:"dev.patel submitted 'Churn Rate' — awaiting your approval as steward",       time:"18m ago", nav:"glossary"},
-  {id:4,type:"cert",            unread:true,title:"Certification approved",      body:"'customers' dataset certified by dev.patel",                                  time:"1h ago",  nav:"certifications"},
-  {id:5,type:"access",          unread:true,title:"Access request pending",      body:"john.doe requested access to 'payments' table",                              time:"2h ago",  nav:"access"},
-  {id:6,type:"escalation",      unread:true,title:"Task Escalated to You",       body:"PII Audit: user_sessions has been escalated — due in 24h",                   time:"3h ago",  nav:"stewardship"},
-  {id:7,type:"term_approved",   unread:false,title:"Term Approved",              body:"'Customer Lifetime Value' was approved by maya.chen",                         time:"4h ago",  nav:"glossary"},
-  {id:8,type:"conflict_resolved",unread:false,title:"Conflict Resolved",         body:"Conflict between 'Attribution Window' and 'UTM Window' has been resolved",   time:"6h ago",  nav:"glossary"},
-  {id:9,type:"policy",          unread:false,title:"New policy applied",         body:"PII Masking policy applied to 'user_events'",                                 time:"8h ago",  nav:"policymanager"},
-  {id:10,type:"schema",         unread:false,title:"Schema drift detected",      body:"Column 'user_id' type changed in product_events",                            time:"12h ago", nav:"observability"},
-  {id:11,type:"contract",       unread:false,title:"Data contract updated",      body:"orders_contract v2.1.0 published on commerce.orders",                        time:"1d ago",  nav:"catalog"},
-  {id:12,type:"new_dataset",    unread:false,title:"Unowned Dataset Detected",   body:"New table 'ml_feature_store_v3' has no owner or steward assigned",            time:"2d ago",  nav:"stewardship"},
-  {id:13,type:"field_updated",  unread:true, title:"Description updated",         body:"priya.nair updated the description on commerce.orders",                       time:"2h ago",  nav:"catalog"},
-  {id:14,type:"assigned",       unread:true, title:"You're now a steward",        body:"james.oh assigned you as steward of analytics.dim_customer",                  time:"1d ago",  nav:"catalog"},
-  {id:15,type:"schema",         unread:false,title:"New column detected",         body:"'referral_source' added to analytics.dim_customer",                           time:"2d ago",  nav:"catalog"},
+  {id:1, type:"alert",         category:"Quality",       unread:true, title:"Quality check failed · orders",               body:"Rule 'orders.amount_not_null' failed on 847 rows (1.8%)",                  time:"2m ago",  nav:"quality"},
+  {id:2, type:"policy",        category:"Policy",        unread:true, title:"Policy violation detected · transactions",     body:"Certification gate — transactions is queryable without an Approved certification", time:"6m ago",  nav:"policymanager"},
+  {id:3, type:"term_submitted",category:"Glossary",      unread:true, title:"Term submitted for review · Churn Rate",       body:"dev.patel submitted it — awaiting your approval as steward",               time:"18m ago", nav:"glossary"},
+  {id:4, type:"cert",          category:"Certification", unread:true, title:"Asset certified · customers",                  body:"Certified by dev.patel",                                                   time:"1h ago",  nav:"catalog"},
+  {id:5, type:"access",        category:"Access",        unread:true, title:"Access request pending · payments",            body:"john.doe requested access to the payments table",                          time:"2h ago",  nav:"stewardship"},
+  {id:6, type:"escalation",    category:"Escalation",    unread:true, title:"Task escalated to you · user_sessions",        body:"PII Audit escalated — due in 24h",                                         time:"3h ago",  nav:"stewardship"},
+  {id:7, type:"term_approved", category:"Glossary",      unread:false,title:"Term approved · Customer Lifetime Value",      body:"Approved by maya.chen",                                                    time:"4h ago",  nav:"glossary"},
+  {id:8, type:"policy",        category:"Policy",        unread:false,title:"Policy published · PII Masking",               body:"Applied to user_events",                                                   time:"8h ago",  nav:"policymanager"},
+  {id:9, type:"schema",        category:"Catalog",       unread:false,title:"Schema drift detected · product_events",       body:"Column 'user_id' type changed",                                            time:"12h ago", nav:"catalog"},
+  {id:10,type:"contract",      category:"Catalog",       unread:false,title:"Contract updated · orders",                    body:"orders_contract v2.1.0 published",                                         time:"1d ago",  nav:"catalog"},
+  {id:11,type:"new_dataset",   category:"Ownership",     unread:false,title:"Unowned asset detected · ml_feature_store_v3", body:"No owner or steward assigned",                                             time:"2d ago",  nav:"stewardship"},
+  {id:12,type:"field_updated", category:"Catalog",       unread:true, title:"Description updated · orders",                 body:"priya.nair updated the description",                                       time:"2h ago",  nav:"catalog"},
+  {id:13,type:"assigned",      category:"Ownership",     unread:true, title:"Assigned as steward · dim_customer",           body:"james.oh assigned you",                                                    time:"1d ago",  nav:"catalog"},
+  {id:14,type:"schema",        category:"Catalog",       unread:false,title:"New column detected · dim_customer",           body:"'referral_source' added",                                                  time:"2d ago",  nav:"catalog"},
 ];
 
 const DOCS = [
