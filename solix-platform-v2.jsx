@@ -11979,52 +11979,32 @@ const ColumnProfilePanel = ({asset})=>{
                     </div>}
                 </td>
               </tr>
-              {open&&(
+              {open&&(()=>{
+                // Minimal profile — only the metrics that are cheap to compute at scale:
+                // Null %, Distinct %, and a type-appropriate Min/Max.
+                const fmtPct=(v,cnt)=> (v==null?"—":`${v}%`) + (cnt&&cnt!=="—"?` (${cnt})`:"");
+                const cells=[
+                  {l:"Null %",     v:fmtPct(p.nullPct,p.nullCount)},
+                  {l:"Distinct %", v:fmtPct(p.distinctPct,p.distinctCount)},
+                ];
+                if(p.dataType==="numeric"){ cells.push({l:"Min",v:p.min||"—"},{l:"Max",v:p.max||"—"}); }
+                else if(p.dataType==="datetime"){ cells.push({l:"Earliest",v:p.min||"—"},{l:"Latest",v:p.max||"—"}); }
+                else if(p.dataType==="string"){ cells.push({l:"Min length",v:p.minLen||"—"},{l:"Max length",v:p.maxLen||"—"}); }
+                return (
                 <tr><td colSpan={6} style={{padding:0,background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
-                  <div style={{padding:"16px 18px 18px 36px",display:"flex",gap:24,flexWrap:"wrap"}}>
-                    {/* distribution */}
-                    <div style={{flex:"1 1 280px",minWidth:240}}>
-                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:10}}>Distribution</div>
-                      {p.topValues?(
-                        <div style={{display:"flex",flexDirection:"column",gap:7}}>
-                          {p.topValues.map((tv,k)=>{const m=tv.match(/\(([\d.]+)%\)/);const pct=m?parseFloat(m[1]):0;return(
-                            <div key={k}>
-                              <div style={{display:"flex",justifyContent:"space-between",fontSize:11.5,marginBottom:3}}><span style={{color:T.textSub}}>{tv.replace(/\s*\([\d.]+%\)/,"")}</span><span style={{...mono,color:T.textMuted}}>{pct}%</span></div>
-                              <div style={{height:6,borderRadius:99,background:T.bgSurface}}><div style={{width:`${pct}%`,height:"100%",borderRadius:99,background:dc}}/></div>
-                            </div>);})}
-                        </div>
-                      ):p.dataType==="numeric"?(
-                        <div style={{display:"flex",gap:10}}>
-                          {[["Min",p.min],["Avg",p.avg||"—"],["Max",p.max]].map(([l,v])=>(
-                            <div key={l} style={{flex:1,padding:"10px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8}}>
-                              <div style={{fontSize:10,color:T.textMuted,marginBottom:3}}>{l}</div>
-                              <div style={{...mono,fontSize:13,fontWeight:700,color:T.text}}>{v||"—"}</div>
-                            </div>))}
-                        </div>
-                      ):(p.samples?(
-                        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                          {p.samples.map((s,k)=><span key={k} style={{...mono,fontSize:11.5,padding:"3px 9px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:6,color:T.textSub}}>{s}</span>)}
-                          {p.minLen&&<div style={{width:"100%",fontSize:11,color:T.textMuted,marginTop:4}}>Length: {p.minLen} – {p.maxLen} (avg {p.avgLen})</div>}
-                        </div>
-                      ):(p.min?(
-                        <div style={{fontSize:12,color:T.textSub}}>Range: <span style={mono}>{p.min}</span> → <span style={mono}>{p.max}</span></div>
-                      ):<div style={{fontSize:12,color:T.textMuted}}>No distribution captured for this column.</div>))}
-                    </div>
-                    {/* stats */}
-                    <div style={{flex:"0 0 200px"}}>
-                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:10}}>Profile</div>
-                      {[["Null","%",p.nullPct,p.nullCount],["Distinct","%",p.distinctPct,p.distinctCount]].map(([l,u,v,cnt])=>(
-                        <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12,borderBottom:`1px solid ${T.border}`}}>
-                          <span style={{color:T.textMuted}}>{l} {u}</span><span style={{...mono,color:T.text,fontWeight:600}}>{v}{u==="%"?"%":""}{cnt&&cnt!=="—"?` (${cnt})`:""}</span>
+                  <div style={{padding:"14px 18px 16px 36px"}}>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10,maxWidth:660}}>
+                      {cells.map(c=>(
+                        <div key={c.l} style={{padding:"10px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8}}>
+                          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:4}}>{c.l}</div>
+                          <div style={{...mono,fontSize:13,fontWeight:700,color:T.text}}>{c.v}</div>
                         </div>
                       ))}
-                      <div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",fontSize:12}}>
-                        <span style={{color:T.textMuted}}>Tests</span><span style={{...mono,color:T.text,fontWeight:600}}>{colTests.length}</span>
-                      </div>
                     </div>
                   </div>
                 </td></tr>
-              )}
+                );
+              })()}
             </React.Fragment>;
           })}
         </tbody>
