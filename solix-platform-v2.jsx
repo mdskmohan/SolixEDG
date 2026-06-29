@@ -14936,6 +14936,14 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
   const cm = CMETA[data.cert]||CMETA["Draft"];
   const owners   = Array.isArray(data.owners)  ? data.owners   : (data.owner   ? [data.owner]   : []);
   const stewards = Array.isArray(data.stewards) ? data.stewards : (data.steward ? [data.steward] : []);
+  // Who can assign the roster directly (owner/admin) vs. who must request (everyone else).
+  const {role:_rbacRole, roleCfg:_rcfg} = useRole();
+  const meHandle = ((_rcfg&&_rcfg.email)||"you@jnj").split("@")[0];
+  const _roleReqsAll = useRoleReqs();
+  const canAssign = _rbacRole==="admin" || owners.includes(meHandle) || data.owner===meHandle;
+  const pendingFor = (r)=>_roleReqsAll.filter(x=>x.kind==="asset"&&x.status==="pending"&&x.asset===data.name&&x.role===r);
+  const myPending  = (r)=>pendingFor(r).some(x=>x.requestedBy===meHandle);
+  const requestRole = (r)=>{ addRoleRequest({kind:"asset",asset:data.name,role:r,requestedBy:meHandle,note:"Requested via asset profile",approver:owners[0]||data.owner||"the domain owner"}); onToast&&onToast(`${r==="owner"?"Ownership":"Stewardship"} requested — pending approval`,"success"); };
 
   useEffect(()=>{
     if(!certOpen) return;
@@ -14946,14 +14954,18 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
 
   const handleCertify = () => { setData(d=>({...d,cert:"Approved"})); setCertModal(false); onToast(`${asset.name} certified successfully`,"success"); };
 
-  const MetaLabel = ({children,onEdit})=>(
+  const MetaLabel = ({children,onEdit,cta})=>(
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
       <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>{children}</div>
-      {onEdit&&<button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}}
-        onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
-        onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
-        <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-      </button>}
+      {onEdit&&(cta
+        ? <button onClick={onEdit} style={{background:"none",border:`1px solid ${T.border}`,cursor:"pointer",color:T.textSub,fontSize:10,fontWeight:700,letterSpacing:"0.03em",padding:"2px 9px",borderRadius:6,transition:"all .12s"}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>{cta}</button>
+        : <button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}}
+            onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
+            onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
+            <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>)}
     </div>
   );
 
@@ -15271,7 +15283,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
 
           {/* OWNERS */}
           <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
-            <MetaLabel onEdit={()=>{setOwnersOpen(p=>!p);setOwnersSearch("");}}>Owners</MetaLabel>
+            <MetaLabel onEdit={()=>{ if(canAssign){setOwnersOpen(p=>!p);setOwnersSearch("");} else if(!myPending("owner")) requestRole("owner"); }} cta={canAssign?null:(myPending("owner")?"Pending":"Request")}>Owners</MetaLabel>
             <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
               {owners.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owners assigned</span>}
               {(showAllOwners?owners:owners.slice(0,3)).map((o,i)=>(
@@ -15311,7 +15323,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
 
           {/* STEWARDS */}
           <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
-            <MetaLabel onEdit={()=>{setStewardsOpen(p=>!p);setStewardsSearch("");}}>Stewards</MetaLabel>
+            <MetaLabel onEdit={()=>{ if(canAssign){setStewardsOpen(p=>!p);setStewardsSearch("");} else if(!myPending("steward")) requestRole("steward"); }} cta={canAssign?null:(myPending("steward")?"Pending":"Request")}>Stewards</MetaLabel>
             <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
               {stewards.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards assigned</span>}
               {(showAllStewards?stewards:stewards.slice(0,3)).map((s,i)=>(
@@ -15836,6 +15848,14 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
   const cm = CMETA[data.cert]||CMETA["Draft"];
   const owners   = Array.isArray(data.owners)  ? data.owners   : (data.owner   ? [data.owner]   : []);
   const stewards = Array.isArray(data.stewards) ? data.stewards : (data.steward ? [data.steward] : []);
+  // Who can assign the roster directly (owner/admin) vs. who must request (everyone else).
+  const {role:_rbacRole, roleCfg:_rcfg} = useRole();
+  const meHandle = ((_rcfg&&_rcfg.email)||"you@jnj").split("@")[0];
+  const _roleReqsAll = useRoleReqs();
+  const canAssign = _rbacRole==="admin" || owners.includes(meHandle) || data.owner===meHandle;
+  const pendingFor = (r)=>_roleReqsAll.filter(x=>x.kind==="asset"&&x.status==="pending"&&x.asset===data.name&&x.role===r);
+  const myPending  = (r)=>pendingFor(r).some(x=>x.requestedBy===meHandle);
+  const requestRole = (r)=>{ addRoleRequest({kind:"asset",asset:data.name,role:r,requestedBy:meHandle,note:"Requested via asset profile",approver:owners[0]||data.owner||"the domain owner"}); onToast&&onToast(`${r==="owner"?"Ownership":"Stewardship"} requested — pending approval`,"success"); };
 
   useEffect(()=>{
     if(!certOpen) return;
@@ -15870,14 +15890,18 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
   };
   const tcFull = tag => TAG_C_FULL[tag]||{bg:T.bgElevated,color:T.textSub,border:T.border};
 
-  const MetaLabel = ({children,onEdit})=>(
+  const MetaLabel = ({children,onEdit,cta})=>(
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
       <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>{children}</div>
-      {onEdit&&<button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}}
-        onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
-        onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
-        <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-      </button>}
+      {onEdit&&(cta
+        ? <button onClick={onEdit} style={{background:"none",border:`1px solid ${T.border}`,cursor:"pointer",color:T.textSub,fontSize:10,fontWeight:700,letterSpacing:"0.03em",padding:"2px 9px",borderRadius:6,transition:"all .12s"}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>{cta}</button>
+        : <button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}}
+            onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
+            onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
+            <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>)}
     </div>
   );
 
@@ -16481,13 +16505,20 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
 
         {/* OWNERS */}
         <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
-          <MetaLabel onEdit={()=>{setOwnersOpen(p=>!p);setOwnersSearch("");}}>Owners</MetaLabel>
+          <MetaLabel onEdit={()=>{ if(canAssign){setOwnersOpen(p=>!p);setOwnersSearch("");} else if(!myPending("owner")) requestRole("owner"); }} cta={canAssign?null:(myPending("owner")?"Pending":"Request")}>Owners</MetaLabel>
           <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
             {owners.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owners assigned</span>}
             {(showAllOwners?owners:owners.slice(0,3)).map((o,i)=>(
               <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
                 <div style={{width:18,height:18,borderRadius:3,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(o)}</div>
                 <span style={{fontSize:12,color:T.accent,fontWeight:500}}>{o}</span>
+              </div>
+            ))}
+            {pendingFor("owner").map((r,pi)=>(
+              <div key={"po"+pi} title="Pending owner approval" style={{display:"inline-flex",alignItems:"center",gap:6,padding:"3px 8px",borderRadius:5,background:"transparent",border:`1px dashed ${T.accent}`}}>
+                <span style={{fontSize:12,color:T.accent,fontWeight:500}}>{r.requestedBy}</span>
+                <span style={{fontSize:8,fontWeight:800,letterSpacing:"0.04em",color:T.accent,background:`${T.accent}1a`,borderRadius:3,padding:"1px 4px"}}>PENDING</span>
+                <span onClick={()=>resolveRoleRequest(r.id,"withdrawn")} title="Withdraw" style={{cursor:"pointer",color:T.accent,fontSize:13,lineHeight:1,marginLeft:1}}>×</span>
               </div>
             ))}
             {owners.length>3&&!showAllOwners&&<span onClick={()=>setShowAllOwners(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{owners.length-3} more</span>}
@@ -16521,13 +16552,20 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
 
         {/* STEWARDS */}
         <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
-          <MetaLabel onEdit={()=>{setStewardsOpen(p=>!p);setStewardsSearch("");}}>Stewards</MetaLabel>
+          <MetaLabel onEdit={()=>{ if(canAssign){setStewardsOpen(p=>!p);setStewardsSearch("");} else if(!myPending("steward")) requestRole("steward"); }} cta={canAssign?null:(myPending("steward")?"Pending":"Request")}>Stewards</MetaLabel>
           <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
             {stewards.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards assigned</span>}
             {(showAllStewards?stewards:stewards.slice(0,3)).map((s,i)=>(
               <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:"rgba(217,119,6,.08)",borderTop:"1px solid rgba(217,119,6,.2)",borderRight:"1px solid rgba(217,119,6,.2)",borderBottom:"1px solid rgba(217,119,6,.2)",borderLeft:"3px solid #d97706"}}>
                 <div style={{width:18,height:18,borderRadius:"50%",background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#d97706",flexShrink:0}}>{ava(s)}</div>
                 <span style={{fontSize:12,color:"#d97706",fontWeight:500}}>{s}</span>
+              </div>
+            ))}
+            {pendingFor("steward").map((r,pi)=>(
+              <div key={"ps"+pi} title="Pending owner approval" style={{display:"inline-flex",alignItems:"center",gap:6,padding:"3px 8px",borderRadius:5,background:"transparent",border:"1px dashed #d97706"}}>
+                <span style={{fontSize:12,color:"#d97706",fontWeight:500}}>{r.requestedBy}</span>
+                <span style={{fontSize:8,fontWeight:800,letterSpacing:"0.04em",color:"#b45309",background:"rgba(217,119,6,.12)",borderRadius:3,padding:"1px 4px"}}>PENDING</span>
+                <span onClick={()=>resolveRoleRequest(r.id,"withdrawn")} title="Withdraw" style={{cursor:"pointer",color:"#b45309",fontSize:13,lineHeight:1,marginLeft:1}}>×</span>
               </div>
             ))}
             {stewards.length>3&&!showAllStewards&&<span onClick={()=>setShowAllStewards(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{stewards.length-3} more</span>}
@@ -16557,22 +16595,6 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
               </div>
             </div>
           )}
-        </div>
-
-        {/* Request a role (bottom-up: ask to own/steward this asset) */}
-        <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`}}>
-          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Request a role</div>
-          <div style={{display:"flex",gap:8}}>
-            {[["owner","Request ownership"],["steward","Request stewardship"]].map(([role,label])=>(
-              <button key={role} onClick={()=>{
-                const approver=(data.owners&&data.owners[0])||data.owner||"the domain owner";
-                addRoleRequest({kind:"asset",asset:data.name,role,requestedBy:"alex.rivera",note:"Requested from the asset profile",approver});
-                onToast&&onToast(`${role==="owner"?"Ownership":"Stewardship"} request sent to ${approver} for approval`,"success");
-              }} style={{flex:1,padding:"7px 10px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,fontWeight:600,cursor:"pointer",transition:"all .12s"}}
-                onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>{label}</button>
-            ))}
-          </div>
-          <div style={{fontSize:10.5,color:T.textMuted,marginTop:7}}>Goes to the asset owner to approve — then you're added to the field.</div>
         </div>
 
         {/* TAGS */}
