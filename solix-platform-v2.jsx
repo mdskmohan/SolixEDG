@@ -2693,6 +2693,9 @@ const NOTIFS = [
   {id:10,type:"schema",         unread:false,title:"Schema drift detected",      body:"Column 'user_id' type changed in product_events",                            time:"12h ago", nav:"observability"},
   {id:11,type:"contract",       unread:false,title:"Data contract updated",      body:"orders_contract v2.1.0 published on commerce.orders",                        time:"1d ago",  nav:"catalog"},
   {id:12,type:"new_dataset",    unread:false,title:"Unowned Dataset Detected",   body:"New table 'ml_feature_store_v3' has no owner or steward assigned",            time:"2d ago",  nav:"stewardship"},
+  {id:13,type:"field_updated",  unread:true, title:"Description updated",         body:"priya.nair updated the description on commerce.orders",                       time:"2h ago",  nav:"catalog"},
+  {id:14,type:"assigned",       unread:true, title:"You're now a steward",        body:"james.oh assigned you as steward of analytics.dim_customer",                  time:"1d ago",  nav:"catalog"},
+  {id:15,type:"schema",         unread:false,title:"New column detected",         body:"'referral_source' added to analytics.dim_customer",                           time:"2d ago",  nav:"catalog"},
 ];
 
 const DOCS = [
@@ -2738,9 +2741,11 @@ const NOTIF_TYPE_CFG = {
   conflict_resolved: {bg:"rgba(22,163,74,0.12)",   color:"#16a34a", icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 8h5l2-5 2 10 2-5h1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>},
   escalation:        {bg:"rgba(225,29,72,0.12)",   color:"#e11d48", icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 13V3M4 7l4-4 4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>},
   new_dataset:       {bg:"rgba(125,211,252,0.12)", color:"#7dd3fc", icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><ellipse cx="8" cy="5" rx="5" ry="2" stroke="currentColor" strokeWidth="1.3"/><path d="M3 5v3c0 1.1 2.2 2 5 2s5-.9 5-2V5" stroke="currentColor" strokeWidth="1.3"/><path d="M3 8v3c0 1.1 2.2 2 5 2s5-.9 5-2V8" stroke="currentColor" strokeWidth="1.3"/></svg>},
+  field_updated:     {bg:"rgba(139,92,246,0.12)",  color:"#8b5cf6", icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M11 2l3 3-7 7-3 1 1-3 6-8z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>},
+  assigned:          {bg:"rgba(13,148,136,0.12)",  color:"#0d9488", icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" strokeWidth="1.3"/><path d="M3.5 13c0-2.2 2-4 4.5-4s4.5 1.8 4.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>},
 };
 
-const NotificationsPanel = ({onClose}) => {
+const NotificationsPanel = ({onClose, onViewAll}) => {
   const onNav = useNav();
   const tagCtx = useTagCtx();
   const [notifs, setNotifs] = useState(NOTIFS.map(n=>({...n})));
@@ -2844,14 +2849,73 @@ const NotificationsPanel = ({onClose}) => {
       </div>
       {/* Footer */}
       <div style={{padding:"10px 16px",borderTop:`1px solid ${T.border}`,textAlign:"center",flexShrink:0}}>
-        <button onClick={onClose} style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer",fontWeight:500}}>View all notifications</button>
+        <button onClick={()=>{onViewAll&&onViewAll();}} style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer",fontWeight:500}}>View all notifications →</button>
       </div>
     </div>
   );
 };
 
+// Full scrollable notifications drawer — slides in from the right ("View all")
+const NotificationsDrawer = ({onClose}) => {
+  const onNav = useNav();
+  const [notifs, setNotifs] = useState(NOTIFS.map(n=>({...n})));
+  const [filter, setFilter] = useState("all");
+  const unread = notifs.filter(n=>n.unread).length;
+  const markAll = () => setNotifs(n=>n.map(x=>({...x,unread:false})));
+  const dismiss = (id,e) => { e&&e.stopPropagation(); setNotifs(n=>n.filter(x=>x.id!==id)); };
+  const displayed = filter==="unread" ? notifs.filter(n=>n.unread) : notifs;
+  return (
+    <>
+      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:900}}/>
+      <div className="slideIn" style={{position:"fixed",top:0,right:0,height:"100vh",width:440,maxWidth:"92vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,boxShadow:"-8px 0 32px rgba(0,0,0,.18)",zIndex:901,display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"16px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{color:T.textSub,display:"flex"}}>{Ic.bell(16)}</span>
+            <span style={{fontSize:15,fontWeight:700,color:T.text}}>All notifications</span>
+            {unread>0&&<span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:99,background:T.accentDim,color:T.accent}}>{unread}</span>}
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <button onClick={markAll} style={{fontSize:11.5,color:T.textMuted,background:"none",border:"none",cursor:"pointer",padding:0}}>Mark all read</button>
+            <button onClick={onClose} style={{width:26,height:26,background:T.bgHover,border:`1px solid ${T.border}`,borderRadius:6,cursor:"pointer",color:T.textMuted,display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(12)}</button>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:0,borderBottom:`1px solid ${T.border}`,padding:"0 18px",flexShrink:0}}>
+          {[{k:"all",l:"All"},{k:"unread",l:`Unread (${unread})`}].map(t=>(
+            <button key={t.k} onClick={()=>setFilter(t.k)} style={{padding:"9px 14px",background:"none",border:"none",borderBottom:`2px solid ${filter===t.k?T.accent:"transparent"}`,color:filter===t.k?T.text:T.textMuted,fontSize:12.5,fontWeight:filter===t.k?600:400,cursor:"pointer",marginBottom:-1}}>{t.l}</button>
+          ))}
+        </div>
+        <div style={{flex:1,overflowY:"auto"}}>
+          {displayed.length===0&&<div style={{padding:"40px 18px",textAlign:"center",color:T.textMuted,fontSize:12.5}}>No notifications</div>}
+          {displayed.map(n=>{
+            const cfg = NOTIF_TYPE_CFG[n.type]||NOTIF_TYPE_CFG.alert;
+            return (
+              <div key={n.id} onClick={()=>{onNav(n.nav);onClose();}} style={{padding:"13px 18px",borderBottom:`1px solid ${T.border}`,background:n.unread?T.bgElevated:"transparent",cursor:"pointer",transition:"background .1s"}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=n.unread?T.bgElevated:"transparent"}>
+                <div style={{display:"flex",alignItems:"flex-start",gap:11}}>
+                  <div style={{width:7,flexShrink:0,display:"flex",justifyContent:"center",paddingTop:6}}>{n.unread&&<span style={{width:7,height:7,borderRadius:"50%",background:T.accent,display:"block"}}/>}</div>
+                  <div style={{width:30,height:30,borderRadius:7,background:cfg.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:cfg.color}}>{cfg.icon}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:2}}>
+                      <span style={{fontSize:13,fontWeight:n.unread?600:500,color:T.text}}>{n.title}</span>
+                      <span style={{fontSize:10.5,color:T.textMuted,flexShrink:0}}>{n.time}</span>
+                    </div>
+                    <div style={{fontSize:12,color:T.textMuted,lineHeight:1.5}}>{n.body}</div>
+                  </div>
+                  <button onClick={e=>dismiss(n.id,e)} title="Dismiss" style={{width:22,height:22,background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:5,opacity:.6,flexShrink:0}}
+                    onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(10)}</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+};
+
 const NotifBtn = () => {
   const [open, setOpen] = useState(false);
+  const [drawer, setDrawer] = useState(false);
   const unread = NOTIFS.filter(n=>n.unread).length;
   const ref = useRef(null);
   useEffect(()=>{const fn=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};document.addEventListener("mousedown",fn);return()=>document.removeEventListener("mousedown",fn);},[]);
@@ -2863,7 +2927,8 @@ const NotifBtn = () => {
         {Ic.bell(15)}
         {unread>0&&<span style={{position:"absolute",top:5,right:5,width:7,height:7,borderRadius:"50%",background:T.rose,border:`1.5px solid ${T.bg}`}}/>}
       </button>
-      {open&&<NotificationsPanel onClose={()=>setOpen(false)}/>}
+      {open&&<NotificationsPanel onClose={()=>setOpen(false)} onViewAll={()=>{setOpen(false);setDrawer(true);}}/>}
+      {drawer&&<NotificationsDrawer onClose={()=>setDrawer(false)}/>}
     </div>
   );
 };
@@ -3211,7 +3276,7 @@ const DocBot = ({open:extOpen, setOpen:extSetOpen}) => {
 const GROUPS = [
   {section:"",items:[
     {key:"home",           icon:"home",          label:"Home"},
-    {key:"stewardship",    icon:"inbox",         label:"Inbox"},
+    {key:"stewardship",    icon:"inbox",         label:"Workspace"},
   ]},
   {section:"Catalog",items:[
     {key:"catalog",        icon:"catalog",       label:"Catalog"},
@@ -10324,7 +10389,7 @@ const StewardshipView = ({onToast, initialTab}) => {
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <Topbar breadcrumb={[{label:"Inbox"}]}/>
+      <Topbar breadcrumb={[{label:"Workspace"}]}/>
       {/* Header metrics */}
       <div style={{padding:"12px 28px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:20,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
         {[
@@ -27018,7 +27083,7 @@ const itemAssignee = (item) => item.assignee || stewardOf(item.asset?.name) || n
 const InboxView = ({onToast}) => {
   const onNav = useNav();
   const tagCtx = useTagCtx(); // tags live in TagProvider context — the tags "shared store"
-  const [items,      setItems]      = useState([...POLICY_VIOLATION_INBOX, ...TAG_REVIEW_INBOX, ...CERT_REVIEW_INBOX, ...ORPHAN_INBOX, ...TERM_REVIEW_INBOX, ...INBOX_DATA]);
+  const [items,      setItems]      = useState([...POLICY_VIOLATION_INBOX, ...TAG_REVIEW_INBOX, ...CERT_REVIEW_INBOX, ...ORPHAN_INBOX, ...TERM_REVIEW_INBOX, ...INBOX_DATA.filter(i=>i.type!=="stewardship_request")]);
   const [filter,     setFilter]     = useState("action"); // action | activity | done
   const [viewMode,   setViewMode]   = useState("list");   // list | kanban
   const [roleScope,  setRoleScope]  = useState("all");    // all | steward | owner
@@ -27027,11 +27092,12 @@ const InboxView = ({onToast}) => {
   const [assignOpen,   setAssignOpen]   = useState(false);
   const [resolveOpen,  setResolveOpen]  = useState(false);  // inline resolve form (DQ + violations)
   const [resolveNote,  setResolveNote]  = useState("");     // resolution reason captured in the inbox
+  const [resolveMode,  setResolveMode]  = useState("remediate"); // violations: remediate | exception
   const [reassignOpen, setReassignOpen] = useState(false);  // inline reassign picker
   const [reassignMap,  setReassignMap]  = useState({});     // {itemId: handle} assignee overrides
   const [filterOpen,   setFilterOpen]   = useState(false);
   const [secFilters,   setSecFilters]   = useState(new Set()); // section multiselect
-  const closeForms = ()=>{ [setAssignOpen,setResolveOpen,setReassignOpen].forEach(f=>f(false)); setResolveNote(""); };
+  const closeForms = ()=>{ [setAssignOpen,setResolveOpen,setReassignOpen].forEach(f=>f(false)); setResolveNote(""); setResolveMode("remediate"); };
 
   // ── Two questions: things to DO vs things to KNOW ──
   // action   = open work needing a decision (steward fixes / owner sign-offs)
@@ -27114,7 +27180,7 @@ const InboxView = ({onToast}) => {
     if(item.type==="dq_alert")
       return <>{btn("Resolve",()=>setResolveOpen(true),true)}{btn("Dismiss",()=>dism(item.id))}{openIn("Open in Data Quality","quality")}</>;
     if(item.type==="policy_violation")
-      return <>{btn("Remediate",()=>setResolveOpen(true),true)}{btn("Request exception",()=>{pvSet(prev=>prev.map(v=>v.id===item.violId?{...v,status:"Exception Requested"}:v));ack(item.id,"Exception requested — sent to owner");})}{openIn("Open in Policy Manager","policymanager",{policyId:item.policyId})}</>;
+      return <>{btn("Resolve",()=>setResolveOpen(true),true)}{btn("Dismiss",()=>dism(item.id))}{openIn("Open in Policy Manager","policymanager",{policyId:item.policyId})}</>;
     if(item.type==="tag_review")
       return <>{btn("Approve",()=>{
         if(item.tagType==="new_source_tag"){ tagCtx?.createTagDef({name:item.tagName,category:'business',description:'Promoted from source tag via Inbox.',propagationMode:'hierarchy',governanceRequired:false,managedBy:'Current User',color:'#fbbf24',sourceAliases:[item.tagName]}); tagCtx?.resolveInboxItem(item.tagInboxId,'promoted'); }
@@ -27241,25 +27307,33 @@ const InboxView = ({onToast}) => {
             );
           })()}
 
-          {/* Inline resolution form — DQ incidents + policy violations capture the reason HERE (the work happens in the inbox) */}
+          {/* Inline resolution form — DQ + violations capture the reason HERE; violations can remediate or request an exception */}
           {(item.type==="dq_alert"||item.type==="policy_violation")&&resolveOpen&&(()=>{
             const isViol = item.type==="policy_violation";
+            const exception = isViol && resolveMode==="exception";
             const ok = resolveNote.trim().length>0;
             return (
               <div style={{marginBottom:16,background:T.bgElevated,borderRadius:8,padding:"12px 14px",border:`1px solid ${T.border}`}}>
-                <div style={{fontSize:11,fontWeight:700,color:T.textSub,marginBottom:8}}>{isViol?"Remediation note":"Resolution reason"} <span style={{color:T.rose}}>*</span></div>
-                <textarea value={resolveNote} onChange={e=>setResolveNote(e.target.value)} rows={3} placeholder={isViol?"Describe how the violation was remediated…":"Describe the root cause and how it was resolved…"}
+                {isViol&&(
+                  <div style={{display:"flex",gap:8,marginBottom:10}}>
+                    {[["remediate","Remediated"],["exception","Request exception → owner"]].map(([k,l])=>(
+                      <button key={k} onClick={()=>setResolveMode(k)} style={{flex:1,padding:"7px 10px",borderRadius:7,background:resolveMode===k?T.accentDim:"transparent",border:`1px solid ${resolveMode===k?T.accent:T.border}`,color:resolveMode===k?T.accent:T.textSub,fontSize:11.5,fontWeight:resolveMode===k?700:500,cursor:"pointer",whiteSpace:"nowrap"}}>{l}</button>
+                    ))}
+                  </div>
+                )}
+                <div style={{fontSize:11,fontWeight:700,color:T.textSub,marginBottom:8}}>{exception?"Reason for exception":isViol?"Remediation note":"Resolution reason"} <span style={{color:T.rose}}>*</span></div>
+                <textarea value={resolveNote} onChange={e=>setResolveNote(e.target.value)} rows={3} placeholder={exception?"Why should this violation be waived? The owner will review.":isViol?"Describe how the violation was remediated…":"Describe the root cause and how it was resolved…"}
                   style={{width:"100%",padding:"9px 11px",background:T.bgSurface,border:`1.5px solid ${ok?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:12.5,lineHeight:1.6,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box"}}/>
                 <div style={{display:"flex",gap:8,marginTop:10}}>
                   <button disabled={!ok} onClick={()=>{
                     if(!ok) return;
-                    if(isViol){ pvSet(prev=>prev.map(v=>v.id===item.violId?{...v,status:"Resolved",resolutionNote:resolveNote.trim()}:v)); }
-                    else { resolveIncidentsForAsset(item.asset.path,item.asset.name,resolveNote.trim()); }
-                    ack(item.id, isViol?`${item.asset.name} violation remediated`:`${item.asset.name} quality incident resolved`);
-                  }} style={{padding:"7px 16px",borderRadius:7,background:ok?T.accent:T.bgHover,border:"none",color:ok?"#fff":T.textMuted,fontSize:12,fontWeight:600,cursor:ok?"pointer":"default"}}>Confirm resolution</button>
-                  <button onClick={()=>{setResolveOpen(false);setResolveNote("");}} style={{padding:"7px 16px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+                    if(item.type==="dq_alert"){ resolveIncidentsForAsset(item.asset.path,item.asset.name,resolveNote.trim()); ack(item.id,`${item.asset.name} quality incident resolved`); }
+                    else if(exception){ pvSet(prev=>prev.map(v=>v.id===item.violId?{...v,status:"Exception Requested",resolutionNote:resolveNote.trim()}:v)); ack(item.id,"Exception requested — sent to owner"); }
+                    else { pvSet(prev=>prev.map(v=>v.id===item.violId?{...v,status:"Resolved",resolutionNote:resolveNote.trim()}:v)); ack(item.id,`${item.asset.name} violation remediated`); }
+                  }} style={{padding:"7px 16px",borderRadius:7,background:ok?T.accent:T.bgHover,border:"none",color:ok?"#fff":T.textMuted,fontSize:12,fontWeight:600,cursor:ok?"pointer":"default"}}>{exception?"Send to owner":"Confirm resolution"}</button>
+                  <button onClick={()=>{setResolveOpen(false);setResolveNote("");setResolveMode("remediate");}} style={{padding:"7px 16px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
                 </div>
-                <div style={{fontSize:10.5,color:T.textMuted,marginTop:8}}>Recorded on the {isViol?"violation":"incident"} and shown in {isViol?"Policy Manager":"Data Quality"} as history.</div>
+                <div style={{fontSize:10.5,color:T.textMuted,marginTop:8}}>{exception?"Goes to the asset owner to approve or deny.":`Recorded on the ${isViol?"violation":"incident"} and shown in ${isViol?"Policy Manager":"Data Quality"} as history.`}</div>
               </div>
             );
           })()}
@@ -27357,6 +27431,7 @@ const InboxView = ({onToast}) => {
     {id:"violation", label:"Violations", c:"#dc2626", cats:["violation"]},
     {id:"approval",  label:"Approvals",  c:"#2563eb", cats:["approval"]},
     {id:"ownership", label:"Ownership",  c:"#0d9488", cats:["ownership"]},
+    {id:"done",      label:"Done",       c:"#16a34a", done:true},
   ];
 
   /* ── Detail panel header — matches ServicePanel pattern ── */
@@ -27410,7 +27485,7 @@ const InboxView = ({onToast}) => {
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
       {/* Topbar — breadcrumb only */}
-      <Topbar breadcrumb={[{label:"Inbox"}]}/>
+      <Topbar breadcrumb={[{label:"Workspace"}]}/>
 
       {/* Primary toolbar — role lens (main filter) + search up top, then filter + view toggle */}
       <div style={{padding:"8px 20px 8px 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:12,flexShrink:0,background:T.bgSurface,minHeight:46}}>
@@ -27492,7 +27567,7 @@ const InboxView = ({onToast}) => {
       {/* Tabs — two questions + archive (below the filter, list view only) */}
       {viewMode==="list"&&(
         <div style={{padding:"0 20px 0 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",flexShrink:0,background:T.bgSurface,minHeight:42}}>
-          {[["action","Action needed"],["activity","Activity"],["done","Done"]].map(([k,l])=>(
+          {[["action","Inbox"],["done","Done"]].map(([k,l])=>(
             <button key={k} onClick={()=>{ setFilter(k); setSel(null); closeForms(); setFilterOpen(false); }}
               style={{padding:"11px 14px",background:"transparent",border:"none",borderBottom:`2px solid ${filter===k?T.accent:"transparent"}`,color:filter===k?T.text:T.textMuted,fontSize:12.5,fontWeight:filter===k?600:400,cursor:"pointer",display:"flex",alignItems:"center",gap:5,transition:"all .12s",whiteSpace:"nowrap"}}>
               {l}
@@ -27571,7 +27646,9 @@ const InboxView = ({onToast}) => {
           {viewMode==="kanban"&&(
             <div style={{flex:1,overflowX:"auto",overflowY:"hidden",padding:"18px 20px",display:"flex",gap:12,alignItems:"flex-start"}}>
               {KANBAN_COLS.map(col=>{
-                const colItems = actionItems.filter(i=>col.cats.includes(itemCategory(i)) && roleMatch(i) && secMatch(i) && searchMatch(i));
+                const colItems = col.done
+                  ? doneItems.filter(i=>roleMatch(i) && secMatch(i) && searchMatch(i))
+                  : actionItems.filter(i=>col.cats.includes(itemCategory(i)) && roleMatch(i) && secMatch(i) && searchMatch(i));
                 return (
                   <div key={col.id} style={{width:248,flexShrink:0,display:"flex",flexDirection:"column",height:"100%"}}>
                     <div style={{display:"flex",alignItems:"center",gap:7,padding:"9px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderTop:`3px solid ${col.c}`,borderRadius:"8px 8px 0 0",flexShrink:0}}>
