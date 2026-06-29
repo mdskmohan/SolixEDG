@@ -2682,21 +2682,25 @@ const SegTabs = ({tabs,active,onChange})=>(
 // ─────────────────────────────────────────────
 // Notifications = awareness feed. Standard template per category: "{what happened} · {subject}".
 const NOTIFS = [
-  {id:1, type:"alert",         category:"Quality",       unread:true, title:"Quality check failed · orders",               body:"Rule 'orders.amount_not_null' failed on 847 rows (1.8%)",                  time:"2m ago",  nav:"quality"},
-  {id:2, type:"policy",        category:"Policy",        unread:true, title:"Policy violation detected · transactions",     body:"Certification gate — transactions is queryable without an Approved certification", time:"6m ago",  nav:"policymanager"},
-  {id:3, type:"term_submitted",category:"Glossary",      unread:true, title:"Term submitted for review · Churn Rate",       body:"dev.patel submitted it — awaiting your approval as steward",               time:"18m ago", nav:"glossary"},
-  {id:4, type:"cert",          category:"Certification", unread:true, title:"Asset certified · customers",                  body:"Certified by dev.patel",                                                   time:"1h ago",  nav:"catalog"},
-  {id:5, type:"access",        category:"Access",        unread:true, title:"Access request pending · payments",            body:"john.doe requested access to the payments table",                          time:"2h ago",  nav:"stewardship"},
-  {id:6, type:"escalation",    category:"Escalation",    unread:true, title:"Task escalated to you · user_sessions",        body:"PII Audit escalated — due in 24h",                                         time:"3h ago",  nav:"stewardship"},
-  {id:7, type:"term_approved", category:"Glossary",      unread:false,title:"Term approved · Customer Lifetime Value",      body:"Approved by maya.chen",                                                    time:"4h ago",  nav:"glossary"},
-  {id:8, type:"policy",        category:"Policy",        unread:false,title:"Policy published · PII Masking",               body:"Applied to user_events",                                                   time:"8h ago",  nav:"policymanager"},
-  {id:9, type:"schema",        category:"Catalog",       unread:false,title:"Schema drift detected · product_events",       body:"Column 'user_id' type changed",                                            time:"12h ago", nav:"catalog"},
-  {id:10,type:"contract",      category:"Catalog",       unread:false,title:"Contract updated · orders",                    body:"orders_contract v2.1.0 published",                                         time:"1d ago",  nav:"catalog"},
-  {id:11,type:"new_dataset",   category:"Ownership",     unread:false,title:"Unowned asset detected · ml_feature_store_v3", body:"No owner or steward assigned",                                             time:"2d ago",  nav:"stewardship"},
-  {id:12,type:"field_updated", category:"Catalog",       unread:true, title:"Description updated · orders",                 body:"priya.nair updated the description",                                       time:"2h ago",  nav:"catalog"},
-  {id:13,type:"assigned",      category:"Ownership",     unread:true, title:"Assigned as steward · dim_customer",           body:"james.oh assigned you",                                                    time:"1d ago",  nav:"catalog"},
-  {id:14,type:"schema",        category:"Catalog",       unread:false,title:"New column detected · dim_customer",           body:"'referral_source' added",                                                  time:"2d ago",  nav:"catalog"},
+  {id:1, type:"alert",         category:"Quality",       asset:"orders",              unread:true, title:"Quality check failed · orders",               body:"Rule 'orders.amount_not_null' failed on 847 rows (1.8%)",                  time:"2m ago",  nav:"quality"},
+  {id:2, type:"policy",        category:"Policy",        asset:"transactions",        unread:true, title:"Policy violation detected · transactions",     body:"Certification gate — transactions is queryable without an Approved certification", time:"6m ago",  nav:"policymanager"},
+  {id:3, type:"term_submitted",category:"Glossary",      asset:null,                  unread:true, title:"Term submitted for review · Churn Rate",       body:"dev.patel submitted it — awaiting your approval as steward",               time:"18m ago", nav:"glossary"},
+  {id:4, type:"cert",          category:"Certification", asset:"customers",           unread:true, title:"Asset certified · customers",                  body:"Certified by dev.patel",                                                   time:"1h ago",  nav:"catalog"},
+  {id:5, type:"access",        category:"Access",        asset:"payments",            unread:true, title:"Access request pending · payments",            body:"john.doe requested access to the payments table",                          time:"2h ago",  nav:"stewardship"},
+  {id:6, type:"escalation",    category:"Escalation",    asset:"user_sessions",       unread:true, forMe:true, title:"Task escalated to you · user_sessions",  body:"PII Audit escalated — due in 24h",                                         time:"3h ago",  nav:"stewardship"},
+  {id:7, type:"term_approved", category:"Glossary",      asset:null,                  unread:false,title:"Term approved · Customer Lifetime Value",      body:"Approved by maya.chen",                                                    time:"4h ago",  nav:"glossary"},
+  {id:8, type:"policy",        category:"Policy",        asset:null,                  unread:false,title:"Policy published · PII Masking",               body:"Applied to user_events",                                                   time:"8h ago",  nav:"policymanager"},
+  {id:9, type:"schema",        category:"Catalog",       asset:"product_events",      unread:false,title:"Schema drift detected · product_events",       body:"Column 'user_id' type changed",                                            time:"12h ago", nav:"catalog"},
+  {id:10,type:"contract",      category:"Catalog",       asset:"orders",              unread:false,title:"Contract updated · orders",                    body:"orders_contract v2.1.0 published",                                         time:"1d ago",  nav:"catalog"},
+  {id:11,type:"new_dataset",   category:"Ownership",     asset:null,                  unread:false,title:"Unowned asset detected · ml_feature_store_v3", body:"No owner or steward assigned",                                             time:"2d ago",  nav:"stewardship"},
+  {id:12,type:"field_updated", category:"Catalog",       asset:"orders",              unread:true, title:"Description updated · orders",                 body:"priya.nair updated the description",                                       time:"2h ago",  nav:"catalog"},
+  {id:13,type:"assigned",      category:"Ownership",     asset:"dim_customer",        unread:true, forMe:true, title:"Assigned as steward · dim_customer",     body:"james.oh assigned you",                                                    time:"1d ago",  nav:"catalog"},
+  {id:14,type:"schema",        category:"Catalog",       asset:"dim_customer",        unread:false,title:"New column detected · dim_customer",           body:"'referral_source' added",                                                  time:"2d ago",  nav:"catalog"},
 ];
+// Scope: you only get a notification if it's a personal one, has no asset (platform-wide),
+// you own/steward the asset — or you're an admin (oversight). ASSETS defined above.
+const _respFor = (assetName, me) => { const a=(typeof ASSETS!=="undefined"?ASSETS:[]).find(x=>x.name===assetName); if(!a) return false; const own=(Array.isArray(a.owners)?a.owners:[a.owner]).filter(Boolean); const stw=(Array.isArray(a.stewards)?a.stewards:[a.steward]).filter(Boolean); return own.includes(me)||stw.includes(me); };
+const notifVisible = (n, me, isAdmin) => isAdmin || n.forMe || !n.asset || _respFor(n.asset, me);
 
 const DOCS = [
   {cat:"Getting Started",icon:"🚀",items:[
@@ -2748,12 +2752,15 @@ const NOTIF_TYPE_CFG = {
 const NotificationsPanel = ({onClose, onViewAll}) => {
   const onNav = useNav();
   const tagCtx = useTagCtx();
+  const {role:_r, roleCfg:_rc} = useRole();
+  const _me = ((_rc&&_rc.email)||"").split("@")[0]; const _isAdmin = _r==="admin";
   const [notifs, setNotifs] = useState(NOTIFS.map(n=>({...n})));
   const [filter, setFilter] = useState("all");
-  const unreadCount = notifs.filter(n=>n.unread).length;
+  const _scoped = notifs.filter(n=>notifVisible(n,_me,_isAdmin)); // only your owned/stewarded assets
+  const unreadCount = _scoped.filter(n=>n.unread).length;
   const markAll = () => setNotifs(n=>n.map(x=>({...x,unread:false})));
   const dismiss  = (id,e) => { e.stopPropagation(); setNotifs(n=>n.filter(x=>x.id!==id)); };
-  const displayed = filter==="unread" ? notifs.filter(n=>n.unread) : notifs;
+  const displayed = filter==="unread" ? _scoped.filter(n=>n.unread) : _scoped;
 
   return (
     <div className="scaleIn" style={{position:"absolute",top:"calc(100% + 8px)",right:0,width:380,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,boxShadow:"0 12px 40px rgba(0,0,0,.3)",zIndex:600,overflow:"hidden",display:"flex",flexDirection:"column",maxHeight:520}}>
@@ -2858,12 +2865,15 @@ const NotificationsPanel = ({onClose, onViewAll}) => {
 // Full scrollable notifications drawer — slides in from the right ("View all")
 const NotificationsDrawer = ({onClose}) => {
   const onNav = useNav();
+  const {role:_r, roleCfg:_rc} = useRole();
+  const _me = ((_rc&&_rc.email)||"").split("@")[0]; const _isAdmin = _r==="admin";
   const [notifs, setNotifs] = useState(NOTIFS.map(n=>({...n})));
   const [filter, setFilter] = useState("all");
-  const unread = notifs.filter(n=>n.unread).length;
+  const _scoped = notifs.filter(n=>notifVisible(n,_me,_isAdmin));
+  const unread = _scoped.filter(n=>n.unread).length;
   const markAll = () => setNotifs(n=>n.map(x=>({...x,unread:false})));
   const dismiss = (id,e) => { e&&e.stopPropagation(); setNotifs(n=>n.filter(x=>x.id!==id)); };
-  const displayed = filter==="unread" ? notifs.filter(n=>n.unread) : notifs;
+  const displayed = filter==="unread" ? _scoped.filter(n=>n.unread) : _scoped;
   return (
     <>
       <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:900}}/>
@@ -2916,7 +2926,9 @@ const NotificationsDrawer = ({onClose}) => {
 const NotifBtn = () => {
   const [open, setOpen] = useState(false);
   const [drawer, setDrawer] = useState(false);
-  const unread = NOTIFS.filter(n=>n.unread).length;
+  const {role:_r, roleCfg:_rc} = useRole();
+  const _me = ((_rc&&_rc.email)||"").split("@")[0]; const _isAdmin = _r==="admin";
+  const unread = NOTIFS.filter(n=>n.unread && notifVisible(n,_me,_isAdmin)).length;
   const ref = useRef(null);
   useEffect(()=>{const fn=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};document.addEventListener("mousedown",fn);return()=>document.removeEventListener("mousedown",fn);},[]);
   return (
