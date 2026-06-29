@@ -21652,6 +21652,25 @@ const TagSyncTab = ({connectorId, connectorName}) => {
         ))}
       </div>
 
+      {/* Governance defaults — inherited by every asset ingested from this source */}
+      <div style={{border:`1px solid ${T.border}`,borderRadius:8,padding:'12px 16px'}}>
+        <div style={{fontSize:12.5,fontWeight:600,color:T.text,marginBottom:2}}>Default owner &amp; steward</div>
+        <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>New assets ingested from {connectorName} inherit these automatically — so a 100-table pull is one decision, not 100 tasks.</div>
+        <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
+          {[['defaultOwner','Default owner'],['defaultSteward','Default steward']].map(([field,label])=>(
+            <div key={field} style={{flex:1,minWidth:170}}>
+              <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>{label}</div>
+              <select value={cfg[field]||''} onChange={e=>updateConnectorConfig(cfgKey,{[field]:e.target.value})}
+                style={{width:'100%',padding:'7px 9px',background:T.bgElevated,border:`1px solid ${cfg[field]?T.accent:T.border}`,borderRadius:7,color:T.text,fontSize:12.5,outline:'none',boxSizing:'border-box'}}>
+                <option value="">— none —</option>
+                {['maya.chen','dev.patel','sarah.kim','alex.wu','priya.nair','james.oh'].map(u=><option key={u} value={u}>{u}</option>)}
+              </select>
+            </div>
+          ))}
+        </div>
+        {(cfg.defaultOwner||cfg.defaultSteward)&&<div style={{fontSize:11,color:T.green,marginTop:9}}>✓ Assets from this source are assigned {cfg.defaultOwner?`owner ${cfg.defaultOwner}`:''}{cfg.defaultOwner&&cfg.defaultSteward?' · ':''}{cfg.defaultSteward?`steward ${cfg.defaultSteward}`:''} on ingest — no per-table tasks.</div>}
+      </div>
+
       {/* Sync controls */}
       <div style={{display:'flex',flexDirection:'column',gap:0,border:`1px solid ${T.border}`,borderRadius:8,overflow:'hidden'}}>
         {/* Pull */}
@@ -27200,6 +27219,7 @@ const InboxView = ({onToast}) => {
   const [resolveMode,  setResolveMode]  = useState("remediate"); // violations: remediate | exception
   const [reassignOpen, setReassignOpen] = useState(false);  // inline reassign picker
   const [reassignMap,  setReassignMap]  = useState({});     // {itemId: handle} assignee overrides
+  const [bulkOpen,     setBulkOpen]     = useState(false);  // bulk-assign orphans picker
   const [filterOpen,   setFilterOpen]   = useState(false);
   const [secFilters,   setSecFilters]   = useState(new Set()); // section multiselect
   const closeForms = ()=>{ [setAssignOpen,setResolveOpen,setReassignOpen].forEach(f=>f(false)); setResolveNote(""); setResolveMode("remediate"); };
@@ -27756,6 +27776,28 @@ const InboxView = ({onToast}) => {
                   </div>
                 ):(
                   <div style={{display:"flex",flexDirection:"column",gap:5,maxWidth:sel?9999:820}}>
+                    {(()=>{const orphans=shown.filter(i=>i.type==="orphan_assignment");return orphans.length>=2?(
+                      <div style={{background:T.accentDim,border:`1px solid ${T.accent}44`,borderRadius:8,padding:"10px 14px",marginBottom:6}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                          <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{orphans.length} unowned assets need an owner</span>
+                          <span style={{fontSize:11.5,color:T.textMuted}}>— assign them all at once instead of one by one</span>
+                          <div style={{flex:1}}/>
+                          <button onClick={()=>setBulkOpen(o=>!o)} style={{padding:"5px 12px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Assign all ▾</button>
+                        </div>
+                        {bulkOpen&&(
+                          <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${T.accent}33`}}>
+                            <div style={{fontSize:11,color:T.textSub,marginBottom:8}}>Assign all {orphans.length} as owner to:</div>
+                            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                              {STEWARD_POOL.map(u=>(
+                                <button key={u} onClick={()=>{orphans.forEach(o=>assignOwnership(o.asset.name,u,"owner"));const ids=orphans.map(o=>o.id);setItems(p=>p.map(i=>ids.includes(i.id)?{...i,readAt:new Date().toISOString()}:i));setBulkOpen(false);setSel(null);onToast(`${orphans.length} assets assigned to ${u}`,"success");}}
+                                  style={{padding:"5px 12px",borderRadius:6,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}
+                                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>{u}</button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ):null;})()}
                     {shown.map(item=><Tile key={item.id} item={item}/>)}
                   </div>
                 )
