@@ -16517,6 +16517,22 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
           )}
         </div>
 
+        {/* Request a role (bottom-up: ask to own/steward this asset) */}
+        <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`}}>
+          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Request a role</div>
+          <div style={{display:"flex",gap:8}}>
+            {[["owner","Request ownership"],["steward","Request stewardship"]].map(([role,label])=>(
+              <button key={role} onClick={()=>{
+                const approver=(data.owners&&data.owners[0])||data.owner||"the domain owner";
+                addRoleRequest({kind:"asset",asset:data.name,role,requestedBy:"alex.rivera",note:"Requested from the asset profile",approver});
+                onToast&&onToast(`${role==="owner"?"Ownership":"Stewardship"} request sent to ${approver} for approval`,"success");
+              }} style={{flex:1,padding:"7px 10px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,fontWeight:600,cursor:"pointer",transition:"all .12s"}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>{label}</button>
+            ))}
+          </div>
+          <div style={{fontSize:10.5,color:T.textMuted,marginTop:7}}>Goes to the asset owner to approve — then you're added to the field.</div>
+        </div>
+
         {/* TAGS */}
         <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
           <MetaLabel onEdit={()=>{setTagsOpen(p=>!p);setTagsSearch("");}}>Tags</MetaLabel>
@@ -27061,7 +27077,7 @@ const TYPE_ACTION = {
   dq_alert:"Resolve quality incident", policy_violation:"Remediate violation",
   tag_review:"Review tag", certification_review:"Certify asset",
   orphan_assignment:"Assign owner", needs_attention:"Assign steward",
-  stewardship_request:"Review access request", term_review:"Approve term",
+  stewardship_request:"Review role request", term_review:"Approve term",
   field_updated:"Field updated", assigned:"Assigned to you",
 };
 const itemTitle = (item) => { if(!item) return ""; const act=TYPE_ACTION[item.type]; const subj=item.asset&&item.asset.name; return (act&&subj)?`${act} · ${subj}`:(item.title||""); };
@@ -27080,6 +27096,19 @@ const certifyAsset = (assetName) => { const a=ASSETS.find(x=>x.name===assetName)
 const STEWARD_POOL = ["maya.chen","dev.patel","sarah.kim","alex.wu","priya.nair","james.oh"];
 const stewardOf = (assetName) => { const a=ASSETS.find(x=>x.name===assetName); return a ? (a.steward || (Array.isArray(a.stewards)&&a.stewards[0]) || null) : null; };
 const itemAssignee = (item) => item.assignee || stewardOf(item.asset?.name) || null;
+
+// ── Bottom-up role requests (be the owner/steward of an asset) ──
+// A user requests on the asset profile; it routes to the asset's owner (or domain
+// owner if orphan) as a Workspace approval; approve writes the field.
+let _roleReqs = [
+  {id:"rr-seed1", kind:"asset", asset:"orders", role:"steward", requestedBy:"dev.patel", note:"I manage this pipeline and want to keep its metadata current.", approver:"maya.chen", status:"pending", at:"1d ago"},
+];
+const _rrSubs = new Set();
+const rrSet = (u)=>{ _roleReqs = typeof u==="function"?u(_roleReqs):u; _rrSubs.forEach(f=>f()); };
+const addRoleRequest = (req)=>rrSet(prev=>[{id:"rr-"+Date.now(), status:"pending", at:"just now", ...req}, ...prev]);
+const resolveRoleRequest = (id,status)=>rrSet(prev=>prev.map(r=>r.id===id?{...r,status}:r));
+const useRoleReqs = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_rrSubs.add(fn);return()=>{_rrSubs.delete(fn);};},[]); return _roleReqs; };
+
 const InboxView = ({onToast}) => {
   const onNav = useNav();
   const tagCtx = useTagCtx(); // tags live in TagProvider context — the tags "shared store"
@@ -27104,12 +27133,20 @@ const InboxView = ({onToast}) => {
   // activity = passive FYI feed (field changes, assignments) — no action needed
   // done     = resolved action items (the archive)
   const secFilterActive = secFilters.size > 0;
+  // bottom-up role requests (asset owner/steward) → owner approval items, merged live
+  const roleReqs = useRoleReqs();
+  const ROLE_REQ_ITEMS = roleReqs.filter(r=>r.kind==="asset"&&r.status==="pending").map(r=>({
+    id:"rrq-"+r.id, type:"stewardship_request", severity:"medium", section:"catalog", timeAgo:r.at||"just now",
+    asset:{name:r.asset, path:r.asset, type:"Table"}, body:`${r.requestedBy} requested to be ${r.role} — "${r.note}"`,
+    requestedBy:r.requestedBy, requestedRole:r.role==="owner"?"Owner":"Steward", reqId:r.id, readAt:null,
+  }));
+  const allItems = [...ROLE_REQ_ITEMS, ...items];
   const isActionItem   = i => itemRole(i)!=="fyi" && !i.readAt;
   const isActivityItem = i => itemRole(i)==="fyi";
   const isDoneItem     = i => itemRole(i)!=="fyi" && !!i.readAt;
-  const actionItems   = items.filter(isActionItem);
-  const activityItems = items.filter(isActivityItem);
-  const doneItems     = items.filter(isDoneItem);
+  const actionItems   = allItems.filter(isActionItem);
+  const activityItems = allItems.filter(isActivityItem);
+  const doneItems     = allItems.filter(isDoneItem);
   const roleMatch = i => roleScope==="all" || itemRole(i)===roleScope;
   const secMatch  = i => !secFilterActive || secFilters.has(i.section);
   const _q = search.trim().toLowerCase();
@@ -27135,7 +27172,7 @@ const InboxView = ({onToast}) => {
   ];
   const toggleSec = s => setSecFilters(prev=>{ const n=new Set(prev); n.has(s)?n.delete(s):n.add(s); return n; });
 
-  const selItem = items.find(i=>i.id===sel)||null;
+  const selItem = allItems.find(i=>i.id===sel)||null;
   const selIdx  = shown.findIndex(i=>i.id===sel);
   const navPrev = ()=>{ if(selIdx>0) { setSel(shown[selIdx-1].id); closeForms(); }};
   const navNext = ()=>{ if(selIdx<shown.length-1) { setSel(shown[selIdx+1].id); closeForms(); }};
@@ -27192,7 +27229,7 @@ const InboxView = ({onToast}) => {
     if(item.type==="certification_review")
       return <>{btn("Certify",()=>{certifyByAsset(item.asset.name);certifyAsset(item.asset.name);ack(item.id,`${item.asset.name} certified`);},true)}{btn("Reject",()=>{certSet(prev=>prev.map(c=>c.asset===item.asset.name?{...c,status:"Rejected",certifier:null,date:null}:c));ack(item.id,"Certification rejected");},false,true)}{openIn("Open in Catalog","catalog")}</>;
     if(item.type==="stewardship_request")
-      return <>{btn("Approve",()=>{const role=item.requestedRole==="Owner"?"owner":"steward";assignOwnership(item.asset.name,item.requestedBy,role);ack(item.id,`${item.requestedBy} added as ${item.requestedRole} of ${item.asset.name}`);},true)}{btn("Reject",()=>ack(item.id,"Request rejected"),false,true)}{openIn("Open in Catalog","catalog")}</>;
+      return <>{btn("Approve",()=>{const role=item.requestedRole==="Owner"?"owner":"steward";assignOwnership(item.asset.name,item.requestedBy,role);if(item.reqId)resolveRoleRequest(item.reqId,"approved");ack(item.id,`${item.requestedBy} added as ${item.requestedRole} of ${item.asset.name} — requester notified`);},true)}{btn("Reject",()=>{if(item.reqId)resolveRoleRequest(item.reqId,"rejected");ack(item.id,"Request rejected — requester notified");},false,true)}{openIn("Open in Catalog","catalog")}</>;
     if(item.type==="orphan_assignment")
       return <>{btn("Assign owner",()=>setAssignOpen(a=>!a),true)}{btn("Deprecate",()=>ack(item.id,"Asset deprecated"),false,true)}{openIn("Open in Catalog","catalog")}</>;
     if(item.type==="needs_attention")
