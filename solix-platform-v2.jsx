@@ -2947,6 +2947,10 @@ const UserMenu = () => {
   const cfg = roleCfg || {label:"User",name:"User",avatar:"U",color:T.accent,badge:T.accentDim,email:""};
   const [open, setOpen] = useState(false);
   const [tab,  setTab]  = useState("menu");
+  const [reqOpen, setReqOpen] = useState(false);   // RBAC role-request modal
+  const [reqRole, setReqRole] = useState("steward");
+  const [reqNote, setReqNote] = useState("");
+  const [reqSent, setReqSent] = useState(false);
   const ref = useRef(null);
   useEffect(()=>{const fn=e=>{if(ref.current&&!ref.current.contains(e.target)){setOpen(false);setTab("menu");}};document.addEventListener("mousedown",fn);return()=>document.removeEventListener("mousedown",fn);},[]);
   return (
@@ -2986,12 +2990,13 @@ const UserMenu = () => {
               {label:"My Tasks",     icon:Ic.steward(13),  nav:"stewardship"},
               {label:"My Assets",    icon:Ic.catalog(13),  nav:"catalog"},
               {divider:true},
+              {label:"Request a role",icon:Ic.persona?Ic.persona(13):Ic.steward(13), action:"reqrole"},
               {label:"What's New",   icon:Ic.bell(13),     nav:null},
               {divider:true},
             ].map((item,i)=>{
               if(item.divider) return <div key={i} style={{height:1,background:T.border,margin:"4px 6px"}}/>;
               return (
-                <button key={i} onClick={()=>{if(item.nav)onNav(item.nav);setOpen(false);}} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"8px 14px",background:"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}}
+                <button key={i} onClick={()=>{if(item.action==="reqrole"){setReqOpen(true);setReqSent(false);}else if(item.nav){onNav(item.nav);}setOpen(false);}} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"8px 14px",background:"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}}
                   onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
                   onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                   <span style={{color:T.textSub,display:"flex",flexShrink:0}}>{item.icon}</span>
@@ -3026,6 +3031,43 @@ const UserMenu = () => {
             </div>
           )}
         </div>
+      )}
+      {reqOpen&&(
+        <>
+          <div onClick={()=>setReqOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:1100}}/>
+          <div className="scaleIn" style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:380,maxWidth:"92vw",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 20px 60px rgba(0,0,0,.3)",zIndex:1101,overflow:"hidden"}}>
+            <div style={{padding:"16px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <span style={{fontSize:14,fontWeight:700,color:T.text}}>Request a platform role</span>
+              <button onClick={()=>setReqOpen(false)} style={{width:24,height:24,background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex"}}>{Ic.x(12)}</button>
+            </div>
+            {reqSent ? (
+              <div style={{padding:"28px 18px",textAlign:"center"}}>
+                <div style={{fontSize:13,fontWeight:600,color:"#16a34a",marginBottom:6}}>✓ Request sent to an admin</div>
+                <div style={{fontSize:12,color:T.textMuted,marginBottom:18}}>You'll be notified when it's reviewed.</div>
+                <button onClick={()=>setReqOpen(false)} style={{padding:"8px 18px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:600,cursor:"pointer"}}>Done</button>
+              </div>
+            ) : (
+              <div style={{padding:"16px 18px"}}>
+                <div style={{fontSize:11.5,color:T.textSub,marginBottom:8}}>Which role do you need? An admin approves platform roles.</div>
+                <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:14}}>
+                  {Object.entries(ROLES_CONFIG).filter(([k])=>k!=="admin").map(([k,c])=>(
+                    <button key={k} onClick={()=>setReqRole(k)} style={{display:"flex",alignItems:"center",gap:9,padding:"9px 11px",borderRadius:8,background:reqRole===k?T.accentDim:"transparent",border:`1px solid ${reqRole===k?T.accent:T.border}`,cursor:"pointer",textAlign:"left"}}>
+                      <span style={{width:9,height:9,borderRadius:"50%",border:`2px solid ${reqRole===k?T.accent:T.border}`,background:reqRole===k?T.accent:"transparent",flexShrink:0}}/>
+                      <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{c.label}</span>
+                    </button>
+                  ))}
+                </div>
+                <textarea value={reqNote} onChange={e=>setReqNote(e.target.value)} rows={3} placeholder="Why do you need this role?"
+                  style={{width:"100%",boxSizing:"border-box",padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",resize:"vertical",fontFamily:"inherit",marginBottom:14}}/>
+                <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                  <button onClick={()=>setReqOpen(false)} style={{padding:"8px 16px",borderRadius:8,background:"none",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer"}}>Cancel</button>
+                  <button disabled={!reqNote.trim()} onClick={()=>{addRoleRequest({kind:"rbac",targetRole:(ROLES_CONFIG[reqRole]&&ROLES_CONFIG[reqRole].label)||reqRole,requestedBy:(cfg.email||"you@jnj").split("@")[0],note:reqNote.trim()});setReqSent(true);setReqNote("");}}
+                    style={{padding:"8px 16px",borderRadius:8,background:reqNote.trim()?T.accent:T.bgHover,border:"none",color:reqNote.trim()?"#fff":T.textMuted,fontSize:12.5,fontWeight:600,cursor:reqNote.trim()?"pointer":"default"}}>Send request</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
@@ -27043,12 +27085,12 @@ const WF_DATA = [
 
 const WF_CATS = ["All", "Ingestion", "Quality", "Lineage", "Governance", "Analytics"];
 
-const TASK_TYPES = ["field_updated","stewardship_request","needs_attention","tag_review","certification_review","orphan_assignment","term_review"];
+const TASK_TYPES = ["field_updated","stewardship_request","needs_attention","tag_review","certification_review","orphan_assignment","term_review","rbac_request"];
 // Phase 3 — work-item categories (color-coded grouping by kind of work)
 const TYPE_CATEGORY = {
   policy_violation:"violation", dq_alert:"violation",
   tag_review:"approval", certification_review:"approval", term_review:"approval",
-  assigned:"ownership", stewardship_request:"ownership", needs_attention:"ownership", orphan_assignment:"ownership",
+  assigned:"ownership", stewardship_request:"ownership", needs_attention:"ownership", orphan_assignment:"ownership", rbac_request:"ownership",
   field_updated:"curation",
 };
 const CATEGORY_META = {
@@ -27062,7 +27104,7 @@ const itemCategory = (item) => TYPE_CATEGORY[item?.type] || "curation";
 // Role model — every work item is whose job: Steward DOES, Owner DECIDES, FYI = awareness.
 const ITEM_ROLE = {
   tag_review:"steward", dq_alert:"steward", policy_violation:"steward", term_review:"steward",
-  certification_review:"owner", stewardship_request:"owner", orphan_assignment:"owner", needs_attention:"owner",
+  certification_review:"owner", stewardship_request:"owner", orphan_assignment:"owner", needs_attention:"owner", rbac_request:"owner",
   field_updated:"fyi", assigned:"fyi",
 };
 const ROLE_META = {
@@ -27077,7 +27119,7 @@ const TYPE_ACTION = {
   dq_alert:"Resolve quality incident", policy_violation:"Remediate violation",
   tag_review:"Review tag", certification_review:"Certify asset",
   orphan_assignment:"Assign owner", needs_attention:"Assign steward",
-  stewardship_request:"Review role request", term_review:"Approve term",
+  stewardship_request:"Review role request", term_review:"Approve term", rbac_request:"Review platform role",
   field_updated:"Field updated", assigned:"Assigned to you",
 };
 const itemTitle = (item) => { if(!item) return ""; const act=TYPE_ACTION[item.type]; const subj=item.asset&&item.asset.name; return (act&&subj)?`${act} · ${subj}`:(item.title||""); };
@@ -27135,7 +27177,12 @@ const InboxView = ({onToast}) => {
   const secFilterActive = secFilters.size > 0;
   // bottom-up role requests (asset owner/steward) → owner approval items, merged live
   const roleReqs = useRoleReqs();
-  const ROLE_REQ_ITEMS = roleReqs.filter(r=>r.kind==="asset"&&r.status==="pending").map(r=>({
+  const ROLE_REQ_ITEMS = roleReqs.filter(r=>r.status==="pending").map(r=> r.kind==="rbac" ? ({
+    id:"rbq-"+r.id, type:"rbac_request", severity:"medium", section:"connections", timeAgo:r.at||"just now",
+    asset:{name:r.requestedBy, path:"Platform role · "+r.targetRole, type:"Role"},
+    body:`Requests the ${r.targetRole} platform role — "${r.note}"`,
+    requestedBy:r.requestedBy, targetRole:r.targetRole, reqId:r.id, readAt:null,
+  }) : ({
     id:"rrq-"+r.id, type:"stewardship_request", severity:"medium", section:"catalog", timeAgo:r.at||"just now",
     asset:{name:r.asset, path:r.asset, type:"Table"}, body:`${r.requestedBy} requested to be ${r.role} — "${r.note}"`,
     requestedBy:r.requestedBy, requestedRole:r.role==="owner"?"Owner":"Steward", reqId:r.id, readAt:null,
@@ -27195,7 +27242,8 @@ const InboxView = ({onToast}) => {
     field_updated:       {icon:sz=>Ic.edit(sz||12),     label:"Field Updated",  shortLabel:"Updated"},
     assigned:            {icon:sz=>Ic.steward(sz||12),  label:"New Assignment", shortLabel:"Assigned"},
     needs_attention:     {icon:sz=>Ic.alert(sz||12),    label:"Needs Steward",  shortLabel:"Action"},
-    stewardship_request: {icon:sz=>Ic.persona(sz||12),  label:"Access Request", shortLabel:"Request"},
+    stewardship_request: {icon:sz=>Ic.persona(sz||12),  label:"Role Request",   shortLabel:"Request"},
+    rbac_request:        {icon:sz=>Ic.access(sz||12),   label:"Platform Role",  shortLabel:"Role"},
     policy_violation:    {icon:sz=>Ic.policies(sz||12), label:"Policy Violation",shortLabel:"Violation"},
     tag_review:          {icon:sz=>Ic.tag(sz||12),     label:"Tag Review",     shortLabel:"Tag"},
     certification_review:{icon:sz=>Ic.cert(sz||12),    label:"Certification",  shortLabel:"Cert"},
@@ -27230,6 +27278,8 @@ const InboxView = ({onToast}) => {
       return <>{btn("Certify",()=>{certifyByAsset(item.asset.name);certifyAsset(item.asset.name);ack(item.id,`${item.asset.name} certified`);},true)}{btn("Reject",()=>{certSet(prev=>prev.map(c=>c.asset===item.asset.name?{...c,status:"Rejected",certifier:null,date:null}:c));ack(item.id,"Certification rejected");},false,true)}{openIn("Open in Catalog","catalog")}</>;
     if(item.type==="stewardship_request")
       return <>{btn("Approve",()=>{const role=item.requestedRole==="Owner"?"owner":"steward";assignOwnership(item.asset.name,item.requestedBy,role);if(item.reqId)resolveRoleRequest(item.reqId,"approved");ack(item.id,`${item.requestedBy} added as ${item.requestedRole} of ${item.asset.name} — requester notified`);},true)}{btn("Reject",()=>{if(item.reqId)resolveRoleRequest(item.reqId,"rejected");ack(item.id,"Request rejected — requester notified");},false,true)}{openIn("Open in Catalog","catalog")}</>;
+    if(item.type==="rbac_request")
+      return <>{btn("Grant role",()=>{if(item.reqId)resolveRoleRequest(item.reqId,"approved");ack(item.id,`${item.targetRole} role granted to ${item.requestedBy} — requester notified`);},true)}{btn("Reject",()=>{if(item.reqId)resolveRoleRequest(item.reqId,"rejected");ack(item.id,"Role request rejected — requester notified");},false,true)}{openIn("Open in Access","access")}</>;
     if(item.type==="orphan_assignment")
       return <>{btn("Assign owner",()=>setAssignOpen(a=>!a),true)}{btn("Deprecate",()=>ack(item.id,"Asset deprecated"),false,true)}{openIn("Open in Catalog","catalog")}</>;
     if(item.type==="needs_attention")
