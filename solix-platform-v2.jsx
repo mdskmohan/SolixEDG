@@ -11902,7 +11902,6 @@ const TableProfilePanel = ({asset})=>{
       <ObsStat color="#3b82f6" label="Row Count"      value={asset.rows||obsFmtCount(rowCount)} icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M2 6.5h12M2 9.5h12" stroke="currentColor" strokeWidth="1.1"/></svg>}/>
       <ObsStat color="#10b981" label="Column Count"   value={String(cols.length||asset.columns||10)} icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M6 3v10M10 3v10" stroke="currentColor" strokeWidth="1.1"/></svg>}/>
       <ObsStat color="#8b5cf6" label="Profile Sample" value="100%" sub="full scan" icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3"/><path d="M8 4v4l2.5 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>}/>
-      <ObsStat color="#f59e0b" label="Size"           value={asset.size||"—"} icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 4.5C3 3.7 5.2 3 8 3s5 .7 5 1.5v7C13 12.3 10.8 13 8 13s-5-.7-5-1.5v-7z" stroke="currentColor" strokeWidth="1.3"/><path d="M3 4.5C3 5.3 5.2 6 8 6s5-.7 5-1.5" stroke="currentColor" strokeWidth="1.3"/></svg>}/>
       <ObsStat color={T.textSub} label="Last Profiled" value="Jun 8, 2026" sub="5:31 AM" icon={<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2.5" y="3" width="11" height="10.5" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M2.5 6h11M5.5 1.8v2.4M10.5 1.8v2.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>}/>
     </div>
     {/* data volume chart */}
@@ -11917,32 +11916,6 @@ const TableProfilePanel = ({asset})=>{
         </div>
         <div style={{...mono,fontSize:24,fontWeight:800,color:T.text,marginBottom:14}}>{obsFmtCount(series[series.length-1])}</div>
         <ObsAreaChart data={series} labels={dates}/>
-      </div>
-    </Card2>
-    {/* profiler config (read-only — the "measurement layer" story) */}
-    <Card2>
-      <div style={{padding:"16px 18px"}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-          <div>
-            <div style={{fontSize:13,fontWeight:700,color:T.text}}>Profiler Configuration</div>
-            <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>Runs scheduled queries against the source to measure data shape.</div>
-          </div>
-          <Badge color="#16a34a" bg="#16a34a15" border="#16a34a33">Enabled</Badge>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
-          {[
-            {l:"Scope",v:`${(asset.db||asset.name).split("/")[0].trim()}`,s:"schema filter"},
-            {l:"Sampling",v:"100%",s:"of rows scanned"},
-            {l:"Partitioning",v:"created_at",s:"last 30 days"},
-            {l:"Schedule",v:"0 5 * * *",s:"daily · 05:00"},
-          ].map(c=>(
-            <div key={c.l} style={{padding:"11px 13px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9}}>
-              <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".07em",marginBottom:5}}>{c.l}</div>
-              <div style={{...mono,fontSize:13,fontWeight:600,color:T.text}}>{c.v}</div>
-              <div style={{fontSize:10.5,color:T.textMuted,marginTop:2}}>{c.s}</div>
-            </div>
-          ))}
-        </div>
       </div>
     </Card2>
   </div>;
@@ -12654,12 +12627,20 @@ const AssetContractTab = ({asset,onToast})=>{
   const [scheduleModal,setScheduleModal]=useState(false);
   const [deleteConfirm,setDeleteConfirm]=useState(false);
   const [expandedRun,setExpandedRun]=useState(null);
+  const [validating,setValidating]=useState(false);   // true while a validation run is in flight
   const setContract=(u)=>setContractState(prev=>{const next=typeof u==="function"?u(prev):u; CONTRACT_STORE[asset.name]=next; return next;});
 
   const changeStatus=(st)=>{ setStatusOpen(false); if(st===contract.status) return; setContract(c=>({...c,status:st,updated:"Just now"})); onToast&&onToast(`Status set to ${st}`,"success"); };
   const runNow=(contractArg)=>{
     setSettingsOpen(false);
+    if(validating) return;   // already in flight
     const target=(contractArg&&contractArg.name)?contractArg:contract;
+    // ── 1) show the running state immediately: a live "Running" row + Health spinner ──
+    setValidating(true);
+    setContract(c=>({...c,runs:[{at:"Just now",by:"You",trigger:"Manual",result:"Running",running:true},...(c.runs||[])]}));
+    setTab("runs");
+    // ── 2) compute + finalize after a short delay ──
+    setTimeout(()=>{
     const res=validateContract(target,asset);
     const total=Object.keys(res.sections).length, passed=total-res.failedSections.length;
     const status=contractRunStatus(res);
@@ -12674,7 +12655,9 @@ const AssetContractTab = ({asset,onToast})=>{
     const run={at:"Just now",by:"You",trigger:"Manual",result:status,total,passed,failed:res.failedSections,detail};
     let incidentOpened=false;
     setContract(c=>{
-      const next={...c,lastRun:"Just now",runs:[run,...(c.runs||[])]};
+      // replace the leading "Running" placeholder with the finalized run
+      const rest=(c.runs||[]).filter(r=>!r.running);
+      const next={...c,lastRun:"Just now",runs:[run,...rest]};
       // ── violation → auto-open an incident + alert (only if not already open) ──
       if(status!=="Success" && typeof DQ_INCIDENTS!=="undefined"){
         const fqTable=(c.schema&&asset.name)?`commerce.${asset.name}`:asset.name;
@@ -12694,9 +12677,10 @@ const AssetContractTab = ({asset,onToast})=>{
       }
       return next;
     });
-    setTab("runs");
+    setValidating(false);
     if(res.allPass) onToast&&onToast("Validation passed — all checks green","success");
     else onToast&&onToast(`Validation ${status==="Failed"?"failed":"partially failed"} — ${res.failedSections.length} check(s) failing${incidentOpened?" · incident opened + alert sent":""}`,"error");
+    },1500);
   };
   const saveEdit=(updated)=>{ setContract(c=>({...updated,version:c.version,status:c.status,versions:c.versions,schedule:updated.schedule??c.schedule,updated:"Just now"})); setWizard(false); onToast&&onToast("Contract updated","success"); };
   // Wizard submit — the two footer buttons (Run now / Schedule) both finalize creation/edit, then act.
@@ -12766,7 +12750,7 @@ const AssetContractTab = ({asset,onToast})=>{
         </div>
         <div style={{display:"flex",gap:8,flexShrink:0,alignItems:"center"}}>
           <ScheduleButton schedule={contract.schedule} onClick={()=>setScheduleModal(true)}/>
-          <Btn small variant="primary" icon={<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>} onClick={runNow}>Run now</Btn>
+          <Btn small variant="primary" disabled={validating} icon={validating?<svg width="12" height="12" viewBox="0 0 24 24" fill="none" style={{animation:"spin 0.8s linear infinite"}}><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2.5" strokeDasharray="20 40"/></svg>:<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>} onClick={()=>runNow()}>{validating?"Running…":"Run now"}</Btn>
           <div style={{position:"relative"}}>
             <button onClick={()=>setSettingsOpen(o=>!o)} title="Contract settings" style={{width:30,height:30,borderRadius:8,background:settingsOpen?T.bgHover:"transparent",border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
               onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;e.currentTarget.style.color=T.text;}} onMouseLeave={e=>{if(!settingsOpen){e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textSub;}}}>
@@ -12817,9 +12801,9 @@ const AssetContractTab = ({asset,onToast})=>{
         <div style={{minWidth:230}}>
           <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.6,marginBottom:8}}>Health <span style={{fontWeight:500,textTransform:"none",letterSpacing:0}}>(auto-validated)</span></div>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <span style={{width:9,height:9,borderRadius:"50%",background:health.color}}/>
-            <span style={{fontSize:13,fontWeight:700,color:health.color}}>{health.label}</span>
-            <span style={{fontSize:11.5,color:T.textMuted}}>· {failCount?`${failCount} of ${TOTAL_CHECKS} checks failing`:`all ${TOTAL_CHECKS} checks passing`}</span>
+            {validating
+              ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{animation:"spin 0.8s linear infinite",flexShrink:0}}><circle cx="12" cy="12" r="9" stroke={T.blue} strokeWidth="2.5" strokeDasharray="20 40"/></svg><span style={{fontSize:13,fontWeight:700,color:T.blue}}>Validating…</span><span style={{fontSize:11.5,color:T.textMuted}}>· running {TOTAL_CHECKS} checks</span></>
+              : <><span style={{width:9,height:9,borderRadius:"50%",background:health.color}}/><span style={{fontSize:13,fontWeight:700,color:health.color}}>{health.label}</span><span style={{fontSize:11.5,color:T.textMuted}}>· {failCount?`${failCount} of ${TOTAL_CHECKS} checks failing`:`all ${TOTAL_CHECKS} checks passing`}</span></>}
           </div>
           <div style={{fontSize:10.5,color:T.textMuted,marginTop:8,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
             <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><circle cx="8" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5.5v3l2 1.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
@@ -12856,7 +12840,7 @@ const AssetContractTab = ({asset,onToast})=>{
       <Card2 style={{padding:0,overflow:"hidden"}}>
         <div style={{padding:"13px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
           <div><div style={{fontSize:13,fontWeight:700,color:T.text}}>Validation Runs</div><div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Every validation of this contract against the live asset, with per-check results.</div></div>
-          <Btn small variant="primary" onClick={runNow}>Run validation now</Btn>
+          <Btn small variant="primary" disabled={validating} onClick={()=>runNow()}>{validating?"Running…":"Run validation now"}</Btn>
         </div>
         {runs.length===0
           ? <div style={{padding:"44px 20px",textAlign:"center",color:T.textMuted,fontSize:13}}>No validation runs yet. Run one from the button above.</div>
@@ -12872,11 +12856,11 @@ const AssetContractTab = ({asset,onToast})=>{
                   return <React.Fragment key={i}>
                   <tr onClick={()=>det&&setExpandedRun(exp?null:i)} style={{borderBottom:(!exp&&i<runs.length-1)?`1px solid ${T.border}`:"none",cursor:det?"pointer":"default",background:exp?T.bgElevated:"transparent"}}
                     onMouseEnter={e=>{if(det&&!exp)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!exp)e.currentTarget.style.background="transparent";}}>
-                    <td style={{padding:"11px 16px"}}><span style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,fontWeight:700,color:hc.color}}>{det&&<span style={{color:T.textMuted,fontSize:9,transform:exp?"rotate(90deg)":"none",transition:"transform .12s",display:"inline-block"}}>▶</span>}<span style={{width:8,height:8,borderRadius:"50%",background:hc.color}}/>{hc.label}</span></td>
+                    <td style={{padding:"11px 16px"}}><span style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,fontWeight:700,color:hc.color}}>{det&&<span style={{color:T.textMuted,fontSize:9,transform:exp?"rotate(90deg)":"none",transition:"transform .12s",display:"inline-block"}}>▶</span>}{r.running?<svg width="11" height="11" viewBox="0 0 24 24" fill="none" style={{animation:"spin 0.8s linear infinite"}}><circle cx="12" cy="12" r="9" stroke={hc.color} strokeWidth="2.5" strokeDasharray="20 40"/></svg>:<span style={{width:8,height:8,borderRadius:"50%",background:hc.color}}/>}{hc.label}</span></td>
                     <td style={{padding:"11px 16px",fontSize:12,...mono,color:T.textSub,whiteSpace:"nowrap"}}>{r.at}<span style={{color:T.textMuted}}> · {r.by}</span></td>
                     <td style={{padding:"11px 16px"}}><span style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>{r.trigger}</span></td>
-                    <td style={{padding:"11px 16px",fontSize:12,...mono,color:r.result==="Aborted"?T.textMuted:r.passed===r.total?"#16a34a":T.textSub,whiteSpace:"nowrap"}}>{r.result==="Aborted"?"—":`${r.passed}/${r.total} passed`}</td>
-                    <td style={{padding:"11px 16px"}}>{r.note?<span style={{fontSize:11.5,color:T.textMuted,fontStyle:"italic"}}>{r.note}</span>:(r.failed&&r.failed.length)?<div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{r.failed.map(f=><span key={f} style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:5,background:T.roseDim,color:T.rose,border:`1px solid ${T.rose}33`}}>{f}</span>)}</div>:<span style={{color:T.textMuted,fontSize:12}}>—</span>}</td>
+                    <td style={{padding:"11px 16px",fontSize:12,...mono,color:r.running?T.blue:r.result==="Aborted"?T.textMuted:r.passed===r.total?"#16a34a":T.textSub,whiteSpace:"nowrap"}}>{r.running?"validating…":r.result==="Aborted"?"—":`${r.passed}/${r.total} passed`}</td>
+                    <td style={{padding:"11px 16px"}}>{r.running?<span style={{color:T.textMuted,fontSize:12}}>—</span>:r.note?<span style={{fontSize:11.5,color:T.textMuted,fontStyle:"italic"}}>{r.note}</span>:(r.failed&&r.failed.length)?<div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{r.failed.map(f=><span key={f} style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:5,background:T.roseDim,color:T.rose,border:`1px solid ${T.rose}33`}}>{f}</span>)}</div>:<span style={{color:T.textMuted,fontSize:12}}>—</span>}</td>
                   </tr>
                   {exp&&det&&<tr style={{borderBottom:i<runs.length-1?`1px solid ${T.border}`:"none"}}><td colSpan={5} style={{padding:"4px 16px 14px 40px",background:T.bgElevated}}>
                     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10}}>
