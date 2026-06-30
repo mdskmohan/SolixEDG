@@ -12791,22 +12791,44 @@ const AssetContractTab = ({asset,onToast})=>{
           </div>
           <div style={{fontSize:10.5,color:T.textMuted,marginTop:7,maxWidth:200}}>{sc.desc}</div>
         </div>
-        <div style={{minWidth:230}}>
-          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.6,marginBottom:8}}>Health <span style={{fontWeight:500,textTransform:"none",letterSpacing:0}}>(auto-validated)</span></div>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
-            {validating
-              ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{animation:"spin 0.8s linear infinite",flexShrink:0}}><circle cx="12" cy="12" r="9" stroke={T.blue} strokeWidth="2.5" strokeDasharray="20 40"/></svg><span style={{fontSize:13,fontWeight:700,color:T.blue}}>Validating…</span><span style={{fontSize:11.5,color:T.textMuted}}>· running {TOTAL_CHECKS} checks</span></>
-              : <><span style={{width:9,height:9,borderRadius:"50%",background:health.color}}/><span style={{fontSize:13,fontWeight:700,color:health.color}}>{health.label}</span><span style={{fontSize:11.5,color:T.textMuted}}>· {failCount?`${failCount} of ${TOTAL_CHECKS} checks failing`:`all ${TOTAL_CHECKS} checks passing`}</span></>}
-          </div>
-          <div style={{fontSize:10.5,color:T.textMuted,marginTop:8,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+        <div>
+          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.6,marginBottom:8}}>Validation</div>
+          <div style={{fontSize:10.5,color:T.textMuted,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
             <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><circle cx="8" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5.5v3l2 1.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-            {(contract.validationMode==="scheduled"&&contract.schedule&&contract.schedule.enabled!==false)?<span>Auto-validates {contractScheduleLabel(contract.schedule)}</span>:(contract.validationMode==="scheduled"&&contract.schedule)?<span>Schedule paused — run on demand from the ⋯ menu</span>:<span>On-demand validation — run from the ⋯ menu</span>}
-            <span style={{opacity:.6}}>·</span><span>Last validated {contract.lastRun}</span>
+            {(contract.validationMode==="scheduled"&&contract.schedule&&contract.schedule.enabled!==false)?<span>Auto-validates {contractScheduleLabel(contract.schedule)}</span>:(contract.validationMode==="scheduled"&&contract.schedule)?<span>Schedule paused</span>:<span>On-demand validation</span>}
+            <span style={{opacity:.6}}>·</span><span>Last run {contract.lastRun}</span>
           </div>
         </div>
       </div>
 
-      <div style={{fontSize:11,color:T.textMuted,marginTop:14}}>Owners: <span style={{color:T.textSub}}>{(contract.owners||[]).join(", ")}</span> · Updated {contract.updated}</div>
+      {/* Owners + Stewards */}
+      <div style={{display:"flex",gap:32,flexWrap:"wrap",marginTop:16,paddingTop:16,borderTop:`1px solid ${T.border}`}}>
+        <div>
+          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.6,marginBottom:8}}>Owners</div>
+          <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+            {(contract.owners||[]).length
+              ? (contract.owners||[]).map(u=>(
+                <span key={u} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"3px 11px 3px 4px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,color:T.textSub,fontSize:12}}>
+                  <span style={{width:20,height:20,borderRadius:6,background:"#b4530915",border:"1px solid #b4530933",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#b45309",flexShrink:0}}>{u.split(".").map(x=>x[0]?.toUpperCase()||"").join("").slice(0,2)}</span>{u}
+                </span>))
+              : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>None assigned</span>}
+          </div>
+        </div>
+        <div>
+          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.6,marginBottom:8}}>Stewards</div>
+          <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+            {(contract.stewards||[]).length
+              ? (contract.stewards||[]).map(u=>(
+                <span key={u} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"3px 11px 3px 4px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,color:T.textSub,fontSize:12}}>
+                  <span style={{width:20,height:20,borderRadius:6,background:"#0d948815",border:"1px solid #0d948833",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#0d9488",flexShrink:0}}>{u.split(".").map(x=>x[0]?.toUpperCase()||"").join("").slice(0,2)}</span>{u}
+                </span>))
+              : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>None assigned</span>}
+          </div>
+        </div>
+        <div style={{marginLeft:"auto",alignSelf:"flex-end"}}>
+          <span style={{fontSize:11,color:T.textMuted}}>Updated {contract.updated}</span>
+        </div>
+      </div>
 
       {/* validation checks (explain Health) */}
       <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginTop:14}}>
