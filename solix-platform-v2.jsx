@@ -4978,7 +4978,7 @@ const QualityView = () => {
       {/* ════════════════ DQ SUITE SCHEDULE MODAL ════════════════ */}
       {dqSchedModal&&(()=>{
         const dqs=suites.find(s=>s.id===dqSchedModal);
-        const DQ_FREQS=[{k:"once",l:"Run Once"},{k:"hourly",l:"Hourly"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"custom",l:"Custom"}];
+        const DQ_FREQS=[{k:"hourly",l:"Hourly"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"custom",l:"Custom"}];
         const TZ_OPTS=["UTC","US/Eastern","US/Central","US/Pacific","Europe/London","Asia/Kolkata","Asia/Singapore"];
         const buildDqCron=()=>{
           if(dqSchedFreq==="once")   return "— run once —";
@@ -5010,7 +5010,7 @@ const QualityView = () => {
                 </div>
                 <div style={{display:"flex",alignItems:"center",gap:10}}>
                   <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <span style={{fontSize:11,color:dqSchedEnabled?T.accent:T.textMuted,fontWeight:600}}>{dqSchedEnabled?"Enabled":"Paused"}</span>
+                    <span style={{fontSize:11,color:dqSchedEnabled?T.accent:T.textMuted,fontWeight:600}}>Automatic: {dqSchedEnabled?"On":"Off"}</span>
                     <div onClick={()=>setDqSchedEnabled(v=>!v)} style={{width:32,height:18,borderRadius:9,background:dqSchedEnabled?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
                       <div style={{position:"absolute",top:2,left:dqSchedEnabled?14:2,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
                     </div>
@@ -8507,7 +8507,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
       {/* ══ Schedule Modal ══ */}
       {scheduleModal&&(()=>{
         const sp = policies.find(pp=>pp.id===scheduleModal);
-        const FREQS = [{k:"once",l:"Run Once"},{k:"hourly",l:"Hourly"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"custom",l:"Custom"}];
+        const FREQS = [{k:"hourly",l:"Hourly"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"custom",l:"Custom"}];
         const TZ_OPTS = ["UTC","US/Eastern","US/Central","US/Pacific","Europe/London","Asia/Kolkata","Asia/Singapore"];
         const buildCron = ()=>{
           if(schedFreq==="once")   return "— run once —";
@@ -8545,7 +8545,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                 <div style={{display:"flex",alignItems:"center",gap:10}}>
                   {/* Enable/Disable toggle */}
                   <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <span style={{fontSize:11,color:schedEnabled?T.accent:T.textMuted,fontWeight:600}}>{schedEnabled?"Enabled":"Paused"}</span>
+                    <span style={{fontSize:11,color:schedEnabled?T.accent:T.textMuted,fontWeight:600}}>Automatic: {schedEnabled?"On":"Off"}</span>
                     <div onClick={()=>setSchedEnabled(v=>!v)} style={{width:32,height:18,borderRadius:9,background:schedEnabled?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
                       <div style={{position:"absolute",top:2,left:schedEnabled?14:2,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
                     </div>
@@ -13341,7 +13341,7 @@ const CONTRACT_SECTIONS=[
   {key:"terms",label:"Terms of Use"},
 ];
 // ── Validation schedule — same vocabulary & cron builder as the Connectors “Sync Schedule” ──
-const CONTRACT_SCHED_FREQS=[{k:"once",l:"Run Once"},{k:"hourly",l:"Hourly"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"custom",l:"Custom"}];
+const CONTRACT_SCHED_FREQS=[{k:"hourly",l:"Hourly"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"custom",l:"Custom"}];
 const CONTRACT_TZ_OPTS=["UTC","US/Eastern","US/Central","US/Pacific","Europe/London","Asia/Kolkata","Asia/Singapore"];
 const CONTRACT_WEEKDAYS=["monday","tuesday","wednesday","thursday","friday","saturday","sunday"];
 function contractCron(s){
@@ -21689,24 +21689,7 @@ const TagSyncTab = ({connectorId, connectorName}) => {
         ))}
       </div>
 
-      {/* Governance defaults — inherited by every asset ingested from this source */}
-      <div style={{border:`1px solid ${T.border}`,borderRadius:8,padding:'12px 16px'}}>
-        <div style={{fontSize:12.5,fontWeight:600,color:T.text,marginBottom:2}}>Default owner &amp; steward</div>
-        <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>New assets ingested from {connectorName} inherit these automatically — so a 100-table pull is one decision, not 100 tasks.</div>
-        <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
-          {[['defaultOwner','Default owner'],['defaultSteward','Default steward']].map(([field,label])=>(
-            <div key={field} style={{flex:1,minWidth:170}}>
-              <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:5}}>{label}</div>
-              <select value={cfg[field]||''} onChange={e=>updateConnectorConfig(cfgKey,{[field]:e.target.value})}
-                style={{width:'100%',padding:'7px 9px',background:T.bgElevated,border:`1px solid ${cfg[field]?T.accent:T.border}`,borderRadius:7,color:T.text,fontSize:12.5,outline:'none',boxSizing:'border-box'}}>
-                <option value="">— none —</option>
-                {['maya.chen','dev.patel','sarah.kim','alex.wu','priya.nair','james.oh'].map(u=><option key={u} value={u}>{u}</option>)}
-              </select>
-            </div>
-          ))}
-        </div>
-        {(cfg.defaultOwner||cfg.defaultSteward)&&<div style={{fontSize:11,color:T.green,marginTop:9}}>✓ Assets from this source are assigned {cfg.defaultOwner?`owner ${cfg.defaultOwner}`:''}{cfg.defaultOwner&&cfg.defaultSteward?' · ':''}{cfg.defaultSteward?`steward ${cfg.defaultSteward}`:''} on ingest — no per-table tasks.</div>}
-      </div>
+      {/* Owner/steward now live on the connection identity (Connection tab) and cascade to assets. */}
 
       {/* Sync controls */}
       <div style={{display:'flex',flexDirection:'column',gap:0,border:`1px solid ${T.border}`,borderRadius:8,overflow:'hidden'}}>
@@ -21870,6 +21853,8 @@ const IntegrationsView = ({onToast})=>{
   const [svcName, setSvcName]               = useState("");
   const [svcEnv, setSvcEnv]                 = useState("Production");
   const [svcOwner, setSvcOwner]             = useState("data-eng");
+  const [svcDataOwner, setSvcDataOwner]     = useState("");   // connection identity → default for ingested assets
+  const [svcDataSteward, setSvcDataSteward] = useState("");
   const pTimer = useRef(null);
   useEffect(()=>()=>clearTimeout(pTimer.current),[]);
 
@@ -22084,6 +22069,23 @@ const IntegrationsView = ({onToast})=>{
                         {["data-eng","analytics","platform","ai-team","governance","data-ops"].map(o=><option key={o}>{o}</option>)}
                       </select>
                     </div>
+                    <div>
+                      <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:4}}>Connection owner</label>
+                      <select value={svcDataOwner} onChange={e=>setSvcDataOwner(e.target.value)}
+                        style={{width:"100%",padding:"7px 11px",background:T.bgElevated,border:`1px solid ${svcDataOwner?T.accent:T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none"}}>
+                        <option value="">— select —</option>
+                        {["maya.chen","dev.patel","sarah.kim","alex.wu","priya.nair","james.oh"].map(o=><option key={o}>{o}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:4}}>Connection steward</label>
+                      <select value={svcDataSteward} onChange={e=>setSvcDataSteward(e.target.value)}
+                        style={{width:"100%",padding:"7px 11px",background:T.bgElevated,border:`1px solid ${svcDataSteward?T.accent:T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none"}}>
+                        <option value="">— select —</option>
+                        {["maya.chen","dev.patel","sarah.kim","alex.wu","priya.nair","james.oh"].map(o=><option key={o}>{o}</option>)}
+                      </select>
+                    </div>
+                    {(svcDataOwner||svcDataSteward)&&<div style={{fontSize:10.5,color:T.green,lineHeight:1.5}}>✓ New assets ingested from this connection inherit {svcDataOwner?`owner ${svcDataOwner}`:""}{svcDataOwner&&svcDataSteward?" · ":""}{svcDataSteward?`steward ${svcDataSteward}`:""} — no per-table tasks.</div>}
                   </div>
                   <div style={{marginTop:14}}>
                     {preflightState==="success"
@@ -23943,7 +23945,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
                     <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Sync Schedule</span>
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <span style={{fontSize:11,color:schedEnabled?T.accent:T.textMuted,fontWeight:600}}>{schedEnabled?"Enabled":"Paused"}</span>
+                    <span style={{fontSize:11,color:schedEnabled?T.accent:T.textMuted,fontWeight:600}}>Automatic: {schedEnabled?"On":"Off"}</span>
                     <div onClick={()=>setSchedEnabled(v=>!v)} style={{width:32,height:18,borderRadius:9,background:schedEnabled?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
                       <div style={{position:"absolute",top:2,left:schedEnabled?14:2,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
                     </div>
@@ -23952,7 +23954,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
                 <div style={{marginBottom:14}}>
                   <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Frequency</div>
                   <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6}}>
-                    {[{k:"once",l:"Run Once"},{k:"hourly",l:"Hourly"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"custom",l:"Custom"}].map(f=>(
+                    {[{k:"hourly",l:"Hourly"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"custom",l:"Custom"}].map(f=>(
                       <button key={f.k} onClick={()=>setSchedFreq(f.k)}
                         style={{padding:"8px 4px",borderRadius:8,border:`1.5px solid ${schedFreq===f.k?T.accent:T.border}`,background:schedFreq===f.k?T.accentDim:"transparent",color:schedFreq===f.k?T.accent:T.textSub,fontSize:11.5,fontWeight:schedFreq===f.k?600:400,cursor:"pointer",fontFamily:"inherit",transition:"all .12s"}}>
                         {f.l}
@@ -24699,7 +24701,7 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
 
     {/* ══ Connector Schedule Modal — same pattern as Policy ══ */}
     {svcSchedModal&&(()=>{
-      const SVC_FREQS=[{k:"once",l:"Run Once"},{k:"hourly",l:"Hourly"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"custom",l:"Custom"}];
+      const SVC_FREQS=[{k:"hourly",l:"Hourly"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"custom",l:"Custom"}];
       const TZ_OPTS=["UTC","US/Eastern","US/Central","US/Pacific","Europe/London","Asia/Kolkata","Asia/Singapore"];
       const buildCron=()=>{
         if(svcSchedFreq==="once")   return "— run once —";
