@@ -2700,7 +2700,14 @@ const NOTIFS = [
 // Scope: you only get a notification if it's a personal one, has no asset (platform-wide),
 // you own/steward the asset — or you're an admin (oversight). ASSETS defined above.
 const _respFor = (assetName, me) => { const a=(typeof ASSETS!=="undefined"?ASSETS:[]).find(x=>x.name===assetName); if(!a) return false; const own=(Array.isArray(a.owners)?a.owners:[a.owner]).filter(Boolean); const stw=(Array.isArray(a.stewards)?a.stewards:[a.steward]).filter(Boolean); return own.includes(me)||stw.includes(me); };
-const notifVisible = (n, me, isAdmin) => isAdmin || n.forMe || !n.asset || _respFor(n.asset, me);
+// Per-category in-app notification preferences (today in-app is the only channel; email/slack are future).
+const NOTIF_CATEGORIES = ["Quality","Policy","Glossary","Certification","Catalog","Ownership","Access","Escalation"];
+let _notifPrefs = NOTIF_CATEGORIES.reduce((o,c)=>{o[c]=true;return o;},{});
+const _npSubs = new Set();
+const npSet = (cat,on)=>{ _notifPrefs={..._notifPrefs,[cat]:on}; _npSubs.forEach(f=>f()); };
+const useNotifPrefs = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_npSubs.add(fn);return()=>{_npSubs.delete(fn);};},[]); return _notifPrefs; };
+// Visible = category not muted AND (admin, personal, platform-wide, or you own/steward the asset).
+const notifVisible = (n, me, isAdmin) => (_notifPrefs[n.category]!==false) && (isAdmin || n.forMe || !n.asset || _respFor(n.asset, me));
 
 const DOCS = [
   {cat:"Getting Started",icon:"🚀",items:[
@@ -2754,6 +2761,7 @@ const NotificationsPanel = ({onClose, onViewAll}) => {
   const tagCtx = useTagCtx();
   const {role:_r, roleCfg:_rc} = useRole();
   const _me = ((_rc&&_rc.email)||"").split("@")[0]; const _isAdmin = _r==="admin";
+  useNotifPrefs(); // re-render when category prefs change
   const [notifs, setNotifs] = useState(NOTIFS.map(n=>({...n})));
   const [filter, setFilter] = useState("all");
   const _scoped = notifs.filter(n=>notifVisible(n,_me,_isAdmin)); // only your owned/stewarded assets
@@ -2869,6 +2877,8 @@ const NotificationsDrawer = ({onClose}) => {
   const _me = ((_rc&&_rc.email)||"").split("@")[0]; const _isAdmin = _r==="admin";
   const [notifs, setNotifs] = useState(NOTIFS.map(n=>({...n})));
   const [filter, setFilter] = useState("all");
+  const prefs = useNotifPrefs();
+  const [prefsOpen, setPrefsOpen] = useState(false);
   const _scoped = notifs.filter(n=>notifVisible(n,_me,_isAdmin));
   const unread = _scoped.filter(n=>n.unread).length;
   const markAll = () => setNotifs(n=>n.map(x=>({...x,unread:false})));
@@ -2881,14 +2891,39 @@ const NotificationsDrawer = ({onClose}) => {
         <div style={{padding:"16px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             <span style={{color:T.textSub,display:"flex"}}>{Ic.bell(16)}</span>
-            <span style={{fontSize:15,fontWeight:700,color:T.text}}>All notifications</span>
-            {unread>0&&<span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:99,background:T.accentDim,color:T.accent}}>{unread}</span>}
+            <span style={{fontSize:15,fontWeight:700,color:T.text}}>{prefsOpen?"Notification settings":"All notifications"}</span>
+            {!prefsOpen&&unread>0&&<span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:99,background:T.accentDim,color:T.accent}}>{unread}</span>}
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <button onClick={markAll} style={{fontSize:11.5,color:T.textMuted,background:"none",border:"none",cursor:"pointer",padding:0}}>Mark all read</button>
+            <button onClick={()=>setPrefsOpen(o=>!o)} title="Notification settings" style={{width:26,height:26,background:prefsOpen?T.accentDim:T.bgHover,border:`1px solid ${prefsOpen?T.accent:T.border}`,borderRadius:6,cursor:"pointer",color:prefsOpen?T.accent:T.textMuted,display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.settings?Ic.settings(13):Ic.edit(13)}</button>
+            {!prefsOpen&&<button onClick={markAll} style={{fontSize:11.5,color:T.textMuted,background:"none",border:"none",cursor:"pointer",padding:0}}>Mark all read</button>}
             <button onClick={onClose} style={{width:26,height:26,background:T.bgHover,border:`1px solid ${T.border}`,borderRadius:6,cursor:"pointer",color:T.textMuted,display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(12)}</button>
           </div>
         </div>
+        {prefsOpen ? (
+          <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>In-app — by category</div>
+            <div style={{fontSize:11,color:T.textMuted,marginBottom:10}}>Mute the categories you don't want in the bell.</div>
+            {NOTIF_CATEGORIES.map(cat=>{const on=prefs[cat]!==false;return(
+              <div key={cat} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 0",borderBottom:`1px solid ${T.border}`}}>
+                <span style={{fontSize:12.5,color:T.text}}>{cat}</span>
+                <div onClick={()=>npSet(cat,!on)} style={{width:32,height:18,borderRadius:9,background:on?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
+                  <div style={{position:"absolute",top:2,left:on?16:2,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 2px rgba(0,0,0,.2)"}}/>
+                </div>
+              </div>
+            );})}
+            <div style={{marginTop:16,padding:"12px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+              <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Channels</div>
+              {[["In-app","Active","#16a34a"],["Email","Soon",null],["Slack","Soon",null]].map(([c,st,col])=>(
+                <div key={c} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"4px 0"}}>
+                  <span style={{fontSize:12.5,color:col?T.text:T.textMuted}}>{c}</span>
+                  {col?<span style={{fontSize:11,color:col,fontWeight:600}}>{st}</span>:<span style={{fontSize:10,color:T.textMuted,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:4,padding:"1px 6px"}}>{st}</span>}
+                </div>
+              ))}
+            </div>
+            <div style={{fontSize:11,color:T.textMuted,marginTop:12,lineHeight:1.5}}>You only get notifications for assets you own or steward. These toggles mute categories on top of that.</div>
+          </div>
+        ) : (<>
         <div style={{display:"flex",gap:0,borderBottom:`1px solid ${T.border}`,padding:"0 18px",flexShrink:0}}>
           {[{k:"all",l:"All"},{k:"unread",l:`Unread (${unread})`}].map(t=>(
             <button key={t.k} onClick={()=>setFilter(t.k)} style={{padding:"9px 14px",background:"none",border:"none",borderBottom:`2px solid ${filter===t.k?T.accent:"transparent"}`,color:filter===t.k?T.text:T.textMuted,fontSize:12.5,fontWeight:filter===t.k?600:400,cursor:"pointer",marginBottom:-1}}>{t.l}</button>
@@ -2918,6 +2953,7 @@ const NotificationsDrawer = ({onClose}) => {
             );
           })}
         </div>
+        </>)}
       </div>
     </>
   );
@@ -2928,6 +2964,7 @@ const NotifBtn = () => {
   const [drawer, setDrawer] = useState(false);
   const {role:_r, roleCfg:_rc} = useRole();
   const _me = ((_rc&&_rc.email)||"").split("@")[0]; const _isAdmin = _r==="admin";
+  useNotifPrefs(); // re-render when category prefs change
   const unread = NOTIFS.filter(n=>n.unread && notifVisible(n,_me,_isAdmin)).length;
   const ref = useRef(null);
   useEffect(()=>{const fn=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};document.addEventListener("mousedown",fn);return()=>document.removeEventListener("mousedown",fn);},[]);
