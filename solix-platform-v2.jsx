@@ -4480,7 +4480,7 @@ const QualityView = () => {
                             <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
                               {(()=>{
                                 const has=!!s.schedule&&s.schedule!=="", paused=has&&s.schedEnabled===false;
-                                const openSched=e=>{e.stopPropagation();setDqSchedFreq("daily");setDqSchedTime("08:00");setDqSchedDay("monday");setDqSchedCron("");setDqSchedTz("UTC");setDqSchedEnabled(s.schedEnabled!==false);setDqSchedModal(s.id);};
+                                const openSched=e=>{e.stopPropagation();setDqSchedModal(s.id);};
                                 return <div style={{display:"flex",alignItems:"center",gap:6}}>
                                   {has
                                     ? <code style={{fontSize:11,color:paused?T.amber:T.violet,background:paused?T.amberDim:`${T.violet}08`,padding:"2px 7px",borderRadius:5,border:`1px solid ${paused?T.amber+"40":T.violet+"18"}`,fontFamily:"'Geist Mono',monospace"}}>{paused?"paused":s.schedule}</code>
@@ -4978,120 +4978,20 @@ const QualityView = () => {
       {/* ════════════════ DQ SUITE SCHEDULE MODAL ════════════════ */}
       {dqSchedModal&&(()=>{
         const dqs=suites.find(s=>s.id===dqSchedModal);
-        const DQ_FREQS=[{k:"hourly",l:"Hourly"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"custom",l:"Custom"}];
-        const TZ_OPTS=["UTC","US/Eastern","US/Central","US/Pacific","Europe/London","Asia/Kolkata","Asia/Singapore"];
-        const buildDqCron=()=>{
-          if(dqSchedFreq==="once")   return "— run once —";
-          if(dqSchedFreq==="hourly") return "0 * * * *";
-          if(dqSchedFreq==="daily"){const[h,m]=dqSchedTime.split(":");return `${m||"0"} ${h||"8"} * * *`;}
-          if(dqSchedFreq==="weekly"){const days={monday:1,tuesday:2,wednesday:3,thursday:4,friday:5,saturday:6,sunday:0};const[h,m]=dqSchedTime.split(":");return `${m||"0"} ${h||"8"} * * ${days[dqSchedDay]||1}`;}
-          return dqSchedCron||"0 8 * * *";
-        };
-        const nextDqRun=()=>{
-          if(dqSchedFreq==="once") return "After saving — one time only";
-          if(dqSchedFreq==="hourly") return `Next run in ~1 hour (${dqSchedTz})`;
-          return `Next run: 2026-05-28 ${dqSchedTime} ${dqSchedTz}`;
-        };
-        const saveDqSchedule=()=>{
-          const cron=buildDqCron();
-          setSuites(prev=>prev.map(s=>s.id===dqSchedModal?{...s,schedule:dqSchedFreq==="once"?"once":cron,nextRun:nextDqRun(),schedEnabled:dqSchedEnabled,schedTz:dqSchedTz}:s));
-          setDqSchedModal(null);
-          onToast(dqSchedEnabled?"DQ schedule saved":"DQ schedule saved (paused)","success");
-        };
-        return (
-          <>
-            <div onClick={()=>setDqSchedModal(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:1300}}/>
-            <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:460,background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:14,zIndex:1301,boxShadow:"0 20px 60px rgba(0,0,0,.4)",padding:"24px 24px 20px"}}>
-              {/* Header */}
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
-                <div>
-                  <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:4}}>Test Suite Schedule</div>
-                  <div style={{fontSize:12,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{dqs?.name}</div>
-                </div>
-                <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <span style={{fontSize:11,color:dqSchedEnabled?T.accent:T.textMuted,fontWeight:600}}>Automatic: {dqSchedEnabled?"On":"Off"}</span>
-                    <div onClick={()=>setDqSchedEnabled(v=>!v)} style={{width:32,height:18,borderRadius:9,background:dqSchedEnabled?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
-                      <div style={{position:"absolute",top:2,left:dqSchedEnabled?14:2,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
-                    </div>
-                  </div>
-                  <button onClick={()=>setDqSchedModal(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:18,lineHeight:1,padding:2}}>×</button>
-                </div>
-              </div>
-              {/* Frequency */}
-              <div style={{marginBottom:14}}>
-                <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Frequency</div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6}}>
-                  {DQ_FREQS.map(f=>(
-                    <button key={f.k} onClick={()=>setDqSchedFreq(f.k)}
-                      style={{padding:"8px 4px",borderRadius:8,border:`1.5px solid ${dqSchedFreq===f.k?T.accent:T.border}`,background:dqSchedFreq===f.k?T.accentDim:"transparent",color:dqSchedFreq===f.k?T.accent:T.textSub,fontSize:11.5,fontWeight:dqSchedFreq===f.k?600:400,cursor:"pointer",fontFamily:"inherit",transition:"all .12s"}}>
-                      {f.l}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {/* Time picker */}
-              {(dqSchedFreq==="daily"||dqSchedFreq==="weekly")&&(
-                <div style={{marginBottom:14}}>
-                  <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Run At</div>
-                  <input type="time" value={dqSchedTime} onChange={e=>setDqSchedTime(e.target.value)}
-                    style={{padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",fontFamily:"'Geist Mono',monospace",width:"100%",boxSizing:"border-box"}}/>
-                </div>
-              )}
-              {/* Day picker */}
-              {dqSchedFreq==="weekly"&&(
-                <div style={{marginBottom:14}}>
-                  <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Day of Week</div>
-                  <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                    {["monday","tuesday","wednesday","thursday","friday","saturday","sunday"].map(d=>(
-                      <button key={d} onClick={()=>setDqSchedDay(d)}
-                        style={{padding:"5px 10px",borderRadius:6,border:`1.5px solid ${dqSchedDay===d?T.accent:T.border}`,background:dqSchedDay===d?T.accentDim:"transparent",color:dqSchedDay===d?T.accent:T.textSub,fontSize:11,fontWeight:dqSchedDay===d?600:400,cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize"}}>
-                        {d.slice(0,3)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {/* Custom cron */}
-              {dqSchedFreq==="custom"&&(
-                <div style={{marginBottom:14}}>
-                  <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Cron Expression</div>
-                  <input value={dqSchedCron} onChange={e=>setDqSchedCron(e.target.value)} placeholder="0 8 * * 1-5"
-                    style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box"}}/>
-                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>Standard 5-field cron: minute hour day month weekday</div>
-                </div>
-              )}
-              {/* Timezone */}
-              {dqSchedFreq!=="once"&&(
-                <div style={{marginBottom:14}}>
-                  <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Timezone</div>
-                  <select value={dqSchedTz} onChange={e=>setDqSchedTz(e.target.value)}
-                    style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
-                    {TZ_OPTS.map(tz=><option key={tz} value={tz}>{tz}</option>)}
-                  </select>
-                </div>
-              )}
-              {/* Preview */}
-              {dqSchedFreq!=="once"&&(
-                <div style={{padding:"10px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,marginBottom:18}}>
-                  <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Cron preview</div>
-                  <div style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.accent,marginBottom:4}}>{buildDqCron()}</div>
-                  <div style={{fontSize:11,color:T.textMuted}}>Next run: <strong style={{color:T.text}}>{nextDqRun()}</strong></div>
-                </div>
-              )}
-              {dqSchedFreq==="once"&&(
-                <div style={{padding:"10px 14px",borderRadius:8,background:`${T.amber}0a`,border:`1px solid ${T.amber}30`,marginBottom:18,fontSize:11.5,color:T.textSub,lineHeight:1.5}}>
-                  This suite will run one time immediately after saving. No recurring schedule will be set.
-                </div>
-              )}
-              <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-                {dqs?.schedule&&<button onClick={()=>{setSuites(prev=>prev.map(s=>s.id===dqSchedModal?{...s,schedule:null,nextRun:null}:s));setDqSchedModal(null);onToast("Schedule removed","info");}} style={{padding:"8px 14px",borderRadius:8,border:`1px solid ${T.rose}40`,background:"transparent",color:T.rose,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Remove</button>}
-                <button onClick={()=>setDqSchedModal(null)} style={{padding:"8px 16px",borderRadius:8,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
-                <button onClick={saveDqSchedule} style={{padding:"8px 20px",borderRadius:8,border:"none",background:T.accent,color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Save Schedule</button>
-              </div>
-            </div>
-          </>
-        );
+        return <ScheduleControl
+          title="Test suite schedule"
+          subtitle={dqs?.name}
+          schedule={dqs?.sched}
+          onClose={()=>setDqSchedModal(null)}
+          onRunNow={()=>{const id=dqSchedModal;setDqSchedModal(null);runSuite(id);}}
+          running={runningSuites.has(dqSchedModal)}
+          onRemove={dqs?.schedule?()=>{setSuites(prev=>prev.map(s=>s.id===dqSchedModal?{...s,sched:null,schedule:null,nextRun:null}:s));setDqSchedModal(null);onToast("Schedule removed","info");}:undefined}
+          onSave={sched=>{
+            const cron=contractCron(sched);
+            setSuites(prev=>prev.map(s=>s.id===dqSchedModal?{...s,sched,schedule:cron,nextRun:scheduleNextRun(sched),schedEnabled:sched.enabled,schedTz:sched.tz}:s));
+            setDqSchedModal(null);
+            onToast(sched.enabled?"Schedule saved":"Schedule saved (paused)","success");
+          }}/>;
       })()}
 
       {/* ════════════════ TEST CASE DETAIL SLIDE-IN ════════════════ */}
@@ -8507,126 +8407,26 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
       {/* ══ Schedule Modal ══ */}
       {scheduleModal&&(()=>{
         const sp = policies.find(pp=>pp.id===scheduleModal);
-        const FREQS = [{k:"hourly",l:"Hourly"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"custom",l:"Custom"}];
-        const TZ_OPTS = ["UTC","US/Eastern","US/Central","US/Pacific","Europe/London","Asia/Kolkata","Asia/Singapore"];
-        const buildCron = ()=>{
-          if(schedFreq==="once")   return "— run once —";
-          if(schedFreq==="hourly") return "0 * * * *";
-          if(schedFreq==="daily"){const[h,m]=schedTime.split(":");return `${m||"0"} ${h||"8"} * * *`;}
-          if(schedFreq==="weekly"){const days={monday:1,tuesday:2,wednesday:3,thursday:4,friday:5,saturday:6,sunday:0};const[h,m]=schedTime.split(":");return `${m||"0"} ${h||"8"} * * ${days[schedDay]||1}`;}
-          return schedCron||"0 8 * * *";
-        };
-        const nextRunLabel = ()=>{
-          if(schedFreq==="once") return "After saving — one time only";
-          const now=new Date();
-          if(schedFreq==="hourly") return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")} ${String(now.getHours()+1).padStart(2,"0")}:00 ${schedTz}`;
-          return `2026-05-28 ${schedTime||"08:00"} ${schedTz}`;
-        };
-        const saveSchedule = ()=>{
-          if(schedFreq==="once"){
-            setPolicies(prev=>prev.map(pp=>pp.id===scheduleModal?{...pp,schedule:"once",nextRun:"Run once on save",schedTz,schedEnabled}:pp));
-          } else {
-            const cron=buildCron();
-            setPolicies(prev=>prev.map(pp=>pp.id===scheduleModal?{...pp,schedule:cron,nextRun:nextRunLabel(),schedTz,schedEnabled}:pp));
-          }
-          setScheduleModal(null);
-          onToast(schedEnabled?"Schedule saved":"Schedule saved (paused)","success");
-        };
-        return (
-          <>
-            <div onClick={()=>setScheduleModal(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:1300}}/>
-            <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:460,background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:14,zIndex:1301,boxShadow:"0 20px 60px rgba(0,0,0,.4)",padding:"24px 24px 20px"}}>
-              {/* Header */}
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
-                <div>
-                  <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:4}}>Evaluation Schedule</div>
-                  <div style={{fontSize:12,color:T.textMuted}}>{sp?.name}</div>
-                </div>
-                <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  {/* Enable/Disable toggle */}
-                  <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <span style={{fontSize:11,color:schedEnabled?T.accent:T.textMuted,fontWeight:600}}>Automatic: {schedEnabled?"On":"Off"}</span>
-                    <div onClick={()=>setSchedEnabled(v=>!v)} style={{width:32,height:18,borderRadius:9,background:schedEnabled?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
-                      <div style={{position:"absolute",top:2,left:schedEnabled?14:2,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
-                    </div>
-                  </div>
-                  <button onClick={()=>setScheduleModal(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:18,lineHeight:1,padding:2}}>×</button>
-                </div>
-              </div>
-              {/* Frequency selector */}
-              <div style={{marginBottom:14}}>
-                <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Frequency</div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6}}>
-                  {FREQS.map(f=>(
-                    <button key={f.k} onClick={()=>setSchedFreq(f.k)}
-                      style={{padding:"8px 4px",borderRadius:8,border:`1.5px solid ${schedFreq===f.k?T.accent:T.border}`,background:schedFreq===f.k?T.accentDim:"transparent",color:schedFreq===f.k?T.accent:T.textSub,fontSize:11.5,fontWeight:schedFreq===f.k?600:400,cursor:"pointer",fontFamily:"inherit",transition:"all .12s"}}>
-                      {f.l}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {/* Time picker — daily/weekly */}
-              {(schedFreq==="daily"||schedFreq==="weekly")&&(
-                <div style={{marginBottom:14}}>
-                  <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Run At</div>
-                  <input type="time" value={schedTime} onChange={e=>setSchedTime(e.target.value)}
-                    style={{padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",fontFamily:"'Geist Mono',monospace",width:"100%",boxSizing:"border-box"}}/>
-                </div>
-              )}
-              {/* Day picker — weekly */}
-              {schedFreq==="weekly"&&(
-                <div style={{marginBottom:14}}>
-                  <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Day of Week</div>
-                  <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                    {["monday","tuesday","wednesday","thursday","friday","saturday","sunday"].map(d=>(
-                      <button key={d} onClick={()=>setSchedDay(d)}
-                        style={{padding:"5px 10px",borderRadius:6,border:`1.5px solid ${schedDay===d?T.accent:T.border}`,background:schedDay===d?T.accentDim:"transparent",color:schedDay===d?T.accent:T.textSub,fontSize:11,fontWeight:schedDay===d?600:400,cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize"}}>
-                        {d.slice(0,3)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {/* Custom cron */}
-              {schedFreq==="custom"&&(
-                <div style={{marginBottom:14}}>
-                  <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Cron Expression</div>
-                  <input value={schedCron} onChange={e=>setSchedCron(e.target.value)} placeholder="0 8 * * 1-5"
-                    style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box"}}/>
-                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>Standard 5-field cron: minute hour day month weekday</div>
-                </div>
-              )}
-              {/* Timezone */}
-              {schedFreq!=="once"&&(
-                <div style={{marginBottom:14}}>
-                  <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Timezone</div>
-                  <select value={schedTz} onChange={e=>setSchedTz(e.target.value)}
-                    style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
-                    {TZ_OPTS.map(tz=><option key={tz} value={tz}>{tz}</option>)}
-                  </select>
-                </div>
-              )}
-              {/* Preview */}
-              {schedFreq!=="once"&&(
-                <div style={{padding:"10px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,marginBottom:18}}>
-                  <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Cron preview</div>
-                  <div style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.accent,marginBottom:4}}>{buildCron()}</div>
-                  <div style={{fontSize:11,color:T.textMuted}}>Next run: <strong style={{color:T.text}}>{nextRunLabel()}</strong></div>
-                </div>
-              )}
-              {schedFreq==="once"&&(
-                <div style={{padding:"10px 14px",borderRadius:8,background:`${T.amber}0a`,border:`1px solid ${T.amber}30`,marginBottom:18,fontSize:11.5,color:T.textSub,lineHeight:1.5}}>
-                  This policy will run one time immediately after saving. No recurring schedule will be set.
-                </div>
-              )}
-              <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-                {sp?.schedule&&<button onClick={()=>{setPolicies(prev=>prev.map(pp=>pp.id===scheduleModal?{...pp,schedule:null,nextRun:null}:pp));setScheduleModal(null);onToast("Schedule removed","info");}} style={{padding:"8px 14px",borderRadius:8,border:`1px solid ${T.rose}40`,background:"transparent",color:T.rose,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Remove</button>}
-                <button onClick={()=>setScheduleModal(null)} style={{padding:"8px 16px",borderRadius:8,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
-                <button onClick={saveSchedule} style={{padding:"8px 20px",borderRadius:8,border:"none",background:T.accent,color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Save Schedule</button>
-              </div>
-            </div>
-          </>
-        );
+        return <ScheduleControl
+          title="Evaluation schedule"
+          subtitle={sp?.name}
+          schedule={sp?.sched}
+          onClose={()=>setScheduleModal(null)}
+          onRunNow={()=>{
+            const id=scheduleModal;setScheduleModal(null);setRunningPolId(id);
+            setTimeout(()=>{
+              setPolicies(prev=>prev.map(pp=>pp.id===id?{...pp,lastEvaluated:new Date().toISOString().slice(0,10),compliancePct:Math.floor(70+Math.random()*25)}:pp));
+              setRunningPolId(null);onToast("Policy evaluation complete","success");
+            },2200);
+          }}
+          running={runningPolId===scheduleModal}
+          onRemove={sp?.schedule?()=>{setPolicies(prev=>prev.map(pp=>pp.id===scheduleModal?{...pp,sched:null,schedule:null,nextRun:null}:pp));setScheduleModal(null);onToast("Schedule removed","info");}:undefined}
+          onSave={sched=>{
+            const cron=contractCron(sched);
+            setPolicies(prev=>prev.map(pp=>pp.id===scheduleModal?{...pp,sched,schedule:cron,nextRun:scheduleNextRun(sched),schedTz:sched.tz,schedEnabled:sched.enabled}:pp));
+            setScheduleModal(null);
+            onToast(sched.enabled?"Schedule saved":"Schedule saved (paused)","success");
+          }}/>;
       })()}
 
       {/* ════ PANELS & MODALS ════ */}
@@ -13193,7 +12993,7 @@ const AssetContractTab = ({asset,onToast})=>{
     {wizard&&<ContractWizard asset={asset} onToast={onToast} existing={wizard==="edit"?contract:null} onClose={()=>setWizard(false)} onSubmit={submitWizard}/>}
 
     {/* ── Schedule validation modal ── */}
-    {scheduleModal&&createPortal(<ContractScheduleModal schedule={contract.schedule} onClose={()=>setScheduleModal(false)} onSave={saveSchedule} onRemove={removeSchedule}/>,document.body)}
+    {scheduleModal&&createPortal(<ScheduleControl title="Validation schedule" subtitle={`How often “${contract.name}” is validated against the live asset`} schedule={contract.schedule} onClose={()=>setScheduleModal(false)} onSave={saveSchedule} onRemove={removeSchedule} onRunNow={()=>{setScheduleModal(false);runNow();}} running={validating}/>,document.body)}
 
     {/* ── Delete confirm ── */}
     {deleteConfirm&&createPortal(
@@ -13218,7 +13018,12 @@ const AssetContractTab = ({asset,onToast})=>{
 };
 
 // Schedule validation modal — identical pattern to the Connectors “Sync Schedule”
-const ContractScheduleModal = ({schedule,onClose,onSave,onRemove})=>{
+// ════════════════ SHARED SCHEDULE CONTROL ════════════════
+// ONE schedule UI used everywhere (Data Quality, Policy, Data Contract, Connections) so
+// the Run-now / Schedule experience is identical irrespective of section.
+// Works on a structured schedule object {freq,time,day,cron,tz,enabled}; the caller's
+// onSave(sched) decides how to persist (cron string, structured, etc).
+const ScheduleControl = ({schedule,onClose,onSave,onRemove,title="Schedule",subtitle,onRunNow,running})=>{
   const [freq,setFreq]=useState(schedule?.freq||"daily");
   const [time,setTime]=useState(schedule?.time||"05:00");
   const [day,setDay]=useState(schedule?.day||"monday");
@@ -13239,12 +13044,12 @@ const ContractScheduleModal = ({schedule,onClose,onSave,onRemove})=>{
         {/* Header */}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
           <div>
-            <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:4}}>Validation Schedule</div>
-            <div style={{fontSize:12,color:T.textMuted}}>How often this contract is automatically validated against the live asset.</div>
+            <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:4}}>{title}</div>
+            {subtitle&&<div style={{fontSize:12,color:T.textMuted}}>{subtitle}</div>}
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <div style={{display:"flex",alignItems:"center",gap:6}}>
-              <span style={{fontSize:11,color:enabled?T.accent:T.textMuted,fontWeight:600}}>{enabled?"Enabled":"Paused"}</span>
+              <span style={{fontSize:11,color:enabled?T.accent:T.textMuted,fontWeight:600}}>Automatic: {enabled?"On":"Off"}</span>
               <div onClick={()=>setEnabled(v=>!v)} style={{width:32,height:18,borderRadius:9,background:enabled?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
                 <div style={{position:"absolute",top:2,left:enabled?14:2,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
               </div>
@@ -13317,7 +13122,12 @@ const ContractScheduleModal = ({schedule,onClose,onSave,onRemove})=>{
             This contract will validate one time immediately after saving. No recurring schedule will be set.
           </div>
         )}
-        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          {onRunNow&&<button onClick={()=>onRunNow()} disabled={running} title="Run once now, independent of the schedule" style={{display:"inline-flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:8,border:`1px solid ${T.border}`,background:T.bgElevated,color:running?T.textMuted:T.textSub,fontSize:12,fontWeight:600,cursor:running?"default":"pointer",fontFamily:"inherit"}}>
+            {running?<span style={{display:"inline-block",width:11,height:11,borderRadius:"50%",border:`1.5px solid ${T.textMuted}`,borderTopColor:"transparent",animation:"spin 0.7s linear infinite"}}/>:<svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>}
+            {running?"Running…":"Run now"}
+          </button>}
+          <div style={{flex:1}}/>
           {schedule&&onRemove&&<button onClick={onRemove} style={{padding:"8px 14px",borderRadius:8,border:`1px solid ${T.rose}40`,background:"transparent",color:T.rose,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Remove</button>}
           <button onClick={onClose} style={{padding:"8px 16px",borderRadius:8,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
           <button onClick={()=>onSave(sched)} style={{padding:"8px 20px",borderRadius:8,border:"none",background:T.accent,color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Save Schedule</button>
@@ -13352,6 +13162,14 @@ function contractCron(s){
   if(s.freq==="daily")  return `${m||"0"} ${h||"5"} * * *`;
   if(s.freq==="weekly"){const days={monday:1,tuesday:2,wednesday:3,thursday:4,friday:5,saturday:6,sunday:0};return `${m||"0"} ${h||"5"} * * ${days[s.day]??1}`;}
   return s.cron||"0 5 * * *";
+}
+// Human "next run" label for sections that persist a cron string + nextRun (DQ, Policy, Connections).
+function scheduleNextRun(s){
+  if(!s||s.enabled===false) return "Paused — next run when re-enabled";
+  if(s.freq==="hourly") return `Next run in ~1 hour (${s.tz||"UTC"})`;
+  if(s.freq==="custom")  return `On cron ${s.cron||"0 5 * * *"} (${s.tz||"UTC"})`;
+  if(s.freq==="weekly")  return `Next run: ${s.day||"monday"} ${s.time||"05:00"} ${s.tz||"UTC"}`;
+  return `Next run: daily ${s.time||"05:00"} ${s.tz||"UTC"}`;
 }
 function contractScheduleLabel(s){
   if(!s) return "";
@@ -24113,6 +23931,8 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
   const [svcSchedTz,      setSvcSchedTz]      = useState("UTC");
   const [svcSchedEnabled, setSvcSchedEnabled] = useState(true);
   const [svcCurrentSched, setSvcCurrentSched] = useState(svc.schedule||null);
+  const [svcSchedObj,     setSvcSchedObj]     = useState(null);   // structured schedule for the shared ScheduleControl
+  const [svcRunning,      setSvcRunning]      = useState(false);
   const [svcFilterMode,   setSvcFilterMode]   = useState("selection");
   const [svcInclSchemas,  setSvcInclSchemas]  = useState([]);
   const [svcExclSchemas,  setSvcExclSchemas]  = useState([]);
@@ -24700,122 +24520,24 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
     )}
 
     {/* ══ Connector Schedule Modal — same pattern as Policy ══ */}
-    {svcSchedModal&&(()=>{
-      const SVC_FREQS=[{k:"hourly",l:"Hourly"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"custom",l:"Custom"}];
-      const TZ_OPTS=["UTC","US/Eastern","US/Central","US/Pacific","Europe/London","Asia/Kolkata","Asia/Singapore"];
-      const buildCron=()=>{
-        if(svcSchedFreq==="once")   return "— run once —";
-        if(svcSchedFreq==="hourly") return "0 * * * *";
-        if(svcSchedFreq==="daily"){const[h,m]=svcSchedTime.split(":");return `${m||"0"} ${h||"8"} * * *`;}
-        if(svcSchedFreq==="weekly"){const days={monday:1,tuesday:2,wednesday:3,thursday:4,friday:5,saturday:6,sunday:0};const[h,m]=svcSchedTime.split(":");return `${m||"0"} ${h||"8"} * * ${days[svcSchedDay]||1}`;}
-        return svcSchedCron||"0 8 * * *";
-      };
-      const nextRunLabel=()=>{
-        if(svcSchedFreq==="once") return "After saving — one time only";
-        if(svcSchedFreq==="hourly") return `Next run in ~1 hour (${svcSchedTz})`;
-        return `Next sync: 2026-05-28 ${svcSchedTime} ${svcSchedTz}`;
-      };
-      const saveSvcSchedule=()=>{
-        const cron=buildCron();
-        setSvcCurrentSched(svcSchedFreq==="once"?"once":cron);
+    {svcSchedModal&&<ScheduleControl
+      title="Sync schedule"
+      subtitle={svc.displayName}
+      schedule={svcSchedObj}
+      onClose={()=>setSvcSchedModal(false)}
+      onRunNow={()=>{
+        setSvcSchedModal(false);setSvcRunning(true);
+        onToast(`${svc.displayName} ingestion triggered`,"success");
+        setTimeout(()=>setSvcRunning(false),2500);
+      }}
+      running={svcRunning}
+      onRemove={svcCurrentSched?()=>{setSvcSchedObj(null);setSvcCurrentSched(null);setSvcSchedModal(false);onToast("Schedule removed","info");}:undefined}
+      onSave={sched=>{
+        setSvcSchedObj(sched);
+        setSvcCurrentSched(contractCron(sched));
         setSvcSchedModal(false);
-        onToast(svcSchedEnabled?"Sync schedule saved":"Sync schedule saved (paused)","success");
-      };
-      return (
-        <>
-          <div onClick={()=>setSvcSchedModal(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:1300}}/>
-          <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:460,background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:14,zIndex:1301,boxShadow:"0 20px 60px rgba(0,0,0,.4)",padding:"24px 24px 20px"}}>
-            {/* Header */}
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
-              <div>
-                <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:4}}>Sync Schedule</div>
-                <div style={{fontSize:12,color:T.textMuted}}>{svc.displayName}</div>
-              </div>
-              <div style={{display:"flex",alignItems:"center",gap:10}}>
-                <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <span style={{fontSize:11,color:svcSchedEnabled?T.accent:T.textMuted,fontWeight:600}}>{svcSchedEnabled?"Enabled":"Paused"}</span>
-                  <div onClick={()=>setSvcSchedEnabled(v=>!v)} style={{width:32,height:18,borderRadius:9,background:svcSchedEnabled?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
-                    <div style={{position:"absolute",top:2,left:svcSchedEnabled?14:2,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
-                  </div>
-                </div>
-                <button onClick={()=>setSvcSchedModal(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:18,lineHeight:1,padding:2}}>×</button>
-              </div>
-            </div>
-            {/* Frequency */}
-            <div style={{marginBottom:14}}>
-              <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Frequency</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6}}>
-                {SVC_FREQS.map(f=>(
-                  <button key={f.k} onClick={()=>setSvcSchedFreq(f.k)}
-                    style={{padding:"8px 4px",borderRadius:8,border:`1.5px solid ${svcSchedFreq===f.k?T.accent:T.border}`,background:svcSchedFreq===f.k?T.accentDim:"transparent",color:svcSchedFreq===f.k?T.accent:T.textSub,fontSize:11.5,fontWeight:svcSchedFreq===f.k?600:400,cursor:"pointer",fontFamily:"inherit",transition:"all .12s"}}>
-                    {f.l}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {/* Time picker */}
-            {(svcSchedFreq==="daily"||svcSchedFreq==="weekly")&&(
-              <div style={{marginBottom:14}}>
-                <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Run At</div>
-                <input type="time" value={svcSchedTime} onChange={e=>setSvcSchedTime(e.target.value)}
-                  style={{padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",fontFamily:"'Geist Mono',monospace",width:"100%",boxSizing:"border-box"}}/>
-              </div>
-            )}
-            {/* Day picker */}
-            {svcSchedFreq==="weekly"&&(
-              <div style={{marginBottom:14}}>
-                <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Day of Week</div>
-                <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                  {["monday","tuesday","wednesday","thursday","friday","saturday","sunday"].map(d=>(
-                    <button key={d} onClick={()=>setSvcSchedDay(d)}
-                      style={{padding:"5px 10px",borderRadius:6,border:`1.5px solid ${svcSchedDay===d?T.accent:T.border}`,background:svcSchedDay===d?T.accentDim:"transparent",color:svcSchedDay===d?T.accent:T.textSub,fontSize:11,fontWeight:svcSchedDay===d?600:400,cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize"}}>
-                      {d.slice(0,3)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {/* Custom cron */}
-            {svcSchedFreq==="custom"&&(
-              <div style={{marginBottom:14}}>
-                <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Cron Expression</div>
-                <input value={svcSchedCron} onChange={e=>setSvcSchedCron(e.target.value)} placeholder="0 2 * * 1-5"
-                  style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box"}}/>
-                <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>Standard 5-field cron: minute hour day month weekday</div>
-              </div>
-            )}
-            {/* Timezone */}
-            {svcSchedFreq!=="once"&&(
-              <div style={{marginBottom:14}}>
-                <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Timezone</div>
-                <select value={svcSchedTz} onChange={e=>setSvcSchedTz(e.target.value)}
-                  style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
-                  {TZ_OPTS.map(tz=><option key={tz} value={tz}>{tz}</option>)}
-                </select>
-              </div>
-            )}
-            {/* Preview */}
-            {svcSchedFreq!=="once"&&(
-              <div style={{padding:"10px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,marginBottom:18}}>
-                <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Cron preview</div>
-                <div style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.accent,marginBottom:4}}>{buildCron()}</div>
-                <div style={{fontSize:11,color:T.textMuted}}>Next run: <strong style={{color:T.text}}>{nextRunLabel()}</strong></div>
-              </div>
-            )}
-            {svcSchedFreq==="once"&&(
-              <div style={{padding:"10px 14px",borderRadius:8,background:`${T.amber}0a`,border:`1px solid ${T.amber}30`,marginBottom:18,fontSize:11.5,color:T.textSub,lineHeight:1.5}}>
-                This connector will sync one time immediately after saving. No recurring schedule will be set.
-              </div>
-            )}
-            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-              {svcCurrentSched&&<button onClick={()=>{setSvcCurrentSched(null);setSvcSchedModal(false);onToast("Schedule removed","info");}} style={{padding:"8px 14px",borderRadius:8,border:`1px solid ${T.rose}40`,background:"transparent",color:T.rose,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Remove</button>}
-              <button onClick={()=>setSvcSchedModal(false)} style={{padding:"8px 16px",borderRadius:8,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
-              <button onClick={saveSvcSchedule} style={{padding:"8px 20px",borderRadius:8,border:"none",background:T.accent,color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Save Schedule</button>
-            </div>
-          </div>
-        </>
-      );
-    })()}
+        onToast(sched.enabled?"Sync schedule saved":"Sync schedule saved (paused)","success");
+      }}/>}
     </>
   );
 };
