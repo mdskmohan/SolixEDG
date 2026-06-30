@@ -6278,9 +6278,11 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
            violations:existing.violations, compliancePct:existing.compliancePct, lastEvaluated:existing.lastEvaluated, runs:existing.runs,
            history:[{when:today(),who:"You",action:"Updated policy"},...(existing.history||[])]}
         :existing));
+      const editedId=selPolicyId;
       closeWizard();
       setPdTab("overview");
-      onToast("Policy updated","success");
+      if(runMode==="schedule"){ setScheduleModal(editedId); onToast("Policy updated — set its schedule","success"); }
+      else onToast("Policy updated","success");
       return;
     }
     setPolicies(prev=>[...prev,p]);
@@ -9509,10 +9511,16 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       const canCreate=!!newPol.name.trim();
                       if(isEditMode){
                         return (
-                          <button onClick={()=>handleCreate("draft")} disabled={!canCreate}
-                            style={{padding:"7px 22px",borderRadius:7,background:canCreate?T.accent:T.bgElevated,border:`1px solid ${canCreate?T.accent:T.border}`,color:canCreate?"#fff":T.textMuted,fontSize:12,fontWeight:700,cursor:canCreate?"pointer":"not-allowed",transition:"all .15s"}}>
-                            Save
-                          </button>
+                          <div style={{display:"flex",gap:8}}>
+                            <button onClick={()=>canCreate&&handleCreate("schedule")} disabled={!canCreate} title="Save changes, then set the evaluation schedule"
+                              style={{display:"flex",alignItems:"center",gap:6,padding:"7px 18px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:canCreate?T.textSub:T.textMuted,fontSize:12,fontWeight:600,cursor:canCreate?"pointer":"not-allowed",transition:"all .15s"}}>
+                              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>Save & Schedule
+                            </button>
+                            <button onClick={()=>handleCreate("draft")} disabled={!canCreate}
+                              style={{padding:"7px 22px",borderRadius:7,background:canCreate?T.accent:T.bgElevated,border:`1px solid ${canCreate?T.accent:T.border}`,color:canCreate?"#fff":T.textMuted,fontSize:12,fontWeight:700,cursor:canCreate?"pointer":"not-allowed",transition:"all .15s"}}>
+                              Save
+                            </button>
+                          </div>
                         );
                       }
                       return (
@@ -12819,7 +12827,41 @@ const AssetContractTab = ({asset,onToast})=>{
     {/* ── Contract tab (definition) ── */}
     {tab==="contract"&&<>
     {/* ── 1. Schema ── */}
-    <Section title="Schema">
+    {(()=>{
+      const schemaMissing = v.schema.filter(c=>c.required&&!c.exists);
+      const schemaFailing = schemaMissing.length > 0;
+      return (
+      <Section title="Schema" pass={schemaFailing?false:null}>
+      {schemaFailing&&(
+        <div style={{marginBottom:12,padding:"11px 14px",background:"rgba(239,68,68,.07)",border:`1px solid ${T.rose}33`,borderRadius:9}}>
+          <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style={{color:T.rose,flexShrink:0,marginTop:1}}><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4"/><path d="M8 5v3.5M8 10.5v.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12.5,fontWeight:700,color:T.rose,marginBottom:2}}>Schema mismatch detected</div>
+              <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.5}}>{schemaMissing.length} required column{schemaMissing.length>1?"s":""} missing from the live asset: <span style={{fontFamily:"'Geist Mono',monospace",fontWeight:600}}>{schemaMissing.map(c=>c.name).join(", ")}</span>. Investigate whether this is an intentional producer change or a breaking change.</div>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:8,marginTop:10,paddingLeft:25}}>
+            <button onClick={()=>{setWizard("edit"); onToast&&onToast("Opening contract editor — update schema to reflect the change","info");}}
+              style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.text,fontSize:12,fontWeight:600,cursor:"pointer"}}
+              onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=T.bgSurface}>
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M10.5 2.5l3 3L6 13H3v-3l7.5-7.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+              Update Contract Schema
+            </button>
+            <button onClick={()=>onToast&&onToast("Producer notified — Connection Admin has been alerted of the schema mismatch","success")}
+              style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:600,cursor:"pointer"}}
+              onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=T.bgSurface}>
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 12l3-3 2.5 2.5L13 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Flag to Producer
+            </button>
+            <button onClick={()=>onToast&&onToast("Schema mismatch dismissed — marked as known change","info")}
+              style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,background:"transparent",border:"none",color:T.textMuted,fontSize:12,fontWeight:500,cursor:"pointer"}}
+              onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
       <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>Producers cannot change these columns without publishing a new contract version.</div>
       <table style={{width:"100%",borderCollapse:"collapse"}}>
         <thead><tr style={{borderBottom:`1px solid ${T.border}`}}>
@@ -12836,11 +12878,31 @@ const AssetContractTab = ({asset,onToast})=>{
           ))}
         </tbody>
       </table>
-    </Section>
+    </Section>);})()}
 
     {/* ── 2 & 4: Quality + Semantics ── */}
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
       <Section title="Quality Assertions" pass={sp.Quality}>
+        {!sp.Quality&&v.quality.some(q=>!q.pass)&&(
+          <div style={{marginBottom:12,padding:"11px 14px",background:"rgba(239,68,68,.07)",border:`1px solid ${T.rose}33`,borderRadius:9}}>
+            <div style={{fontSize:12.5,fontWeight:700,color:T.rose,marginBottom:2}}>{v.quality.filter(q=>!q.pass).length} quality check{v.quality.filter(q=>!q.pass).length>1?"s":""} failing</div>
+            <div style={{fontSize:11.5,color:T.textSub,marginBottom:10,lineHeight:1.5}}>Investigate the root cause before resolving. A DQ incident has been opened and your inbox has been notified.</div>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>onToast&&onToast("Navigating to DQ Incidents — incident opened for this contract","info")}
+                style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.text,fontSize:12,fontWeight:600,cursor:"pointer"}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=T.bgSurface}>
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4"/><path d="M8 5v3.5M8 10.2v.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                View DQ Incident
+              </button>
+              <button onClick={()=>onToast&&onToast("Quality failure acknowledged — marked as under investigation","success")}
+                style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:600,cursor:"pointer"}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=T.bgSurface}>
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5l3 3 6-6.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                Acknowledge
+              </button>
+            </div>
+          </div>
+        )}
         <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>Linked to live data-quality test cases — status reflects the latest run.</div>
         <div style={{display:"flex",flexDirection:"column",gap:7}}>
           {v.quality.length===0&&<div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No quality tests attached.</div>}
@@ -12854,6 +12916,18 @@ const AssetContractTab = ({asset,onToast})=>{
         </div>
       </Section>
       <Section title="Semantics" pass={sp.Semantics}>
+        {!sp.Semantics&&(
+          <div style={{marginBottom:12,padding:"11px 14px",background:"rgba(245,158,11,.07)",border:`1px solid ${T.amber}44`,borderRadius:9}}>
+            <div style={{fontSize:12.5,fontWeight:700,color:T.amber,marginBottom:2}}>Semantic definitions incomplete</div>
+            <div style={{fontSize:11.5,color:T.textSub,marginBottom:10,lineHeight:1.5}}>One or more required metadata fields are missing. As the steward, you can fix these directly in the contract.</div>
+            <button onClick={()=>{setWizard("edit"); onToast&&onToast("Opening contract editor — navigate to the Semantics step","info");}}
+              style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.text,fontSize:12,fontWeight:600,cursor:"pointer"}}
+              onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=T.bgSurface}>
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M10.5 2.5l3 3L6 13H3v-3l7.5-7.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+              Fix Semantic Definitions
+            </button>
+          </div>
+        )}
         <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>Mandatory metadata — validated against this asset's live metadata.</div>
         <div style={{display:"flex",flexDirection:"column",gap:7}}>
           {v.semantics.map((s,i)=>(
@@ -12868,6 +12942,29 @@ const AssetContractTab = ({asset,onToast})=>{
 
     {/* ── Policies (governance from Policy Manager) ── */}
     <Section title="Policies" pass={(contract.policies||[]).length?sp.Policies:null}>
+      {(contract.policies||[]).length>0&&!sp.Policies&&(()=>{
+        const breached=(v.policies||[]).filter(p=>!p.pass);
+        return breached.length>0&&(
+          <div style={{marginBottom:12,padding:"11px 14px",background:"rgba(239,68,68,.07)",border:`1px solid ${T.rose}33`,borderRadius:9}}>
+            <div style={{fontSize:12.5,fontWeight:700,color:T.rose,marginBottom:2}}>{breached.length} policy breach{breached.length>1?"es":""} detected</div>
+            <div style={{fontSize:11.5,color:T.textSub,marginBottom:10,lineHeight:1.5}}>The following policies have active violations: <span style={{fontWeight:600}}>{breached.map(p=>p.name).join(", ")}</span>. Review in Policy Manager or escalate to the domain owner.</div>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>onToast&&onToast("Navigating to Policy Manager — review the breached policy rules","info")}
+                style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.text,fontSize:12,fontWeight:600,cursor:"pointer"}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=T.bgSurface}>
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 1.5l5 2v4c0 3.2-2.1 5.6-5 6.5-2.9-.9-5-3.3-5-6.5v-4l5-2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+                View Policy
+              </button>
+              <button onClick={()=>onToast&&onToast("Policy breach acknowledged and escalated to the domain owner","success")}
+                style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:600,cursor:"pointer"}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=T.bgSurface}>
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v6M8 10.5v.5M3 8a5 5 0 1010 0A5 5 0 003 8z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                Acknowledge & Escalate
+              </button>
+            </div>
+          </div>
+        );
+      })()}
       <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>Governance policies from Policy Manager that this contract enforces — a policy with open violations fails the check.</div>
       {(v.policies||[]).length===0
         ? <div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No policies attached.</div>
@@ -23230,13 +23327,14 @@ const AddServiceWizard = ({onClose, onDone}) => {
   const filteredConnList = connList.filter(c=>!connSearch||c.name.toLowerCase().includes(connSearch.toLowerCase())||c.desc.toLowerCase().includes(connSearch.toLowerCase()));
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.65)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:900,backdropFilter:"blur(10px)"}}>
-      <div className="scaleIn" style={{
-        background:T.bgSurface,borderRadius:20,
-        width:980,maxWidth:"97vw",
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:900,backdropFilter:"blur(3px)",display:"flex",justifyContent:"flex-end"}}>
+      <div onClick={e=>e.stopPropagation()} className="slideInRight" style={{
+        background:T.bgSurface,
+        width:720,maxWidth:"100vw",
+        height:"100%",
         display:"flex",flexDirection:"column",
-        maxHeight:"92vh",
-        boxShadow:"0 48px 120px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.06)",
+        borderLeft:`1px solid ${T.border}`,
+        boxShadow:"-24px 0 80px rgba(0,0,0,.5)",
         overflow:"hidden",
       }}>
 
@@ -23755,80 +23853,15 @@ const AddServiceWizard = ({onClose, onDone}) => {
                 </div>
               </div>
 
-              {/* Sync Schedule */}
-              <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:18}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <div style={{width:3,height:16,borderRadius:2,background:T.accent,flexShrink:0}}/>
-                    <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Sync Schedule</span>
-                  </div>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <span style={{fontSize:11,color:schedEnabled?T.accent:T.textMuted,fontWeight:600}}>Automatic: {schedEnabled?"On":"Off"}</span>
-                    <div onClick={()=>setSchedEnabled(v=>!v)} style={{width:32,height:18,borderRadius:9,background:schedEnabled?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
-                      <div style={{position:"absolute",top:2,left:schedEnabled?14:2,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
-                    </div>
-                  </div>
+              {/* Sync schedule — set after connecting, via the shared Schedule modal (consistent with Policy & Data Contract) */}
+              <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"16px 20px",display:"flex",alignItems:"flex-start",gap:12}}>
+                <div style={{width:30,height:30,borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent,flexShrink:0}}>
+                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>
                 </div>
-                <div style={{marginBottom:14}}>
-                  <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Frequency</div>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6}}>
-                    {[{k:"hourly",l:"Hourly"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"custom",l:"Custom"}].map(f=>(
-                      <button key={f.k} onClick={()=>setSchedFreq(f.k)}
-                        style={{padding:"8px 4px",borderRadius:8,border:`1.5px solid ${schedFreq===f.k?T.accent:T.border}`,background:schedFreq===f.k?T.accentDim:"transparent",color:schedFreq===f.k?T.accent:T.textSub,fontSize:11.5,fontWeight:schedFreq===f.k?600:400,cursor:"pointer",fontFamily:"inherit",transition:"all .12s"}}>
-                        {f.l}
-                      </button>
-                    ))}
-                  </div>
+                <div>
+                  <div style={{fontSize:12.5,fontWeight:600,color:T.text,marginBottom:3}}>Sync schedule is set after connecting</div>
+                  <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.55}}>Connect first, then open the connection and click <strong style={{color:T.textSub}}>Schedule</strong> to choose how often it syncs — the same scheduling flow used for Policies and Data Contracts.</div>
                 </div>
-                {(schedFreq==="daily"||schedFreq==="weekly")&&(
-                  <div style={{marginBottom:14}}>
-                    <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Run At</div>
-                    <input type="time" value={schedTime} onChange={e=>setSchedTime(e.target.value)}
-                      style={{padding:"8px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",fontFamily:"'Geist Mono',monospace",width:"100%",boxSizing:"border-box"}}/>
-                  </div>
-                )}
-                {schedFreq==="weekly"&&(
-                  <div style={{marginBottom:14}}>
-                    <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Day of Week</div>
-                    <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                      {["monday","tuesday","wednesday","thursday","friday","saturday","sunday"].map(d=>(
-                        <button key={d} onClick={()=>setSchedDay(d)}
-                          style={{padding:"5px 10px",borderRadius:6,border:`1.5px solid ${schedDay===d?T.accent:T.border}`,background:schedDay===d?T.accentDim:"transparent",color:schedDay===d?T.accent:T.textSub,fontSize:11,fontWeight:schedDay===d?600:400,cursor:"pointer",fontFamily:"inherit",textTransform:"capitalize"}}>
-                          {d.slice(0,3)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {schedFreq==="custom"&&(
-                  <div style={{marginBottom:14}}>
-                    <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Cron Expression</div>
-                    <input value={schedCron} onChange={e=>setSchedCron(e.target.value)} placeholder="0 8 * * 1-5"
-                      style={{width:"100%",padding:"8px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box"}}/>
-                    <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>Standard 5-field cron: minute hour day month weekday</div>
-                  </div>
-                )}
-                {schedFreq!=="once"&&(
-                  <div style={{marginBottom:14}}>
-                    <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8,textTransform:"uppercase",letterSpacing:"0.06em"}}>Timezone</div>
-                    <select value={schedTz} onChange={e=>setSchedTz(e.target.value)}
-                      style={{width:"100%",padding:"8px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
-                      {["UTC","US/Eastern","US/Central","US/Pacific","Europe/London","Asia/Kolkata","Asia/Singapore"].map(tz=><option key={tz} value={tz}>{tz}</option>)}
-                    </select>
-                  </div>
-                )}
-                {schedFreq!=="once"&&(
-                  <div style={{padding:"10px 14px",borderRadius:8,background:T.bgSurface,border:`1px solid ${T.border}`}}>
-                    <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Cron preview</div>
-                    <div style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.accent,marginBottom:4}}>{buildConnCron()}</div>
-                    <div style={{fontSize:11,color:T.textMuted}}>Next run: <strong style={{color:T.text}}>{nextRunLabel()}</strong></div>
-                  </div>
-                )}
-                {schedFreq==="once"&&(
-                  <div style={{padding:"10px 14px",borderRadius:8,background:"rgba(245,158,11,.06)",border:"1px solid rgba(245,158,11,.25)",fontSize:11.5,color:T.textSub,lineHeight:1.5}}>
-                    This connection will run one time immediately after saving. No recurring schedule will be set.
-                  </div>
-                )}
               </div>
 
               {/* Launch summary */}
@@ -23844,7 +23877,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
                 <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:9}}>
                   {[
                     {l:"Owner",    v:svcOwner},
-                    {l:"Schedule", v:schedFreq==="once"?"Run Once":buildConnCron(), mono:true},
+                    {l:"Schedule", v:"Set after connecting"},
                     {l:"Object Types", v:objTypes.length>0?objTypes.slice(0,3).join(", ")+(objTypes.length>3?` +${objTypes.length-3}`:""):"All"},
                   ].map(({l,v,mono})=>(
                     <div key={l} style={{padding:"10px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
@@ -23893,13 +23926,13 @@ const AddServiceWizard = ({onClose, onDone}) => {
                     : (testState==="running"?"Testing…":testState==="success"?"Set Filters & Launch →":"Test Connection First")}
                 </button>
               : <div style={{display:"flex",gap:8}}>
-                  <button onClick={()=>onDone(svcName,connector,category,"schedule")} title="Create the connection and run only on the schedule set above" style={{display:"flex",alignItems:"center",gap:7,padding:"10px 18px",borderRadius:10,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,fontSize:13,fontWeight:600,cursor:"pointer",transition:"all .15s"}}
+                  <button onClick={()=>onDone(svcName,connector,category,"add")} title="Create the connection without an initial sync — you can run or schedule it from the connection page" style={{display:"flex",alignItems:"center",gap:7,padding:"10px 18px",borderRadius:10,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,fontSize:13,fontWeight:600,cursor:"pointer",transition:"all .15s"}}
                     onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
-                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>Schedule
+                    Add without sync
                   </button>
-                  <button onClick={()=>onDone(svcName,connector,category,"run")} title="Create the connection and sync immediately" style={{display:"flex",alignItems:"center",gap:8,padding:"10px 24px",borderRadius:10,border:"none",background:"#ee2424",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",transition:"all .15s",boxShadow:"0 4px 14px rgba(238,36,36,.38)"}}
+                  <button onClick={()=>onDone(svcName,connector,category,"run")} title="Create the connection and run the first sync now" style={{display:"flex",alignItems:"center",gap:8,padding:"10px 24px",borderRadius:10,border:"none",background:"#ee2424",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",transition:"all .15s",boxShadow:"0 4px 14px rgba(238,36,36,.38)"}}
                     onMouseEnter={e=>{e.currentTarget.style.opacity=".88";e.currentTarget.style.transform="translateY(-1px)";}} onMouseLeave={e=>{e.currentTarget.style.opacity="1";e.currentTarget.style.transform="none";}}>
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>Run now
+                    {Ic.plug(13)}Connect & sync now
                   </button>
                 </div>}
           </div>
