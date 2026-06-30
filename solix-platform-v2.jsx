@@ -27062,6 +27062,7 @@ const InboxView = ({onToast}) => {
   const [reassignMap,  setReassignMap]  = useState({});     // {itemId: handle} assignee overrides
   const [bulkOpen,     setBulkOpen]     = useState(false);  // bulk-assign orphans picker
   const [filterOpen,   setFilterOpen]   = useState(false);
+  const [roleOpen,     setRoleOpen]     = useState(false);
   const [secFilters,   setSecFilters]   = useState(new Set()); // section multiselect
   const closeForms = ()=>{ [setAssignOpen,setResolveOpen,setReassignOpen].forEach(f=>f(false)); setResolveNote(""); setResolveMode("remediate"); };
 
@@ -27477,22 +27478,11 @@ const InboxView = ({onToast}) => {
       {/* Topbar — breadcrumb only */}
       <Topbar breadcrumb={[{label:"Workspace"}]}/>
 
-      {/* Primary toolbar — role dropdown + search + section filter */}
+      {/* Primary toolbar — search + role filter + section filter */}
       <div style={{padding:"8px 20px 8px 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10,flexShrink:0,background:T.bgSurface,minHeight:46}}>
 
-        {/* Role filter — dropdown */}
-        <div style={{position:"relative"}}>
-          <select value={roleScope} onChange={e=>{setRoleScope(e.target.value);setSel(null);}}
-            style={{appearance:"none",padding:"5px 28px 5px 10px",borderRadius:7,border:`1px solid ${roleScope!=="all"?T.accent:T.border}`,background:roleScope!=="all"?T.accentDim:T.bgElevated,color:roleScope!=="all"?T.accent:T.textSub,fontSize:12,fontWeight:roleScope!=="all"?700:500,cursor:"pointer",outline:"none"}}>
-            <option value="all">Role: All</option>
-            <option value="steward">Role: Steward</option>
-            <option value="owner">Role: Owner</option>
-          </select>
-          <svg style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",color:roleScope!=="all"?T.accent:T.textMuted}} width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-        </div>
-
         {/* Search */}
-        <div style={{position:"relative",width:280}}>
+        <div style={{position:"relative",flex:1,maxWidth:340}}>
           <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,display:"flex",pointerEvents:"none"}}>
             <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.4"/><path d="M9.5 9.5l3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
           </span>
@@ -27504,9 +27494,37 @@ const InboxView = ({onToast}) => {
 
         <div style={{flex:1}}/>
 
+        {/* Role filter — button style matching Section */}
+        <div style={{position:"relative"}}>
+          <button onClick={()=>{setRoleOpen(o=>!o);setFilterOpen(false);}}
+            style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,background:roleOpen||roleScope!=="all"?T.accentDim:"transparent",border:`1px solid ${roleOpen||roleScope!=="all"?T.accent:T.border}`,color:roleOpen||roleScope!=="all"?T.accent:T.textSub,cursor:"pointer",fontSize:12,fontWeight:500,transition:"all .12s"}}>
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M1 3h12M3 7h8M5 11h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            Role{roleScope!=="all"&&<span style={{fontWeight:700,marginLeft:2}}>{roleScope==="steward"?"· Steward":"· Owner"}</span>}
+          </button>
+          {roleOpen&&(
+            <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.15)",minWidth:160,padding:"6px 0"}}
+              onClick={e=>e.stopPropagation()}>
+              <div style={{padding:"4px 14px 8px",fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Filter by Role</div>
+              {[["all","All"],["steward","Steward"],["owner","Owner"]].map(([k,l])=>{
+                const active = roleScope===k;
+                return (
+                  <button key={k} onClick={()=>{setRoleScope(k);setSel(null);setRoleOpen(false);}}
+                    style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"7px 14px",background:active?T.accentDim:"transparent",border:"none",cursor:"pointer",fontSize:12.5,color:active?T.accent:T.text,fontWeight:active?700:400,textAlign:"left",transition:"background .1s"}}
+                    onMouseEnter={e=>{if(!active)e.currentTarget.style.background=T.bgHover;}}
+                    onMouseLeave={e=>{if(!active)e.currentTarget.style.background="transparent";}}>
+                    {active&&<svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M1.5 5.5L3.8 7.8L8.5 2.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    {!active&&<span style={{width:9}}/>}
+                    {l}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {/* Section filter */}
         <div style={{position:"relative"}}>
-          <button onClick={()=>setFilterOpen(o=>!o)}
+          <button onClick={()=>{setFilterOpen(o=>!o);setRoleOpen(false);}}
             style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,background:filterOpen||secFilterActive?T.accentDim:"transparent",border:`1px solid ${filterOpen||secFilterActive?T.accent:T.border}`,color:filterOpen||secFilterActive?T.accent:T.textSub,cursor:"pointer",fontSize:12,fontWeight:500,transition:"all .12s"}}>
             <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M1 3h12M3 7h8M5 11h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
             Section
