@@ -2722,6 +2722,45 @@ const useNotifPrefs = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>
 // Visible = category not muted AND (admin, personal, platform-wide, or you own/steward the asset).
 const notifVisible = (n, me, isAdmin) => (_notifPrefs[n.category]!==false) && (isAdmin || n.forMe || !n.asset || _respFor(n.asset, me));
 
+// Reusable notification-preferences UI — lives in Settings → Notifications (the proper home).
+// Per-category in-app mute toggles + honest channel status. Wired to the shared _notifPrefs store.
+const NotifPrefsSettings = ()=>{
+  const prefs = useNotifPrefs();
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:22}}>
+      {/* In-app by category */}
+      <div>
+        <div style={{fontSize:12,fontWeight:600,color:T.textSub,marginBottom:4}}>In-app alerts — by category</div>
+        <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>Turn off the categories you don't want in the notification bell. You only receive alerts for assets you own or steward; these toggles mute categories on top of that.</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8}}>
+          {NOTIF_CATEGORIES.map(cat=>{const on=prefs[cat]!==false;return(
+            <div key={cat} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
+              <span style={{fontSize:12.5,color:T.text,fontWeight:500}}>{cat}</span>
+              <div onClick={()=>npSet(cat,!on)} style={{width:34,height:19,borderRadius:10,background:on?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
+                <div style={{position:"absolute",top:2,left:on?17:2,width:15,height:15,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 2px rgba(0,0,0,.2)"}}/>
+              </div>
+            </div>
+          );})}
+        </div>
+      </div>
+      {/* Channels — honest about what's live today */}
+      <div>
+        <div style={{fontSize:12,fontWeight:600,color:T.textSub,marginBottom:10}}>Delivery channels</div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {[["In-app","Active",true],["Email","Coming soon",false],["Slack","Coming soon",false]].map(([c,st,live])=>(
+            <div key={c} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,opacity:live?1:0.7}}>
+              <span style={{fontSize:13,fontWeight:500,color:live?T.text:T.textMuted}}>{c}</span>
+              {live
+                ? <span style={{fontSize:11,color:"#16a34a",fontWeight:600,display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:6,height:6,borderRadius:"50%",background:"#16a34a"}}/>{st}</span>
+                : <span style={{fontSize:10.5,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:5,padding:"2px 8px",fontWeight:600}}>{st}</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const DOCS = [
   {cat:"Getting Started",icon:"🚀",items:[
     {title:"Platform Overview",desc:"Introduction to Solix Data Governance"},
@@ -2890,8 +2929,7 @@ const NotificationsDrawer = ({onClose}) => {
   const _me = ((_rc&&_rc.email)||"").split("@")[0]; const _isAdmin = _r==="admin";
   const [notifs, setNotifs] = useState(NOTIFS.map(n=>({...n})));
   const [filter, setFilter] = useState("all");
-  const prefs = useNotifPrefs();
-  const [prefsOpen, setPrefsOpen] = useState(false);
+  useNotifPrefs(); // re-render when category prefs change (managed in Settings → Notifications)
   const _scoped = notifs.filter(n=>notifVisible(n,_me,_isAdmin));
   const unread = _scoped.filter(n=>n.unread).length;
   const markAll = () => setNotifs(n=>n.map(x=>({...x,unread:false})));
@@ -2904,39 +2942,14 @@ const NotificationsDrawer = ({onClose}) => {
         <div style={{padding:"16px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             <span style={{color:T.textSub,display:"flex"}}>{Ic.bell(16)}</span>
-            <span style={{fontSize:15,fontWeight:700,color:T.text}}>{prefsOpen?"Notification settings":"All notifications"}</span>
-            {!prefsOpen&&unread>0&&<span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:99,background:T.accentDim,color:T.accent}}>{unread}</span>}
+            <span style={{fontSize:15,fontWeight:700,color:T.text}}>All notifications</span>
+            {unread>0&&<span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:99,background:T.accentDim,color:T.accent}}>{unread}</span>}
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <button onClick={()=>setPrefsOpen(o=>!o)} title="Notification settings" style={{width:26,height:26,background:prefsOpen?T.accentDim:T.bgHover,border:`1px solid ${prefsOpen?T.accent:T.border}`,borderRadius:6,cursor:"pointer",color:prefsOpen?T.accent:T.textMuted,display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.settings?Ic.settings(13):Ic.edit(13)}</button>
-            {!prefsOpen&&<button onClick={markAll} style={{fontSize:11.5,color:T.textMuted,background:"none",border:"none",cursor:"pointer",padding:0}}>Mark all read</button>}
+            <button onClick={markAll} style={{fontSize:11.5,color:T.textMuted,background:"none",border:"none",cursor:"pointer",padding:0}}>Mark all read</button>
             <button onClick={onClose} style={{width:26,height:26,background:T.bgHover,border:`1px solid ${T.border}`,borderRadius:6,cursor:"pointer",color:T.textMuted,display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(12)}</button>
           </div>
         </div>
-        {prefsOpen ? (
-          <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
-            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>In-app — by category</div>
-            <div style={{fontSize:11,color:T.textMuted,marginBottom:10}}>Mute the categories you don't want in the bell.</div>
-            {NOTIF_CATEGORIES.map(cat=>{const on=prefs[cat]!==false;return(
-              <div key={cat} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 0",borderBottom:`1px solid ${T.border}`}}>
-                <span style={{fontSize:12.5,color:T.text}}>{cat}</span>
-                <div onClick={()=>npSet(cat,!on)} style={{width:32,height:18,borderRadius:9,background:on?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
-                  <div style={{position:"absolute",top:2,left:on?16:2,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 2px rgba(0,0,0,.2)"}}/>
-                </div>
-              </div>
-            );})}
-            <div style={{marginTop:16,padding:"12px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
-              <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Channels</div>
-              {[["In-app","Active","#16a34a"],["Email","Soon",null],["Slack","Soon",null]].map(([c,st,col])=>(
-                <div key={c} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"4px 0"}}>
-                  <span style={{fontSize:12.5,color:col?T.text:T.textMuted}}>{c}</span>
-                  {col?<span style={{fontSize:11,color:col,fontWeight:600}}>{st}</span>:<span style={{fontSize:10,color:T.textMuted,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:4,padding:"1px 6px"}}>{st}</span>}
-                </div>
-              ))}
-            </div>
-            <div style={{fontSize:11,color:T.textMuted,marginTop:12,lineHeight:1.5}}>You only get notifications for assets you own or steward. These toggles mute categories on top of that.</div>
-          </div>
-        ) : (<>
         <div style={{display:"flex",gap:0,borderBottom:`1px solid ${T.border}`,padding:"0 18px",flexShrink:0}}>
           {[{k:"all",l:"All"},{k:"unread",l:`Unread (${unread})`}].map(t=>(
             <button key={t.k} onClick={()=>setFilter(t.k)} style={{padding:"9px 14px",background:"none",border:"none",borderBottom:`2px solid ${filter===t.k?T.accent:"transparent"}`,color:filter===t.k?T.text:T.textMuted,fontSize:12.5,fontWeight:filter===t.k?600:400,cursor:"pointer",marginBottom:-1}}>{t.l}</button>
@@ -2966,7 +2979,6 @@ const NotificationsDrawer = ({onClose}) => {
             );
           })}
         </div>
-        </>)}
       </div>
     </>
   );
@@ -29038,35 +29050,8 @@ const SettingsView = ({onToast})=>{
 
             {/* ══ NOTIFICATIONS ══ */}
             {section==="notifications"&&<>
-              <SettSH icon={Ic.notif(16)} title="Notifications" desc="Configure real-time alerts for quality failures, access requests, policy violations and more."/>
-              <div style={{fontSize:12,fontWeight:600,color:T.textSub,marginBottom:10}}>Channels</div>
-              <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:22}}>
-                {[
-                    {icon:<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="1.5" y="3.5" width="15" height="11" rx="2" stroke="currentColor" strokeWidth="1.3"/><path d="M1.5 6l7.5 5 7.5-5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,l:"Email",connected:true,detail:"alerts@jnj.com"},
-                    {icon:<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 2h12a1.5 1.5 0 011.5 1.5v8A1.5 1.5 0 0115 13H9l-4 3v-3H3A1.5 1.5 0 011.5 11.5v-8A1.5 1.5 0 013 2Z" stroke="currentColor" strokeWidth="1.3"/><path d="M6 7h6M6 9.5h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>,l:"Slack",connected:true,detail:"#data-alerts"},
-                    {icon:<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="7" stroke="currentColor" strokeWidth="1.3"/><path d="M9 5.5v4M9 12h.01" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>,l:"PagerDuty",connected:false,detail:""},
-                    {icon:<svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M5 9h8M10 6l3 3-3 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><rect x="1.5" y="1.5" width="6" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" opacity=".5"/><rect x="10.5" y="11.5" width="6" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" opacity=".5"/></svg>,l:"Webhook",connected:false,detail:""},
-                  ].map((ch,i)=>(
-                  <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
-                    <span style={{color:T.textSub,display:"flex",flexShrink:0}}>{ch.icon}</span>
-                    <div style={{flex:1}}><div style={{fontSize:13,fontWeight:500,color:T.text}}>{ch.l}</div>{ch.connected&&<div style={{fontSize:11,color:T.textMuted}}>{ch.detail}</div>}</div>
-                    {ch.connected?<><span style={{fontSize:11,color:T.accent,fontWeight:600}}>Connected</span><Btn small ghost>Configure</Btn></>:<Btn small onClick={()=>onToast(`${ch.l} connected`,"success")}>Connect</Btn>}
-                  </div>
-                ))}
-              </div>
-              <div style={{fontSize:12,fontWeight:600,color:T.textSub,marginBottom:10}}>Alert Rules</div>
-              <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                {[{l:"Quality rule failure",e:true,s:true,p:false},{l:"New access request",e:true,s:false,p:false},{l:"Certification expiring",e:true,s:true,p:false},{l:"Policy violation",e:true,s:true,p:true},{l:"Schema drift detected",e:false,s:true,p:true},{l:"New PII column discovered",e:true,s:true,p:false},{l:"SLA breach",e:true,s:true,p:true}].map((r,i)=>(
-                  <div key={i} style={{display:"flex",alignItems:"center",padding:"10px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,gap:12}}>
-                    <span style={{fontSize:12,color:T.text,flex:1}}>{r.l}</span>
-                    {[{l:"Email",v:r.e},{l:"Slack",v:r.s},{l:"PD",v:r.p}].map(ch=>(
-                      <div key={ch.l} style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:T.textMuted}}>
-                        <Toggle on={ch.v} onChange={()=>onToast("Alert rule updated","success")}/><span>{ch.l}</span>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
+              <SettSH icon={Ic.notif(16)} title="Notifications" desc="Choose which in-app alerts reach you. Today notifications are delivered in-app; email & Slack are coming soon."/>
+              <NotifPrefsSettings/>
             </>}
 
             {/* ══ PREFERENCES ══ */}
