@@ -12793,10 +12793,21 @@ const AssetContractTab = ({asset,onToast})=>{
         </div>
         <div>
           <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.6,marginBottom:8}}>Validation</div>
-          <div style={{fontSize:10.5,color:T.textMuted,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+            {validating
+              ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" style={{animation:"spin 0.8s linear infinite",flexShrink:0}}><circle cx="12" cy="12" r="9" stroke={T.blue} strokeWidth="2.5" strokeDasharray="20 40"/></svg><span style={{fontSize:13,fontWeight:700,color:T.blue}}>Running {TOTAL_CHECKS} checks…</span></>
+              : failCount>0
+                ? <><span style={{width:8,height:8,borderRadius:"50%",background:T.rose,flexShrink:0}}/><span style={{fontSize:13,fontWeight:700,color:T.rose}}>{failCount} of {TOTAL_CHECKS} checks failing</span></>
+                : <><span style={{width:8,height:8,borderRadius:"50%",background:"#16a34a",flexShrink:0}}/><span style={{fontSize:13,fontWeight:700,color:"#16a34a"}}>All {TOTAL_CHECKS} checks passing</span></>}
+          </div>
+          <div style={{fontSize:10.5,color:T.textMuted,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
             <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><circle cx="8" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5.5v3l2 1.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-            {(contract.validationMode==="scheduled"&&contract.schedule&&contract.schedule.enabled!==false)?<span>Auto-validates {contractScheduleLabel(contract.schedule)}</span>:(contract.validationMode==="scheduled"&&contract.schedule)?<span>Schedule paused</span>:<span>On-demand validation</span>}
-            <span style={{opacity:.6}}>·</span><span>Last run {contract.lastRun}</span>
+            {(contract.validationMode==="scheduled"&&contract.schedule&&contract.schedule.enabled!==false)
+              ? <span>Auto-validates {contractScheduleLabel(contract.schedule)}</span>
+              : (contract.validationMode==="scheduled"&&contract.schedule)
+                ? <span>Schedule paused</span>
+                : <span>On-demand</span>}
+            <span style={{opacity:.5}}>·</span><span>Last run {contract.lastRun}</span>
           </div>
         </div>
       </div>
@@ -12912,24 +12923,8 @@ const AssetContractTab = ({asset,onToast})=>{
               <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.5}}>{schemaMissing.length} required column{schemaMissing.length>1?"s":""} missing from the live asset: <span style={{fontFamily:"'Geist Mono',monospace",fontWeight:600}}>{schemaMissing.map(c=>c.name).join(", ")}</span>. Investigate whether this is an intentional producer change or a breaking change.</div>
             </div>
           </div>
-          <div style={{display:"flex",gap:8,marginTop:10,paddingLeft:25}}>
-            <button onClick={()=>{setWizard("edit"); onToast&&onToast("Opening contract editor — update schema to reflect the change","info");}}
-              style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.text,fontSize:12,fontWeight:600,cursor:"pointer"}}
-              onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=T.bgSurface}>
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M10.5 2.5l3 3L6 13H3v-3l7.5-7.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
-              Update Contract Schema
-            </button>
-            <button onClick={()=>onToast&&onToast("Producer notified — Connection Admin has been alerted of the schema mismatch","success")}
-              style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:600,cursor:"pointer"}}
-              onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=T.bgSurface}>
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 12l3-3 2.5 2.5L13 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              Flag to Producer
-            </button>
-            <button onClick={()=>onToast&&onToast("Schema mismatch dismissed — marked as known change","info")}
-              style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,background:"transparent",border:"none",color:T.textMuted,fontSize:12,fontWeight:500,cursor:"pointer"}}
-              onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
-              Dismiss
-            </button>
+          <div style={{marginTop:8,paddingLeft:25}}>
+            <span style={{fontSize:11,color:T.textMuted}}>Review this in your Workspace to take action.</span>
           </div>
         </div>
       )}
@@ -12965,12 +12960,6 @@ const AssetContractTab = ({asset,onToast})=>{
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4"/><path d="M8 5v3.5M8 10.2v.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
                 View DQ Incident
               </button>
-              <button onClick={()=>onToast&&onToast("Quality failure acknowledged — marked as under investigation","success")}
-                style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:600,cursor:"pointer"}}
-                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=T.bgSurface}>
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5l3 3 6-6.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                Acknowledge
-              </button>
             </div>
           </div>
         )}
@@ -12990,13 +12979,7 @@ const AssetContractTab = ({asset,onToast})=>{
         {!sp.Semantics&&(
           <div style={{marginBottom:12,padding:"11px 14px",background:"rgba(245,158,11,.07)",border:`1px solid ${T.amber}44`,borderRadius:9}}>
             <div style={{fontSize:12.5,fontWeight:700,color:T.amber,marginBottom:2}}>Semantic definitions incomplete</div>
-            <div style={{fontSize:11.5,color:T.textSub,marginBottom:10,lineHeight:1.5}}>One or more required metadata fields are missing. As the steward, you can fix these directly in the contract.</div>
-            <button onClick={()=>{setWizard("edit"); onToast&&onToast("Opening contract editor — navigate to the Semantics step","info");}}
-              style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.text,fontSize:12,fontWeight:600,cursor:"pointer"}}
-              onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=T.bgSurface}>
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M10.5 2.5l3 3L6 13H3v-3l7.5-7.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
-              Fix Semantic Definitions
-            </button>
+            <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.5}}>One or more required metadata fields are missing. Review this in your Workspace to take action.</div>
           </div>
         )}
         <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>Mandatory metadata — validated against this asset's live metadata.</div>
@@ -13020,17 +13003,11 @@ const AssetContractTab = ({asset,onToast})=>{
             <div style={{fontSize:12.5,fontWeight:700,color:T.rose,marginBottom:2}}>{breached.length} policy breach{breached.length>1?"es":""} detected</div>
             <div style={{fontSize:11.5,color:T.textSub,marginBottom:10,lineHeight:1.5}}>The following policies have active violations: <span style={{fontWeight:600}}>{breached.map(p=>p.name).join(", ")}</span>. Review in Policy Manager or escalate to the domain owner.</div>
             <div style={{display:"flex",gap:8}}>
-              <button onClick={()=>onToast&&onToast("Navigating to Policy Manager — review the breached policy rules","info")}
+              <button onClick={()=>onToast&&onToast("Navigating to Policy Manager — review the breached policy violations","info")}
                 style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.text,fontSize:12,fontWeight:600,cursor:"pointer"}}
                 onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=T.bgSurface}>
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 1.5l5 2v4c0 3.2-2.1 5.6-5 6.5-2.9-.9-5-3.3-5-6.5v-4l5-2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
-                View Policy
-              </button>
-              <button onClick={()=>onToast&&onToast("Policy breach acknowledged and escalated to the domain owner","success")}
-                style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:600,cursor:"pointer"}}
-                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=T.bgSurface}>
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2v6M8 10.5v.5M3 8a5 5 0 1010 0A5 5 0 003 8z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-                Acknowledge & Escalate
+                View Policy Violation
               </button>
             </div>
           </div>
