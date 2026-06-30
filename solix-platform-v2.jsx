@@ -28097,6 +28097,12 @@ const SettingsView = ({onToast})=>{
   const [fwSearch,      setFwSearch]      = useState("");
   const [localEnabled,  setLocalEnabled]  = useState(()=>Object.fromEntries(REGS_META.map(r=>[r.id,r.enabled])));
 
+  // ── Governance Sweep state ──
+  const [govFreq,    setGovFreq]    = useState("weekly");
+  const [govGrace,   setGovGrace]   = useState(7);
+  const [govScope,   setGovScope]   = useState({assets:true,domains:true,products:true,terms:true,tags:true});
+  const [govSaved,   setGovSaved]   = useState(false);
+
   // ── Audit Logs state (hoisted to avoid hook-in-conditional-IIFE crash) ──
   const [auditSearch,      setAuditSearch]      = useState("");
   const [auditCatFilter,   setAuditCatFilter]   = useState("All");
@@ -28129,6 +28135,7 @@ const SettingsView = ({onToast})=>{
       {key:"notifications",icon:"notif",   label:"Notifications",        desc:"Alerts & channels"},
       {key:"preferences",  icon:"palette", label:"Preferences",          desc:"Theme & display"},
       {key:"custom_props", icon:"props",   label:"Custom Properties",    desc:"Extend asset metadata"},
+      {key:"governance",   icon:"shield",  label:"Governance",           desc:"Stewardship sweep & coverage settings"},
     ]},
     {label:"System", items:[
       {key:"api",          icon:"apikey",  label:"API Keys",              desc:"Programmatic access"},
@@ -29347,6 +29354,70 @@ const SettingsView = ({onToast})=>{
                 </div>
               </div>
               <div style={{display:"flex",gap:8}}><button style={{padding:"8px 16px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Upgrade Plan</button><Btn ghost>Download Invoice</Btn></div>
+            </>}
+
+            {/* ══ GOVERNANCE ══ */}
+            {section==="governance"&&<>
+              <SettSH icon={Ic.shield(16)} title="Governance" desc="Configure how often the platform scans for ungoverned assets and controls the flow of orphan assignment work items into the Admin inbox."/>
+
+              {/* Scan Frequency */}
+              <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:18,marginBottom:14}}>
+                <div style={{fontSize:12,fontWeight:700,color:T.text,marginBottom:4}}>Stewardship Coverage Sweep</div>
+                <div style={{fontSize:11,color:T.textMuted,marginBottom:14}}>Determines how often the system scans all assets for missing owners or stewards and generates Orphan Assignment items in the Admin Workspace inbox.</div>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:2}}>Scan Frequency</div>
+                  {[["ingestion","On every ingestion","Triggers immediately after each data source sync"],["daily","Daily","Runs once per day at midnight UTC"],["weekly","Weekly","Runs every Monday at midnight UTC"],["monthly","Monthly","Runs on the 1st of each month"]].map(([k,l,sub])=>(
+                    <label key={k} onClick={()=>setGovFreq(k)} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 12px",borderRadius:8,border:`1.5px solid ${govFreq===k?T.accent:T.border}`,background:govFreq===k?T.accentDim:"transparent",cursor:"pointer",transition:"all .12s"}}>
+                      <div style={{marginTop:2,width:14,height:14,borderRadius:"50%",border:`2px solid ${govFreq===k?T.accent:T.border}`,background:govFreq===k?T.accent:"transparent",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        {govFreq===k&&<div style={{width:5,height:5,borderRadius:"50%",background:"#fff"}}/>}
+                      </div>
+                      <div>
+                        <div style={{fontSize:12,fontWeight:600,color:govFreq===k?T.accent:T.text}}>{l}</div>
+                        <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{sub}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Grace Period */}
+              <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:18,marginBottom:14}}>
+                <div style={{fontSize:12,fontWeight:700,color:T.text,marginBottom:4}}>Grace Period</div>
+                <div style={{fontSize:11,color:T.textMuted,marginBottom:12}}>Assets ingested within this window are excluded from orphan flagging — allows time for initial assignment before the inbox is notified.</div>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <input type="number" min={0} max={90} value={govGrace} onChange={e=>setGovGrace(Number(e.target.value))}
+                    style={{width:70,padding:"6px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:13,fontWeight:600,outline:"none",textAlign:"center"}}/>
+                  <span style={{fontSize:12,color:T.textSub}}>days after ingestion before flagging as ungoverned</span>
+                </div>
+              </div>
+
+              {/* Scope */}
+              <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:18,marginBottom:20}}>
+                <div style={{fontSize:12,fontWeight:700,color:T.text,marginBottom:4}}>Scope</div>
+                <div style={{fontSize:11,color:T.textMuted,marginBottom:12}}>Choose which governed object types are included in each sweep.</div>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {[["assets","Data Assets (Tables, Schemas, Databases, Containers)"],["domains","Data Domains"],["products","Data Products"],["terms","Glossary Terms"],["tags","Tags"]].map(([k,l])=>{
+                    const on = govScope[k];
+                    return (
+                      <label key={k} onClick={()=>setGovScope(s=>({...s,[k]:!s[k]}))} style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",padding:"8px 0"}}>
+                        <div style={{width:16,height:16,borderRadius:4,border:`1.5px solid ${on?T.accent:T.border}`,background:on?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .12s"}}>
+                          {on&&<svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M1.5 5.5L3.8 7.8L8.5 2.5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                        </div>
+                        <span style={{fontSize:12,color:T.text}}>{l}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Save */}
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <button onClick={()=>{setGovSaved(true);onToast("Governance sweep settings saved","success");setTimeout(()=>setGovSaved(false),2500);}}
+                  style={{padding:"8px 20px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                  Save Settings
+                </button>
+                {govSaved&&<span style={{fontSize:12,color:T.green,fontWeight:500}}>✓ Saved</span>}
+              </div>
             </>}
 
             </div>
