@@ -27092,7 +27092,7 @@ const InboxView = ({onToast}) => {
   const roleMatch = i => roleScope==="all" || itemRole(i)===roleScope;
   const secMatch  = i => !secFilterActive || secFilters.has(i.section);
   const _q = search.trim().toLowerCase();
-  const searchMatch = i => !_q || ((i.title||"")+" "+(i.asset?.name||"")+" "+(i.asset?.path||"")).toLowerCase().includes(_q);
+  const searchMatch = i => !_q || ((i.title||"")+" "+(i.asset?.name||"")+" "+(i.asset?.path||"")+" "+(i.asset?.fqn||i.asset?.path||"")).toLowerCase().includes(_q);
   const counts = {
     action:   actionItems.length,
     activity: activityItems.filter(i=>!i.readAt).length,
@@ -27110,7 +27110,6 @@ const InboxView = ({onToast}) => {
     {k:"policy",   l:"Policy"},
     {k:"glossary", l:"Glossary"},
     {k:"tags",     l:"Tags"},
-    {k:"connections", l:"Connections"},
   ];
   const toggleSec = s => setSecFilters(prev=>{ const n=new Set(prev); n.has(s)?n.delete(s):n.add(s); return n; });
 
@@ -27447,9 +27446,8 @@ const InboxView = ({onToast}) => {
               </div>
             </div>
           </div>
-          {/* Right: severity badge + prev/next + close */}
+          {/* Right: prev/next + close */}
           <div style={{display:"flex",gap:5,alignItems:"center",flexShrink:0}}>
-            <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:sev.bg,color:sev.c,border:`1px solid ${sev.c}30`,letterSpacing:"0.05em"}}>{sev.label}</span>
             <button onClick={navPrev} disabled={selIdx<=0}
               style={{width:26,height:26,borderRadius:6,background:T.bgHover,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:selIdx<=0?"default":"pointer",opacity:selIdx<=0?0.35:1,color:T.textSub,transition:"all .1s"}}
               onMouseEnter={e=>{if(selIdx>0)e.currentTarget.style.borderColor=T.accent;}}
@@ -27479,29 +27477,26 @@ const InboxView = ({onToast}) => {
       {/* Topbar — breadcrumb only */}
       <Topbar breadcrumb={[{label:"Workspace"}]}/>
 
-      {/* Primary toolbar — role lens (main filter) + search up top, then filter + view toggle */}
-      <div style={{padding:"8px 20px 8px 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:12,flexShrink:0,background:T.bgSurface,minHeight:46}}>
-        {/* Role lens — the main filter */}
-        <div style={{display:"flex",gap:1,background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,padding:2}}>
-          {[["all","All"],["steward","As Steward"],["owner","As Owner"]].map(([k,l])=>{
-            const on = roleScope===k;
-            const accent = k==="owner"?"#b45309":k==="steward"?"#0d9488":T.text;
-            const onBg   = k==="owner"?"rgba(180,83,9,0.12)":k==="steward"?"rgba(13,148,136,0.12)":T.bgSurface;
-            return (
-              <button key={k} onClick={()=>{ setRoleScope(k); setSel(null); }}
-                style={{padding:"5px 13px",borderRadius:5,background:on?onBg:"transparent",border:`1px solid ${on?(k==="all"?T.border:accent):"transparent"}`,color:on?accent:T.textMuted,fontSize:12,fontWeight:on?700:500,cursor:"pointer",transition:"all .12s",whiteSpace:"nowrap"}}>
-                {l}
-              </button>
-            );
-          })}
+      {/* Primary toolbar — role dropdown + search + section filter */}
+      <div style={{padding:"8px 20px 8px 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10,flexShrink:0,background:T.bgSurface,minHeight:46}}>
+
+        {/* Role filter — dropdown */}
+        <div style={{position:"relative"}}>
+          <select value={roleScope} onChange={e=>{setRoleScope(e.target.value);setSel(null);}}
+            style={{appearance:"none",padding:"5px 28px 5px 10px",borderRadius:7,border:`1px solid ${roleScope!=="all"?T.accent:T.border}`,background:roleScope!=="all"?T.accentDim:T.bgElevated,color:roleScope!=="all"?T.accent:T.textSub,fontSize:12,fontWeight:roleScope!=="all"?700:500,cursor:"pointer",outline:"none"}}>
+            <option value="all">Role: All</option>
+            <option value="steward">Role: Steward</option>
+            <option value="owner">Role: Owner</option>
+          </select>
+          <svg style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",color:roleScope!=="all"?T.accent:T.textMuted}} width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </div>
 
-        {/* Search — applies to list + kanban */}
+        {/* Search */}
         <div style={{position:"relative",width:280}}>
           <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,display:"flex",pointerEvents:"none"}}>
             <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.4"/><path d="M9.5 9.5l3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
           </span>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search inbox…"
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by asset name, FQN or title…"
             style={{width:"100%",boxSizing:"border-box",padding:"6px 28px 6px 30px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12.5,outline:"none"}}
             onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
           {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex",padding:2}}><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg></button>}
@@ -27509,56 +27504,43 @@ const InboxView = ({onToast}) => {
 
         <div style={{flex:1}}/>
 
-        {/* Filter icon — list + kanban */}
+        {/* Section filter */}
         <div style={{position:"relative"}}>
-            <button onClick={()=>setFilterOpen(o=>!o)}
-              style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,background:filterOpen||secFilterActive?T.accentDim:"transparent",border:`1px solid ${filterOpen||secFilterActive?T.accent:T.border}`,color:filterOpen||secFilterActive?T.accent:T.textSub,cursor:"pointer",fontSize:12,fontWeight:500,transition:"all .12s"}}>
-              <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M1 3h12M3 7h8M5 11h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              Filter
-              {secFilterActive&&<span style={{fontSize:10,fontWeight:700,background:T.accent,color:"#fff",borderRadius:99,padding:"1px 6px",marginLeft:2}}>{secFilters.size}</span>}
-            </button>
-            {filterOpen&&(
-              <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.15)",minWidth:200,padding:"10px 0"}}
-                onClick={e=>e.stopPropagation()}>
-                <div style={{padding:"4px 14px 8px",fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Filter by Section</div>
-                {SECTIONS.map(({k,l})=>{
-                  const checked = secFilters.has(k);
-                  return (
-                    <label key={k} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 14px",cursor:"pointer",transition:"background .1s"}}
-                      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
-                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                      <div onClick={()=>toggleSec(k)} style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${checked?T.accent:T.border}`,background:checked?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .12s"}}>
-                        {checked&&<svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M1.5 5.5L3.8 7.8L8.5 2.5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                      </div>
-                      <span onClick={()=>toggleSec(k)} style={{fontSize:12.5,color:T.text}}>{l}</span>
-                    </label>
-                  );
-                })}
-                {secFilterActive&&(
-                  <div style={{borderTop:`1px solid ${T.border}`,marginTop:6,padding:"8px 14px 2px"}}>
-                    <button onClick={()=>setSecFilters(new Set())} style={{background:"none",border:"none",cursor:"pointer",color:T.rose,fontSize:12,padding:0}}>Clear filters</button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-        {/* View toggle */}
-        <div style={{display:"flex",gap:1,background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`,padding:2}}>
-          {[["list",<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 4h10M2 7h10M2 10h10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>],
-            ["kanban",<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="3.5" height="10" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="5.25" y="2" width="3.5" height="7" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="9.5" y="2" width="3.5" height="8.5" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg>]
-          ].map(([mode,icon])=>(
-            <button key={mode} onClick={()=>{setViewMode(mode);setSel(null);closeForms();setFilterOpen(false);}}
-              style={{width:28,height:26,borderRadius:5,background:viewMode===mode?T.bgSurface:"transparent",border:viewMode===mode?`1px solid ${T.border}`:"none",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:viewMode===mode?T.text:T.textMuted,boxShadow:viewMode===mode?"0 1px 3px rgba(0,0,0,.08)":"none",transition:"all .12s"}}>
-              {icon}
-            </button>
-          ))}
+          <button onClick={()=>setFilterOpen(o=>!o)}
+            style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,background:filterOpen||secFilterActive?T.accentDim:"transparent",border:`1px solid ${filterOpen||secFilterActive?T.accent:T.border}`,color:filterOpen||secFilterActive?T.accent:T.textSub,cursor:"pointer",fontSize:12,fontWeight:500,transition:"all .12s"}}>
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M1 3h12M3 7h8M5 11h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            Section
+            {secFilterActive&&<span style={{fontSize:10,fontWeight:700,background:T.accent,color:"#fff",borderRadius:99,padding:"1px 6px",marginLeft:2}}>{secFilters.size}</span>}
+          </button>
+          {filterOpen&&(
+            <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.15)",minWidth:200,padding:"10px 0"}}
+              onClick={e=>e.stopPropagation()}>
+              <div style={{padding:"4px 14px 8px",fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Filter by Section</div>
+              {SECTIONS.map(({k,l})=>{
+                const checked = secFilters.has(k);
+                return (
+                  <label key={k} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 14px",cursor:"pointer",transition:"background .1s"}}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
+                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <div onClick={()=>toggleSec(k)} style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${checked?T.accent:T.border}`,background:checked?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .12s"}}>
+                      {checked&&<svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M1.5 5.5L3.8 7.8L8.5 2.5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    </div>
+                    <span onClick={()=>toggleSec(k)} style={{fontSize:12.5,color:T.text}}>{l}</span>
+                  </label>
+                );
+              })}
+              {secFilterActive&&(
+                <div style={{borderTop:`1px solid ${T.border}`,marginTop:6,padding:"8px 14px 2px"}}>
+                  <button onClick={()=>setSecFilters(new Set())} style={{background:"none",border:"none",cursor:"pointer",color:T.rose,fontSize:12,padding:0}}>Clear filters</button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Tabs — two questions + archive (below the filter, list view only) */}
-      {viewMode==="list"&&(
-        <div style={{padding:"0 20px 0 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",flexShrink:0,background:T.bgSurface,minHeight:42}}>
+      {/* Tabs — Inbox / Done */}
+      <div style={{padding:"0 20px 0 28px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",flexShrink:0,background:T.bgSurface,minHeight:42}}>
           {[["action","Inbox"],["done","Done"]].map(([k,l])=>(
             <button key={k} onClick={()=>{ setFilter(k); setSel(null); closeForms(); setFilterOpen(false); }}
               style={{padding:"11px 14px",background:"transparent",border:"none",borderBottom:`2px solid ${filter===k?T.accent:"transparent"}`,color:filter===k?T.text:T.textMuted,fontSize:12.5,fontWeight:filter===k?600:400,cursor:"pointer",display:"flex",alignItems:"center",gap:5,transition:"all .12s",whiteSpace:"nowrap"}}>
@@ -27570,8 +27552,7 @@ const InboxView = ({onToast}) => {
               </span>}
             </button>
           ))}
-        </div>
-      )}
+      </div>
 
       {/* ── Main content + unified detail panel ── */}
       <div style={{flex:1,display:"flex",overflow:"hidden"}}>
