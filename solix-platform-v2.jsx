@@ -12800,6 +12800,15 @@ const AssetContractTab = ({asset,onToast})=>{
                 ? <><span style={{width:8,height:8,borderRadius:"50%",background:T.rose,flexShrink:0}}/><span style={{fontSize:13,fontWeight:700,color:T.rose}}>{failCount} of {TOTAL_CHECKS} checks failing</span></>
                 : <><span style={{width:8,height:8,borderRadius:"50%",background:"#16a34a",flexShrink:0}}/><span style={{fontSize:13,fontWeight:700,color:"#16a34a"}}>All {TOTAL_CHECKS} checks passing</span></>}
           </div>
+          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:8}}>
+            {["Schema","Semantics","Quality","Policies","SLA"].map(s=>{
+              const ok=sp[s];
+              return <div key={s} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 9px",borderRadius:6,background:ok?"#16a34a0e":T.roseDim,border:`1px solid ${ok?"#16a34a33":T.rose+"33"}`}}>
+                <span style={{color:ok?"#16a34a":T.rose,display:"flex"}}>{ok?<svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5l3 3 6-6.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>:<svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>}</span>
+                <span style={{fontSize:11,fontWeight:600,color:ok?"#16a34a":T.rose}}>{s}</span>
+              </div>;
+            })}
+          </div>
           <div style={{fontSize:10.5,color:T.textMuted,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
             <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><circle cx="8" cy="8.5" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5.5v3l2 1.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
             {(contract.validationMode==="scheduled"&&contract.schedule&&contract.schedule.enabled!==false)
@@ -12841,17 +12850,6 @@ const AssetContractTab = ({asset,onToast})=>{
         </div>
       </div>
 
-      {/* validation checks (explain Health) */}
-      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginTop:14}}>
-        <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.6,marginRight:2}}>Checks</span>
-        {["Schema","Semantics","Quality","Policies","SLA"].map(s=>{
-          const ok=sp[s];
-          return <div key={s} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 11px",borderRadius:7,background:ok?"#16a34a0e":T.roseDim,border:`1px solid ${ok?"#16a34a33":T.rose+"33"}`}}>
-            <span style={{color:ok?"#16a34a":T.rose,display:"flex"}}>{ok?<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5l3 3 6-6.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>:<svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>}</span>
-            <span style={{fontSize:11.5,fontWeight:600,color:ok?"#16a34a":T.rose}}>{s}</span>
-          </div>;
-        })}
-      </div>
     </div></Card2>
 
     {/* ── Tabs: Contract · Runs · Version History (segmented, like Observability) ── */}
