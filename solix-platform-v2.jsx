@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo, createContext, useContext } from "react";
+﻿import React, { useState, useRef, useEffect, useCallback, useMemo, createContext, useContext } from "react";
 import { createPortal } from "react-dom";
 import {
   ReactFlow, Background, Controls, MiniMap,
@@ -679,6 +679,19 @@ const DQ_INCIDENTS = [
     desc:"Dimension table was not refreshed for 3 days due to a failed dbt run. Resolved by re-triggering the ingestion pipeline and confirming row count recovery.",
   },
 ];
+
+// ── Shared reactive store for contract approval inbox items ──
+const _contractApprovalSubs = new Set();
+let _contractApprovalItems = [];
+const addContractApprovalItem = (item) => {
+  _contractApprovalItems = [item, ..._contractApprovalItems];
+  _contractApprovalSubs.forEach(fn => fn());
+};
+const useContractApprovals = () => {
+  const [, force] = useState(0);
+  useEffect(() => { const fn = () => force(n => n + 1); _contractApprovalSubs.add(fn); return () => { _contractApprovalSubs.delete(fn); }; }, []);
+  return _contractApprovalItems;
+};
 
 // ── Shared reactive store for DQ incidents ──
 // One source the Data Quality view and the Inbox share, so resolving a dq_alert
@@ -11915,7 +11928,7 @@ const ColumnProfilePanel = ({asset})=>{
           ))}
         </tr></thead>
         <tbody>
-          {filtered.length===0 && <tr><td colSpan={6} style={{padding:"30px",textAlign:"center",color:T.textMuted,fontSize:12.5}}>No columns match “{q}”.</td></tr>}
+          {filtered.length===0 && <tr><td colSpan={6} style={{padding:"30px",textAlign:"center",color:T.textMuted,fontSize:12.5}}>No columns match "{q}".</td></tr>}
           {filtered.map((c,i)=>{
             const p=obsColProfile(c);
             const dc=OBS_DTYPE_COLOR[p.dataType]||T.textSub;
@@ -12417,11 +12430,10 @@ const AssetObservabilityTab = ({asset,onToast,onNav})=>{
 // ═══════════════════════════════════════════════════════════════════════════
 // Lifecycle status is set by the owner (like certification) — Draft / Active / Deprecated.
 const CONTRACT_STATUS = {
-  Draft:      {label:"Draft",      color:T.amber,     bg:T.amberDim,  border:`${T.amber}40`, desc:"Being defined — not yet enforced."},
-  Active:     {label:"Active",     color:"#16a34a",   bg:"#16a34a14", border:"#16a34a40",     desc:"Published and enforced."},
-  Deprecated: {label:"Deprecated", color:T.textMuted, bg:T.bgElevated,border:T.border,        desc:"Retired — no longer enforced."},
+  Draft:  {label:"Draft",  color:T.amber,   bg:T.amberDim,  border:`${T.amber}40`, desc:"Pending steward approval — not yet enforced."},
+  Active: {label:"Active", color:"#16a34a", bg:"#16a34a14", border:"#16a34a40",     desc:"Approved and enforced."},
 };
-const CONTRACT_STATES = ["Draft","Active","Deprecated"];
+const CONTRACT_STATES = ["Draft","Active"];
 // Health is computed from validation — independent of the lifecycle status.
 const CONTRACT_HEALTH = {
   Passing:  {label:"Passing",  color:"#16a34a", bg:"#16a34a14", border:"#16a34a40"},
@@ -12563,6 +12575,23 @@ function validateContract(contract,asset){
 
 const AssetContractTab = ({asset,onToast})=>{
   const mono={fontFamily:"'Geist Mono',monospace"};
+  const {role:_role, roleCfg:_rcfg} = useRole();
+  const meHandle = ((_rcfg&&_rcfg.email)||"you@jnj").split("@")[0];
+  const isStewardOrAdmin = _role==="steward"||_role==="admin";
+
+  // Push a contract approval request into the shared inbox store
+  const pushContractApprovalInbox = (contractName, action="created") => {
+    const id = "inb_ca_"+Date.now();
+    addContractApprovalItem({
+      id, type:"contract_approval", severity:"medium", section:"catalog", timeAgo:"Just now",
+      title:`Contract approval needed · ${contractName}`,
+      asset:{name:asset.name, path:asset.db||asset.name, type:"Table"},
+      body:`${meHandle} ${action} the contract "${contractName}" on ${asset.name}. Review and approve to make it Active.`,
+      contractName, assetName:asset.name, requestedBy:meHandle, action,
+      readAt:null,
+    });
+  };
+
   const [contract,setContractState]=useState(()=>getStoredContract(asset.name));
   const [wizard,setWizard]=useState(false);   // false | "create" | "edit"
   const [tab,setTab]=useState("contract");    // contract | runs | versions
@@ -12574,7 +12603,8 @@ const AssetContractTab = ({asset,onToast})=>{
   const [validating,setValidating]=useState(false);   // true while a validation run is in flight
   const setContract=(u)=>setContractState(prev=>{const next=typeof u==="function"?u(prev):u; CONTRACT_STORE[asset.name]=next; return next;});
 
-  const changeStatus=(st)=>{ setStatusOpen(false); if(st===contract.status) return; setContract(c=>({...c,status:st,updated:"Just now"})); onToast&&onToast(`Status set to ${st}`,"success"); };
+  // Status can only be changed by steward/admin — connection admins go through approval flow
+  const changeStatus=(st)=>{ setStatusOpen(false); if(st===contract.status) return; if(!isStewardOrAdmin){onToast&&onToast("Only a steward or admin can change contract status","error");return;} setContract(c=>({...c,status:st,updated:"Just now"})); onToast&&onToast(`Status set to ${st}`,"success"); };
   const runNow=(contractArg)=>{
     setSettingsOpen(false);
     if(validating) return;   // already in flight
@@ -12615,7 +12645,7 @@ const AssetContractTab = ({asset,onToast})=>{
             opened:"Just now", assignee:null, rootCause:"", resolutionReason:"", resolved:null, affectedRows:null,
             timeline:[{action:`Contract ${c.name} failed validation — ${res.failedSections.join(", ")}`,by:"system",at:"Just now"}],
             comments:[],
-            desc:`Data contract “${c.name}” validation ${status==="Failed"?"failed":"partially failed"}. Failing checks: ${res.failedSections.join(", ")}.`,
+            desc:`Data contract "${c.name}" validation ${status==="Failed"?"failed":"partially failed"}. Failing checks: ${res.failedSections.join(", ")}.`,
           });
         }
       }
@@ -12626,17 +12656,36 @@ const AssetContractTab = ({asset,onToast})=>{
     else onToast&&onToast(`Validation ${status==="Failed"?"failed":"partially failed"} — ${res.failedSections.length} check(s) failing${incidentOpened?" · incident opened + alert sent":""}`,"error");
     },1500);
   };
-  const saveEdit=(updated)=>{ setContract(c=>({...updated,version:c.version,status:c.status,versions:c.versions,schedule:updated.schedule??c.schedule,updated:"Just now"})); setWizard(false); onToast&&onToast("Contract updated","success"); };
+  const saveEdit=(updated)=>{
+    // Steward/admin edits → stay Active. Connection admin edits → drop to Draft for re-approval.
+    const newStatus = isStewardOrAdmin ? (contract.status||"Active") : "Draft";
+    setContract(c=>({...updated,version:c.version,status:newStatus,versions:c.versions,schedule:updated.schedule??c.schedule,updated:"Just now"}));
+    setWizard(false);
+    if(!isStewardOrAdmin){ pushContractApprovalInbox(updated.name,"updated"); onToast&&onToast("Contract updated — pending steward approval to go Active","info"); }
+    else { onToast&&onToast("Contract updated","success"); }
+  };
   // Wizard submit — the two footer buttons (Run now / Schedule) both finalize creation/edit, then act.
   const submitWizard=(built,action)=>{
     const editing = wizard==="edit";
-    if(editing) setContract(c=>({...built,version:c.version,status:c.status,versions:c.versions,schedule:built.schedule??c.schedule,updated:"Just now"}));
-    else setContract({...built,versions:[]});
+    // Steward/Admin → auto-Active. Connection Admin → Draft, needs steward approval.
+    const newStatus = isStewardOrAdmin ? "Active" : "Draft";
+    if(editing) setContract(c=>({...built,version:c.version,status:newStatus,versions:c.versions,schedule:built.schedule??c.schedule,updated:"Just now"}));
+    else setContract({...built,status:newStatus,versions:[]});
     setWizard(false);
-    if(action==="schedule"){ onToast&&onToast(editing?"Contract updated":`Contract “${built.name}” created`,"success"); setScheduleModal(true); }
-    else { runNow(built); }  // "run" (default) — validate immediately; runNow shows the result toast
+    if(!isStewardOrAdmin){ pushContractApprovalInbox(built.name, editing?"updated":"created"); onToast&&onToast(editing?"Contract updated — pending steward approval":"Contract created — pending steward approval to go Active","info"); return; }
+    if(action==="schedule"){ onToast&&onToast(editing?"Contract updated":`Contract "${built.name}" created`,"success"); setScheduleModal(true); }
+    else { runNow(built); }
   };
-  const doDelete=()=>{ setContractState(null); CONTRACT_STORE[asset.name]=null; setDeleteConfirm(false); onToast&&onToast("Contract deleted","error"); };
+  const doDelete=()=>{
+    if(!isStewardOrAdmin){
+      // Connection admin requesting delete → send approval request to steward
+      setDeleteConfirm(false);
+      pushContractApprovalInbox(contract.name,"requested deletion of");
+      onToast&&onToast("Delete request sent to steward for approval","info");
+      return;
+    }
+    setContractState(null); CONTRACT_STORE[asset.name]=null; setDeleteConfirm(false); onToast&&onToast("Contract deleted","error");
+  };
   const saveSchedule=(sched)=>{ setContract(c=>({...c,schedule:sched,validationMode:sched.freq==="once"?"ondemand":"scheduled"})); setScheduleModal(false); onToast&&onToast(sched.enabled===false?"Validation schedule saved (paused)":"Validation schedule updated","success"); };
   const removeSchedule=()=>{ setContract(c=>({...c,schedule:null,validationMode:"ondemand"})); setScheduleModal(false); onToast&&onToast("Schedule removed — validate on demand","info"); };
 
@@ -13090,7 +13139,7 @@ const AssetContractTab = ({asset,onToast})=>{
     {wizard&&<ContractWizard asset={asset} onToast={onToast} existing={wizard==="edit"?contract:null} onClose={()=>setWizard(false)} onSubmit={submitWizard}/>}
 
     {/* ── Schedule validation modal ── */}
-    {scheduleModal&&createPortal(<ScheduleControl title="Validation schedule" subtitle={`How often “${contract.name}” is validated against the live asset`} schedule={contract.schedule} onClose={()=>setScheduleModal(false)} onSave={saveSchedule} onRemove={removeSchedule} onRunNow={()=>{setScheduleModal(false);runNow();}} running={validating}/>,document.body)}
+    {scheduleModal&&createPortal(<ScheduleControl title="Validation schedule" subtitle={`How often "${contract.name}" is validated against the live asset`} schedule={contract.schedule} onClose={()=>setScheduleModal(false)} onSave={saveSchedule} onRemove={removeSchedule} running={validating}/>,document.body)}
 
     {/* ── Delete confirm ── */}
     {deleteConfirm&&createPortal(
@@ -13114,7 +13163,7 @@ const AssetContractTab = ({asset,onToast})=>{
   </div>;
 };
 
-// Schedule validation modal — identical pattern to the Connectors “Sync Schedule”
+// Schedule validation modal — identical pattern to the Connectors "Sync Schedule"
 // ════════════════ SHARED SCHEDULE CONTROL ════════════════
 // ONE schedule UI used everywhere (Data Quality, Policy, Data Contract, Connections) so
 // the Run-now / Schedule experience is identical irrespective of section.
@@ -13247,7 +13296,7 @@ const CONTRACT_SECTIONS=[
   {key:"sla",label:"SLA"},
   {key:"terms",label:"Terms of Use"},
 ];
-// ── Validation schedule — same vocabulary & cron builder as the Connectors “Sync Schedule” ──
+// ── Validation schedule — same vocabulary & cron builder as the Connectors "Sync Schedule" ──
 const CONTRACT_SCHED_FREQS=[{k:"hourly",l:"Hourly"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"custom",l:"Custom"}];
 const CONTRACT_TZ_OPTS=["UTC","US/Eastern","US/Central","US/Pacific","Europe/London","Asia/Kolkata","Asia/Singapore"];
 const CONTRACT_WEEKDAYS=["monday","tuesday","wednesday","thursday","friday","saturday","sunday"];
@@ -13440,7 +13489,7 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
               {assetCases.length===0?<div style={{fontSize:12.5,color:T.textMuted,padding:"16px 0"}}>No test cases exist for this asset yet. Create them in Data Quality › Tests first.</div>:<>
               <input value={qualitySearch} onChange={e=>setQualitySearch(e.target.value)} placeholder="Search this table's quality tests…" style={{...inp,marginBottom:10}}/>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                {filtered.length===0&&<div style={{fontSize:12,color:T.textMuted,fontStyle:"italic",padding:"8px 0"}}>No tests match “{qualitySearch}”.</div>}
+                {filtered.length===0&&<div style={{fontSize:12,color:T.textMuted,fontStyle:"italic",padding:"8px 0"}}>No tests match "{qualitySearch}".</div>}
                 {filtered.map(t=>(
                 <label key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:quality.includes(t.id)?T.accentDim:T.bgElevated,border:`1px solid ${quality.includes(t.id)?T.accent+"55":T.border}`,borderRadius:9,cursor:"pointer"}}>
                   <input type="checkbox" checked={quality.includes(t.id)} onChange={()=>toggle(quality,setQuality,t.id)} style={{accentColor:T.accent}}/>
@@ -13456,7 +13505,7 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
               <div style={{marginBottom:14}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>Governance Policies</div><div style={{fontSize:12,color:T.textMuted,marginTop:3}}>Search and attach governance policies that apply to <span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{asset.name}</span> ({policies.length} selected). Optional.</div></div>
               <input value={policySearch} onChange={e=>setPolicySearch(e.target.value)} placeholder="Search policies assigned to this table…" style={{...inp,marginBottom:10}}/>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                {filtered.length===0&&<div style={{fontSize:12,color:T.textMuted,fontStyle:"italic",padding:"8px 0"}}>No policies match “{policySearch}”.</div>}
+                {filtered.length===0&&<div style={{fontSize:12,color:T.textMuted,fontStyle:"italic",padding:"8px 0"}}>No policies match "{policySearch}".</div>}
                 {filtered.map(p=>(
                 <label key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:policies.includes(p.id)?T.accentDim:T.bgElevated,border:`1px solid ${policies.includes(p.id)?T.accent+"55":T.border}`,borderRadius:9,cursor:"pointer"}}>
                   <input type="checkbox" checked={policies.includes(p.id)} onChange={()=>toggle(policies,setPolicies,p.id)} style={{accentColor:T.accent}}/>
@@ -17239,7 +17288,7 @@ const ObsView = ({onToast,onNav})=>{
           ))}
         </div>
         <AlertWizard open={alertWizard} onClose={()=>setAlertWizard(false)}
-          onCreate={(a)=>{setSubs(p=>[{...a},...p]);setAlertWizard(false);onToast&&onToast(`Alert “${a.rule}” created`,"success");}}/>
+          onCreate={(a)=>{setSubs(p=>[{...a},...p]);setAlertWizard(false);onToast&&onToast(`Alert "${a.rule}" created`,"success");}}/>
       </>}
     </div>
   </div>;
@@ -26936,7 +26985,7 @@ const TASK_TYPES = ["field_updated","stewardship_request","needs_attention","tag
 // Phase 3 — work-item categories (color-coded grouping by kind of work)
 const TYPE_CATEGORY = {
   policy_violation:"violation", dq_alert:"violation",
-  tag_review:"approval", certification_review:"approval", term_review:"approval",
+  tag_review:"approval", certification_review:"approval", term_review:"approval", contract_approval:"approval",
   assigned:"ownership", stewardship_request:"ownership", needs_attention:"ownership", orphan_assignment:"ownership", rbac_request:"ownership",
   field_updated:"curation",
 };
@@ -26950,7 +26999,7 @@ const CATEGORY_META = {
 const itemCategory = (item) => TYPE_CATEGORY[item?.type] || "curation";
 // Role model — every work item is whose job: Steward DOES, Owner DECIDES, FYI = awareness.
 const ITEM_ROLE = {
-  tag_review:"steward", dq_alert:"steward", policy_violation:"steward", term_review:"steward",
+  tag_review:"steward", dq_alert:"steward", policy_violation:"steward", term_review:"steward", contract_approval:"steward",
   certification_review:"owner", stewardship_request:"owner", orphan_assignment:"owner", needs_attention:"owner", rbac_request:"owner",
   field_updated:"fyi", assigned:"fyi",
 };
@@ -27001,6 +27050,7 @@ const useRoleReqs = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(
 const InboxView = ({onToast}) => {
   const onNav = useNav();
   const tagCtx = useTagCtx(); // tags live in TagProvider context — the tags "shared store"
+  const contractApprovals = useContractApprovals();
   const [items,      setItems]      = useState([...POLICY_VIOLATION_INBOX, ...TAG_REVIEW_INBOX, ...CERT_REVIEW_INBOX, ...ORPHAN_INBOX, ...TERM_REVIEW_INBOX, ...INBOX_DATA.filter(i=>i.type!=="stewardship_request")]);
   const [filter,     setFilter]     = useState("action"); // action | activity | done
   const [viewMode,   setViewMode]   = useState("list");   // list | kanban
@@ -27035,7 +27085,7 @@ const InboxView = ({onToast}) => {
     asset:{name:r.asset, path:r.asset, type:"Table"}, body:`${r.requestedBy} requested to be ${r.role} — "${r.note}"`,
     requestedBy:r.requestedBy, requestedRole:r.role==="owner"?"Owner":"Steward", reqId:r.id, readAt:null,
   }));
-  const allItems = [...ROLE_REQ_ITEMS, ...items];
+  const allItems = [...contractApprovals.filter(ca=>!items.some(i=>i.id===ca.id)), ...ROLE_REQ_ITEMS, ...items];
   const isActionItem   = i => itemRole(i)!=="fyi" && !i.readAt;
   const isActivityItem = i => itemRole(i)==="fyi";
   const isDoneItem     = i => itemRole(i)!=="fyi" && !!i.readAt;
@@ -27072,8 +27122,8 @@ const InboxView = ({onToast}) => {
   const navPrev = ()=>{ if(selIdx>0) { setSel(shown[selIdx-1].id); closeForms(); }};
   const navNext = ()=>{ if(selIdx<shown.length-1) { setSel(shown[selIdx+1].id); closeForms(); }};
 
-  const ack     = (id,msg)=>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); setSel(null); closeForms(); onToast(msg||"Acknowledged","success"); };
-  const dism    = id      =>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); setSel(null); closeForms(); };
+  const ack     = (id,msg)=>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); _contractApprovalItems=_contractApprovalItems.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i); _contractApprovalSubs.forEach(fn=>fn()); setSel(null); closeForms(); onToast(msg||"Acknowledged","success"); };
+  const dism    = id      =>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); _contractApprovalItems=_contractApprovalItems.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i); _contractApprovalSubs.forEach(fn=>fn()); setSel(null); closeForms(); };
   const markAll = ()      =>{ setItems(p=>p.map(i=>({...i,readAt:i.readAt||new Date().toISOString()}))); setSel(null); closeForms(); onToast("All caught up","success"); };
   // Assignee + reassignment (steward hands off; owner can override — task handoff, not role change).
   const effAssignee = (item)=> reassignMap[item.id] || itemAssignee(item) || "unassigned";
@@ -27097,6 +27147,7 @@ const InboxView = ({onToast}) => {
     certification_review:{icon:sz=>Ic.cert(sz||12),    label:"Certification",  shortLabel:"Cert"},
     orphan_assignment:   {icon:sz=>Ic.steward(sz||12), label:"Orphan — Assign Owner", shortLabel:"Orphan"},
     term_review:         {icon:sz=>Ic.glossary(sz||12),label:"Term Review",     shortLabel:"Term"},
+    contract_approval:   {icon:sz=>Ic.contracts(sz||12),label:"Contract Approval",shortLabel:"Contract"},
   };
 
   /* ── Action row — only inside detail panel ── */
@@ -27136,6 +27187,15 @@ const InboxView = ({onToast}) => {
       return <>{btn("Acknowledge",()=>ack(item.id),true)}{openIn("Open in Catalog","catalog")}</>;
     if(item.type==="assigned")
       return <>{btn("Acknowledge",()=>ack(item.id),true)}{openIn("Open in Catalog","catalog")}</>;
+    if(item.type==="contract_approval"){
+      const isDelete = (item.action||"").includes("deletion");
+      return <>{btn(isDelete?"Approve deletion":"Approve",()=>{
+        // activate or delete the contract in the store
+        if(isDelete){ CONTRACT_STORE[item.assetName]=null; }
+        else { const c=CONTRACT_STORE[item.assetName]; if(c) CONTRACT_STORE[item.assetName]={...c,status:"Active",updated:"Just now"}; }
+        ack(item.id, isDelete?`Contract on ${item.assetName} deleted`:`Contract "${item.contractName}" approved — now Active`);
+      },true)}{btn("Reject",()=>ack(item.id,`Contract "${item.contractName}" rejected — returned to Draft`),false,true)}{openIn("Open in Catalog","catalog")}</>;
+    }
     return null;
   };
 
