@@ -18285,11 +18285,6 @@ const DomainsView = ({onAsset, onNav}) => {
                           </div>
                         ))}
                       </div>
-                      {/* CERTIFICATE */}
-                      <div style={{padding:16,borderBottom:`1px solid ${T.border}`}}>
-                        <SbLabel onEdit={()=>{setPdSbModal("cert");setPdSbSearch("");}}>Status</SbLabel>
-                        {(()=>{const CM={"Draft":{color:"#6b7280",bg:"rgba(107,114,128,.1)",border:"rgba(107,114,128,.25)",icon:"◐"},"In Review":{color:"#d97706",bg:"rgba(217,119,6,.12)",border:"rgba(217,119,6,.3)",icon:"⏳"},"Approved":{color:"#16a34a",bg:"rgba(22,163,74,.12)",border:"rgba(22,163,74,.3)",icon:"✓"},"Rejected":{color:"#e11d48",bg:"rgba(225,29,72,.12)",border:"rgba(225,29,72,.3)",icon:"✕"},"Deprecated":{color:"#7c3aed",bg:"rgba(124,58,237,.1)",border:"rgba(124,58,237,.25)",icon:"—"}};const cm=CM[pd.cert]||CM["Draft"];return <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px 4px 9px",borderRadius:5,background:cm.bg,borderTop:`1px solid ${cm.border}`,borderRight:`1px solid ${cm.border}`,borderBottom:`1px solid ${cm.border}`,borderLeft:`3px solid ${cm.color}`}}><span style={{fontSize:13}}>{cm.icon}</span><span style={{fontSize:12,color:cm.color,fontWeight:600}}>{pd.cert||"Draft"}</span></div>;})()}
-                      </div>
                       {/* OWNERS */}
                       <div style={{padding:16,borderBottom:`1px solid ${T.border}`}}>
                         <SbLabel onEdit={()=>{setPdSbModal("owners");setPdSbSearch("");}}>Owners</SbLabel>
