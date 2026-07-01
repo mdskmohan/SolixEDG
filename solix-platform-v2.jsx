@@ -1126,12 +1126,17 @@ const LIFECYCLE_TRANSITIONS = {
   Deprecated:  [],
 };
 
-const GlossaryView = ({onToast}) => {
+const GlossaryView = ({onToast, deepLinkTermId}) => {
   const [glossaries, setGlossaries] = useState(GLOSSARY_DATA);
   const [terms,      setTerms]      = useGlossaryTerms(); // shared store — synced with Inbox
   const [selG,       setSelG]       = useState("g1");
   const [selCat,     setSelCat]     = useState(null);
   const [selTerm,    setSelTerm]    = useState(null);
+  useEffect(()=>{
+    if(!deepLinkTermId) return;
+    const t = terms.find(x=>x.id===deepLinkTermId);
+    if(t){ setSelG(t.glossary); setSelCat(null); setSelTerm(deepLinkTermId); setTermTab("overview"); }
+  },[deepLinkTermId]);
   const [expG,       setExpG]       = useState({"g1":true});
   const [expCat,     setExpCat]     = useState({"c1":true,"c2":true});
   const [q,          setQ]          = useState("");
@@ -2842,6 +2847,10 @@ const NOTIF_TYPE_CFG = {
   tag:               {bg:"rgba(139,92,246,0.12)",  color:"#8b5cf6", icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 2h5.5l6.5 6.5-5.5 5.5L2 7.5V2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><circle cx="5" cy="5" r="1" fill="currentColor"/></svg>},
 };
 
+// Auto-derive the deep-link argument from a notification when none was set explicitly —
+// most Catalog/Pipelines notifications already carry the subject in n.asset.
+const notifNavArg = (n) => n.navArg || (n.asset ? (n.nav==="integrations" ? {connName:n.asset} : {assetName:n.asset}) : null);
+
 const NotificationsPanel = ({onClose, onViewAll}) => {
   const onNav = useNav();
   const tagCtx = useTagCtx();
@@ -2938,7 +2947,7 @@ const NotificationsPanel = ({onClose, onViewAll}) => {
                 <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
                   <button onClick={e=>dismiss(n.id,e)} title="Dismiss" style={{width:22,height:22,background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:5,opacity:.6}}
                     onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(10)}</button>
-                  <button onClick={()=>{onNav(n.nav,n.navArg);onClose();}} title="Go to" style={{width:22,height:22,background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:5,opacity:.6}}
+                  <button onClick={()=>{onNav(n.nav,notifNavArg(n));onClose();}} title="Go to" style={{width:22,height:22,background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:5,opacity:.6}}
                     onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>
                     <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
                   </button>
@@ -2994,7 +3003,7 @@ const NotificationsDrawer = ({onClose}) => {
           {displayed.map(n=>{
             const cfg = NOTIF_TYPE_CFG[n.type]||NOTIF_TYPE_CFG.alert;
             return (
-              <div key={n.id} onClick={()=>{onNav(n.nav,n.navArg);onClose();}} style={{padding:"13px 18px",borderBottom:`1px solid ${T.border}`,background:n.unread?T.bgElevated:"transparent",cursor:"pointer",transition:"background .1s"}}
+              <div key={n.id} onClick={()=>{onNav(n.nav,notifNavArg(n));onClose();}} style={{padding:"13px 18px",borderBottom:`1px solid ${T.border}`,background:n.unread?T.bgElevated:"transparent",cursor:"pointer",transition:"background .1s"}}
                 onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=n.unread?T.bgElevated:"transparent"}>
                 <div style={{display:"flex",alignItems:"flex-start",gap:11}}>
                   <div style={{width:7,flexShrink:0,display:"flex",justifyContent:"center",paddingTop:6}}>{n.unread&&<span style={{width:7,height:7,borderRadius:"50%",background:T.accent,display:"block"}}/>}</div>
@@ -21874,7 +21883,7 @@ const TagSyncTab = ({connectorId, connectorName}) => {
   );
 };
 
-const IntegrationsView = ({onToast})=>{
+const IntegrationsView = ({onToast, deepLinkConnName})=>{
   const cats = ["All","Database","Data Warehouse","Dashboard","Pipeline","Messaging","ML Model","Storage","Search","Metadata"];
   const [catFilter, setCatFilter] = useState("All");
   const [search, setSearch] = useState("");
@@ -21920,6 +21929,11 @@ const IntegrationsView = ({onToast})=>{
     setSvcEnv("Production"); setSvcOwner("data-eng");
   };
   const closeConfig = () => { setConfigTarget(null); clearTimeout(pTimer.current); };
+  useEffect(()=>{
+    if(!deepLinkConnName) return;
+    const c = OM_CONNECTORS.find(x=>x.name===deepLinkConnName);
+    if(c) openConfig(c);
+  },[deepLinkConnName]);
 
   const runPreflight = () => {
     setPreflightState("running"); setPreflightStep(0); setPreflightLogs([]);
@@ -31348,6 +31362,8 @@ export default function App(){
   const [deepLinkPolicyId, setDeepLinkPolicyId] = useState(null);
   const [deepLinkTagId, setDeepLinkTagId] = useState(null);
   const [deepLinkDomainId, setDeepLinkDomainId] = useState(null);
+  const [deepLinkTermId, setDeepLinkTermId] = useState(null);
+  const [deepLinkConnName, setDeepLinkConnName] = useState(null);
 
   const roleCfg    = ROLES_CONFIG[role] || ROLES_CONFIG.analyst;
   const allowedNav = roleCfg.nav || [];
@@ -31358,9 +31374,16 @@ export default function App(){
   const handleNav    = (id, payload=null) => {
     // Guard: redirect disallowed pages to home
     if(!allowedNav.includes(id) && id!=="profile") { setNav("home"); return; }
+    // Catalog deep-links to a specific asset (not just the list) when we know its name.
+    if(id==="catalog" && payload?.assetName){
+      const a = ASSETS.find(x=>x.name===payload.assetName);
+      if(a){ handleAsset(a); return; }
+    }
     setDeepLinkPolicyId(payload?.policyId ?? null);
     setDeepLinkTagId(payload?.tagId ?? null);
     setDeepLinkDomainId(payload?.domainId ?? null);
+    setDeepLinkTermId(payload?.termName ? (_gtState.find(t=>t.term===payload.termName)?.id ?? null) : null);
+    setDeepLinkConnName(payload?.connName ?? null);
     setNav(id); setAssetStack([]);
   };
   const handleAsset     = (a) => { setAssetStack([a]); setNav("catalog"); };
@@ -31390,13 +31413,13 @@ export default function App(){
       case "stewardship":   return <InboxView onToast={showToast}/>;
       case "tags":          return <TagManagementView onToast={showToast} deepLinkTagId={deepLinkTagId}/>;
       case "steward-inbox": return <InboxView onToast={showToast}/>;
-      case "glossary":      return <GlossaryView onToast={showToast}/>;
+      case "glossary":      return <GlossaryView onToast={showToast} deepLinkTermId={deepLinkTermId}/>;
       case "domains":       return <DomainsView onAsset={handleAsset} onNav={handleNav} onToast={showToast} deepLinkDomainId={deepLinkDomainId}/>;
       case "dataproducts":  return <DataProductsView onAsset={handleAsset} onNav={handleNav}/>;
       case "observability": return <QualityView/>;
       case "analytics":     return <AnalyticsView/>;
       case "teams":         return <TeamsView onToast={showToast}/>;
-      case "integrations":  return <IntegrationsView onToast={showToast}/>;
+      case "integrations":  return <IntegrationsView onToast={showToast} deepLinkConnName={deepLinkConnName}/>;
       case "profile":       return <ProfileView onToast={showToast}/>;
       case "settings":      return <SettingsView onToast={showToast}/>;
       default:              return <HomeView onNav={handleNav} onToast={showToast} role={role} roleCfg={roleCfg}/>;
