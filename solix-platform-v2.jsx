@@ -2696,9 +2696,9 @@ const SegTabs = ({tabs,active,onChange})=>(
 // Notifications = awareness feed. Standard template per category: "{what happened} · {subject}".
 const NOTIFS = [
   {id:1, type:"alert",         category:"Quality",       asset:"orders",              unread:true, title:"Quality check failed · orders",               body:"Rule 'orders.amount_not_null' failed on 847 rows (1.8%)",                  time:"2m ago",  nav:"quality"},
-  {id:2, type:"policy",        category:"Policy",        asset:"transactions",        unread:true, title:"Policy violation detected · transactions",     body:"Certification gate — transactions is queryable without an Approved certification", time:"6m ago",  nav:"policymanager"},
+  {id:2, type:"policy",        category:"Policy",        asset:"transactions",        unread:true, title:"Policy violation detected · transactions",     body:"Status gate — transactions is queryable without an Approved status", time:"6m ago",  nav:"policymanager"},
   {id:3, type:"term_submitted",category:"Glossary",      asset:null,                  unread:true, title:"Term submitted for review · Churn Rate",       body:"dev.patel submitted it — awaiting your approval as steward",               time:"18m ago", nav:"glossary"},
-  {id:4, type:"cert",          category:"Certification", asset:"customers",           unread:true, title:"Asset certified · customers",                  body:"Certified by dev.patel",                                                   time:"1h ago",  nav:"catalog"},
+  {id:4, type:"cert",          category:"Status",        asset:"customers",           unread:true, title:"Status changed to Approved · customers",       body:"Approved by dev.patel (steward)",                                          time:"1h ago",  nav:"catalog"},
   {id:5, type:"access",        category:"Access",        asset:"payments",            unread:true, title:"Access request pending · payments",            body:"john.doe requested access to the payments table",                          time:"2h ago",  nav:"stewardship"},
   {id:6, type:"escalation",    category:"Escalation",    asset:"user_sessions",       unread:true, forMe:true, title:"Task escalated to you · user_sessions",  body:"PII Audit escalated — due in 24h",                                         time:"3h ago",  nav:"stewardship"},
   {id:7, type:"term_approved", category:"Glossary",      asset:null,                  unread:false,title:"Term approved · Customer Lifetime Value",      body:"Approved by maya.chen",                                                    time:"4h ago",  nav:"glossary"},
@@ -2709,12 +2709,25 @@ const NOTIFS = [
   {id:12,type:"field_updated", category:"Catalog",       asset:"orders",              unread:true, title:"Description updated · orders",                 body:"priya.nair updated the description",                                       time:"2h ago",  nav:"catalog"},
   {id:13,type:"assigned",      category:"Ownership",     asset:"dim_customer",        unread:true, forMe:true, title:"Assigned as steward · dim_customer",     body:"james.oh assigned you",                                                    time:"1d ago",  nav:"catalog"},
   {id:14,type:"schema",        category:"Catalog",       asset:"dim_customer",        unread:false,title:"New column detected · dim_customer",           body:"'referral_source' added",                                                  time:"2d ago",  nav:"catalog"},
+  // ── Status lifecycle — any governed object; requests route to the steward, outcomes to requester+owner ──
+  {id:15,type:"field_updated", category:"Status",        asset:"dim_customer",        unread:true, forMe:true, title:"Status change requested · dim_customer", body:"priya.nair requested Approved — awaiting your review as steward",          time:"12m ago", nav:"catalog"},
+  {id:16,type:"cert",          category:"Status",        asset:"legacy_orders",       unread:false,title:"Status changed to Deprecated · legacy_orders", body:"Approved by maya.chen (steward)",                                          time:"6h ago",  nav:"catalog"},
+  // ── Deletion — owner-gated; requests route to the owner ──
+  {id:17,type:"alert",         category:"Ownership",     asset:null,                  unread:true, forMe:true, title:"Deletion requested · Tier 1 (tag)",     body:"alex.wu requested to delete the 'Tier 1' tag — 42 assets affected",        time:"20m ago", nav:"tags"},
+  // ── Attachments & changes on your assets — tag / quality test / policy attached ──
+  {id:18,type:"tag",           category:"Classification",asset:"orders",              unread:false,title:"Tag attached · orders",                       body:"'Tier 1' attached by maya.chen",                                           time:"5h ago",  nav:"catalog"},
+  {id:19,type:"field_updated", category:"Catalog",       asset:"orders",              unread:true, title:"Quality test attached · orders",              body:"'row count range' test attached by dev.patel",                             time:"1h ago",  nav:"catalog"},
+  {id:20,type:"policy",        category:"Catalog",       asset:"orders",              unread:false,title:"Policy attached · orders",                    body:"'PII Masking' policy now applies to orders",                               time:"7h ago",  nav:"catalog"},
+  // ── Data Contract validation failure (we support contracts + validation runs) ──
+  {id:21,type:"alert",         category:"Quality",       asset:"orders",              unread:true, title:"Contract validation failed · orders",          body:"orders_contract — Quality check failing (status not in allowed set)",      time:"14m ago", nav:"catalog"},
+  // ── Ingestion failure (we support connections + sync/run) ──
+  {id:22,type:"alert",         category:"Pipelines",     asset:null,                  unread:true, title:"Ingestion failed · Snowflake DWH",             body:"Sync aborted — source unreachable (connection timed out)",                 time:"9m ago",  nav:"integrations"},
 ];
 // Scope: you only get a notification if it's a personal one, has no asset (platform-wide),
 // you own/steward the asset — or you're an admin (oversight). ASSETS defined above.
 const _respFor = (assetName, me) => { const a=(typeof ASSETS!=="undefined"?ASSETS:[]).find(x=>x.name===assetName); if(!a) return false; const own=(Array.isArray(a.owners)?a.owners:[a.owner]).filter(Boolean); const stw=(Array.isArray(a.stewards)?a.stewards:[a.steward]).filter(Boolean); return own.includes(me)||stw.includes(me); };
 // Per-category in-app notification preferences (today in-app is the only channel; email/slack are future).
-const NOTIF_CATEGORIES = ["Quality","Policy","Glossary","Certification","Catalog","Ownership","Access","Escalation"];
+const NOTIF_CATEGORIES = ["Status","Quality","Policy","Glossary","Classification","Catalog","Ownership","Access","Pipelines","Escalation"];
 let _notifPrefs = NOTIF_CATEGORIES.reduce((o,c)=>{o[c]=true;return o;},{});
 const _npSubs = new Set();
 const npSet = (cat,on)=>{ _notifPrefs={..._notifPrefs,[cat]:on}; _npSubs.forEach(f=>f()); };
@@ -2806,6 +2819,8 @@ const NOTIF_TYPE_CFG = {
   new_dataset:       {bg:"rgba(125,211,252,0.12)", color:"#7dd3fc", icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><ellipse cx="8" cy="5" rx="5" ry="2" stroke="currentColor" strokeWidth="1.3"/><path d="M3 5v3c0 1.1 2.2 2 5 2s5-.9 5-2V5" stroke="currentColor" strokeWidth="1.3"/><path d="M3 8v3c0 1.1 2.2 2 5 2s5-.9 5-2V8" stroke="currentColor" strokeWidth="1.3"/></svg>},
   field_updated:     {bg:"rgba(139,92,246,0.12)",  color:"#8b5cf6", icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M11 2l3 3-7 7-3 1 1-3 6-8z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>},
   assigned:          {bg:"rgba(13,148,136,0.12)",  color:"#0d9488", icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" strokeWidth="1.3"/><path d="M3.5 13c0-2.2 2-4 4.5-4s4.5 1.8 4.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>},
+  pipeline:          {bg:"rgba(13,148,136,0.12)",  color:"#0d9488", icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2.5 8A5.5 5.5 0 019.5 2.7M13.5 8A5.5 5.5 0 016.5 13.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M9 1.5l1 1.2-1.3 1M7 14.5l-1-1.2 1.3-1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>},
+  tag:               {bg:"rgba(139,92,246,0.12)",  color:"#8b5cf6", icon:<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M2 2h5.5l6.5 6.5-5.5 5.5L2 7.5V2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><circle cx="5" cy="5" r="1" fill="currentColor"/></svg>},
 };
 
 const NotificationsPanel = ({onClose, onViewAll}) => {
@@ -22722,11 +22737,17 @@ const LoginScreen = ({onLogin}) => {
   const [loading,     setLoading]     = useState(false);
   const [error,       setError]       = useState("");
   const [showPw,      setShowPw]      = useState(false);
-  // forgot password flow: null | "form" | "sent"
+  // forgot password flow: null | "form" | "sent" | "reset"
   const [forgotMode,  setForgotMode]  = useState(null);
   const [resetEmail,  setResetEmail]  = useState("");
   const [resetError,  setResetError]  = useState("");
   const [resetLoading,setResetLoading]= useState(false);
+  const [newPw,       setNewPw]       = useState("");
+  const [confirmPw,   setConfirmPw]   = useState("");
+  const [newPwError,  setNewPwError]  = useState("");
+  const [savingPw,    setSavingPw]    = useState(false);
+  const [showNewPw,   setShowNewPw]   = useState(false);
+  const [justReset,   setJustReset]   = useState(false);
 
   // Demo accounts mapped to roles
   const DEMO_ACCOUNTS = {
@@ -22739,6 +22760,7 @@ const LoginScreen = ({onLogin}) => {
 
   const handleSubmit = () => {
     setError("");
+    setJustReset(false);
     if(!email.trim()) { setError("Email is required"); return; }
     if(!password)     { setError("Password is required"); return; }
     setLoading(true);
@@ -22769,6 +22791,21 @@ const LoginScreen = ({onLogin}) => {
     if(!/\S+@\S+\.\S+/.test(resetEmail)) { setResetError("Enter a valid email address"); return; }
     setResetLoading(true);
     setTimeout(()=>{ setResetLoading(false); setForgotMode("sent"); }, 1200);
+  };
+
+  const handleResetPassword = () => {
+    setNewPwError("");
+    if(!newPw || newPw.length<8) { setNewPwError("Password must be at least 8 characters"); return; }
+    if(newPw !== confirmPw) { setNewPwError("Passwords do not match"); return; }
+    setSavingPw(true);
+    setTimeout(()=>{
+      setSavingPw(false);
+      setEmail(resetEmail);
+      setPassword("");
+      setNewPw(""); setConfirmPw("");
+      setJustReset(true);
+      setForgotMode(null);
+    }, 900);
   };
 
   const quickLogin = (role) => {
@@ -22915,6 +22952,84 @@ const LoginScreen = ({onLogin}) => {
           >
             Back to sign in
           </button>
+          <div style={{marginTop:16}}>
+            <button onClick={()=>{setNewPw("");setConfirmPw("");setNewPwError("");setForgotMode("reset");}}
+              style={{background:"none",border:"none",fontSize:11.5,color:T.textMuted,cursor:"pointer",padding:0,textDecoration:"underline",textDecorationStyle:"dashed",textDecorationColor:T.textMuted}}>
+              (Demo) Continue to reset screen →
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  /* ── Forgot password — set new password (prototype stand-in for the emailed link) ── */
+  if(forgotMode === "reset") return (
+    <div style={{minHeight:"100vh",display:"flex",background:T.bg,fontFamily:"'Geist',sans-serif"}}>
+      {leftPanel}
+      <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:"40px 60px",overflowY:"auto"}}>
+        <div style={{width:"100%",maxWidth:400}}>
+          <div style={{marginBottom:28}}>
+            <div style={{width:44,height:44,borderRadius:12,background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:16}}>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="4" y="9" width="12" height="9" rx="1.5" stroke={T.accent} strokeWidth="1.5"/><path d="M7 9V6a3 3 0 016 0v3" stroke={T.accent} strokeWidth="1.5"/></svg>
+            </div>
+            <div style={{fontSize:22,fontWeight:700,color:T.text,marginBottom:8,letterSpacing:"-0.4px"}}>Set a new password</div>
+            <div style={{fontSize:13,color:T.textMuted,lineHeight:1.6}}>
+              Choose a new password for <span style={{color:T.text,fontWeight:600}}>{resetEmail}</span>.
+            </div>
+          </div>
+          <div style={{marginBottom:16}}>
+            <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>New password</label>
+            <div style={{position:"relative"}}>
+              <input
+                type={showNewPw?"text":"password"} value={newPw} onChange={e=>{setNewPw(e.target.value);setNewPwError("");}}
+                onKeyDown={e=>e.key==="Enter"&&handleResetPassword()}
+                placeholder="At least 8 characters" autoFocus
+                style={{width:"100%",padding:"10px 40px 10px 13px",background:T.bgSurface,border:`1.5px solid ${newPwError?T.rose:T.border}`,borderRadius:9,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box",transition:"border-color .15s"}}
+                onFocus={e=>e.target.style.borderColor=T.accent}
+                onBlur={e=>e.target.style.borderColor=newPwError?T.rose:T.border}
+              />
+              <button onClick={()=>setShowNewPw(v=>!v)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:T.textMuted,cursor:"pointer",display:"flex",padding:4}}>
+                {showNewPw
+                  ? <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 8s2.5-5 6-5 6 5 6 5-2.5 5-6 5-6-5-6-5z" stroke="currentColor" strokeWidth="1.3"/><circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.3"/><path d="M3 3l10 10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                  : <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 8s2.5-5 6-5 6 5 6 5-2.5 5-6 5-6-5-6-5z" stroke="currentColor" strokeWidth="1.3"/><circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.3"/></svg>
+                }
+              </button>
+            </div>
+          </div>
+          <div style={{marginBottom:16}}>
+            <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>Confirm new password</label>
+            <input
+              type={showNewPw?"text":"password"} value={confirmPw} onChange={e=>{setConfirmPw(e.target.value);setNewPwError("");}}
+              onKeyDown={e=>e.key==="Enter"&&handleResetPassword()}
+              placeholder="Re-enter password"
+              style={{width:"100%",padding:"10px 13px",background:T.bgSurface,border:`1.5px solid ${newPwError?T.rose:T.border}`,borderRadius:9,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box",transition:"border-color .15s"}}
+              onFocus={e=>e.target.style.borderColor=T.accent}
+              onBlur={e=>e.target.style.borderColor=newPwError?T.rose:T.border}
+            />
+          </div>
+          {newPwError && (
+            <div style={{display:"flex",alignItems:"center",gap:7,padding:"8px 11px",background:T.roseDim,border:`1px solid ${T.rose}44`,borderRadius:7,marginBottom:16,fontSize:12,color:T.rose}}>
+              {Ic.alert(12)}{newPwError}
+            </div>
+          )}
+          <button onClick={handleResetPassword} disabled={savingPw} style={{
+            width:"100%",padding:"11px",borderRadius:9,border:"none",
+            background:savingPw?"rgba(238,36,36,0.6)":"#ee2424",
+            color:"#fff",fontSize:13,fontWeight:700,cursor:savingPw?"default":"pointer",
+            transition:"all .15s",boxShadow:savingPw?"none":"0 2px 12px rgba(238,36,36,0.35)",
+          }}
+            onMouseEnter={e=>{if(!savingPw)e.currentTarget.style.background="#d41f1f";}}
+            onMouseLeave={e=>{if(!savingPw)e.currentTarget.style.background="#ee2424";}}
+          >
+            {savingPw
+              ? <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{animation:"spin 1s linear infinite"}}><circle cx="7" cy="7" r="5.5" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5"/><path d="M7 1.5A5.5 5.5 0 0112.5 7" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                  Saving…
+                </span>
+              : "Save new password"
+            }
+          </button>
         </div>
       </div>
     </div>
@@ -22935,6 +23050,13 @@ const LoginScreen = ({onLogin}) => {
             <div style={{fontSize:24,fontWeight:700,color:T.text,marginBottom:8,letterSpacing:"-0.4px"}}>Sign in</div>
             <div style={{fontSize:13,color:T.textMuted}}>Access your J&amp;J data governance workspace</div>
           </div>
+
+          {justReset && (
+            <div style={{display:"flex",alignItems:"center",gap:7,padding:"8px 11px",background:"rgba(52,211,153,0.1)",border:"1px solid rgba(52,211,153,0.3)",borderRadius:7,marginBottom:16,fontSize:12,color:"#34d399"}}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Password updated. Please sign in with your new password.
+            </div>
+          )}
 
           {/* Email */}
           <div style={{marginBottom:16}}>
@@ -28105,6 +28227,13 @@ const SettingsView = ({onToast})=>{
   });
   const [ldapRoleGroupOpen, setLdapRoleGroupOpen] = useState({});
 
+  // ── Channels (outbound delivery: email, Slack, Teams) state ──
+  const [channelPanelOpen, setChannelPanelOpen] = useState(null); // null | "email" | "slack" | "teams"
+  const [channelTestState, setChannelTestState] = useState("idle"); // idle | testing | success
+  const [emailChCfg, setEmailChCfg] = useState({configured:true, senderName:"Solix EDG", senderEmail:"noreply@jnj.com", provider:"smtp", host:"smtp.jnj.com", port:"587", username:"", password:"", apiKey:""});
+  const [slackChCfg, setSlackChCfg] = useState({configured:false, webhookUrl:""});
+  const [teamsChCfg, setTeamsChCfg] = useState({configured:false, webhookUrl:""});
+
   // ── Regulatory Frameworks state (hoisted to avoid hook-in-conditional-IIFE crash) ──
   const [fwSearch,      setFwSearch]      = useState("");
   const [localEnabled,  setLocalEnabled]  = useState(()=>Object.fromEntries(REGS_META.map(r=>[r.id,r.enabled])));
@@ -28153,6 +28282,7 @@ const SettingsView = ({onToast})=>{
       {key:"api",          icon:"apikey",  label:"API Keys",              desc:"Programmatic access"},
       {key:"bg_jobs",      icon:"refresh", label:"Background Jobs",       desc:"Search indexing, archival & maintenance"},
       {key:"audit",        icon:"audit",   label:"Audit Logs",            desc:"Activity history"},
+      {key:"channels",     icon:"notif",   label:"Channels",              desc:"Email, Slack & Teams delivery"},
       {key:"billing",      icon:"invoice", label:"Billing",               desc:"Plan & usage"},
     ]},
   ];
@@ -29319,6 +29449,202 @@ const SettingsView = ({onToast})=>{
                           style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"transparent",color:auditPage===totalPages-1?T.textMuted:T.text,cursor:auditPage===totalPages-1?"not-allowed":"pointer",fontFamily:"inherit",fontSize:12}}>Next ›</button>
                       </div>
                     </div>
+                  )}
+                </>
+              );
+            })()}
+
+            {/* ══ CHANNELS ══ */}
+            {section==="channels"&&(()=>{
+              const CHANNELS = [
+                {key:"email", label:"Email", cfg:emailChCfg,
+                  color:"#ee2424", bg:"rgba(238,36,36,.1)", border:"rgba(238,36,36,.25)",
+                  icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M3 7l9 6 9-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+                  summary: emailChCfg.configured ? `Configured · ${emailChCfg.senderEmail}` : "Not configured — password resets & alerts can't be delivered",
+                  desc:"SMTP or API-based provider for password resets, invites & notification emails."},
+                {key:"slack", label:"Slack", cfg:slackChCfg,
+                  color:"#22c55e", bg:"rgba(34,197,94,.1)", border:"rgba(34,197,94,.25)",
+                  icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5"/><rect x="13" y="3" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5"/><rect x="3" y="13" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5"/><rect x="13" y="13" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5"/></svg>,
+                  summary: slackChCfg.configured ? "Connected via webhook" : "Not connected",
+                  desc:"Post policy alerts, quality issues & mentions to a Slack channel."},
+                {key:"teams", label:"Microsoft Teams", cfg:teamsChCfg,
+                  color:"#6366f1", bg:"rgba(99,102,241,.1)", border:"rgba(99,102,241,.25)",
+                  icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="9" r="3.5" stroke="currentColor" strokeWidth="1.5"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="17" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.3"/><path d="M14.5 20c0-2.8 1.7-5 4.5-5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
+                  summary: teamsChCfg.configured ? "Connected via webhook" : "Not connected",
+                  desc:"Post policy alerts, quality issues & mentions to a Teams channel."},
+              ];
+              const active = CHANNELS.find(c=>c.key===channelPanelOpen);
+              const setActiveCfg = (patch) => {
+                if(channelPanelOpen==="email") setEmailChCfg(p=>({...p,...patch}));
+                if(channelPanelOpen==="slack") setSlackChCfg(p=>({...p,...patch}));
+                if(channelPanelOpen==="teams") setTeamsChCfg(p=>({...p,...patch}));
+              };
+              return (
+                <>
+                  <SettSH icon={Ic.notif(16)} title="Channels" desc="Configure where the system delivers outbound messages — password resets, invites, and policy or quality alerts. Email is required for account emails; Slack and Teams are optional for team alerts."/>
+                  <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                    {CHANNELS.map(ch=>(
+                      <div key={ch.key} style={{display:"flex",alignItems:"center",gap:16,padding:"18px 20px",background:T.bgSurface,border:`1.5px solid ${ch.cfg.configured?ch.color:T.border}`,borderRadius:12,transition:"border-color .2s"}}>
+                        <div style={{width:44,height:44,borderRadius:11,background:ch.bg,border:`1.5px solid ${ch.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:ch.color}}>
+                          {ch.icon}
+                        </div>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:14,fontWeight:700,color:T.text}}>{ch.label}</div>
+                          <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{ch.cfg.configured?ch.summary:ch.desc}</div>
+                        </div>
+                        <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+                          {ch.cfg.configured&&(
+                            <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:99,background:ch.bg,color:ch.color,border:`1px solid ${ch.border}`}}>
+                              <span style={{width:5,height:5,borderRadius:"50%",background:ch.color,display:"inline-block"}}/>Configured
+                            </span>
+                          )}
+                          <button onClick={()=>{setChannelPanelOpen(ch.key);setChannelTestState("idle");}}
+                            style={{padding:"7px 16px",borderRadius:8,background:ch.cfg.configured?T.bgElevated:T.accent,border:`1px solid ${ch.cfg.configured?T.border:T.accent}`,color:ch.cfg.configured?T.textSub:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",transition:"all .12s"}}
+                            onMouseEnter={e=>{e.currentTarget.style.opacity=".85";}} onMouseLeave={e=>{e.currentTarget.style.opacity="1";}}>
+                            {ch.cfg.configured?"Configure":"Connect →"}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Channel config right slide-in panel */}
+                  {channelPanelOpen&&(
+                    <>
+                      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:700}} onClick={()=>setChannelPanelOpen(null)}/>
+                      <div className="slideIn" style={{position:"fixed",top:0,right:0,bottom:0,width:520,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:800,display:"flex",flexDirection:"column",boxShadow:"-8px 0 40px rgba(0,0,0,.25)"}}>
+
+                        {/* Panel header */}
+                        <div style={{padding:"18px 22px",borderBottom:`1px solid ${T.border}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                          <div style={{display:"flex",alignItems:"center",gap:10}}>
+                            <div style={{width:34,height:34,borderRadius:9,background:active.bg,border:`1.5px solid ${active.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:active.color}}>
+                              {active.icon}
+                            </div>
+                            <div>
+                              <div style={{fontSize:14,fontWeight:700,color:T.text}}>{active.label} Configuration</div>
+                              <div style={{fontSize:11,color:T.textMuted}}>Delivery channel</div>
+                            </div>
+                          </div>
+                          <button onClick={()=>setChannelPanelOpen(null)} style={{width:28,height:28,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+                        </div>
+
+                        {/* Panel body */}
+                        <div style={{flex:1,overflowY:"auto",padding:"22px"}}>
+                          {channelPanelOpen==="email" ? (
+                            <div style={{display:"flex",flexDirection:"column",gap:16}}>
+                              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+                                <div>
+                                  <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Sender name</label>
+                                  <input value={emailChCfg.senderName} onChange={e=>setEmailChCfg(p=>({...p,senderName:e.target.value}))} placeholder="e.g. Solix EDG"
+                                    style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                                </div>
+                                <div>
+                                  <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Sender email <span style={{color:"#ee2424"}}>*</span></label>
+                                  <input value={emailChCfg.senderEmail} onChange={e=>setEmailChCfg(p=>({...p,senderEmail:e.target.value}))} placeholder="noreply@jnj.com"
+                                    style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                                </div>
+                              </div>
+                              <div>
+                                <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Provider</label>
+                                <div style={{display:"flex",gap:0}}>
+                                  {[["smtp","SMTP"],["api","API Key (SendGrid / SES / Postmark)"]].map(([k,l])=>(
+                                    <button key={k} onClick={()=>setEmailChCfg(p=>({...p,provider:k}))} style={{padding:"8px 16px",fontSize:12,fontWeight:emailChCfg.provider===k?700:500,cursor:"pointer",background:"transparent",border:"none",borderBottom:`2.5px solid ${emailChCfg.provider===k?T.accent:"transparent"}`,color:emailChCfg.provider===k?T.accent:T.textMuted,transition:"all .12s"}}>
+                                      {l}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              {emailChCfg.provider==="smtp" ? (
+                                <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:14}}>
+                                  <div>
+                                    <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>SMTP host</label>
+                                    <input value={emailChCfg.host} onChange={e=>setEmailChCfg(p=>({...p,host:e.target.value}))} placeholder="smtp.jnj.com"
+                                      style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                                  </div>
+                                  <div>
+                                    <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Port</label>
+                                    <input value={emailChCfg.port} onChange={e=>setEmailChCfg(p=>({...p,port:e.target.value}))} placeholder="587"
+                                      style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                                  </div>
+                                  <div>
+                                    <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Username</label>
+                                    <input value={emailChCfg.username} onChange={e=>setEmailChCfg(p=>({...p,username:e.target.value}))} placeholder="smtp-user"
+                                      style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                                  </div>
+                                  <div>
+                                    <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Password</label>
+                                    <input type="password" value={emailChCfg.password} onChange={e=>setEmailChCfg(p=>({...p,password:e.target.value}))} placeholder="••••••••"
+                                      style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div>
+                                  <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>API key</label>
+                                  <input type="password" value={emailChCfg.apiKey} onChange={e=>setEmailChCfg(p=>({...p,apiKey:e.target.value}))} placeholder="SG.•••••••••••••••••••"
+                                    style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"'Geist Mono',monospace"}}
+                                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                                </div>
+                              )}
+                              {channelTestState==="success"&&(
+                                <div style={{display:"flex",alignItems:"center",gap:7,padding:"9px 12px",background:"rgba(52,211,153,.1)",border:"1px solid rgba(52,211,153,.3)",borderRadius:8,fontSize:12,color:"#34d399"}}>
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                  Test email sent to {emailChCfg.senderEmail}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div style={{display:"flex",flexDirection:"column",gap:16}}>
+                              <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6}}>
+                                Create an incoming webhook in {active.label} and paste the URL below. Policy and quality alerts will be posted to that channel.
+                              </div>
+                              <div>
+                                <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Webhook URL <span style={{color:"#ee2424"}}>*</span></label>
+                                <input value={active.cfg.webhookUrl} onChange={e=>setActiveCfg({webhookUrl:e.target.value})} placeholder="https://hooks.example.com/services/…"
+                                  style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"'Geist Mono',monospace"}}
+                                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                              </div>
+                              {channelTestState==="success"&&(
+                                <div style={{display:"flex",alignItems:"center",gap:7,padding:"9px 12px",background:"rgba(52,211,153,.1)",border:"1px solid rgba(52,211,153,.3)",borderRadius:8,fontSize:12,color:"#34d399"}}>
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                  Test message sent to {active.label}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Panel footer */}
+                        <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,alignItems:"center",flexShrink:0,background:T.bgSurface}}>
+                          <button onClick={()=>{
+                              setChannelTestState("testing");
+                              setTimeout(()=>{
+                                setChannelTestState("success");
+                                onToast(channelPanelOpen==="email"?"Test email sent":"Test message sent","success");
+                              },1100);
+                            }}
+                            style={{flex:1,padding:"9px",borderRadius:8,background:"transparent",border:`1.5px solid ${T.accent}`,color:T.accent,fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7,transition:"background .12s"}}
+                            onMouseEnter={e=>e.currentTarget.style.background=T.accentDim} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                            {channelTestState==="testing"
+                              ? <><svg width="13" height="13" viewBox="0 0 12 12" fill="none" style={{animation:"spin 1s linear infinite"}}><circle cx="6" cy="6" r="4.5" stroke="rgba(238,36,36,.3)" strokeWidth="1.5"/><path d="M6 1.5A4.5 4.5 0 0110.5 6" stroke={T.accent} strokeWidth="1.5" strokeLinecap="round"/></svg>Testing…</>
+                              : channelPanelOpen==="email" ? "Send Test Email" : "Send Test Message"}
+                          </button>
+                          <button onClick={()=>{setActiveCfg({configured:true});setChannelPanelOpen(null);onToast(`${active.label} channel saved`,"success");}}
+                            style={{flex:1,padding:"9px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                            Save
+                          </button>
+                          <button onClick={()=>setChannelPanelOpen(null)}
+                            style={{padding:"9px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </>
                   )}
                 </>
               );
