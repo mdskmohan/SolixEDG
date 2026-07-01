@@ -445,6 +445,8 @@ function TagProvider({ children }) {
 
   const updateTagDef = (id, patch) => setTagDefs(prev=>prev.map(t=>t.id===id?{...t,...patch}:t));
 
+  const deleteTagDef = (id) => setTagDefs(prev=>prev.filter(t=>t.id!==id));
+
   const updateConnectorConfig = (connectorId, patch) => setConnectorConfigs(prev=>({...prev,[connectorId]:{...prev[connectorId],...patch}}));
 
   const upsertNameMapping = (connectorId, mapping) => {
@@ -461,7 +463,7 @@ function TagProvider({ children }) {
   const updateTagPolicies = (patch) => setTagPolicies(prev=>({...prev,...patch}));
 
   return (
-    <TagContext.Provider value={{ tagDefs, assignments, connectorConfigs, inbox, tagPolicies, unresolvedCount, conflictCount, pendingCount, getAssetAssignments, getTagDef, applyTag, removeTag, resolveInboxItem, createTagDef, updateTagDef, updateConnectorConfig, upsertNameMapping, updateTagPolicies }}>
+    <TagContext.Provider value={{ tagDefs, assignments, connectorConfigs, inbox, tagPolicies, unresolvedCount, conflictCount, pendingCount, getAssetAssignments, getTagDef, applyTag, removeTag, resolveInboxItem, createTagDef, updateTagDef, deleteTagDef, updateConnectorConfig, upsertNameMapping, updateTagPolicies }}>
       {children}
     </TagContext.Provider>
   );
@@ -17488,6 +17490,18 @@ const DOMAIN_LIST_DATA = [
    quality:85,assetCount:121,createdAt:"Mar 15, 2024",updatedAt:"May 25, 2026"},
 ];
 
+// ── Shared reactive store for domains ──
+// So a status-change approval in the Workspace inbox can write a domain's
+// cert field and have DomainsView reflect it live.
+const _domainsSubs = new Set();
+let _domainsState = DOMAIN_LIST_DATA;
+const domainsSet = (updater) => { _domainsState = typeof updater==="function"?updater(_domainsState):updater; _domainsSubs.forEach(fn=>fn()); };
+const useDomains = () => {
+  const [,force] = useState(0);
+  useEffect(()=>{ const fn=()=>force(n=>n+1); _domainsSubs.add(fn); return ()=>_domainsSubs.delete(fn); },[]);
+  return [_domainsState, domainsSet];
+};
+
 const DATA_PRODUCTS_DATA = [
   {id:"dp1",name:"order-analytics",displayName:"Order Analytics",domain:"Commerce",
    icon:"📊",color:"#0ea5e9",
@@ -17946,9 +17960,11 @@ const PortsTab=({pd,allAssets,onPatch})=>{
 // ─────────────────────────────────────────────
 // DOMAINS VIEW
 // ─────────────────────────────────────────────
-const DomainsView = ({onAsset, onNav}) => {
+const DomainsView = ({onAsset, onNav, onToast}) => {
   const tagCtx = useTagCtx();
-  const [domains, setDomains]     = useState(DOMAIN_LIST_DATA);
+  const { role: dmvRole, roleCfg: dmvRoleCfg } = useRole();
+  const dmMeHandle = ((dmvRoleCfg&&dmvRoleCfg.email)||"you@jnj").split("@")[0];
+  const [domains, setDomains]     = useDomains();
   const [products, setProducts]   = useState(DATA_PRODUCTS_DATA);
   const [selectedDomainId, setSelectedDomainId]     = useState(null);
   const [selectedProductId, setSelectedProductId]   = useState(null);
@@ -18686,7 +18702,11 @@ const DomainsView = ({onAsset, onNav}) => {
                           <div><div style={{fontSize:12,fontWeight:600,color:T.text}}>{item.label}</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{item.sub}</div></div>
                         </button>
                       ))}
-                      <button onClick={()=>{setDeleteConfirm({type:"domain",id:dm.id,name:dm.displayName});setDmMenuOpen(false);}}
+                      <button onClick={()=>{
+                        setDmMenuOpen(false);
+                        if(dmvRole==='admin'||(dm.owners||[]).includes(dmMeHandle)){ setDeleteConfirm({type:"domain",id:dm.id,name:dm.displayName}); }
+                        else { requestDeletion({kind:'domain',targetId:dm.id,name:dm.displayName,requestedBy:dmMeHandle,note:'Requested via domain detail',owner:(dm.owners||[])[0]||null}); onToast&&onToast('Deletion requested — pending owner approval','success'); }
+                      }}
                         style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}
                         onMouseEnter={e=>e.currentTarget.style.background="rgba(239,68,68,.07)"} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                         <span style={{fontSize:15,marginTop:1}}>🗑️</span>
@@ -18847,7 +18867,11 @@ const DomainsView = ({onAsset, onNav}) => {
                     </div>
                   </div>
                   {/* Domain Status Modal */}
-                  {dmStatusOpen&&<><div onClick={()=>setDmStatusOpen(false)} style={{position:"fixed",inset:0,zIndex:499,background:"rgba(0,0,0,.35)"}}/><div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:300,display:"flex",flexDirection:"column",maxHeight:"70vh",overflow:"hidden"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}><span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Set Status</span><button onClick={()=>setDmStatusOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg></button></div><div style={{flex:1,overflowY:"auto",padding:"6px 0"}}>{Object.keys(STATUS_META).map(s=>{const sel=dm.cert===s;const sm=STATUS_META[s];return(<button key={s} onClick={()=>{patchDomain(dm.id,{cert:s});setDmStatusOpen(false);}} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 14px",background:sel?T.bgElevated:"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{width:26,height:26,borderRadius:4,background:sm.bg,border:`1px solid ${sm.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:sm.color,flexShrink:0}}>{sm.icon}</div><span style={{flex:1,fontSize:13,color:T.text}}>{s}</span>{sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={sm.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})}</div></div></>}
+                  {dmStatusOpen&&(()=>{const canSetDomainStatus=dmvRole==="admin"||(dm.owners||[]).includes(dmMeHandle)||(dm.experts||[]).includes(dmMeHandle);return <><div onClick={()=>setDmStatusOpen(false)} style={{position:"fixed",inset:0,zIndex:499,background:"rgba(0,0,0,.35)"}}/><div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:300,display:"flex",flexDirection:"column",maxHeight:"70vh",overflow:"hidden"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}><span style={{fontSize:13.5,fontWeight:700,color:T.text}}>{canSetDomainStatus?"Set Status":"Request Status Change"}</span><button onClick={()=>setDmStatusOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg></button></div><div style={{flex:1,overflowY:"auto",padding:"6px 0"}}>{Object.keys(STATUS_META).map(s=>{const sel=dm.cert===s;const sm=STATUS_META[s];return(<button key={s} onClick={()=>{
+                    if(canSetDomainStatus){ patchDomain(dm.id,{cert:s}); onToast&&onToast(`Status set to ${s}`,'success'); }
+                    else { requestStatusChange({kind:'domain',targetId:dm.id,name:dm.displayName||dm.name,requestedStatus:s,requestedBy:dmMeHandle,note:`Requested via domain detail`,steward:(dm.experts||[])[0]||(dm.owners||[])[0]||null}); patchDomain(dm.id,{cert:'In Review'}); onToast&&onToast('Status change requested — pending steward approval','success'); }
+                    setDmStatusOpen(false);
+                  }} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 14px",background:sel?T.bgElevated:"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{width:26,height:26,borderRadius:4,background:sm.bg,border:`1px solid ${sm.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:sm.color,flexShrink:0}}>{sm.icon}</div><span style={{flex:1,fontSize:13,color:T.text}}>{s}</span>{sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={sm.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})}</div></div></>;})()}
                   {/* Domain Owner Modal */}
                   {dmOwnerOpen&&<><div onClick={()=>setDmOwnerOpen(false)} style={{position:"fixed",inset:0,zIndex:499,background:"rgba(0,0,0,.35)"}}/><div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:300,display:"flex",flexDirection:"column",maxHeight:"70vh",overflow:"hidden"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}><span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Owners</span><button onClick={()=>setDmOwnerOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg></button></div><div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}><input autoFocus placeholder="Search users…" value={dmOwnerSearch} onChange={e=>setDmOwnerSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/></div><div style={{flex:1,overflowY:"auto"}}>{ALL_USERS.filter(u=>!dmOwnerSearch||u.toLowerCase().includes(dmOwnerSearch.toLowerCase())).map(u=>{const sel=(dm.owners||[]).includes(u);return(<button key={u} onMouseDown={e=>{e.stopPropagation();patchDomain(dm.id,{owners:sel?(dm.owners||[]).filter(x=>x!==u):[...(dm.owners||[]),u]});}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"9px 12px",background:sel?"rgba(99,102,241,.06)":"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{width:26,height:26,borderRadius:3,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(u)}</div><span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>{sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={T.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})}</div><div style={{padding:"8px 10px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",flexShrink:0}}><button onMouseDown={()=>setDmOwnerOpen(false)} style={{padding:"5px 14px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Done</button></div></div></>}
                   {/* Domain Steward Modal */}
@@ -20254,7 +20278,7 @@ const DomainsView = ({onAsset, onNav}) => {
 // ─────────────────────────────────────────────
 const DataProductsView = ({onAsset, onNav}) => {
   const [products, setProducts]         = useState(DATA_PRODUCTS_DATA);
-  const [domains]                       = useState(DOMAIN_LIST_DATA);
+  const [domains]                       = useDomains();
   const [selectedProductId, setSelectedProductId] = useState(null);
   const [productTab, setProductTab]     = useState("overview");
   const [domainFilter, setDomainFilter] = useState("All");
@@ -27123,7 +27147,7 @@ const TASK_TYPES = ["field_updated","stewardship_request","needs_attention","tag
 const TYPE_CATEGORY = {
   policy_violation:"violation", dq_alert:"violation",
   tag_review:"approval", certification_review:"approval", term_review:"approval", contract_approval:"approval",
-  assigned:"ownership", stewardship_request:"ownership", needs_attention:"ownership", orphan_assignment:"ownership", rbac_request:"ownership",
+  assigned:"ownership", stewardship_request:"ownership", needs_attention:"ownership", orphan_assignment:"ownership", rbac_request:"ownership", delete_request:"ownership",
   field_updated:"curation",
 };
 const CATEGORY_META = {
@@ -27186,6 +27210,28 @@ const addRoleRequest = (req)=>rrSet(prev=>[{id:"rr-"+Date.now(), status:"pending
 const resolveRoleRequest = (id,status)=>rrSet(prev=>prev.map(r=>r.id===id?{...r,status}:r));
 const useRoleReqs = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_rrSubs.add(fn);return()=>{_rrSubs.delete(fn);};},[]); return _roleReqs; };
 
+// ── Status change requests (Phase 3) ──
+// Owner/steward set status directly on the object. Anyone else with edit access
+// requests instead; a steward approves (writes the requested status) or rejects
+// (sends it back to Draft). Reuses the existing certification_review work-item
+// type/plumbing (role=steward, "Review status change") — just a different source.
+let _statusReqs = [];
+const _srSubs = new Set();
+const srSet = (u)=>{ _statusReqs = typeof u==="function"?u(_statusReqs):u; _srSubs.forEach(f=>f()); };
+const requestStatusChange = (req)=>srSet(prev=>[{id:"sr-"+Date.now(), status:"pending", at:"just now", ...req}, ...prev]);
+const resolveStatusRequest = (id,status)=>srSet(prev=>prev.map(r=>r.id===id?{...r,status}:r));
+const useStatusReqs = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_srSubs.add(fn);return()=>{_srSubs.delete(fn);};},[]); return _statusReqs; };
+
+// ── Deletion requests (Phase 4) ──
+// Owner deletes immediately. Anyone else with delete access requests instead;
+// the owner approves (executes the delete) or rejects.
+let _deleteReqs = [];
+const _drSubs = new Set();
+const drSet = (u)=>{ _deleteReqs = typeof u==="function"?u(_deleteReqs):u; _drSubs.forEach(f=>f()); };
+const requestDeletion = (req)=>drSet(prev=>[{id:"dr-"+Date.now(), status:"pending", at:"just now", ...req}, ...prev]);
+const resolveDeleteRequest = (id,status)=>drSet(prev=>prev.map(r=>r.id===id?{...r,status}:r));
+const useDeleteReqs = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_drSubs.add(fn);return()=>{_drSubs.delete(fn);};},[]); return _deleteReqs; };
+
 const InboxView = ({onToast}) => {
   const onNav = useNav();
   const tagCtx = useTagCtx(); // tags live in TagProvider context — the tags "shared store"
@@ -27225,7 +27271,23 @@ const InboxView = ({onToast}) => {
     asset:{name:r.asset, path:r.asset, type:"Table"}, body:`${r.requestedBy} requested to be ${r.role} — "${r.note}"`,
     requestedBy:r.requestedBy, requestedRole:r.role==="owner"?"Owner":"Steward", reqId:r.id, readAt:null,
   }));
-  const allItems = [...contractApprovals.filter(ca=>!items.some(i=>i.id===ca.id)), ...ROLE_REQ_ITEMS, ...items];
+  // top-down status-change requests (tag/domain — assets keep their own certification flow) → steward approval items
+  const statusReqs = useStatusReqs();
+  const STATUS_REQ_ITEMS = statusReqs.filter(r=>r.status==="pending").map(r=>({
+    id:"srq-"+r.id, type:"certification_review", severity:"medium", section:r.kind==="tag"?"tags":"catalog", timeAgo:r.at||"just now",
+    asset:{name:r.name, path:r.kind==="tag"?"Tag · Classifications":"Domain · Data Domains", type:r.kind==="tag"?"Tag":"Domain"},
+    body:`${r.requestedBy} requested status → ${r.requestedStatus} — "${r.note||""}"`,
+    requestedBy:r.requestedBy, requestedStatus:r.requestedStatus, reqKind:r.kind, reqTargetId:r.targetId, reqId:r.id, readAt:null,
+  }));
+  // top-down deletion requests (tag/domain) → owner approval items
+  const deleteReqs = useDeleteReqs();
+  const DELETE_REQ_ITEMS = deleteReqs.filter(r=>r.status==="pending").map(r=>({
+    id:"drq-"+r.id, type:"delete_request", severity:"high", section:r.kind==="tag"?"tags":"catalog", timeAgo:r.at||"just now",
+    asset:{name:r.name, path:r.kind==="tag"?"Tag · Classifications":"Domain · Data Domains", type:r.kind==="tag"?"Tag":"Domain"},
+    body:`${r.requestedBy} requested to delete this ${r.kind} — "${r.note||""}"`,
+    requestedBy:r.requestedBy, reqKind:r.kind, reqTargetId:r.targetId, reqId:r.id, readAt:null,
+  }));
+  const allItems = [...contractApprovals.filter(ca=>!items.some(i=>i.id===ca.id)), ...ROLE_REQ_ITEMS, ...STATUS_REQ_ITEMS, ...DELETE_REQ_ITEMS, ...items];
   const isActionItem   = i => itemRole(i)!=="fyi" && !i.readAt;
   const isActivityItem = i => itemRole(i)==="fyi";
   const isDoneItem     = i => itemRole(i)!=="fyi" && !!i.readAt;
@@ -27287,6 +27349,7 @@ const InboxView = ({onToast}) => {
     orphan_assignment:   {icon:sz=>Ic.steward(sz||12), label:"Orphan — Assign Owner", shortLabel:"Orphan"},
     term_review:         {icon:sz=>Ic.glossary(sz||12),label:"Term Review",     shortLabel:"Term"},
     contract_approval:   {icon:sz=>Ic.contracts(sz||12),label:"Contract Approval",shortLabel:"Contract"},
+    delete_request:      {icon:sz=>Ic.trash(sz||12),    label:"Deletion Request", shortLabel:"Delete"},
   };
 
   /* ── Action row — only inside detail panel ── */
@@ -27312,12 +27375,24 @@ const InboxView = ({onToast}) => {
       },true)}{btn("Reject",()=>{tagCtx?.resolveInboxItem(item.tagInboxId,'reject');ack(item.id,"Tag rejected");},false,true)}{openIn("Open in Classifications","tags")}</>;
     if(item.type==="term_review")
       return <>{btn("Approve",()=>{setTermStatus(item.termId,"Approved");ack(item.id,`${item.asset.name} approved & published`);},true)}{btn("Reject",()=>{setTermStatus(item.termId,"Draft");ack(item.id,"Term sent back to draft");},false,true)}{openIn("Open in Glossary","glossary")}</>;
-    if(item.type==="certification_review")
+    if(item.type==="certification_review"){
+      if(item.reqKind==="tag")
+        return <>{btn("Approve",()=>{tagCtx?.updateTagDef(item.reqTargetId,{cert:item.requestedStatus});if(item.reqId)resolveStatusRequest(item.reqId,"approved");ack(item.id,`${item.asset.name} status → ${item.requestedStatus} — requester notified`);},true)}{btn("Reject",()=>{tagCtx?.updateTagDef(item.reqTargetId,{cert:"Draft"});if(item.reqId)resolveStatusRequest(item.reqId,"rejected");ack(item.id,"Status change rejected — sent back to Draft");},false,true)}{openIn("Open in Classifications","tags")}</>;
+      if(item.reqKind==="domain")
+        return <>{btn("Approve",()=>{domainsSet(prev=>prev.map(d=>d.id===item.reqTargetId?{...d,cert:item.requestedStatus}:d));if(item.reqId)resolveStatusRequest(item.reqId,"approved");ack(item.id,`${item.asset.name} status → ${item.requestedStatus} — requester notified`);},true)}{btn("Reject",()=>{domainsSet(prev=>prev.map(d=>d.id===item.reqTargetId?{...d,cert:"Draft"}:d));if(item.reqId)resolveStatusRequest(item.reqId,"rejected");ack(item.id,"Status change rejected — sent back to Draft");},false,true)}{openIn("Open in Domains","domains")}</>;
       return <>{btn("Approve",()=>{certifyByAsset(item.asset.name);certifyAsset(item.asset.name);ack(item.id,`${item.asset.name} status → Approved`);},true)}{btn("Reject",()=>{certSet(prev=>prev.map(c=>c.asset===item.asset.name?{...c,status:"Rejected",certifier:null,date:null}:c));ack(item.id,"Status change rejected");},false,true)}{openIn("Open in Catalog","catalog")}</>;
+    }
     if(item.type==="stewardship_request")
       return <>{btn("Approve",()=>{const role=item.requestedRole==="Owner"?"owner":"steward";assignOwnership(item.asset.name,item.requestedBy,role);if(item.reqId)resolveRoleRequest(item.reqId,"approved");ack(item.id,`${item.requestedBy} added as ${item.requestedRole} of ${item.asset.name} — requester notified`);},true)}{btn("Reject",()=>{if(item.reqId)resolveRoleRequest(item.reqId,"rejected");ack(item.id,"Request rejected — requester notified");},false,true)}{openIn("Open in Catalog","catalog")}</>;
     if(item.type==="rbac_request")
       return <>{btn("Grant role",()=>{if(item.reqId)resolveRoleRequest(item.reqId,"approved");ack(item.id,`${item.targetRole} role granted to ${item.requestedBy} — requester notified`);},true)}{btn("Reject",()=>{if(item.reqId)resolveRoleRequest(item.reqId,"rejected");ack(item.id,"Role request rejected — requester notified");},false,true)}{openIn("Open in Access","access")}</>;
+    if(item.type==="delete_request"){
+      if(item.reqKind==="tag")
+        return <>{btn("Approve deletion",()=>{tagCtx?.deleteTagDef(item.reqTargetId);if(item.reqId)resolveDeleteRequest(item.reqId,"approved");ack(item.id,`${item.asset.name} deleted — requester notified`);},true)}{btn("Reject",()=>{if(item.reqId)resolveDeleteRequest(item.reqId,"rejected");ack(item.id,"Deletion request rejected — requester notified");},false,true)}{openIn("Open in Classifications","tags")}</>;
+      if(item.reqKind==="domain")
+        return <>{btn("Approve deletion",()=>{domainsSet(prev=>prev.filter(d=>d.id!==item.reqTargetId));if(item.reqId)resolveDeleteRequest(item.reqId,"approved");ack(item.id,`${item.asset.name} deleted — requester notified`);},true)}{btn("Reject",()=>{if(item.reqId)resolveDeleteRequest(item.reqId,"rejected");ack(item.id,"Deletion request rejected — requester notified");},false,true)}{openIn("Open in Domains","domains")}</>;
+      return null;
+    }
     if(item.type==="orphan_assignment")
       return <>{btn("Assign owner",()=>setAssignOpen(a=>!a),true)}{btn("Deprecate",()=>ack(item.id,"Asset deprecated"),false,true)}{openIn("Open in Catalog","catalog")}</>;
     if(item.type==="needs_attention")
@@ -29860,8 +29935,10 @@ const PersonPicker = ({value, onChange, placeholder='Unassigned', disabled=false
 };
 
 const TagManagementView = ({onToast}) => {
-  const { tagDefs, assignments, connectorConfigs, inbox, createTagDef, updateTagDef, upsertNameMapping } = useTagCtx();
+  const { tagDefs, assignments, connectorConfigs, inbox, createTagDef, updateTagDef, deleteTagDef, upsertNameMapping } = useTagCtx();
   const navigate = useNav();
+  const { role: tmvRole, roleCfg: tmvRoleCfg } = useRole();
+  const meHandle = ((tmvRoleCfg&&tmvRoleCfg.email)||"you@jnj").split("@")[0];
 
   // ── Left panel state ──
   const [search,           setSearch]           = useState('');
@@ -29963,6 +30040,7 @@ const TagManagementView = ({onToast}) => {
   };
 
   const deleteTag = (tagId) => {
+    deleteTagDef(tagId);
     setDeleteConfirm(null);
     setSelTagId(null);
     onToast('Tag deleted','success');
@@ -30210,7 +30288,10 @@ const TagManagementView = ({onToast}) => {
                                   <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                                   Edit Tag
                                 </button>
-                                <button onClick={e=>{e.stopPropagation();setDeleteConfirm({type:'tag',id:td.id,name:td.name});setDotMenuOpen(null);}}
+                                <button onClick={e=>{e.stopPropagation();setDotMenuOpen(null);
+                                  if(tmvRole==='admin'||td.owner===meHandle){ setDeleteConfirm({type:'tag',id:td.id,name:td.name}); }
+                                  else { requestDeletion({kind:'tag',targetId:td.id,name:td.name,requestedBy:meHandle,note:'Requested via tag list',owner:td.owner||null}); onToast('Deletion requested — pending owner approval','success'); }
+                                }}
                                   style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.rose,display:'flex',alignItems:'center',gap:8}}
                                   onMouseEnter={e=>e.currentTarget.style.background=T.roseDim} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                                   <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 5l.5 5M8 5l-.5 5M3 3l.5 7h5L9 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -30351,6 +30432,7 @@ const TagManagementView = ({onToast}) => {
             ];
             // Related tags: same category or similar name
             const relatedTags = tagDefs.filter(td=>td.id!==selTag.id&&td.category&&td.category===selTag.category).slice(0,4);
+            const canSetTagStatus = tmvRole==='admin' || tagOwners.includes(meHandle) || tagStewards.includes(meHandle);
 
             return (
               <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
@@ -30718,7 +30800,7 @@ const TagManagementView = ({onToast}) => {
             <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1200,backdropFilter:'blur(3px)'}} onClick={()=>setTagEditModal(null)}>
               <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,width:360,maxHeight:'80vh',overflow:'auto',boxShadow:'0 24px 60px rgba(0,0,0,.35)'}} onClick={e=>e.stopPropagation()}>
                 <div style={{padding:'14px 18px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                  <div style={{fontSize:13,fontWeight:700,color:T.text}}>{tagEditModal==='status'?'Set Status':`Edit ${tagEditModal==='owners'?'Owner':tagEditModal==='stewards'?'Steward':'Domain'}`}</div>
+                  <div style={{fontSize:13,fontWeight:700,color:T.text}}>{tagEditModal==='status'?((tmvRole==='admin'||tagOwners.includes(meHandle)||tagStewards.includes(meHandle))?'Set Status':'Request Status Change'):`Edit ${tagEditModal==='owners'?'Owner':tagEditModal==='stewards'?'Steward':'Domain'}`}</div>
                   <button onClick={()=>setTagEditModal(null)} style={{background:T.bgHover,border:`1px solid ${T.border}`,borderRadius:6,color:T.textMuted,cursor:'pointer',padding:'3px 6px',display:'flex'}}>{Ic.x(10)}</button>
                 </div>
                 {tagEditModal!=='status'&&<div style={{padding:'10px 14px',borderBottom:`1px solid ${T.border}`}}>
@@ -30730,10 +30812,17 @@ const TagManagementView = ({onToast}) => {
                   {tagEditModal==='status'&&Object.keys(STATUS_META).map(s=>{
                     const sel=selTag?.cert===s;
                     const sm=STATUS_META[s];
+                    const canSet = tmvRole==='admin' || tagOwners.includes(meHandle) || tagStewards.includes(meHandle);
                     return (
                       <button key={s} onClick={()=>{
-                        updateTagDef(selTag.id,{...selTag,cert:s});
-                        onToast(`Status set to ${s}`,'success');
+                        if(canSet){
+                          updateTagDef(selTag.id,{...selTag,cert:s});
+                          onToast(`Status set to ${s}`,'success');
+                        } else {
+                          requestStatusChange({kind:'tag',targetId:selTag.id,name:selTag.name,requestedStatus:s,requestedBy:meHandle,note:`Requested via tag detail`,steward:tagStewards[0]||tagOwners[0]||null});
+                          updateTagDef(selTag.id,{...selTag,cert:'In Review'});
+                          onToast('Status change requested — pending steward approval','success');
+                        }
                         setTagEditModal(null);
                       }}
                         style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 14px',background:sel?T.bgElevated:'transparent',border:'none',cursor:'pointer',transition:'background .1s'}}
@@ -31274,7 +31363,7 @@ export default function App(){
       case "tags":          return <TagManagementView onToast={showToast}/>;
       case "steward-inbox": return <InboxView onToast={showToast}/>;
       case "glossary":      return <GlossaryView onToast={showToast}/>;
-      case "domains":       return <DomainsView onAsset={handleAsset} onNav={handleNav}/>;
+      case "domains":       return <DomainsView onAsset={handleAsset} onNav={handleNav} onToast={showToast}/>;
       case "dataproducts":  return <DataProductsView onAsset={handleAsset} onNav={handleNav}/>;
       case "observability": return <QualityView/>;
       case "analytics":     return <AnalyticsView/>;
