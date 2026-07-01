@@ -1841,7 +1841,7 @@ const GlossaryView = ({onToast}) => {
             <div>
               <div style={{display:"flex",alignItems:"center",padding:"8px 20px",borderBottom:`1px solid ${T.border}`,background:T.bgSurface,position:"sticky",top:0,zIndex:1}}>
                 <span style={{flex:1,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Term</span>
-                <span style={{width:110,flexShrink:0,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Certificate</span>
+                <span style={{width:110,flexShrink:0,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Status</span>
                 <span style={{width:150,flexShrink:0,paddingLeft:12,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Owner</span>
               </div>
               {catTerms.map(t=>{
@@ -2007,7 +2007,7 @@ const GlossaryView = ({onToast}) => {
 
             {/* CERTIFICATE */}
             <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
-              <SideLabel ch="Certificate" onEdit={()=>{setGlossEditModal("cert");setGlossModalSearch("");}}/>
+              <SideLabel ch="Status" onEdit={()=>{setGlossEditModal("cert");setGlossModalSearch("");}}/>
               <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px 4px 9px",borderRadius:5,background:cm.bg,borderTop:`1px solid ${cm.border}`,borderRight:`1px solid ${cm.border}`,borderBottom:`1px solid ${cm.border}`,borderLeft:`3px solid ${cm.color}`}}>
                 <span style={{fontSize:13}}>{cm.icon}</span>
                 <span style={{fontSize:12,color:cm.color,fontWeight:600}}>{term.cert||"Draft"}</span>
@@ -2110,7 +2110,7 @@ const GlossaryView = ({onToast}) => {
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1200,backdropFilter:"blur(3px)"}} onClick={()=>setGlossEditModal(null)}>
           <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,width:360,maxHeight:"80vh",overflow:"auto",boxShadow:"0 24px 60px rgba(0,0,0,.35)"}} onClick={e=>e.stopPropagation()}>
             <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-              <div style={{fontSize:13,fontWeight:700,color:T.text}}>Edit {glossEditModal==="cert"?"Certificate":glossEditModal==="domain"?"Domain":glossEditModal==="owners"?"Owners":glossEditModal==="stewards"?"Stewards":"Tags"}</div>
+              <div style={{fontSize:13,fontWeight:700,color:T.text}}>Edit {glossEditModal==="cert"?"Status":glossEditModal==="domain"?"Domain":glossEditModal==="owners"?"Owners":glossEditModal==="stewards"?"Stewards":"Tags"}</div>
               <button onClick={()=>setGlossEditModal(null)} style={{background:T.bgHover,border:`1px solid ${T.border}`,borderRadius:6,color:T.textMuted,cursor:"pointer",padding:"3px 6px",display:"flex"}}><IcX/></button>
             </div>
             {(glossEditModal==="owners"||glossEditModal==="stewards"||glossEditModal==="tags")&&(
@@ -2514,7 +2514,7 @@ const CertBadge = ({cert})=>{
     Deprecated:  {c:"#7c3aed", bg:"rgba(124,58,237,.1)"},
   };
   const s = map[cert]||{c:T.textMuted,bg:T.bgHover};
-  return <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:s.bg,color:s.c,border:`1px solid ${s.c}33`,display:"inline-flex",alignItems:"center",whiteSpace:"nowrap"}}>{cert||"Not Certified"}</span>;
+  return <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:s.bg,color:s.c,border:`1px solid ${s.c}33`,display:"inline-flex",alignItems:"center",whiteSpace:"nowrap"}}>{cert||"No status"}</span>;
 };
 
 const QScore = ({score})=>{
@@ -3562,7 +3562,7 @@ const HomeView = ({onNav, onToast}) => {
     ),
     certQueue: (
       <Card2 style={{marginBottom:20}}><div style={{padding:16}}>
-        <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:14}}>Certification Queue</div>
+        <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:14}}>Status Queue</div>
         {certList.filter(c=>c.status==="In Review").concat(certList.filter(c=>c.status==="Approved").slice(0,2)).map((c,i)=>(
           <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:i<2?`1px solid ${T.border}`:"none"}}>
             <SDot status={c.status==="Approved"?"passing":"warning"}/>
@@ -3647,7 +3647,7 @@ const HomeView = ({onNav, onToast}) => {
             <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:14}}>Platform Health</div>
             {[
               {label:"Data Quality Score", value:"89%",  color:"#d97706", bar:89},
-              {label:"Certified Assets",   value:"66%",  color:"#16a34a", bar:66},
+              {label:"Approved Assets",   value:"66%",  color:"#16a34a", bar:66},
               {label:"Policy Compliance",  value:"94%",  color:T.accent,  bar:94},
               {label:"SLA Adherence",      value:"97%",  color:"#60a5fa", bar:97},
             ].map((h,i)=>(
@@ -5756,7 +5756,7 @@ const _relAgo = (dateStr) => {
 // Module-level so both Policy Manager and My Workspace (InboxView) read the same source.
 const POLICY_VIOLATIONS = [
   {id:"viol-1",policyId:"pol-1",assetName:"orders",assetType:"Table",domain:"Commerce",rule:"PII classification required",severity:"Critical",status:"Open",detectedAt:"2026-05-15",description:"The orders table is missing a pii.customer tag required before promotion to downstream analytics."},
-  {id:"viol-2",policyId:"pol-1",assetName:"transactions",assetType:"Table",domain:"Finance",rule:"Certification gate",severity:"Critical",status:"In Progress",detectedAt:"2026-05-14",description:"transactions table does not hold Approved certification and is currently queryable by 3 downstream pipelines."},
+  {id:"viol-2",policyId:"pol-1",assetName:"transactions",assetType:"Table",domain:"Finance",rule:"Status gate",severity:"Critical",status:"In Progress",detectedAt:"2026-05-14",description:"transactions table does not hold Approved certification and is currently queryable by 3 downstream pipelines."},
   {id:"viol-3",policyId:"pol-2",assetName:"payments",assetType:"Table",domain:"Finance",rule:"Quality threshold enforcement",severity:"High",status:"Open",detectedAt:"2026-05-16",description:"payments table quality score is 67, below the required threshold of 80 for use in financial reporting."},
   {id:"viol-4",policyId:"pol-4",assetName:"patient_events",assetType:"Table",domain:"Commerce",rule:"PHI quality gate",severity:"Critical",status:"Open",detectedAt:"2026-05-13",description:"patient_events contains PHI but quality score is 84 — below the required 90 threshold."},
   {id:"viol-5",policyId:"pol-4",assetName:"user_health_data",assetType:"Table",domain:"Finance",rule:"Access restriction",severity:"Critical",status:"Open",detectedAt:"2026-05-12",description:"user_health_data is accessible to roles without healthcare.phi_read scope. 2 roles in violation."},
@@ -5884,7 +5884,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
      description:"All assets in the Commerce and Finance domains must carry an Approved certification and meet PII classification requirements. Non-compliant assets pose direct privacy and regulatory risk under GDPR and CCPA.",
      rules:[
        {id:"r1-1",name:"PII classification required",criteria:"All assets in the Commerce and Finance domains must carry a pii.customer or pii.sensitive tag before promotion to any downstream system."},
-       {id:"r1-2",name:"Certification gate",criteria:"Assets must hold Approved certification to be queryable by downstream analytics and reporting pipelines."},
+       {id:"r1-2",name:"Status gate",criteria:"Assets must hold Approved certification to be queryable by downstream analytics and reporting pipelines."},
      ],
      links:[
        {type:"Table",target:"orders",rel:"governs",assetId:1},
@@ -5900,7 +5900,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
      governedAssets:[
        {name:"orders",      type:"Table",domain:"Commerce",service:"snowflake",   status:"fail",  failedRules:["PII classification required"],    quality:72},
        {name:"customers",   type:"Table",domain:"Commerce",service:"snowflake",   status:"pass",  failedRules:[],                                  quality:91},
-       {name:"transactions",type:"Table",domain:"Finance", service:"postgresql",  status:"fail",  failedRules:["Certification gate"],              quality:85},
+       {name:"transactions",type:"Table",domain:"Finance", service:"postgresql",  status:"fail",  failedRules:["Status gate"],              quality:85},
        {name:"revenue",     type:"Table",domain:"Finance", service:"postgresql",  status:"pass",  failedRules:[],                                  quality:93},
        {name:"dim_products",type:"Table",domain:"Commerce",service:"databricks",  status:"pass",  failedRules:[],                                  quality:88},
      ],
@@ -5947,7 +5947,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
      description:"Features used in ML pipelines must score above 85 on quality checks and hold an Approved certification before promotion to production. Prevents model degradation from poor-quality training data.",
      rules:[
        {id:"r3-1",name:"Quality score gate",criteria:"ML features must score ≥ 85 before promotion to the production feature store."},
-       {id:"r3-2",name:"Certification requirement",criteria:"Features must hold Approved certification to be eligible for use in production ML training pipelines."},
+       {id:"r3-2",name:"Status requirement",criteria:"Features must hold Approved certification to be eligible for use in production ML training pipelines."},
      ],
      links:[],
      history:[
@@ -6007,7 +6007,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
      criteria:["Pipeline outputs must hold Approved certification before use in downstream production systems"],
      description:"Data pipeline outputs must be Approved-certified before promotion to production. Deprecated — scope has been consolidated under ML Feature Readiness.",
      rules:[
-       {id:"r6-1",name:"Certification requirement",criteria:"Pipeline outputs must hold Approved certification before use in downstream production systems."},
+       {id:"r6-1",name:"Status requirement",criteria:"Pipeline outputs must hold Approved certification before use in downstream production systems."},
      ],
      links:[],
      history:[
@@ -6200,7 +6200,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   ];
   const W_FIELD_LABELS = {
     // Governance
-    certification:"Certification Status", domain:"Domain", tag:"Tag", glossary_term:"Glossary Term",
+    certification:"Status", domain:"Domain", tag:"Tag", glossary_term:"Glossary Term",
     owner:"Owner", steward:"Steward", data_product:"Data Product", asset_type:"Asset Type",
     description:"Description", business_term:"Business Term",
     // Quality
@@ -6369,7 +6369,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   };
   const saveRulePanel = () => {
     if (!selPol) return;
-    const W_FIELD_LABELS2 = {certification:"Certification Status",domain:"Domain",tag:"Tag",glossary_term:"Glossary Term",owner:"Owner",steward:"Steward",data_product:"Data Product",asset_type:"Asset Type",description:"Description",business_term:"Business Term",quality_score:"Quality Score",last_updated:"Last Updated",null_rate:"Null Rate",completeness:"Completeness",row_count:"Row Count",duplicate_rate:"Duplicate Rate",retention_period:"Retention Period",last_accessed:"Last Accessed",archive_status:"Archive Status"};
+    const W_FIELD_LABELS2 = {certification:"Status",domain:"Domain",tag:"Tag",glossary_term:"Glossary Term",owner:"Owner",steward:"Steward",data_product:"Data Product",asset_type:"Asset Type",description:"Description",business_term:"Business Term",quality_score:"Quality Score",last_updated:"Last Updated",null_rate:"Null Rate",completeness:"Completeness",row_count:"Row Count",duplicate_rate:"Duplicate Rate",retention_period:"Retention Period",last_accessed:"Last Accessed",archive_status:"Archive Status"};
     if (rpTab==="preset") {
       const fl=W_FIELD_LABELS2[rpPreset.field]||rpPreset.field;
       const newRule={id:rulePanel?.mode==="edit"?rulePanel.ruleId:`r${Date.now()}`,type:"preset",field:rpPreset.field,operator:rpPreset.operator,value:rpPreset.value||"",table:rpPreset.table||"",column:rpPreset.column||"",severity:rpPreset.severity||"Medium",name:`${fl} ${rpPreset.operator}${rpPreset.value?" "+rpPreset.value:""}${rpPreset.table?" on "+rpPreset.table:""}${rpPreset.column?"."+rpPreset.column:""}`};
@@ -7160,7 +7160,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                         {/* Right sidebar — exact Tags/Glossary pattern */}
                         <div style={{width:272,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto"}}>
 
-                          <SB ch="Certification" onEdit={()=>setPolEditModal("cert")}>
+                          <SB ch="Status" onEdit={()=>setPolEditModal("cert")}>
                             {(()=>{const cm=CERT_META[p.cert]||CERT_META.Draft;return(
                               <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px 4px 9px",borderRadius:5,background:cm.bg,borderTop:`1px solid ${cm.border}`,borderRight:`1px solid ${cm.border}`,borderBottom:`1px solid ${cm.border}`,borderLeft:`3px solid ${cm.color}`}}>
                                 <span style={{fontSize:13}}>{cm.icon}</span>
@@ -7324,7 +7324,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       const sqlRules    = (p.rules||[]).filter(r=>r.type==="sql"||r.sql);
                       const totalRls    = (p.rules||[]).length;
                       const logicMode   = p.ruleLogic||"independent";
-                      const FIELD_LBL   = {certification:"Certification Status",domain:"Domain",tag:"Tag",glossary_term:"Glossary Term",owner:"Owner",steward:"Steward",data_product:"Data Product",asset_type:"Asset Type",description:"Description",business_term:"Business Term",quality_score:"Quality Score",last_updated:"Last Updated",null_rate:"Null Rate",completeness:"Completeness",row_count:"Row Count",duplicate_rate:"Duplicate Rate",retention_period:"Retention Period",last_accessed:"Last Accessed",archive_status:"Archive Status"};
+                      const FIELD_LBL   = {certification:"Status",domain:"Domain",tag:"Tag",glossary_term:"Glossary Term",owner:"Owner",steward:"Steward",data_product:"Data Product",asset_type:"Asset Type",description:"Description",business_term:"Business Term",quality_score:"Quality Score",last_updated:"Last Updated",null_rate:"Null Rate",completeness:"Completeness",row_count:"Row Count",duplicate_rate:"Duplicate Rate",retention_period:"Retention Period",last_accessed:"Last Accessed",archive_status:"Archive Status"};
                       const opLabel     = op=>({eq:"=",neq:"≠",gt:">",lt:"<",gte:"≥",lte:"≤",contains:"contains","not_contains":"does not contain","not contains":"does not contain","starts_with":"starts with","ends_with":"ends with",is_null:"is null","is_not_null":"is not null",matches:"matches",in:"in","not_in":"not in","is":"is","is not":"is not","greater than":">","less than":"<","equals":"=","is set":"is set","is not set":"is not set","is one of":"in","is not one of":"not in"}[op]||op||"");
 
                       // Open rule panel for editing a specific rule
@@ -8477,7 +8477,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
       {rulePanel&&selPol&&(()=>{
         const p2 = selPol;
         const W_RULE_FIELDS_SIMPLE = [
-          {id:"certification",  label:"Certification Status",  ops:["is","is not"],                           vals:["Draft","In Review","Approved","Rejected","Deprecated"]},
+          {id:"certification",  label:"Status",  ops:["is","is not"],                           vals:["Draft","In Review","Approved","Rejected","Deprecated"]},
           {id:"domain",         label:"Domain",                ops:["is","is not","is one of","is not one of"],vals:["Finance","HR","Operations","Legal","Technology","Marketing"]},
           {id:"tag",            label:"Tag",                   ops:["contains","does not contain"],           vals:[]},
           {id:"glossary_term",  label:"Glossary Term",         ops:["contains","does not contain"],           vals:[]},
@@ -8813,7 +8813,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                     {id:"access_level",     label:"Access Level",            scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Open","Controlled","Restricted","Not Set"], types:["Access"], action:{verb:"Restrict access",engine:"CDP",maturity:"GA"}},
                     {id:"gdpr_erasure",     label:"GDPR Erasure Eligible",   scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Yes","No"], types:["Privacy"], action:{verb:"Erase / redact",engine:"CDP",maturity:"GA"}},
                     // ── Governance — all table-level catalog attributes ──
-                    {id:"certification",  label:"Certification Status",    scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Draft","In Review","Approved","Rejected","Deprecated"],  types:["Governance","Quality","Access"]},
+                    {id:"certification",  label:"Status",    scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Draft","In Review","Approved","Rejected","Deprecated"],  types:["Governance","Quality","Access"]},
                     {id:"domain",         label:"Domain",                  scope:"table",  type:"enum_multi", ops:["is","is not","is one of","is not one of"], vals:ALL_DOMAINS,                                               types:["Governance","Retention"]},
                     {id:"tag",            label:"Tag",                     scope:"both",   type:"list",       ops:["contains","does not contain"],             vals:POLICY_TAGS,                                               types:["Governance","Retention","Access"],  hint:"Leave column blank to check the table tag; enter a column name to check that column's tag"},
                     {id:"glossary_term",  label:"Glossary Term",           scope:"both",   type:"list",       ops:["contains","does not contain"],             vals:[],                                                        types:["Governance"],                      hint:"Leave column blank to check the table; enter a column name to check that column's glossary linkage"},
@@ -9738,7 +9738,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1200,backdropFilter:"blur(3px)"}} onClick={close}>
             <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,width:360,maxHeight:"80vh",overflow:"auto",boxShadow:"0 24px 60px rgba(0,0,0,.35)"}} onClick={e=>e.stopPropagation()}>
               <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                <div style={{fontSize:13,fontWeight:700,color:T.text}}>Edit Certification</div>
+                <div style={{fontSize:13,fontWeight:700,color:T.text}}>Edit Status</div>
                 <button onClick={close} style={{background:T.bgHover,border:`1px solid ${T.border}`,borderRadius:6,color:T.textMuted,cursor:"pointer",padding:"3px 6px",display:"flex"}}>{Ic.x(11)}</button>
               </div>
               <div style={{padding:"6px 0"}}>
@@ -10194,13 +10194,13 @@ const CertificationsView = ({onToast}) => {
   const patchCert = (id, patch) => { setCerts(p=>p.map(c=>c.id===id?{...c,...patch}:c)); setSelected(s=>s?{...s,...patch}:s); };
   const submitForReview = (id) => { patchCert(id,{status:"In Review"}); onToast("Submitted for review","success"); };
   const approve         = (id) => { patchCert(id,{status:"Approved",certifier:"maya.chen",date:new Date().toISOString().slice(0,10)}); onToast("Asset certified","success"); };
-  const rejectCert      = (id) => { patchCert(id,{status:"Rejected",certifier:null,date:null}); onToast("Certification rejected","error"); };
+  const rejectCert      = (id) => { patchCert(id,{status:"Rejected",certifier:null,date:null}); onToast("Status change rejected","error"); };
   const returnToDraft   = (id) => { patchCert(id,{status:"Draft",certifier:null,date:null}); onToast("Returned to Draft","info"); };
   const deprecateCert   = (id) => { patchCert(id,{status:"Deprecated"}); onToast("Asset deprecated","info"); };
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <Topbar breadcrumb={[{label:"Certifications"}]}/>
+      <Topbar breadcrumb={[{label:"Status"}]}/>
       <div style={{flex:1,display:"flex",overflow:"hidden"}}>
         <div style={{flex:1,overflowY:"auto",padding:28}}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
@@ -10218,7 +10218,7 @@ const CertificationsView = ({onToast}) => {
                 return <button key={f} onClick={()=>setFilter(f)} style={{padding:"5px 14px",borderRadius:99,fontSize:12,fontWeight:filter===f?600:400,border:`1px solid ${filter===f?(mc?.border||T.accent):T.border}`,background:filter===f?(mc?.bg||T.accentDim):"transparent",color:filter===f?(mc?.color||T.accent):T.textSub,cursor:"pointer",transition:"all .12s"}}>{f}</button>;
               })}
             </div>
-            <Btn icon={Ic.plus(12)} variant="primary" onClick={()=>onToast("Certification workflow opened","success")}>New Certification</Btn>
+            <Btn icon={Ic.plus(12)} variant="primary" onClick={()=>onToast("Status workflow opened","success")}>New Status Request</Btn>
           </div>
           <DataTable cols={[
             {key:"asset",     label:"Asset",     render:v=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:12.5,fontWeight:600,color:T.text}}>{v}</span>},
@@ -10307,7 +10307,7 @@ const StewardshipView = ({onToast, initialTab}) => {
   const priorityColor = p=>p==="Critical"?"#e11d48":p==="High"?"#d97706":p==="Medium"?"#2563eb":"#6b7280";
   const priorityBg    = p=>p==="Critical"?"rgba(225,29,72,.1)":p==="High"?"rgba(217,119,6,.1)":p==="Medium"?"rgba(37,99,235,.1)":"rgba(107,114,128,.1)";
   const typeIcons = {conflict_resolution:"⚡",pii_audit:"🔒",term_review:"📋",access_review:"👤",orphan_assignment:"🔗",schema_documentation:"📄",certification_review:"✓",term_deprecation:"✕"};
-  const typeLabels = {conflict_resolution:"Conflict Resolution",pii_audit:"PII Audit",term_review:"Term Review",access_review:"Access Review",orphan_assignment:"Orphan Assignment",schema_documentation:"Schema Documentation",certification_review:"Certification Review",term_deprecation:"Term Deprecation"};
+  const typeLabels = {conflict_resolution:"Conflict Resolution",pii_audit:"PII Audit",term_review:"Term Review",access_review:"Access Review",orphan_assignment:"Orphan Assignment",schema_documentation:"Schema Documentation",certification_review:"Status Review",term_deprecation:"Term Deprecation"};
 
   const activeTasks = tasks.filter(t=>t.status!=="Completed"&&t.status!=="Resolved");
   const doneTasks   = tasks.filter(t=>t.status==="Completed"||t.status==="Resolved");
@@ -11515,10 +11515,10 @@ const AssetLineageFull=({asset})=>{
                           </div>
                         )}
 
-                        {/* Certificate — inherited from parent node */}
+                        {/* Status — inherited from parent node */}
                         <div>
                           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-                            <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em"}}>Certificate</div>
+                            <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em"}}>Status</div>
                             <span style={{fontSize:9.5,color:"#94a3b8",fontStyle:"italic"}}>Inherited</span>
                           </div>
                           <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px 4px 9px",borderRadius:5,background:cm2.bg,borderTop:`1px solid ${cm2.border}`,borderRight:`1px solid ${cm2.border}`,borderBottom:`1px solid ${cm2.border}`,borderLeft:`3px solid ${cm2.color}`}}>
@@ -11715,7 +11715,7 @@ const AssetLineageFull=({asset})=>{
                     <p style={{fontSize:12,color:T.textSub,lineHeight:1.7,margin:0}}>{selMeta.description}</p>
                   </div>
                   <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
-                    <SLabel>Certificate</SLabel>
+                    <SLabel>Status</SLabel>
                     <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px 4px 9px",borderRadius:5,background:cm.bg,borderTop:`1px solid ${cm.border}`,borderRight:`1px solid ${cm.border}`,borderBottom:`1px solid ${cm.border}`,borderLeft:`3px solid ${cm.color}`}}>
                       <span style={{fontSize:12,color:cm.color,fontWeight:600}}>{selMeta.cert}</span>
                     </div>
@@ -14989,7 +14989,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
     return ()=>document.removeEventListener("mousedown",close);
   },[certOpen]);
 
-  const handleCertify = () => { setData(d=>({...d,cert:"Approved"})); setCertModal(false); onToast(`${asset.name} certified successfully`,"success"); };
+  const handleCertify = () => { setData(d=>({...d,cert:"Approved"})); setCertModal(false); onToast(`${asset.name} status set to Approved`,"success"); };
 
   const MetaLabel = ({children,onEdit,cta})=>(
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
@@ -15072,7 +15072,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
               <button onClick={()=>setCertModal(true)}
                 style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 14px",borderRadius:8,background:"#16a34a12",border:"1px solid rgba(22,163,74,.3)",color:"#16a34a",fontSize:12.5,fontWeight:600,cursor:"pointer",transition:"opacity .1s"}}
                 onMouseEnter={e=>e.currentTarget.style.opacity=".8"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
-                {Ic.cert(12)} Certify
+                {Ic.cert(12)} Set status
               </button>
             )}
             <button onClick={()=>onToast("Edit panel coming soon","success")}
@@ -15280,7 +15280,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
 
           {/* CERTIFICATE */}
           <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
-            <MetaLabel onEdit={()=>setEditModal("cert")}>Certificate</MetaLabel>
+            <MetaLabel onEdit={()=>setEditModal("cert")}>Status</MetaLabel>
             <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px 4px 9px",borderRadius:5,background:cm.bg,borderTop:`1px solid ${cm.border}`,borderRight:`1px solid ${cm.border}`,borderBottom:`1px solid ${cm.border}`,borderLeft:`3px solid ${cm.color}`}}>
               <span style={{fontSize:13}}>{cm.icon}</span>
               <span style={{fontSize:12,color:cm.color,fontWeight:600}}>{data.cert||"Draft"}</span>
@@ -15495,13 +15495,13 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
         </div>}
       </div>
 
-      {/* Certificate edit modal (centered — cert is a single-step action) */}
+      {/* Status edit modal (centered — cert is a single-step action) */}
       {editModal==="cert"&&(
         <>
           <div onClick={()=>setEditModal(null)} style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,.4)"}}/>
           <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:501,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:280,display:"flex",flexDirection:"column",overflow:"hidden"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
-              <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Edit Certificate</span>
+              <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Edit Status</span>
               <button onClick={()=>setEditModal(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
                 <svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
               </button>
@@ -15523,8 +15523,8 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
       )}
 
       {/* Certification Modal */}
-      <Modal open={certModal} onClose={()=>setCertModal(false)} title={`Certify "${asset.name}"`}>
-        <p style={{fontSize:13,color:T.textSub,marginBottom:16}}>Certifying marks this asset as trusted and production-ready. This action is logged and visible to all users.</p>
+      <Modal open={certModal} onClose={()=>setCertModal(false)} title={`Set status — ${asset.name}`}>
+        <p style={{fontSize:13,color:T.textSub,marginBottom:16}}>Setting the status to Approved marks this asset as trusted and production-ready. This action is logged and visible to all users.</p>
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           {[
             {label:"Description documented", done:!!(descVal)},
@@ -15540,12 +15540,12 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
           ))}
         </div>
         <div style={{marginTop:16}}>
-          <div style={{fontSize:12,color:T.textSub,marginBottom:6}}>Certification notes</div>
+          <div style={{fontSize:12,color:T.textSub,marginBottom:6}}>Status notes</div>
           <Input2 multiline rows={3} placeholder="Add notes for the certification record…" value={certNote} onChange={e=>setCertNote(e.target.value)}/>
         </div>
         <div style={{display:"flex",gap:8,marginTop:20,justifyContent:"flex-end"}}>
           <Btn onClick={()=>setCertModal(false)}>Cancel</Btn>
-          <Btn variant="primary" icon={Ic.cert(13)} onClick={handleCertify}>Certify Asset</Btn>
+          <Btn variant="primary" icon={Ic.cert(13)} onClick={handleCertify}>Set status to Approved</Btn>
         </div>
       </Modal>
     </div>
@@ -15769,7 +15769,7 @@ const FileAssetDetail = ({asset, onBack, onToast}) => {
               <MetaRow label="Domain"         value={asset.domain}/>
               <MetaRow label="Owner"          value={asset.owner}/>
               <MetaRow label="Steward"        value={asset.steward}/>
-              <MetaRow label="Certification"  value={asset.cert}/>
+              <MetaRow label="Status"  value={asset.cert}/>
               <MetaRow label="Tier"           value={asset.tier ? `Tier ${asset.tier}` : null}/>
               <MetaRow label="Usage"          value={asset.usage}/>
               <MetaRow label="SLA Freshness"  value={asset.slaFreshness}/>
@@ -15912,7 +15912,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
     certifyAsset(asset.name);    // module ASSETS → Catalog badge reflects
     certifyByAsset(asset.name);  // shared certification store
     setCertModal(false);
-    onToast(`${asset.name} certified successfully`,"success");
+    onToast(`${asset.name} status set to Approved`,"success");
   };
 
   const TAG_C_FULL = {
@@ -15960,7 +15960,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
             <button onClick={()=>setCertModal(true)}
               style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 14px",borderRadius:8,background:"#16a34a12",border:"1px solid rgba(22,163,74,.3)",color:"#16a34a",fontSize:12.5,fontWeight:600,cursor:"pointer",transition:"opacity .1s"}}
               onMouseEnter={e=>e.currentTarget.style.opacity=".8"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
-              {Ic.cert(12)} Certify
+              {Ic.cert(12)} Set status
             </button>
           )}
           <button onClick={()=>onToast("Edit panel coming soon","success")}
@@ -16162,14 +16162,14 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
                     </div>
                   )}
 
-                  {/* Certificate — inherited from parent table, read-only */}
+                  {/* Status — inherited from parent table, read-only */}
                   {(()=>{
                     const cert = data.cert||asset.cert||"Draft";
                     const cm   = CERT_META[cert]||CERT_META.Draft;
                     return (
                       <div>
                         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-                          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Certificate</div>
+                          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Status</div>
                           <span style={{fontSize:9.5,color:T.textMuted,fontStyle:"italic"}}>Inherited</span>
                         </div>
                         <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px 4px 9px",borderRadius:5,background:cm.bg,borderTop:`1px solid ${cm.border}`,borderRight:`1px solid ${cm.border}`,borderBottom:`1px solid ${cm.border}`,borderLeft:`3px solid ${cm.color}`}}>
@@ -16502,7 +16502,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
 
         {/* CERTIFICATE */}
         <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
-          <MetaLabel onEdit={()=>setEditModal("cert")}>Certificate</MetaLabel>
+          <MetaLabel onEdit={()=>setEditModal("cert")}>Status</MetaLabel>
           <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px 4px 9px",borderRadius:5,background:cm.bg,borderTop:`1px solid ${cm.border}`,borderRight:`1px solid ${cm.border}`,borderBottom:`1px solid ${cm.border}`,borderLeft:`3px solid ${cm.color}`}}>
             <span style={{fontSize:13}}>{cm.icon}</span>
             <span style={{fontSize:12,color:cm.color,fontWeight:600}}>{data.cert||"Draft"}</span>
@@ -16711,13 +16711,13 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
           )}
         </div>
 
-        {/* Certificate edit modal */}
+        {/* Status edit modal */}
         {editModal==="cert"&&(
           <>
             <div onClick={()=>setEditModal(null)} style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,.4)"}}/>
             <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:501,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:280,display:"flex",flexDirection:"column",overflow:"hidden"}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
-                <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Edit Certificate</span>
+                <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Edit Status</span>
                 <button onClick={()=>setEditModal(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
                   <svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
                 </button>
@@ -16760,8 +16760,8 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
     </div>
 
     {/* Certification Modal */}
-    <Modal open={certModal} onClose={()=>setCertModal(false)} title={`Certify "${asset.name}"`}>
-      <p style={{fontSize:13,color:T.textSub,marginBottom:16}}>Certifying marks this asset as trusted and production-ready. This action is logged and visible to all users.</p>
+    <Modal open={certModal} onClose={()=>setCertModal(false)} title={`Set status — ${asset.name}`}>
+      <p style={{fontSize:13,color:T.textSub,marginBottom:16}}>Setting the status to Approved marks this asset as trusted and production-ready. This action is logged and visible to all users.</p>
       <div style={{display:"flex",flexDirection:"column",gap:12}}>
         {[
           {label:"Schema documented",done:true},
@@ -16779,7 +16779,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
         ))}
       </div>
       <div style={{marginTop:16}}>
-        <div style={{fontSize:12,color:T.textSub,marginBottom:6}}>Certification notes</div>
+        <div style={{fontSize:12,color:T.textSub,marginBottom:6}}>Status notes</div>
         <Input2 multiline rows={3} placeholder="Add notes for the certification record…" value={certNote} onChange={e=>setCertNote(e.target.value)}/>
       </div>
       <div style={{display:"flex",gap:8,marginTop:20,justifyContent:"flex-end"}}>
@@ -18287,7 +18287,7 @@ const DomainsView = ({onAsset, onNav}) => {
                       </div>
                       {/* CERTIFICATE */}
                       <div style={{padding:16,borderBottom:`1px solid ${T.border}`}}>
-                        <SbLabel onEdit={()=>{setPdSbModal("cert");setPdSbSearch("");}}>Certificate</SbLabel>
+                        <SbLabel onEdit={()=>{setPdSbModal("cert");setPdSbSearch("");}}>Status</SbLabel>
                         {(()=>{const CM={"Draft":{color:"#6b7280",bg:"rgba(107,114,128,.1)",border:"rgba(107,114,128,.25)",icon:"◐"},"In Review":{color:"#d97706",bg:"rgba(217,119,6,.12)",border:"rgba(217,119,6,.3)",icon:"⏳"},"Approved":{color:"#16a34a",bg:"rgba(22,163,74,.12)",border:"rgba(22,163,74,.3)",icon:"✓"},"Rejected":{color:"#e11d48",bg:"rgba(225,29,72,.12)",border:"rgba(225,29,72,.3)",icon:"✕"},"Deprecated":{color:"#7c3aed",bg:"rgba(124,58,237,.1)",border:"rgba(124,58,237,.25)",icon:"—"}};const cm=CM[pd.cert]||CM["Draft"];return <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px 4px 9px",borderRadius:5,background:cm.bg,borderTop:`1px solid ${cm.border}`,borderRight:`1px solid ${cm.border}`,borderBottom:`1px solid ${cm.border}`,borderLeft:`3px solid ${cm.color}`}}><span style={{fontSize:13}}>{cm.icon}</span><span style={{fontSize:12,color:cm.color,fontWeight:600}}>{pd.cert||"Draft"}</span></div>;})()}
                       </div>
                       {/* OWNERS */}
@@ -18344,7 +18344,7 @@ const DomainsView = ({onAsset, onNav}) => {
                           <div onClick={()=>setPdSbModal(null)} style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,.4)"}}/>
                           <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:501,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:300,display:"flex",flexDirection:"column",maxHeight:"80vh",overflow:"hidden"}}>
                             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-                              <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>{pdSbModal==="cert"?"Certificate":pdSbModal==="owners"?"Owners":pdSbModal==="experts"?"Stewards":pdSbModal==="glossary"?"Business Glossary":"Tags"}</span>
+                              <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>{pdSbModal==="cert"?"Status":pdSbModal==="owners"?"Owners":pdSbModal==="experts"?"Stewards":pdSbModal==="glossary"?"Business Glossary":"Tags"}</span>
                               <button onClick={()=>setPdSbModal(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg></button>
                             </div>
                             {(pdSbModal==="owners"||pdSbModal==="experts"||pdSbModal==="tags"||pdSbModal==="glossary")&&<div style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
@@ -20453,7 +20453,7 @@ const DataProductsView = ({onAsset, onNav}) => {
                       </div>
                       {/* CERTIFICATE */}
                       <div style={{padding:16,borderBottom:`1px solid ${T.border}`}}>
-                        <SbLabel onEdit={()=>{setDpSbModal("cert");setDpSbSearch("");}}>Certificate</SbLabel>
+                        <SbLabel onEdit={()=>{setDpSbModal("cert");setDpSbSearch("");}}>Status</SbLabel>
                         {(()=>{const CM={"Draft":{color:"#6b7280",bg:"rgba(107,114,128,.1)",border:"rgba(107,114,128,.25)",icon:"◐"},"In Review":{color:"#d97706",bg:"rgba(217,119,6,.12)",border:"rgba(217,119,6,.3)",icon:"⏳"},"Approved":{color:"#16a34a",bg:"rgba(22,163,74,.12)",border:"rgba(22,163,74,.3)",icon:"✓"},"Rejected":{color:"#e11d48",bg:"rgba(225,29,72,.12)",border:"rgba(225,29,72,.3)",icon:"✕"},"Deprecated":{color:"#7c3aed",bg:"rgba(124,58,237,.1)",border:"rgba(124,58,237,.25)",icon:"—"}};const cm=CM[pd.cert]||CM["Draft"];return <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px 4px 9px",borderRadius:5,background:cm.bg,borderTop:`1px solid ${cm.border}`,borderRight:`1px solid ${cm.border}`,borderBottom:`1px solid ${cm.border}`,borderLeft:`3px solid ${cm.color}`}}><span style={{fontSize:13}}>{cm.icon}</span><span style={{fontSize:12,color:cm.color,fontWeight:600}}>{pd.cert||"Draft"}</span></div>;})()}
                       </div>
                       {/* OWNERS */}
@@ -20510,7 +20510,7 @@ const DataProductsView = ({onAsset, onNav}) => {
                           <div onClick={()=>setDpSbModal(null)} style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,.4)"}}/>
                           <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:501,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:300,display:"flex",flexDirection:"column",maxHeight:"80vh",overflow:"hidden"}}>
                             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-                              <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>{dpSbModal==="cert"?"Certificate":dpSbModal==="owners"?"Owners":dpSbModal==="experts"?"Stewards":dpSbModal==="glossary"?"Business Glossary":"Tags"}</span>
+                              <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>{dpSbModal==="cert"?"Status":dpSbModal==="owners"?"Owners":dpSbModal==="experts"?"Stewards":dpSbModal==="glossary"?"Business Glossary":"Tags"}</span>
                               <button onClick={()=>setDpSbModal(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg></button>
                             </div>
                             {(dpSbModal==="owners"||dpSbModal==="experts"||dpSbModal==="tags"||dpSbModal==="glossary")&&<div style={{padding:"10px 12px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
@@ -26887,8 +26887,8 @@ const PersonasSection = ({onToast}) => {
   const [editPersona,    setEditPersona]    = useState(null);
   const [editingNavFor,  setEditingNavFor]  = useState(null);
   const NAV_ITEMS = ["home","search","catalog","lineage","quality","policymanager","access","certifications","stewardship","glossary","domains","observability","analytics","settings"];
-  const NAV_LABELS = {home:"Home",search:"Search",catalog:"Catalog",lineage:"Lineage",quality:"Data Quality",policymanager:"Policy Manager",access:"Access Gov.",certifications:"Certifications",stewardship:"Stewardship",glossary:"Glossary",domains:"Domains",observability:"Observability",analytics:"Analytics",settings:"Settings"};
-  const WIDGET_LABELS = {metrics:"Platform Metrics",tasks:"My Tasks",certQueue:"Cert. Queue",qualityAlerts:"Quality Alerts",recentAssets:"Recently Viewed",certifiedAssets:"Certified Assets",services:"Service Health",lineageSnippet:"Certifications",activity:"Activity Feed"};
+  const NAV_LABELS = {home:"Home",search:"Search",catalog:"Catalog",lineage:"Lineage",quality:"Data Quality",policymanager:"Policy Manager",access:"Access Gov.",certifications:"Status",stewardship:"Stewardship",glossary:"Glossary",domains:"Domains",observability:"Observability",analytics:"Analytics",settings:"Settings"};
+  const WIDGET_LABELS = {metrics:"Platform Metrics",tasks:"My Tasks",certQueue:"Cert. Queue",qualityAlerts:"Quality Alerts",recentAssets:"Recently Viewed",certifiedAssets:"Approved Assets",services:"Service Health",lineageSnippet:"Certifications",activity:"Activity Feed"};
 
   const toggleNav = (personaId, navKey) => {
     setPersonas(prev=>prev.map(p=>p.id===personaId?{...p,nav:{...p.nav,[navKey]:!p.nav[navKey]}}:p));
@@ -27131,7 +27131,8 @@ const itemCategory = (item) => TYPE_CATEGORY[item?.type] || "curation";
 // Role model — every work item is whose job: Steward DOES, Owner DECIDES, FYI = awareness.
 const ITEM_ROLE = {
   tag_review:"steward", dq_alert:"steward", policy_violation:"steward", term_review:"steward", contract_approval:"steward",
-  certification_review:"owner", stewardship_request:"owner", orphan_assignment:"owner", needs_attention:"owner", rbac_request:"owner",
+  certification_review:"steward",  // status-change requests are approved by the STEWARD
+  stewardship_request:"owner", orphan_assignment:"owner", needs_attention:"owner", rbac_request:"owner", delete_request:"owner",
   field_updated:"fyi", assigned:"fyi",
 };
 const ROLE_META = {
@@ -27144,9 +27145,10 @@ const itemRole = (item) => ITEM_ROLE[item?.type] || "steward";
 // No bespoke per-item text — only the subject value changes.
 const TYPE_ACTION = {
   dq_alert:"Resolve quality incident", policy_violation:"Remediate violation",
-  tag_review:"Review tag", certification_review:"Certify asset",
+  tag_review:"Review tag", certification_review:"Review status change",
   orphan_assignment:"Assign owner", needs_attention:"Assign steward",
   stewardship_request:"Review role request", term_review:"Approve term", rbac_request:"Review platform role",
+  delete_request:"Approve deletion",
   field_updated:"Field updated", assigned:"Assigned to you",
 };
 const itemTitle = (item) => { if(!item) return ""; const act=TYPE_ACTION[item.type]; const subj=item.asset&&item.asset.name; return (act&&subj)?`${act} · ${subj}`:(item.title||""); };
@@ -27275,7 +27277,7 @@ const InboxView = ({onToast}) => {
     rbac_request:        {icon:sz=>Ic.access(sz||12),   label:"Platform Role",  shortLabel:"Role"},
     policy_violation:    {icon:sz=>Ic.policies(sz||12), label:"Policy Violation",shortLabel:"Violation"},
     tag_review:          {icon:sz=>Ic.tag(sz||12),     label:"Tag Review",     shortLabel:"Tag"},
-    certification_review:{icon:sz=>Ic.cert(sz||12),    label:"Certification",  shortLabel:"Cert"},
+    certification_review:{icon:sz=>Ic.cert(sz||12),    label:"Status change",  shortLabel:"Status"},
     orphan_assignment:   {icon:sz=>Ic.steward(sz||12), label:"Orphan — Assign Owner", shortLabel:"Orphan"},
     term_review:         {icon:sz=>Ic.glossary(sz||12),label:"Term Review",     shortLabel:"Term"},
     contract_approval:   {icon:sz=>Ic.contracts(sz||12),label:"Contract Approval",shortLabel:"Contract"},
@@ -27305,7 +27307,7 @@ const InboxView = ({onToast}) => {
     if(item.type==="term_review")
       return <>{btn("Approve",()=>{setTermStatus(item.termId,"Approved");ack(item.id,`${item.asset.name} approved & published`);},true)}{btn("Reject",()=>{setTermStatus(item.termId,"Draft");ack(item.id,"Term sent back to draft");},false,true)}{openIn("Open in Glossary","glossary")}</>;
     if(item.type==="certification_review")
-      return <>{btn("Certify",()=>{certifyByAsset(item.asset.name);certifyAsset(item.asset.name);ack(item.id,`${item.asset.name} certified`);},true)}{btn("Reject",()=>{certSet(prev=>prev.map(c=>c.asset===item.asset.name?{...c,status:"Rejected",certifier:null,date:null}:c));ack(item.id,"Certification rejected");},false,true)}{openIn("Open in Catalog","catalog")}</>;
+      return <>{btn("Approve",()=>{certifyByAsset(item.asset.name);certifyAsset(item.asset.name);ack(item.id,`${item.asset.name} status → Approved`);},true)}{btn("Reject",()=>{certSet(prev=>prev.map(c=>c.asset===item.asset.name?{...c,status:"Rejected",certifier:null,date:null}:c));ack(item.id,"Status change rejected");},false,true)}{openIn("Open in Catalog","catalog")}</>;
     if(item.type==="stewardship_request")
       return <>{btn("Approve",()=>{const role=item.requestedRole==="Owner"?"owner":"steward";assignOwnership(item.asset.name,item.requestedBy,role);if(item.reqId)resolveRoleRequest(item.reqId,"approved");ack(item.id,`${item.requestedBy} added as ${item.requestedRole} of ${item.asset.name} — requester notified`);},true)}{btn("Reject",()=>{if(item.reqId)resolveRoleRequest(item.reqId,"rejected");ack(item.id,"Request rejected — requester notified");},false,true)}{openIn("Open in Catalog","catalog")}</>;
     if(item.type==="rbac_request")
