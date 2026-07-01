@@ -233,20 +233,20 @@ const ASSET_COLUMNS = {
 // TAG MANAGEMENT MOCK DATA
 // ─────────────────────────────────────────────
 const INITIAL_TAG_DEFS = [
-  { id:'t1',  name:'PII',               category:'sensitivity', color:'#ee2424', propagationMode:'both',      propagationLocked:true,  governanceRequired:true,  managedBy:'Priya K.', usageCount:48, description:'Personally identifiable information. Name, email, phone, address, SSN, DOB.',                            sourceAliases:['pii_column','contains_pii','PIIData','pii_flag','is_pii'],          createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin'    },
-  { id:'t2',  name:'PHI',               category:'sensitivity', color:'#ee2424', propagationMode:'both',      propagationLocked:true,  governanceRequired:true,  managedBy:'Priya K.', usageCount:12, description:'Protected health information under HIPAA. Medical records, diagnoses, treatments.',                     sourceAliases:['phi_flag','health_data','phi_column','protected_health'],            createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin'    },
-  { id:'t3',  name:'PCI-DSS',           category:'sensitivity', color:'#ee2424', propagationMode:'both',      propagationLocked:true,  governanceRequired:true,  managedBy:'Priya K.', usageCount:7,  description:'Payment card data. Card numbers, CVV, expiry, cardholder name.',                                        sourceAliases:['pci_scope','pci_data','card_data'],                                  createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin'    },
-  { id:'t4',  name:'GDPR',              category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Priya K.', usageCount:31, description:'EU GDPR. Personal data of EU residents regardless of processing location.',                             sourceAliases:['gdpr_applicable','gdpr_scope','gdpr_flag','is_gdpr'],                createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin'    },
-  { id:'t5',  name:'HIPAA',             category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Rahul M.', usageCount:9,  description:'US health data privacy. Any PHI used in US healthcare operations.',                                     sourceAliases:['hipaa_flag','hipaa_applicable','hipaa_scope'],                       createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin'    },
-  { id:'t6',  name:'CCPA',              category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Rahul M.', usageCount:6,  description:'California Consumer Privacy Act. Personal data of California residents.',                               sourceAliases:['ccpa_scope','ccpa_flag'],                                            createdAt:'2026-02-01T00:00:00Z', createdBy:'Admin'    },
-  { id:'t7',  name:'DPDP',              category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Rahul M.', usageCount:4,  description:'India Digital Personal Data Protection Act 2023.',                                                     sourceAliases:['dpdp_scope'],                                                        createdAt:'2026-03-01T00:00:00Z', createdBy:'Admin'    },
-  { id:'t8',  name:'Finance domain',    category:'business',    color:'#fbbf24', propagationMode:'hierarchy', propagationLocked:false, governanceRequired:false, managedBy:'Rahul M.', usageCount:22, description:'Owned by the Finance domain. Revenue, costs, GL, AR/AP data.',                                         sourceAliases:[],                                                                    createdAt:'2026-02-01T00:00:00Z', createdBy:'Rahul M.' },
-  { id:'t9',  name:'Board reporting',   category:'business',    color:'#fbbf24', propagationMode:'hierarchy', propagationLocked:false, governanceRequired:false, managedBy:'Rahul M.', usageCount:11, description:'Feeds board-level reports and investor materials.',                                                     sourceAliases:[],                                                                    createdAt:'2026-02-15T00:00:00Z', createdBy:'Rahul M.' },
-  { id:'t10', name:'Clinical trial data',category:'business',   color:'#fbbf24', propagationMode:'hierarchy', propagationLocked:false, governanceRequired:true,  managedBy:'Priya K.', usageCount:8,  description:'FDA-regulated clinical trial data. Subject to 21 CFR Part 11.',                                        sourceAliases:['trial_data','clinical_data'],                                        createdAt:'2026-02-20T00:00:00Z', createdBy:'Priya K.' },
-  { id:'t11', name:'Golden record',     category:'business',    color:'#fbbf24', propagationMode:'none',      propagationLocked:false, governanceRequired:false, managedBy:'Rahul M.', usageCount:5,  description:'Master/trusted canonical version of this entity.',                                                     sourceAliases:[],                                                                    createdAt:'2026-03-01T00:00:00Z', createdBy:'Rahul M.' },
-  { id:'t12', name:'crm-source',        category:'custom',      color:'#a1a1aa', propagationMode:'none',      propagationLocked:false, governanceRequired:false, managedBy:null,        usageCount:9,  description:'Data originating from the CRM system.',                                                                sourceAliases:[],                                                                    createdAt:'2026-03-10T00:00:00Z', createdBy:'Maya C.'  },
-  { id:'t13', name:'needs-review',      category:'custom',      color:'#a1a1aa', propagationMode:'none',      propagationLocked:false, governanceRequired:false, managedBy:null,        usageCount:4,  description:'Flagged for steward review. Temporary label.',                                                         sourceAliases:[],                                                                    createdAt:'2026-04-01T00:00:00Z', createdBy:'Analyst'  },
-  { id:'t14', name:'deprecated',        category:'custom',      color:'#a1a1aa', propagationMode:'none',      propagationLocked:false, governanceRequired:false, managedBy:null,        usageCount:7,  description:'Asset or field is deprecated and scheduled for removal.',                                              sourceAliases:[],                                                                    createdAt:'2026-03-15T00:00:00Z', createdBy:'Data Eng' },
+  { id:'t1',  cert:'Approved', name:'PII',               category:'sensitivity', color:'#ee2424', propagationMode:'both',      propagationLocked:true,  governanceRequired:true,  managedBy:'Priya K.', usageCount:48, description:'Personally identifiable information. Name, email, phone, address, SSN, DOB.',                            sourceAliases:['pii_column','contains_pii','PIIData','pii_flag','is_pii'],          createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin'    },
+  { id:'t2',  cert:'Approved', name:'PHI',               category:'sensitivity', color:'#ee2424', propagationMode:'both',      propagationLocked:true,  governanceRequired:true,  managedBy:'Priya K.', usageCount:12, description:'Protected health information under HIPAA. Medical records, diagnoses, treatments.',                     sourceAliases:['phi_flag','health_data','phi_column','protected_health'],            createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin'    },
+  { id:'t3',  cert:'Approved', name:'PCI-DSS',           category:'sensitivity', color:'#ee2424', propagationMode:'both',      propagationLocked:true,  governanceRequired:true,  managedBy:'Priya K.', usageCount:7, description:'Payment card data. Card numbers, CVV, expiry, cardholder name.',                                        sourceAliases:['pci_scope','pci_data','card_data'],                                  createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin'    },
+  { id:'t4',  cert:'Approved', name:'GDPR',              category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Priya K.', usageCount:31, description:'EU GDPR. Personal data of EU residents regardless of processing location.',                             sourceAliases:['gdpr_applicable','gdpr_scope','gdpr_flag','is_gdpr'],                createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin'    },
+  { id:'t5',  cert:'Approved', name:'HIPAA',             category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Rahul M.', usageCount:9, description:'US health data privacy. Any PHI used in US healthcare operations.',                                     sourceAliases:['hipaa_flag','hipaa_applicable','hipaa_scope'],                       createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin'    },
+  { id:'t6',  cert:'Approved', name:'CCPA',              category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Rahul M.', usageCount:6, description:'California Consumer Privacy Act. Personal data of California residents.',                               sourceAliases:['ccpa_scope','ccpa_flag'],                                            createdAt:'2026-02-01T00:00:00Z', createdBy:'Admin'    },
+  { id:'t7',  cert:'Approved', name:'DPDP',              category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Rahul M.', usageCount:4, description:'India Digital Personal Data Protection Act 2023.',                                                     sourceAliases:['dpdp_scope'],                                                        createdAt:'2026-03-01T00:00:00Z', createdBy:'Admin'    },
+  { id:'t8',  cert:'Approved', name:'Finance domain',    category:'business',    color:'#fbbf24', propagationMode:'hierarchy', propagationLocked:false, governanceRequired:false, managedBy:'Rahul M.', usageCount:22, description:'Owned by the Finance domain. Revenue, costs, GL, AR/AP data.',                                         sourceAliases:[],                                                                    createdAt:'2026-02-01T00:00:00Z', createdBy:'Rahul M.' },
+  { id:'t9',  cert:'Approved', name:'Board reporting',   category:'business',    color:'#fbbf24', propagationMode:'hierarchy', propagationLocked:false, governanceRequired:false, managedBy:'Rahul M.', usageCount:11, description:'Feeds board-level reports and investor materials.',                                                     sourceAliases:[],                                                                    createdAt:'2026-02-15T00:00:00Z', createdBy:'Rahul M.' },
+  { id:'t10', cert:'Approved', name:'Clinical trial data',category:'business',   color:'#fbbf24', propagationMode:'hierarchy', propagationLocked:false, governanceRequired:true,  managedBy:'Priya K.', usageCount:8, description:'FDA-regulated clinical trial data. Subject to 21 CFR Part 11.',                                        sourceAliases:['trial_data','clinical_data'],                                        createdAt:'2026-02-20T00:00:00Z', createdBy:'Priya K.' },
+  { id:'t11', cert:'Approved', name:'Golden record',     category:'business',    color:'#fbbf24', propagationMode:'none',      propagationLocked:false, governanceRequired:false, managedBy:'Rahul M.', usageCount:5, description:'Master/trusted canonical version of this entity.',                                                     sourceAliases:[],                                                                    createdAt:'2026-03-01T00:00:00Z', createdBy:'Rahul M.' },
+  { id:'t12', cert:'Approved', name:'crm-source',        category:'custom',      color:'#a1a1aa', propagationMode:'none',      propagationLocked:false, governanceRequired:false, managedBy:null,        usageCount:9, description:'Data originating from the CRM system.',                                                                sourceAliases:[],                                                                    createdAt:'2026-03-10T00:00:00Z', createdBy:'Maya C.'  },
+  { id:'t13', cert:'In Review', name:'needs-review',      category:'custom',      color:'#a1a1aa', propagationMode:'none',      propagationLocked:false, governanceRequired:false, managedBy:null,        usageCount:4, description:'Flagged for steward review. Temporary label.',                                                         sourceAliases:[],                                                                    createdAt:'2026-04-01T00:00:00Z', createdBy:'Analyst'  },
+  { id:'t14', cert:'Deprecated', name:'deprecated',        category:'custom',      color:'#a1a1aa', propagationMode:'none',      propagationLocked:false, governanceRequired:false, managedBy:null,        usageCount:7, description:'Asset or field is deprecated and scheduled for removal.',                                              sourceAliases:[],                                                                    createdAt:'2026-03-15T00:00:00Z', createdBy:'Data Eng' },
 ];
 
 // Use a function so INITIAL_ASSIGNMENTS is computed after ASSETS is defined
@@ -440,7 +440,7 @@ function TagProvider({ children }) {
   };
 
   const createTagDef = (def) => {
-    setTagDefs(prev=>[...prev,{...def,id:'t'+Date.now(),usageCount:0,sourceAliases:def.sourceAliases||[],createdAt:new Date().toISOString(),createdBy:'Current User'}]);
+    setTagDefs(prev=>[...prev,{cert:'Draft',...def,id:'t'+Date.now(),usageCount:0,sourceAliases:def.sourceAliases||[],createdAt:new Date().toISOString(),createdBy:'Current User'}]);
   };
 
   const updateTagDef = (id, patch) => setTagDefs(prev=>prev.map(t=>t.id===id?{...t,...patch}:t));
@@ -17459,32 +17459,32 @@ const DOMAIN_LIST_DATA = [
   {id:"d1",name:"Commerce",displayName:"Commerce",icon:"🛒",color:"#0ea5e9",
    domainType:"Source-aligned",
    description:"Core transactional and order management data. Owns the order lifecycle from cart to fulfillment, customer records, and product catalog. All commerce revenue metrics originate here.",
-   owners:["maya.chen"],experts:["dev.patel","sarah.kim"],tags:["revenue","PII"],
+   owners:["maya.chen"],experts:["dev.patel","sarah.kim"],tags:["revenue","PII"],cert:"Approved",
    quality:94,assetCount:342,createdAt:"Jan 10, 2024",updatedAt:"May 22, 2026"},
   {id:"d2",name:"Finance",displayName:"Finance",icon:"💰",color:"#f59e0b",
    domainType:"Consumer-aligned",
    description:"Revenue, P&L, and financial reporting data. Serves finance, accounting, and FP&A stakeholders with GAAP-compliant metrics. All board-level reporting flows through this domain.",
-   owners:["sarah.kim"],experts:["alex.wu"],tags:["revenue","GDPR"],
+   owners:["sarah.kim"],experts:["alex.wu"],tags:["revenue","GDPR"],cert:"Approved",
    quality:91,assetCount:156,createdAt:"Jan 14, 2024",updatedAt:"May 18, 2026"},
   {id:"d3",name:"Product",displayName:"Product",icon:"📱",color:"#3b82f6",
    domainType:"Consumer-aligned",
    description:"User behavior, events, and product analytics. Tracks feature adoption, retention, funnel drop-off, and engagement for product decision-making.",
-   owners:["alex.wu"],experts:["priya.nair"],tags:["behavioral"],
+   owners:["alex.wu"],experts:["priya.nair"],tags:["behavioral"],cert:"In Review",
    quality:72,assetCount:289,createdAt:"Feb 3, 2024",updatedAt:"May 20, 2026"},
   {id:"d4",name:"ML",displayName:"Machine Learning",icon:"🤖",color:"#8b5cf6",
    domainType:"Aggregate",
    description:"Model artifacts, feature store, and experiment tracking. Provides curated feature sets and model performance metrics across the organization. Aggregates from Commerce, Product, and Finance.",
-   owners:["priya.nair"],experts:["dev.patel"],tags:["ML"],
+   owners:["priya.nair"],experts:["dev.patel"],tags:["ML"],cert:"Approved",
    quality:88,assetCount:94,createdAt:"Feb 20, 2024",updatedAt:"May 15, 2026"},
   {id:"d5",name:"Marketing",displayName:"Marketing",icon:"📣",color:"#f43f5e",
    domainType:"Consumer-aligned",
    description:"Attribution, campaign performance, and acquisition analytics. Measures CAC, ROAS, and channel effectiveness for paid and organic channels.",
-   owners:["lisa.ray"],experts:["maya.chen"],tags:["marketing","PII"],
+   owners:["lisa.ray"],experts:["maya.chen"],tags:["marketing","PII"],cert:"Approved",
    quality:79,assetCount:67,createdAt:"Mar 1, 2024",updatedAt:"May 10, 2026"},
   {id:"d6",name:"Engineering",displayName:"Engineering",icon:"⚙️",color:"#10b981",
    domainType:"Source-aligned",
    description:"Platform infrastructure metrics, service observability, and pipeline health data. Supports SRE and data engineering teams with system telemetry and operational KPIs.",
-   owners:["dev.patel"],experts:["alex.wu"],tags:["operational"],
+   owners:["dev.patel"],experts:["alex.wu"],tags:["operational"],cert:"Approved",
    quality:85,assetCount:121,createdAt:"Mar 15, 2024",updatedAt:"May 25, 2026"},
 ];
 
@@ -17982,6 +17982,7 @@ const DomainsView = ({onAsset, onNav}) => {
   const [nsOwnerSearch, setNsOwnerSearch] = useState("");
   const [nsStewOpen,    setNsStewOpen]    = useState(false);
   const [nsStewSearch,  setNsStewSearch]  = useState("");
+  const [dmStatusOpen, setDmStatusOpen] = useState(false);
   const [dmOwnerOpen, setDmOwnerOpen] = useState(false);
   const [dmOwnerSearch, setDmOwnerSearch] = useState("");
   const [dmStewOpen, setDmStewOpen] = useState(false);
@@ -18090,7 +18091,7 @@ const DomainsView = ({onAsset, onNav}) => {
 
   const handleCreateDomain = () => {
     if(!nd.name.trim()) return;
-    const d = {id:`d${Date.now()}`,name:nd.name.trim(),displayName:nd.displayName.trim()||nd.name.trim(),icon:nd.icon,color:nd.color,domainType:nd.domainType,description:nd.description.trim()||"No description provided.",owners:ndOwners,experts:ndExperts,tags:ndTags,glossaryTerms:ndGlossary,quality:0,assetCount:0,extraAssetIds:[]};
+    const d = {id:`d${Date.now()}`,name:nd.name.trim(),displayName:nd.displayName.trim()||nd.name.trim(),icon:nd.icon,color:nd.color,domainType:nd.domainType,description:nd.description.trim()||"No description provided.",owners:ndOwners,experts:ndExperts,tags:ndTags,glossaryTerms:ndGlossary,cert:"Draft",quality:0,assetCount:0,extraAssetIds:[]};
     setDomains(prev=>[...prev,d]);
     setCreateDomainOpen(false);
     setNd({name:"",displayName:"",description:"",domainType:"Source-aligned",icon:"🗂️",color:"#0ea5e9"});
@@ -18776,6 +18777,14 @@ const DomainsView = ({onAsset, onNav}) => {
                   </div>
                   {/* Owners / Stewards / Tags / Glossary card */}
                   <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                    {/* Status */}
+                    <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Status</div>
+                        <button onClick={()=>setDmStatusOpen(true)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+                      </div>
+                      <CertBadge cert={dm.cert}/>
+                    </div>
                     {/* Owners */}
                     <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
@@ -18837,6 +18846,8 @@ const DomainsView = ({onAsset, onNav}) => {
                       </div>
                     </div>
                   </div>
+                  {/* Domain Status Modal */}
+                  {dmStatusOpen&&<><div onClick={()=>setDmStatusOpen(false)} style={{position:"fixed",inset:0,zIndex:499,background:"rgba(0,0,0,.35)"}}/><div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:300,display:"flex",flexDirection:"column",maxHeight:"70vh",overflow:"hidden"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}><span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Set Status</span><button onClick={()=>setDmStatusOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg></button></div><div style={{flex:1,overflowY:"auto",padding:"6px 0"}}>{Object.keys(STATUS_META).map(s=>{const sel=dm.cert===s;const sm=STATUS_META[s];return(<button key={s} onClick={()=>{patchDomain(dm.id,{cert:s});setDmStatusOpen(false);}} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 14px",background:sel?T.bgElevated:"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{width:26,height:26,borderRadius:4,background:sm.bg,border:`1px solid ${sm.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:sm.color,flexShrink:0}}>{sm.icon}</div><span style={{flex:1,fontSize:13,color:T.text}}>{s}</span>{sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={sm.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})}</div></div></>}
                   {/* Domain Owner Modal */}
                   {dmOwnerOpen&&<><div onClick={()=>setDmOwnerOpen(false)} style={{position:"fixed",inset:0,zIndex:499,background:"rgba(0,0,0,.35)"}}/><div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:300,display:"flex",flexDirection:"column",maxHeight:"70vh",overflow:"hidden"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}><span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Owners</span><button onClick={()=>setDmOwnerOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg></button></div><div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}><input autoFocus placeholder="Search users…" value={dmOwnerSearch} onChange={e=>setDmOwnerSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/></div><div style={{flex:1,overflowY:"auto"}}>{ALL_USERS.filter(u=>!dmOwnerSearch||u.toLowerCase().includes(dmOwnerSearch.toLowerCase())).map(u=>{const sel=(dm.owners||[]).includes(u);return(<button key={u} onMouseDown={e=>{e.stopPropagation();patchDomain(dm.id,{owners:sel?(dm.owners||[]).filter(x=>x!==u):[...(dm.owners||[]),u]});}} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"9px 12px",background:sel?"rgba(99,102,241,.06)":"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{width:26,height:26,borderRadius:3,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(u)}</div><span style={{flex:1,fontSize:12.5,color:T.text}}>{u}</span>{sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={T.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})}</div><div style={{padding:"8px 10px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",flexShrink:0}}><button onMouseDown={()=>setDmOwnerOpen(false)} style={{padding:"5px 14px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Done</button></div></div></>}
                   {/* Domain Steward Modal */}
@@ -29895,7 +29906,7 @@ const TagManagementView = ({onToast}) => {
   // ── Tag owner/steward state ──
   const [tagOwners,       setTagOwners]       = useState([]);
   const [tagStewards,     setTagStewards]     = useState([]);
-  const [tagEditModal,    setTagEditModal]    = useState(null); // 'owners'|'stewards'|'domain'
+  const [tagEditModal,    setTagEditModal]    = useState(null); // 'owners'|'stewards'|'domain'|'status'
   const [tagModalSearch,  setTagModalSearch]  = useState('');
   const [showAllTagOwners,   setShowAllTagOwners]   = useState(false);
   const [showAllTagStewards, setShowAllTagStewards] = useState(false);
@@ -30491,6 +30502,12 @@ const TagManagementView = ({onToast}) => {
                         }
                       </div>
 
+                      {/* STATUS */}
+                      <div style={{padding:'16px',borderBottom:`1px solid ${T.border}`}}>
+                        <SideLabel ch="Status" onEdit={()=>{setTagEditModal('status');setTagModalSearch('');}}/>
+                        <CertBadge cert={selTag.cert}/>
+                      </div>
+
                       {/* OWNERS */}
                       <div style={{padding:'16px',borderBottom:`1px solid ${T.border}`}}>
                         <SideLabel ch="Owners" onEdit={()=>{setTagEditModal('owners');setTagModalSearch('');}}/>
@@ -30696,20 +30713,37 @@ const TagManagementView = ({onToast}) => {
             );
           })()}
 
-          {/* ── Tag edit modal (owners / stewards) ── */}
+          {/* ── Tag edit modal (owners / stewards / domain / status) ── */}
           {tagEditModal&&(
             <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1200,backdropFilter:'blur(3px)'}} onClick={()=>setTagEditModal(null)}>
               <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,width:360,maxHeight:'80vh',overflow:'auto',boxShadow:'0 24px 60px rgba(0,0,0,.35)'}} onClick={e=>e.stopPropagation()}>
                 <div style={{padding:'14px 18px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                  <div style={{fontSize:13,fontWeight:700,color:T.text}}>Edit {tagEditModal==='owners'?'Owner':tagEditModal==='stewards'?'Steward':'Domain'}</div>
+                  <div style={{fontSize:13,fontWeight:700,color:T.text}}>{tagEditModal==='status'?'Set Status':`Edit ${tagEditModal==='owners'?'Owner':tagEditModal==='stewards'?'Steward':'Domain'}`}</div>
                   <button onClick={()=>setTagEditModal(null)} style={{background:T.bgHover,border:`1px solid ${T.border}`,borderRadius:6,color:T.textMuted,cursor:'pointer',padding:'3px 6px',display:'flex'}}>{Ic.x(10)}</button>
                 </div>
-                <div style={{padding:'10px 14px',borderBottom:`1px solid ${T.border}`}}>
+                {tagEditModal!=='status'&&<div style={{padding:'10px 14px',borderBottom:`1px solid ${T.border}`}}>
                   <input autoFocus placeholder={`Search ${tagEditModal==='owners'?'users':tagEditModal==='stewards'?'users':'domains'}…`} value={tagModalSearch} onChange={e=>setTagModalSearch(e.target.value)}
                     style={{width:'100%',padding:'7px 11px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:'none',boxSizing:'border-box'}}
                     onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                </div>
+                </div>}
                 <div style={{padding:'6px 0'}}>
+                  {tagEditModal==='status'&&Object.keys(STATUS_META).map(s=>{
+                    const sel=selTag?.cert===s;
+                    const sm=STATUS_META[s];
+                    return (
+                      <button key={s} onClick={()=>{
+                        updateTagDef(selTag.id,{...selTag,cert:s});
+                        onToast(`Status set to ${s}`,'success');
+                        setTagEditModal(null);
+                      }}
+                        style={{width:'100%',display:'flex',alignItems:'center',gap:10,padding:'9px 14px',background:sel?T.bgElevated:'transparent',border:'none',cursor:'pointer',transition:'background .1s'}}
+                        onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background='transparent';}}>
+                        <div style={{width:26,height:26,borderRadius:4,background:sm.bg,border:`1px solid ${sm.border}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,color:sm.color,flexShrink:0}}>{sm.icon}</div>
+                        <span style={{flex:1,fontSize:13,color:T.text}}>{s}</span>
+                        {sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={sm.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      </button>
+                    );
+                  })}
                   {(tagEditModal==='owners'||tagEditModal==='stewards')&&(()=>{
                     const isSt = tagEditModal==='stewards';
                     const list = isSt ? tagStewards : tagOwners;
