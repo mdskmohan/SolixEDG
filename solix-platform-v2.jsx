@@ -849,7 +849,7 @@ const STEWARDSHIP_TASKS = [
   {id:7, type:"certification_review", label:"Re-certify: revenue_dashboard",
    asset:"revenue_dashboard", assetType:"Dashboard", domain:"Finance",
    priority:"Low", dueDate:"2026-04-22", assigned:"maya.chen", status:"Open",
-   description:"Certification expires in 13 days. Review quality score (87) and lineage before renewal.",
+   description:"Status review due in 13 days. Review quality score (87) and lineage before renewal.",
    termId:null, relatedTermId:null,
    actions:["certify","defer"],
    createdAt:"2026-04-05",sla:"2w"},
@@ -5820,7 +5820,7 @@ const CERT_REVIEW_INBOX = CERTIFICATIONS
     severity:"medium",
     section:"catalog",
     timeAgo:"",
-    title:`Certification review: ${c.asset}`,
+    title:`Status review: ${c.asset}`,
     asset:{name:c.asset, path:c.asset, type:c.type},
     body:c.notes||"Awaiting steward certification review.", score:c.score,
     readAt:null,
@@ -10224,7 +10224,7 @@ const CertificationsView = ({onToast}) => {
             {key:"asset",     label:"Asset",     render:v=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:12.5,fontWeight:600,color:T.text}}>{v}</span>},
             {key:"type",      label:"Type",      render:v=><TypeBadge type={v}/>},
             {key:"status",    label:"Status",    render:v=><CertBadge cert={v}/>},
-            {key:"certifier", label:"Certifier", render:v=>v?<span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{v}</span>:<span style={{fontSize:11,color:T.textMuted}}>Pending</span>},
+            {key:"certifier", label:"Reviewer", render:v=>v?<span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{v}</span>:<span style={{fontSize:11,color:T.textMuted}}>Pending</span>},
             {key:"score",     label:"Quality",   render:v=><QScore score={v}/>},
             {key:"date",      label:"Approved",  render:v=>v?<span style={{fontSize:11,color:T.textMuted}}>{v}</span>:<span style={{fontSize:11,color:T.amber}}>Not yet</span>},
             {key:"notes",     label:"Notes",     render:v=><span style={{fontSize:11,color:T.textMuted,maxWidth:200,display:"block",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v}</span>},
@@ -10237,7 +10237,7 @@ const CertificationsView = ({onToast}) => {
               <button onClick={()=>setSelected(null)} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer"}}>{Ic.x(13)}</button>
             </div>
             <div style={{marginBottom:14}}><TypeBadge type={selected.type}/>&nbsp;<CertBadge cert={selected.status}/></div>
-            {[{l:"Score",v:null},{l:"Certifier",v:selected.certifier||"—"},{l:"Date",v:selected.date||"—"},{l:"Expires",v:selected.expires||"—"}].map(({l,v})=>(
+            {[{l:"Score",v:null},{l:"Reviewer",v:selected.certifier||"—"},{l:"Date",v:selected.date||"—"},{l:"Expires",v:selected.expires||"—"}].map(({l,v})=>(
               <div key={l} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:10,alignItems:"center"}}>
                 <span style={{color:T.textMuted}}>{l}</span>
                 <span>{l==="Score"?<QScore score={selected.score}/>:<span style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{v}</span>}</span>
@@ -10864,7 +10864,7 @@ const AssetOverview = ({asset,data,setData,onToast})=>{
         <SH title="Activity"/>
         <div style={{position:"relative",paddingLeft:18}}>
           {[
-            {ts:"2026-05-20",who:"maya.chen",  action:`Certification status → Approved`,                                                           color:T.green},
+            {ts:"2026-05-20",who:"maya.chen",  action:`Status → Approved`,                                                           color:T.green},
             {ts:"2026-05-17",who:"dev.patel",  action:`Tag 'PII' added to ${asset.name}`,                                                          color:T.accent},
             {ts:"2026-05-15",who:"ai-bot",     action:`Ingestion run — schema updated (2 new cols)`,                                               color:T.amber},
             {ts:"2026-05-10",who:(asset.owners||[])[0]||"maya.chen",  action:`Description updated for ${asset.name}`,                             color:T.textMuted},
@@ -14552,7 +14552,7 @@ const AUDIT_CAT_META={
 };
 
 const ASSET_AUDIT_ENTRIES=[
-  {id:"aa1", timestamp:"May 21, 2026 · 14:32", category:"CERT",   action:"Certified as Approved",           details:"Certification status changed from In Review → Approved",       actor:"maya.chen",  isSystem:false, note:"Annual data quality review completed. All threshold checks passed."},
+  {id:"aa1", timestamp:"May 21, 2026 · 14:32", category:"CERT",   action:"Status set to Approved",           details:"Status changed from In Review → Approved",       actor:"maya.chen",  isSystem:false, note:"Annual data quality review completed. All threshold checks passed."},
   {id:"aa2", timestamp:"May 20, 2026 · 09:14", category:"SCHEMA", action:"Schema drift detected",            details:"Column 'amount' type changed: float → decimal(18,4)",          actor:"system",     isSystem:true,  diff:{before:"float",after:"decimal(18,4)"}},
   {id:"aa3", timestamp:"May 18, 2026 · 16:47", category:"TAG",    action:"PII tag added",                    details:"Tag 'PII' added to column 'email'",                           actor:"dev.patel",  isSystem:false},
   {id:"aa4", timestamp:"May 17, 2026 · 11:30", category:"EDIT",   action:"Quality rule updated",             details:"Freshness threshold updated",                                 actor:"james.oh",   isSystem:false, diff:{before:"Freshness threshold: 24 hours",after:"Freshness threshold: 12 hours"}},
@@ -14561,14 +14561,14 @@ const ASSET_AUDIT_ENTRIES=[
   {id:"aa7", timestamp:"May 07, 2026 · 10:22", category:"LINEAGE","action":"Data contract linked",           details:"Contract 'orders-v2' linked to this asset",                   actor:"james.oh",   isSystem:false},
   {id:"aa8", timestamp:"Apr 30, 2026 · 08:55", category:"EDIT",   action:"Description updated",              details:"Asset description was edited",                                actor:"dev.patel",  isSystem:false, diff:{before:"Order transactions table.",after:"Fact table tracking all commerce orders. Source of truth for revenue, retention and growth reporting."}},
   {id:"aa9", timestamp:"Apr 28, 2026 · 15:41", category:"SYSTEM", action:"Ingestion run completed",          details:"Schema refreshed — 2 new columns detected",                   actor:"system",     isSystem:true},
-  {id:"aa10",timestamp:"Apr 25, 2026 · 09:10", category:"CERT",   action:"Submitted for Review",             details:"Certification request submitted for Q2 cycle",                actor:"dev.patel",  isSystem:false, note:"Ready for Q2 certification cycle. Owner has reviewed all columns."},
+  {id:"aa10",timestamp:"Apr 25, 2026 · 09:10", category:"CERT",   action:"Submitted for Review",             details:"Status change request submitted for Q2 cycle",              actor:"dev.patel",  isSystem:false, note:"Ready for Q2 status review cycle. Owner has reviewed all columns."},
   {id:"aa11",timestamp:"Apr 22, 2026 · 14:00", category:"SCHEMA", action:"Column added",                     details:"Column 'discount_pct' (decimal) added to schema",             actor:"system",     isSystem:true},
   {id:"aa12",timestamp:"Apr 18, 2026 · 11:15", category:"ACCESS", action:"Access revoked",                   details:"Role 'finance_analyst' read access removed",                  actor:"maya.chen",  isSystem:false},
   {id:"aa13",timestamp:"Apr 15, 2026 · 07:30", category:"SYSTEM", action:"Quality scan completed",           details:"Overall quality score: 92 (no change from previous scan)",   actor:"system",     isSystem:true},
   {id:"aa14",timestamp:"Apr 10, 2026 · 16:00", category:"TAG",    action:"Tag updated",                      details:"Tag 'finance' replaced with 'KPI'",                           actor:"james.oh",   isSystem:false, diff:{before:"Tags: PII, finance",after:"Tags: PII, KPI"}},
   {id:"aa15",timestamp:"Apr 05, 2026 · 10:44", category:"EDIT",   action:"Owner updated",                    details:"Asset owner changed",                                         actor:"maya.chen",  isSystem:false, diff:{before:"Owner: john.doe",after:"Owner: maya.chen"}},
   {id:"aa16",timestamp:"Mar 28, 2026 · 09:00", category:"LINEAGE","action":"Upstream asset linked",          details:"Upstream link to 'postgresql_prod' established",              actor:"system",     isSystem:true},
-  {id:"aa17",timestamp:"Mar 20, 2026 · 14:22", category:"CERT",   action:"Returned to Draft",                details:"Certification reverted — quality score dropped below threshold",actor:"maya.chen", isSystem:false, note:"Quality score fell to 78. Requires remediation before recertification."},
+  {id:"aa17",timestamp:"Mar 20, 2026 · 14:22", category:"CERT",   action:"Returned to Draft",                details:"Status reverted — quality score dropped below threshold",actor:"maya.chen", isSystem:false, note:"Quality score fell to 78. Requires remediation before re-approval."},
   {id:"aa18",timestamp:"Mar 15, 2026 · 08:00", category:"SYSTEM", action:"First ingestion completed",        details:"Asset first ingested from Snowflake COMMERCE schema",          actor:"system",     isSystem:true},
 ];
 
@@ -15139,7 +15139,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
                       )}
                       <div style={{background:T.bgElevated,borderRadius:8,padding:"12px 14px",border:`1px solid ${T.border}`}}>
                         <div style={{fontSize:22,fontWeight:700,color:T.green,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{children.filter(c=>c.cert==="Approved").length}</div>
-                        <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>Certified</div>
+                        <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>Approved</div>
                       </div>
                     </div>
                     {Object.keys(childTypeCounts).length>0&&(
@@ -15508,7 +15508,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
             </div>
             <div style={{overflowY:"auto"}}>
               {Object.entries(CMETA).map(([c,m])=>(
-                <button key={c} onClick={()=>{setData(d=>({...d,cert:c}));setEditModal(null);onToast(`Certification set to ${c}`,"success");}}
+                <button key={c} onClick={()=>{setData(d=>({...d,cert:c}));setEditModal(null);onToast(`Status set to ${c}`,"success");}}
                   style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"11px 16px",background:data.cert===c?m.bg:"transparent",border:"none",cursor:"pointer",transition:"background .1s"}}
                   onMouseEnter={e=>{if(data.cert!==c)e.currentTarget.style.background=T.bgHover;}}
                   onMouseLeave={e=>{if(data.cert!==c)e.currentTarget.style.background="transparent";}}>
@@ -16724,7 +16724,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
               </div>
               <div style={{overflowY:"auto"}}>
                 {Object.entries(CMETA).map(([c,m])=>(
-                  <button key={c} onClick={()=>{setData(d=>({...d,cert:c}));setEditModal(null);onToast(`Certification set to ${c}`,"success");}}
+                  <button key={c} onClick={()=>{setData(d=>({...d,cert:c}));setEditModal(null);onToast(`Status set to ${c}`,"success");}}
                     style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"11px 16px",background:data.cert===c?m.bg:"transparent",border:"none",cursor:"pointer",transition:"background .1s"}}
                     onMouseEnter={e=>{if(data.cert!==c)e.currentTarget.style.background=T.bgHover;}}
                     onMouseLeave={e=>{if(data.cert!==c)e.currentTarget.style.background="transparent";}}>
@@ -16784,7 +16784,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
       </div>
       <div style={{display:"flex",gap:8,marginTop:20,justifyContent:"flex-end"}}>
         <Btn onClick={()=>setCertModal(false)}>Cancel</Btn>
-        <Btn variant="primary" icon={Ic.cert(13)} onClick={handleCertify}>Certify Asset</Btn>
+        <Btn variant="primary" icon={Ic.cert(13)} onClick={handleCertify}>Set status to Approved</Btn>
       </div>
     </Modal>
   </div>;
@@ -22570,15 +22570,15 @@ const ProfileView = ({onToast}) => {
         {tab==="auditlog"&&(()=>{
           const userHandle = cfg.email?.split("@")[0] || "maya.chen";
           const USER_AUDIT_ENTRIES = [
-            {id:"ua1", timestamp:"May 27, 2026 · 10:14", category:"CERT",   action:"Certified asset as Approved",         details:"orders — Certification changed from In Review → Approved",       actor:userHandle, isSystem:false, note:"Q2 annual data quality review completed."},
+            {id:"ua1", timestamp:"May 27, 2026 · 10:14", category:"CERT",   action:"Set status to Approved",              details:"orders — Status changed from In Review → Approved",       actor:userHandle, isSystem:false, note:"Q2 annual data quality review completed."},
             {id:"ua2", timestamp:"May 25, 2026 · 14:32", category:"EDIT",   action:"Description updated",                  details:"customers — Asset description edited",                           actor:userHandle, isSystem:false},
             {id:"ua3", timestamp:"May 22, 2026 · 11:05", category:"ACCESS", action:"Access granted",                        details:"analytics_team granted read access to finance_summary",          actor:userHandle, isSystem:false},
             {id:"ua4", timestamp:"May 20, 2026 · 09:48", category:"EDIT",   action:"Owner updated",                        details:"payments — Owner changed from john.doe → "+userHandle,           actor:userHandle, isSystem:false},
             {id:"ua5", timestamp:"May 18, 2026 · 16:20", category:"TAG",    action:"Tag added",                             details:"PII tag applied to column 'email' on customers",                 actor:userHandle, isSystem:false},
-            {id:"ua6", timestamp:"May 15, 2026 · 13:00", category:"CERT",   action:"Submitted asset for Review",           details:"fact_revenue — Submitted for Q2 certification cycle",             actor:userHandle, isSystem:false, note:"Owner has reviewed all columns."},
+            {id:"ua6", timestamp:"May 15, 2026 · 13:00", category:"CERT",   action:"Submitted asset for Review",           details:"fact_revenue — Submitted for Q2 status review cycle",           actor:userHandle, isSystem:false, note:"Owner has reviewed all columns."},
             {id:"ua7", timestamp:"May 12, 2026 · 10:30", category:"ACCESS", action:"Access revoked",                        details:"Role 'finance_analyst' read access removed from orders",         actor:userHandle, isSystem:false},
             {id:"ua8", timestamp:"May 08, 2026 · 15:45", category:"EDIT",   action:"Glossary term linked",                 details:"'Customer Lifetime Value' term linked to customers asset",        actor:userHandle, isSystem:false},
-            {id:"ua9", timestamp:"May 05, 2026 · 09:10", category:"CERT",   action:"Returned asset to Draft",              details:"fact_revenue — Certification reverted, quality score dropped",    actor:userHandle, isSystem:false, note:"Quality score fell to 78. Requires remediation before recertification."},
+            {id:"ua9", timestamp:"May 05, 2026 · 09:10", category:"CERT",   action:"Returned asset to Draft",              details:"fact_revenue — Status reverted, quality score dropped",    actor:userHandle, isSystem:false, note:"Quality score fell to 78. Requires remediation before re-approval."},
             {id:"ua10",timestamp:"Apr 30, 2026 · 11:22", category:"EDIT",   action:"Steward assigned",                     details:"transactions — "+userHandle+" added as steward",                  actor:userHandle, isSystem:false},
             {id:"ua11",timestamp:"Apr 25, 2026 · 14:00", category:"TAG",    action:"Tag removed",                          details:"'finance' tag replaced with 'KPI' on fact_revenue",               actor:userHandle, isSystem:false},
             {id:"ua12",timestamp:"Apr 18, 2026 · 08:55", category:"EDIT",   action:"Quality rule updated",                 details:"Freshness threshold updated 24 h → 12 h on orders",              actor:userHandle, isSystem:false},
@@ -25403,7 +25403,7 @@ const TEAMS_INIT = [
   {id:"t1",name:"Data Engineering",desc:"Manages pipelines, ingestion, and data infrastructure.",  color:"#7c3aed",created:"Nov 2022"},
   {id:"t2",name:"Analytics",        desc:"Builds dashboards, runs queries, and surfaces insights.", color:"#0284c7",created:"Jan 2023"},
   {id:"t3",name:"Finance",          desc:"Owns financial reporting datasets and access policies.",  color:"#d97706",created:"Feb 2022"},
-  {id:"t4",name:"Governance",       desc:"Certifies data, manages glossary, enforces data policy.",color:"#16a34a",created:"Jan 2023"},
+  {id:"t4",name:"Governance",       desc:"Sets asset status, manages glossary, enforces data policy.",color:"#16a34a",created:"Jan 2023"},
   {id:"t5",name:"Platform",         desc:"Platform administration, integrations, and settings.",   color:"#ee2424",created:"Jun 2022"},
 ];
 
@@ -26874,7 +26874,7 @@ const PersonasSection = ({onToast}) => {
       homeWidgets:["metrics","recentAssets","quality","lineageSnippet","activity"],
       defaultPage:"catalog"},
     {id:"p3",name:"Data Steward",     color:"#d97706",users:2, linkedRole:"Data Steward",
-      desc:"Governance-first. Stewardship task queue is the landing page. Certification, policy, and glossary management are the core tools.",
+      desc:"Governance-first. Stewardship task queue is the landing page. Status, policy, and glossary management are the core tools.",
       nav:{home:true,search:true,catalog:true,lineage:true,quality:true,contracts:false,observability:false,analytics:false,settings:false,policymanager:true,access:false,certifications:true,stewardship:true,glossary:true,domains:true},
       homeWidgets:["tasks","certQueue","qualityAlerts","recentAssets","activity"],
       defaultPage:"stewardship"},
@@ -26888,7 +26888,7 @@ const PersonasSection = ({onToast}) => {
   const [editingNavFor,  setEditingNavFor]  = useState(null);
   const NAV_ITEMS = ["home","search","catalog","lineage","quality","policymanager","access","certifications","stewardship","glossary","domains","observability","analytics","settings"];
   const NAV_LABELS = {home:"Home",search:"Search",catalog:"Catalog",lineage:"Lineage",quality:"Data Quality",policymanager:"Policy Manager",access:"Access Gov.",certifications:"Status",stewardship:"Stewardship",glossary:"Glossary",domains:"Domains",observability:"Observability",analytics:"Analytics",settings:"Settings"};
-  const WIDGET_LABELS = {metrics:"Platform Metrics",tasks:"My Tasks",certQueue:"Cert. Queue",qualityAlerts:"Quality Alerts",recentAssets:"Recently Viewed",certifiedAssets:"Approved Assets",services:"Service Health",lineageSnippet:"Certifications",activity:"Activity Feed"};
+  const WIDGET_LABELS = {metrics:"Platform Metrics",tasks:"My Tasks",certQueue:"Cert. Queue",qualityAlerts:"Quality Alerts",recentAssets:"Recently Viewed",certifiedAssets:"Approved Assets",services:"Service Health",lineageSnippet:"Status",activity:"Activity Feed"};
 
   const toggleNav = (personaId, navKey) => {
     setPersonas(prev=>prev.map(p=>p.id===personaId?{...p,nav:{...p.nav,[navKey]:!p.nav[navKey]}}:p));
@@ -27079,7 +27079,7 @@ const WF_DATA = [
     currentStage:null,
   },
   {
-    id:"wf5", name:"Certification Expiry Alerts", category:"Governance",
+    id:"wf5", name:"Status Review Alerts", category:"Governance",
     status:"success", schedule:"0 9 * * 1", scheduleLabel:"Weekly (Mon 09:00)",
     lastRun:"2 days ago", duration:"0m 08s", nextRun:"In 5 days",
     successRate:100, totalRuns:24, owner:"maya.chen", source:"Certifications",
@@ -28707,7 +28707,7 @@ const SettingsView = ({onToast})=>{
                   {name:"Audit Log Archival",        desc:"Compresses and archives audit logs older than 90 days to cold storage.",                             sched:"Sundays midnight",                lastRun:"7d ago",  status:"Active",  runs:12,   sr:100},
                   {name:"Stale Asset Cleanup",       desc:"Marks assets as stale if they haven't been updated in 30 days and their source service is offline.", sched:"Daily 5AM",                       lastRun:"5h ago",  status:"Active",  runs:87,   sr:95},
                   {name:"Notification Digest",       desc:"Compiles and sends daily summary digests to subscribed users and teams.",                            sched:"Daily 7AM",                       lastRun:"17h ago", status:"Active",  runs:134,  sr:99},
-                  {name:"Certification Expiry Scan", desc:"Checks all certified assets for upcoming expiry dates and queues reminder notifications.",           sched:"Daily 8AM",                       lastRun:"16h ago", status:"Active",  runs:94,   sr:100},
+                  {name:"Status Review Scan", desc:"Checks all certified assets for upcoming expiry dates and queues reminder notifications.",           sched:"Daily 8AM",                       lastRun:"16h ago", status:"Active",  runs:94,   sr:100},
                 ].map((job,i)=>(
                   <div key={i} style={{padding:"14px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10}}>
                     <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:6}}>
@@ -29333,7 +29333,7 @@ const SettingsView = ({onToast})=>{
               const ALL_AUDIT = [
                 {ts:"2026-05-20 16:44",u:"maya.chen",   cat:"Policy",   a:"POLICY_EVALUATED",   r:"Commerce PII Sensitivity",  detail:"Compliance score updated: 78% → 81%",     ip:"10.0.1.4"},
                 {ts:"2026-05-20 16:12",u:"dev.patel",   cat:"Asset",    a:"TAG_ADDED",           r:"orders",                    detail:"Tag 'PII' applied",                         ip:"10.0.1.8"},
-                {ts:"2026-05-20 15:58",u:"maya.chen",   cat:"Asset",    a:"CERTIFIED",           r:"customers",                 detail:"Certification status: Draft → Approved",    ip:"10.0.1.4"},
+                {ts:"2026-05-20 15:58",u:"maya.chen",   cat:"Asset",    a:"CERTIFIED",           r:"customers",                 detail:"Status: Draft → Approved",    ip:"10.0.1.4"},
                 {ts:"2026-05-20 15:30",u:"ai-bot",      cat:"Ingestion",a:"INGESTION_RUN",        r:"Snowflake DWH",             detail:"12,840 assets synced, 3 schema changes",   ip:"10.0.3.5"},
                 {ts:"2026-05-20 14:55",u:"sarah.kim",   cat:"Policy",   a:"VIOLATION_RESOLVED",  r:"Finance Data Integrity",    detail:"Violation viol-3 marked resolved",          ip:"10.0.1.9"},
                 {ts:"2026-05-20 14:32",u:"priya.nair",  cat:"Glossary", a:"TERM_CREATED",         r:"Churn Rate",                detail:"New business term added to Analytics glossary",ip:"10.0.1.6"},
