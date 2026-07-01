@@ -2737,6 +2737,23 @@ const useNotifPrefs = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>
 // Visible = category not muted AND (admin, personal, platform-wide, or you own/steward the asset).
 const notifVisible = (n, me, isAdmin) => (_notifPrefs[n.category]!==false) && (isAdmin || n.forMe || !n.asset || _respFor(n.asset, me));
 
+// ── Shared reactive store for the notification bell ──
+// NOTIFS was static seed data duplicated into local state by both NotificationsPanel
+// and NotificationsDrawer; neither reflected real app activity. Lifted to a module
+// store + pushNotif() so status-change and deletion request/approve/reject events
+// generate a real bell entry (standard template "{what happened} · {subject}"),
+// not just a toast.
+const _notifSubs = new Set();
+let _notifState = NOTIFS.map(n => ({...n}));
+let _notifIdSeq = NOTIFS.length;
+const notifSet = (updater) => { _notifState = typeof updater==="function"?updater(_notifState):updater; _notifSubs.forEach(fn=>fn()); };
+const useNotifs = () => {
+  const [,force] = useState(0);
+  useEffect(()=>{ const fn=()=>force(n=>n+1); _notifSubs.add(fn); return ()=>_notifSubs.delete(fn); },[]);
+  return [_notifState, notifSet];
+};
+const pushNotif = (entry) => { _notifIdSeq += 1; notifSet(prev=>[{id:_notifIdSeq, unread:true, time:"just now", asset:null, forMe:true, ...entry}, ...prev]); };
+
 // Reusable notification-preferences UI — lives in Settings → Notifications (the proper home).
 // Per-category in-app mute toggles + honest channel status. Wired to the shared _notifPrefs store.
 const NotifPrefsSettings = ()=>{
@@ -2831,7 +2848,7 @@ const NotificationsPanel = ({onClose, onViewAll}) => {
   const {role:_r, roleCfg:_rc} = useRole();
   const _me = ((_rc&&_rc.email)||"").split("@")[0]; const _isAdmin = _r==="admin";
   useNotifPrefs(); // re-render when category prefs change
-  const [notifs, setNotifs] = useState(NOTIFS.map(n=>({...n})));
+  const [notifs, setNotifs] = useNotifs();
   const [filter, setFilter] = useState("all");
   const _scoped = notifs.filter(n=>notifVisible(n,_me,_isAdmin)); // only your owned/stewarded assets
   const unreadCount = _scoped.filter(n=>n.unread).length;
@@ -2944,7 +2961,7 @@ const NotificationsDrawer = ({onClose}) => {
   const onNav = useNav();
   const {role:_r, roleCfg:_rc} = useRole();
   const _me = ((_rc&&_rc.email)||"").split("@")[0]; const _isAdmin = _r==="admin";
-  const [notifs, setNotifs] = useState(NOTIFS.map(n=>({...n})));
+  const [notifs, setNotifs] = useNotifs();
   const [filter, setFilter] = useState("all");
   useNotifPrefs(); // re-render when category prefs change (managed in Settings → Notifications)
   const _scoped = notifs.filter(n=>notifVisible(n,_me,_isAdmin));
@@ -3007,7 +3024,8 @@ const NotifBtn = () => {
   const {role:_r, roleCfg:_rc} = useRole();
   const _me = ((_rc&&_rc.email)||"").split("@")[0]; const _isAdmin = _r==="admin";
   useNotifPrefs(); // re-render when category prefs change
-  const unread = NOTIFS.filter(n=>n.unread && notifVisible(n,_me,_isAdmin)).length;
+  const [liveNotifs] = useNotifs();
+  const unread = liveNotifs.filter(n=>n.unread && notifVisible(n,_me,_isAdmin)).length;
   const ref = useRef(null);
   useEffect(()=>{const fn=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};document.addEventListener("mousedown",fn);return()=>document.removeEventListener("mousedown",fn);},[]);
   return (
@@ -3507,7 +3525,8 @@ const HomeView = ({onNav, onToast}) => {
   const cfg = roleCfg || {label:"User",name:"User",color:T.accent,badge:T.accentDim,homeWidgets:["metrics","recentAssets","activity"],avatar:"U"};
   const onNavCtx = useNav();
   const nav = onNav || onNavCtx;
-  const unreadNotifs = NOTIFS.filter(n=>n.unread).length;
+  const [liveHomeNotifs] = useNotifs();
+  const unreadNotifs = liveHomeNotifs.filter(n=>n.unread).length;
   const [certList] = useCertifications(); // live cert store for the home widget
 
   const WIDGET_MAP = {
@@ -18705,7 +18724,7 @@ const DomainsView = ({onAsset, onNav, onToast}) => {
                       <button onClick={()=>{
                         setDmMenuOpen(false);
                         if(dmvRole==='admin'||(dm.owners||[]).includes(dmMeHandle)){ setDeleteConfirm({type:"domain",id:dm.id,name:dm.displayName}); }
-                        else { requestDeletion({kind:'domain',targetId:dm.id,name:dm.displayName,requestedBy:dmMeHandle,note:'Requested via domain detail',owner:(dm.owners||[])[0]||null}); onToast&&onToast('Deletion requested — pending owner approval','success'); }
+                        else { requestDeletion({kind:'domain',targetId:dm.id,name:dm.displayName,requestedBy:dmMeHandle,note:'Requested via domain detail',owner:(dm.owners||[])[0]||null}); pushNotif({category:"Ownership",type:"alert",title:`Deletion requested · ${dm.displayName} (domain)`,body:`${dmMeHandle} requested to delete this domain`}); onToast&&onToast('Deletion requested — pending owner approval','success'); }
                       }}
                         style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}
                         onMouseEnter={e=>e.currentTarget.style.background="rgba(239,68,68,.07)"} onMouseLeave={e=>e.currentTarget.style.background="none"}>
@@ -18869,7 +18888,7 @@ const DomainsView = ({onAsset, onNav, onToast}) => {
                   {/* Domain Status Modal */}
                   {dmStatusOpen&&(()=>{const canSetDomainStatus=dmvRole==="admin"||(dm.owners||[]).includes(dmMeHandle)||(dm.experts||[]).includes(dmMeHandle);return <><div onClick={()=>setDmStatusOpen(false)} style={{position:"fixed",inset:0,zIndex:499,background:"rgba(0,0,0,.35)"}}/><div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:300,display:"flex",flexDirection:"column",maxHeight:"70vh",overflow:"hidden"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}><span style={{fontSize:13.5,fontWeight:700,color:T.text}}>{canSetDomainStatus?"Set Status":"Request Status Change"}</span><button onClick={()=>setDmStatusOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg></button></div><div style={{flex:1,overflowY:"auto",padding:"6px 0"}}>{Object.keys(STATUS_META).map(s=>{const sel=dm.cert===s;const sm=STATUS_META[s];return(<button key={s} onClick={()=>{
                     if(canSetDomainStatus){ patchDomain(dm.id,{cert:s}); onToast&&onToast(`Status set to ${s}`,'success'); }
-                    else { requestStatusChange({kind:'domain',targetId:dm.id,name:dm.displayName||dm.name,requestedStatus:s,requestedBy:dmMeHandle,note:`Requested via domain detail`,steward:(dm.experts||[])[0]||(dm.owners||[])[0]||null}); patchDomain(dm.id,{cert:'In Review'}); onToast&&onToast('Status change requested — pending steward approval','success'); }
+                    else { requestStatusChange({kind:'domain',targetId:dm.id,name:dm.displayName||dm.name,requestedStatus:s,requestedBy:dmMeHandle,note:`Requested via domain detail`,steward:(dm.experts||[])[0]||(dm.owners||[])[0]||null}); patchDomain(dm.id,{cert:'In Review'}); pushNotif({category:"Status",type:"field_updated",title:`Status change requested · ${dm.displayName||dm.name}`,body:`${dmMeHandle} requested ${s} — awaiting review as steward`}); onToast&&onToast('Status change requested — pending steward approval','success'); }
                     setDmStatusOpen(false);
                   }} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 14px",background:sel?T.bgElevated:"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{width:26,height:26,borderRadius:4,background:sm.bg,border:`1px solid ${sm.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:sm.color,flexShrink:0}}>{sm.icon}</div><span style={{flex:1,fontSize:13,color:T.text}}>{s}</span>{sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={sm.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})}</div></div></>;})()}
                   {/* Domain Owner Modal */}
@@ -27234,6 +27253,8 @@ const useDeleteReqs = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>
 
 const InboxView = ({onToast}) => {
   const onNav = useNav();
+  const { roleCfg: ibxRoleCfg } = useRole();
+  const meHandle = ((ibxRoleCfg&&ibxRoleCfg.email)||"you@jnj").split("@")[0];
   const tagCtx = useTagCtx(); // tags live in TagProvider context — the tags "shared store"
   const contractApprovals = useContractApprovals();
   const [items,      setItems]      = useState([...POLICY_VIOLATION_INBOX, ...TAG_REVIEW_INBOX, ...CERT_REVIEW_INBOX, ...ORPHAN_INBOX, ...TERM_REVIEW_INBOX, ...INBOX_DATA.filter(i=>i.type!=="stewardship_request")]);
@@ -27377,9 +27398,9 @@ const InboxView = ({onToast}) => {
       return <>{btn("Approve",()=>{setTermStatus(item.termId,"Approved");ack(item.id,`${item.asset.name} approved & published`);},true)}{btn("Reject",()=>{setTermStatus(item.termId,"Draft");ack(item.id,"Term sent back to draft");},false,true)}{openIn("Open in Glossary","glossary")}</>;
     if(item.type==="certification_review"){
       if(item.reqKind==="tag")
-        return <>{btn("Approve",()=>{tagCtx?.updateTagDef(item.reqTargetId,{cert:item.requestedStatus});if(item.reqId)resolveStatusRequest(item.reqId,"approved");ack(item.id,`${item.asset.name} status → ${item.requestedStatus} — requester notified`);},true)}{btn("Reject",()=>{tagCtx?.updateTagDef(item.reqTargetId,{cert:"Draft"});if(item.reqId)resolveStatusRequest(item.reqId,"rejected");ack(item.id,"Status change rejected — sent back to Draft");},false,true)}{openIn("Open in Classifications","tags")}</>;
+        return <>{btn("Approve",()=>{tagCtx?.updateTagDef(item.reqTargetId,{cert:item.requestedStatus});if(item.reqId)resolveStatusRequest(item.reqId,"approved");pushNotif({category:"Status",type:"cert",title:`Status changed to ${item.requestedStatus} · ${item.asset.name}`,body:`Approved by ${meHandle||"steward"}`});ack(item.id,`${item.asset.name} status → ${item.requestedStatus} — requester notified`);},true)}{btn("Reject",()=>{tagCtx?.updateTagDef(item.reqTargetId,{cert:"Draft"});if(item.reqId)resolveStatusRequest(item.reqId,"rejected");pushNotif({category:"Status",type:"field_updated",title:`Status change rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request was sent back to Draft`});ack(item.id,"Status change rejected — sent back to Draft");},false,true)}{openIn("Open in Classifications","tags")}</>;
       if(item.reqKind==="domain")
-        return <>{btn("Approve",()=>{domainsSet(prev=>prev.map(d=>d.id===item.reqTargetId?{...d,cert:item.requestedStatus}:d));if(item.reqId)resolveStatusRequest(item.reqId,"approved");ack(item.id,`${item.asset.name} status → ${item.requestedStatus} — requester notified`);},true)}{btn("Reject",()=>{domainsSet(prev=>prev.map(d=>d.id===item.reqTargetId?{...d,cert:"Draft"}:d));if(item.reqId)resolveStatusRequest(item.reqId,"rejected");ack(item.id,"Status change rejected — sent back to Draft");},false,true)}{openIn("Open in Domains","domains")}</>;
+        return <>{btn("Approve",()=>{domainsSet(prev=>prev.map(d=>d.id===item.reqTargetId?{...d,cert:item.requestedStatus}:d));if(item.reqId)resolveStatusRequest(item.reqId,"approved");pushNotif({category:"Status",type:"cert",title:`Status changed to ${item.requestedStatus} · ${item.asset.name}`,body:`Approved by ${meHandle||"steward"}`});ack(item.id,`${item.asset.name} status → ${item.requestedStatus} — requester notified`);},true)}{btn("Reject",()=>{domainsSet(prev=>prev.map(d=>d.id===item.reqTargetId?{...d,cert:"Draft"}:d));if(item.reqId)resolveStatusRequest(item.reqId,"rejected");pushNotif({category:"Status",type:"field_updated",title:`Status change rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request was sent back to Draft`});ack(item.id,"Status change rejected — sent back to Draft");},false,true)}{openIn("Open in Domains","domains")}</>;
       return <>{btn("Approve",()=>{certifyByAsset(item.asset.name);certifyAsset(item.asset.name);ack(item.id,`${item.asset.name} status → Approved`);},true)}{btn("Reject",()=>{certSet(prev=>prev.map(c=>c.asset===item.asset.name?{...c,status:"Rejected",certifier:null,date:null}:c));ack(item.id,"Status change rejected");},false,true)}{openIn("Open in Catalog","catalog")}</>;
     }
     if(item.type==="stewardship_request")
@@ -27388,9 +27409,9 @@ const InboxView = ({onToast}) => {
       return <>{btn("Grant role",()=>{if(item.reqId)resolveRoleRequest(item.reqId,"approved");ack(item.id,`${item.targetRole} role granted to ${item.requestedBy} — requester notified`);},true)}{btn("Reject",()=>{if(item.reqId)resolveRoleRequest(item.reqId,"rejected");ack(item.id,"Role request rejected — requester notified");},false,true)}{openIn("Open in Access","access")}</>;
     if(item.type==="delete_request"){
       if(item.reqKind==="tag")
-        return <>{btn("Approve deletion",()=>{tagCtx?.deleteTagDef(item.reqTargetId);if(item.reqId)resolveDeleteRequest(item.reqId,"approved");ack(item.id,`${item.asset.name} deleted — requester notified`);},true)}{btn("Reject",()=>{if(item.reqId)resolveDeleteRequest(item.reqId,"rejected");ack(item.id,"Deletion request rejected — requester notified");},false,true)}{openIn("Open in Classifications","tags")}</>;
+        return <>{btn("Approve deletion",()=>{tagCtx?.deleteTagDef(item.reqTargetId);if(item.reqId)resolveDeleteRequest(item.reqId,"approved");pushNotif({category:"Ownership",type:"alert",title:`${item.asset.name} deleted (tag)`,body:`Deletion approved by ${meHandle||"owner"}`});ack(item.id,`${item.asset.name} deleted — requester notified`);},true)}{btn("Reject",()=>{if(item.reqId)resolveDeleteRequest(item.reqId,"rejected");pushNotif({category:"Ownership",type:"field_updated",title:`Deletion request rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request to delete this tag was declined`});ack(item.id,"Deletion request rejected — requester notified");},false,true)}{openIn("Open in Classifications","tags")}</>;
       if(item.reqKind==="domain")
-        return <>{btn("Approve deletion",()=>{domainsSet(prev=>prev.filter(d=>d.id!==item.reqTargetId));if(item.reqId)resolveDeleteRequest(item.reqId,"approved");ack(item.id,`${item.asset.name} deleted — requester notified`);},true)}{btn("Reject",()=>{if(item.reqId)resolveDeleteRequest(item.reqId,"rejected");ack(item.id,"Deletion request rejected — requester notified");},false,true)}{openIn("Open in Domains","domains")}</>;
+        return <>{btn("Approve deletion",()=>{domainsSet(prev=>prev.filter(d=>d.id!==item.reqTargetId));if(item.reqId)resolveDeleteRequest(item.reqId,"approved");pushNotif({category:"Ownership",type:"alert",title:`${item.asset.name} deleted (domain)`,body:`Deletion approved by ${meHandle||"owner"}`});ack(item.id,`${item.asset.name} deleted — requester notified`);},true)}{btn("Reject",()=>{if(item.reqId)resolveDeleteRequest(item.reqId,"rejected");pushNotif({category:"Ownership",type:"field_updated",title:`Deletion request rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request to delete this domain was declined`});ack(item.id,"Deletion request rejected — requester notified");},false,true)}{openIn("Open in Domains","domains")}</>;
       return null;
     }
     if(item.type==="orphan_assignment")
@@ -30290,7 +30311,7 @@ const TagManagementView = ({onToast}) => {
                                 </button>
                                 <button onClick={e=>{e.stopPropagation();setDotMenuOpen(null);
                                   if(tmvRole==='admin'||td.owner===meHandle){ setDeleteConfirm({type:'tag',id:td.id,name:td.name}); }
-                                  else { requestDeletion({kind:'tag',targetId:td.id,name:td.name,requestedBy:meHandle,note:'Requested via tag list',owner:td.owner||null}); onToast('Deletion requested — pending owner approval','success'); }
+                                  else { requestDeletion({kind:'tag',targetId:td.id,name:td.name,requestedBy:meHandle,note:'Requested via tag list',owner:td.owner||null}); pushNotif({category:"Ownership",type:"alert",title:`Deletion requested · ${td.name} (tag)`,body:`${meHandle} requested to delete this tag`}); onToast('Deletion requested — pending owner approval','success'); }
                                 }}
                                   style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.rose,display:'flex',alignItems:'center',gap:8}}
                                   onMouseEnter={e=>e.currentTarget.style.background=T.roseDim} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
@@ -30821,6 +30842,7 @@ const TagManagementView = ({onToast}) => {
                         } else {
                           requestStatusChange({kind:'tag',targetId:selTag.id,name:selTag.name,requestedStatus:s,requestedBy:meHandle,note:`Requested via tag detail`,steward:tagStewards[0]||tagOwners[0]||null});
                           updateTagDef(selTag.id,{...selTag,cert:'In Review'});
+                          pushNotif({category:"Status",type:"field_updated",title:`Status change requested · ${selTag.name}`,body:`${meHandle} requested ${s} — awaiting review as steward`});
                           onToast('Status change requested — pending steward approval','success');
                         }
                         setTagEditModal(null);
