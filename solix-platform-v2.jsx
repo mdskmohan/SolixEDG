@@ -233,13 +233,13 @@ const ASSET_COLUMNS = {
 // TAG MANAGEMENT MOCK DATA
 // ─────────────────────────────────────────────
 const INITIAL_TAG_DEFS = [
-  { id:'t1',  cert:'Approved', name:'PII',               category:'sensitivity', color:'#ee2424', propagationMode:'both',      propagationLocked:true,  governanceRequired:true,  managedBy:'Priya K.', usageCount:48, description:'Personally identifiable information. Name, email, phone, address, SSN, DOB.',                            sourceAliases:['pii_column','contains_pii','PIIData','pii_flag','is_pii'],          createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin'    },
-  { id:'t2',  cert:'Approved', name:'PHI',               category:'sensitivity', color:'#ee2424', propagationMode:'both',      propagationLocked:true,  governanceRequired:true,  managedBy:'Priya K.', usageCount:12, description:'Protected health information under HIPAA. Medical records, diagnoses, treatments.',                     sourceAliases:['phi_flag','health_data','phi_column','protected_health'],            createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin'    },
-  { id:'t3',  cert:'Approved', name:'PCI-DSS',           category:'sensitivity', color:'#ee2424', propagationMode:'both',      propagationLocked:true,  governanceRequired:true,  managedBy:'Priya K.', usageCount:7, description:'Payment card data. Card numbers, CVV, expiry, cardholder name.',                                        sourceAliases:['pci_scope','pci_data','card_data'],                                  createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin'    },
-  { id:'t4',  cert:'Approved', name:'GDPR',              category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Priya K.', usageCount:31, description:'EU GDPR. Personal data of EU residents regardless of processing location.',                             sourceAliases:['gdpr_applicable','gdpr_scope','gdpr_flag','is_gdpr'],                createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin'    },
-  { id:'t5',  cert:'Approved', name:'HIPAA',             category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Rahul M.', usageCount:9, description:'US health data privacy. Any PHI used in US healthcare operations.',                                     sourceAliases:['hipaa_flag','hipaa_applicable','hipaa_scope'],                       createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin'    },
-  { id:'t6',  cert:'Approved', name:'CCPA',              category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Rahul M.', usageCount:6, description:'California Consumer Privacy Act. Personal data of California residents.',                               sourceAliases:['ccpa_scope','ccpa_flag'],                                            createdAt:'2026-02-01T00:00:00Z', createdBy:'Admin'    },
-  { id:'t7',  cert:'Approved', name:'DPDP',              category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Rahul M.', usageCount:4, description:'India Digital Personal Data Protection Act 2023.',                                                     sourceAliases:['dpdp_scope'],                                                        createdAt:'2026-03-01T00:00:00Z', createdBy:'Admin'    },
+  { id:'t1',  cert:'Approved', name:'PII',               category:'sensitivity', color:'#ee2424', propagationMode:'both',      propagationLocked:true,  governanceRequired:true,  managedBy:'Priya K.', usageCount:48, description:'Personally identifiable information. Name, email, phone, address, SSN, DOB.',                            sourceAliases:['pii_column','contains_pii','PIIData','pii_flag','is_pii'],          createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin', system:true },
+  { id:'t2',  cert:'Approved', name:'PHI',               category:'sensitivity', color:'#ee2424', propagationMode:'both',      propagationLocked:true,  governanceRequired:true,  managedBy:'Priya K.', usageCount:12, description:'Protected health information under HIPAA. Medical records, diagnoses, treatments.',                     sourceAliases:['phi_flag','health_data','phi_column','protected_health'],            createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin', system:true },
+  { id:'t3',  cert:'Approved', name:'PCI-DSS',           category:'sensitivity', color:'#ee2424', propagationMode:'both',      propagationLocked:true,  governanceRequired:true,  managedBy:'Priya K.', usageCount:7, description:'Payment card data. Card numbers, CVV, expiry, cardholder name.',                                        sourceAliases:['pci_scope','pci_data','card_data'],                                  createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin', system:true },
+  { id:'t4',  cert:'Approved', name:'GDPR',              category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Priya K.', usageCount:31, description:'EU GDPR. Personal data of EU residents regardless of processing location.',                             sourceAliases:['gdpr_applicable','gdpr_scope','gdpr_flag','is_gdpr'],                createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin', system:true },
+  { id:'t5',  cert:'Approved', name:'HIPAA',             category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Rahul M.', usageCount:9, description:'US health data privacy. Any PHI used in US healthcare operations.',                                     sourceAliases:['hipaa_flag','hipaa_applicable','hipaa_scope'],                       createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin', system:true },
+  { id:'t6',  cert:'Approved', name:'CCPA',              category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Rahul M.', usageCount:6, description:'California Consumer Privacy Act. Personal data of California residents.',                               sourceAliases:['ccpa_scope','ccpa_flag'],                                            createdAt:'2026-02-01T00:00:00Z', createdBy:'Admin', system:true },
+  { id:'t7',  cert:'Approved', name:'DPDP',              category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Rahul M.', usageCount:4, description:'India Digital Personal Data Protection Act 2023.',                                                     sourceAliases:['dpdp_scope'],                                                        createdAt:'2026-03-01T00:00:00Z', createdBy:'Admin', system:true },
   { id:'t8',  cert:'Approved', name:'Finance domain',    category:'business',    color:'#fbbf24', propagationMode:'hierarchy', propagationLocked:false, governanceRequired:false, managedBy:'Rahul M.', usageCount:22, description:'Owned by the Finance domain. Revenue, costs, GL, AR/AP data.',                                         sourceAliases:[],                                                                    createdAt:'2026-02-01T00:00:00Z', createdBy:'Rahul M.' },
   { id:'t9',  cert:'Approved', name:'Board reporting',   category:'business',    color:'#fbbf24', propagationMode:'hierarchy', propagationLocked:false, governanceRequired:false, managedBy:'Rahul M.', usageCount:11, description:'Feeds board-level reports and investor materials.',                                                     sourceAliases:[],                                                                    createdAt:'2026-02-15T00:00:00Z', createdBy:'Rahul M.' },
   { id:'t10', cert:'Approved', name:'Clinical trial data',category:'business',   color:'#fbbf24', propagationMode:'hierarchy', propagationLocked:false, governanceRequired:true,  managedBy:'Priya K.', usageCount:8, description:'FDA-regulated clinical trial data. Subject to 21 CFR Part 11.',                                        sourceAliases:['trial_data','clinical_data'],                                        createdAt:'2026-02-20T00:00:00Z', createdBy:'Priya K.' },
@@ -443,9 +443,15 @@ function TagProvider({ children }) {
     setTagDefs(prev=>[...prev,{cert:'Draft',...def,id:'t'+Date.now(),usageCount:0,sourceAliases:def.sourceAliases||[],createdAt:new Date().toISOString(),createdBy:'Current User'}]);
   };
 
-  const updateTagDef = (id, patch) => setTagDefs(prev=>prev.map(t=>t.id===id?{...t,...patch}:t));
+  // System tags (PII/PHI/PCI + regulatory framework tags) are platform-seeded and referenced
+  // directly by compliance rules — name is immutable and they can never be deleted, only disabled.
+  const updateTagDef = (id, patch) => setTagDefs(prev=>prev.map(t=>t.id===id?{...t,...patch,name:t.system?t.name:(patch.name??t.name)}:t));
 
-  const deleteTagDef = (id) => setTagDefs(prev=>prev.filter(t=>t.id!==id));
+  const deleteTagDef = (id) => setTagDefs(prev=>{
+    const t = prev.find(x=>x.id===id);
+    if(t && t.system) return prev;
+    return prev.filter(x=>x.id!==id);
+  });
 
   const updateConnectorConfig = (connectorId, patch) => setConnectorConfigs(prev=>({...prev,[connectorId]:{...prev[connectorId],...patch}}));
 
@@ -5720,9 +5726,9 @@ const CatFieldDropdown = ({label, required, options, selected, onChange, placeho
 };
 
 const REGS_META = [
-  {id:"gdpr",name:"GDPR",enabled:true,fullName:"General Data Protection Regulation",jurisdiction:"EU",type:"Privacy",industry:"All",effective:"2018-05-25",penalty:"€20M or 4% global revenue",covers:["Personal data","Special categories","Behavioral data"],score:68,status:"Partial",lastAudit:"2026-03-01",requirements:[{id:"gdpr-art5",ref:"Art. 5(1)(c)",title:"Data minimisation — collect only what is necessary",linkedPolicies:[]},{id:"gdpr-art5b",ref:"Art. 5(1)(b)",title:"Purpose limitation — data used only as declared",linkedPolicies:[]},{id:"gdpr-art5e",ref:"Art. 5(1)(e)",title:"Storage limitation — enforce retention periods",linkedPolicies:[]},{id:"gdpr-art17",ref:"Art. 17",title:"Right to erasure — honour deletion requests without undue delay (within one month)",linkedPolicies:[]},{id:"gdpr-art32",ref:"Art. 32",title:"Security of processing — technical controls documented",linkedPolicies:[]},{id:"gdpr-art30",ref:"Art. 30",title:"Records of processing activities maintained",linkedPolicies:[]}]},
-  {id:"ukgdpr",name:"UK GDPR",enabled:true,fullName:"UK General Data Protection Regulation",jurisdiction:"UK",type:"Privacy",industry:"All",effective:"2021-01-01",penalty:"£17.5M or 4% global revenue",covers:["Personal data","Special categories"],score:70,status:"Partial",lastAudit:"2026-03-15",requirements:[{id:"ukgdpr-1",ref:"Art. 6",title:"Lawful basis for processing — documented and maintained",linkedPolicies:[]},{id:"ukgdpr-2",ref:"Art. 13-14",title:"Transparency — privacy notices provided to data subjects",linkedPolicies:[]},{id:"ukgdpr-3",ref:"Art. 25",title:"Data protection by design and by default",linkedPolicies:[]},{id:"ukgdpr-4",ref:"Art. 35",title:"Data Protection Impact Assessment for high-risk processing",linkedPolicies:[]},{id:"ukgdpr-5",ref:"Art. 33",title:"Breach notification — 72-hour reporting to ICO",linkedPolicies:[]}]},
-  {id:"ccpa",name:"CCPA / CPRA",enabled:true,fullName:"California Consumer Privacy Act / Privacy Rights Act",jurisdiction:"US-CA",type:"Privacy",industry:"All",effective:"2020-01-01 (CPRA: 2023-01-01)",penalty:"$7,500 per intentional violation",covers:["Personal information","Sensitive personal information","Consumer data"],score:74,status:"Partial",lastAudit:"2026-01-20",requirements:[{id:"ccpa-1",ref:"§1798.100",title:"Right to know — disclose personal data collected",linkedPolicies:[]},{id:"ccpa-2",ref:"§1798.105",title:"Right to delete — honour deletion requests",linkedPolicies:[]},{id:"ccpa-3",ref:"§1798.120",title:"Right to opt-out — do not sell or share personal information",linkedPolicies:[]},{id:"ccpa-4",ref:"§1798.150",title:"Data breach liability — reasonable security measures required",linkedPolicies:[]},{id:"ccpa-5",ref:"§1798.121",title:"Sensitive personal information — limit use and disclosure",linkedPolicies:[]}]},
+  {id:"gdpr",name:"GDPR",enabled:true,fullName:"General Data Protection Regulation",jurisdiction:"EU",type:"Privacy",industry:"All",effective:"2018-05-25",penalty:"€20M or 4% global revenue",covers:["Personal data","Special categories","Behavioral data"],score:68,status:"Partial",lastAudit:"2026-03-01",requirements:[{id:"gdpr-art5",ref:"Art. 5(1)(c)",title:"Data minimisation — collect only what is necessary",linkedPolicies:[],enforcement:"proxy",pattern:"CP1"},{id:"gdpr-art5b",ref:"Art. 5(1)(b)",title:"Purpose limitation — data used only as declared",linkedPolicies:[],enforcement:"attested",pattern:"CP7"},{id:"gdpr-art5e",ref:"Art. 5(1)(e)",title:"Storage limitation — enforce retention periods",linkedPolicies:[],enforcement:"enforceable",pattern:"CP6"},{id:"gdpr-art17",ref:"Art. 17",title:"Right to erasure — honour deletion requests without undue delay (within one month)",linkedPolicies:[],enforcement:"attested",pattern:"CP5"},{id:"gdpr-art32",ref:"Art. 32",title:"Security of processing — technical controls documented",linkedPolicies:[],enforcement:"enforceable",pattern:"CP2,CP3"},{id:"gdpr-art30",ref:"Art. 30",title:"Records of processing activities maintained",linkedPolicies:[],enforcement:"enforceable",pattern:"CP8"}]},
+  {id:"ukgdpr",name:"UK GDPR",enabled:true,fullName:"UK General Data Protection Regulation",jurisdiction:"UK",type:"Privacy",industry:"All",effective:"2021-01-01",penalty:"£17.5M or 4% global revenue",covers:["Personal data","Special categories"],score:70,status:"Partial",lastAudit:"2026-03-15",requirements:[{id:"ukgdpr-1",ref:"Art. 6",title:"Lawful basis for processing — documented and maintained",linkedPolicies:[],enforcement:"attested",pattern:"CP7"},{id:"ukgdpr-2",ref:"Art. 13-14",title:"Transparency — privacy notices provided to data subjects",linkedPolicies:[],enforcement:"attested",pattern:"CP7"},{id:"ukgdpr-3",ref:"Art. 25",title:"Data protection by design and by default",linkedPolicies:[],enforcement:"proxy",pattern:"CP19"},{id:"ukgdpr-4",ref:"Art. 35",title:"Data Protection Impact Assessment for high-risk processing",linkedPolicies:[],enforcement:"attested",pattern:"CP7"},{id:"ukgdpr-5",ref:"Art. 33",title:"Breach notification — 72-hour reporting to ICO",linkedPolicies:[],enforcement:"out_of_model",pattern:"CP9"}]},
+  {id:"ccpa",name:"CCPA / CPRA",enabled:true,fullName:"California Consumer Privacy Act / Privacy Rights Act",jurisdiction:"US-CA",type:"Privacy",industry:"All",effective:"2020-01-01 (CPRA: 2023-01-01)",penalty:"$7,500 per intentional violation",covers:["Personal information","Sensitive personal information","Consumer data"],score:74,status:"Partial",lastAudit:"2026-01-20",requirements:[{id:"ccpa-1",ref:"§1798.100",title:"Right to know — disclose personal data collected",linkedPolicies:[],enforcement:"attested",pattern:"CP13"},{id:"ccpa-2",ref:"§1798.105",title:"Right to delete — honour deletion requests",linkedPolicies:[],enforcement:"attested",pattern:"CP5"},{id:"ccpa-3",ref:"§1798.120",title:"Right to opt-out — do not sell or share personal information",linkedPolicies:[],enforcement:"proxy",pattern:"CP1"},{id:"ccpa-4",ref:"§1798.150",title:"Data breach liability — reasonable security measures required",linkedPolicies:[],enforcement:"enforceable",pattern:"CP2,CP1"},{id:"ccpa-5",ref:"§1798.121",title:"Sensitive personal information — limit use and disclosure",linkedPolicies:[],enforcement:"enforceable",pattern:"CP12"}]},
   {id:"lgpd",name:"LGPD",enabled:false,fullName:"Lei Geral de Proteção de Dados (Brazil)",jurisdiction:"Brazil",type:"Privacy",industry:"All",effective:"2020-09-18",penalty:"R$50M or 2% Brazil revenue",covers:["Personal data","Sensitive data","Children's data"],score:45,status:"Not Started",lastAudit:null,requirements:[{id:"lgpd-1",ref:"Art. 7",title:"Legal basis for processing — one of 10 bases required",linkedPolicies:[]},{id:"lgpd-2",ref:"Art. 18",title:"Data subject rights — access, correction, deletion",linkedPolicies:[]},{id:"lgpd-3",ref:"Art. 46",title:"Security measures — technical controls to protect personal data",linkedPolicies:[]},{id:"lgpd-4",ref:"Art. 48",title:"Breach notification — ANPD and affected parties notified",linkedPolicies:[]}]},
   {id:"pipl",name:"PIPL",enabled:false,fullName:"Personal Information Protection Law (China)",jurisdiction:"China",type:"Privacy",industry:"All",effective:"2021-11-01",penalty:"¥50M or 5% prior year revenue",covers:["Personal information","Sensitive personal information","Biometric data"],score:40,status:"Not Started",lastAudit:null,requirements:[{id:"pipl-1",ref:"Art. 13",title:"Legal basis — consent or other lawful basis required",linkedPolicies:[]},{id:"pipl-2",ref:"Art. 17",title:"Notice — inform individuals of processing purpose and method",linkedPolicies:[]},{id:"pipl-3",ref:"Art. 28",title:"Sensitive data — heightened consent for biometric, health, financial data",linkedPolicies:[]},{id:"pipl-4",ref:"Art. 38",title:"Cross-border transfer — security assessment required",linkedPolicies:[]},{id:"pipl-5",ref:"Art. 52",title:"Organisational measures — DPO designated for large-scale processing",linkedPolicies:[]}]},
   {id:"pipeda",name:"PIPEDA",enabled:false,fullName:"Personal Information Protection and Electronic Documents Act",jurisdiction:"Canada",type:"Privacy",industry:"All",effective:"2001-01-01",penalty:"CAD $100,000 per violation",covers:["Personal information","Employee data","Health information"],score:60,status:"Partial",lastAudit:null,requirements:[{id:"pipeda-1",ref:"Sched 1 §4.1",title:"Accountability — designated person responsible for compliance",linkedPolicies:[]},{id:"pipeda-2",ref:"Sched 1 §4.3",title:"Consent — meaningful consent obtained for collection and use",linkedPolicies:[]},{id:"pipeda-3",ref:"Sched 1 §4.5",title:"Limiting use — data used only for stated purpose",linkedPolicies:[]},{id:"pipeda-4",ref:"Sched 1 §4.7",title:"Safeguards — security appropriate to sensitivity of information",linkedPolicies:[]}]},
@@ -5730,16 +5736,16 @@ const REGS_META = [
   {id:"appi",name:"APPI",enabled:false,fullName:"Act on the Protection of Personal Information (Japan)",jurisdiction:"Japan",type:"Privacy",industry:"All",effective:"2003-05-30",penalty:"JPY 100M (entity)",covers:["Personal information","Sensitive personal information","Anonymised data"],score:50,status:"Not Started",lastAudit:null,requirements:[{id:"appi-1",ref:"Art. 17",title:"Purpose specification — specific purpose of use defined",linkedPolicies:[]},{id:"appi-2",ref:"Art. 20",title:"Appropriate acquisition — no false or deceptive means",linkedPolicies:[]},{id:"appi-3",ref:"Art. 27",title:"Restriction on third-party provision without consent",linkedPolicies:[]},{id:"appi-4",ref:"Art. 23",title:"Security control measures — prevent leakage and loss",linkedPolicies:[]}]},
   {id:"popia",name:"POPIA",enabled:false,fullName:"Protection of Personal Information Act (South Africa)",jurisdiction:"South Africa",type:"Privacy",industry:"All",effective:"2021-07-01",penalty:"ZAR 10M or imprisonment",covers:["Personal information","Special personal information","Children's data"],score:42,status:"Not Started",lastAudit:null,requirements:[{id:"popia-1",ref:"Condition 1",title:"Accountability — responsible party accountable for conditions",linkedPolicies:[]},{id:"popia-2",ref:"Condition 2",title:"Processing limitation — lawful and minimal processing",linkedPolicies:[]},{id:"popia-3",ref:"Condition 7",title:"Security safeguards — integrity and confidentiality of data",linkedPolicies:[]},{id:"popia-4",ref:"Condition 8",title:"Data subject participation — access and correction rights",linkedPolicies:[]}]},
   {id:"dpdp",name:"DPDP Act",enabled:false,fullName:"Digital Personal Data Protection Act (India)",jurisdiction:"India",type:"Privacy",industry:"All",effective:"2023-08-11 (enacted; rules notified 2025, phased to 2027)",penalty:"₹250 crore per breach",covers:["Digital personal data","Children's data","Cross-border data"],score:35,status:"Not Started",lastAudit:null,requirements:[{id:"dpdp-1",ref:"§6",title:"Consent — free, specific, informed, unconditional consent required",linkedPolicies:[]},{id:"dpdp-2",ref:"§8",title:"General obligations of data fiduciary — accuracy and security",linkedPolicies:[]},{id:"dpdp-3",ref:"§11",title:"Right to information — data principal's right to access data",linkedPolicies:[]},{id:"dpdp-4",ref:"§9",title:"Processing of children's data — verifiable parental consent",linkedPolicies:[]},{id:"dpdp-5",ref:"§8(6)",title:"Data breach notification — Board and data principal notified",linkedPolicies:[]}]},
-  {id:"hipaa",name:"HIPAA",enabled:true,fullName:"Health Insurance Portability and Accountability Act",jurisdiction:"US",type:"Healthcare",industry:"Healthcare",effective:"1996-08-21",penalty:"$100–$50,000 per violation, max $1.9M/year",covers:["Protected Health Information","Electronic PHI","Medical records"],score:91,status:"Passing",lastAudit:"2026-04-10",requirements:[{id:"hipaa-1",ref:"§164.308",title:"Administrative safeguards — policies and procedures for PHI",linkedPolicies:[]},{id:"hipaa-2",ref:"§164.310",title:"Physical safeguards — facility and workstation controls",linkedPolicies:[]},{id:"hipaa-3",ref:"§164.312",title:"Technical safeguards — access controls and audit controls",linkedPolicies:[]},{id:"hipaa-4",ref:"§164.502",title:"Use and disclosure limitations — minimum necessary standard",linkedPolicies:[]},{id:"hipaa-5",ref:"§164.524",title:"Right of access — patients can request copies of PHI",linkedPolicies:[]}]},
-  {id:"hitech",name:"HITECH",enabled:true,fullName:"Health Information Technology for Economic and Clinical Health Act",jurisdiction:"US",type:"Healthcare",industry:"Healthcare",effective:"2009-02-17",penalty:"Up to $1.9M per violation category",covers:["Electronic PHI","EHR data","Business associate data"],score:84,status:"Passing",lastAudit:"2026-04-10",requirements:[{id:"hitech-1",ref:"§13402",title:"Breach notification — notify affected individuals and HHS",linkedPolicies:[]},{id:"hitech-2",ref:"§13401",title:"Business associate liability — direct HIPAA obligations apply",linkedPolicies:[]},{id:"hitech-3",ref:"§13405",title:"Restrictions on disclosures — honour patient restrictions",linkedPolicies:[]},{id:"hitech-4",ref:"§13405(c)",title:"Accounting of disclosures — track disclosures made through an EHR",linkedPolicies:[]}]},
-  {id:"pci_dss",name:"PCI DSS",enabled:true,fullName:"Payment Card Industry Data Security Standard",jurisdiction:"Global",type:"Financial",industry:"Financial Services",effective:"2022-03-31",penalty:"$5,000–$100,000/month by card networks",covers:["Cardholder data","Sensitive auth data","Payment records"],score:79,status:"Partial",lastAudit:"2026-03-25",requirements:[{id:"pci-1",ref:"Req. 3",title:"Protect stored cardholder data — encryption required",linkedPolicies:[]},{id:"pci-2",ref:"Req. 7",title:"Restrict access to cardholder data by business need-to-know",linkedPolicies:[]},{id:"pci-3",ref:"Req. 8",title:"Identify users and authenticate access to system components",linkedPolicies:[]},{id:"pci-4",ref:"Req. 10",title:"Log and monitor all access to network resources and cardholder data",linkedPolicies:[]},{id:"pci-5",ref:"Req. 12",title:"Support information security with organisational policies",linkedPolicies:[]}]},
-  {id:"sox",name:"SOX",enabled:true,fullName:"Sarbanes-Oxley Act",jurisdiction:"US",type:"Financial",industry:"Public Companies",effective:"2002-07-30",penalty:"Fines and up to 20 years imprisonment",covers:["Financial records","Audit data","Internal controls"],score:76,status:"Partial",lastAudit:"2026-02-28",requirements:[{id:"sox-1",ref:"§302",title:"CEO/CFO certification of financial statement accuracy",linkedPolicies:[]},{id:"sox-2",ref:"§404",title:"Internal control assessment — ICFR documented annually",linkedPolicies:[]},{id:"sox-3",ref:"§802",title:"Records retention — audit records retained 7 years",linkedPolicies:[]},{id:"sox-4",ref:"§409",title:"Real-time disclosure of material changes to financial condition",linkedPolicies:[]}]},
+  {id:"hipaa",name:"HIPAA",enabled:true,fullName:"Health Insurance Portability and Accountability Act",jurisdiction:"US",type:"Healthcare",industry:"Healthcare",effective:"1996-08-21",penalty:"$100–$50,000 per violation, max $1.9M/year",covers:["Protected Health Information","Electronic PHI","Medical records"],score:91,status:"Passing",lastAudit:"2026-04-10",requirements:[{id:"hipaa-1",ref:"§164.308",title:"Administrative safeguards — policies and procedures for PHI",linkedPolicies:[],enforcement:"meta",pattern:"CP1"},{id:"hipaa-2",ref:"§164.310",title:"Physical safeguards — facility and workstation controls",linkedPolicies:[],enforcement:"attested",pattern:"CP10"},{id:"hipaa-3",ref:"§164.312",title:"Technical safeguards — access controls and audit controls",linkedPolicies:[],enforcement:"partial",pattern:"CP1,CP4"},{id:"hipaa-4",ref:"§164.502",title:"Use and disclosure limitations — minimum necessary standard",linkedPolicies:[],enforcement:"enforceable",pattern:"CP12"},{id:"hipaa-5",ref:"§164.524",title:"Right of access — patients can request copies of PHI",linkedPolicies:[],enforcement:"attested",pattern:"CP13"}]},
+  {id:"hitech",name:"HITECH",enabled:true,fullName:"Health Information Technology for Economic and Clinical Health Act",jurisdiction:"US",type:"Healthcare",industry:"Healthcare",effective:"2009-02-17",penalty:"Up to $1.9M per violation category",covers:["Electronic PHI","EHR data","Business associate data"],score:84,status:"Passing",lastAudit:"2026-04-10",requirements:[{id:"hitech-1",ref:"§13402",title:"Breach notification — notify affected individuals and HHS",linkedPolicies:[],enforcement:"out_of_model",pattern:"CP9"},{id:"hitech-2",ref:"§13401",title:"Business associate liability — direct HIPAA obligations apply",linkedPolicies:[],enforcement:"attested",pattern:"CP15"},{id:"hitech-3",ref:"§13405",title:"Restrictions on disclosures — honour patient restrictions",linkedPolicies:[],enforcement:"enforceable",pattern:"CP12"},{id:"hitech-4",ref:"§13405(c)",title:"Accounting of disclosures — track disclosures made through an EHR",linkedPolicies:[],enforcement:"gap_field",pattern:"CP4"}]},
+  {id:"pci_dss",name:"PCI DSS",enabled:true,fullName:"Payment Card Industry Data Security Standard",jurisdiction:"Global",type:"Financial",industry:"Financial Services",effective:"2022-03-31",penalty:"$5,000–$100,000/month by card networks",covers:["Cardholder data","Sensitive auth data","Payment records"],score:79,status:"Partial",lastAudit:"2026-03-25",requirements:[{id:"pci-1",ref:"Req. 3",title:"Protect stored cardholder data — encryption required",linkedPolicies:[],enforcement:"partial",pattern:"CP2"},{id:"pci-2",ref:"Req. 7",title:"Restrict access to cardholder data by business need-to-know",linkedPolicies:[],enforcement:"enforceable",pattern:"CP1"},{id:"pci-3",ref:"Req. 8",title:"Identify users and authenticate access to system components",linkedPolicies:[],enforcement:"out_of_model",pattern:"CP14"},{id:"pci-4",ref:"Req. 10",title:"Log and monitor all access to network resources and cardholder data",linkedPolicies:[],enforcement:"gap_field",pattern:"CP4"},{id:"pci-5",ref:"Req. 12",title:"Support information security with organisational policies",linkedPolicies:[],enforcement:"meta",pattern:"CP1"}]},
+  {id:"sox",name:"SOX",enabled:true,fullName:"Sarbanes-Oxley Act",jurisdiction:"US",type:"Financial",industry:"Public Companies",effective:"2002-07-30",penalty:"Fines and up to 20 years imprisonment",covers:["Financial records","Audit data","Internal controls"],score:76,status:"Partial",lastAudit:"2026-02-28",requirements:[{id:"sox-1",ref:"§302",title:"CEO/CFO certification of financial statement accuracy",linkedPolicies:[],enforcement:"attested",pattern:"CP20"},{id:"sox-2",ref:"§404",title:"Internal control assessment — ICFR documented annually",linkedPolicies:[],enforcement:"attested",pattern:"CP16"},{id:"sox-3",ref:"§802",title:"Records retention — audit records retained 7 years",linkedPolicies:[],enforcement:"enforceable",pattern:"CP6"},{id:"sox-4",ref:"§409",title:"Real-time disclosure of material changes to financial condition",linkedPolicies:[],enforcement:"out_of_model",pattern:"n/a"}]},
   {id:"glba",name:"GLBA",enabled:false,fullName:"Gramm-Leach-Bliley Act",jurisdiction:"US",type:"Financial",industry:"Financial Services",effective:"1999-11-12",penalty:"Up to $100,000 per violation (institution)",covers:["Non-public personal information","Consumer financial data"],score:65,status:"Partial",lastAudit:null,requirements:[{id:"glba-1",ref:"§6801",title:"Financial privacy rule — notice and opt-out requirements",linkedPolicies:[]},{id:"glba-2",ref:"§6801(b)",title:"Safeguards rule — written information security program required",linkedPolicies:[]},{id:"glba-3",ref:"§6821",title:"Pretexting protection — prohibit false pretenses for customer data",linkedPolicies:[]},{id:"glba-4",ref:"16 CFR §314",title:"Safeguards — designate qualified individual to oversee program",linkedPolicies:[]}]},
   {id:"dora",name:"DORA",enabled:false,fullName:"Digital Operational Resilience Act",jurisdiction:"EU",type:"Financial",industry:"Financial Services",effective:"2025-01-17",penalty:"1% daily average global turnover for up to 6 months",covers:["ICT risk data","Incident data","Third-party risk data"],score:52,status:"Partial",lastAudit:null,requirements:[{id:"dora-1",ref:"Art. 6",title:"ICT risk management framework — documented and maintained",linkedPolicies:[]},{id:"dora-2",ref:"Art. 17",title:"ICT incident classification and reporting to competent authority",linkedPolicies:[]},{id:"dora-3",ref:"Art. 28",title:"Third-party risk management — contractual arrangements",linkedPolicies:[]},{id:"dora-4",ref:"Art. 26",title:"Digital operational resilience testing — TLPT for critical entities",linkedPolicies:[]},{id:"dora-5",ref:"Art. 45",title:"Information sharing — voluntary cyber threat intelligence exchange",linkedPolicies:[]}]},
-  {id:"soc2",name:"SOC 2",enabled:true,fullName:"Service Organisation Control 2",jurisdiction:"Global",type:"Security",industry:"Technology / SaaS",effective:"Ongoing",penalty:"Loss of certification / customer trust",covers:["Customer data","System logs","Access records"],score:82,status:"Passing",lastAudit:"2026-02-15",requirements:[{id:"soc2-1",ref:"CC6.1",title:"Logical access security measures — RBAC and MFA enforced",linkedPolicies:[]},{id:"soc2-2",ref:"CC7.1",title:"System monitoring — anomaly detection and alerting",linkedPolicies:[]},{id:"soc2-3",ref:"CC8.1",title:"Change management — authorised change process documented",linkedPolicies:[]},{id:"soc2-4",ref:"A1.1",title:"Data backup and recovery — tested RTO/RPO targets",linkedPolicies:[]},{id:"soc2-5",ref:"CC9.2",title:"Vendor risk management — third-party assessments conducted",linkedPolicies:[]}]},
-  {id:"iso27001",name:"ISO 27001",enabled:true,fullName:"ISO/IEC 27001 — Information Security Management",jurisdiction:"Global",type:"Security",industry:"All",effective:"2022-10-25",penalty:"Loss of certification",covers:["Information assets","ICT systems","Supplier data"],score:77,status:"Partial",lastAudit:"2026-01-30",requirements:[{id:"iso27001-1",ref:"Clause 6.1",title:"Information security risk assessment and treatment",linkedPolicies:[]},{id:"iso27001-2",ref:"Annex A 5.12",title:"Information classification — asset classification scheme",linkedPolicies:[]},{id:"iso27001-3",ref:"Annex A 5.15",title:"Access control policy — documented and implemented",linkedPolicies:[]},{id:"iso27001-4",ref:"Annex A 8.15",title:"Logging and monitoring — event logs retained and reviewed",linkedPolicies:[]},{id:"iso27001-5",ref:"Annex A 5.29",title:"Information security continuity — BCP/DR aligned",linkedPolicies:[]}]},
+  {id:"soc2",name:"SOC 2",enabled:true,fullName:"Service Organisation Control 2",jurisdiction:"Global",type:"Security",industry:"Technology / SaaS",effective:"Ongoing",penalty:"Loss of certification / customer trust",covers:["Customer data","System logs","Access records"],score:82,status:"Passing",lastAudit:"2026-02-15",requirements:[{id:"soc2-1",ref:"CC6.1",title:"Logical access security measures — RBAC and MFA enforced",linkedPolicies:[],enforcement:"partial",pattern:"CP1,CP14"},{id:"soc2-2",ref:"CC7.1",title:"System monitoring — anomaly detection and alerting",linkedPolicies:[],enforcement:"out_of_model",pattern:"n/a"},{id:"soc2-3",ref:"CC8.1",title:"Change management — authorised change process documented",linkedPolicies:[],enforcement:"attested",pattern:"CP16"},{id:"soc2-4",ref:"A1.1",title:"Data backup and recovery — tested RTO/RPO targets",linkedPolicies:[],enforcement:"attested",pattern:"CP17"},{id:"soc2-5",ref:"CC9.2",title:"Vendor risk management — third-party assessments conducted",linkedPolicies:[],enforcement:"attested",pattern:"CP15"}]},
+  {id:"iso27001",name:"ISO 27001",enabled:true,fullName:"ISO/IEC 27001 — Information Security Management",jurisdiction:"Global",type:"Security",industry:"All",effective:"2022-10-25",penalty:"Loss of certification",covers:["Information assets","ICT systems","Supplier data"],score:77,status:"Partial",lastAudit:"2026-01-30",requirements:[{id:"iso27001-1",ref:"Clause 6.1",title:"Information security risk assessment and treatment",linkedPolicies:[],enforcement:"attested",pattern:"n/a"},{id:"iso27001-2",ref:"Annex A 5.12",title:"Information classification — asset classification scheme",linkedPolicies:[],enforcement:"enforceable",pattern:"CP19"},{id:"iso27001-3",ref:"Annex A 5.15",title:"Access control policy — documented and implemented",linkedPolicies:[],enforcement:"partial",pattern:"CP1,CP16"},{id:"iso27001-4",ref:"Annex A 8.15",title:"Logging and monitoring — event logs retained and reviewed",linkedPolicies:[],enforcement:"gap_field",pattern:"CP4"},{id:"iso27001-5",ref:"Annex A 5.29",title:"Information security continuity — BCP/DR aligned",linkedPolicies:[],enforcement:"attested",pattern:"CP17"}]},
   {id:"iso27701",name:"ISO 27701",enabled:false,fullName:"ISO/IEC 27701 — Privacy Information Management",jurisdiction:"Global",type:"Privacy",industry:"All",effective:"2019-08-06",penalty:"Loss of certification",covers:["Personally identifiable information","Processing records"],score:58,status:"Partial",lastAudit:null,requirements:[{id:"iso27701-1",ref:"§6.2.1",title:"Understand organisation and its context for privacy",linkedPolicies:[]},{id:"iso27701-2",ref:"§7.2.1",title:"PII controller — define and document processing purposes",linkedPolicies:[]},{id:"iso27701-3",ref:"§7.3.1",title:"Privacy by design — PII considerations during development",linkedPolicies:[]},{id:"iso27701-4",ref:"§8.2.1",title:"PII processor — processing under controller instructions only",linkedPolicies:[]}]},
-  {id:"nistcsf",name:"NIST CSF",enabled:true,fullName:"NIST Cybersecurity Framework",jurisdiction:"US (Global Adoption)",type:"Security",industry:"All",effective:"2014-02-12 (CSF 1.1; v2.0 issued 2024)",penalty:"Voluntary framework — no direct penalty",covers:["Cyber assets","System data","Threat data"],score:80,status:"Passing",lastAudit:"2026-03-20",requirements:[{id:"nistcsf-1",ref:"ID.AM",title:"Asset management — catalogue of data assets maintained",linkedPolicies:[]},{id:"nistcsf-2",ref:"PR.AC",title:"Identity management and access control implemented",linkedPolicies:[]},{id:"nistcsf-3",ref:"PR.DS",title:"Data security — data-at-rest and in-transit protection",linkedPolicies:[]},{id:"nistcsf-4",ref:"DE.CM",title:"Continuous monitoring — security events detected",linkedPolicies:[]},{id:"nistcsf-5",ref:"RS.RP",title:"Response planning — incident response plan executed",linkedPolicies:[]}]},
+  {id:"nistcsf",name:"NIST CSF",enabled:true,fullName:"NIST Cybersecurity Framework",jurisdiction:"US (Global Adoption)",type:"Security",industry:"All",effective:"2014-02-12 (CSF 1.1; v2.0 issued 2024)",penalty:"Voluntary framework — no direct penalty",covers:["Cyber assets","System data","Threat data"],score:80,status:"Passing",lastAudit:"2026-03-20",requirements:[{id:"nistcsf-1",ref:"ID.AM",title:"Asset management — catalogue of data assets maintained",linkedPolicies:[],enforcement:"enforceable",pattern:"CP18"},{id:"nistcsf-2",ref:"PR.AC",title:"Identity management and access control implemented",linkedPolicies:[],enforcement:"partial",pattern:"CP1,CP14"},{id:"nistcsf-3",ref:"PR.DS",title:"Data security — data-at-rest and in-transit protection",linkedPolicies:[],enforcement:"partial",pattern:"CP2,CP3"},{id:"nistcsf-4",ref:"DE.CM",title:"Continuous monitoring — security events detected",linkedPolicies:[],enforcement:"out_of_model",pattern:"n/a"},{id:"nistcsf-5",ref:"RS.RP",title:"Response planning — incident response plan executed",linkedPolicies:[],enforcement:"attested",pattern:"CP9"}]},
   {id:"nis2",name:"NIS2",enabled:false,fullName:"Network and Information Security Directive 2",jurisdiction:"EU",type:"Security",industry:"Critical Infrastructure",effective:"2024-10-17",penalty:"€10M or 2% global revenue (essential entities)",covers:["Network systems","ICT infrastructure","Incident data"],score:48,status:"Not Started",lastAudit:null,requirements:[{id:"nis2-1",ref:"Art. 21",title:"Cybersecurity risk management measures — policies documented",linkedPolicies:[]},{id:"nis2-2",ref:"Art. 23",title:"Incident reporting — 24h early warning, 72h notification",linkedPolicies:[]},{id:"nis2-3",ref:"Art. 21(2)(d)",title:"Supply chain security — third-party risk measures",linkedPolicies:[]},{id:"nis2-4",ref:"Art. 21(2)(c)",title:"Business continuity — backup, disaster recovery, crisis management",linkedPolicies:[]}]},
   {id:"fedramp",name:"FedRAMP",enabled:false,fullName:"Federal Risk and Authorization Management Program",jurisdiction:"US Federal",type:"Security",industry:"Government / Cloud",effective:"2011-12-08",penalty:"Loss of ATO / contract termination",covers:["Federal data","Cloud system data","CUI"],score:62,status:"Partial",lastAudit:null,requirements:[{id:"fedramp-1",ref:"AC-2",title:"Account management — authorised users and access tracked",linkedPolicies:[]},{id:"fedramp-2",ref:"AU-2",title:"Audit events — defined set of events logged continuously",linkedPolicies:[]},{id:"fedramp-3",ref:"SC-28",title:"Protection of information at rest — encryption required",linkedPolicies:[]},{id:"fedramp-4",ref:"IR-4",title:"Incident handling — federal incident response procedures",linkedPolicies:[]},{id:"fedramp-5",ref:"CA-7",title:"Continuous monitoring — ongoing authorisation program",linkedPolicies:[]}]},
 ];
@@ -6138,6 +6144,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   const [schedEnabled,   setSchedEnabled]   = useState(true);
   const [selRegId,       setSelRegId]       = useState(null);
   const [regSearch,      setRegSearch]      = useState("");
+  const [attestOpen,     setAttestOpen]     = useState(null); // {regId,reqId} or null
+  const [attestDraft,    setAttestDraft]    = useState({evidence:"",date:""});
   const [polEditCatOpen,  setPolEditCatOpen]  = useState(false);
   const [polEditCatDraft, setPolEditCatDraft] = useState(null);
   const [polBulkEdit,    setPolBulkEdit]    = useState(false);
@@ -6292,6 +6300,30 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
       ?{...p,lifecycle:newLifecycle,updated:today(),history:[{when:today(),who:"You",action},...(p.history||[])]}:p));
     onToast(action,"success");
   };
+  // Keeps regulations[].requirements[].linkedPolicies in sync with a policy's own
+  // regulationArticles selection, so the Regulations dashboard and the Create Policy
+  // wizard's article picker always agree on what's covered — idempotent, safe to call
+  // on create, edit (re-syncs to the new selection) and delete (pass {} to clear).
+  const applyRegArticleLinks = (policyId, regulationArticles) => {
+    const wanted = new Set();
+    Object.entries(regulationArticles||{}).forEach(([fw,reqIds])=>{
+      (reqIds||[]).forEach(reqId=>wanted.add(fw+"::"+reqId));
+    });
+    setRegulations(prev=>prev.map(reg=>({
+      ...reg,
+      requirements:reg.requirements.map(req=>{
+        const key = reg.name+"::"+req.id;
+        const has = (req.linkedPolicies||[]).includes(policyId);
+        const should = wanted.has(key);
+        if(has===should) return req;
+        const linkedPolicies = should
+          ? [...(req.linkedPolicies||[]),policyId]
+          : (req.linkedPolicies||[]).filter(id=>id!==policyId);
+        return {...req,linkedPolicies};
+      })
+    })));
+  };
+
   const handleCreate = (runMode="draft") => {
     if (!newPol.name.trim()) return;
     const cat = newPol.category.toLowerCase().replace(/[^a-z0-9]+/g,"_");
@@ -6348,6 +6380,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
            violations:existing.violations, compliancePct:existing.compliancePct, lastEvaluated:existing.lastEvaluated, runs:existing.runs,
            history:[{when:today(),who:"You",action:"Updated policy"},...(existing.history||[])]}
         :existing));
+      applyRegArticleLinks(selPolicyId, p.regulationArticles);
       const editedId=selPolicyId;
       closeWizard();
       setPdTab("overview");
@@ -6356,6 +6389,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
       return;
     }
     setPolicies(prev=>[...prev,p]);
+    applyRegArticleLinks(p.id, p.regulationArticles);
     closeWizard();
     setSelPolicyId(p.id); setPdTab("overview");
     if(runMode==="run"){
@@ -6463,6 +6497,25 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
     onToast("Policy link updated","success");
   };
   const handleCloseLinkPol = () => setLinkPolOpen(null);
+
+  // Attestation — for requirements EDG cannot check with a rule (attested / gap_field / the
+  // manual half of partial). Filing one records evidence + reviewer + date on the requirement.
+  const saveAttestation = (regId,reqId) => {
+    if(!attestDraft.evidence.trim()) return;
+    setRegulations(prev=>prev.map(r=>r.id===regId
+      ?{...r,requirements:r.requirements.map(req=>req.id===reqId
+          ?{...req,attestation:{evidence:attestDraft.evidence.trim(),reviewedBy:"You",reviewedAt:attestDraft.date||today()}}
+          :req)}
+      :r));
+    setAttestOpen(null);
+    setAttestDraft({evidence:"",date:""});
+    onToast("Attestation saved","success");
+  };
+  const clearAttestation = (regId,reqId) => {
+    setRegulations(prev=>prev.map(r=>r.id===regId
+      ?{...r,requirements:r.requirements.map(req=>req.id===reqId?{...req,attestation:null}:req)}
+      :r));
+  };
   const handleAddRule = (polId) => {
     if (!ruleForm.name.trim()) return;
     const rule = {id:`r-${Date.now()}`,name:ruleForm.name.trim(),criteria:ruleForm.criteria.trim()||"No criteria specified."};
@@ -8258,17 +8311,48 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
           const STATUS_COLOR = {Passing:T.green,Partial:T.amber,"Not Started":T.textMuted};
           const selReg = selRegId ? regulations.find(r=>r.id===selRegId) : null;
 
-          // Summary counts
-          const passing = regulations.filter(r=>r.status==="Passing").length;
-          const partial  = regulations.filter(r=>r.status==="Partial").length;
-          const notStart = regulations.filter(r=>r.status==="Not Started").length;
-          const totalGaps = regulations.reduce((s,r)=>s+r.requirements.filter(req=>!(req.linkedPolicies||[]).length).length,0);
+          // ── Enforcement classification (section 4 of the compliance strategy doc) ──
+          // Every requirement is either enforceable/meta/proxy/partial (rule-checkable, wholly
+          // or in part), gap_field (blocked on a missing canonical field), attested (procedural,
+          // needs a human sign-off), or out_of_model (a different system's job entirely — never
+          // counted in the score, never presented as a gap this platform could close).
+          const CLASS_META = {
+            enforceable:{label:"Enforceable",color:T.green},
+            meta:{label:"Enforceable (meta)",color:T.green},
+            proxy:{label:"Enforceable (proxy)",color:T.green},
+            partial:{label:"Enforceable (partial)",color:T.amber},
+            gap_field:{label:"Gap — new field",color:T.amber},
+            attested:{label:"Attested",color:T.blue},
+          };
+          const reqResolved = (r) => {
+            const hasPolicy = (r.linkedPolicies||[]).length>0;
+            const hasAttestation = !!r.attestation;
+            if(r.enforcement==="partial") return hasPolicy && hasAttestation;
+            if(r.enforcement==="attested"||r.enforcement==="gap_field") return hasAttestation;
+            return hasPolicy; // enforceable, meta, proxy — and legacy requirements with no enforcement field yet
+          };
+          const regScope  = (reg) => (reg.requirements||[]).filter(r=>r.enforcement!=="out_of_model");
+          const regScore  = (reg) => {
+            const scope = regScope(reg);
+            if(!scope.length) return reg.score||0;
+            return Math.round(scope.filter(reqResolved).length/scope.length*100);
+          };
+          const scoreBand = (score) => score>=80?T.green:score>=50?T.amber:T.rose;
+
+          // Summary counts — recomputed from live coverage, not the static seed status
+          const passing = regulations.filter(r=>r.enabled&&regScore(r)>=80).length;
+          const partial  = regulations.filter(r=>r.enabled&&regScore(r)>=50&&regScore(r)<80).length;
+          const notStart = regulations.filter(r=>r.enabled&&regScore(r)<50).length;
+          const totalGaps = regulations.filter(r=>r.enabled).reduce((s,r)=>s+regScope(r).filter(req=>!reqResolved(req)).length,0);
 
           if(selReg){
             // ─── Drill-in view ───
-            const sc = selReg.score>=90?T.green:selReg.score>=75?T.amber:T.rose;
+            const liveScore = regScore(selReg);
+            const sc = scoreBand(liveScore);
             const tc = TYPE_COLOR[selReg.type]||T.accent;
             const linkedPolsForReg = policies.filter(p=>(p.regulations||[]).some(r=>r===selReg.name||selReg.name.includes(r)||r.includes(selReg.id.toUpperCase())));
+            const outOfScope = (selReg.requirements||[]).filter(r=>r.enforcement==="out_of_model");
+            const inScopeReqs = (selReg.requirements||[]).filter(r=>r.enforcement!=="out_of_model");
             return (
               <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
                 {/* Back bar */}
@@ -8293,13 +8377,16 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                         <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:6}}>
                           <span style={{fontSize:20,fontWeight:800,letterSpacing:"-0.5px",color:T.text}}>{selReg.name}</span>
                           <span style={{fontSize:10.5,fontWeight:700,padding:"2px 9px",borderRadius:99,background:`${tc}15`,color:tc,border:`1px solid ${tc}30`}}>{selReg.type}</span>
-                          <span style={{fontSize:10.5,fontWeight:700,padding:"2px 9px",borderRadius:99,background:`${STATUS_COLOR[selReg.status]||T.textMuted}15`,color:STATUS_COLOR[selReg.status]||T.textMuted,border:`1px solid ${STATUS_COLOR[selReg.status]||T.textMuted}30`}}>{selReg.status}</span>
+                          <span style={{fontSize:10.5,fontWeight:700,padding:"2px 9px",borderRadius:99,background:`${sc}15`,color:sc,border:`1px solid ${sc}30`}}>{liveScore>=80?"On Track":liveScore>=50?"Partial":"Needs Attention"}</span>
                         </div>
                         <div style={{fontSize:13,color:T.textSub,lineHeight:1.5,marginBottom:14}}>{selReg.fullName}</div>
                         {/* Score bar */}
-                        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
-                          <div style={{flex:1,height:6,borderRadius:3,background:T.bgElevated,overflow:"hidden"}}><div style={{width:`${selReg.score}%`,height:"100%",background:sc,borderRadius:3,transition:"width .4s"}}/></div>
-                          <span style={{fontSize:13,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:sc,flexShrink:0}}>{selReg.score}% compliance</span>
+                        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+                          <div style={{flex:1,height:6,borderRadius:3,background:T.bgElevated,overflow:"hidden"}}><div style={{width:`${liveScore}%`,height:"100%",background:sc,borderRadius:3,transition:"width .4s"}}/></div>
+                          <span style={{fontSize:13,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:sc,flexShrink:0}}>{liveScore}%</span>
+                        </div>
+                        <div style={{fontSize:10.5,color:T.textMuted,marginBottom:14}}>
+                          Data governance readiness — {inScopeReqs.filter(reqResolved).length} of {inScopeReqs.length} in-scope controls. Not a {selReg.name} compliance certification{outOfScope.length>0?` — excludes ${outOfScope.length} requirement${outOfScope.length!==1?"s":""} outside EDG's scope`:""}.
                         </div>
                         {/* Meta grid */}
                         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:10}}>
@@ -8353,40 +8440,93 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       </div>
                     </div>
                   )}
-                  {/* Requirements */}
+                  {/* Requirements — in EDG's data-governance scope */}
                   <div>
-                    <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Key Requirements ({selReg.requirements.length})</div>
-                    {selReg.requirements.map(req=>{
+                    <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Data governance scope ({inScopeReqs.length})</div>
+                    {inScopeReqs.map(req=>{
+                      const cls = req.enforcement||"enforceable";
+                      const meta = CLASS_META[cls]||CLASS_META.enforceable;
                       const lps=(req.linkedPolicies||[]).map(id=>policies.find(p=>p.id===id)).filter(Boolean);
-                      const hasLinks=lps.length>0;
+                      const hasPolicy=lps.length>0;
+                      const hasAttestation=!!req.attestation;
+                      const resolved=reqResolved(req);
+                      const needsPolicy = cls==="enforceable"||cls==="meta"||cls==="proxy"||cls==="partial";
+                      const needsAttestation = cls==="attested"||cls==="gap_field"||cls==="partial";
+                      const formOpen = attestOpen&&attestOpen.regId===selReg.id&&attestOpen.reqId===req.id;
                       return (
-                        <div key={req.id} style={{padding:"12px 16px",background:T.bgSurface,border:`1.5px solid ${hasLinks?T.green+"30":T.border}`,borderRadius:9,marginBottom:8}}>
+                        <div key={req.id} style={{padding:"12px 16px",background:T.bgSurface,border:`1.5px solid ${resolved?T.green+"30":T.border}`,borderRadius:9,marginBottom:8}}>
                           <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
-                            <div style={{width:20,height:20,borderRadius:"50%",background:hasLinks?`${T.green}18`:`${T.amber}15`,border:`1.5px solid ${hasLinks?T.green:T.amber}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>
-                              {hasLinks?<svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M2 4.5l2 2L7 2.5" stroke={T.green} strokeWidth="1.4" strokeLinecap="round"/></svg>:<span style={{fontSize:9,color:T.amber,fontWeight:700}}>!</span>}
+                            <div style={{width:20,height:20,borderRadius:"50%",background:resolved?`${T.green}18`:`${T.amber}15`,border:`1.5px solid ${resolved?T.green:T.amber}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>
+                              {resolved?<svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M2 4.5l2 2L7 2.5" stroke={T.green} strokeWidth="1.4" strokeLinecap="round"/></svg>:<span style={{fontSize:9,color:T.amber,fontWeight:700}}>!</span>}
                             </div>
                             <div style={{flex:1,minWidth:0}}>
                               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
                                 <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",fontWeight:700,color:tc,background:`${tc}10`,padding:"1px 7px",borderRadius:4,border:`1px solid ${tc}20`,flexShrink:0}}>{req.ref}</span>
                                 <span style={{fontSize:12.5,color:T.text,lineHeight:1.5}}>{req.title}</span>
+                                <span style={{fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:99,background:`${meta.color}15`,color:meta.color,flexShrink:0}}>{meta.label}</span>
                               </div>
-                              {hasLinks&&(
+                              {hasPolicy&&(
                                 <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:4}}>
                                   {lps.map(lp=>(
                                     <span key={lp.id} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,padding:"2px 8px 2px 6px",borderRadius:5,background:`${T.green}12`,borderLeft:`3px solid ${T.green}`,color:T.green,fontWeight:600}}>{lp.name}</span>
                                   ))}
                                 </div>
                               )}
+                              {hasAttestation&&(
+                                <div style={{display:"flex",alignItems:"center",gap:6,marginTop:4,flexWrap:"wrap"}}>
+                                  <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,padding:"2px 8px 2px 6px",borderRadius:5,background:`${T.blue}12`,borderLeft:`3px solid ${T.blue}`,color:T.blue,fontWeight:600}}>Attested by {req.attestation.reviewedBy} · {req.attestation.reviewedAt}</span>
+                                  <button onClick={()=>clearAttestation(selReg.id,req.id)} style={{fontSize:10.5,color:T.textMuted,background:"none",border:"none",cursor:"pointer",padding:0,textDecoration:"underline"}}>Reset</button>
+                                </div>
+                              )}
+                              {hasAttestation&&<div style={{fontSize:11,color:T.textMuted,marginTop:3,fontStyle:"italic"}}>"{req.attestation.evidence}"</div>}
+                              {formOpen&&(
+                                <div style={{marginTop:10,padding:10,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:8}}>
+                                  <textarea value={attestDraft.evidence} onChange={e=>setAttestDraft(d=>({...d,evidence:e.target.value}))} rows={2} placeholder="Describe how this requirement is satisfied and where the evidence lives"
+                                    style={{width:"100%",padding:"8px 10px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box"}}/>
+                                  <input type="date" value={attestDraft.date} onChange={e=>setAttestDraft(d=>({...d,date:e.target.value}))}
+                                    style={{padding:"6px 10px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",width:160}}/>
+                                  <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                                    <Btn ghost onClick={()=>{setAttestOpen(null);setAttestDraft({evidence:"",date:""});}}>Cancel</Btn>
+                                    <Btn onClick={()=>saveAttestation(selReg.id,req.id)}>Save attestation</Btn>
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                            <button onClick={()=>setLinkPolOpen({regId:selReg.id,reqId:req.id})}
-                              style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:hasLinks?"transparent":T.amberDim,border:`1px solid ${hasLinks?T.border:T.amber+"50"}`,color:hasLinks?T.textMuted:T.amber,cursor:"pointer",flexShrink:0,fontWeight:hasLinks?400:600,whiteSpace:"nowrap"}}>
-                              {hasLinks?"+ Add":"Link Policy"}
-                            </button>
+                            <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0}}>
+                              {needsPolicy&&(
+                                <button onClick={()=>setLinkPolOpen({regId:selReg.id,reqId:req.id})}
+                                  style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:hasPolicy?"transparent":T.amberDim,border:`1px solid ${hasPolicy?T.border:T.amber+"50"}`,color:hasPolicy?T.textMuted:T.amber,cursor:"pointer",fontWeight:hasPolicy?400:600,whiteSpace:"nowrap"}}>
+                                  {hasPolicy?"+ Add policy":"Link Policy"}
+                                </button>
+                              )}
+                              {needsAttestation&&!hasAttestation&&(
+                                <button onClick={()=>{setAttestOpen({regId:selReg.id,reqId:req.id});setAttestDraft({evidence:"",date:""});}}
+                                  style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:T.blueDim,border:`1px solid ${T.blue}50`,color:T.blue,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>
+                                  Attest manually
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );
                     })}
                   </div>
+                  {/* Outside EDG's scope — never counted in the score above */}
+                  {outOfScope.length>0&&(
+                    <div style={{marginTop:20}}>
+                      <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Outside EDG's scope ({outOfScope.length}) — not counted above</div>
+                      {outOfScope.map(req=>(
+                        <div key={req.id} style={{padding:"12px 16px",background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:9,marginBottom:8}}>
+                          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
+                            <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",fontWeight:700,color:T.textMuted,background:T.bgSurface,padding:"1px 7px",borderRadius:4,border:`1px solid ${T.border}`,flexShrink:0}}>{req.ref}</span>
+                            <span style={{fontSize:12.5,color:T.textSub,lineHeight:1.5}}>{req.title}</span>
+                            <span style={{fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:99,background:T.bgSurface,color:T.textMuted,flexShrink:0}}>Out of model</span>
+                          </div>
+                          <div style={{fontSize:11,color:T.textMuted,lineHeight:1.6}}>Belongs to a different system (identity, incident response, legal disclosure, vendor management) — confirm with your security/legal team, not this platform.</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -8414,15 +8554,16 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                 </div>
                 <span style={{fontSize:11.5,color:T.textMuted}}>{enabledRegs.length} active frameworks · <span style={{color:T.textMuted}}>manage in Settings → Regulatory Frameworks</span></span>
               </div>
-              {/* Summary banner */}
-              <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap"}}>
-                {[{label:"Passing",count:enabledRegs.filter(r=>r.status==="Passing").length,color:T.green},{label:"Partial",count:enabledRegs.filter(r=>r.status==="Partial").length,color:T.amber},{label:"Not Started",count:enabledRegs.filter(r=>r.status==="Not Started").length,color:T.textMuted},{label:"Coverage Gaps",count:enabledRegs.reduce((s,r)=>s+r.requirements.filter(req=>!(req.linkedPolicies||[]).length).length,0),color:T.rose}].map(s=>(
+              {/* Summary banner — live data-governance coverage, not a compliance certification */}
+              <div style={{display:"flex",gap:10,marginBottom:8,flexWrap:"wrap"}}>
+                {[{label:"On Track (≥80%)",count:passing,color:T.green},{label:"Partial (50–79%)",count:partial,color:T.amber},{label:"Needs Attention (<50%)",count:notStart,color:T.rose},{label:"Coverage Gaps",count:totalGaps,color:T.rose}].map(s=>(
                   <div key={s.label} style={{flex:1,minWidth:120,padding:"12px 16px",background:T.bgSurface,border:`1.5px solid ${s.color}30`,borderRadius:10,textAlign:"center"}}>
                     <div style={{fontSize:22,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:s.color,marginBottom:3}}>{s.count}</div>
                     <div style={{fontSize:10.5,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{s.label}</div>
                   </div>
                 ))}
               </div>
+              <div style={{fontSize:11,color:T.textMuted,marginBottom:20}}>Data governance control coverage — not a legal compliance certification. Requirements outside EDG's scope (identity, incident response, vendor management, legal disclosure) are excluded from these numbers.</div>
               {searchedRegs.length===0&&<div style={{textAlign:"center",padding:"48px 0",color:T.textMuted,fontSize:13}}>No active frameworks match "{regSearch}". <button onClick={()=>setRegSearch("")} style={{background:"none",border:"none",color:T.accent,cursor:"pointer",fontSize:13,fontFamily:"inherit"}}>Clear</button></div>}
               {/* Grouped regulation cards */}
               {REG_GROUPS.map(group=>{
@@ -8437,9 +8578,12 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:8}}>
                       {group.regs.map(reg=>{
-                        const sc = reg.score>=90?T.green:reg.score>=75?T.amber:T.rose;
-                        const stc = STATUS_COLOR[reg.status]||T.textMuted;
-                        const gaps = reg.requirements.filter(r=>!(r.linkedPolicies||[]).length).length;
+                        const liveScore = regScore(reg);
+                        const sc = scoreBand(liveScore);
+                        const scope = regScope(reg);
+                        const gaps = scope.filter(r=>!reqResolved(r)).length;
+                        const outCt = reg.requirements.filter(r=>r.enforcement==="out_of_model").length;
+                        const statusLabel = liveScore>=80?"On Track":liveScore>=50?"Partial":"Needs Attention";
                         const linkedCt = policies.filter(p=>(p.regulations||[]).some(r=>r===reg.name||reg.name.includes(r))).length;
                         return (
                           <div key={reg.id} onClick={()=>setSelRegId(reg.id)}
@@ -8451,16 +8595,17 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                 <div style={{fontSize:15,fontWeight:800,color:T.text,marginBottom:2,letterSpacing:"-0.3px"}}>{reg.name}</div>
                                 <div style={{fontSize:10.5,color:T.textMuted,lineHeight:1.4}}>{reg.jurisdiction} · {reg.industry}</div>
                               </div>
-                              <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:99,background:`${stc}15`,color:stc,border:`1px solid ${stc}25`,flexShrink:0,whiteSpace:"nowrap"}}>{reg.status}</span>
+                              <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:99,background:`${sc}15`,color:sc,border:`1px solid ${sc}25`,flexShrink:0,whiteSpace:"nowrap"}}>{statusLabel}</span>
                             </div>
                             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                              <div style={{flex:1,height:4,borderRadius:2,background:T.bgElevated,overflow:"hidden"}}><div style={{width:`${reg.score}%`,height:"100%",background:sc,borderRadius:2}}/></div>
-                              <span style={{fontSize:11,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:sc,flexShrink:0}}>{reg.score}%</span>
+                              <div style={{flex:1,height:4,borderRadius:2,background:T.bgElevated,overflow:"hidden"}}><div style={{width:`${liveScore}%`,height:"100%",background:sc,borderRadius:2}}/></div>
+                              <span style={{fontSize:11,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:sc,flexShrink:0}}>{liveScore}%</span>
                             </div>
-                            <div style={{display:"flex",alignItems:"center",gap:10,fontSize:10.5,color:T.textMuted}}>
-                              <span>{reg.requirements.length} requirements</span>
+                            <div style={{display:"flex",alignItems:"center",gap:10,fontSize:10.5,color:T.textMuted,flexWrap:"wrap"}}>
+                              <span>{scope.length} in-scope requirements</span>
                               {gaps>0&&<span style={{color:T.amber,fontWeight:600}}>· {gaps} gaps</span>}
                               {linkedCt>0&&<span style={{color:T.green,fontWeight:600}}>· {linkedCt} {linkedCt===1?"policy":"policies"}</span>}
+                              {outCt>0&&<span style={{color:T.textMuted}}>· {outCt} outside scope</span>}
                             </div>
                           </div>
                         );
@@ -9928,6 +10073,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
             <Btn variant="danger" onClick={()=>{
               if(selPolicyId===deleteConfPol.id) setSelPolicyId(null);
               setPolicies(prev=>prev.filter(p=>p.id!==deleteConfPol.id));
+              applyRegArticleLinks(deleteConfPol.id, {});
               setDeleteConfPol(null);
               onToast("Policy deleted","info");
             }}>Delete</Btn>
@@ -30077,6 +30223,12 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
   };
 
   const deleteTag = (tagId) => {
+    const t = tagDefs.find(x=>x.id===tagId);
+    if(t&&t.system){
+      setDeleteConfirm(null);
+      onToast('System tags are seeded by the platform and used by compliance rules across HIPAA, GDPR, PCI DSS — they can be disabled in Settings but not deleted.','error');
+      return;
+    }
     deleteTagDef(tagId);
     setDeleteConfirm(null);
     setSelTagId(null);
@@ -30310,6 +30462,7 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                             style={{flex:1,display:'flex',alignItems:'center',gap:7,padding:'5px 6px 5px 30px',background:'none',border:'none',cursor:'pointer',textAlign:'left',minWidth:0}}>
                             {td.color&&<span style={{width:8,height:8,borderRadius:'50%',background:td.color,flexShrink:0,display:'block'}}/>}
                             <span style={{flex:1,fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
+                            {td.system&&<span title="Platform system tag — cannot be deleted" style={{fontSize:8.5,fontWeight:700,padding:'1px 5px',borderRadius:99,background:T.roseDim,color:T.rose,flexShrink:0,letterSpacing:'0.04em'}}>SYS</span>}
                             <span style={{fontSize:10,color:T.textMuted,flexShrink:0,fontFamily:"'Geist Mono',monospace",marginRight:2}}>{cnt}</span>
                           </button>
                           <div ref={dotMenuOpen===td.id?dotMenuRef:undefined} style={{position:'relative',flexShrink:0,paddingRight:6}}>
@@ -30326,6 +30479,7 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                                   Edit Tag
                                 </button>
                                 <button onClick={e=>{e.stopPropagation();setDotMenuOpen(null);
+                                  if(td.system){ onToast('System tags are seeded by the platform and used by compliance rules across HIPAA, GDPR, PCI DSS — they can be disabled in Settings but not deleted.','error'); return; }
                                   if(tmvRole==='admin'||td.owner===meHandle){ setDeleteConfirm({type:'tag',id:td.id,name:td.name}); }
                                   else { requestDeletion({kind:'tag',targetId:td.id,name:td.name,requestedBy:meHandle,note:'Requested via tag list',owner:td.owner||null}); pushNotif({category:"Ownership",type:"alert",title:`Deletion requested · ${td.name} (tag)`,body:`${meHandle} requested to delete this tag`,nav:"tags",navArg:{tagId:td.id}}); onToast('Deletion requested — pending owner approval','success'); }
                                 }}
@@ -30358,6 +30512,7 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                           style={{flex:1,display:'flex',alignItems:'center',gap:7,padding:'5px 6px 5px 14px',background:'none',border:'none',cursor:'pointer',textAlign:'left',minWidth:0}}>
                           {td.color&&<span style={{width:8,height:8,borderRadius:'50%',background:td.color,flexShrink:0,display:'block'}}/>}
                           <span style={{flex:1,fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
+                          {td.system&&<span title="Platform system tag — cannot be deleted" style={{fontSize:8.5,fontWeight:700,padding:'1px 5px',borderRadius:99,background:T.roseDim,color:T.rose,flexShrink:0,letterSpacing:'0.04em'}}>SYS</span>}
                           <span style={{fontSize:10,color:T.textMuted,flexShrink:0,fontFamily:"'Geist Mono',monospace",marginRight:2}}>{cnt}</span>
                         </button>
                         <div ref={dotMenuOpen===td.id?dotMenuRef:undefined} style={{position:'relative',flexShrink:0,paddingRight:6}}>
@@ -30373,7 +30528,9 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                                 <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                                 Edit Tag
                               </button>
-                              <button onClick={e=>{e.stopPropagation();setDeleteConfirm({type:'tag',id:td.id,name:td.name});setDotMenuOpen(null);}}
+                              <button onClick={e=>{e.stopPropagation();setDotMenuOpen(null);
+                                if(td.system){ onToast('System tags are seeded by the platform and used by compliance rules across HIPAA, GDPR, PCI DSS — they can be disabled in Settings but not deleted.','error'); return; }
+                                setDeleteConfirm({type:'tag',id:td.id,name:td.name});}}
                                 style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.rose,display:'flex',alignItems:'center',gap:8}}
                                 onMouseEnter={e=>e.currentTarget.style.background=T.roseDim} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                                 <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 5l.5 5M8 5l-.5 5M3 3l.5 7h5L9 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -30494,6 +30651,7 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                       <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                         <span style={{fontSize:17,fontWeight:700,color:T.text}}>{selTag.name}</span>
                         {selTag.category&&<span style={{fontSize:11,padding:'2px 9px',borderRadius:99,background:cc.bg,color:cc.color,fontWeight:600,textTransform:'capitalize',flexShrink:0}}>{selTag.category}</span>}
+                        {selTag.system&&<span title="Platform system tag — seeded automatically, referenced by compliance rules, cannot be renamed or deleted" style={{fontSize:11,fontWeight:700,padding:'2px 9px',borderRadius:99,background:T.roseDim,color:T.rose,flexShrink:0,display:'inline-flex',alignItems:'center',gap:4}}>🔒 System</span>}
                         {selTag.propagationLocked&&<span title="Propagation locked — contact Admin to change" style={{fontSize:11,color:T.textMuted,cursor:'help',borderBottom:`1px dashed ${T.textMuted}`,paddingBottom:1,flexShrink:0}}>🔒 Locked</span>}
                       </div>
                     </div>
