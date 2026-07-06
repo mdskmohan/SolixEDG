@@ -5750,6 +5750,38 @@ const REGS_META = [
   {id:"fedramp",name:"FedRAMP",enabled:false,fullName:"Federal Risk and Authorization Management Program",jurisdiction:"US Federal",type:"Security",industry:"Government / Cloud",effective:"2011-12-08",penalty:"Loss of ATO / contract termination",covers:["Federal data","Cloud system data","CUI"],score:62,status:"Partial",lastAudit:null,requirements:[{id:"fedramp-1",ref:"AC-2",title:"Account management — authorised users and access tracked",linkedPolicies:[]},{id:"fedramp-2",ref:"AU-2",title:"Audit events — defined set of events logged continuously",linkedPolicies:[]},{id:"fedramp-3",ref:"SC-28",title:"Protection of information at rest — encryption required",linkedPolicies:[]},{id:"fedramp-4",ref:"IR-4",title:"Incident handling — federal incident response procedures",linkedPolicies:[]},{id:"fedramp-5",ref:"CA-7",title:"Continuous monitoring — ongoing authorisation program",linkedPolicies:[]}]},
 ];
 
+// Policy packs — pre-built starter policies per framework requirement. Each rule uses the
+// real Rule Builder vocabulary (W_RULE_FIELDS in PolicyManagerView), so "Add suggested policy"
+// creates a genuinely working Draft, not a placeholder. Reqs classified "attested" / "gap_field" /
+// "out_of_model" have no rule possible and are deliberately absent — those get an attestation, not a pack.
+const POLICY_PACKS = {
+  HIPAA: [
+    {reqId:"hipaa-1", name:"HIPAA PHI Governance Program", category:"Data", severity:"Medium",
+      description:"Baseline governance check — every PHI-classified asset should carry an Approved status. This is the evidence for §164.308's \"policies and procedures\" requirement: an active, working policy scoped to PHI.",
+      rules:[{field:"classification",label:"Classification",operator:"is",value:"PHI"},{field:"certification",label:"Status",operator:"is not",value:"Approved"}]},
+    {reqId:"hipaa-3", name:"PHI Access Control Policy", category:"Security", severity:"Critical",
+      description:"Flags PHI-classified assets with open access — the technical-safeguards half of §164.312. The audit-logging half needs a new canonical field (auditLoggingEnabled) and stays a manual attestation until that's built.",
+      rules:[{field:"classification",label:"Classification",operator:"is",value:"PHI"},{field:"access_level",label:"Access Level",operator:"is",value:"Open"}]},
+    {reqId:"hipaa-4", name:"HIPAA Minimum Necessary Access", category:"Access", severity:"Critical",
+      description:"Flags PHI-classified assets exposed beyond a restricted boundary — the minimum-necessary standard in §164.502.",
+      rules:[{field:"classification",label:"Classification",operator:"is",value:"PHI"},{field:"exposure",label:"Exposure",operator:"is not",value:"Restricted"}]},
+  ],
+  GDPR: [
+    {reqId:"gdpr-art5", name:"GDPR Data Minimization Review", category:"Data", severity:"Medium",
+      description:"Flags long-idle PII as an over-collection signal. This is a proxy, not an exact legal test — route flagged assets to a human review, don't auto-resolve them.",
+      rules:[{field:"classification",label:"Classification",operator:"is",value:"PII"},{field:"last_accessed",label:"Last Accessed (days ago)",operator:"greater than",value:"180"}]},
+    {reqId:"gdpr-art5e", name:"GDPR Data Retention Policy", category:"Retention", severity:"High",
+      description:"Flags PII-classified assets with no retention class set — storage limitation (Art. 5(1)(e)) can't be enforced without one.",
+      rules:[{field:"classification",label:"Classification",operator:"is",value:"PII"},{field:"retention_class",label:"Retention Class",operator:"is",value:"Not Set"}]},
+    {reqId:"gdpr-art32", name:"GDPR Technical Security Controls", category:"Security", severity:"Critical",
+      description:"Flags PII-classified assets that are unencrypted or unmasked — the technical-controls half of Art. 32.",
+      rules:[{field:"classification",label:"Classification",operator:"is",value:"PII"},{field:"encryption_status",label:"Encryption Status",operator:"is",value:"Disabled"},{field:"masking_status",label:"Masking Status",operator:"is",value:"Not Applied"}]},
+    {reqId:"gdpr-art30", name:"GDPR Processing Records Completeness", category:"Data", severity:"Medium",
+      description:"Flags PII-classified tables with no description — a proxy for missing processing-activity documentation (Art. 30).",
+      rules:[{field:"classification",label:"Classification",operator:"is",value:"PII"},{field:"description",label:"Description",operator:"is not set",value:""}]},
+  ],
+};
+
 const DEMO_POLICIES_GLOBAL = [
   {id:"pol-1",name:"Commerce PII Sensitivity",category:"Data",severity:"Critical",lifecycle:"Active",regulations:["GDPR","CCPA"],scope:{domains:["Commerce","Finance"]},links:[{target:"orders"},{target:"customers"},{target:"transactions"}]},
   {id:"pol-2",name:"Finance Data Integrity",category:"Quality",severity:"High",lifecycle:"Active",regulations:["SOC2","PCI DSS"],scope:{domains:["Finance"]},links:[{target:"payments"},{target:"revenue"}]},
@@ -6146,6 +6178,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   const [regSearch,      setRegSearch]      = useState("");
   const [attestOpen,     setAttestOpen]     = useState(null); // {regId,reqId} or null
   const [attestDraft,    setAttestDraft]    = useState({evidence:"",date:""});
+  const [packPreview,    setPackPreview]    = useState(null); // {regId,reqId} or null
   const [polEditCatOpen,  setPolEditCatOpen]  = useState(false);
   const [polEditCatDraft, setPolEditCatDraft] = useState(null);
   const [polBulkEdit,    setPolBulkEdit]    = useState(false);
@@ -6516,6 +6549,39 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
       ?{...r,requirements:r.requirements.map(req=>req.id===reqId?{...req,attestation:null}:req)}
       :r));
   };
+
+  // Policy packs — "Add suggested policy" creates a real, working Draft from POLICY_PACKS
+  // instead of a blank policy, then wires it into the requirement via applyRegArticleLinks
+  // (the same path a manually-built policy uses), so the dashboard reflects it immediately.
+  const createPackPolicy = (regId,reqId) => {
+    const reg = regulations.find(r=>r.id===regId);
+    const packDef = reg && (POLICY_PACKS[reg.name]||[]).find(p=>p.reqId===reqId);
+    if(!reg||!packDef) return;
+    const rules = packDef.rules.map((r,i)=>({
+      id:`pk${i+1}-${Date.now()}`, type:"preset", field:r.field, operator:r.operator, value:r.value||"",
+      table:"", column:"", severity:packDef.severity,
+      name:`${r.label} ${r.operator}${r.value?` "${r.value}"`:""}`,
+    }));
+    const cat = packDef.category.toLowerCase().replace(/[^a-z0-9]+/g,"_");
+    const nm  = packDef.name.toLowerCase().replace(/[^a-z0-9]+/g,"_").slice(0,32);
+    const p = {
+      ...EMPTY_POL, id:`pol-${Date.now()}`, fqn:`policies.${cat}.${nm}`, version:1,
+      name:packDef.name, category:packDef.category, description:packDef.description, severity:packDef.severity,
+      owner:"", owners:[], stewards:[], tags:[], scope:{domains:[],sources:[],assetType:"both"},
+      regulations:[reg.name], regulationArticles:{[reg.name]:[reqId]},
+      criteria:rules.map(r=>r.name), rules, links:[], lifecycle:"Draft",
+      created:today(), updated:today(), ruleLogic:"independent",
+      violations:0, compliancePct:null, lastEvaluated:null, assetsInScope:ASSETS.length,
+      history:[{when:today(),who:"You",action:`Created from ${reg.name} compliance pack`}],
+      packOrigin:{packId:packDef.reqId, frameworkId:reg.id},
+    };
+    setPolicies(prev=>[...prev,p]);
+    applyRegArticleLinks(p.id, p.regulationArticles);
+    setPackPreview(null);
+    onToast(`"${packDef.name}" created — now in Draft`,"success");
+    setTab("policies"); setSelPolicyId(p.id); setPdTab("overview");
+  };
+
   const handleAddRule = (polId) => {
     if (!ruleForm.name.trim()) return;
     const rule = {id:`r-${Date.now()}`,name:ruleForm.name.trim(),criteria:ruleForm.criteria.trim()||"No criteria specified."};
@@ -8492,13 +8558,28 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                 </div>
                               )}
                             </div>
-                            <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0}}>
-                              {needsPolicy&&(
-                                <button onClick={()=>setLinkPolOpen({regId:selReg.id,reqId:req.id})}
-                                  style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:hasPolicy?"transparent":T.amberDim,border:`1px solid ${hasPolicy?T.border:T.amber+"50"}`,color:hasPolicy?T.textMuted:T.amber,cursor:"pointer",fontWeight:hasPolicy?400:600,whiteSpace:"nowrap"}}>
-                                  {hasPolicy?"+ Add policy":"Link Policy"}
-                                </button>
-                              )}
+                            <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0,alignItems:"flex-end"}}>
+                              {needsPolicy&&(()=>{
+                                const packDef = (POLICY_PACKS[selReg.name]||[]).find(pk=>pk.reqId===req.id);
+                                if(packDef&&!hasPolicy){
+                                  return (<>
+                                    <button onClick={()=>setPackPreview({regId:selReg.id,reqId:req.id})}
+                                      style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:`${T.green}18`,border:`1px solid ${T.green}50`,color:T.green,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>
+                                      + Add suggested policy
+                                    </button>
+                                    <button onClick={()=>setLinkPolOpen({regId:selReg.id,reqId:req.id})}
+                                      style={{fontSize:10.5,padding:0,background:"none",border:"none",color:T.textMuted,cursor:"pointer",textDecoration:"underline",whiteSpace:"nowrap"}}>
+                                      Link existing policy
+                                    </button>
+                                  </>);
+                                }
+                                return (
+                                  <button onClick={()=>setLinkPolOpen({regId:selReg.id,reqId:req.id})}
+                                    style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:hasPolicy?"transparent":T.amberDim,border:`1px solid ${hasPolicy?T.border:T.amber+"50"}`,color:hasPolicy?T.textMuted:T.amber,cursor:"pointer",fontWeight:hasPolicy?400:600,whiteSpace:"nowrap"}}>
+                                    {hasPolicy?"+ Add policy":"Link Policy"}
+                                  </button>
+                                );
+                              })()}
                               {needsAttestation&&!hasAttestation&&(
                                 <button onClick={()=>{setAttestOpen({regId:selReg.id,reqId:req.id});setAttestDraft({evidence:"",date:""});}}
                                   style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:T.blueDim,border:`1px solid ${T.blue}50`,color:T.blue,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>
@@ -10257,6 +10338,43 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                 <Btn ghost onClick={handleCloseLinkPol}>Cancel</Btn>
                 <Btn onClick={handleCloseLinkPol}>Done</Btn>
               </div>
+            </div>
+          </CenteredModal>
+        );
+      })()}
+
+      {packPreview&&(()=>{
+        const {regId,reqId}=packPreview;
+        const reg=regulations.find(r=>r.id===regId);
+        const req=reg?.requirements.find(r=>r.id===reqId);
+        const packDef=reg&&(POLICY_PACKS[reg.name]||[]).find(p=>p.reqId===reqId);
+        if(!reg||!req||!packDef) return null;
+        return (
+          <CenteredModal onClose={()=>setPackPreview(null)}>
+            <div style={{padding:"22px 24px 14px",borderBottom:`1px solid ${T.border}`}}>
+              <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>From the {reg.name} compliance pack</div>
+              <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:4}}>{packDef.name}</div>
+              <div style={{fontSize:12,color:T.textMuted}}>Satisfies {req.ref} — {req.title}</div>
+            </div>
+            <div style={{padding:"18px 24px",display:"flex",flexDirection:"column",gap:14}}>
+              <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6}}>{packDef.description}</div>
+              <div>
+                <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Rules ({packDef.rules.length})</div>
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {packDef.rules.map((r,i)=>(
+                    <div key={i} style={{padding:"8px 12px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`,fontSize:12,color:T.text}}>
+                      <span style={{fontWeight:600}}>{r.label}</span> {r.operator}{r.value?` "${r.value}"`:""}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{padding:"10px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textMuted,lineHeight:1.7}}>
+                Creates this as a <strong style={{color:T.textSub}}>Draft</strong> policy scoped to all domains and sources — customize scope, rules, owner and severity, then Approve and Activate when ready.
+              </div>
+            </div>
+            <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",gap:10,justifyContent:"flex-end"}}>
+              <Btn ghost onClick={()=>setPackPreview(null)}>Cancel</Btn>
+              <Btn onClick={()=>createPackPolicy(regId,reqId)}>Create draft</Btn>
             </div>
           </CenteredModal>
         );
