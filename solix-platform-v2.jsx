@@ -187,6 +187,10 @@ ASSETS.push(...HIERARCHY_ASSETS);
 // COLUMN METADATA (keyed by asset name)
 // ─────────────────────────────────────────────
 const ASSET_COLUMNS = {
+  // ── orders_archive (Solix CDP) ──
+  "orders_archive":    ["order_id","customer_id","product_id","order_date","status","amount","currency","region","archived_at"],
+  // ── customers_archive (Solix CDP) ──
+  "customers_archive": ["customer_id","email","phone","first_name","last_name","date_of_birth","address","country","legal_hold_flag","archived_at"],
   // ── orders (Snowflake) ──
   "orders":          ["order_id","customer_id","product_id","order_date","status","amount","currency","discount","region","shipping_address","created_at","updated_at"],
   // ── customers (Snowflake) ──
@@ -1133,6 +1137,8 @@ const LIFECYCLE_TRANSITIONS = {
 };
 
 const GlossaryView = ({onToast, deepLinkTermId}) => {
+  const {role:gvRole, roleCfg:gvRoleCfg} = useRole();
+  const meHandle = ((gvRoleCfg&&gvRoleCfg.email)||"you@jnj").split("@")[0];
   const [glossaries, setGlossaries] = useState(GLOSSARY_DATA);
   const [terms,      setTerms]      = useGlossaryTerms(); // shared store — synced with Inbox
   const [selG,       setSelG]       = useState("g1");
@@ -1280,7 +1286,15 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
     setTerms(p=>p.map(t=>t.id===modal.data.id?{...t,term:form.term.trim(),abbr:form.abbr||t.abbr,definition:form.definition??t.definition,domain:form.domain||t.domain,owner:form.owner||t.owner,category:form.category||t.category,cert:form.cert||t.cert}:t));
     closeModal(); onToast("Term updated","success");
   };
+  const canSetTermStatus = t => gvRole==="admin" || (t&&(t.owner===meHandle||t.steward===meHandle));
   const doDeleteTerm = id => {
+    const t = terms.find(x=>x.id===id);
+    if(t && !canSetTermStatus(t)){
+      requestDeletion({kind:"term", targetId:id, name:t.term, requestedBy:meHandle, note:"Requested via glossary", owner:t.owner||t.steward||null});
+      pushNotif({category:"Ownership", type:"alert", title:`Deletion requested · ${t.term} (term)`, body:`${meHandle} requested to delete this term`, nav:"glossary", navArg:{termId:id}});
+      closeModal(); onToast("Deletion requested — pending owner approval","success");
+      return;
+    }
     setTerms(p=>p.filter(t=>t.id!==id));
     if(selTerm===id) setSelTerm(null);
     closeModal(); onToast("Term deleted","success");
@@ -1307,7 +1321,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
   };
 
   // ── Workflow / Lifecycle ──
-  const CURRENT_USER = "maya.chen";
+  const CURRENT_USER = meHandle;
   const CURRENT_DOMAIN = "Commerce";
 
   const canTransition = (t, toStatus) => {
@@ -1318,6 +1332,18 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
   const transitionTerm = (id, toStatus, note="") => {
     const t = terms.find(x=>x.id===id);
     if(!t) return;
+    // Submitting your own draft for review needs no permission — but every other transition
+    // (approve/reject/deprecate/return-to-draft) is a real decision, gated like Tags/Domains:
+    // owner/steward/admin act directly, everyone else's click becomes a real request routed
+    // to the term's steward.
+    if(toStatus!=="In Review" && !canSetTermStatus(t)){
+      requestStatusChange({kind:"term", targetId:id, name:t.term, requestedStatus:toStatus, requestedBy:meHandle, note, steward:t.steward||t.owner||null});
+      patchTerm(id,{cert:"In Review", status:"In Review"});
+      pushNotif({category:"Status", type:"field_updated", title:`Status change requested · ${t.term}`, body:`${meHandle} requested ${toStatus} — awaiting review as steward`, nav:"glossary", navArg:{termId:id}});
+      setTransitionModal(null); setRejectReason(""); setDeprecateReason("");
+      onToast("Status change requested — pending steward approval","success");
+      return;
+    }
     const now = new Date().toISOString().slice(0,10);
     const logEntry = {action:toStatus==="Approved"?"Approved":toStatus==="In Review"?"Submitted for Review":toStatus==="Deprecated"?"Deprecated":toStatus==="Draft"?"Returned to Draft":toStatus==="Rejected"?"Rejected":"Status changed to "+toStatus, by:CURRENT_USER, at:now, note};
     const actEntry = {user:CURRENT_USER, avatar:ava(CURRENT_USER), action:logEntry.action+(note?`: ${note}`:""), time:"Just now"};
@@ -1330,6 +1356,8 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
     if(toStatus==="Deprecated")  updates.deprecationReason = note||"Deprecated by steward";
     if(toStatus==="Rejected")    updates.rejectionReason = note||"Rejected by steward";
     patchTerm(id, updates);
+    const pendingReq = _statusReqs.find(r=>r.kind==="term"&&r.targetId===id&&r.status==="pending");
+    if(pendingReq) resolveStatusRequest(pendingReq.id, toStatus==="Rejected"?"rejected":"approved");
     setTransitionModal(null); setRejectReason(""); setDeprecateReason("");
     const toastMsg = toStatus==="Approved"?"Term approved":toStatus==="In Review"?"Term submitted for review":toStatus==="Deprecated"?"Term deprecated":toStatus==="Rejected"?"Term rejected":toStatus==="Draft"?"Term returned to draft":"Term updated";
     onToast(toastMsg, toStatus==="Rejected"?"error":"success");
@@ -5772,10 +5800,10 @@ const POLICY_PACKS = {
       rules:[{field:"classification",label:"Classification",operator:"is",value:"PII"},{field:"last_accessed",label:"Last Accessed (days ago)",operator:"greater than",value:"180"}]},
     {reqId:"gdpr-art5e", name:"GDPR Data Retention Policy", category:"Retention", severity:"High",
       description:"Flags PII-classified assets with no retention class set — storage limitation (Art. 5(1)(e)) can't be enforced without one.",
-      rules:[{field:"classification",label:"Classification",operator:"is",value:"PII"},{field:"retention_class",label:"Retention Class",operator:"is",value:"Not Set"}]},
+      rules:[{field:"classification",label:"Classification",operator:"is",value:"PII"},{field:"retention_class",label:"Retention",operator:"is",value:"Not Set"}]},
     {reqId:"gdpr-art32", name:"GDPR Technical Security Controls", category:"Security", severity:"Critical",
       description:"Flags PII-classified assets that are unencrypted or unmasked — the technical-controls half of Art. 32.",
-      rules:[{field:"classification",label:"Classification",operator:"is",value:"PII"},{field:"encryption_status",label:"Encryption Status",operator:"is",value:"Disabled"},{field:"masking_status",label:"Masking Status",operator:"is",value:"Not Applied"}]},
+      rules:[{field:"classification",label:"Classification",operator:"is",value:"PII"},{field:"encryption_status",label:"Encryption Status",operator:"is",value:"Disabled"},{field:"masking_status",label:"Masking",operator:"is",value:"Not Applied"}]},
     {reqId:"gdpr-art30", name:"GDPR Processing Records Completeness", category:"Data", severity:"Medium",
       description:"Flags PII-classified tables with no description — a proxy for missing processing-activity documentation (Art. 30).",
       rules:[{field:"classification",label:"Classification",operator:"is",value:"PII"},{field:"description",label:"Description",operator:"is not set",value:""}]},
@@ -5989,7 +6017,164 @@ const TERM_REVIEW_INBOX = GLOSSARY_TERMS
     };
   });
 
+// ── Policies (Policy Manager) — module-level shared store ──
+// Lifted out of PolicyManagerView's local state so policies created/edited in one
+// session survive navigating away (e.g. to Workspace to approve an enforcement
+// request) and back, instead of resetting to seed data on every remount.
+let _policiesStore = [
+  {id:"pol-1",name:"Commerce PII Sensitivity",fqn:"policies.data.commerce_pii",version:2,
+   enforcement:{enabled:true,action:"Legal hold",ptype:"Retention",field:"legalHold",maturity:"GA",inPlace:true,approvalRequired:true,dryRun:true,status:"Applied",runId:"EDG-48213",lastApplied:"2026-05-20 14:40",prefilled:{object:"kb.customers",scope:"sales · customers",period:"7y · basis archive_date",approver:"M. Chen (Records/Legal)"}},
+   category:"Data",severity:"Critical",lifecycle:"Active",cert:"Approved",owner:"maya.chen",stewards:["dev.patel","sarah.kim"],tags:["PII","sensitive"],
+   created:"2026-02-10",updated:"2026-05-01",regulations:["GDPR","CCPA"],
+   violations:2,compliancePct:78,lastEvaluated:"2026-05-17",assetsInScope:12,schedule:"0 */6 * * *",nextRun:"2026-05-20 20:00",
+   scope:{domains:["Commerce","Finance"]},
+   criteria:["All assets in Commerce and Finance domains must carry a PII classification tag before promotion to any downstream system","Data subjects' right to erasure must be honoured within 30 days of request","Assets must hold Approved certification before being queryable by downstream analytics pipelines"],
+   description:"All assets in the Commerce and Finance domains must carry an Approved certification and meet PII classification requirements. Non-compliant assets pose direct privacy and regulatory risk under GDPR and CCPA.",
+   rules:[
+     {id:"r1-1",name:"PII classification required",criteria:"All assets in the Commerce and Finance domains must carry a pii.customer or pii.sensitive tag before promotion to any downstream system."},
+     {id:"r1-2",name:"Status gate",criteria:"Assets must hold Approved certification to be queryable by downstream analytics and reporting pipelines."},
+   ],
+   links:[
+     {type:"Table",target:"orders",rel:"governs",assetId:1},
+     {type:"Table",target:"customers",rel:"governs",assetId:2},
+   ],
+   runs:[
+     {id:"r1a",ts:"2026-05-20 14:32",trigger:"Schedule",duration:"4m 12s",assetsScanned:12,rulesEval:5,violationsNew:0,violationsResolved:0,status:"success",score:81},
+     {id:"r1b",ts:"2026-05-19 08:00",trigger:"Schedule",duration:"3m 58s",assetsScanned:12,rulesEval:5,violationsNew:2,violationsResolved:0,status:"success",score:78},
+     {id:"r1c",ts:"2026-05-18 11:24",trigger:"Manual",  duration:"5m 02s",assetsScanned:12,rulesEval:5,violationsNew:0,violationsResolved:1,status:"success",score:78},
+     {id:"r1d",ts:"2026-05-17 08:00",trigger:"Schedule",duration:"4m 44s",assetsScanned:12,rulesEval:5,violationsNew:2,violationsResolved:0,status:"success",score:75},
+     {id:"r1e",ts:"2026-05-16 08:00",trigger:"Schedule",duration:"6m 01s",assetsScanned:12,rulesEval:5,violationsNew:0,violationsResolved:0,status:"failed", score:null,errorMsg:"Connection timeout — Snowflake DWH unreachable after 3 retries"},
+   ],
+   governedAssets:[
+     {name:"orders",      type:"Table",domain:"Commerce",service:"snowflake",   status:"fail",  failedRules:["PII classification required"],    quality:72},
+     {name:"customers",   type:"Table",domain:"Commerce",service:"snowflake",   status:"pass",  failedRules:[],                                  quality:91},
+     {name:"transactions",type:"Table",domain:"Finance", service:"postgresql",  status:"fail",  failedRules:["Status gate"],              quality:85},
+     {name:"revenue",     type:"Table",domain:"Finance", service:"postgresql",  status:"pass",  failedRules:[],                                  quality:93},
+     {name:"dim_products",type:"Table",domain:"Commerce",service:"databricks",  status:"pass",  failedRules:[],                                  quality:88},
+   ],
+   history:[
+     {when:"2026-05-01",who:"maya.chen",action:"Policy activated"},
+     {when:"2026-04-15",who:"dev.patel",action:"Approved v2"},
+     {when:"2026-04-10",who:"maya.chen",action:"Submitted v2 for review"},
+     {when:"2026-02-10",who:"maya.chen",action:"Created draft v1"},
+   ]},
+  {id:"pol-2",name:"Finance Data Integrity",fqn:"policies.quality.finance_integrity",version:1,
+   category:"Quality",severity:"High",lifecycle:"Active",cert:"Approved",owner:"dev.patel",stewards:["sarah.kim"],tags:["financial","regulated"],
+   created:"2026-01-15",updated:"2026-04-20",regulations:["SOC2","PCI DSS"],
+   violations:1,compliancePct:88,lastEvaluated:"2026-05-17",assetsInScope:8,schedule:"0 8 * * *",nextRun:"2026-05-21 08:00",
+   scope:{domains:["Finance"]},
+   criteria:["Financial datasets must maintain a quality score of 80 or above before use in any reporting pipeline","All financial tables must have a certified owner and a documented data contract","Assets with quality below 70 must have a steward review initiated within 24 hours"],
+   description:"Financial datasets must maintain a minimum quality score of 80 to ensure accurate reporting and audit readiness. Assets below threshold are flagged for stewardship review.",
+   rules:[
+     {id:"r2-1",name:"Quality threshold enforcement",criteria:"Financial datasets must score ≥ 80 on automated quality checks before use in reporting pipelines."},
+     {id:"r2-2",name:"Stewardship escalation",criteria:"Assets scoring below 70 must trigger an escalation to the assigned steward within 24 hours."},
+   ],
+   links:[],
+   runs:[
+     {id:"r2a",ts:"2026-05-20 08:00",trigger:"Schedule",duration:"2m 44s",assetsScanned:8,rulesEval:2,violationsNew:1,violationsResolved:0,status:"success",score:88},
+     {id:"r2b",ts:"2026-05-19 08:00",trigger:"Schedule",duration:"2m 38s",assetsScanned:8,rulesEval:2,violationsNew:0,violationsResolved:0,status:"success",score:90},
+     {id:"r2c",ts:"2026-05-18 08:00",trigger:"Schedule",duration:"2m 51s",assetsScanned:8,rulesEval:2,violationsNew:0,violationsResolved:1,status:"success",score:90},
+   ],
+   governedAssets:[
+     {name:"payments",    type:"Table",domain:"Finance",service:"postgresql", status:"fail",  failedRules:["Quality threshold enforcement"],quality:67},
+     {name:"revenue",     type:"Table",domain:"Finance",service:"postgresql", status:"pass",  failedRules:[],                               quality:93},
+     {name:"transactions",type:"Table",domain:"Finance",service:"postgresql", status:"pass",  failedRules:[],                               quality:85},
+     {name:"orders",      type:"Table",domain:"Finance",service:"snowflake",  status:"pass",  failedRules:[],                               quality:88},
+   ],
+   history:[
+     {when:"2026-04-20",who:"dev.patel",action:"Policy activated"},
+     {when:"2026-03-10",who:"sarah.kim",action:"Approved v1"},
+     {when:"2026-01-15",who:"dev.patel",action:"Created draft v1"},
+   ]},
+  {id:"pol-3",name:"ML Feature Readiness",fqn:"policies.quality.ml_feature_readiness",version:1,
+   category:"Quality",severity:"High",lifecycle:"In Review",cert:"In Review",owner:"sarah.kim",stewards:["alex.wu"],tags:["regulated"],
+   created:"2026-03-20",updated:"2026-05-05",regulations:[],
+   violations:0,compliancePct:null,lastEvaluated:null,assetsInScope:5,
+   scope:{domains:["ML","Engineering"]},
+   criteria:["ML features must score above 85 on quality checks before promotion to the production feature store","Features must hold Approved certification to be eligible for production ML training pipelines","All features must have documented lineage tracing back to their source tables"],
+   description:"Features used in ML pipelines must score above 85 on quality checks and hold an Approved certification before promotion to production. Prevents model degradation from poor-quality training data.",
+   rules:[
+     {id:"r3-1",name:"Quality score gate",criteria:"ML features must score ≥ 85 before promotion to the production feature store."},
+     {id:"r3-2",name:"Status requirement",criteria:"Features must hold Approved certification to be eligible for use in production ML training pipelines."},
+   ],
+   links:[],
+   history:[
+     {when:"2026-05-05",who:"sarah.kim",action:"Submitted v1 for review"},
+     {when:"2026-03-20",who:"sarah.kim",action:"Created draft v1"},
+   ]},
+  {id:"pol-4",name:"HIPAA PHI Compliance",fqn:"policies.access.hipaa_phi",version:3,
+   category:"Access",severity:"Critical",lifecycle:"Active",cert:"Approved",owner:"lisa.ray",stewards:["priya.nair","maya.chen"],tags:["PHI","healthcare","sensitive","regulated"],
+   created:"2026-01-05",updated:"2026-04-01",regulations:["HIPAA"],
+   violations:3,compliancePct:65,lastEvaluated:"2026-05-17",assetsInScope:7,schedule:"0 */4 * * *",nextRun:"2026-05-20 22:00",
+   scope:{domains:["Finance","Commerce"]},
+   criteria:["PHI-containing assets must hold Approved certification and maintain a quality score of 90 or above","Only roles with healthcare.phi_read scope may access PHI-tagged assets","All access to PHI-tagged assets must generate an immutable audit log entry retained for 7 years","Policy violations must be remediated within 72 hours of detection"],
+   description:"Assets containing Protected Health Information must be Approved-certified and maintain quality at or above 90 to ensure data integrity in healthcare workflows.",
+   rules:[
+     {id:"r4-1",name:"PHI quality gate",criteria:"PHI-containing assets must score ≥ 90 on automated quality checks."},
+     {id:"r4-2",name:"Access restriction",criteria:"Only roles with healthcare.phi_read scope may access PHI-tagged assets."},
+     {id:"r4-3",name:"Audit logging",criteria:"All access to PHI-tagged assets must generate an immutable audit log entry retained for 7 years."},
+   ],
+   links:[
+     {type:"Table",target:"customers",rel:"governs",assetId:2},
+   ],
+   runs:[
+     {id:"r4a",ts:"2026-05-20 18:00",trigger:"Schedule",duration:"1m 52s",assetsScanned:7,rulesEval:3,violationsNew:1,violationsResolved:0,status:"success",score:65},
+     {id:"r4b",ts:"2026-05-20 14:00",trigger:"Schedule",duration:"1m 48s",assetsScanned:7,rulesEval:3,violationsNew:2,violationsResolved:0,status:"success",score:62},
+     {id:"r4c",ts:"2026-05-19 10:00",trigger:"Manual",  duration:"2m 10s",assetsScanned:7,rulesEval:3,violationsNew:0,violationsResolved:0,status:"success",score:68},
+   ],
+   governedAssets:[
+     {name:"patient_events",   type:"Table",domain:"Commerce",service:"snowflake",  status:"fail",  failedRules:["PHI quality gate"],    quality:84},
+     {name:"user_health_data", type:"Table",domain:"Finance", service:"postgresql", status:"fail",  failedRules:["Access restriction"],  quality:91},
+     {name:"audit_records",    type:"Table",domain:"Commerce",service:"snowflake",  status:"fail",  failedRules:["Audit logging"],       quality:79},
+     {name:"customers",        type:"Table",domain:"Commerce",service:"snowflake",  status:"pass",  failedRules:[],                      quality:91},
+   ],
+   history:[
+     {when:"2026-04-01",who:"lisa.ray",action:"Policy activated"},
+     {when:"2026-03-20",who:"priya.nair",action:"Approved v3"},
+     {when:"2026-01-05",who:"lisa.ray",action:"Created draft v1"},
+   ]},
+  {id:"pol-5",name:"Product Catalog Completeness",fqn:"policies.quality.product_completeness",version:1,
+   category:"Quality",severity:"Medium",lifecycle:"Draft",cert:"Draft",owner:"alex.wu",stewards:[],tags:["internal"],
+   created:"2026-04-10",updated:"2026-05-10",regulations:[],
+   violations:0,compliancePct:null,lastEvaluated:null,assetsInScope:4,
+   scope:{domains:["Product","Marketing"]},
+   criteria:["Product and Marketing domain assets must meet a 70% quality threshold to be discoverable in the Data Catalog","All assets must have a description and at least one owner assigned","Assets in Draft lifecycle state must not appear in self-serve catalog search results"],
+   description:"Product and Marketing domain assets must meet a 70% quality threshold to be discoverable in the Data Catalog. Ensures consumers can trust and find data without steward intervention.",
+   rules:[
+     {id:"r5-1",name:"Catalog discoverability gate",criteria:"Product and Marketing domain assets must score ≥ 70% to appear in catalog search results and be accessible to self-serve analysts."},
+   ],
+   links:[],
+   history:[
+     {when:"2026-05-10",who:"alex.wu",action:"Created draft v1"},
+   ]},
+  {id:"pol-6",name:"Engineering Pipeline Governance",fqn:"policies.data.engineering_pipeline",version:2,
+   category:"Data",severity:"Medium",lifecycle:"Deprecated",cert:"Deprecated",owner:"priya.nair",stewards:[],tags:[],
+   created:"2025-11-01",updated:"2026-02-15",regulations:["SOC2"],
+   violations:0,compliancePct:null,lastEvaluated:null,assetsInScope:3,
+   scope:{domains:["Engineering"]},
+   criteria:["Pipeline outputs must hold Approved certification before use in downstream production systems"],
+   description:"Data pipeline outputs must be Approved-certified before promotion to production. Deprecated — scope has been consolidated under ML Feature Readiness.",
+   rules:[
+     {id:"r6-1",name:"Status requirement",criteria:"Pipeline outputs must hold Approved certification before use in downstream production systems."},
+   ],
+   links:[],
+   history:[
+     {when:"2026-02-15",who:"priya.nair",action:"Policy deprecated — scope merged into ML Feature Readiness"},
+     {when:"2025-12-01",who:"priya.nair",action:"Policy activated"},
+     {when:"2025-11-01",who:"priya.nair",action:"Created draft v1"},
+   ]},
+];
+const _polSubs = new Set();
+const polSet = (u)=>{ _policiesStore = typeof u==="function"?u(_policiesStore):u; _polSubs.forEach(f=>f()); };
+const usePoliciesStore = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_polSubs.add(fn);return()=>{_polSubs.delete(fn);};},[]); return _policiesStore; };
+
 const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
+  const {role:pmvRole, roleCfg:pmvRoleCfg} = useRole();
+  const meHandle = ((pmvRoleCfg&&pmvRoleCfg.email)||"you@jnj").split("@")[0];
+  const enfApprovals = useEnfApprovals();
+  // Mirrors the Tag/Domain pattern: owners/stewards (or admins) can set a policy's lifecycle
+  // status directly; everyone else's click routes through a real approval request instead.
+  const canSetPolicyStatus = (p) => pmvRole==="admin" || (p.owners||[p.owner]).filter(Boolean).includes(meHandle) || (p.stewards||[]).includes(meHandle);
   // ─── palette & constants ──────────────────────────────────────────────
   const LC_COLORS  = {"Draft":T.textMuted,"In Review":T.amber,"Approved":T.green,"Active":T.blue,"Deprecated":T.rose};
   const LC_STEPS   = ["Draft","In Review","Approved","Active","Deprecated"];
@@ -6002,149 +6187,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   const lcIdx   = lc => LC_STEPS.indexOf(lc);
 
   // ─── state ──────────────────────────────────────────────────────────
-  const [policies, setPolicies] = useState([
-    {id:"pol-1",name:"Commerce PII Sensitivity",fqn:"policies.data.commerce_pii",version:2,
-     enforcement:{enabled:true,action:"Legal hold",ptype:"Retention",field:"legalHold",engine:"CDP",maturity:"GA",inPlace:true,approvalRequired:true,dryRun:true,status:"Applied",runId:"CDP-48213",lastApplied:"2026-05-20 14:40",prefilled:{object:"kb.customers",scope:"sales · customers",period:"7y · basis archive_date",approver:"M. Chen (Records/Legal)"}},
-     category:"Data",severity:"Critical",lifecycle:"Active",cert:"Approved",owner:"maya.chen",stewards:["dev.patel","sarah.kim"],tags:["PII","sensitive"],
-     created:"2026-02-10",updated:"2026-05-01",regulations:["GDPR","CCPA"],
-     violations:2,compliancePct:78,lastEvaluated:"2026-05-17",assetsInScope:12,schedule:"0 */6 * * *",nextRun:"2026-05-20 20:00",
-     scope:{domains:["Commerce","Finance"]},
-     criteria:["All assets in Commerce and Finance domains must carry a PII classification tag before promotion to any downstream system","Data subjects' right to erasure must be honoured within 30 days of request","Assets must hold Approved certification before being queryable by downstream analytics pipelines"],
-     description:"All assets in the Commerce and Finance domains must carry an Approved certification and meet PII classification requirements. Non-compliant assets pose direct privacy and regulatory risk under GDPR and CCPA.",
-     rules:[
-       {id:"r1-1",name:"PII classification required",criteria:"All assets in the Commerce and Finance domains must carry a pii.customer or pii.sensitive tag before promotion to any downstream system."},
-       {id:"r1-2",name:"Status gate",criteria:"Assets must hold Approved certification to be queryable by downstream analytics and reporting pipelines."},
-     ],
-     links:[
-       {type:"Table",target:"orders",rel:"governs",assetId:1},
-       {type:"Table",target:"customers",rel:"governs",assetId:2},
-     ],
-     runs:[
-       {id:"r1a",ts:"2026-05-20 14:32",trigger:"Schedule",duration:"4m 12s",assetsScanned:12,rulesEval:5,violationsNew:0,violationsResolved:0,status:"success",score:81},
-       {id:"r1b",ts:"2026-05-19 08:00",trigger:"Schedule",duration:"3m 58s",assetsScanned:12,rulesEval:5,violationsNew:2,violationsResolved:0,status:"success",score:78},
-       {id:"r1c",ts:"2026-05-18 11:24",trigger:"Manual",  duration:"5m 02s",assetsScanned:12,rulesEval:5,violationsNew:0,violationsResolved:1,status:"success",score:78},
-       {id:"r1d",ts:"2026-05-17 08:00",trigger:"Schedule",duration:"4m 44s",assetsScanned:12,rulesEval:5,violationsNew:2,violationsResolved:0,status:"success",score:75},
-       {id:"r1e",ts:"2026-05-16 08:00",trigger:"Schedule",duration:"6m 01s",assetsScanned:12,rulesEval:5,violationsNew:0,violationsResolved:0,status:"failed", score:null,errorMsg:"Connection timeout — Snowflake DWH unreachable after 3 retries"},
-     ],
-     governedAssets:[
-       {name:"orders",      type:"Table",domain:"Commerce",service:"snowflake",   status:"fail",  failedRules:["PII classification required"],    quality:72},
-       {name:"customers",   type:"Table",domain:"Commerce",service:"snowflake",   status:"pass",  failedRules:[],                                  quality:91},
-       {name:"transactions",type:"Table",domain:"Finance", service:"postgresql",  status:"fail",  failedRules:["Status gate"],              quality:85},
-       {name:"revenue",     type:"Table",domain:"Finance", service:"postgresql",  status:"pass",  failedRules:[],                                  quality:93},
-       {name:"dim_products",type:"Table",domain:"Commerce",service:"databricks",  status:"pass",  failedRules:[],                                  quality:88},
-     ],
-     history:[
-       {when:"2026-05-01",who:"maya.chen",action:"Policy activated"},
-       {when:"2026-04-15",who:"dev.patel",action:"Approved v2"},
-       {when:"2026-04-10",who:"maya.chen",action:"Submitted v2 for review"},
-       {when:"2026-02-10",who:"maya.chen",action:"Created draft v1"},
-     ]},
-    {id:"pol-2",name:"Finance Data Integrity",fqn:"policies.quality.finance_integrity",version:1,
-     category:"Quality",severity:"High",lifecycle:"Active",cert:"Approved",owner:"dev.patel",stewards:["sarah.kim"],tags:["financial","regulated"],
-     created:"2026-01-15",updated:"2026-04-20",regulations:["SOC2","PCI DSS"],
-     violations:1,compliancePct:88,lastEvaluated:"2026-05-17",assetsInScope:8,schedule:"0 8 * * *",nextRun:"2026-05-21 08:00",
-     scope:{domains:["Finance"]},
-     criteria:["Financial datasets must maintain a quality score of 80 or above before use in any reporting pipeline","All financial tables must have a certified owner and a documented data contract","Assets with quality below 70 must have a steward review initiated within 24 hours"],
-     description:"Financial datasets must maintain a minimum quality score of 80 to ensure accurate reporting and audit readiness. Assets below threshold are flagged for stewardship review.",
-     rules:[
-       {id:"r2-1",name:"Quality threshold enforcement",criteria:"Financial datasets must score ≥ 80 on automated quality checks before use in reporting pipelines."},
-       {id:"r2-2",name:"Stewardship escalation",criteria:"Assets scoring below 70 must trigger an escalation to the assigned steward within 24 hours."},
-     ],
-     links:[],
-     runs:[
-       {id:"r2a",ts:"2026-05-20 08:00",trigger:"Schedule",duration:"2m 44s",assetsScanned:8,rulesEval:2,violationsNew:1,violationsResolved:0,status:"success",score:88},
-       {id:"r2b",ts:"2026-05-19 08:00",trigger:"Schedule",duration:"2m 38s",assetsScanned:8,rulesEval:2,violationsNew:0,violationsResolved:0,status:"success",score:90},
-       {id:"r2c",ts:"2026-05-18 08:00",trigger:"Schedule",duration:"2m 51s",assetsScanned:8,rulesEval:2,violationsNew:0,violationsResolved:1,status:"success",score:90},
-     ],
-     governedAssets:[
-       {name:"payments",    type:"Table",domain:"Finance",service:"postgresql", status:"fail",  failedRules:["Quality threshold enforcement"],quality:67},
-       {name:"revenue",     type:"Table",domain:"Finance",service:"postgresql", status:"pass",  failedRules:[],                               quality:93},
-       {name:"transactions",type:"Table",domain:"Finance",service:"postgresql", status:"pass",  failedRules:[],                               quality:85},
-       {name:"orders",      type:"Table",domain:"Finance",service:"snowflake",  status:"pass",  failedRules:[],                               quality:88},
-     ],
-     history:[
-       {when:"2026-04-20",who:"dev.patel",action:"Policy activated"},
-       {when:"2026-03-10",who:"sarah.kim",action:"Approved v1"},
-       {when:"2026-01-15",who:"dev.patel",action:"Created draft v1"},
-     ]},
-    {id:"pol-3",name:"ML Feature Readiness",fqn:"policies.quality.ml_feature_readiness",version:1,
-     category:"Quality",severity:"High",lifecycle:"In Review",cert:"In Review",owner:"sarah.kim",stewards:["alex.wu"],tags:["regulated"],
-     created:"2026-03-20",updated:"2026-05-05",regulations:[],
-     violations:0,compliancePct:null,lastEvaluated:null,assetsInScope:5,
-     scope:{domains:["ML","Engineering"]},
-     criteria:["ML features must score above 85 on quality checks before promotion to the production feature store","Features must hold Approved certification to be eligible for production ML training pipelines","All features must have documented lineage tracing back to their source tables"],
-     description:"Features used in ML pipelines must score above 85 on quality checks and hold an Approved certification before promotion to production. Prevents model degradation from poor-quality training data.",
-     rules:[
-       {id:"r3-1",name:"Quality score gate",criteria:"ML features must score ≥ 85 before promotion to the production feature store."},
-       {id:"r3-2",name:"Status requirement",criteria:"Features must hold Approved certification to be eligible for use in production ML training pipelines."},
-     ],
-     links:[],
-     history:[
-       {when:"2026-05-05",who:"sarah.kim",action:"Submitted v1 for review"},
-       {when:"2026-03-20",who:"sarah.kim",action:"Created draft v1"},
-     ]},
-    {id:"pol-4",name:"HIPAA PHI Compliance",fqn:"policies.access.hipaa_phi",version:3,
-     category:"Access",severity:"Critical",lifecycle:"Active",cert:"Approved",owner:"lisa.ray",stewards:["priya.nair","maya.chen"],tags:["PHI","healthcare","sensitive","regulated"],
-     created:"2026-01-05",updated:"2026-04-01",regulations:["HIPAA"],
-     violations:3,compliancePct:65,lastEvaluated:"2026-05-17",assetsInScope:7,schedule:"0 */4 * * *",nextRun:"2026-05-20 22:00",
-     scope:{domains:["Finance","Commerce"]},
-     criteria:["PHI-containing assets must hold Approved certification and maintain a quality score of 90 or above","Only roles with healthcare.phi_read scope may access PHI-tagged assets","All access to PHI-tagged assets must generate an immutable audit log entry retained for 7 years","Policy violations must be remediated within 72 hours of detection"],
-     description:"Assets containing Protected Health Information must be Approved-certified and maintain quality at or above 90 to ensure data integrity in healthcare workflows.",
-     rules:[
-       {id:"r4-1",name:"PHI quality gate",criteria:"PHI-containing assets must score ≥ 90 on automated quality checks."},
-       {id:"r4-2",name:"Access restriction",criteria:"Only roles with healthcare.phi_read scope may access PHI-tagged assets."},
-       {id:"r4-3",name:"Audit logging",criteria:"All access to PHI-tagged assets must generate an immutable audit log entry retained for 7 years."},
-     ],
-     links:[
-       {type:"Table",target:"customers",rel:"governs",assetId:2},
-     ],
-     runs:[
-       {id:"r4a",ts:"2026-05-20 18:00",trigger:"Schedule",duration:"1m 52s",assetsScanned:7,rulesEval:3,violationsNew:1,violationsResolved:0,status:"success",score:65},
-       {id:"r4b",ts:"2026-05-20 14:00",trigger:"Schedule",duration:"1m 48s",assetsScanned:7,rulesEval:3,violationsNew:2,violationsResolved:0,status:"success",score:62},
-       {id:"r4c",ts:"2026-05-19 10:00",trigger:"Manual",  duration:"2m 10s",assetsScanned:7,rulesEval:3,violationsNew:0,violationsResolved:0,status:"success",score:68},
-     ],
-     governedAssets:[
-       {name:"patient_events",   type:"Table",domain:"Commerce",service:"snowflake",  status:"fail",  failedRules:["PHI quality gate"],    quality:84},
-       {name:"user_health_data", type:"Table",domain:"Finance", service:"postgresql", status:"fail",  failedRules:["Access restriction"],  quality:91},
-       {name:"audit_records",    type:"Table",domain:"Commerce",service:"snowflake",  status:"fail",  failedRules:["Audit logging"],       quality:79},
-       {name:"customers",        type:"Table",domain:"Commerce",service:"snowflake",  status:"pass",  failedRules:[],                      quality:91},
-     ],
-     history:[
-       {when:"2026-04-01",who:"lisa.ray",action:"Policy activated"},
-       {when:"2026-03-20",who:"priya.nair",action:"Approved v3"},
-       {when:"2026-01-05",who:"lisa.ray",action:"Created draft v1"},
-     ]},
-    {id:"pol-5",name:"Product Catalog Completeness",fqn:"policies.quality.product_completeness",version:1,
-     category:"Quality",severity:"Medium",lifecycle:"Draft",cert:"Draft",owner:"alex.wu",stewards:[],tags:["internal"],
-     created:"2026-04-10",updated:"2026-05-10",regulations:[],
-     violations:0,compliancePct:null,lastEvaluated:null,assetsInScope:4,
-     scope:{domains:["Product","Marketing"]},
-     criteria:["Product and Marketing domain assets must meet a 70% quality threshold to be discoverable in the Data Catalog","All assets must have a description and at least one owner assigned","Assets in Draft lifecycle state must not appear in self-serve catalog search results"],
-     description:"Product and Marketing domain assets must meet a 70% quality threshold to be discoverable in the Data Catalog. Ensures consumers can trust and find data without steward intervention.",
-     rules:[
-       {id:"r5-1",name:"Catalog discoverability gate",criteria:"Product and Marketing domain assets must score ≥ 70% to appear in catalog search results and be accessible to self-serve analysts."},
-     ],
-     links:[],
-     history:[
-       {when:"2026-05-10",who:"alex.wu",action:"Created draft v1"},
-     ]},
-    {id:"pol-6",name:"Engineering Pipeline Governance",fqn:"policies.data.engineering_pipeline",version:2,
-     category:"Data",severity:"Medium",lifecycle:"Deprecated",cert:"Deprecated",owner:"priya.nair",stewards:[],tags:[],
-     created:"2025-11-01",updated:"2026-02-15",regulations:["SOC2"],
-     violations:0,compliancePct:null,lastEvaluated:null,assetsInScope:3,
-     scope:{domains:["Engineering"]},
-     criteria:["Pipeline outputs must hold Approved certification before use in downstream production systems"],
-     description:"Data pipeline outputs must be Approved-certified before promotion to production. Deprecated — scope has been consolidated under ML Feature Readiness.",
-     rules:[
-       {id:"r6-1",name:"Status requirement",criteria:"Pipeline outputs must hold Approved certification before use in downstream production systems."},
-     ],
-     links:[],
-     history:[
-       {when:"2026-02-15",who:"priya.nair",action:"Policy deprecated — scope merged into ML Feature Readiness"},
-       {when:"2025-12-01",who:"priya.nair",action:"Policy activated"},
-       {when:"2025-11-01",who:"priya.nair",action:"Created draft v1"},
-     ]},
-  ]);
+  const policies = usePoliciesStore();
+  const setPolicies = polSet;
 
   const [regulations, setRegulations] = useState(REGS_META);
 
@@ -6340,8 +6384,67 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
     completeness:"Completeness (%)", row_count:"Row Count", duplicate_rate:"Duplicate Rate (%)",
     // Retention
     retention_period:"Retention Period (days)", last_accessed:"Last Accessed (days ago)",
+    retention_class:"Retention", archive_status:"Archive Status",
+    // Security / Access / Privacy — enforceable fields
+    classification:"Classification", sensitivity:"Sensitivity", masking_status:"Masking",
+    encryption_status:"Encryption Status", row_security:"Row Security", exposure:"Exposure",
+    legal_hold:"Legal Hold", access_level:"Access Level", gdpr_erasure:"GDPR Erasure Eligible",
+  };
+  // Which fields carry a real enforcement action, and what EDG actually does when they match —
+  // used to describe enforcement-approval requests without duplicating the wizard's full rule catalog.
+  const FIELD_ACTION_VERB = {
+    classification:"Classify", sensitivity:"Set sensitivity", masking_status:"Mask",
+    encryption_status:"Encrypt", row_security:"Restrict (row-level)", exposure:"Restrict access",
+    legal_hold:"Legal hold", retention_class:"Set disposition", access_level:"Restrict access",
+    gdpr_erasure:"Erase / redact",
+  };
+  const resolveTableOwner = (tableName) => {
+    const a = ASSETS.find(x=>x.name===tableName);
+    return (a && (a.owner || (Array.isArray(a.owners)&&a.owners[0]))) || "the domain owner";
+  };
+  // Plural form — an asset can carry more than one owner; used to render approver chips
+  // instead of a fake pickable "Approver" dropdown, since the real approver isn't a choice.
+  const resolveTableOwners = (tableName) => {
+    const a = ASSETS.find(x=>x.name===tableName);
+    if(!a) return [];
+    if(Array.isArray(a.owners)&&a.owners.length) return a.owners;
+    if(a.owner) return [a.owner];
+    return [];
   };
   const closeWizard = () => { setCreateOpen(false); setNewPol(EMPTY_POL); setCreateStep(1); setWizardRules([]); setWizardRuleTab("preset"); setWizardSqlRules([]); setIsEditMode(false); };
+
+  // Masking / Legal Hold / Retention are the only fields whose enforcement action actually
+  // writes to the source — under combined (AND/OR) logic, silently dropping one of these from
+  // the evaluation would change the aggregate pass/fail result the user sees. So under AND/OR,
+  // an unapproved rule on one of these three fields blocks the whole run instead of being skipped.
+  const BLOCKING_FIELDS = {masking_status:"Masking", legal_hold:"Legal Hold", retention_class:"Retention"};
+  const findBlockingRule = (pol) => {
+    // Blocks regardless of rule logic (Independent/AND/OR) — a Masking/Legal Hold/Retention rule
+    // that isn't approved must never silently run, whether or not it's combined with other rules.
+    if(!pol) return null;
+    return (pol.rules||[]).find(r=>r.enforce && BLOCKING_FIELDS[r.field] && ((enfApprovalFor(pol.id,r.id)||{}).status||"pending")!=="approved") || null;
+  };
+  const runPolicyEvaluation = (pol) => {
+    if(!pol) return;
+    const policyId = pol.id;
+    setRunningPolId(policyId);
+    setTimeout(()=>{
+      const blocker = findBlockingRule(pol);
+      setRunningPolId(null);
+      if(blocker){
+        const label = BLOCKING_FIELDS[blocker.field];
+        const approver = (enfApprovalFor(policyId,blocker.id)||{}).approver || resolveTableOwner(blocker.table);
+        setPolicies(prev=>prev.map(pp=>pp.id===policyId?{...pp,lastEvaluated:new Date().toISOString().slice(0,10),lastRunBlocked:true,lastRunBlockReason:`${label} rule pending approval from ${approver}`}:pp));
+        onToast(`Run blocked — ${label} rule pending approval from ${approver}. Approve it before this policy can be evaluated.`,"error");
+        // Standard workspace event — same pushNotif shape used everywhere else — so the owner
+        // sees why the run didn't happen, not just a toast that's gone the moment they navigate away.
+        pushNotif({category:"Policy", type:"alert", title:`Run blocked · ${pol.name}`, body:`${label} rule on ${blocker.table||"the target table"} needs ${approver}'s approval before this policy can evaluate — nothing was silently skipped.`, nav:"policymanager", navArg:{policyId}});
+      } else {
+        setPolicies(prev=>prev.map(pp=>pp.id===policyId?{...pp,lastEvaluated:new Date().toISOString().slice(0,10),compliancePct:Math.floor(70+Math.random()*25),lastRunBlocked:false,lastRunBlockReason:null}:pp));
+        onToast("Policy evaluation complete","success");
+      }
+    },2200);
+  };
 
   // ─── computed ────────────────────────────────────────────────────────
   const POLICY_CATS = policyCategories.map(c=>c.name);
@@ -6424,10 +6527,33 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
     const nm  = newPol.name.toLowerCase().replace(/[^a-z0-9]+/g,"_").slice(0,32);
     const convertedRules = wizardRules.map((r,i)=>{
       const fl=W_FIELD_LABELS[r.field]||r.field;
-      const valStr=r.value?` ${r.value}`:"";
       const tblStr=r.table?` on ${r.table}`:"";
       const colStr=r.column?`.${r.column}`:"";
-      return {id:`r${i+1}-${Date.now()}`,type:"preset",field:r.field,operator:r.operator,value:r.value||"",table:r.table||"",column:r.column||"",severity:r.severity||"Medium",name:`${fl} ${r.operator}${valStr}${tblStr}${colStr}`};
+      // Main rule (field + operator + value) drives the name for every field, same as before;
+      // Legal Hold / Retention / Masking append their enforcement criteria detail when present.
+      let name;
+      if(r.field==="legal_hold"){
+        const valStr = r.value?` ${r.value}`:"";
+        const crit = (r.holdCriteria||[]).filter(c=>c.column);
+        const critStr = crit.length ? ` where ${crit.map(c=>`${c.column} ${c.operator||"="} ${c.value||"…"}`).join(" and ")}` : "";
+        name = `${fl} ${r.operator}${valStr}${tblStr}${critStr}`;
+      } else if(r.field==="retention_class"){
+        const valStr = r.value?` ${r.value}`:"";
+        const critType = r.critType||"date";
+        const parts = [];
+        if((critType==="date"||critType==="both") && r.dateCol) parts.push(`by ${r.dateCol}`);
+        if((critType==="text"||critType==="both") && r.critText) parts.push(`where ${r.critText}`);
+        name = `${fl} ${r.operator}${valStr}${tblStr}${parts.length?` ${parts.join(" & ")}`:""}`;
+      } else if(r.field==="masking_status" && (r.maskColumns||[]).length){
+        name = `${fl} ${r.operator}${r.value?` ${r.value}`:""}${tblStr} (${r.maskColumns.length} column${r.maskColumns.length>1?"s":""})`;
+      } else {
+        const valStr=r.value?` ${r.value}`:"";
+        name = `${fl} ${r.operator}${valStr}${tblStr}${colStr}`;
+      }
+      return {id:`r${i+1}-${Date.now()}`,type:"preset",field:r.field,operator:r.operator,value:r.value||"",table:r.table||"",column:r.column||"",severity:r.severity||"Medium",name,enforce:!!r.enforce,enf:r.enf||null,
+        critType:r.critType||null, dateCol:r.dateCol||"", critText:r.critText||"",
+        holdCriteria:r.holdCriteria||[], maskColumns:r.maskColumns||[],
+        pendingUnhold:!!r.pendingUnhold};
     });
     const convertedSqlRules = wizardSqlRules.map((r,i)=>({
       id:`rsql${i+1}-${Date.now()}`,type:"sql",table:r.table||"",sql:r.sql||"",strategy:r.strategy||"",operator:r.operator||"",threshold:r.threshold||"",partitionExpr:r.partitionExpr||"",severity:r.severity||"Medium",name:r.label||`Custom Rule ${i+1}`
@@ -6456,12 +6582,43 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
     const schedObj = null;  // schedule is set afterwards via the Schedule modal (consistent with the other sections)
     const lifecycle = runMode==="draft"?"Draft":"Active";
     const histAction = runMode==="run"?"Created & ran immediately":runMode==="schedule"?"Created — scheduling":"Created draft v1";
+    // A policy can only carry one enforcement action today — take the first rule with
+    // "Enforce in place" checked as the policy's enforcement definition. It stays gated
+    // (status:"Not dispatched") until its approval request is signed off by the table owner.
+    const enforcedRules = convertedRules.filter(r=>r.enforce);
+    const primaryEnfRule = enforcedRules[0]||null;
+    const ENF_FIELD_MAP = {masking_status:"maskingStatus", legal_hold:"legalHold", retention_class:"retentionClass"};
+    const enforcementObj = primaryEnfRule ? {
+      enabled:true, action:FIELD_ACTION_VERB[primaryEnfRule.field]||"Enforce",
+      ptype:primaryEnfRule.field==="masking_status"?"Security":(primaryEnfRule.field==="legal_hold"||primaryEnfRule.field==="retention_class")?"Retention":"Access",
+      field:ENF_FIELD_MAP[primaryEnfRule.field]||primaryEnfRule.field,
+      maturity:"MVP", inPlace:true, approvalRequired:true, dryRun:true, status:"Not dispatched",
+      ruleId:primaryEnfRule.id,
+      prefilled:{
+        object:"kb."+(primaryEnfRule.table||"asset"),
+        scope:(primaryEnfRule.table||"—")+(primaryEnfRule.column?"."+primaryEnfRule.column:""),
+        period:(()=>{
+          const enf = primaryEnfRule.enf||{};
+          const parts = [["Years","y"],["Months","mo"],["Weeks","w"],["Days","d"]]
+            .map(([k,suffix])=>{ const v=enf["Retention — "+k]; return v?`${v}${suffix}`:null; })
+            .filter(Boolean);
+          return parts.length ? parts.join(" ") : "—";
+        })(),
+        approver:resolveTableOwner(primaryEnfRule.table),
+      },
+    } : null;
+    const fireEnfApprovalRequests = (policyId, policyName) => {
+      enforcedRules.forEach(r=>{
+        if(_enfReqs.some(er=>er.ruleId===r.id)) return; // already requested for this rule — don't duplicate
+        addEnfApproval({policyId, policyName, ruleId:r.id, action:FIELD_ACTION_VERB[r.field]||"Enforce", table:r.table||"—", approver:resolveTableOwner(r.table), requestedBy:meHandle});
+      });
+    };
     const p = {...newPol,
       id:`pol-${Date.now()}`,fqn:`policies.${cat}.${nm}`,version:1,
       owner:ownerArr[0]||"", owners:ownerArr,
       lifecycle, created:today(), updated:today(),
       ruleLogic:newPol.ruleLogic||"independent",
-      criteria:autoText, rules:allRules, links:[],
+      criteria:autoText, rules:allRules, links:[], enforcement:enforcementObj,
       schedule:schedObj,
       violations:0, compliancePct:null, lastEvaluated:null, assetsInScope:scopeCount,
       history:[{when:today(),who:"You",action:histAction}]};
@@ -6475,6 +6632,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
            history:[{when:today(),who:"You",action:"Updated policy"},...(existing.history||[])]}
         :existing));
       applyRegArticleLinks(selPolicyId, p.regulationArticles);
+      fireEnfApprovalRequests(selPolicyId, p.name);
       const editedId=selPolicyId;
       closeWizard();
       setPdTab("overview");
@@ -6484,15 +6642,11 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
     }
     setPolicies(prev=>[...prev,p]);
     applyRegArticleLinks(p.id, p.regulationArticles);
+    fireEnfApprovalRequests(p.id, p.name);
     closeWizard();
     setSelPolicyId(p.id); setPdTab("overview");
     if(runMode==="run"){
-      setRunningPolId(p.id);
-      setTimeout(()=>{
-        setPolicies(prev=>prev.map(pp=>pp.id===p.id?{...pp,lastEvaluated:new Date().toISOString().slice(0,10),compliancePct:Math.floor(70+Math.random()*25)}:pp));
-        setRunningPolId(null);
-        onToast("Policy evaluation complete","success");
-      },2200);
+      runPolicyEvaluation(p);
       onToast("Policy created — running evaluation now…","success");
     } else if(runMode==="schedule"){
       // reset the schedule-modal fields so a new policy opens with clean defaults
@@ -6559,7 +6713,10 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
     const stewardArr = Array.isArray(pol.stewards)?pol.stewards:(pol.steward?[pol.steward]:[]);
     setNewPol({...pol, scope: normalizedScope, owner: ownerArr, stewards: stewardArr});
     // Convert existing rules back to wizard-compatible format
-    const presetBack = (pol.rules||[]).filter(r=>r.type==="preset"||(!r.type&&!r.sql)).map(r=>({id:r.id||`wr-${Date.now()}`,field:r.field||"certification",operator:r.operator||"is",value:r.value||"",table:r.table||"",column:r.column||"",severity:r.severity||"Medium"}));
+    const presetBack = (pol.rules||[]).filter(r=>r.type==="preset"||(!r.type&&!r.sql)).map(r=>({id:r.id||`wr-${Date.now()}`,field:r.field||"certification",operator:r.operator||"is",value:r.value||"",table:r.table||"",column:r.column||"",severity:r.severity||"Medium",enforce:!!r.enforce,enf:r.enf||null,
+      critType:r.critType||null, dateCol:r.dateCol||"", critText:r.critText||"",
+      holdCriteria:r.holdCriteria||[], maskColumns:r.maskColumns||[],
+      pendingUnhold:!!r.pendingUnhold}));
     const sqlBack    = (pol.rules||[]).filter(r=>r.type==="sql"||r.sql).map(r=>({id:r.id||`wsql-${Date.now()}`,label:r.label||r.name||"",table:r.table||"",sql:r.sql||"",strategy:r.strategy||"BINARY",operator:r.operator||"",threshold:r.threshold||"",partitionExpr:r.partitionExpr||"",severity:r.severity||"Medium"}));
     setWizardRules(presetBack);
     setWizardSqlRules(sqlBack);
@@ -6849,13 +7006,30 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
         {label}
       </button>
     );
+    const approverOf = (pp) => (pp.stewards&&pp.stewards[0]) || pp.owner || "the policy owner";
     if (p.lifecycle==="Draft")
-      return btnPrimary("→ Submit for review",()=>transition(p.id,"In Review","Submitted for review"),T.amber);
-    if (p.lifecycle==="In Review") return <>{btnGhost("Reject",()=>transition(p.id,"Draft","Rejected — sent back to draft"),T.rose)}{btnPrimary("✓ Approve",()=>transition(p.id,"Approved","Approved"),T.green)}</>;
+      return btnPrimary("→ Submit for review",()=>{
+        transition(p.id,"In Review","Submitted for review");
+        // Real request, same mechanism Tags/Domains use — so the approver sees this as an
+        // actionable item in their own Workspace inbox, not just a status label that changed.
+        requestStatusChange({kind:"policy", targetId:p.id, name:p.name, requestedStatus:"Approved", requestedBy:meHandle, note:"Submitted for review", approver:approverOf(p)});
+      },T.amber);
+    if (p.lifecycle==="In Review"){
+      if(!canSetPolicyStatus(p))
+        return <span style={{fontSize:11,color:T.textMuted,fontStyle:"italic"}}>Pending review by {approverOf(p)}</span>;
+      // A privileged user (owner/steward) can also decide directly here, not just via the inbox —
+      // resolve the matching pending request too, so it doesn't sit orphaned in someone's inbox.
+      const resolvePendingReq = (status) => { const req=_statusReqs.find(r=>r.kind==="policy"&&r.targetId===p.id&&r.status==="pending"); if(req) resolveStatusRequest(req.id,status); };
+      return <>{btnGhost("Reject",()=>{transition(p.id,"Draft","Rejected — sent back to draft");resolvePendingReq("rejected");},T.rose)}{btnPrimary("✓ Approve",()=>{transition(p.id,"Approved","Approved");resolvePendingReq("approved");},T.green)}</>;
+    }
     if (p.lifecycle==="Approved")
-      return btnPrimary("→ Publish",()=>transition(p.id,"Active","Published and activated"),T.blue);
+      return canSetPolicyStatus(p)
+        ? btnPrimary("→ Publish",()=>transition(p.id,"Active","Published and activated"),T.blue)
+        : <span style={{fontSize:11,color:T.textMuted,fontStyle:"italic"}}>Approved — awaiting {approverOf(p)} to publish</span>;
     if (p.lifecycle==="Active")
-      return btnGhost("Archive",()=>transition(p.id,"Deprecated","Policy deprecated"),T.rose);
+      return canSetPolicyStatus(p)
+        ? btnGhost("Archive",()=>transition(p.id,"Deprecated","Policy deprecated"),T.rose)
+        : <span style={{fontSize:11,color:T.textMuted,fontStyle:"italic"}}>Active</span>;
     return <span style={{fontSize:11,color:T.textMuted,fontStyle:"italic"}}>Deprecated</span>;
   };
   return (
@@ -7096,7 +7270,27 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                             {p.severity}
                           </span>
                         )}
-                        {p.compliancePct!=null&&(
+                        {(()=>{
+                          const enfRules = (p.rules||[]).filter(r=>r.enforce);
+                          if(enfRules.length===0) return null;
+                          const statusOf = r => (enfApprovalFor(p.id,r.id)||{}).status || "pending";
+                          const pending  = enfRules.filter(r=>statusOf(r)==="pending").length;
+                          const rejected = enfRules.filter(r=>statusOf(r)==="rejected").length;
+                          if(pending===0&&rejected===0) return null;
+                          const label = rejected>0 ? `${rejected} rule${rejected>1?"s":""} rejected` : `${pending} of ${enfRules.length} rule${enfRules.length>1?"s":""} pending approval`;
+                          const color = rejected>0?T.rose:T.amber;
+                          return (
+                            <span title="Rules with an enforcement action must be approved by the table owner before they run" style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:5,background:`${color}12`,color,border:`1px solid ${color}30`}}>
+                              {label}
+                            </span>
+                          );
+                        })()}
+                        {p.lastRunBlocked ? (
+                          <div title={p.lastRunBlockReason} style={{display:"flex",alignItems:"center",gap:5,padding:"2px 9px",borderRadius:5,background:`${T.rose}12`,border:`1px solid ${T.rose}30`}}>
+                            <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M3 3l6 6M9 3l-6 6" stroke={T.rose} strokeWidth="1.5" strokeLinecap="round"/></svg>
+                            <span style={{fontSize:11,fontWeight:700,color:T.rose}}>Blocked</span>
+                          </div>
+                        ) : p.compliancePct!=null&&(
                           <div title="Compliance score" style={{display:"flex",alignItems:"center",gap:5,padding:"2px 9px",borderRadius:5,background:p.compliancePct>=80?`${T.green}12`:`${T.rose}12`,border:`1px solid ${p.compliancePct>=80?T.green:T.rose}30`}}>
                             <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M6 1L2 4v3c0 2.5 1.8 4 4 4.5C8.2 11 10 9.5 10 7V4L6 1z" stroke={p.compliancePct>=80?T.green:T.rose} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
                             <span style={{fontSize:11,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:p.compliancePct>=80?T.green:T.rose}}>{p.compliancePct}%</span>
@@ -7474,19 +7668,17 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                             {/* Run Now button */}
                             <button
                               disabled={runningPolId===p.id}
-                              onClick={()=>{
-                                setRunningPolId(p.id);
-                                setTimeout(()=>{
-                                  setPolicies(prev=>prev.map(pp=>pp.id===p.id?{...pp,lastEvaluated:new Date().toISOString().slice(0,10),compliancePct:Math.floor(70+Math.random()*25)}:pp));
-                                  setRunningPolId(null);
-                                  onToast("Policy evaluation complete","success");
-                                },2200);
-                              }}
+                              onClick={()=>runPolicyEvaluation(p)}
                               style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"8px 12px",borderRadius:8,background:runningPolId===p.id?T.bgElevated:T.accentDim,border:`1.5px solid ${runningPolId===p.id?T.border:T.accent+"44"}`,color:runningPolId===p.id?T.textMuted:T.accent,fontSize:12.5,fontWeight:600,cursor:runningPolId===p.id?"not-allowed":"pointer",marginBottom:8,transition:"all .15s",fontFamily:"inherit"}}>
                               {runningPolId===p.id
                                 ? <><span style={{display:"inline-block",width:12,height:12,borderRadius:"50%",border:`1.5px solid ${T.accent}`,borderTopColor:"transparent",animation:"spin 0.7s linear infinite"}}/>Evaluating…</>
                                 : <><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><polygon points="5,3 14,8 5,13" fill="currentColor" stroke="none"/></svg>Run now</>}
                             </button>
+                            {p.lastRunBlocked&&(
+                              <div style={{padding:"8px 10px",borderRadius:7,background:`${T.rose}12`,border:`1px solid ${T.rose}30`,fontSize:11,color:T.rose,fontWeight:600,marginBottom:8,lineHeight:1.5}}>
+                                Run blocked — {p.lastRunBlockReason}
+                              </div>
+                            )}
                             {/* Schedule button — stateful (active / paused / none) */}
                             {(()=>{
                               const on=!!p.schedule&&p.schedEnabled!==false, paused=!!p.schedule&&p.schedEnabled===false;
@@ -7534,7 +7726,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       const sqlRules    = (p.rules||[]).filter(r=>r.type==="sql"||r.sql);
                       const totalRls    = (p.rules||[]).length;
                       const logicMode   = p.ruleLogic||"independent";
-                      const FIELD_LBL   = {certification:"Status",domain:"Domain",tag:"Tag",glossary_term:"Glossary Term",owner:"Owner",steward:"Steward",data_product:"Data Product",asset_type:"Asset Type",description:"Description",business_term:"Business Term",quality_score:"Quality Score",last_updated:"Last Updated",null_rate:"Null Rate",completeness:"Completeness",row_count:"Row Count",duplicate_rate:"Duplicate Rate",retention_period:"Retention Period",last_accessed:"Last Accessed",archive_status:"Archive Status"};
+                      const FIELD_LBL   = {certification:"Status",domain:"Domain",tag:"Tag",glossary_term:"Glossary Term",owner:"Owner",steward:"Steward",data_product:"Data Product",asset_type:"Asset Type",description:"Description",business_term:"Business Term",quality_score:"Quality Score",last_updated:"Last Updated",null_rate:"Null Rate",completeness:"Completeness",row_count:"Row Count",duplicate_rate:"Duplicate Rate",retention_period:"Retention Period",last_accessed:"Last Accessed",archive_status:"Archive Status",classification:"Classification",sensitivity:"Sensitivity",masking_status:"Masking",encryption_status:"Encryption Status",row_security:"Row Security",exposure:"Exposure",legal_hold:"Legal Hold",retention_class:"Retention",access_level:"Access Level",gdpr_erasure:"GDPR Erasure Eligible"};
                       const opLabel     = op=>({eq:"=",neq:"≠",gt:">",lt:"<",gte:"≥",lte:"≤",contains:"contains","not_contains":"does not contain","not contains":"does not contain","starts_with":"starts with","ends_with":"ends with",is_null:"is null","is_not_null":"is not null",matches:"matches",in:"in","not_in":"not in","is":"is","is not":"is not","greater than":">","less than":"<","equals":"=","is set":"is set","is not set":"is not set","is one of":"in","is not one of":"not in"}[op]||op||"");
 
                       // Open rule panel for editing a specific rule
@@ -7555,8 +7747,14 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                         const sevClr = SEV_COLOR[r.severity]||T.textMuted;
                         if (!isSQL) {
                           const fieldLabel = FIELD_LBL[r.field]||r.field||r.name||"—";
+                          // A rule with an enforcement action doesn't go live until the target table's
+                          // owner approves it — show it visibly dimmed/inactive until then, not blended
+                          // in with rules that are actually running.
+                          const enfStatus = r.enforce ? ((enfApprovalFor(p.id,r.id)||{}).status||"pending") : null;
+                          const inactive = !!enfStatus && enfStatus!=="approved";
+                          const inactiveColor = enfStatus==="rejected"?T.rose:T.amber;
                           return (
-                            <div key={r.id||ri} style={{padding:"11px 13px",border:`1px solid ${T.border}`,borderRadius:9,background:T.bgSurface}}>
+                            <div key={r.id||ri} style={{padding:"11px 13px",border:`1px ${inactive?"dashed":"solid"} ${inactive?inactiveColor:T.border}`,borderRadius:9,background:T.bgSurface,opacity:inactive?0.75:1}}>
                               <div style={{display:"flex",alignItems:"center",gap:8}}>
                                 <span style={{fontSize:12.5,fontWeight:600,color:T.text,flex:1,minWidth:0}}>{fieldLabel}</span>
                                 <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:5,background:sevBg,color:sevClr,flexShrink:0}}>{r.severity||"Medium"}</span>
@@ -7565,6 +7763,12 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                 </button>
                                 <button onClick={()=>handleRemoveRule(p.id,r.id)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:15,padding:"0 2px",lineHeight:1,flexShrink:0}} title="Remove rule">×</button>
                               </div>
+                              {inactive&&(
+                                <div style={{display:"flex",alignItems:"center",gap:5,marginTop:6}}>
+                                  <span style={{width:5,height:5,borderRadius:"50%",background:inactiveColor,display:"inline-block",flexShrink:0}}/>
+                                  <span style={{fontSize:10.5,fontWeight:600,color:inactiveColor}}>{enfStatus==="rejected"?"Inactive — rejected by owner":"Inactive — pending owner approval"}</span>
+                                </div>
+                              )}
                               {(r.operator||r.value)&&(
                                 <div style={{display:"flex",alignItems:"center",gap:6,marginTop:6,flexWrap:"wrap"}}>
                                   {r.operator&&<span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",padding:"2px 7px",borderRadius:5,background:T.bgBase,color:T.textSub,border:`1px solid ${T.border}`}}>{opLabel(r.operator)}</span>}
@@ -7576,6 +7780,30 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                   <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>Target:</span>
                                   {r.table&&<span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",padding:"2px 8px",borderRadius:5,background:`${T.accent}10`,color:T.accent,border:`1px solid ${T.accent}28`,fontWeight:500}}>{r.table}</span>}
                                   {r.column&&<span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",padding:"2px 8px",borderRadius:5,background:`${T.violet}12`,color:T.violet,border:`1px solid ${T.violet}28`,fontWeight:500}}>.{r.column}</span>}
+                                </div>
+                              )}
+                              {/* Enforcement criteria — Masking's selected columns, Legal Hold's sub-rule
+                                  criteria, Retention's criteria type — the detail beyond the main rule above,
+                                  only meaningful once "Enforce in place" is on. */}
+                              {r.enforce&&r.field==="masking_status"&&(r.maskColumns||[]).length>0&&(
+                                <div style={{display:"flex",alignItems:"center",gap:5,marginTop:6,flexWrap:"wrap"}}>
+                                  <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>Masks:</span>
+                                  {r.maskColumns.map(c=><span key={c} style={{fontSize:11,fontFamily:"'Geist Mono',monospace",padding:"2px 8px",borderRadius:5,background:`${T.violet}12`,color:T.violet,border:`1px solid ${T.violet}28`,fontWeight:500}}>.{c}</span>)}
+                                </div>
+                              )}
+                              {r.enforce&&r.field==="legal_hold"&&(r.holdCriteria||[]).filter(c=>c.column).length>0&&(
+                                <div style={{marginTop:6,display:"flex",flexDirection:"column",gap:3}}>
+                                  <span style={{fontSize:10,color:T.textMuted}}>Hold criteria:</span>
+                                  {r.holdCriteria.filter(c=>c.column).map((c,ci)=>(
+                                    <span key={ci} style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{c.column} {c.operator} {c.value||"…"}</span>
+                                  ))}
+                                </div>
+                              )}
+                              {r.enforce&&r.field==="retention_class"&&(r.dateCol||r.critText)&&(
+                                <div style={{marginTop:6,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                                  <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>Criteria:</span>
+                                  {r.dateCol&&<span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",padding:"2px 8px",borderRadius:5,background:`${T.violet}12`,color:T.violet,border:`1px solid ${T.violet}28`,fontWeight:500}}>by .{r.dateCol}</span>}
+                                  {r.critText&&<span style={{fontSize:11,color:T.textSub}}>{r.critText}</span>}
                                 </div>
                               )}
                             </div>
@@ -7891,25 +8119,67 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
 
                     {/* ── Governed Assets ── */}
                     {pdTab==="enforcement"&&(()=>{
-                      const enf = p.enforcement || {action:"Mask",ptype:"Security",field:"maskingStatus",engine:"CDP",maturity:"MVP",inPlace:false,approvalRequired:true,dryRun:true,status:"Not dispatched",prefilled:{object:"kb."+((p.governedAssets&&p.governedAssets[0]&&p.governedAssets[0].name)||"asset"),scope:"—",period:"—",approver:"—"}};
-                      const st = (enfRun[p.id]&&enfRun[p.id].status)||enf.status;
-                      const runId = (enfRun[p.id]&&enfRun[p.id].runId)||enf.runId;
+                      // Solix's own platform — enforcement here is native/in-house by construction, no capability question to ask.
+                      const NATIVE_SVCS = {cdp:"Solix CDP", ecs:"ECS"};
+                      // External SQL sources — capability EDG has confirmed for masking / legal hold / retention on each.
+                      // "native" = the source enforces it itself; "edg" = EDG applies and manages it directly since the source has no equivalent.
+                      const ENGINE_CAPS = {
+                        snowflake:  {label:"Snowflake",  masking:"native", legalHold:"edg",    retention:"edg"},
+                        bigquery:   {label:"BigQuery",   masking:"native", legalHold:"edg",    retention:"native"},
+                        databricks: {label:"Databricks", masking:"native", legalHold:"edg",    retention:"edg"},
+                        oracle:     {label:"Oracle",     masking:"native", legalHold:"native", retention:"native"},
+                        redshift:   {label:"Redshift",   masking:"native", legalHold:"edg",    retention:"edg"},
+                        postgres:   {label:"PostgreSQL", masking:"edg",    legalHold:"edg",    retention:"edg"},
+                        postgresql: {label:"PostgreSQL", masking:"edg",    legalHold:"edg",    retention:"edg"},
+                        mysql:      {label:"MySQL",      masking:"edg",    legalHold:"edg",    retention:"edg"},
+                      };
+                      const enf = p.enforcement || {action:"Mask",ptype:"Security",field:"maskingStatus",maturity:"MVP",inPlace:false,approvalRequired:true,dryRun:true,status:"Not dispatched",prefilled:{object:"kb."+((p.governedAssets&&p.governedAssets[0]&&p.governedAssets[0].name)||"asset"),scope:"—",period:"—",approver:"—"}};
+                      const dim = enf.field==="maskingStatus" ? "masking" : enf.field==="legalHold" ? "legalHold" : (enf.ptype==="Retention" ? "retention" : null);
+                      // Rules created before this approval flow existed (seed/demo data) have no ruleId to gate on — treat as already approved.
+                      const gateStatus = enf.ruleId ? ((enfApprovalFor(p.id,enf.ruleId)||{}).status||"pending") : "approved";
+                      const assets = p.governedAssets||[];
+                      const nativeSvcs = Array.from(new Set(assets.map(a=>a.service).filter(svc=>NATIVE_SVCS[svc])));
+                      const fedSvcSet  = Array.from(new Set(assets.map(a=>a.service).filter(svc=>ENGINE_CAPS[svc])));
+                      const fedSvcs = fedSvcSet.length>0 ? fedSvcSet : (nativeSvcs.length>0 ? [] : Object.keys(ENGINE_CAPS).slice(0,1));
                       const matColor = enf.maturity==="GA"?T.green:enf.maturity==="MVP"?T.amber:T.textMuted;
-                      const stColor = st==="Applied"?T.green:st==="Pending approval"?T.amber:st==="Failed"?T.rose:T.textMuted;
                       const chip=(txt,c)=>(<span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:10,background:c+"18",color:c}}>{txt}</span>);
-                      const dispatch=()=>{ setEnfRun(prev=>({...prev,[p.id]:{status:"Pending approval"}})); onToast("Sent to "+enf.engine+" approver — pending approval","info"); setTimeout(()=>{ setEnfRun(prev=>({...prev,[p.id]:{status:"Applied",runId:enf.engine+"-"+Math.floor(40000+Math.random()*9000)}})); onToast("Enforced in "+enf.engine+" — applied in place","success"); },1300); };
+                      const capChip=(cap)=> cap==="native" ? chip("Native",T.green) : chip("EDG-managed",T.blue);
+                      const zoneLabel=(txt)=>(<div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",marginBottom:8}}>{txt}</div>);
+                      const dispatch=(svc,label)=>{
+                        const key=p.id+"::"+svc;
+                        setEnfRun(prev=>({...prev,[key]:{status:"Pending approval"}}));
+                        onToast("Sent to "+label+" approver — pending approval","info");
+                        setTimeout(()=>{ setEnfRun(prev=>({...prev,[key]:{status:"Applied",runId:"EDG-"+Math.floor(40000+Math.random()*9000)}})); onToast("EDG applied "+enf.action.toLowerCase()+" directly in "+label,"success"); },1300);
+                      };
+                      const isPrimarySvc = svc => svc === ((assets[0]&&assets[0].service)||fedSvcs[0]||nativeSvcs[0]);
+                      const statusRow=(svc,label)=>{
+                        const key = p.id+"::"+svc;
+                        const primary = isPrimarySvc(svc);
+                        const st = (enfRun[key]&&enfRun[key].status) || (primary?enf.status:"Not dispatched");
+                        const runId = (enfRun[key]&&enfRun[key].runId) || ((primary&&st===enf.status)?enf.runId:null);
+                        const stColor = st==="Applied"?T.green:st==="Pending approval"?T.amber:st==="Failed"?T.rose:T.textMuted;
+                        return {st,runId,stColor,key};
+                      };
                       return (
                         <div style={{padding:"16px 18px"}}>
                           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
-                            <span style={{fontSize:14,fontWeight:600,color:T.text}}>Enforce in place · {enf.action}</span>
-                            {chip(enf.engine,T.blue)}
+                            <span style={{fontSize:14,fontWeight:600,color:T.text}}>{enf.action}</span>
                             {chip(enf.maturity,matColor)}
-                            {enf.inPlace&&chip("Federated Governance · in place",T.green)}
+                            {nativeSvcs.length>0&&chip(`Solix · ${nativeSvcs.length}`,T.accent)}
+                            {fedSvcs.length>0&&chip(`Federated · ${fedSvcs.length}`,T.green)}
                           </div>
-                          <div style={{fontSize:11,color:T.textMuted,marginBottom:14}}>Write-twin of <code>{enf.field||"—"}</code> · source-aware from scope, so the fields and data below are scoped to {enf.engine}.</div>
+                          <div style={{fontSize:11,color:T.textMuted,marginBottom:14}}>Write-twin of <code>{enf.field||"—"}</code>. This policy's assets are enforced differently depending on where they live — see below.</div>
 
-                          <div style={{border:"1px solid "+T.border,borderRadius:8,padding:"12px 14px",marginBottom:12,background:T.bgElevated}}>
-                            <div style={{fontSize:10,color:T.textMuted,letterSpacing:".06em",marginBottom:8}}>{enf.engine} ENGINE FIELDS · PRE-FILLED FROM CATALOG</div>
+                          {gateStatus!=="approved"&&(
+                            <div style={{padding:"10px 14px",borderRadius:8,marginBottom:14,background:`${gateStatus==="rejected"?T.rose:T.amber}12`,border:`1px solid ${gateStatus==="rejected"?T.rose:T.amber}30`,fontSize:12,color:gateStatus==="rejected"?T.rose:T.amber,fontWeight:600}}>
+                              {gateStatus==="rejected"
+                                ? `Rejected by ${(enf.prefilled&&enf.prefilled.approver)||"the table owner"} — edit this rule and resubmit to request approval again.`
+                                : `Awaiting approval from ${(enf.prefilled&&enf.prefilled.approver)||"the table owner"} — this rule won't run or dispatch until approved.`}
+                            </div>
+                          )}
+
+                          <div style={{border:"1px solid "+T.border,borderRadius:8,padding:"12px 14px",marginBottom:18,background:T.bgElevated}}>
+                            <div style={{fontSize:10,color:T.textMuted,letterSpacing:".06em",marginBottom:8}}>POLICY FIELDS · PRE-FILLED FROM CATALOG</div>
                             {[["Object",enf.prefilled&&enf.prefilled.object],["Scope",enf.prefilled&&enf.prefilled.scope],["Retention / basis",(enf.prefilled&&(enf.prefilled.period||enf.prefilled.basis))||"—"],["Approver",enf.prefilled&&enf.prefilled.approver]].map((kv,i)=>(
                               <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:12}}>
                                 <span style={{color:T.textMuted}}>{kv[0]}</span><span style={{color:T.text}}>{kv[1]||"—"}</span>
@@ -7917,17 +8187,74 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                             ))}
                           </div>
 
-                          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
-                            <span style={{fontSize:11,color:T.textMuted}}>Status</span>
-                            <span style={{fontSize:12,fontWeight:600,color:stColor}}>{st}</span>
-                            {runId&&<span style={{fontSize:11,color:T.textMuted}}>· Run {runId}</span>}
-                            {enf.approvalRequired&&<span style={{fontSize:10,color:T.textMuted,marginLeft:"auto"}}>approval-gated · dry-run on</span>}
-                          </div>
+                          {nativeSvcs.length>0&&(
+                            <>
+                              {zoneLabel("ENFORCED NATIVELY IN SOLIX")}
+                              <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:18}}>
+                                {nativeSvcs.map(svc=>{
+                                  const label = NATIVE_SVCS[svc];
+                                  const svcAssets = assets.filter(a=>a.service===svc);
+                                  const {st,runId,stColor} = statusRow(svc,label);
+                                  return (
+                                    <div key={svc} style={{border:"1px solid "+T.border,borderRadius:8,padding:"10px 14px",background:T.bgSurface}}>
+                                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
+                                        {chip(label,T.accent)}
+                                        <span style={{fontSize:11,color:T.textMuted}}>{svcAssets.length} asset{svcAssets.length!==1?"s":""}{svcAssets.length>0?" · "+svcAssets.map(a=>a.name).slice(0,2).join(", "):""}</span>
+                                        <span style={{fontSize:12,fontWeight:600,color:stColor,marginLeft:"auto"}}>{st}</span>
+                                        {runId&&<span style={{fontSize:11,color:T.textMuted}}>· Run {runId}</span>}
+                                      </div>
+                                      <div style={{display:"flex",gap:8}}>
+                                        <button onClick={()=>onToast("Dry-run in "+label+": changes previewed, nothing applied","info")}
+                                          style={{fontSize:11.5,padding:"6px 12px",borderRadius:7,border:"1px solid "+T.border,background:"none",color:T.text,cursor:"pointer"}}>Preview (dry-run)</button>
+                                        {st!=="Applied"&&gateStatus==="approved"&&<button onClick={()=>dispatch(svc,label)}
+                                          style={{fontSize:11.5,padding:"6px 12px",borderRadius:7,border:"none",background:T.accent,color:"#fff",cursor:"pointer",fontWeight:600}}>Apply in {label}</button>}
+                                        {st!=="Applied"&&gateStatus!=="approved"&&<span style={{fontSize:11.5,padding:"6px 12px",color:T.textMuted,fontWeight:600}}>{gateStatus==="rejected"?"Rejected — cannot dispatch":"Awaiting approval"}</span>}
+                                        {st==="Applied"&&<span style={{fontSize:11.5,padding:"6px 12px",color:T.green,fontWeight:600}}>✓ Enforced in {label}</span>}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </>
+                          )}
 
-                          <div style={{display:"flex",gap:8}}>
-                            <button onClick={()=>onToast("Dry-run on "+enf.engine+": changes previewed, nothing applied","info")} style={{fontSize:11.5,padding:"7px 14px",borderRadius:7,border:"1px solid "+T.border,background:"none",color:T.text,cursor:"pointer"}}>Preview (dry-run)</button>
-                            {st!=="Applied"&&<button onClick={dispatch} style={{fontSize:11.5,padding:"7px 14px",borderRadius:7,border:"none",background:T.accent,color:"#fff",cursor:"pointer",fontWeight:600}}>Dispatch to {enf.engine}</button>}
-                            {st==="Applied"&&<span style={{fontSize:11.5,padding:"7px 14px",color:T.green,fontWeight:600}}>✓ Enforced in {enf.engine}</span>}
+                          {fedSvcs.length>0&&(
+                            <>
+                              {zoneLabel("FEDERATED — EXTERNAL SOURCES")}
+                              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                                {fedSvcs.map(svc=>{
+                                  const caps = ENGINE_CAPS[svc];
+                                  const cap = dim ? caps[dim] : "native";
+                                  const label = caps.label;
+                                  const {st,runId,stColor} = statusRow(svc,label);
+                                  return (
+                                    <div key={svc} style={{border:"1px solid "+T.border,borderRadius:8,padding:"10px 14px",background:T.bgSurface}}>
+                                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
+                                        {chip(label,T.blue)}
+                                        {capChip(cap)}
+                                        <span style={{fontSize:12,fontWeight:600,color:stColor,marginLeft:"auto"}}>{st}</span>
+                                        {runId&&<span style={{fontSize:11,color:T.textMuted}}>· Run {runId}</span>}
+                                      </div>
+                                      {dim&&cap==="edg"&&(
+                                        <div style={{fontSize:11,color:T.textMuted,marginBottom:8,lineHeight:1.5}}>No native {dim==="legalHold"?"legal hold":dim} support in {label} — EDG applies and manages this directly.</div>
+                                      )}
+                                      <div style={{display:"flex",gap:8}}>
+                                        <button onClick={()=>onToast("Dry-run in "+label+": changes previewed, nothing applied","info")}
+                                          style={{fontSize:11.5,padding:"6px 12px",borderRadius:7,border:"1px solid "+T.border,background:"none",color:T.text,cursor:"pointer"}}>Preview (dry-run)</button>
+                                        {st!=="Applied"&&gateStatus==="approved"&&<button onClick={()=>dispatch(svc,label)}
+                                          style={{fontSize:11.5,padding:"6px 12px",borderRadius:7,border:"none",background:T.accent,color:"#fff",cursor:"pointer",fontWeight:600}}>Apply in {label}</button>}
+                                        {st!=="Applied"&&gateStatus!=="approved"&&<span style={{fontSize:11.5,padding:"6px 12px",color:T.textMuted,fontWeight:600}}>{gateStatus==="rejected"?"Rejected — cannot dispatch":"Awaiting approval"}</span>}
+                                        {st==="Applied"&&<span style={{fontSize:11.5,padding:"6px 12px",color:T.green,fontWeight:600}}>✓ Enforced in {label}</span>}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </>
+                          )}
+
+                          <div style={{marginTop:18,padding:"10px 14px",borderRadius:8,background:T.bgElevated,fontSize:11,color:T.textMuted,lineHeight:1.6}}>
+                            Row security, exposure, and access-level rules for this policy are evaluated under the <b style={{fontWeight:600,color:T.textSub||T.text}}>Rules</b> tab — they're not shown here since there's no enforcement action to dispatch for them yet.
                           </div>
                         </div>
                       );
@@ -8771,13 +9098,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
           subtitle={sp?.name}
           schedule={sp?.sched}
           onClose={()=>setScheduleModal(null)}
-          onRunNow={()=>{
-            const id=scheduleModal;setScheduleModal(null);setRunningPolId(id);
-            setTimeout(()=>{
-              setPolicies(prev=>prev.map(pp=>pp.id===id?{...pp,lastEvaluated:new Date().toISOString().slice(0,10),compliancePct:Math.floor(70+Math.random()*25)}:pp));
-              setRunningPolId(null);onToast("Policy evaluation complete","success");
-            },2200);
-          }}
+          onRunNow={()=>{ setScheduleModal(null); runPolicyEvaluation(sp); }}
           running={runningPolId===scheduleModal}
           onRemove={sp?.schedule?()=>{setPolicies(prev=>prev.map(pp=>pp.id===scheduleModal?{...pp,sched:null,schedule:null,nextRun:null}:pp));setScheduleModal(null);onToast("Schedule removed","info");}:undefined}
           onSave={sched=>{
@@ -8807,7 +9128,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
           {id:"completeness",   label:"Completeness (%)",      ops:["greater than","less than","equals"],     vals:[]},
           {id:"row_count",      label:"Row Count",             ops:["greater than","less than","equals"],     vals:[]},
           {id:"duplicate_rate", label:"Duplicate Rate (%)",    ops:["greater than","less than","equals"],     vals:[]},
-          {id:"retention_period",label:"Retention Period (days)",ops:["greater than","less than","equals"],  vals:[]},
+          {id:"retention_class",label:"Retention",ops:["is","is not"],                                vals:["true","false"]},
           {id:"last_accessed",  label:"Last Accessed (days ago)",ops:["greater than","less than","equals"],  vals:[]},
           {id:"archive_status", label:"Archive Status",        ops:["is","is not"],                           vals:["Archived","Active","Pending Archival"]},
         ];
@@ -9039,7 +9360,10 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   const scopeDoms  = newPol.scope?.domains||[];
                   const scopeSrcs  = newPol.scope?.sources||[];
                   const assetType  = newPol.scope?.assetType||"both";
-                  const ALL_SOURCES = ["CDP","ECS","Snowflake","Databricks","PostgreSQL","Oracle","BigQuery","Redshift"];
+                  const SOLIX_SOURCES    = ["CDP","ECS"];
+                  const EXTERNAL_SOURCES = ["Snowflake","Databricks","PostgreSQL","Oracle","BigQuery","Redshift"];
+                  const ALL_SOURCES      = [...SOLIX_SOURCES, ...EXTERNAL_SOURCES];
+                  const SRC_ICON = {"CDP":"🗄️","ECS":"📁","Snowflake":"❄️","Databricks":"🧱","PostgreSQL":"🐘","Oracle":"🔴","BigQuery":"🔷","Redshift":"🌀"};
                   return (
                     <div style={{display:"flex",flexDirection:"column",gap:20}}>
                       {secHead("Policy Scope","Define which sources and asset types this policy governs. Specific tables and columns are selected per rule in the next step.")}
@@ -9063,6 +9387,14 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                           options={ALL_SOURCES}
                           selected={scopeSrcs}
                           onChange={v=>setNewPol(p=>({...p,scope:{...p.scope,sources:v}}))}
+                          renderOpt={(o,sel)=>(
+                            <>
+                              <span style={{fontSize:14,flexShrink:0}}>{SRC_ICON[o]||"🗄️"}</span>
+                              <span style={{flex:1,fontSize:12.5,color:sel?T.accent:T.text}}>{o}</span>
+                              {SOLIX_SOURCES.includes(o)&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:8,background:`${T.accent}18`,color:T.accent,flexShrink:0}}>Solix</span>}
+                            </>
+                          )}
+                          renderChip={o=><span style={{display:"inline-flex",alignItems:"center",gap:4}}><span>{SRC_ICON[o]||"🗄️"}</span>{o}</span>}
                         />
                         {scopeSrcs.length===0&&<div style={{fontSize:10.5,color:T.rose,marginTop:4}}>Select at least one source to continue.</div>}
                       </div>
@@ -9121,12 +9453,12 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   const W_RULE_FIELDS = [
                     {id:"classification",   label:"Classification",          scope:"both",   type:"enum",       ops:["is","is not","is one of","is not one of"], vals:["PII","PHI","PCI","Confidential","Internal","Public","Not Set"], types:["Security","Privacy","Governance"], action:{verb:"Classify",engine:"EDG",maturity:"GA"}},
                     {id:"sensitivity",      label:"Sensitivity",             scope:"both",   type:"enum",       ops:["is","is not"],                             vals:["Low","Medium","High","Critical","Not Set"], types:["Security","Access"], action:{verb:"Set sensitivity",engine:"EDG",maturity:"MVP"}},
-                    {id:"masking_status",   label:"Masking Status",          scope:"column", type:"enum",       ops:["is","is not"],                             vals:["Applied","Partial","Not Applied","Unknown"], types:["Security"], action:{verb:"Mask",engine:"CDP",maturity:"GA"}},
+                    {id:"masking_status",   label:"Masking",                 scope:"column", type:"enum",       ops:["is","is not"],                             vals:["true","false"], types:["Security"], action:{verb:"Mask",engine:"CDP",maturity:"GA"}},
                     {id:"encryption_status",label:"Encryption Status",       scope:"both",   type:"enum",       ops:["is","is not"],                             vals:["Enabled","Disabled","Unknown"], types:["Security"], action:{verb:"Encrypt",engine:"source",maturity:"Planned"}},
                     {id:"row_security",     label:"Row Security",            scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Enabled","Disabled","Unknown"], types:["Security","Access"], action:{verb:"Restrict (row-level)",engine:"CDP",maturity:"GA"}},
                     {id:"exposure",         label:"Exposure",                scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Public","Internal","Restricted","Not Set"], types:["Security","Access"], action:{verb:"Restrict access",engine:"CDP",maturity:"GA"}},
-                    {id:"legal_hold",       label:"Legal Hold",              scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["true","false"], types:["Retention"], action:{verb:"Legal hold",engine:"CDP",maturity:"GA"}},
-                    {id:"retention_class",  label:"Retention Class",         scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Operational","Regulatory","Archive","Legal Hold","Not Set"], types:["Retention"], action:{verb:"Set disposition",engine:"CDP",maturity:"GA"}},
+                    {id:"legal_hold",       label:"Legal Hold",              scope:"both",   type:"enum",       ops:["is","is not"],                             vals:["true","false"], types:["Retention"], action:{verb:"Legal hold",engine:"CDP",maturity:"GA"}},
+                    {id:"retention_class",  label:"Retention",               scope:"both",   type:"enum",       ops:["is","is not"],                             vals:["true","false"], types:["Retention"], action:{verb:"Set disposition",engine:"CDP",maturity:"GA"}},
                     {id:"access_level",     label:"Access Level",            scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Open","Controlled","Restricted","Not Set"], types:["Access"], action:{verb:"Restrict access",engine:"CDP",maturity:"GA"}},
                     {id:"gdpr_erasure",     label:"GDPR Erasure Eligible",   scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Yes","No"], types:["Privacy"], action:{verb:"Erase / redact",engine:"CDP",maturity:"GA"}},
                     // ── Governance — all table-level catalog attributes ──
@@ -9149,7 +9481,6 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                     {id:"completeness",   label:"Completeness (%)",        scope:"column", type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Quality"]},
                     {id:"duplicate_rate", label:"Duplicate Rate (%)",      scope:"column", type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Quality"]},
                     // ── Retention — table-level catalog metadata ──
-                    {id:"retention_period",label:"Retention Period (days)",scope:"table",  type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Retention"],                       hint:"Catalog-stored metadata — set via policy or ingestion"},
                     {id:"last_accessed",   label:"Last Accessed (days ago)",scope:"table", type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Retention"],                       hint:"Snowflake / BigQuery only — not available in PostgreSQL / Oracle"},
                     {id:"archive_status",  label:"Archive Status",         scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Archived","Active","Pending Archival"],                  types:["Retention"],                       hint:"Catalog-stored — set manually or via workflow"},
                   ];
@@ -9159,13 +9490,31 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                     : W_RULE_FIELDS;
                   const defaultField = filteredRuleFields[0]||W_RULE_FIELDS[0];
                   const addPresetRule = () => setWizardRules(prev=>[...prev,{id:`wr-${Date.now()}`,field:defaultField.id,operator:defaultField.ops[0],value:"",table:"",column:"",severity:"Medium"}]);
-                  const removeRule = id => setWizardRules(prev=>prev.filter(r=>r.id!==id));
+                  // Deleting a Legal Hold rule that's already approved & in effect doesn't unhold the
+                  // table immediately — it fires a real "Unhold" approval request to the same approver
+                  // (same store/inbox mechanism as the original hold) and the rule stays, marked
+                  // pending, until that's approved. Draft/not-yet-approved rules just delete outright.
+                  const removeRule = id => {
+                    const r = wizardRules.find(x=>x.id===id);
+                    if(r && r.field==="legal_hold" && r.enforce && isEditMode && selPolicyId){
+                      const approval = enfApprovalFor(selPolicyId, id);
+                      if(approval && approval.status==="approved" && !r.pendingUnhold){
+                        const approver = approval.approver || resolveTableOwner(r.table);
+                        addEnfApproval({policyId:selPolicyId, policyName:newPol.name, ruleId:id+"-unhold", action:"Unhold", table:r.table||"—", approver, requestedBy:meHandle});
+                        setWizardRules(prev=>prev.map(rr=>rr.id===id?{...rr,pendingUnhold:true}:rr));
+                        pushNotif({category:"Policy", type:"alert", title:`Unhold requested · ${r.table||"table"}`, body:`${meHandle} requested to release the legal hold on ${r.table||"the target table"} — awaiting approval from ${approver}.`, nav:"policymanager", navArg:{policyId:selPolicyId}});
+                        onToast(`Unhold requested — pending approval from ${approver}`,"success");
+                        return;
+                      }
+                    }
+                    setWizardRules(prev=>prev.filter(r=>r.id!==id));
+                  };
 
                   // ── Tables available for rule-level picking (from Step 1 source + assetType) ──
                   const scopeSrcs2  = newPol.scope?.sources||[];
                   const assetType2  = newPol.scope?.assetType||"both";
-                  const SRC_SVC2    = {"Snowflake":["snowflake"],"Databricks":["databricks"],"PostgreSQL":["postgres","postgresql"],"Oracle":["oracle"],"BigQuery":["bigquery"],"Redshift":["redshift"]};
-                  const SRC_ICON2   = {"snowflake":"❄️","databricks":"🧱","postgres":"🐘","postgresql":"🐘","oracle":"🔴","bigquery":"🔷","redshift":"🌀"};
+                  const SRC_SVC2    = {"CDP":["cdp"],"ECS":["ecs"],"Snowflake":["snowflake"],"Databricks":["databricks"],"PostgreSQL":["postgres","postgresql"],"Oracle":["oracle"],"BigQuery":["bigquery"],"Redshift":["redshift"]};
+                  const SRC_ICON2   = {"cdp":"🗄️","ecs":"📁","snowflake":"❄️","databricks":"🧱","postgres":"🐘","postgresql":"🐘","oracle":"🔴","bigquery":"🔷","redshift":"🌀"};
                   const availTables = ASSETS.filter(a=>{
                     const svcMatch = scopeSrcs2.length===0 || scopeSrcs2.some(s=>(SRC_SVC2[s]||[]).includes((a.service||"").toLowerCase()));
                     const typeOk   = assetType2==="both" || (assetType2==="table"&&a.type==="Table") || (assetType2==="view"&&a.type==="View");
@@ -9270,6 +9619,23 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   };
                   const updRule = (id,k,v) => setWizardRules(prev=>prev.map(r=>r.id===id?{...r,[k]:v}:r));
                   const sel_s={padding:"7px 9px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",cursor:"pointer",fontFamily:"inherit"};
+                  // Only one enforced Masking/Legal Hold/Retention policy is allowed per table at a time —
+                  // stacking two conflicts silently (e.g. two different retention periods) instead of
+                  // erroring, so this is checked the moment "Enforce in place" is turned on, not after save.
+                  const ENF_LABEL = {masking_status:"Masking", legal_hold:"Legal Hold", retention_class:"Retention"};
+                  const findConflictingEnforcedPolicy = (field, table) => {
+                    if(!table) return null;
+                    for(const p of policies){
+                      if(isEditMode && p.id===selPolicyId) continue; // editing this policy — its own rules aren't a conflict with themselves
+                      for(const rr of (p.rules||[])){
+                        if(rr.field===field && rr.table===table && rr.enforce){
+                          const appr = enfApprovalFor(p.id, rr.id);
+                          if(appr && appr.status==="approved") return p;
+                        }
+                      }
+                    }
+                    return null;
+                  };
                   const cq = newPol.consequence||{notify:"Both"};
                   // ── Severity badge dropdown — accepts optional onChangeSev for SQL rules ──
                   const SevBadge = ({ruleId, sev, onChangeSev}) => {
@@ -9525,6 +9891,49 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                 const scopeColor = fd.scope==="column"?T.violet:fd.scope==="both"?T.amber:T.textMuted;
                                 // Connector badge between rules
                                 const connectorLabel = ruleLogic==="and"?"AND":ruleLogic==="or"?"OR":null;
+                                // Masking / Legal Hold / Retention are approved by the target table's owner —
+                                // shown as read-only chips once a table is picked, never an editable "pick your
+                                // approver" dropdown, since who approves isn't actually a choice.
+                                const isEnfField = r.field==="masking_status"||r.field==="legal_hold"||r.field==="retention_class";
+                                const tableColBlock = (showApprover)=>(
+                                  <div style={{borderTop:`1px solid ${T.border}`,padding:"10px 11px 11px",display:"flex",flexDirection:"column",gap:8,background:`${T.bgBase}88`}}>
+                                    {/* Table row */}
+                                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                                      <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0,minWidth:60}}>
+                                        <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/><line x1="1" y1="5" x2="13" y2="5" stroke="currentColor" strokeWidth="1"/><line x1="5" y1="5" x2="5" y2="13" stroke="currentColor" strokeWidth="1"/></svg>
+                                        <span style={{fontSize:11,fontWeight:600,color:T.textSub}}>Table <span style={{color:T.rose}}>*</span></span>
+                                      </div>
+                                      <TablePicker ruleId={r.id} value={r.table||""}/>
+                                    </div>
+                                    {/* Column row — for Masking/Legal Hold/Retention, column selection now lives inside
+                                        "Enforce in place" (multi-select columns for Masking, hold criteria for Legal
+                                        Hold) since a single optional column here was redundant with that. */}
+                                    {(fd.scope==="column"||fd.scope==="both")&&!isEnfField&&(
+                                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                                        <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0,minWidth:60}}>
+                                          <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/><line x1="1" y1="5" x2="13" y2="5" stroke="currentColor" strokeWidth="1"/><line x1="5" y1="1" x2="5" y2="13" stroke="currentColor" strokeWidth="1"/></svg>
+                                          <span style={{fontSize:11,fontWeight:600,color:fd.scope==="column"?T.textSub:T.textMuted}}>
+                                            Column{fd.scope==="column"?<span style={{color:T.rose}}> *</span>:<span style={{color:T.textMuted,fontWeight:400}}> (opt)</span>}
+                                          </span>
+                                        </div>
+                                        <ColPicker ruleId={r.id} value={r.column||""} required={fd.scope==="column"} tableVal={r.table||""}/>
+                                      </div>
+                                    )}
+                                    {showApprover&&(()=>{
+                                      const owners = r.table ? resolveTableOwners(r.table) : [];
+                                      return (
+                                        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                                          <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>Approver{owners.length>1?"s":""}:</span>
+                                          {!r.table&&<span style={{fontSize:10,color:T.textMuted,fontStyle:"italic"}}>Select a table to see who approves this rule</span>}
+                                          {r.table&&owners.length===0&&<span style={{fontSize:10,color:T.textMuted,fontStyle:"italic"}}>the domain owner</span>}
+                                          {owners.map(o=>(
+                                            <span key={o} style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:10,background:`${T.accent}14`,color:T.accent}}>{o}</span>
+                                          ))}
+                                        </div>
+                                      );
+                                    })()}
+                                  </div>
+                                );
                                 return (
                                   <div key={r.id}>
                                     {/* Connector between rules */}
@@ -9545,7 +9954,13 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                         {fd.scope==="column"&&<span style={{fontSize:10,color:T.rose,marginLeft:2}}>column required</span>}
                                         {fd.scope==="both"&&<span style={{fontSize:10,color:T.textMuted,marginLeft:2}}>column optional</span>}
                                       </div>
-                                      {/* Condition row */}
+                                      {/* Condition row — same shape for every field, including Masking/Legal Hold/
+                                          Retention: field + operator + value is the "main rule" that decides whether
+                                          this rule matches at all (e.g. "Legal Hold is false" / "Retention is Not Set").
+                                          Checking "Enforce in place" below adds the extra criteria that refine WHICH
+                                          rows/columns the enforcement action actually touches. */}
+                                      {(()=>{
+                                        return (
                                       <div style={{padding:"6px 11px 9px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                                         <select value={r.field} onChange={e=>{
                                           const nfd=W_RULE_FIELDS.find(f=>f.id===e.target.value)||filteredRuleFields[0]||W_RULE_FIELDS[0];
@@ -9568,35 +9983,132 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                         {needsVal&&(fd.vals||[]).length===0&&<input type="text" value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} placeholder="value…" style={{...sel_s,flex:"1 1 110px"}}/>}
                                         {needsNum&&<input type="number" value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} placeholder="value" style={{...sel_s,flex:"0 0 80px",width:80}}/>}
                                         <SevBadge ruleId={r.id} sev={sev}/>
-                                        <button onClick={()=>removeRule(r.id)} title="Remove rule"
-                                          style={{width:24,height:24,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15,lineHeight:1}}
-                                          onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
-                                          onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>×</button>
+                                        {r.pendingUnhold
+                                          ? <span style={{fontSize:9.5,fontWeight:700,padding:"3px 8px",borderRadius:10,background:`${T.amber}18`,color:T.amber,letterSpacing:"0.03em",flexShrink:0}}>PENDING UNHOLD</span>
+                                          : <button onClick={()=>removeRule(r.id)} title="Remove rule"
+                                              style={{width:24,height:24,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15,lineHeight:1}}
+                                              onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
+                                              onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>×</button>}
                                       </div>
+                                        );
+                                      })()}
+                                      {tableColBlock(isEnfField)}
                                       {fd.action&&(()=>{
-                                        const _src=newPol.scope?.sources||[];
-                                        const matC = fd.action.maturity==="GA"?T.green:fd.action.maturity==="MVP"?T.amber:T.textMuted;
-                                        let engines = (fd.action.engine==="EDG"||fd.action.engine==="source") ? [fd.action.engine] : _src.filter(x=>x==="CDP"||x==="ECS");
-                                        if(!engines.length) engines=["CDP"];
-                                        const FS = {"Mask":[["Rule type",["Encryption/Decryption","Nullout","Mask Data","Constants","Truncate","Shuffle/Scramble","Substitute"],"Mask Data"],["Algorithm language",["Java","Python","SQL","Oracle"],"Java"],["Algorithm",["EMAIL","SSN","CREDIT_CARD","REDACT","HASHMASKING","CONSISTENT_HASH","NULLOUT"],"REDACT"],["Process type",["Masking","Masking Preview","Xpress Masking"],"Masking"],["Approver",["M. Chen","Records / Legal","Data Office"],"M. Chen"]],"Legal hold":[["Hold type",["Rule-based","Search-based"],"Rule-based"],["Progressive hold",["On","Off"],"Off"],["Federated Governance",["On — enforce in place","Off"],"On — enforce in place"],["Scope",["Whole asset","Match criteria"],"Whole asset"],["Approver",["Records / Legal","M. Chen"],"Records / Legal"]],"Set disposition":[["Retention mode",["Date-wise","Criteria-wise"],"Date-wise"],["Retention period",["30d","90d","1y","7y","Indefinite"],"7y"],["On expiry",["Retention purge","Review"],"Retention purge"],["Approver",["Records / Legal","M. Chen"],"Records / Legal"]],"Restrict access":[["Mechanism",["RBAC entity","Row-level security"],"RBAC entity"],["Entity name",null,"edg_restricted"],["User privilege",["Read","Write"],"Read"],["Approver",["Security","M. Chen"],"Security"]],"Restrict (row-level)":[["Filter column",null,""],["Operator",["=","in","!="],"="],["Value",null,""],["Approver",["Security","M. Chen"],"Security"]],"Encrypt":[["Algorithm",["CHAR_ENCRYPT","NUMERIC_ENCRYPT","SENSITIVE_DATA_ENCRYPT"],"SENSITIVE_DATA_ENCRYPT"],["Key holder / role",null,"kms_key"],["Approver",["Security"],"Security"]],"Erase / redact":[["Action",["Purge","Obfuscate","Redact"],"Redact"],["Regulation",["GDPR","CCPA","HIPAA"],"GDPR"],["Identity scope",null,"data-subject id"],["Approver",["Records / Legal","Privacy Office"],"Records / Legal"]],"Classify":[["Label to write",["PII","PHI","PCI","Confidential"],"PII"],["Apply to",["Column","Table"],"Column"]],"Set sensitivity":[["Sensitivity",["Low","Medium","High","Critical"],"High"],["Apply to",["Column","Table"],"Column"]]};
+                                        // Masking / Legal Hold / Retention fields are audited against the actual CDP reference screens —
+                                        // only fields that exist there (or are a direct equivalent) are kept. No fake "Approver" dropdown
+                                        // here — the real approver is shown as read-only chips in the table/column block below.
+                                        const FS = {"Mask":[["Algorithm",["EMAIL","SSN","CREDIT_CARD","REDACT","HASHMASKING","CONSISTENT_HASH","NULLOUT"],"REDACT"]],"Legal hold":[["Legal Case Number",null,""]],"Set disposition":[["Retention — Years",null,"","number"],["Retention — Months",null,"","number"],["Retention — Weeks",null,"","number"],["Retention — Days",null,"","number"],["Notification Value (In Days)",null,"","number"],["Auto Purge",["On","Off"],"On"]],"Restrict access":[["Mechanism",["RBAC entity","Row-level security"],"RBAC entity"],["Entity name",null,"edg_restricted"],["User privilege",["Read","Write"],"Read"],["Approver",["Security","M. Chen"],"Security"]],"Restrict (row-level)":[["Filter column",null,""],["Operator",["=","in","!="],"="],["Value",null,""],["Approver",["Security","M. Chen"],"Security"]],"Encrypt":[["Algorithm",["CHAR_ENCRYPT","NUMERIC_ENCRYPT","SENSITIVE_DATA_ENCRYPT"],"SENSITIVE_DATA_ENCRYPT"],["Key holder / role",null,"kms_key"],["Approver",["Security"],"Security"]],"Erase / redact":[["Action",["Purge","Obfuscate","Redact"],"Redact"],["Regulation",["GDPR","CCPA","HIPAA"],"GDPR"],["Identity scope",null,"data-subject id"],["Approver",["Records / Legal","Privacy Office"],"Records / Legal"]],"Classify":[["Label to write",["PII","PHI","PCI","Confidential"],"PII"],["Apply to",["Column","Table"],"Column"]],"Set sensitivity":[["Sensitivity",["Low","Medium","High","Critical"],"High"],["Apply to",["Column","Table"],"Column"]]};
                                         const fields = FS[fd.action.verb] || [["Approver",["Records / Legal"],"Records / Legal"]];
                                         return (
                                         <div style={{borderTop:`1px solid ${T.border}`,padding:"8px 11px",background:`${T.accent}06`}}>
                                           <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
-                                            <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".5px"}}>On match, enforce</span>
-                                            <span style={{fontSize:11,fontWeight:600,color:T.text}}>{fd.action.verb}</span>
-                                            <span style={{fontSize:9.5,color:T.textMuted}}>via</span>
-                                            {engines.map(e=><span key={e} style={{fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:10,background:`${T.blue}18`,color:T.blue}}>{e}</span>)}
-                                            <span title="GA = live today; MVP/Planned = roadmap" style={{fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:10,background:`${matC}22`,color:matC}}>{fd.action.maturity}</span>
+                                            <span style={{fontSize:11,color:T.textSub}}>This rule will <b style={{fontWeight:600,color:T.text}}>{fd.action.verb.toLowerCase()}</b> when it matches.</span>
                                             <label style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:5,fontSize:11,color:T.textSub,cursor:"pointer"}}>
-                                              <input type="checkbox" checked={!!r.enforce} onChange={e=>updRule(r.id,"enforce",e.target.checked)} style={{cursor:"pointer"}}/>
+                                              <input type="checkbox" checked={!!r.enforce} onChange={e=>{
+                                                if(e.target.checked && isEnfField){
+                                                  const conflict = findConflictingEnforcedPolicy(r.field, r.table);
+                                                  if(conflict){
+                                                    const label = ENF_LABEL[r.field];
+                                                    onToast(`This table already has an active ${label} policy — '${conflict.name}'. A table can only have one enforced ${label.toLowerCase()} policy at a time.`,"error");
+                                                    return;
+                                                  }
+                                                }
+                                                updRule(r.id,"enforce",e.target.checked);
+                                              }} style={{cursor:"pointer"}}/>
                                               Enforce in place
                                             </label>
                                           </div>
                                           {r.enforce&&(
                                             <div style={{marginTop:8,paddingTop:8,borderTop:`1px dashed ${T.border}`}}>
-                                              <div style={{fontSize:9.5,color:T.textMuted,marginBottom:6,letterSpacing:".3px"}}>Engine fields{engines.length>1?(" — same for "+engines.join(" & ")+"; each asset enforced by its own engine"):""} · pre-filled, editable</div>
-                                              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}><span style={{fontSize:10.5,color:T.textMuted,width:120,flexShrink:0}}>Target</span><span style={{fontSize:11,color:T.text}}>{(r.table||"per policy scope")}{r.column?(" · "+r.column):""} · {engines.join(" + ")}</span></div>
+                                              <div style={{fontSize:9.5,color:T.textMuted,marginBottom:6,letterSpacing:".3px"}}>Enforcement settings — pre-filled, editable. Which engine actually applies this is resolved per-asset in the policy's Enforcement tab.</div>
+                                              {!isEnfField&&(
+                                                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}><span style={{fontSize:10.5,color:T.textMuted,width:120,flexShrink:0}}>Target</span><span style={{fontSize:11,color:T.text}}>{(r.table||"per policy scope")}{r.column?(" · "+r.column):""}</span></div>
+                                              )}
+                                              {/* ── Mask: multi-select dropdown for which columns this rule masks — a
+                                                  masking run commonly touches several sensitive columns at once. ── */}
+                                              {fd.action.verb==="Mask"&&(()=>{
+                                                const cols = r.table ? (ASSET_COLUMNS[r.table]||[]) : [];
+                                                return (
+                                                  <div style={{marginBottom:8}}>
+                                                    <RuleMultiSelect label="Columns to mask" flat={cols} selected={r.maskColumns||[]}
+                                                      onChange={v=>updRule(r.id,"maskColumns",v)}
+                                                      placeholder={r.table?"Select columns…":"Select a table first"} mono/>
+                                                  </div>
+                                                );
+                                              })()}
+                                              {/* ── Legal hold: hold criteria — CDP's real "Add Criteria" (Column Name +
+                                                  Operator + Data Type + Value). Multiple sub-rules since a hold can key
+                                                  off several columns at once (e.g. custodian AND case_status). No
+                                                  Search-based / Progressive Hold — rule-based only. ── */}
+                                              {fd.action.verb==="Legal hold"&&(()=>{
+                                                const cols = r.table ? (ASSET_COLUMNS[r.table]||[]) : [];
+                                                const crit = r.holdCriteria&&r.holdCriteria.length ? r.holdCriteria : [{id:"hc0",column:"",operator:"=",dataType:"Text",value:""}];
+                                                const setCrit = (list)=>updRule(r.id,"holdCriteria",list);
+                                                const updCrit = (cid,k,v)=>setCrit(crit.map(c=>c.id===cid?{...c,[k]:v}:c));
+                                                const addCrit = ()=>setCrit([...crit,{id:"hc"+Date.now(),column:"",operator:"=",dataType:"Text",value:""}]);
+                                                const rmCrit  = (cid)=>setCrit(crit.length>1?crit.filter(c=>c.id!==cid):crit);
+                                                return (
+                                                  <div style={{marginBottom:8}}>
+                                                    <div style={{fontSize:10.5,color:T.textMuted,marginBottom:5}}>Hold criteria — which rows get held</div>
+                                                    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                                                      {crit.map(c=>{
+                                                        const isDate = c.dataType==="Date";
+                                                        return (
+                                                          <div key={c.id} style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                                                            <select value={c.column} onChange={e=>updCrit(c.id,"column",e.target.value)} style={{...sel_s,flex:"1 1 120px",minWidth:100}} disabled={!r.table}>
+                                                              <option value="">{r.table?"Column…":"Select a table first"}</option>
+                                                              {cols.map(cn=><option key={cn} value={cn}>{cn}</option>)}
+                                                            </select>
+                                                            <select value={c.operator} onChange={e=>updCrit(c.id,"operator",e.target.value)} style={{...sel_s,flex:"0 0 auto",minWidth:76}}>
+                                                              {["=","!=","contains",">","<","in"].map(op=><option key={op} value={op}>{op}</option>)}
+                                                            </select>
+                                                            <select value={c.dataType} onChange={e=>updCrit(c.id,"dataType",e.target.value)} style={{...sel_s,flex:"0 0 auto",minWidth:84}}>
+                                                              {["Text","Number","Date"].map(t=><option key={t} value={t}>{t}</option>)}
+                                                            </select>
+                                                            <input type={isDate?"date":c.dataType==="Number"?"number":"text"} value={c.value} onChange={e=>updCrit(c.id,"value",e.target.value)} placeholder="value…" style={{...sel_s,flex:"1 1 100px"}}/>
+                                                            <button onClick={()=>rmCrit(c.id)} title="Remove criteria" disabled={crit.length<=1}
+                                                              style={{width:22,height:22,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:crit.length<=1?T.border:T.textMuted,cursor:crit.length<=1?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:14,lineHeight:1}}>×</button>
+                                                          </div>
+                                                        );
+                                                      })}
+                                                      <button onClick={addCrit} style={{alignSelf:"flex-start",fontSize:10.5,padding:"5px 10px",borderRadius:6,border:`1.5px dashed ${T.border}`,background:"none",color:T.textSub,cursor:"pointer",fontWeight:500}}>+ Add criteria</button>
+                                                    </div>
+                                                  </div>
+                                                );
+                                              })()}
+                                              {/* ── Retention: Criteria Type — CDP's real "Datewise / Criteriawise / Both"
+                                                  from the Retention Policy Assignment screen. ── */}
+                                              {fd.action.verb==="Set disposition"&&(()=>{
+                                                const critType = r.critType||"date";
+                                                const cols = r.table ? (ASSET_COLUMNS[r.table]||[]) : [];
+                                                return (
+                                                  <div style={{marginBottom:8}}>
+                                                    <div style={{fontSize:10.5,color:T.textMuted,marginBottom:5}}>Criteria type</div>
+                                                    <div style={{display:"flex",gap:6,marginBottom:6}}>
+                                                      {[["date","Datewise"],["text","Criteriawise"],["both","Both"]].map(([v,l])=>{
+                                                        const sel=critType===v;
+                                                        return <button key={v} onClick={()=>updRule(r.id,"critType",v)}
+                                                          style={{flex:1,padding:"6px 4px",borderRadius:7,border:`1.5px solid ${sel?T.accent:T.border}`,background:sel?T.accentDim:T.bgElevated,color:sel?T.accent:T.textSub,fontSize:11,fontWeight:sel?700:400,cursor:"pointer",transition:"all .1s"}}>{l}</button>;
+                                                      })}
+                                                    </div>
+                                                    {(critType==="date"||critType==="both")&&(
+                                                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                                                        <span style={{fontSize:10.5,color:T.textMuted,width:120,flexShrink:0}}>Date column</span>
+                                                        <select value={r.dateCol||""} onChange={e=>updRule(r.id,"dateCol",e.target.value)} style={{...sel_s,flex:1}} disabled={!r.table}>
+                                                          <option value="">{r.table?"Select column…":"Select a table first"}</option>
+                                                          {cols.map(c=><option key={c} value={c}>{c}</option>)}
+                                                        </select>
+                                                      </div>
+                                                    )}
+                                                    {(critType==="text"||critType==="both")&&(
+                                                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                                                        <span style={{fontSize:10.5,color:T.textMuted,width:120,flexShrink:0}}>Criteria</span>
+                                                        <input type="text" value={r.critText||""} onChange={e=>updRule(r.id,"critText",e.target.value)} placeholder="e.g. status = 'closed'" style={{...sel_s,flex:1,cursor:"text"}}/>
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })()}
                                               {fields.map((ff,fi)=>{
                                                 const cur=(r.enf&&r.enf[ff[0]]!==undefined)?r.enf[ff[0]]:(ff[2]!==undefined?ff[2]:"");
                                                 const setv=(v)=>updRule(r.id,"enf",{...(r.enf||{}),[ff[0]]:v});
@@ -9605,41 +10117,16 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                                     <span style={{fontSize:10.5,color:T.textMuted,width:120,flexShrink:0}}>{ff[0]}</span>
                                                     {ff[1]
                                                       ? <select value={cur} onChange={e=>setv(e.target.value)} style={{...sel_s,flex:1,minWidth:120}}><option value="">— select —</option>{ff[1].map(o=><option key={o} value={o}>{o}</option>)}</select>
-                                                      : <input value={cur} onChange={e=>setv(e.target.value)} placeholder="—" style={{...sel_s,flex:1,minWidth:120}}/>}
+                                                      : <input type={ff[3]||"text"} value={cur} onChange={e=>setv(e.target.value)} placeholder="—" style={{...sel_s,flex:1,minWidth:120}}/>}
                                                   </div>
                                                 );
                                               })}
-                                              <button onClick={()=>onToast("Dry-run on "+engines.join(" & ")+": previewed, nothing applied","info")} style={{fontSize:10.5,padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"none",color:T.text,cursor:"pointer",marginTop:2}}>Preview (dry-run)</button>
+                                              {!isEnfField&&<button onClick={()=>onToast("Dry-run: previewed, nothing applied","info")} style={{fontSize:10.5,padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"none",color:T.text,cursor:"pointer",marginTop:2}}>Preview (dry-run)</button>}
                                             </div>
                                           )}
                                         </div>
                                         );
                                       })()}
-                                      {/* Table + Column pickers for Quality/Retention rules */}
-                                      {(fd.types.includes("Quality")||fd.types.includes("Retention"))&&(
-                                        <div style={{borderTop:`1px solid ${T.border}`,padding:"10px 11px 11px",display:"flex",flexDirection:"column",gap:8,background:`${T.bgBase}88`}}>
-                                          {/* Table row */}
-                                          <div style={{display:"flex",alignItems:"center",gap:8}}>
-                                            <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0,minWidth:60}}>
-                                              <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/><line x1="1" y1="5" x2="13" y2="5" stroke="currentColor" strokeWidth="1"/><line x1="5" y1="5" x2="5" y2="13" stroke="currentColor" strokeWidth="1"/></svg>
-                                              <span style={{fontSize:11,fontWeight:600,color:T.textSub}}>Table <span style={{color:T.rose}}>*</span></span>
-                                            </div>
-                                            <TablePicker ruleId={r.id} value={r.table||""}/>
-                                          </div>
-                                          {/* Column row — only for column-scoped fields */}
-                                          {(fd.scope==="column"||fd.scope==="both")&&(
-                                            <div style={{display:"flex",alignItems:"center",gap:8}}>
-                                              <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0,minWidth:60}}>
-                                                <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/><line x1="1" y1="5" x2="13" y2="5" stroke="currentColor" strokeWidth="1"/><line x1="5" y1="1" x2="5" y2="13" stroke="currentColor" strokeWidth="1"/></svg>
-                                                <span style={{fontSize:11,fontWeight:600,color:fd.scope==="column"?T.textSub:T.textMuted}}>
-                                                  Column{fd.scope==="column"?<span style={{color:T.rose}}> *</span>:<span style={{color:T.textMuted,fontWeight:400}}> (opt)</span>}
-                                                </span>
-                                              </div>
-                                              <ColPicker ruleId={r.id} value={r.column||""} required={fd.scope==="column"} tableVal={r.table||""}/>
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
                                       {/* Source hint */}
                                       {fd.hint&&(
                                         <div style={{padding:"0 11px 8px",fontSize:10.5,color:T.amber,display:"flex",alignItems:"center",gap:5}}>
@@ -10213,6 +10700,22 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
           <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",gap:10,justifyContent:"flex-end"}}>
             <Btn ghost onClick={()=>setDeleteConfPol(null)}>Cancel</Btn>
             <Btn variant="danger" onClick={()=>{
+              // Deleting a policy that has an active, approved legal hold doesn't delete it —
+              // it fires Unhold approval requests for every held table (same store/approver as
+              // the original hold) and leaves the policy in place until those are resolved.
+              const heldRules = (deleteConfPol.rules||[]).filter(r=>r.field==="legal_hold" && r.enforce && !r.pendingUnhold && (enfApprovalFor(deleteConfPol.id,r.id)||{}).status==="approved");
+              if(heldRules.length){
+                heldRules.forEach(r=>{
+                  const approval = enfApprovalFor(deleteConfPol.id, r.id);
+                  const approver = (approval&&approval.approver) || resolveTableOwner(r.table);
+                  addEnfApproval({policyId:deleteConfPol.id, policyName:deleteConfPol.name, ruleId:r.id+"-unhold", action:"Unhold", table:r.table||"—", approver, requestedBy:meHandle});
+                  pushNotif({category:"Policy", type:"alert", title:`Unhold requested · ${r.table||"table"}`, body:`${meHandle} requested to release the legal hold on ${r.table||"the target table"} — awaiting approval from ${approver}.`, nav:"policymanager", navArg:{policyId:deleteConfPol.id}});
+                });
+                setPolicies(prev=>prev.map(p=>p.id===deleteConfPol.id?{...p,rules:(p.rules||[]).map(r=>heldRules.some(hr=>hr.id===r.id)?{...r,pendingUnhold:true}:r)}:p));
+                setDeleteConfPol(null);
+                onToast(`This policy has an active legal hold — requested unhold approval first (${heldRules.length}). Delete again once released.`,"info");
+                return;
+              }
               if(selPolicyId===deleteConfPol.id) setSelPolicyId(null);
               setPolicies(prev=>prev.filter(p=>p.id!==deleteConfPol.id));
               applyRegArticleLinks(deleteConfPol.id, {});
@@ -10533,6 +11036,8 @@ const ComplianceView = () => {
 };
 
 const CertificationsView = ({onToast}) => {
+  const {role:cvRole, roleCfg:cvRoleCfg} = useRole();
+  const meHandle = ((cvRoleCfg&&cvRoleCfg.email)||"you@jnj").split("@")[0];
   const [selected, setSelected] = useState(null);
   const [certs, setCerts] = useCertifications(); // shared store — synced with Inbox
   const [filter, setFilter] = useState("All");
@@ -10547,11 +11052,33 @@ const CertificationsView = ({onToast}) => {
     "Deprecated": {color:"#7c3aed",bg:"rgba(124,58,237,.1)",  border:"rgba(124,58,237,.25)"},
   };
   const patchCert = (id, patch) => { setCerts(p=>p.map(c=>c.id===id?{...c,...patch}:c)); setSelected(s=>s?{...s,...patch}:s); };
+  // A cert record has no owner/steward of its own — it certifies an asset, so permission is
+  // resolved from that asset's owner/steward, same as table-owner approval elsewhere.
+  const canSetCertStatus = (c) => {
+    const a = ASSETS.find(x=>x.name===c.asset);
+    const owners = a ? (Array.isArray(a.owners)?a.owners:[a.owner].filter(Boolean)) : [];
+    const stewards = a ? (Array.isArray(a.stewards)?a.stewards:[a.steward].filter(Boolean)) : [];
+    return cvRole==="admin" || owners.includes(meHandle) || stewards.includes(meHandle);
+  };
+  const requestCertStatus = (id, toStatus) => {
+    const c = certs.find(x=>x.id===id);
+    if(!c) return;
+    const a = ASSETS.find(x=>x.name===c.asset);
+    const approver = a ? (a.steward || (Array.isArray(a.stewards)&&a.stewards[0]) || a.owner || (Array.isArray(a.owners)&&a.owners[0])) : null;
+    requestStatusChange({kind:"cert", targetId:id, name:c.asset, requestedStatus:toStatus, requestedBy:meHandle, note:"Requested via Status view", steward:approver||null});
+    patchCert(id,{status:"In Review"});
+    pushNotif({category:"Status", type:"field_updated", title:`Status change requested · ${c.asset}`, body:`${meHandle} requested ${toStatus} — awaiting review as steward`, nav:"catalog"});
+    onToast("Status change requested — pending steward approval","success");
+  };
+  // Submitting your own asset for review needs no permission — every other transition
+  // (approve/reject/deprecate/return-to-draft) is gated to the asset's owner/steward/admin,
+  // same pattern as Tags, Domains, Glossary Terms and Policy Manager.
   const submitForReview = (id) => { patchCert(id,{status:"In Review"}); onToast("Submitted for review","success"); };
-  const approve         = (id) => { patchCert(id,{status:"Approved",certifier:"maya.chen",date:new Date().toISOString().slice(0,10)}); onToast("Asset certified","success"); };
-  const rejectCert      = (id) => { patchCert(id,{status:"Rejected",certifier:null,date:null}); onToast("Status change rejected","error"); };
-  const returnToDraft   = (id) => { patchCert(id,{status:"Draft",certifier:null,date:null}); onToast("Returned to Draft","info"); };
-  const deprecateCert   = (id) => { patchCert(id,{status:"Deprecated"}); onToast("Asset deprecated","info"); };
+  const resolveCertReq = (id,status) => { const req=_statusReqs.find(r=>r.kind==="cert"&&r.targetId===id&&r.status==="pending"); if(req) resolveStatusRequest(req.id,status); };
+  const approve         = (id) => { const c=certs.find(x=>x.id===id); if(c&&!canSetCertStatus(c)){ requestCertStatus(id,"Approved"); return; } patchCert(id,{status:"Approved",certifier:meHandle,date:new Date().toISOString().slice(0,10)}); resolveCertReq(id,"approved"); onToast("Asset certified","success"); };
+  const rejectCert      = (id) => { const c=certs.find(x=>x.id===id); if(c&&!canSetCertStatus(c)){ requestCertStatus(id,"Rejected"); return; } patchCert(id,{status:"Rejected",certifier:null,date:null}); resolveCertReq(id,"rejected"); onToast("Status change rejected","error"); };
+  const returnToDraft   = (id) => { const c=certs.find(x=>x.id===id); if(c&&!canSetCertStatus(c)){ requestCertStatus(id,"Draft"); return; } patchCert(id,{status:"Draft",certifier:null,date:null}); onToast("Returned to Draft","info"); };
+  const deprecateCert   = (id) => { const c=certs.find(x=>x.id===id); if(c&&!canSetCertStatus(c)){ requestCertStatus(id,"Deprecated"); return; } patchCert(id,{status:"Deprecated"}); onToast("Asset deprecated","info"); };
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
@@ -27522,6 +28049,7 @@ const ITEM_ROLE = {
   tag_review:"steward", dq_alert:"steward", policy_violation:"steward", term_review:"steward", contract_approval:"steward",
   certification_review:"steward",  // status-change requests are approved by the STEWARD
   stewardship_request:"owner", orphan_assignment:"owner", needs_attention:"owner", rbac_request:"owner", delete_request:"owner",
+  enforcement_approval:"owner",
   field_updated:"fyi", assigned:"fyi",
 };
 const ROLE_META = {
@@ -27537,7 +28065,7 @@ const TYPE_ACTION = {
   tag_review:"Review tag", certification_review:"Review status change",
   orphan_assignment:"Assign owner", needs_attention:"Assign steward",
   stewardship_request:"Review role request", term_review:"Approve term", rbac_request:"Review platform role",
-  delete_request:"Approve deletion",
+  delete_request:"Approve deletion", enforcement_approval:"Approve enforcement",
   field_updated:"Field updated", assigned:"Assigned to you",
 };
 const itemTitle = (item) => { if(!item) return ""; const act=TYPE_ACTION[item.type]; const subj=item.asset&&item.asset.name; return (act&&subj)?`${act} · ${subj}`:(item.title||""); };
@@ -27591,6 +28119,18 @@ const requestDeletion = (req)=>drSet(prev=>[{id:"dr-"+Date.now(), status:"pendin
 const resolveDeleteRequest = (id,status)=>drSet(prev=>prev.map(r=>r.id===id?{...r,status}:r));
 const useDeleteReqs = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_drSubs.add(fn);return()=>{_drSubs.delete(fn);};},[]); return _deleteReqs; };
 
+// ── Enforcement approval requests (Policy Manager) ──
+// A rule with "Enforce in place" checked needs its target table's owner to sign off before
+// it counts as active — until approved it doesn't run in evaluation and its action can't dispatch.
+// Rejecting sends it back to the rule author; approving flips it live everywhere at once.
+let _enfReqs = [];
+const _erSubs = new Set();
+const erSet = (u)=>{ _enfReqs = typeof u==="function"?u(_enfReqs):u; _erSubs.forEach(f=>f()); };
+const addEnfApproval = (req)=>erSet(prev=>[{id:"er-"+Date.now(), status:"pending", at:"just now", ...req}, ...prev]);
+const resolveEnfApproval = (id,status)=>erSet(prev=>prev.map(r=>r.id===id?{...r,status}:r));
+const useEnfApprovals = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_erSubs.add(fn);return()=>{_erSubs.delete(fn);};},[]); return _enfReqs; };
+const enfApprovalFor = (policyId,ruleId) => _enfReqs.filter(r=>r.policyId===policyId&&r.ruleId===ruleId).slice(-1)[0]||null;
+
 const InboxView = ({onToast}) => {
   const onNav = useNav();
   const { roleCfg: ibxRoleCfg } = useRole();
@@ -27635,20 +28175,31 @@ const InboxView = ({onToast}) => {
   // top-down status-change requests (tag/domain — assets keep their own certification flow) → steward approval items
   const statusReqs = useStatusReqs();
   const STATUS_REQ_ITEMS = statusReqs.filter(r=>r.status==="pending").map(r=>({
-    id:"srq-"+r.id, type:"certification_review", severity:"medium", section:r.kind==="tag"?"tags":"catalog", timeAgo:r.at||"just now",
-    asset:{name:r.name, path:r.kind==="tag"?"Tag · Classifications":"Domain · Data Domains", type:r.kind==="tag"?"Tag":"Domain"},
+    id:"srq-"+r.id, type:"certification_review", severity:"medium", section:r.kind==="tag"?"tags":r.kind==="policy"?"policy":r.kind==="term"?"glossary":"catalog", timeAgo:r.at||"just now",
+    asset:{name:r.name, path:r.kind==="tag"?"Tag · Classifications":r.kind==="policy"?"Policy · Policy Manager":r.kind==="term"?"Term · Glossary":r.kind==="cert"?"Status · Catalog":"Domain · Data Domains", type:r.kind==="tag"?"Tag":r.kind==="policy"?"Policy":r.kind==="term"?"Term":r.kind==="cert"?"Table":"Domain"},
     body:`${r.requestedBy} requested status → ${r.requestedStatus} — "${r.note||""}"`,
     requestedBy:r.requestedBy, requestedStatus:r.requestedStatus, reqKind:r.kind, reqTargetId:r.targetId, reqId:r.id, readAt:null,
   }));
   // top-down deletion requests (tag/domain) → owner approval items
   const deleteReqs = useDeleteReqs();
   const DELETE_REQ_ITEMS = deleteReqs.filter(r=>r.status==="pending").map(r=>({
-    id:"drq-"+r.id, type:"delete_request", severity:"high", section:r.kind==="tag"?"tags":"catalog", timeAgo:r.at||"just now",
-    asset:{name:r.name, path:r.kind==="tag"?"Tag · Classifications":"Domain · Data Domains", type:r.kind==="tag"?"Tag":"Domain"},
+    id:"drq-"+r.id, type:"delete_request", severity:"high", section:r.kind==="tag"?"tags":r.kind==="term"?"glossary":"catalog", timeAgo:r.at||"just now",
+    asset:{name:r.name, path:r.kind==="tag"?"Tag · Classifications":r.kind==="term"?"Term · Glossary":"Domain · Data Domains", type:r.kind==="tag"?"Tag":r.kind==="term"?"Term":"Domain"},
     body:`${r.requestedBy} requested to delete this ${r.kind} — "${r.note||""}"`,
     requestedBy:r.requestedBy, reqKind:r.kind, reqTargetId:r.targetId, reqId:r.id, readAt:null,
   }));
-  const allItems = [...contractApprovals.filter(ca=>!items.some(i=>i.id===ca.id)), ...ROLE_REQ_ITEMS, ...STATUS_REQ_ITEMS, ...DELETE_REQ_ITEMS, ...items];
+  // enforcement approval requests (Policy Manager rules with "Enforce in place") → table owner approval items
+  const enfReqs = useEnfApprovals();
+  const ENF_APPROVAL_ITEMS = enfReqs.filter(r=>r.status==="pending").map(r=>({
+    id:"eaq-"+r.id, type:"enforcement_approval", severity:"medium", section:"policy", timeAgo:r.at||"just now",
+    title:r.action==="Unhold" ? `Approve release of legal hold on ${r.table}` : `Approve ${r.action} on ${r.table}`,
+    asset:{name:r.table||"asset", path:r.table||"asset", type:"Table"},
+    body:r.action==="Unhold"
+      ? `${r.policyName} requests release of the legal hold on ${r.table}. Requested by ${r.requestedBy}.`
+      : `${r.policyName} wants to ${(r.action||"enforce").toLowerCase()} on ${r.table}. Requested by ${r.requestedBy}.`,
+    requestedBy:r.requestedBy, action:r.action, policyId:r.policyId, ruleId:r.ruleId, reqId:r.id, readAt:null,
+  }));
+  const allItems = [...contractApprovals.filter(ca=>!items.some(i=>i.id===ca.id)), ...ROLE_REQ_ITEMS, ...STATUS_REQ_ITEMS, ...DELETE_REQ_ITEMS, ...ENF_APPROVAL_ITEMS, ...items];
   const isActionItem   = i => itemRole(i)!=="fyi" && !i.readAt;
   const isActivityItem = i => itemRole(i)==="fyi";
   const isDoneItem     = i => itemRole(i)!=="fyi" && !!i.readAt;
@@ -27711,6 +28262,7 @@ const InboxView = ({onToast}) => {
     term_review:         {icon:sz=>Ic.glossary(sz||12),label:"Term Review",     shortLabel:"Term"},
     contract_approval:   {icon:sz=>Ic.contracts(sz||12),label:"Contract Approval",shortLabel:"Contract"},
     delete_request:      {icon:sz=>Ic.trash(sz||12),    label:"Deletion Request", shortLabel:"Delete"},
+    enforcement_approval:{icon:sz=>Ic.policies(sz||12), label:"Enforcement Approval", shortLabel:"Enforce"},
   };
 
   /* ── Action row — only inside detail panel ── */
@@ -27741,6 +28293,42 @@ const InboxView = ({onToast}) => {
         return <>{btn("Approve",()=>{tagCtx?.updateTagDef(item.reqTargetId,{cert:item.requestedStatus});if(item.reqId)resolveStatusRequest(item.reqId,"approved");pushNotif({category:"Status",type:"cert",title:`Status changed to ${item.requestedStatus} · ${item.asset.name}`,body:`Approved by ${meHandle||"steward"}`,nav:"tags",navArg:{tagId:item.reqTargetId}});ack(item.id,`${item.asset.name} status → ${item.requestedStatus} — requester notified`);},true)}{btn("Reject",()=>{tagCtx?.updateTagDef(item.reqTargetId,{cert:"Draft"});if(item.reqId)resolveStatusRequest(item.reqId,"rejected");pushNotif({category:"Status",type:"field_updated",title:`Status change rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request was sent back to Draft`,nav:"tags",navArg:{tagId:item.reqTargetId}});ack(item.id,"Status change rejected — sent back to Draft");},false,true)}{openIn("Open in Classifications","tags")}</>;
       if(item.reqKind==="domain")
         return <>{btn("Approve",()=>{domainsSet(prev=>prev.map(d=>d.id===item.reqTargetId?{...d,cert:item.requestedStatus}:d));if(item.reqId)resolveStatusRequest(item.reqId,"approved");pushNotif({category:"Status",type:"cert",title:`Status changed to ${item.requestedStatus} · ${item.asset.name}`,body:`Approved by ${meHandle||"steward"}`,nav:"domains",navArg:{domainId:item.reqTargetId}});ack(item.id,`${item.asset.name} status → ${item.requestedStatus} — requester notified`);},true)}{btn("Reject",()=>{domainsSet(prev=>prev.map(d=>d.id===item.reqTargetId?{...d,cert:"Draft"}:d));if(item.reqId)resolveStatusRequest(item.reqId,"rejected");pushNotif({category:"Status",type:"field_updated",title:`Status change rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request was sent back to Draft`,nav:"domains",navArg:{domainId:item.reqTargetId}});ack(item.id,"Status change rejected — sent back to Draft");},false,true)}{openIn("Open in Domains","domains")}</>;
+      if(item.reqKind==="policy")
+        return <>{btn("Approve",()=>{
+          polSet(prev=>prev.map(pp=>pp.id===item.reqTargetId?{...pp,lifecycle:item.requestedStatus,updated:new Date().toISOString().slice(0,10),history:[{when:new Date().toISOString().slice(0,10),who:meHandle||"steward",action:item.requestedStatus},...(pp.history||[])]}:pp));
+          if(item.reqId)resolveStatusRequest(item.reqId,"approved");
+          pushNotif({category:"Status",type:"cert",title:`Status changed to ${item.requestedStatus} · ${item.asset.name}`,body:`Approved by ${meHandle||"steward"}`,nav:"policymanager",navArg:{policyId:item.reqTargetId}});
+          ack(item.id,`${item.asset.name} status → ${item.requestedStatus} — requester notified`);
+        },true)}{btn("Reject",()=>{
+          polSet(prev=>prev.map(pp=>pp.id===item.reqTargetId?{...pp,lifecycle:"Draft",updated:new Date().toISOString().slice(0,10),history:[{when:new Date().toISOString().slice(0,10),who:meHandle||"steward",action:"Rejected — sent back to draft"},...(pp.history||[])]}:pp));
+          if(item.reqId)resolveStatusRequest(item.reqId,"rejected");
+          pushNotif({category:"Status",type:"field_updated",title:`Status change rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request was sent back to Draft`,nav:"policymanager",navArg:{policyId:item.reqTargetId}});
+          ack(item.id,"Status change rejected — sent back to Draft");
+        },false,true)}{openIn("Open in Policy Manager","policymanager",{policyId:item.reqTargetId})}</>;
+      if(item.reqKind==="term")
+        return <>{btn("Approve",()=>{
+          setTermStatus(item.reqTargetId,item.requestedStatus);
+          if(item.reqId)resolveStatusRequest(item.reqId,"approved");
+          pushNotif({category:"Status",type:"cert",title:`Status changed to ${item.requestedStatus} · ${item.asset.name}`,body:`Approved by ${meHandle||"steward"}`,nav:"glossary",navArg:{termId:item.reqTargetId}});
+          ack(item.id,`${item.asset.name} status → ${item.requestedStatus} — requester notified`);
+        },true)}{btn("Reject",()=>{
+          setTermStatus(item.reqTargetId,"Draft");
+          if(item.reqId)resolveStatusRequest(item.reqId,"rejected");
+          pushNotif({category:"Status",type:"field_updated",title:`Status change rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request was sent back to Draft`,nav:"glossary",navArg:{termId:item.reqTargetId}});
+          ack(item.id,"Status change rejected — sent back to Draft");
+        },false,true)}{openIn("Open in Glossary","glossary")}</>;
+      if(item.reqKind==="cert")
+        return <>{btn("Approve",()=>{
+          certSet(prev=>prev.map(c=>c.id===item.reqTargetId?{...c,status:item.requestedStatus,certifier:item.requestedStatus==="Approved"?(meHandle||"steward"):c.certifier,date:item.requestedStatus==="Approved"?new Date().toISOString().slice(0,10):c.date}:c));
+          if(item.reqId)resolveStatusRequest(item.reqId,"approved");
+          pushNotif({category:"Status",type:"cert",title:`Status changed to ${item.requestedStatus} · ${item.asset.name}`,body:`Approved by ${meHandle||"steward"}`,nav:"catalog"});
+          ack(item.id,`${item.asset.name} status → ${item.requestedStatus} — requester notified`);
+        },true)}{btn("Reject",()=>{
+          certSet(prev=>prev.map(c=>c.id===item.reqTargetId?{...c,status:"Draft",certifier:null,date:null}:c));
+          if(item.reqId)resolveStatusRequest(item.reqId,"rejected");
+          pushNotif({category:"Status",type:"field_updated",title:`Status change rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request was sent back to Draft`,nav:"catalog"});
+          ack(item.id,"Status change rejected — sent back to Draft");
+        },false,true)}{openIn("Open in Catalog","catalog")}</>;
       return <>{btn("Approve",()=>{certifyByAsset(item.asset.name);certifyAsset(item.asset.name);ack(item.id,`${item.asset.name} status → Approved`);},true)}{btn("Reject",()=>{certSet(prev=>prev.map(c=>c.asset===item.asset.name?{...c,status:"Rejected",certifier:null,date:null}:c));ack(item.id,"Status change rejected");},false,true)}{openIn("Open in Catalog","catalog")}</>;
     }
     if(item.type==="stewardship_request")
@@ -27752,7 +28340,34 @@ const InboxView = ({onToast}) => {
         return <>{btn("Approve deletion",()=>{tagCtx?.deleteTagDef(item.reqTargetId);if(item.reqId)resolveDeleteRequest(item.reqId,"approved");pushNotif({category:"Ownership",type:"alert",title:`${item.asset.name} deleted (tag)`,body:`Deletion approved by ${meHandle||"owner"}`,nav:"tags"});ack(item.id,`${item.asset.name} deleted — requester notified`);},true)}{btn("Reject",()=>{if(item.reqId)resolveDeleteRequest(item.reqId,"rejected");pushNotif({category:"Ownership",type:"field_updated",title:`Deletion request rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request to delete this tag was declined`,nav:"tags",navArg:{tagId:item.reqTargetId}});ack(item.id,"Deletion request rejected — requester notified");},false,true)}{openIn("Open in Classifications","tags")}</>;
       if(item.reqKind==="domain")
         return <>{btn("Approve deletion",()=>{domainsSet(prev=>prev.filter(d=>d.id!==item.reqTargetId));if(item.reqId)resolveDeleteRequest(item.reqId,"approved");pushNotif({category:"Ownership",type:"alert",title:`${item.asset.name} deleted (domain)`,body:`Deletion approved by ${meHandle||"owner"}`,nav:"domains"});ack(item.id,`${item.asset.name} deleted — requester notified`);},true)}{btn("Reject",()=>{if(item.reqId)resolveDeleteRequest(item.reqId,"rejected");pushNotif({category:"Ownership",type:"field_updated",title:`Deletion request rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request to delete this domain was declined`,nav:"domains",navArg:{domainId:item.reqTargetId}});ack(item.id,"Deletion request rejected — requester notified");},false,true)}{openIn("Open in Domains","domains")}</>;
+      if(item.reqKind==="term")
+        return <>{btn("Approve deletion",()=>{gtSet(prev=>prev.filter(t=>t.id!==item.reqTargetId));if(item.reqId)resolveDeleteRequest(item.reqId,"approved");pushNotif({category:"Ownership",type:"alert",title:`${item.asset.name} deleted (term)`,body:`Deletion approved by ${meHandle||"owner"}`,nav:"glossary"});ack(item.id,`${item.asset.name} deleted — requester notified`);},true)}{btn("Reject",()=>{if(item.reqId)resolveDeleteRequest(item.reqId,"rejected");pushNotif({category:"Ownership",type:"field_updated",title:`Deletion request rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request to delete this term was declined`,nav:"glossary",navArg:{termId:item.reqTargetId}});ack(item.id,"Deletion request rejected — requester notified");},false,true)}{openIn("Open in Glossary","glossary")}</>;
       return null;
+    }
+    if(item.type==="enforcement_approval"){
+      if(item.action==="Unhold"){
+        const baseRuleId = (item.ruleId||"").replace(/-unhold$/,"");
+        return <>{btn("Approve release",()=>{
+          if(item.reqId)resolveEnfApproval(item.reqId,"approved");
+          polSet(prev=>prev.map(pp=>pp.id===item.policyId?{...pp,rules:(pp.rules||[]).filter(r=>r.id!==baseRuleId)}:pp));
+          pushNotif({category:"Policy",type:"cert",title:`Legal hold released · ${item.asset.name}`,body:`The hold on ${item.asset.name} was released by ${meHandle||"owner"} — the table is no longer under legal hold.`,nav:"policymanager",navArg:{policyId:item.policyId}});
+          ack(item.id,`Legal hold released on ${item.asset.name} — requester notified`);
+        },true)}{btn("Reject",()=>{
+          if(item.reqId)resolveEnfApproval(item.reqId,"rejected");
+          polSet(prev=>prev.map(pp=>pp.id===item.policyId?{...pp,rules:(pp.rules||[]).map(r=>r.id===baseRuleId?{...r,pendingUnhold:false}:r)}:pp));
+          pushNotif({category:"Policy",type:"field_updated",title:`Unhold rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request to release the legal hold on ${item.asset.name} was declined — the hold remains in place.`,nav:"policymanager",navArg:{policyId:item.policyId}});
+          ack(item.id,"Unhold rejected — hold remains in place");
+        },false,true)}{openIn("Open in Policy Manager","policymanager",{policyId:item.policyId})}</>;
+      }
+      return <>{btn("Approve",()=>{
+        if(item.reqId)resolveEnfApproval(item.reqId,"approved");
+        pushNotif({category:"Policy",type:"cert",title:`Enforcement approved · ${item.asset.name}`,body:`${item.action} approved by ${meHandle||"owner"}`,nav:"policymanager",navArg:{policyId:item.policyId}});
+        ack(item.id,`Enforcement approved — ${item.action} on ${item.asset.name}`);
+      },true)}{btn("Reject",()=>{
+        if(item.reqId)resolveEnfApproval(item.reqId,"rejected");
+        pushNotif({category:"Policy",type:"field_updated",title:`Enforcement rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request to ${(item.action||"enforce").toLowerCase()} was declined`,nav:"policymanager",navArg:{policyId:item.policyId}});
+        ack(item.id,"Enforcement rejected — requester notified");
+      },false,true)}{openIn("Open in Policy Manager","policymanager",{policyId:item.policyId})}</>;
     }
     if(item.type==="orphan_assignment")
       return <>{btn("Assign owner",()=>setAssignOpen(a=>!a),true)}{btn("Deprecate",()=>ack(item.id,"Asset deprecated"),false,true)}{openIn("Open in Catalog","catalog")}</>;
