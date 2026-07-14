@@ -6435,7 +6435,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   const [filterDropOpen, setFilterDropOpen]= useState(false);
   const [hovPolId,       setHovPolId]      = useState(null);
   const [deleteConfPol,  setDeleteConfPol] = useState(null);
-  const [manageHoldRuleId, setManageHoldRuleId] = useState(null);
+  const [manageHold, setManageHold] = useState(null); // {policyId, ruleId} — partial-unhold panel target (wizard or Rules tab)
   const [polPlusMenuOpen, setPolPlusMenuOpen] = useState(false);
   const [polNewCatOpen,   setPolNewCatOpen]   = useState(false);
   const [polNewCatDraft,  setPolNewCatDraft]  = useState({name:"",description:"",color:"#6366f1",owners:[],stewards:[],domains:[],tags:[],frameworks:[]});
@@ -6873,7 +6873,32 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
     const W_FIELD_LABELS2 = {certification:"Status",domain:"Domain",tag:"Tag",glossary_term:"Glossary Term",owner:"Owner",steward:"Steward",data_product:"Data Product",asset_type:"Asset Type",description:"Description",business_term:"Business Term",quality_score:"Quality Score",last_updated:"Last Updated",null_rate:"Null Rate",completeness:"Completeness",row_count:"Row Count",duplicate_rate:"Duplicate Rate",retention_period:"Retention Period",last_accessed:"Last Accessed",archive_status:"Archive Status"};
     if (rpTab==="preset") {
       const fl=W_FIELD_LABELS2[rpPreset.field]||rpPreset.field;
-      const newRule={id:rulePanel?.mode==="edit"?rulePanel.ruleId:`r${Date.now()}`,type:"preset",field:rpPreset.field,operator:rpPreset.operator,value:rpPreset.value||"",table:rpPreset.table||"",column:rpPreset.column||"",severity:rpPreset.severity||"Medium",name:`${fl} ${rpPreset.operator}${rpPreset.value?" "+rpPreset.value:""}${rpPreset.table?" on "+rpPreset.table:""}${rpPreset.column?"."+rpPreset.column:""}`};
+      // When editing a Masking / Legal Hold / Retention rule, this panel doesn't expose the
+      // enforcement criteria (columns / hold rows / retention terms), so we must carry the
+      // original rule's enforcement config forward — otherwise saving here would silently wipe
+      // holdCriteria, maskColumns, the enforce flag, releasedKeys, etc.
+      const orig  = rulePanel?.mode==="edit" ? (selPol.rules||[]).find(r=>r.id===rulePanel.ruleId) : null;
+      const isEnf = ["legal_hold","masking_status","retention_class"].includes(rpPreset.field);
+      const keepEnf = !!(orig && isEnf && orig.field===rpPreset.field);
+      const tblStr = rpPreset.table?` on ${rpPreset.table}`:"";
+      const colStr = rpPreset.column?`.${rpPreset.column}`:"";
+      let name;
+      if(keepEnf && rpPreset.field==="legal_hold"){
+        const crit=(orig.holdCriteria||[]).filter(c=>c.column);
+        const critStr=crit.length?` where ${crit.map(c=>`${c.column} ${c.operator||"="} ${c.value||"…"}`).join(" and ")}`:"";
+        name=`${fl} ${rpPreset.operator}${rpPreset.value?" "+rpPreset.value:""}${tblStr}${critStr}`;
+      } else if(keepEnf && rpPreset.field==="retention_class"){
+        const ct=orig.critType||"date"; const parts=[];
+        if((ct==="date"||ct==="both")&&orig.dateCol) parts.push(`by ${orig.dateCol}`);
+        if((ct==="text"||ct==="both")&&orig.critText) parts.push(`where ${orig.critText}`);
+        name=`${fl} ${rpPreset.operator}${rpPreset.value?" "+rpPreset.value:""}${tblStr}${parts.length?` ${parts.join(" & ")}`:""}`;
+      } else if(keepEnf && rpPreset.field==="masking_status" && (orig.maskColumns||[]).length){
+        name=`${fl} ${rpPreset.operator}${rpPreset.value?" "+rpPreset.value:""}${tblStr} (${orig.maskColumns.length} column${orig.maskColumns.length>1?"s":""})`;
+      } else {
+        name=`${fl} ${rpPreset.operator}${rpPreset.value?" "+rpPreset.value:""}${tblStr}${colStr}`;
+      }
+      const newRule={id:rulePanel?.mode==="edit"?rulePanel.ruleId:`r${Date.now()}`,type:"preset",field:rpPreset.field,operator:rpPreset.operator,value:rpPreset.value||"",table:rpPreset.table||"",column:rpPreset.column||"",severity:rpPreset.severity||"Medium",name,
+        ...(keepEnf?{enforce:!!orig.enforce,enf:orig.enf||null,holdCriteria:orig.holdCriteria||[],maskColumns:orig.maskColumns||[],critType:orig.critType||null,dateCol:orig.dateCol||"",critText:orig.critText||"",releasedKeys:orig.releasedKeys||[],pendingUnhold:!!orig.pendingUnhold}:{})};
       setPolicies(prev=>prev.map(p=>{
         if(p.id!==selPol.id) return p;
         const rules=rulePanel?.mode==="edit"?(p.rules||[]).map(r=>r.id===rulePanel.ruleId?newRule:r):[...(p.rules||[]),newRule];
@@ -6999,11 +7024,27 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
     onToast("Rule added","success");
   };
   const handleRemoveRule = (polId, ruleId) => {
+    const pol = policies.find(p=>p.id===polId);
+    const rule = (pol?.rules||[]).find(r=>r.id===ruleId);
+    // An active, approved legal hold can't just be deleted — deleting it fires an Unhold approval
+    // request (same store/approver as the original hold) and keeps the rule, marked pending, until
+    // that's signed off. Un-approved / non-hold rules delete outright as before.
+    if(rule && rule.field==="legal_hold" && rule.enforce){
+      if(rule.pendingUnhold){ onToast("Unhold already requested — pending owner approval","info"); return; }
+      if((enfApprovalFor(polId,ruleId)||{}).status==="approved"){
+        const approver = (enfApprovalFor(polId,ruleId)||{}).approver || resolveTableOwner(rule.table);
+        addEnfApproval({policyId:polId, policyName:pol?.name||"Policy", ruleId:ruleId+"-unhold", baseRuleId:ruleId, action:"Unhold", table:rule.table||"—", approver, requestedBy:meHandle});
+        setPolicies(prev=>prev.map(p=>p.id===polId?{...p,rules:(p.rules||[]).map(r=>r.id===ruleId?{...r,pendingUnhold:true}:r),updated:today()}:p));
+        pushNotif({category:"Policy", type:"alert", title:`Unhold requested · ${rule.table||"table"}`, body:`${meHandle} requested to release the legal hold on ${rule.table||"the target table"} — awaiting approval from ${approver}.`, nav:"policymanager", navArg:{policyId:polId}});
+        onToast(`Unhold requested — pending approval from ${approver}`,"success");
+        return;
+      }
+    }
     setPolicies(prev=>prev.map(p=>{
       if (p.id!==polId) return p;
-      const rule = (p.rules||[]).find(r=>r.id===ruleId);
+      const r0 = (p.rules||[]).find(r=>r.id===ruleId);
       return {...p,rules:(p.rules||[]).filter(r=>r.id!==ruleId),
-        history:[{when:today(),who:"You",action:`Removed rule: ${rule?.name||ruleId}`},...(p.history||[])],updated:today()};
+        history:[{when:today(),who:"You",action:`Removed rule: ${r0?.name||ruleId}`},...(p.history||[])],updated:today()};
     }));
     onToast("Rule removed","info");
   };
@@ -7957,6 +7998,21 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                 <div style={{display:"flex",alignItems:"center",gap:5,marginTop:6}}>
                                   <span style={{width:5,height:5,borderRadius:"50%",background:inactiveColor,display:"inline-block",flexShrink:0}}/>
                                   <span style={{fontSize:10.5,fontWeight:600,color:inactiveColor}}>{enfStatus==="rejected"?"Inactive — rejected by owner":"Inactive — pending owner approval"}</span>
+                                </div>
+                              )}
+                              {/* Legal-hold partial unhold — once the hold is approved & in effect, manage
+                                  which held records get released without deleting the whole rule. */}
+                              {r.field==="legal_hold" && r.enforce && enfStatus==="approved" && !r.pendingUnhold && (
+                                <button onClick={()=>setManageHold({policyId:p.id, ruleId:r.id})}
+                                  style={{marginTop:8,display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,padding:"6px 11px",borderRadius:7,border:`1px solid ${T.accent}55`,background:`${T.accent}0d`,color:T.accent,cursor:"pointer"}}>
+                                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.4"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0" stroke="currentColor" strokeWidth="1.4"/></svg>
+                                  Manage held records — partial unhold
+                                </button>
+                              )}
+                              {r.field==="legal_hold" && r.pendingUnhold && (
+                                <div style={{display:"flex",alignItems:"center",gap:5,marginTop:8}}>
+                                  <span style={{width:5,height:5,borderRadius:"50%",background:T.amber,display:"inline-block",flexShrink:0}}/>
+                                  <span style={{fontSize:10.5,fontWeight:600,color:T.amber}}>Unhold requested — pending owner approval</span>
                                 </div>
                               )}
                               {(r.operator||r.value)&&(
@@ -9369,6 +9425,12 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
               <div style={{flex:1,overflowY:"auto",padding:"20px"}}>
                 {rpTab==="preset"&&(
                   <div style={{display:"flex",flexDirection:"column",gap:14}}>
+                    {rulePanel.mode==="edit" && ["legal_hold","masking_status","retention_class"].includes(rpPreset.field) && (
+                      <div style={{display:"flex",alignItems:"flex-start",gap:7,padding:"9px 11px",borderRadius:8,background:`${T.amber}12`,border:`1px solid ${T.amber}33`}}>
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,marginTop:1,color:T.amber}}><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/><line x1="8" y1="7" x2="8" y2="11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="4.8" r=".7" fill="currentColor"/></svg>
+                        <span style={{fontSize:11,color:T.textSub,lineHeight:1.5}}>This is an enforcement rule. Its criteria (columns, hold rows, or retention terms) are preserved and edited from the policy wizard — changes here only affect the fields shown below.</span>
+                      </div>
+                    )}
                     <div>
                       <label style={lbl2}>Field</label>
                       <select value={rpPreset.field} onChange={e=>setRpPreset(r=>({...r,field:e.target.value,operator:W_RULE_FIELDS_SIMPLE.find(f=>f.id===e.target.value)?.ops[0]||"is",value:""}))} style={{...inp2,cursor:"pointer"}}>
@@ -10269,7 +10331,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                               {/* ── Manage held records — only once the hold is approved & in effect.
                                                   Opens the partial-unhold panel (row-pick + criteria release). ── */}
                                               {fd.action.verb==="Legal hold" && isEditMode && selPolicyId && ((enfApprovalFor(selPolicyId,r.id)||{}).status==="approved") && !r.pendingUnhold && (
-                                                <button onClick={()=>setManageHoldRuleId(r.id)}
+                                                <button onClick={()=>setManageHold({policyId:selPolicyId, ruleId:r.id})}
                                                   style={{marginBottom:8,display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,padding:"7px 12px",borderRadius:7,border:`1px solid ${T.accent}55`,background:`${T.accent}0d`,color:T.accent,cursor:"pointer"}}>
                                                   <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.4"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0" stroke="currentColor" strokeWidth="1.4"/></svg>
                                                   Manage held records — partial unhold
@@ -10925,20 +10987,24 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
         </CenteredModal>
       )}
 
-      {/* Manage held records / partial unhold panel */}
-      {manageHoldRuleId && (()=>{
-        const mr = wizardRules.find(r=>r.id===manageHoldRuleId);
+      {/* Manage held records / partial unhold panel — reachable from the wizard rule editor AND
+          the policy detail Rules tab. Resolve the rule from the wizard draft when editing that
+          same policy, otherwise from the saved policy in the store. */}
+      {manageHold && (()=>{
+        const pol = policies.find(p=>p.id===manageHold.policyId);
+        const mr = ((isEditMode && selPolicyId===manageHold.policyId) ? wizardRules.find(r=>r.id===manageHold.ruleId) : null)
+                   || (pol?.rules||[]).find(r=>r.id===manageHold.ruleId);
         if(!mr) return null;
-        const approver = (enfApprovalFor(selPolicyId, mr.id)||{}).approver || resolveTableOwner(mr.table);
+        const approver = (enfApprovalFor(manageHold.policyId, mr.id)||{}).approver || resolveTableOwner(mr.table);
         return (
           <ManageHoldModal
             rule={mr}
-            policyId={selPolicyId}
-            policyName={newPol.name||"Policy"}
+            policyId={manageHold.policyId}
+            policyName={pol?.name||newPol.name||"Policy"}
             approver={approver}
             meHandle={meHandle}
             enfApprovals={enfApprovals}
-            onClose={()=>setManageHoldRuleId(null)}
+            onClose={()=>setManageHold(null)}
             onToast={onToast}
           />
         );
