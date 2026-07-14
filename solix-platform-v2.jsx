@@ -234,6 +234,193 @@ const ASSET_COLUMNS = {
 };
 
 // ─────────────────────────────────────────────
+// LEGAL HOLD — held-records mock + partial unhold
+// ─────────────────────────────────────────────
+// Held rows are defined by a hold rule's criteria, not an enumerated list, so for the
+// prototype we deterministically materialize a plausible record set from the table +
+// criteria. A partial unhold never deletes the rule — it adds the selected record keys
+// to the rule's releasedKeys (an exclusion list). A row is "held" when it matches the
+// criteria AND its key is not released. Row-pick and criteria-group release both funnel
+// through the same releasedKeys mechanism; criteria release just selects a whole group.
+const _lhHash = (s)=>{ let h=0; const str=String(s); for(let i=0;i<str.length;i++){ h=(h*31+str.charCodeAt(i))>>>0; } return h; };
+const _LH_FIRST=["Rowan","Priya","Marco","Dana","Sam","Lena","Ivan","Mona","Carlos","Nadia","Theo","Aisha","Bruno","Elsa","Omar","Yuki","Hana","Diego"];
+const _LH_LAST =["Ellis","Nair","Bianchi","Whitfield","Okafor","Vogel","Petrov","Haddad","Reyes","Costa","Lang","Khan","Moreau","Berg","Farah","Tan","Silva","Roy"];
+const heldRecordsFor = (tableName, holdCriteria) => {
+  const crit = (holdCriteria||[]).filter(c=>c&&c.column);
+  const groupCol = (crit[0]&&crit[0].column) || "custodian";
+  let vals = Array.from(new Set(crit.map(c=>c.value).filter(Boolean)))
+    .flatMap(v=>String(v).split(/[,;]/).map(x=>x.trim().replace(/^["']|["']$/g,"")).filter(Boolean));
+  if(vals.length<2) vals = vals.concat(["Matter-2211","Matter-3480"]);
+  vals = Array.from(new Set(vals)).slice(0,4);
+  const seed = _lhHash(tableName||"tbl");
+  const prefix = ((tableName||"REC").replace(/[^a-z]/gi,"").slice(0,4).toUpperCase()) || "REC";
+  const n = 10 + (seed%6);
+  const rows = [];
+  for(let i=0;i<n;i++){
+    const r = _lhHash((tableName||"t")+"#"+i);
+    rows.push({
+      key: prefix+"-"+(10000+i),
+      person: _LH_FIRST[r%_LH_FIRST.length]+" "+_LH_LAST[(r>>5)%_LH_LAST.length],
+      groupCol,
+      groupVal: vals[i%vals.length],
+      opened: "2026-"+String(1+(r%9)).padStart(2,"0")+"-"+String(10+(r%18)).padStart(2,"0"),
+    });
+  }
+  return rows;
+};
+
+// Panel launched from the legal-hold rule row (edit mode, hold approved). Presentational +
+// local selection state; store writes go through the module-level addEnfApproval/pushNotif.
+// Released keys (approved) come from rule.releasedKeys; pending keys are read live from the
+// enfApprovals store so a request shows "Release pending" the instant it's filed.
+const ManageHoldModal = ({ rule, policyId, policyName, approver, meHandle, enfApprovals, onClose, onToast }) => {
+  const [selected, setSelected] = useState(()=>new Set());
+  const [reason, setReason] = useState("");
+  const records = heldRecordsFor(rule.table, rule.holdCriteria);
+  const releasedSet = new Set(rule.releasedKeys||[]);
+  const pendingSet = new Set(
+    (enfApprovals||[])
+      .filter(a=>a.policyId===policyId && a.baseRuleId===rule.id && a.action==="Partial Unhold" && a.status==="pending")
+      .flatMap(a=>a.keys||[])
+  );
+  const stateOf = k => releasedSet.has(k) ? "released" : pendingSet.has(k) ? "pending" : "held";
+  const heldRecords = records.filter(r=>stateOf(r.key)==="held");
+  const selectableKeys = heldRecords.map(r=>r.key);
+  const allSel = selectableKeys.length>0 && selectableKeys.every(k=>selected.has(k));
+  const groups = {};
+  heldRecords.forEach(r=>{ (groups[r.groupVal]=groups[r.groupVal]||[]).push(r); });
+  const crit = (rule.holdCriteria||[]).filter(c=>c&&c.column);
+  const critStr = crit.length
+    ? crit.map(c=>`${c.column} ${c.operator||"="} ${c.value||"…"}`).join(" and ")
+    : "all rows in the table";
+
+  const toggle = k => setSelected(prev=>{ const n=new Set(prev); n.has(k)?n.delete(k):n.add(k); return n; });
+  const toggleAll = () => setSelected(allSel ? new Set() : new Set(selectableKeys));
+
+  const fileRequest = (keys, reasonText, label) => {
+    if(!keys.length) return;
+    addEnfApproval({ policyId, policyName, ruleId:rule.id+"-punhold-"+Date.now(), baseRuleId:rule.id,
+      action:"Partial Unhold", table:rule.table||"—", approver, requestedBy:meHandle,
+      keys, reason:reasonText||"", count:keys.length, groupLabel:label||null });
+    pushNotif({ category:"Policy", type:"alert", title:`Partial unhold requested · ${rule.table||"table"}`,
+      body:`${meHandle} requested to release ${keys.length} record${keys.length>1?"s":""} from the legal hold on ${rule.table||"the target table"}${label?` (${label})`:""} — awaiting approval from ${approver}.`,
+      nav:"policymanager", navArg:{policyId} });
+    onToast(`Partial unhold requested — ${keys.length} record${keys.length>1?"s":""} pending approval from ${approver}`,"success");
+    setSelected(new Set());
+    setReason("");
+  };
+
+  const totalHeld = records.filter(r=>stateOf(r.key)!=="released").length;
+  const pendCount = records.filter(r=>stateOf(r.key)==="pending").length;
+  const relCount  = releasedSet.size;
+  const canUnholdSel = selected.size>0 && reason.trim().length>0;
+
+  const badge = totalHeld===0
+    ? { txt:"Fully released", bg:`${T.green}18`, fg:T.green }
+    : pendCount>0
+      ? { txt:`${pendCount} release pending`, bg:`${T.amber}18`, fg:T.amber }
+      : { txt:"Hold active", bg:`${T.rose}14`, fg:T.rose };
+
+  const sel_s = { padding:"7px 9px", background:T.bgElevated, border:`1px solid ${T.border}`, borderRadius:7, color:T.text, fontSize:12, outline:"none", boxSizing:"border-box" };
+
+  return (
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div onClick={e=>e.stopPropagation()} style={{width:640,maxHeight:"88vh",background:T.bgSurface,borderRadius:14,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 24px 80px rgba(0,0,0,.4)"}}>
+        {/* Header */}
+        <div style={{padding:"18px 22px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+          <div>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.5" stroke={T.rose} strokeWidth="1.4"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" stroke={T.rose} strokeWidth="1.4"/></svg>
+              <span style={{fontSize:15,fontWeight:700,color:T.text}}>Manage held records</span>
+            </div>
+            <div style={{fontSize:12,color:T.textMuted,marginTop:4}}>{rule.table||"—"} · legal hold · {policyName}</div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:10,background:badge.bg,color:badge.fg,whiteSpace:"nowrap"}}>{badge.txt}</span>
+            <button onClick={onClose} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer",fontSize:20,lineHeight:1,padding:"0 2px"}}>×</button>
+          </div>
+        </div>
+        {/* Criteria summary */}
+        <div style={{padding:"9px 22px",borderBottom:`1px solid ${T.border}`,background:`${T.accent}06`,fontSize:11.5,color:T.textSub}}>
+          <span style={{color:T.textMuted}}>Hold criteria: </span>
+          <span style={{fontFamily:"monospace",color:T.text}}>{critStr}</span>
+          <span style={{color:T.textMuted}}>  ·  {totalHeld} held{relCount?` · ${relCount} released`:""}</span>
+        </div>
+        <div style={{overflowY:"auto",padding:"16px 22px",display:"flex",flexDirection:"column",gap:18}}>
+          {/* ── Release by criteria (group) ── */}
+          <div>
+            <div style={{fontSize:11,fontWeight:700,color:T.textSub,marginBottom:2}}>Release by criteria</div>
+            <div style={{fontSize:11,color:T.textMuted,marginBottom:8}}>Release a whole slice of the hold at once — defensible and scales. Still needs {approver}'s sign-off.</div>
+            {Object.keys(groups).length===0
+              ? <div style={{fontSize:11.5,color:T.textMuted,fontStyle:"italic"}}>No held records left to release.</div>
+              : <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {Object.entries(groups).map(([val,rows])=>(
+                    <div key={val} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+                      <span style={{fontSize:11.5,color:T.text,flex:1}}>
+                        <span style={{fontFamily:"monospace",color:T.textSub}}>{rows[0].groupCol} = {val}</span>
+                        <span style={{color:T.textMuted}}>  ·  {rows.length} record{rows.length>1?"s":""}</span>
+                      </span>
+                      <button onClick={()=>fileRequest(rows.map(r=>r.key), `criteria release: ${rows[0].groupCol} = ${val}`, `${rows[0].groupCol} = ${val}`)}
+                        style={{fontSize:11,fontWeight:600,padding:"5px 11px",borderRadius:7,background:"transparent",border:`1px solid ${T.amber}66`,color:T.amber,cursor:"pointer"}}>Release group</button>
+                    </div>
+                  ))}
+                </div>}
+          </div>
+          <div style={{height:1,background:T.border}}/>
+          {/* ── Release specific records (row-pick) ── */}
+          <div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:8}}>
+              <div>
+                <div style={{fontSize:11,fontWeight:700,color:T.textSub}}>Release specific records</div>
+                <div style={{fontSize:11,color:T.textMuted}}>Hand-pick individual rows. A reason is required for the audit trail.</div>
+              </div>
+              <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:T.textSub,cursor:selectableKeys.length?"pointer":"default",whiteSpace:"nowrap"}}>
+                <input type="checkbox" checked={allSel} disabled={!selectableKeys.length} onChange={toggleAll}/> Select all
+              </label>
+            </div>
+            <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+              {records.map((rec,i)=>{
+                const st = stateOf(rec.key);
+                const disabled = st!=="held";
+                return (
+                  <div key={rec.key} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 11px",borderTop:i?`1px solid ${T.border}`:"none",opacity:disabled?0.55:1,background:selected.has(rec.key)?`${T.accent}0d`:"transparent"}}>
+                    <input type="checkbox" disabled={disabled} checked={selected.has(rec.key)} onChange={()=>toggle(rec.key)} style={{cursor:disabled?"default":"pointer"}}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,color:T.text}}>{rec.person} <span style={{fontFamily:"monospace",fontSize:11,color:T.textMuted}}>{rec.key}</span></div>
+                      <div style={{fontSize:11,color:T.textMuted}}>{rec.groupCol} {rec.groupVal} · opened {rec.opened}</div>
+                    </div>
+                    <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:9,whiteSpace:"nowrap",
+                      background: st==="released"?`${T.green}18`:st==="pending"?`${T.amber}18`:`${T.rose}14`,
+                      color: st==="released"?T.green:st==="pending"?T.amber:T.rose}}>
+                      {st==="released"?"Released":st==="pending"?"Release pending":"Held"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{marginTop:10}}>
+              <input value={reason} onChange={e=>setReason(e.target.value)} placeholder="Reason for release (required) — e.g. custodian no longer relevant to matter"
+                style={{...sel_s,width:"100%",cursor:"text"}}/>
+            </div>
+          </div>
+        </div>
+        {/* Footer */}
+        <div style={{padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+          <span style={{fontSize:11,color:T.textMuted}}>{selected.size} selected</span>
+          <div style={{display:"flex",gap:9}}>
+            <button onClick={onClose} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",fontWeight:500}}>Close</button>
+            <button disabled={!canUnholdSel} onClick={()=>fileRequest(Array.from(selected), reason.trim(), null)}
+              style={{padding:"8px 16px",borderRadius:8,background:canUnholdSel?T.amber:`${T.amber}33`,border:"none",color:canUnholdSel?"#1a1200":`${T.amber}`,fontSize:12,fontWeight:700,cursor:canUnholdSel?"pointer":"default"}}>
+              Unhold selected
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
 // TAG MANAGEMENT MOCK DATA
 // ─────────────────────────────────────────────
 const INITIAL_TAG_DEFS = [
@@ -6248,6 +6435,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   const [filterDropOpen, setFilterDropOpen]= useState(false);
   const [hovPolId,       setHovPolId]      = useState(null);
   const [deleteConfPol,  setDeleteConfPol] = useState(null);
+  const [manageHoldRuleId, setManageHoldRuleId] = useState(null);
   const [polPlusMenuOpen, setPolPlusMenuOpen] = useState(false);
   const [polNewCatOpen,   setPolNewCatOpen]   = useState(false);
   const [polNewCatDraft,  setPolNewCatDraft]  = useState({name:"",description:"",color:"#6366f1",owners:[],stewards:[],domains:[],tags:[],frameworks:[]});
@@ -6553,6 +6741,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
       return {id:`r${i+1}-${Date.now()}`,type:"preset",field:r.field,operator:r.operator,value:r.value||"",table:r.table||"",column:r.column||"",severity:r.severity||"Medium",name,enforce:!!r.enforce,enf:r.enf||null,
         critType:r.critType||null, dateCol:r.dateCol||"", critText:r.critText||"",
         holdCriteria:r.holdCriteria||[], maskColumns:r.maskColumns||[],
+        releasedKeys:r.releasedKeys||[],
         pendingUnhold:!!r.pendingUnhold};
     });
     const convertedSqlRules = wizardSqlRules.map((r,i)=>({
@@ -6716,6 +6905,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
     const presetBack = (pol.rules||[]).filter(r=>r.type==="preset"||(!r.type&&!r.sql)).map(r=>({id:r.id||`wr-${Date.now()}`,field:r.field||"certification",operator:r.operator||"is",value:r.value||"",table:r.table||"",column:r.column||"",severity:r.severity||"Medium",enforce:!!r.enforce,enf:r.enf||null,
       critType:r.critType||null, dateCol:r.dateCol||"", critText:r.critText||"",
       holdCriteria:r.holdCriteria||[], maskColumns:r.maskColumns||[],
+      releasedKeys:r.releasedKeys||[],
       pendingUnhold:!!r.pendingUnhold}));
     const sqlBack    = (pol.rules||[]).filter(r=>r.type==="sql"||r.sql).map(r=>({id:r.id||`wsql-${Date.now()}`,label:r.label||r.name||"",table:r.table||"",sql:r.sql||"",strategy:r.strategy||"BINARY",operator:r.operator||"",threshold:r.threshold||"",partitionExpr:r.partitionExpr||"",severity:r.severity||"Medium"}));
     setWizardRules(presetBack);
@@ -10076,6 +10266,15 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                                   </div>
                                                 );
                                               })()}
+                                              {/* ── Manage held records — only once the hold is approved & in effect.
+                                                  Opens the partial-unhold panel (row-pick + criteria release). ── */}
+                                              {fd.action.verb==="Legal hold" && isEditMode && selPolicyId && ((enfApprovalFor(selPolicyId,r.id)||{}).status==="approved") && !r.pendingUnhold && (
+                                                <button onClick={()=>setManageHoldRuleId(r.id)}
+                                                  style={{marginBottom:8,display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,padding:"7px 12px",borderRadius:7,border:`1px solid ${T.accent}55`,background:`${T.accent}0d`,color:T.accent,cursor:"pointer"}}>
+                                                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.4"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0" stroke="currentColor" strokeWidth="1.4"/></svg>
+                                                  Manage held records — partial unhold
+                                                </button>
+                                              )}
                                               {/* ── Retention: Criteria Type — CDP's real "Datewise / Criteriawise / Both"
                                                   from the Retention Policy Assignment screen. ── */}
                                               {fd.action.verb==="Set disposition"&&(()=>{
@@ -10725,6 +10924,25 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
           </div>
         </CenteredModal>
       )}
+
+      {/* Manage held records / partial unhold panel */}
+      {manageHoldRuleId && (()=>{
+        const mr = wizardRules.find(r=>r.id===manageHoldRuleId);
+        if(!mr) return null;
+        const approver = (enfApprovalFor(selPolicyId, mr.id)||{}).approver || resolveTableOwner(mr.table);
+        return (
+          <ManageHoldModal
+            rule={mr}
+            policyId={selPolicyId}
+            policyName={newPol.name||"Policy"}
+            approver={approver}
+            meHandle={meHandle}
+            enfApprovals={enfApprovals}
+            onClose={()=>setManageHoldRuleId(null)}
+            onToast={onToast}
+          />
+        );
+      })()}
 
 
       {/* Link Policy to Regulation Requirement — multi-select modal */}
@@ -28068,7 +28286,19 @@ const TYPE_ACTION = {
   delete_request:"Approve deletion", enforcement_approval:"Approve enforcement",
   field_updated:"Field updated", assigned:"Assigned to you",
 };
-const itemTitle = (item) => { if(!item) return ""; const act=TYPE_ACTION[item.type]; const subj=item.asset&&item.asset.name; return (act&&subj)?`${act} · ${subj}`:(item.title||""); };
+const itemTitle = (item) => {
+  if(!item) return "";
+  const subj=item.asset&&item.asset.name;
+  // Enforcement approvals share one type but differ by action — legal-hold releases read very
+  // differently from "apply this enforcement", so give unhold/partial-unhold their own phrase.
+  if(item.type==="enforcement_approval" && item.action){
+    const phrase = item.action==="Unhold" ? "Approve unhold"
+                 : item.action==="Partial Unhold" ? "Approve partial unhold"
+                 : "Approve enforcement";
+    return subj?`${phrase} · ${subj}`:phrase;
+  }
+  const act=TYPE_ACTION[item.type]; return (act&&subj)?`${act} · ${subj}`:(item.title||"");
+};
 // Phase 4 — work-item actions that actually write ownership fields on the asset.
 const assignOwnership = (assetName, handle, role) => {
   const a = ASSETS.find(x => x.name===assetName);
@@ -28147,13 +28377,11 @@ const InboxView = ({onToast}) => {
   const [resolveOpen,  setResolveOpen]  = useState(false);  // inline resolve form (DQ + violations)
   const [resolveNote,  setResolveNote]  = useState("");     // resolution reason captured in the inbox
   const [resolveMode,  setResolveMode]  = useState("remediate"); // violations: remediate | exception
-  const [reassignOpen, setReassignOpen] = useState(false);  // inline reassign picker
-  const [reassignMap,  setReassignMap]  = useState({});     // {itemId: handle} assignee overrides
   const [bulkOpen,     setBulkOpen]     = useState(false);  // bulk-assign orphans picker
   const [filterOpen,   setFilterOpen]   = useState(false);
   const [roleOpen,     setRoleOpen]     = useState(false);
   const [secFilters,   setSecFilters]   = useState(new Set()); // section multiselect
-  const closeForms = ()=>{ [setAssignOpen,setResolveOpen,setReassignOpen].forEach(f=>f(false)); setResolveNote(""); setResolveMode("remediate"); };
+  const closeForms = ()=>{ [setAssignOpen,setResolveOpen].forEach(f=>f(false)); setResolveNote(""); setResolveMode("remediate"); };
 
   // ── Two questions: things to DO vs things to KNOW ──
   // action   = open work needing a decision (steward fixes / owner sign-offs)
@@ -28192,12 +28420,16 @@ const InboxView = ({onToast}) => {
   const enfReqs = useEnfApprovals();
   const ENF_APPROVAL_ITEMS = enfReqs.filter(r=>r.status==="pending").map(r=>({
     id:"eaq-"+r.id, type:"enforcement_approval", severity:"medium", section:"policy", timeAgo:r.at||"just now",
-    title:r.action==="Unhold" ? `Approve release of legal hold on ${r.table}` : `Approve ${r.action} on ${r.table}`,
+    title:r.action==="Unhold" ? `Approve release of legal hold on ${r.table}`
+        : r.action==="Partial Unhold" ? `Approve partial unhold on ${r.table} · ${r.count||(r.keys||[]).length} record${((r.count||(r.keys||[]).length)>1)?"s":""}`
+        : `Approve ${r.action} on ${r.table}`,
     asset:{name:r.table||"asset", path:r.table||"asset", type:"Table"},
     body:r.action==="Unhold"
       ? `${r.policyName} requests release of the legal hold on ${r.table}. Requested by ${r.requestedBy}.`
+      : r.action==="Partial Unhold"
+      ? `${r.policyName} requests release of ${r.count||(r.keys||[]).length} record${((r.count||(r.keys||[]).length)>1)?"s":""} from the legal hold on ${r.table}${r.reason?` — "${r.reason}"`:""}. The rest of the hold stays active. Requested by ${r.requestedBy}.`
       : `${r.policyName} wants to ${(r.action||"enforce").toLowerCase()} on ${r.table}. Requested by ${r.requestedBy}.`,
-    requestedBy:r.requestedBy, action:r.action, policyId:r.policyId, ruleId:r.ruleId, reqId:r.id, readAt:null,
+    requestedBy:r.requestedBy, action:r.action, policyId:r.policyId, ruleId:r.ruleId, baseRuleId:r.baseRuleId, keys:r.keys, reason:r.reason, count:r.count, reqId:r.id, readAt:null,
   }));
   const allItems = [...contractApprovals.filter(ca=>!items.some(i=>i.id===ca.id)), ...ROLE_REQ_ITEMS, ...STATUS_REQ_ITEMS, ...DELETE_REQ_ITEMS, ...ENF_APPROVAL_ITEMS, ...items];
   const isActionItem   = i => itemRole(i)!=="fyi" && !i.readAt;
@@ -28238,9 +28470,9 @@ const InboxView = ({onToast}) => {
   const ack     = (id,msg)=>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); _contractApprovalItems=_contractApprovalItems.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i); _contractApprovalSubs.forEach(fn=>fn()); setSel(null); closeForms(); onToast(msg||"Acknowledged","success"); };
   const dism    = id      =>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); _contractApprovalItems=_contractApprovalItems.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i); _contractApprovalSubs.forEach(fn=>fn()); setSel(null); closeForms(); };
   const markAll = ()      =>{ setItems(p=>p.map(i=>({...i,readAt:i.readAt||new Date().toISOString()}))); setSel(null); closeForms(); onToast("All caught up","success"); };
-  // Assignee + reassignment (steward hands off; owner can override — task handoff, not role change).
-  const effAssignee = (item)=> reassignMap[item.id] || itemAssignee(item) || "unassigned";
-  const reassign    = (id,handle)=>{ setReassignMap(m=>({...m,[id]:handle})); setReassignOpen(false); onToast(`Reassigned to ${handle}`,"success"); };
+  // Assignee display only — real reassignment isn't implemented yet (add when there's a
+  // real workflow behind it, not just a label that resets on reload).
+  const effAssignee = (item)=> itemAssignee(item) || "unassigned";
 
   const SEV = {
     high:  {c:T.rose,    bg:`${T.rose}12`,         label:"HIGH"},
@@ -28359,6 +28591,19 @@ const InboxView = ({onToast}) => {
           ack(item.id,"Unhold rejected — hold remains in place");
         },false,true)}{openIn("Open in Policy Manager","policymanager",{policyId:item.policyId})}</>;
       }
+      if(item.action==="Partial Unhold"){
+        const cnt = item.count||(item.keys||[]).length;
+        return <>{btn("Approve release",()=>{
+          if(item.reqId)resolveEnfApproval(item.reqId,"approved");
+          polSet(prev=>prev.map(pp=>pp.id===item.policyId?{...pp,rules:(pp.rules||[]).map(r=>r.id===item.baseRuleId?{...r,releasedKeys:Array.from(new Set([...(r.releasedKeys||[]),...(item.keys||[])]))}:r)}:pp));
+          pushNotif({category:"Policy",type:"cert",title:`Records released from hold · ${item.asset.name}`,body:`${cnt} record${cnt>1?"s":""} released from the legal hold on ${item.asset.name} by ${meHandle||"owner"} — the hold remains active for the rest.`,nav:"policymanager",navArg:{policyId:item.policyId}});
+          ack(item.id,`${cnt} record${cnt>1?"s":""} released on ${item.asset.name} — requester notified`);
+        },true)}{btn("Reject",()=>{
+          if(item.reqId)resolveEnfApproval(item.reqId,"rejected");
+          pushNotif({category:"Policy",type:"field_updated",title:`Partial unhold rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request to release ${cnt} record${cnt>1?"s":""} from the legal hold on ${item.asset.name} was declined — all records remain held.`,nav:"policymanager",navArg:{policyId:item.policyId}});
+          ack(item.id,"Partial unhold rejected — records remain held");
+        },false,true)}{openIn("Open in Policy Manager","policymanager",{policyId:item.policyId})}</>;
+      }
       return <>{btn("Approve",()=>{
         if(item.reqId)resolveEnfApproval(item.reqId,"approved");
         pushNotif({category:"Policy",type:"cert",title:`Enforcement approved · ${item.asset.name}`,body:`${item.action} approved by ${meHandle||"owner"}`,nav:"policymanager",navArg:{policyId:item.policyId}});
@@ -28419,7 +28664,7 @@ const InboxView = ({onToast}) => {
           {/* Body text */}
           {item.body&&<div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65,marginBottom:16}}>{item.body}</div>}
 
-          {/* Assignee + reassign — task handoff (steward → steward; owner can override) */}
+          {/* Assignee — display only for now; see effAssignee comment above. */}
           {itemRole(item)!=="fyi"&&(()=>{const a=effAssignee(item);const ini=a==="unassigned"?"?":a.split(".").map(s=>s[0]?.toUpperCase()||"").join("").slice(0,2);return (
             <div style={{marginBottom:16,background:T.bgElevated,borderRadius:8,padding:"10px 13px",border:`1px solid ${T.border}`}}>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -28428,18 +28673,7 @@ const InboxView = ({onToast}) => {
                   <div style={{fontSize:9.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:700}}>Assignee</div>
                   <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{a}</div>
                 </div>
-                <button onClick={()=>setReassignOpen(o=>!o)} style={{padding:"5px 12px",borderRadius:7,background:reassignOpen?T.accentDim:"transparent",border:`1px solid ${reassignOpen?T.accent:T.border}`,color:reassignOpen?T.accent:T.textSub,fontSize:11.5,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>Reassign</button>
               </div>
-              {reassignOpen&&(
-                <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${T.border}`}}>
-                  <div style={{fontSize:11,color:T.textSub,marginBottom:8}}>Hand off to another steward — the owner can reassign anytime:</div>
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                    {STEWARD_POOL.map(u=>(
-                      <button key={u} onClick={()=>reassign(item.id,u)} style={{padding:"5px 12px",borderRadius:6,background:a===u?T.accentDim:T.bgSurface,border:`1px solid ${a===u?T.accent:T.border}`,color:a===u?T.accent:T.textSub,fontSize:12,cursor:"pointer"}}>{u}</button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           );})()}
 
