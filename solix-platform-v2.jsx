@@ -32692,8 +32692,8 @@ export default function App(){
     <RoleCtx.Provider value={{role, roleCfg, onSwitch:handleRole, onLogout:handleLogout}}>
     <NavCtx.Provider value={handleNav}>
     <ThemeCtx.Provider value={{isDark,toggleTheme}}>
-      <style key={themeKey}>{makeG(T)}</style>
-      <div key={themeKey} style={{display:"flex",height:"100vh",background:T.bg,overflow:"hidden"}}>
+      <style key={`theme-style-${themeKey}`}>{makeG(T)}</style>
+      <div key={`theme-root-${themeKey}`} style={{display:"flex",height:"100vh",background:T.bg,overflow:"hidden"}}>
         <Sidebar active={nav} onNav={handleNav} exp={sideExp} setExp={setSideExp} allowedNav={allowedNav} role={role} onHelp={()=>setHelpOpen(true)}/>
         <main style={{flex:1,marginLeft:sideExp?EXPANDED_W:COLLAPSED_W,height:"100vh",overflowY:"auto",display:"flex",flexDirection:"column",background:T.bg,transition:"margin-left .2s ease"}}>
           {renderPage()}
