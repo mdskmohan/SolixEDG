@@ -269,10 +269,22 @@ const heldRecordsFor = (tableName, holdCriteria) => {
   return rows;
 };
 
+// Inline SVG spinner (SMIL so it animates without any global @keyframes).
+const _Spinner = ({ size=12, color }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{flexShrink:0,display:"block"}}>
+    <circle cx="12" cy="12" r="9" stroke={`${color}33`} strokeWidth="3"/>
+    <path d="M12 3a9 9 0 0 1 9 9" stroke={color} strokeWidth="3" strokeLinecap="round">
+      <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.8s" repeatCount="indefinite"/>
+    </path>
+  </svg>
+);
+
 // An unhold isn't an instant action — it's a short approval workflow (the requester files it,
 // the table owner signs off). Showing it as a 3-step tracker lets the requester (rule card) and
-// the approver (inbox) both see exactly where the request stands. status: "pending" (awaiting
-// owner) | "approved"/"released" | "rejected". variant flips the final label full vs partial.
+// the approver (inbox) both see exactly where the request stands. The in-flight step shows a
+// spinner ("loading") until the owner signs off; then it flips to a green "Records released".
+// status: "pending" (awaiting owner) | "approved"/"released" | "rejected". variant flips the
+// final label full vs partial.
 const UnholdStepper = ({ status="pending", variant="full", compact=false }) => {
   const done = status==="approved" || status==="released";
   const rejected = status==="rejected";
@@ -280,21 +292,32 @@ const UnholdStepper = ({ status="pending", variant="full", compact=false }) => {
   const steps = [
     { label:"Requested",    st:"done" },
     { label:"Owner review", st: (done||rejected) ? "done" : "current" },
-    { label: finalLabel,    st: done ? "done" : (rejected ? "rejected" : "todo") },
+    { label: finalLabel,    st: done ? "done" : (rejected ? "loading" : "loading") },
   ];
-  const clr = st => st==="done" ? T.green : st==="current" ? T.amber : st==="rejected" ? T.rose : T.textMuted;
-  const dot = compact?7:9, fs = compact?10:11, lineW = compact?12:22;
+  const clr = st => st==="done" ? T.green : st==="current"||st==="loading" ? T.amber : st==="rejected" ? T.rose : T.textMuted;
+  const dot = compact?7:9, fs = compact?10:11, lineW = compact?12:22, sp = compact?12:14;
+  // The final step is "loading" only while genuinely in flight; rejected recolors it rose.
+  const realStep = (s,i) => (i===2 && rejected) ? {...s, st:"rejected", label:"Rejected"} : s;
+  const indicator = (st) => {
+    if(st==="current"||st==="loading") return <_Spinner size={sp} color={T.amber}/>;
+    if(st==="done") return (
+      <span style={{width:sp,height:sp,borderRadius:"50%",background:T.green,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+        <svg width={compact?7:8} height={compact?7:8} viewBox="0 0 10 10" fill="none"><path d="M2 5l2 2 4-5" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </span>
+    );
+    return <span style={{width:dot,height:dot,borderRadius:"50%",background: st==="rejected"?T.rose:"transparent",border:`1.5px solid ${clr(st)}`,display:"inline-block",flexShrink:0}}/>;
+  };
   return (
     <div style={{display:"flex",alignItems:"center",flexWrap:"wrap",rowGap:4}}>
-      {steps.map((s,i)=>(
+      {steps.map((s0,i)=>{ const s=realStep(s0,i); return (
         <div key={i} style={{display:"flex",alignItems:"center"}}>
-          {i>0 && <span style={{width:lineW,height:1.5,background: steps[i].st==="todo"?T.border:clr(steps[i].st),opacity:0.55,margin:"0 6px"}}/>}
+          {i>0 && <span style={{width:lineW,height:1.5,background: (s.st==="loading")?T.border:clr(s.st),opacity:0.55,margin:"0 6px"}}/>}
           <span style={{display:"flex",alignItems:"center",gap:5}}>
-            <span style={{width:dot,height:dot,borderRadius:"50%",background: s.st==="todo"?"transparent":clr(s.st),border:`1.5px solid ${clr(s.st)}`,display:"inline-block",flexShrink:0}}/>
-            <span style={{fontSize:fs,fontWeight: (s.st==="current"||s.st==="rejected")?700:600,color:clr(s.st),whiteSpace:"nowrap"}}>{s.label}</span>
+            {indicator(s.st)}
+            <span style={{fontSize:fs,fontWeight: (s.st==="current"||s.st==="loading"||s.st==="rejected")?700:600,color:clr(s.st),whiteSpace:"nowrap"}}>{s.label}</span>
           </span>
         </div>
-      ))}
+      );})}
     </div>
   );
 };
@@ -341,7 +364,9 @@ const ManageHoldModal = ({ rule, policyId, policyName, approver, meHandle, enfAp
   const totalHeld = records.filter(r=>stateOf(r.key)!=="released").length;
   const pendCount = records.filter(r=>stateOf(r.key)==="pending").length;
   const relCount  = releasedSet.size;
-  const canUnholdSel = selected.size>0 && reason.trim().length>0;
+  // Selecting records is enough to file the request — the reason is captured for the audit
+  // trail but isn't a hard gate (an empty-reason request used to silently do nothing).
+  const canUnholdSel = selected.size>0;
 
   const badge = totalHeld===0
     ? { txt:"Fully released", bg:`${T.green}18`, fg:T.green }
@@ -352,8 +377,8 @@ const ManageHoldModal = ({ rule, policyId, policyName, approver, meHandle, enfAp
   const sel_s = { padding:"7px 9px", background:T.bgElevated, border:`1px solid ${T.border}`, borderRadius:7, color:T.text, fontSize:12, outline:"none", boxSizing:"border-box" };
 
   return (
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div onClick={e=>e.stopPropagation()} style={{width:640,maxHeight:"88vh",background:T.bgSurface,borderRadius:14,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 24px 80px rgba(0,0,0,.4)"}}>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:1000,display:"flex",justifyContent:"flex-end"}}>
+      <div onClick={e=>e.stopPropagation()} style={{width:520,maxWidth:"92vw",height:"100vh",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"-24px 0 80px rgba(0,0,0,.4)"}}>
         {/* Header */}
         <div style={{padding:"18px 22px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
           <div>
@@ -374,11 +399,17 @@ const ManageHoldModal = ({ rule, policyId, policyName, approver, meHandle, enfAp
           <span style={{fontFamily:"monospace",color:T.text}}>{critStr}</span>
           <span style={{color:T.textMuted}}>  ·  {totalHeld} held{relCount?` · ${relCount} released`:""}</span>
         </div>
-        {/* Workflow tracker — a partial unhold is an owner-approved request, not an instant edit. */}
+        {/* Release status — a partial unhold is an owner-approved request, not an instant edit.
+            While a request is in flight the stepper spins ("loading"); it flips to a green
+            "Records released" once the owner signs off. */}
         <div style={{padding:"10px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-          <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.05em"}}>Release workflow</span>
-          <UnholdStepper status={pendCount>0?"pending":"requested"} variant="partial" compact/>
-          <span style={{fontSize:11,color:T.textMuted}}>Approver: <span style={{color:T.textSub,fontWeight:600}}>{approver}</span></span>
+          <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.05em"}}>Release status</span>
+          {pendCount>0
+            ? <UnholdStepper status="pending" variant="partial" compact/>
+            : relCount>0
+              ? <UnholdStepper status="released" variant="partial" compact/>
+              : <span style={{fontSize:11.5,color:T.textMuted}}>No release requested yet</span>}
+          <span style={{fontSize:11,color:T.textMuted,marginLeft:"auto"}}>Approver: <span style={{color:T.textSub,fontWeight:600}}>{approver}</span></span>
         </div>
         <div style={{overflowY:"auto",padding:"16px 22px",display:"flex",flexDirection:"column",gap:18}}>
           {/* ── Release specific records (row-pick) ── */}
@@ -386,7 +417,7 @@ const ManageHoldModal = ({ rule, policyId, policyName, approver, meHandle, enfAp
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginBottom:8}}>
               <div>
                 <div style={{fontSize:11,fontWeight:700,color:T.textSub}}>Release specific records</div>
-                <div style={{fontSize:11,color:T.textMuted}}>Hand-pick the rows to release from the hold. A reason is required for the audit trail. The rest of the hold stays active.</div>
+                <div style={{fontSize:11,color:T.textMuted}}>Hand-pick the rows to release from the hold. Add a reason for the audit trail. The rest of the hold stays active.</div>
               </div>
               <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:T.textSub,cursor:selectableKeys.length?"pointer":"default",whiteSpace:"nowrap"}}>
                 <input type="checkbox" checked={allSel} disabled={!selectableKeys.length} onChange={toggleAll}/> Select all
@@ -413,7 +444,7 @@ const ManageHoldModal = ({ rule, policyId, policyName, approver, meHandle, enfAp
               })}
             </div>
             <div style={{marginTop:10}}>
-              <input value={reason} onChange={e=>setReason(e.target.value)} placeholder="Reason for release (required) — e.g. custodian no longer relevant to matter"
+              <input value={reason} onChange={e=>setReason(e.target.value)} placeholder="Reason for release (optional) — e.g. custodian no longer relevant to matter"
                 style={{...sel_s,width:"100%",cursor:"text"}}/>
             </div>
           </div>
@@ -434,54 +465,45 @@ const ManageHoldModal = ({ rule, policyId, policyName, approver, meHandle, enfAp
   );
 };
 
-// Chooser launched by "Remove rule" on an active, approved legal-hold rule. Deleting a hold
-// isn't a plain delete — it releases records, so it forks into full unhold (release everything,
-// rule goes away) or partial unhold (pick specific records, rule + hold stay for the rest).
-// Both routes are owner-approved; neither takes effect until sign-off.
-const RemoveHoldChooser = ({ rule, policyName, approver, onFull, onPartial, onClose }) => {
-  const Opt = ({ accent, title, desc, onClick, icon }) => (
+// "Remove rule" on an active, approved legal hold opens a small dropdown menu, not a delete —
+// removing a hold releases records, so it forks into Full unhold (release everything, rule goes
+// away) or Partial unhold (pick records, hold stays). Both routes are owner-approved. Self-
+// contained: owns its open state, closes on outside click.
+const HoldRemoveMenu = ({ onFull, onPartial, style }) => {
+  const [open, setOpen] = useState(false);
+  const Item = ({ accent, title, desc, icon, onClick }) => (
     <button onClick={onClick}
-      style={{display:"flex",alignItems:"flex-start",gap:12,textAlign:"left",width:"100%",padding:"13px 14px",borderRadius:10,background:T.bgElevated,border:`1px solid ${T.border}`,cursor:"pointer",transition:"all .12s"}}
-      onMouseEnter={e=>{e.currentTarget.style.borderColor=accent;e.currentTarget.style.background=`${accent}0d`;}}
-      onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.bgElevated;}}>
-      <span style={{width:30,height:30,borderRadius:8,background:`${accent}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>{icon}</span>
+      style={{display:"flex",alignItems:"flex-start",gap:10,textAlign:"left",width:"100%",padding:"10px 11px",borderRadius:7,background:"none",border:"none",cursor:"pointer",transition:"background .1s"}}
+      onMouseEnter={e=>e.currentTarget.style.background=`${accent}12`}
+      onMouseLeave={e=>e.currentTarget.style.background="none"}>
+      <span style={{width:24,height:24,borderRadius:6,background:`${accent}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>{icon}</span>
       <span style={{flex:1,minWidth:0}}>
-        <span style={{display:"block",fontSize:13,fontWeight:700,color:T.text,marginBottom:3}}>{title}</span>
-        <span style={{display:"block",fontSize:11.5,color:T.textMuted,lineHeight:1.5}}>{desc}</span>
-        <span style={{display:"inline-flex",alignItems:"center",gap:4,marginTop:7,fontSize:10,fontWeight:700,color:accent,textTransform:"uppercase",letterSpacing:"0.04em"}}>
-          <span style={{width:5,height:5,borderRadius:"50%",background:accent}}/> Needs {approver}'s approval
-        </span>
+        <span style={{display:"block",fontSize:12.5,fontWeight:700,color:T.text}}>{title}</span>
+        <span style={{display:"block",fontSize:11,color:T.textMuted,lineHeight:1.45,marginTop:2}}>{desc}</span>
       </span>
     </button>
   );
   return (
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div onClick={e=>e.stopPropagation()} style={{width:460,background:T.bgSurface,borderRadius:14,border:`1px solid ${T.border}`,overflow:"hidden",boxShadow:"0 24px 80px rgba(0,0,0,.4)"}}>
-        <div style={{padding:"18px 22px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
-          <div>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.5" stroke={T.amber} strokeWidth="1.4"/><path d="M5.5 7V4.8a2.5 2.5 0 0 1 4.9-.6" stroke={T.amber} strokeWidth="1.4" strokeLinecap="round"/></svg>
-              <span style={{fontSize:15,fontWeight:700,color:T.text}}>Remove legal hold rule</span>
-            </div>
-            <div style={{fontSize:12,color:T.textMuted,marginTop:4}}>{rule.table||"—"} · legal hold · {policyName}</div>
+    <div style={{position:"relative",display:"inline-block",...(style||{})}}>
+      <button onClick={()=>setOpen(o=>!o)}
+        style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,padding:"6px 11px",borderRadius:7,border:`1px solid ${T.amber}55`,background:`${T.amber}0d`,color:T.amber,cursor:"pointer"}}>
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.4"/><path d="M5.5 7V4.8a2.5 2.5 0 0 1 4.9-.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+        Remove rule
+        <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{transform:open?"rotate(180deg)":"none",transition:"transform .12s"}}><path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </button>
+      {open && (
+        <>
+          <div onClick={()=>setOpen(false)} style={{position:"fixed",inset:0,zIndex:40}}/>
+          <div style={{position:"absolute",top:"calc(100% + 5px)",left:0,zIndex:50,width:252,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 14px 44px rgba(0,0,0,.3)",overflow:"hidden",padding:4}}>
+            <Item accent={T.rose} title="Full unhold" desc="Release all records and delete this rule"
+              onClick={()=>{setOpen(false); onFull&&onFull();}}
+              icon={<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.5" stroke={T.rose} strokeWidth="1.4"/><path d="M5.5 7V4.8a2.5 2.5 0 0 1 4.9-.6" stroke={T.rose} strokeWidth="1.4" strokeLinecap="round"/></svg>}/>
+            <Item accent={T.amber} title="Partial unhold" desc="Release specific records; the hold stays active"
+              onClick={()=>{setOpen(false); onPartial&&onPartial();}}
+              icon={<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 8h7M3 5h10M3 11h5" stroke={T.amber} strokeWidth="1.4" strokeLinecap="round"/></svg>}/>
           </div>
-          <button onClick={onClose} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer",fontSize:20,lineHeight:1,padding:"0 2px"}}>×</button>
-        </div>
-        <div style={{padding:"16px 22px",display:"flex",flexDirection:"column",gap:10}}>
-          <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginBottom:2}}>Removing records from a legal hold is a controlled release — choose how much to release:</div>
-          <Opt accent={T.rose} title="Full unhold — release everything"
-            desc="Release every held record and delete this rule. The table is no longer under legal hold once approved."
-            onClick={onFull}
-            icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.5" stroke={T.rose} strokeWidth="1.4"/><path d="M5.5 7V4.8a2.5 2.5 0 0 1 4.9-.6" stroke={T.rose} strokeWidth="1.4" strokeLinecap="round"/></svg>}/>
-          <Opt accent={T.amber} title="Partial unhold — release specific records"
-            desc="Hand-pick the records to release. The rule and the hold stay active for everything else."
-            onClick={onPartial}
-            icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 8h7M3 5h10M3 11h5" stroke={T.amber} strokeWidth="1.4" strokeLinecap="round"/></svg>}/>
-        </div>
-        <div style={{padding:"12px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end"}}>
-          <button onClick={onClose} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",fontWeight:500}}>Cancel</button>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 };
@@ -6501,8 +6523,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   const [filterDropOpen, setFilterDropOpen]= useState(false);
   const [hovPolId,       setHovPolId]      = useState(null);
   const [deleteConfPol,  setDeleteConfPol] = useState(null);
-  const [manageHold, setManageHold] = useState(null); // {policyId, ruleId} — partial-unhold panel target (wizard or Rules tab)
-  const [removeHoldChoice, setRemoveHoldChoice] = useState(null); // {policyId, ruleId} — "Remove rule" full/partial unhold chooser
+  const [manageHold, setManageHold] = useState(null); // {policyId, ruleId} — partial-unhold drawer target (wizard or Rules tab)
   const [polPlusMenuOpen, setPolPlusMenuOpen] = useState(false);
   const [polNewCatOpen,   setPolNewCatOpen]   = useState(false);
   const [polNewCatDraft,  setPolNewCatDraft]  = useState({name:"",description:"",color:"#6366f1",owners:[],stewards:[],domains:[],tags:[],frameworks:[]});
@@ -8070,13 +8091,11 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                 </div>
                               )}
                               {/* Legal-hold removal — once the hold is approved & in effect, "Remove rule"
-                                  opens the full/partial unhold chooser (never a silent delete). */}
+                                  opens a full/partial unhold menu (never a silent delete). */}
                               {r.field==="legal_hold" && r.enforce && enfStatus==="approved" && !r.pendingUnhold && (
-                                <button onClick={()=>setRemoveHoldChoice({policyId:p.id, ruleId:r.id})}
-                                  style={{marginTop:8,display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,padding:"6px 11px",borderRadius:7,border:`1px solid ${T.amber}55`,background:`${T.amber}0d`,color:T.amber,cursor:"pointer"}}>
-                                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.4"/><path d="M5.5 7V4.8a2.5 2.5 0 0 1 4.9-.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-                                  Remove rule — full or partial unhold
-                                </button>
+                                <HoldRemoveMenu style={{marginTop:8}}
+                                  onFull={()=>handleRemoveRule(p.id, r.id)}
+                                  onPartial={()=>setManageHold({policyId:p.id, ruleId:r.id})}/>
                               )}
                               {r.field==="legal_hold" && r.pendingUnhold && (
                                 <div style={{marginTop:8}}>
@@ -10398,13 +10417,13 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                                 );
                                               })()}
                                               {/* ── Remove rule — only once the hold is approved & in effect.
-                                                  Opens the full/partial unhold chooser (never a silent delete). ── */}
+                                                  Opens the full/partial unhold menu (never a silent delete). ── */}
                                               {fd.action.verb==="Legal hold" && isEditMode && selPolicyId && ((enfApprovalFor(selPolicyId,r.id)||{}).status==="approved") && !r.pendingUnhold && (
-                                                <button onClick={()=>setRemoveHoldChoice({policyId:selPolicyId, ruleId:r.id})}
-                                                  style={{marginBottom:8,display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,padding:"7px 12px",borderRadius:7,border:`1px solid ${T.amber}55`,background:`${T.amber}0d`,color:T.amber,cursor:"pointer"}}>
-                                                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.4"/><path d="M5.5 7V4.8a2.5 2.5 0 0 1 4.9-.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-                                                  Remove rule — full or partial unhold
-                                                </button>
+                                                <div style={{marginBottom:8}}>
+                                                  <HoldRemoveMenu
+                                                    onFull={()=>handleRemoveRule(selPolicyId, r.id)}
+                                                    onPartial={()=>setManageHold({policyId:selPolicyId, ruleId:r.id})}/>
+                                                </div>
                                               )}
                                               {fd.action.verb==="Legal hold" && isEditMode && selPolicyId && r.pendingUnhold && (
                                                 <div style={{marginBottom:8}}>
@@ -11081,26 +11100,6 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
             enfApprovals={enfApprovals}
             onClose={()=>setManageHold(null)}
             onToast={onToast}
-          />
-        );
-      })()}
-
-      {/* Remove-rule chooser — full vs partial unhold. Full routes through handleRemoveRule
-          (fires the Unhold approval); Partial opens the release panel above. */}
-      {removeHoldChoice && (()=>{
-        const pol = policies.find(p=>p.id===removeHoldChoice.policyId);
-        const mr = ((isEditMode && selPolicyId===removeHoldChoice.policyId) ? wizardRules.find(r=>r.id===removeHoldChoice.ruleId) : null)
-                   || (pol?.rules||[]).find(r=>r.id===removeHoldChoice.ruleId);
-        if(!mr) return null;
-        const approver = (enfApprovalFor(removeHoldChoice.policyId, mr.id)||{}).approver || resolveTableOwner(mr.table);
-        return (
-          <RemoveHoldChooser
-            rule={mr}
-            policyName={pol?.name||newPol.name||"Policy"}
-            approver={approver}
-            onFull={()=>{ handleRemoveRule(removeHoldChoice.policyId, removeHoldChoice.ruleId); setRemoveHoldChoice(null); }}
-            onPartial={()=>{ setManageHold({policyId:removeHoldChoice.policyId, ruleId:removeHoldChoice.ruleId}); setRemoveHoldChoice(null); }}
-            onClose={()=>setRemoveHoldChoice(null)}
           />
         );
       })()}
