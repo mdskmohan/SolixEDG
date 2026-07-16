@@ -465,11 +465,12 @@ const ManageHoldModal = ({ rule, policyId, policyName, approver, meHandle, enfAp
   );
 };
 
-// "Remove rule" on an active, approved legal hold opens a small dropdown menu, not a delete —
-// removing a hold releases records, so it forks into Full unhold (release everything, rule goes
-// away) or Partial unhold (pick records, hold stays). Both routes are owner-approved. Self-
-// contained: owns its open state, closes on outside click.
-const HoldRemoveMenu = ({ onFull, onPartial, style }) => {
+// Removing an active, approved legal hold releases records, so the rule's remove control opens a
+// small dropdown — Full unhold (release everything, rule goes away) or Partial unhold (pick
+// records, hold stays), both owner-approved — instead of deleting outright. asX renders the same
+// "×" as every other rule (so legal hold looks identical); otherwise a labelled button.
+// Self-contained: owns its open state, closes on outside click.
+const HoldRemoveMenu = ({ onFull, onPartial, style, asX=false }) => {
   const [open, setOpen] = useState(false);
   const Item = ({ accent, title, desc, icon, onClick }) => (
     <button onClick={onClick}
@@ -484,17 +485,22 @@ const HoldRemoveMenu = ({ onFull, onPartial, style }) => {
     </button>
   );
   return (
-    <div style={{position:"relative",display:"inline-block",...(style||{})}}>
-      <button onClick={()=>setOpen(o=>!o)}
-        style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,padding:"6px 11px",borderRadius:7,border:`1px solid ${T.amber}55`,background:`${T.amber}0d`,color:T.amber,cursor:"pointer"}}>
-        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.4"/><path d="M5.5 7V4.8a2.5 2.5 0 0 1 4.9-.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
-        Remove rule
-        <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{transform:open?"rotate(180deg)":"none",transition:"transform .12s"}}><path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-      </button>
+    <div style={{position:"relative",display:"inline-flex",flexShrink:0,...(style||{})}}>
+      {asX ? (
+        <button onClick={()=>setOpen(o=>!o)} title="Remove rule"
+          style={{background:"none",border:"none",cursor:"pointer",color:open?T.amber:T.textMuted,fontSize:15,padding:"0 2px",lineHeight:1,flexShrink:0}}>×</button>
+      ) : (
+        <button onClick={()=>setOpen(o=>!o)}
+          style={{display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,padding:"6px 11px",borderRadius:7,border:`1px solid ${T.amber}55`,background:`${T.amber}0d`,color:T.amber,cursor:"pointer"}}>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.4"/><path d="M5.5 7V4.8a2.5 2.5 0 0 1 4.9-.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+          Remove rule
+          <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{transform:open?"rotate(180deg)":"none",transition:"transform .12s"}}><path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+      )}
       {open && (
         <>
           <div onClick={()=>setOpen(false)} style={{position:"fixed",inset:0,zIndex:40}}/>
-          <div style={{position:"absolute",top:"calc(100% + 5px)",left:0,zIndex:50,width:252,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 14px 44px rgba(0,0,0,.3)",overflow:"hidden",padding:4}}>
+          <div style={{position:"absolute",top:"calc(100% + 5px)",[asX?"right":"left"]:0,zIndex:50,width:252,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 14px 44px rgba(0,0,0,.3)",overflow:"hidden",padding:4}}>
             <Item accent={T.rose} title="Full unhold" desc="Release all records and delete this rule"
               onClick={()=>{setOpen(false); onFull&&onFull();}}
               icon={<svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="3" y="7" width="10" height="7" rx="1.5" stroke={T.rose} strokeWidth="1.4"/><path d="M5.5 7V4.8a2.5 2.5 0 0 1 4.9-.6" stroke={T.rose} strokeWidth="1.4" strokeLinecap="round"/></svg>}/>
@@ -8080,9 +8086,15 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                 <button onClick={()=>openEditRule(r)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 4px",lineHeight:1,flexShrink:0,borderRadius:5,fontSize:11}} onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}} title="Edit rule">
                                   <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                                 </button>
-                                {!(r.field==="legal_hold" && r.enforce && enfStatus==="approved") && (
-                                  <button onClick={()=>handleRemoveRule(p.id,r.id)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:15,padding:"0 2px",lineHeight:1,flexShrink:0}} title="Remove rule">×</button>
-                                )}
+                                {r.field==="legal_hold" && r.enforce && enfStatus==="approved"
+                                  ? (!r.pendingUnhold && (
+                                      <HoldRemoveMenu asX
+                                        onFull={()=>handleRemoveRule(p.id, r.id)}
+                                        onPartial={()=>setManageHold({policyId:p.id, ruleId:r.id})}/>
+                                    ))
+                                  : (
+                                      <button onClick={()=>handleRemoveRule(p.id,r.id)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:15,padding:"0 2px",lineHeight:1,flexShrink:0}} title="Remove rule">×</button>
+                                    )}
                               </div>
                               {inactive&&(
                                 <div style={{display:"flex",alignItems:"center",gap:5,marginTop:6}}>
@@ -8090,13 +8102,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                   <span style={{fontSize:10.5,fontWeight:600,color:inactiveColor}}>{enfStatus==="rejected"?"Inactive — rejected by owner":"Inactive — pending owner approval"}</span>
                                 </div>
                               )}
-                              {/* Legal-hold removal — once the hold is approved & in effect, "Remove rule"
-                                  opens a full/partial unhold menu (never a silent delete). */}
-                              {r.field==="legal_hold" && r.enforce && enfStatus==="approved" && !r.pendingUnhold && (
-                                <HoldRemoveMenu style={{marginTop:8}}
-                                  onFull={()=>handleRemoveRule(p.id, r.id)}
-                                  onPartial={()=>setManageHold({policyId:p.id, ruleId:r.id})}/>
-                              )}
+                              {/* Legal-hold removal now lives on the header × (opens the full/partial
+                                  unhold menu). Once a full unhold is in flight, show its status here. */}
                               {r.field==="legal_hold" && r.pendingUnhold && (
                                 <div style={{marginTop:8}}>
                                   <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:5}}>Full unhold in progress</div>
@@ -28824,13 +28831,6 @@ const InboxView = ({onToast}) => {
           {/* Body text */}
           {item.body&&<div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65,marginBottom:16}}>{item.body}</div>}
 
-          {/* Unhold workflow tracker — a legal-hold release is an approval process, so show the approver where it stands. */}
-          {item.type==="enforcement_approval" && (item.action==="Unhold"||item.action==="Partial Unhold") && (
-            <div style={{marginBottom:16,background:T.bgElevated,borderRadius:8,padding:"12px 14px",border:`1px solid ${T.border}`}}>
-              <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:10}}>{item.action==="Partial Unhold"?"Partial unhold":"Full unhold"} · workflow</div>
-              <UnholdStepper status={item.readAt?"approved":"pending"} variant={item.action==="Partial Unhold"?"partial":"full"}/>
-            </div>
-          )}
 
           {/* Assignee — display only for now; see effAssignee comment above. */}
           {itemRole(item)!=="fyi"&&(()=>{const a=effAssignee(item);const ini=a==="unassigned"?"?":a.split(".").map(s=>s[0]?.toUpperCase()||"").join("").slice(0,2);return (
