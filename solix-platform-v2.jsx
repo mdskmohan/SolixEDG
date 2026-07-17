@@ -529,7 +529,7 @@ const INITIAL_TAG_DEFS = [
   { id:'t9',  cert:'Approved', name:'Board reporting',   category:'business',    color:'#fbbf24', propagationMode:'hierarchy', propagationLocked:false, governanceRequired:false, managedBy:'Rahul M.', usageCount:11, description:'Feeds board-level reports and investor materials.',                                                     sourceAliases:[],                                                                    createdAt:'2026-02-15T00:00:00Z', createdBy:'Rahul M.' },
   { id:'t10', cert:'Approved', name:'Clinical trial data',category:'business',   color:'#fbbf24', propagationMode:'hierarchy', propagationLocked:false, governanceRequired:true,  managedBy:'Priya K.', usageCount:8, description:'FDA-regulated clinical trial data. Subject to 21 CFR Part 11.',                                        sourceAliases:['trial_data','clinical_data'],                                        createdAt:'2026-02-20T00:00:00Z', createdBy:'Priya K.' },
   { id:'t11', cert:'Approved', name:'Golden record',     category:'business',    color:'#fbbf24', propagationMode:'none',      propagationLocked:false, governanceRequired:false, managedBy:'Rahul M.', usageCount:5, description:'Master/trusted canonical version of this entity.',                                                     sourceAliases:[],                                                                    createdAt:'2026-03-01T00:00:00Z', createdBy:'Rahul M.' },
-  { id:'t12', cert:'Approved', name:'crm-source',        category:'custom',      color:'#a1a1aa', propagationMode:'none',      propagationLocked:false, governanceRequired:false, managedBy:null,        usageCount:9, description:'Data originating from the CRM system.',                                                                sourceAliases:[],                                                                    createdAt:'2026-03-10T00:00:00Z', createdBy:'Maya C.'  },
+  { id:'t12', cert:'Approved', name:'crm-source',        category:'custom',      color:'#a1a1aa', propagationMode:'hierarchy', propagationLocked:false, governanceRequired:false, managedBy:null,        usageCount:9, reverseSyncEnabled:true, description:'Data originating from the CRM system.',                                       sourceAliases:['crm_source','crm_origin','source_crm'],                               createdAt:'2026-03-10T00:00:00Z', createdBy:'Maya C.'  },
   { id:'t13', cert:'In Review', name:'needs-review',      category:'custom',      color:'#a1a1aa', propagationMode:'none',      propagationLocked:false, governanceRequired:false, managedBy:null,        usageCount:4, description:'Flagged for steward review. Temporary label.',                                                         sourceAliases:[],                                                                    createdAt:'2026-04-01T00:00:00Z', createdBy:'Analyst'  },
   { id:'t14', cert:'Deprecated', name:'deprecated',        category:'custom',      color:'#a1a1aa', propagationMode:'none',      propagationLocked:false, governanceRequired:false, managedBy:null,        usageCount:7, description:'Asset or field is deprecated and scheduled for removal.',                                              sourceAliases:[],                                                                    createdAt:'2026-03-15T00:00:00Z', createdBy:'Data Eng' },
 ];
@@ -572,12 +572,15 @@ const INITIAL_CONNECTOR_CONFIGS = {
       { id:'m4',  sourceTagName:'pci_scope',      edgTagId:'t3', reverseSyncAlias:'pci_scope',      status:'mapped'    },
       { id:'m5',  sourceTagName:'gdpr_scope',     edgTagId:'t4', reverseSyncAlias:'gdpr_scope',     status:'mapped'    },
       { id:'m6',  sourceTagName:'restricted',     edgTagId:null, reverseSyncAlias:'restricted',     status:'ambiguous' },
+      { id:'m15', sourceTagName:'crm_source',     edgTagId:'t12',reverseSyncAlias:'crm_source',     status:'mapped'    },
+      { id:'m16', sourceTagName:'deprecated',     edgTagId:'t14',reverseSyncAlias:'deprecated',     status:'mapped'    },
     ]},
   dbt:        { connectorId:'dbt',        syncEnabled:true,  reverseSyncEnabled:false, reverseSyncApproval:false, conflictRule:'flag_always',  lastSyncAt:'2026-04-20T09:42:00Z', lastSyncStatus:'success',  lastSyncNewTags:1, lastSyncConflicts:0,
     nameMappings:[
       { id:'m7',  sourceTagName:'contains_pii',      edgTagId:'t1', reverseSyncAlias:'contains_pii',      status:'mapped'   },
       { id:'m8',  sourceTagName:'hipaa_flag',         edgTagId:'t5', reverseSyncAlias:'hipaa_flag',         status:'mapped'   },
       { id:'m9',  sourceTagName:'financial_forecast', edgTagId:null, reverseSyncAlias:'financial_forecast', status:'unmapped' },
+      { id:'m19', sourceTagName:'source_crm',         edgTagId:'t12',reverseSyncAlias:'source_crm',         status:'mapped'   },
     ]},
   bigquery:   { connectorId:'bigquery',   syncEnabled:true,  reverseSyncEnabled:false, reverseSyncApproval:false, conflictRule:'steward_wins', lastSyncAt:'2026-04-19T22:00:00Z', lastSyncStatus:'success',  lastSyncNewTags:0, lastSyncConflicts:0,
     nameMappings:[
@@ -589,6 +592,8 @@ const INITIAL_CONNECTOR_CONFIGS = {
       { id:'m12', sourceTagName:'pii',            edgTagId:'t1', reverseSyncAlias:'pii',            status:'mapped'    },
       { id:'m13', sourceTagName:'personal_data',  edgTagId:'t1', reverseSyncAlias:'personal_data',  status:'mapped'    },
       { id:'m14', sourceTagName:'phi',            edgTagId:'t2', reverseSyncAlias:'phi',            status:'mapped'    },
+      { id:'m17', sourceTagName:'crm_origin',     edgTagId:'t12',reverseSyncAlias:'crm_origin',     status:'mapped'    },
+      { id:'m18', sourceTagName:'is_deprecated',  edgTagId:'t14',reverseSyncAlias:'is_deprecated',  status:'mapped'    },
     ]},
 };
 
