@@ -664,6 +664,13 @@ const INITIAL_TAG_POLICIES = {
   removalFromCertified:'approval', auditLogEnabled:true, notifyOnLargePropagate:true,
 };
 
+// Propagation is an explicit, tracked background job (not a silent cascade).
+// Each record captures scope, status, blast-radius and who triggered it.
+const INITIAL_PROP_JOBS = [
+  { id:'pj1', assetId:ASSETS[1].id, tagId:'t4', scope:'lineage',   status:'done', startedAt:'2026-04-15T09:43:00Z', finishedAt:'2026-04-15T09:43:04Z', updated:1,  target:1,  by:'system',   targets:[ASSETS[0].name] },
+  { id:'pj2', assetId:ASSETS[1].id, tagId:'t5', scope:'both',      status:'done', startedAt:'2026-04-01T08:01:00Z', finishedAt:'2026-04-01T08:01:06Z', updated:1,  target:1,  by:'system',   targets:[ASSETS[3].name] },
+];
+
 // ─────────────────────────────────────────────
 // TAG PROVIDER
 // ─────────────────────────────────────────────
@@ -673,6 +680,7 @@ function TagProvider({ children }) {
   const [connectorConfigs, setConnectorConfigs] = useState(INITIAL_CONNECTOR_CONFIGS);
   const [inbox,            setInbox]            = useState(INITIAL_INBOX);
   const [tagPolicies,      setTagPolicies]      = useState(INITIAL_TAG_POLICIES);
+  const [propagationJobs,  setPropagationJobs]  = useState(INITIAL_PROP_JOBS);
 
   const unresolvedCount = inbox.filter(i => !i.resolvedAt).length;
   const conflictCount   = Object.values(assignments).flat().filter(a => a.status==='conflict').length;
@@ -753,8 +761,28 @@ function TagProvider({ children }) {
 
   const updateTagPolicies = (patch) => setTagPolicies(prev=>({...prev,...patch}));
 
+  // ── Propagation as a tracked background job ──
+  const getPropagationJobs = (assetId, tagId) =>
+    propagationJobs
+      .filter(j => j.assetId===assetId && (tagId ? j.tagId===tagId : true))
+      .sort((a,b)=> (b.startedAt||'').localeCompare(a.startedAt||''));
+
+  const startPropagation = (assetId, tagId, scope, meta={}) => {
+    const id = 'pj'+Date.now();
+    const target = meta.target ?? 0;
+    const job = { id, assetId, tagId, scope, status:'queued', startedAt:new Date().toISOString(), finishedAt:null, updated:0, target, by: meta.by||'Current User', targets: meta.targets||[] };
+    setPropagationJobs(prev=>[job,...prev]);
+    // Simulate the async background worker: queued → running → done.
+    setTimeout(()=>setPropagationJobs(prev=>prev.map(j=>j.id===id?{...j,status:'running',updated:Math.ceil(target/2)}:j)), 600);
+    setTimeout(()=>setPropagationJobs(prev=>prev.map(j=>j.id===id?{...j,status:'done',updated:target,finishedAt:new Date().toISOString()}:j)), 1500);
+    return id;
+  };
+
+  // Reverse-sync intent lives on the tag (one toggle); connector-level capability gates whether it actually pushes.
+  const setTagReverseSync = (tagId, enabled) => setTagDefs(prev=>prev.map(t=>t.id===tagId?{...t,reverseSyncEnabled:enabled}:t));
+
   return (
-    <TagContext.Provider value={{ tagDefs, assignments, connectorConfigs, inbox, tagPolicies, unresolvedCount, conflictCount, pendingCount, getAssetAssignments, getTagDef, applyTag, removeTag, resolveInboxItem, createTagDef, updateTagDef, deleteTagDef, updateConnectorConfig, upsertNameMapping, updateTagPolicies }}>
+    <TagContext.Provider value={{ tagDefs, assignments, connectorConfigs, inbox, tagPolicies, propagationJobs, unresolvedCount, conflictCount, pendingCount, getAssetAssignments, getTagDef, applyTag, removeTag, resolveInboxItem, createTagDef, updateTagDef, deleteTagDef, updateConnectorConfig, upsertNameMapping, updateTagPolicies, getPropagationJobs, startPropagation, setTagReverseSync }}>
       {children}
     </TagContext.Provider>
   );
@@ -15530,7 +15558,7 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
   </div>;
 }
 const AssetTagsTab = ({assetId, onToast}) => {
-  const { tagDefs, getAssetAssignments, applyTag, removeTag, resolveInboxItem, getTagDef } = useTagCtx();
+  const { tagDefs, getAssetAssignments, applyTag, removeTag, resolveInboxItem, getTagDef, startPropagation, getPropagationJobs, propagationJobs } = useTagCtx();
   const navigate = useNav();
   const [selectedAsgn, setSelectedAsgn] = useState(null);
   const [applyModalOpen, setApplyModalOpen] = useState(false);
@@ -15538,6 +15566,15 @@ const AssetTagsTab = ({assetId, onToast}) => {
   const [selectedTagId, setSelectedTagId] = useState(null);
   const [removeNote, setRemoveNote] = useState('');
   const [removingId, setRemovingId] = useState(null);
+  const [propModal, setPropModal] = useState(null);   // assignment being propagated
+  const [propScope, setPropScope] = useState('both'); // hierarchy | lineage | both
+
+  // Estimated blast radius per scope (prototype heuristic; real impl walks the graph).
+  const PROP_SCOPE_META = {
+    hierarchy: { label:'Only hierarchy', desc:'Cascades to child objects in this schema / container.',                      color:T.amber, est:6  },
+    lineage:   { label:'Only lineage',   desc:'Follows the lineage graph downstream — can cross connections.',              color:T.blue,  est:11 },
+    both:      { label:'Hierarchy + lineage', desc:'Schema children AND downstream lineage assets. Maximum coverage.',       color:T.violet,est:15 },
+  };
 
   const assignments = getAssetAssignments(assetId);
   const active = assignments.filter(a => a.status !== 'rejected');
@@ -15648,6 +15685,28 @@ const AssetTagsTab = ({assetId, onToast}) => {
             {selAsgn.status==='pending'&&<><button onClick={()=>{resolveInboxItem('i'+assetId,'approve');onToast('Tag approved','success');}} style={{padding:'5px 12px',background:'transparent',border:`1px solid ${T.accent}`,color:T.accent,borderRadius:5,fontSize:12,cursor:'pointer'}}>Approve</button><button onClick={()=>{removeTag(assetId,selAsgn.id,'Rejected by steward');onToast('Tag rejected','success');setSelectedAsgn(null);}} style={{padding:'5px 12px',background:'none',border:'none',color:T.textMuted,fontSize:12,cursor:'pointer'}}>Reject</button></>}
             {selAsgn.status==='conflict'&&<><button onClick={()=>{}} style={{padding:'5px 12px',background:'transparent',border:`1px solid ${T.accent}`,color:T.accent,borderRadius:5,fontSize:12,cursor:'pointer'}}>Keep override</button><button onClick={()=>{}} style={{padding:'5px 12px',background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,borderRadius:5,fontSize:12,cursor:'pointer'}}>Accept source</button></>}
           </div>
+          {/* Propagate — explicit, tracked background job */}
+          <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${T.border}`}}>
+            {(()=>{
+              const jobs = getPropagationJobs(assetId, selAsgn.tagId);
+              const latest = jobs[0];
+              return (
+                <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+                  <button onClick={()=>{ const m=selDef.propagationMode; setPropScope((m==='hierarchy'||m==='lineage'||m==='both')?m:'both'); setPropModal(selAsgn); }}
+                    style={{display:'inline-flex',alignItems:'center',gap:6,padding:'6px 12px',borderRadius:6,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600,cursor:'pointer'}}>
+                    ⇄ Propagate…
+                  </button>
+                  {latest&&(
+                    <span style={{fontSize:11.5,color:latest.status==='done'?T.green:T.amber,display:'inline-flex',alignItems:'center',gap:6}}>
+                      {latest.status==='done'
+                        ? <>✓ Last propagated {latest.scope} · {latest.updated} object{latest.updated!==1?'s':''}</>
+                        : <><span style={{width:9,height:9,borderRadius:'50%',border:`2px solid ${T.amber}`,borderTopColor:'transparent',display:'inline-block',animation:'spin 1s linear infinite'}}/> Propagating {latest.scope}… {latest.updated}/{latest.target}</>}
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
           {!selDef.propagationLocked ? (
             <button onClick={()=>{handleRemove(selAsgn);setSelectedAsgn(null);}} style={{fontSize:12,color:T.rose,background:'none',border:'none',cursor:'pointer',marginTop:10,padding:0}}>Remove this tag</button>
           ) : (
@@ -15706,6 +15765,87 @@ const AssetTagsTab = ({assetId, onToast}) => {
           </div>
         </div>
       )}
+
+      {/* Propagate Modal — explicit scope + tracked background job + history */}
+      {propModal&&(()=>{
+        const pDef = getTagDef(propModal.tagId);
+        if(!pDef) return null;
+        const locked = pDef.propagationLocked;
+        const lockedScope = (pDef.propagationMode==='hierarchy'||pDef.propagationMode==='lineage'||pDef.propagationMode==='both')?pDef.propagationMode:'both';
+        const scope = locked ? lockedScope : propScope;
+        const est = PROP_SCOPE_META[scope].est;
+        const crossConn = scope==='lineage'||scope==='both';
+        const history = getPropagationJobs(assetId, propModal.tagId);
+        return (
+          <div style={{position:'absolute',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',zIndex:60,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:8}} onClick={()=>setPropModal(null)}>
+            <div onClick={e=>e.stopPropagation()} style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,width:460,maxHeight:'86vh',display:'flex',flexDirection:'column',boxShadow:'0 16px 48px rgba(0,0,0,0.4)'}}>
+              <div style={{padding:'14px 16px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}><span style={{fontSize:13,fontWeight:700,color:T.text}}>Propagate</span><TagPill tagDef={pDef} size='sm'/></div>
+                <button onClick={()=>setPropModal(null)} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',fontSize:16}}>×</button>
+              </div>
+
+              <div style={{padding:'16px',overflowY:'auto',display:'flex',flexDirection:'column',gap:16}}>
+                {/* Scope picker */}
+                <div>
+                  <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Propagation scope</div>
+                  {locked ? (
+                    <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`}}>
+                      <span style={{fontSize:12.5,fontWeight:600,color:PROP_SCOPE_META[scope].color}}>{PROP_SCOPE_META[scope].label}</span>
+                      <span style={{fontSize:11,color:T.textMuted}}>🔒 locked by governance policy</span>
+                    </div>
+                  ) : (
+                    <div style={{display:'flex',gap:6}}>
+                      {['hierarchy','lineage','both'].map(s=>{
+                        const sm=PROP_SCOPE_META[s]; const sel=propScope===s;
+                        return (
+                          <button key={s} onClick={()=>setPropScope(s)} style={{flex:1,padding:'8px 6px',borderRadius:7,border:`1.5px solid ${sel?sm.color:T.border}`,background:sel?`${sm.color}18`:'transparent',color:sel?sm.color:T.textSub,fontSize:11.5,fontWeight:sel?700:500,cursor:'pointer',transition:'all .12s'}}>{sm.label}</button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div style={{fontSize:11.5,color:T.textMuted,marginTop:8,lineHeight:1.5}}>{PROP_SCOPE_META[scope].desc}</div>
+                </div>
+
+                {/* Blast-radius preview */}
+                <div style={{padding:'12px 14px',background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:18,fontWeight:800,color:PROP_SCOPE_META[scope].color,fontFamily:"'Geist Mono',monospace"}}>~{est}</span>
+                    <span style={{fontSize:12.5,color:T.textSub}}>object{est!==1?'s':''} will inherit this tag</span>
+                  </div>
+                  {crossConn && <div style={{fontSize:11,color:T.blue,marginTop:6,display:'flex',alignItems:'center',gap:5}}>↗ Lineage can cross connections — downstream assets in other sources will be tagged (flagged with provenance).</div>}
+                </div>
+
+                <div style={{fontSize:11,color:T.textMuted,display:'flex',alignItems:'flex-start',gap:6,lineHeight:1.5}}>
+                  <span style={{flexShrink:0}}>ℹ</span> Propagation runs as a background job. You can track its status and history below.
+                </div>
+
+                {/* History */}
+                {history.length>0&&(
+                  <div>
+                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Propagation history</div>
+                    <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:'hidden'}}>
+                      {history.slice(0,5).map((j,i)=>(
+                        <div key={j.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderBottom:i<Math.min(history.length,5)-1?`1px solid ${T.border}`:'none',background:i%2?T.bgSurface:'transparent'}}>
+                          <span style={{width:7,height:7,borderRadius:'50%',background:j.status==='done'?T.green:T.amber,flexShrink:0}}/>
+                          <span style={{fontSize:11.5,color:T.textSub,textTransform:'capitalize',flex:1}}>{j.scope} · {j.status==='done'?`${j.updated} object${j.updated!==1?'s':''}`:`${j.updated}/${j.target} …`}</span>
+                          <span style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{(j.startedAt||'').slice(0,10)}</span>
+                          <span style={{fontSize:10.5,color:T.textMuted}}>{j.by}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div style={{padding:'12px 16px',borderTop:`1px solid ${T.border}`,display:'flex',gap:8,justifyContent:'flex-end'}}>
+                <button onClick={()=>setPropModal(null)} style={{padding:'8px 14px',background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,borderRadius:7,fontSize:12.5,cursor:'pointer'}}>Cancel</button>
+                <button onClick={()=>{ startPropagation(assetId, propModal.tagId, scope, {target:est, by:'Current User'}); onToast(`Propagating ${pDef.name} (${scope}) — running in background`,'success'); setPropModal(null); }}
+                  style={{padding:'8px 18px',background:T.accent,border:'none',color:'#fff',borderRadius:7,fontSize:12.5,fontWeight:700,cursor:'pointer'}}>Propagate now</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
@@ -17136,6 +17276,16 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
   const [assetGlOpen,    setAssetGlOpen]   = useState(false);
   const [assetGlSearch,  setAssetGlSearch] = useState("");
 
+  // ── Tag propagation (explicit, tracked background job) ──
+  const _tagCtx = useTagCtx();
+  const [propTag,   setPropTag]   = useState(null);   // tag name being propagated
+  const [propScope, setPropScope] = useState('both'); // hierarchy | lineage | both
+  const PROP_SCOPE_META = {
+    hierarchy: { label:'Only hierarchy',      desc:'Cascades to child objects in this schema / container.',              color:T.amber,  est:6  },
+    lineage:   { label:'Only lineage',        desc:'Follows the lineage graph downstream — can cross connections.',      color:T.blue,   est:11 },
+    both:      { label:'Hierarchy + lineage', desc:'Schema children AND downstream lineage assets. Maximum coverage.',    color:T.violet, est:15 },
+  };
+
   const DOMAINS_LIST = ["Commerce","Finance","Product","Marketing","ML","Engineering"];
   const USERS_LIST   = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
   const ava          = name => (name||"?").split(".").map(s=>s[0]?.toUpperCase()||"").join("");
@@ -17907,7 +18057,8 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
           <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
             {(data.tags||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
             {(showAllTags?data.tags||[]:(data.tags||[]).slice(0,3)).map(t=>{const c=tcFull(t);return(
-              <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}</span>
+              <span key={t} title="Click to propagate" onClick={()=>{ const def=_tagCtx?.tagDefs.find(td=>td.name.toLowerCase()===t.toLowerCase()); const m=def?.propagationMode; setPropScope((m==='hierarchy'||m==='lineage'||m==='both')?m:'both'); setPropTag(t); }}
+                style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600,cursor:"pointer"}}>{t}<span style={{opacity:.5,fontSize:9}}>⇄</span></span>
             );})}
             {(data.tags||[]).length>3&&!showAllTags&&<span onClick={()=>setShowAllTags(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{(data.tags||[]).length-3} more</span>}
             {(data.tags||[]).length>3&&showAllTags&&<span onClick={()=>setShowAllTags(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
@@ -17937,6 +18088,82 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
             </div>
           )}
         </div>
+
+        {/* Propagate modal — click a tag → choose scope → tracked background job + history */}
+        {propTag&&(()=>{
+          const pDef = _tagCtx?.tagDefs.find(td=>td.name.toLowerCase()===propTag.toLowerCase());
+          const pTagId = pDef?.id || ('name:'+propTag);
+          const locked = !!pDef?.propagationLocked;
+          const lockedScope = (pDef?.propagationMode==='hierarchy'||pDef?.propagationMode==='lineage'||pDef?.propagationMode==='both')?pDef.propagationMode:'both';
+          const scope = locked ? lockedScope : propScope;
+          const est = PROP_SCOPE_META[scope].est;
+          const crossConn = scope==='lineage'||scope==='both';
+          const history = _tagCtx?.getPropagationJobs(asset.id, pTagId) || [];
+          const pc = tcFull(propTag);
+          return (
+            <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1200,backdropFilter:'blur(3px)'}} onClick={()=>setPropTag(null)}>
+              <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,width:460,maxHeight:'86vh',display:'flex',flexDirection:'column',boxShadow:'0 24px 60px rgba(0,0,0,.35)'}} onClick={e=>e.stopPropagation()}>
+                <div style={{padding:'14px 18px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:14,fontWeight:700,color:T.text}}>Propagate</span>
+                    <span style={{display:'inline-flex',alignItems:'center',fontSize:11.5,padding:'3px 10px 3px 9px',borderRadius:5,background:pc.bg,borderLeft:`3px solid ${pc.color}`,color:pc.color,fontWeight:600}}>{propTag}</span>
+                    {locked&&<span style={{fontSize:10.5,color:T.textMuted}}>🔒 locked</span>}
+                  </div>
+                  <button onClick={()=>setPropTag(null)} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',fontSize:16}}>×</button>
+                </div>
+                <div style={{padding:'16px 18px',overflowY:'auto',display:'flex',flexDirection:'column',gap:16}}>
+                  {/* Scope */}
+                  <div>
+                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Propagation scope</div>
+                    {locked ? (
+                      <div style={{display:'flex',alignItems:'center',gap:8,padding:'9px 12px',borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                        <span style={{fontSize:12.5,fontWeight:600,color:PROP_SCOPE_META[scope].color}}>{PROP_SCOPE_META[scope].label}</span>
+                        <span style={{fontSize:11,color:T.textMuted}}>🔒 fixed by governance policy</span>
+                      </div>
+                    ) : (
+                      <div style={{display:'flex',gap:6}}>
+                        {['hierarchy','lineage','both'].map(s=>{const sm=PROP_SCOPE_META[s];const sel=propScope===s;return(
+                          <button key={s} onClick={()=>setPropScope(s)} style={{flex:1,padding:'8px 6px',borderRadius:7,border:`1.5px solid ${sel?sm.color:T.border}`,background:sel?`${sm.color}18`:'transparent',color:sel?sm.color:T.textSub,fontSize:11.5,fontWeight:sel?700:500,cursor:'pointer',transition:'all .12s'}}>{sm.label}</button>
+                        );})}
+                      </div>
+                    )}
+                    <div style={{fontSize:11.5,color:T.textMuted,marginTop:8,lineHeight:1.5}}>{PROP_SCOPE_META[scope].desc}</div>
+                  </div>
+                  {/* Blast radius */}
+                  <div style={{padding:'12px 14px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8}}>
+                      <span style={{fontSize:18,fontWeight:800,color:PROP_SCOPE_META[scope].color,fontFamily:"'Geist Mono',monospace"}}>~{est}</span>
+                      <span style={{fontSize:12.5,color:T.textSub}}>object{est!==1?'s':''} will inherit this tag</span>
+                    </div>
+                    {crossConn&&<div style={{fontSize:11,color:T.blue,marginTop:6}}>↗ Lineage can cross connections — downstream assets in other sources get tagged (flagged with provenance).</div>}
+                  </div>
+                  <div style={{fontSize:11,color:T.textMuted,display:'flex',alignItems:'flex-start',gap:6,lineHeight:1.5}}><span>ℹ</span> Propagation runs as a background job — track its status and history below.</div>
+                  {/* History */}
+                  {history.length>0&&(
+                    <div>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:8}}>Propagation history</div>
+                      <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:'hidden'}}>
+                        {history.slice(0,5).map((j,i)=>(
+                          <div key={j.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderBottom:i<Math.min(history.length,5)-1?`1px solid ${T.border}`:'none',background:i%2?T.bgElevated:'transparent'}}>
+                            <span style={{width:7,height:7,borderRadius:'50%',background:j.status==='done'?T.green:T.amber,flexShrink:0}}/>
+                            <span style={{fontSize:11.5,color:T.textSub,textTransform:'capitalize',flex:1}}>{j.scope} · {j.status==='done'?`${j.updated} object${j.updated!==1?'s':''}`:`${j.updated}/${j.target} …`}</span>
+                            <span style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{(j.startedAt||'').slice(0,10)}</span>
+                            <span style={{fontSize:10.5,color:T.textMuted}}>{j.by}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div style={{padding:'12px 18px',borderTop:`1px solid ${T.border}`,display:'flex',gap:8,justifyContent:'flex-end'}}>
+                  <button onClick={()=>setPropTag(null)} style={{padding:'8px 14px',background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,borderRadius:7,fontSize:12.5,cursor:'pointer'}}>Cancel</button>
+                  <button onClick={()=>{ _tagCtx?.startPropagation(asset.id, pTagId, scope, {target:est, by:meHandle}); onToast&&onToast(`Propagating ${propTag} (${scope}) — running in background`,'success'); setPropTag(null); }}
+                    style={{padding:'8px 18px',background:T.accent,border:'none',color:'#fff',borderRadius:7,fontSize:12.5,fontWeight:700,cursor:'pointer'}}>Propagate now</button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* BUSINESS GLOSSARY */}
         <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
@@ -24697,6 +24924,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
   const [enableLineage,   setEnableLineage]   = useState(true);
   const [enableProfiling, setEnableProfiling] = useState(false);
   const [enableUsage,     setEnableUsage]     = useState(false);
+  const [enableTagSync,   setEnableTagSync]   = useState(true);
   // Test connection state (combined auth + discovery)
   const [testState,    setTestState]   = useState("idle"); // idle|running|success|error
   const [testPhase,    setTestPhase]   = useState(0);
@@ -25321,6 +25549,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
                     {key:"lineage",  label:"Lineage",            desc:"Data flow between tables and transformations.", value:enableLineage, setter:setEnableLineage},
                     {key:"profiling",label:"Data Profiling",     desc:"Column statistics: null %, distinct count, distributions.", value:enableProfiling, setter:setEnableProfiling},
                     {key:"usage",    label:"Usage Analytics",    desc:"Query logs to surface popular and unused assets.", value:enableUsage, setter:setEnableUsage},
+                    {key:"tagsync",  label:"Tag Sync",           desc:"Pull classification tags from this source during ingestion. New source tags auto-create an EDG tag for review. Push / reverse sync is configured later in the connection's Tag sync tab.", value:enableTagSync, setter:setEnableTagSync},
                   ].map(app=>(
                     <div key={app.key} style={{display:"flex",alignItems:"center",gap:14,padding:"11px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
                       <Toggle on={app.value} onChange={app.disabled?undefined:()=>app.setter(v=>!v)} disabled={app.disabled}/>
@@ -31313,7 +31542,7 @@ const PersonPicker = ({value, onChange, placeholder='Unassigned', disabled=false
 };
 
 const TagManagementView = ({onToast, deepLinkTagId}) => {
-  const { tagDefs, assignments, connectorConfigs, inbox, createTagDef, updateTagDef, deleteTagDef, upsertNameMapping } = useTagCtx();
+  const { tagDefs, assignments, connectorConfigs, inbox, createTagDef, updateTagDef, deleteTagDef, upsertNameMapping, setTagReverseSync, updateConnectorConfig } = useTagCtx();
   const navigate = useNav();
   const { role: tmvRole, roleCfg: tmvRoleCfg } = useRole();
   const meHandle = ((tmvRoleCfg&&tmvRoleCfg.email)||"you@jnj").split("@")[0];
@@ -31355,6 +31584,7 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
   const [aliasInput,   setAliasInput]   = useState('');
   const [flashSaved,   setFlashSaved]   = useState(false);
   const [syncDirs,     setSyncDirs]     = useState({});   // {connId::tagId: 'forward'|'reverse'|'both'|'off'}
+  const [rsPreview,    setRsPreview]    = useState(false); // reverse-sync enable confirmation (blast-radius preview)
   const [catDropOpen,  setCatDropOpen]  = useState(false); // category dropdown in tag detail sidebar
   const [catDropSearch,setCatDropSearch]= useState('');    // search within that dropdown
   const catDropRef = useRef(null);
@@ -31816,6 +32046,7 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
             const draft = editing ? editDraft : selTag;
             const affectedAssets = ASSETS.filter(a=>Object.values(assignments).flat().some(asn=>asn.tagId===selTag.id&&asn.status!=='rejected'&&(asn.assetId===a.id||asn.assetName===a.name)));
             const tagSyncRows = Object.entries(connectorConfigs).flatMap(([connId,cfg])=>(cfg.nameMappings||[]).filter(m=>m.edgTagId===selTag.id).map(m=>({connId,cfg,m})));
+            const tagConnIds  = [...new Set(tagSyncRows.map(r=>r.connId))];
             const tagActivity = [
               ...inbox.filter(i=>i.tagName===selTag.name).map(i=>({date:i.createdAt?.slice(0,10)||'—',action:i.type==='sync_conflict'?'Sync conflict':i.type==='pending_approval'?'Approval requested':'Inbox item',by:i.sourceSystem||'System',detail:i.note||i.assetName||'',resolved:!!i.resolvedAt})),
               {date:'2026-01-10',action:'Tag created',by:'Admin',detail:'Initial definition',resolved:true},
@@ -31866,7 +32097,7 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                     {[
                       {key:'overview',   label:'Overview'},
                       {key:'assets',     label:'Linked Assets', count:affectedAssets.length},
-                      {key:'connectors', label:'Assignments', count:tagSyncRows.length},
+                      {key:'connectors', label:'Sources & Sync', count:tagConnIds.length},
                       {key:'activity',   label:'Audit Logs',   count:tagActivity.length},
                     ].map(({key:t,label,count})=>(
                       <button key={t} onClick={()=>setDetailTab(t)}
@@ -32092,58 +32323,85 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                     </div>
                   )}
 
-                  {/* ── CONNECTORS TAB ── */}
-                  {detailTab==='connectors'&&(
+                  {/* ── SOURCES & SYNC TAB ── */}
+                  {detailTab==='connectors'&&(()=>{
+                    // Two-tier model: this EDG classification (parent) → its source-system variants (children).
+                    const rsDefault = selTag.category==='sensitivity'||selTag.category==='regulatory';
+                    const rsOn = selTag.reverseSyncEnabled ?? rsDefault;
+                    const byConn = {};
+                    tagSyncRows.forEach(({connId,cfg,m})=>{ (byConn[connId] || (byConn[connId]={cfg,rows:[]})).rows.push(m); });
+                    const pushable = tagConnIds.filter(id=>connectorConfigs[id]?.reverseSyncEnabled);
+                    const activeSources = rsOn ? pushable.length : 0;
+                    const setPrimary = (connId,mapId)=>{ (byConn[connId]?.rows||[]).forEach(r=>upsertNameMapping(connId,{...r,writebackPrimary:r.id===mapId})); };
+                    const nice = id => id.charAt(0).toUpperCase()+id.slice(1);
+                    return (
                     <div style={{maxWidth:680,display:'flex',flexDirection:'column',gap:16}}>
 
-                      {/* Sync direction legend */}
-                      <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,padding:'10px 14px',fontSize:11.5,color:T.textMuted,lineHeight:1.7}}>
-                        <strong style={{color:T.textSub}}>→ Forward</strong> — EDG pushes tag to source system &nbsp;·&nbsp;
-                        <strong style={{color:T.textSub}}>← Reverse</strong> — source writes tag back to EDG &nbsp;·&nbsp;
-                        <strong style={{color:T.textSub}}>↔ Both</strong> — bidirectional &nbsp;·&nbsp;
-                        <strong style={{color:T.textSub}}>○ Off</strong> — mapping only, no sync
+                      {/* ── Reverse sync master (tag-level intent) ── */}
+                      <div style={{background:T.bgSurface,border:`1px solid ${rsOn?T.accent+'44':T.border}`,borderRadius:10,overflow:'hidden'}}>
+                        <div style={{padding:'14px 16px',display:'flex',alignItems:'flex-start',gap:12}}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
+                              <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Reverse sync</span>
+                              <span style={{fontSize:10.5,fontWeight:700,padding:'1px 7px',borderRadius:99,background:rsOn?'rgba(22,163,74,.12)':T.bgElevated,color:rsOn?'#16a34a':T.textMuted}}>{rsOn?`→ ${activeSources} of ${tagConnIds.length} sources`:'Off'}</span>
+                            </div>
+                            <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.55}}>Mirror this classification back to source systems. Writes only to sources whose connection allows push (below).</div>
+                          </div>
+                          <div onClick={()=>{ if(rsOn){ setTagReverseSync(selTag.id,false); onToast(`Reverse sync disabled for ${selTag.name}`,'success'); } else { setRsPreview(true); } }}
+                            style={{width:34,height:19,borderRadius:10,background:rsOn?T.accent:T.border,position:'relative',cursor:'pointer',transition:'background .2s',flexShrink:0,marginTop:2}}>
+                            <div style={{position:'absolute',top:3,left:rsOn?18:3,width:13,height:13,borderRadius:'50%',background:'#fff',transition:'left .2s'}}/>
+                          </div>
+                        </div>
+                        {rsOn&&pushable.length<tagConnIds.length&&(
+                          <div style={{padding:'8px 16px',borderTop:`1px solid ${T.border}`,background:T.amberDim,fontSize:11,color:T.amber,display:'flex',alignItems:'center',gap:6}}>
+                            ⚠ {tagConnIds.length-pushable.length} source{tagConnIds.length-pushable.length!==1?'s':''} won't receive pushes — push is disabled on that connection.
+                          </div>
+                        )}
                       </div>
 
-                      {/* Connector rows */}
+                      {/* ── Two-tier: EDG classification → source variants per connector ── */}
                       <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
-                        <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.border}`,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Connected Sources</div>
-                        {tagSyncRows.length===0
+                        <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.border}`,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Source variants</div>
+                        {tagConnIds.length===0
                           ? <div style={{padding:'40px 24px',textAlign:'center'}}>
                               <div style={{fontSize:26,marginBottom:10,opacity:.25}}>⇄</div>
-                              <div style={{fontSize:13,fontWeight:500,color:T.textSub,marginBottom:4}}>No connectors mapped</div>
-                              <div style={{fontSize:12,color:T.textMuted}}>Add connector aliases in Overview to enable sync configuration.</div>
+                              <div style={{fontSize:13,fontWeight:500,color:T.textSub,marginBottom:4}}>No source variants mapped</div>
+                              <div style={{fontSize:12,color:T.textMuted}}>Map source tag names to this classification from a connector's Tag sync tab.</div>
                             </div>
-                          : tagSyncRows.map(({connId,m},i)=>{
-                              const dirKey=`${connId}::${selTag.id}`;
-                              const dir=syncDirs[dirKey]||'forward';
-                              const dirOpt=SYNC_DIR_OPTS.find(o=>o.v===dir)||SYNC_DIR_OPTS[0];
+                          : tagConnIds.map((connId,ci)=>{
+                              const {rows}=byConn[connId];
+                              const canPush=!!connectorConfigs[connId]?.reverseSyncEnabled;
+                              const primary=rows.find(r=>r.writebackPrimary)||rows[0];
+                              const dim = !(rsOn&&canPush);
                               return (
-                                <div key={i} style={{padding:'14px 16px',borderBottom:i<tagSyncRows.length-1?`1px solid ${T.border}`:'none'}}>
-                                  <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:10}}>
-                                    <ServiceIcon service={connId} size={22}/>
-                                    <div style={{flex:1,minWidth:0}}>
-                                      <div style={{fontSize:13,fontWeight:600,color:T.text}}>{connId.charAt(0).toUpperCase()+connId.slice(1)}</div>
-                                      <div style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>alias: <span style={{color:T.textSub}}>{m.sourceTagName}</span></div>
-                                    </div>
-                                    <span style={{fontSize:11,padding:'2px 8px',borderRadius:4,background:m.status==='ambiguous'?T.amberDim:m.status==='unmapped'?T.bgElevated:'rgba(22,163,74,.12)',color:m.status==='ambiguous'?T.amber:m.status==='unmapped'?T.textMuted:'#16a34a',fontWeight:600,flexShrink:0}}>
-                                      {m.status==='ambiguous'?'⚠ Ambiguous':m.status==='unmapped'?'Unmapped':'✓ Mapped'}
-                                    </span>
+                                <div key={connId} style={{borderBottom:ci<tagConnIds.length-1?`1px solid ${T.border}`:'none'}}>
+                                  {/* connector header */}
+                                  <div style={{display:'flex',alignItems:'center',gap:10,padding:'11px 16px',background:T.bgElevated}}>
+                                    <ServiceIcon service={connId} size={20}/>
+                                    <span style={{flex:1,fontSize:12.5,fontWeight:600,color:T.text}}>{nice(connId)}</span>
+                                    {canPush
+                                      ? <span style={{fontSize:10.5,fontWeight:600,padding:'2px 8px',borderRadius:99,background:'rgba(22,163,74,.12)',color:'#16a34a'}}>Push enabled</span>
+                                      : <span title="Enable push on this connection's Tag sync tab" style={{fontSize:10.5,fontWeight:600,padding:'2px 8px',borderRadius:99,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textMuted}}>Push disabled</span>}
                                   </div>
-                                  <div>
-                                    <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:6}}>Sync Direction</div>
-                                    <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
-                                      {SYNC_DIR_OPTS.map(opt=>(
-                                        <button key={opt.v} onClick={()=>setSyncDirs(p=>({...p,[dirKey]:opt.v}))}
-                                          style={{padding:'5px 11px',borderRadius:6,fontSize:11.5,fontWeight:dir===opt.v?600:400,
-                                            border:`1.5px solid ${dir===opt.v?opt.color:T.border}`,
-                                            background:dir===opt.v?`${opt.color}18`:'transparent',
-                                            color:dir===opt.v?opt.color:T.textMuted,cursor:'pointer',transition:'all .12s'}}>
-                                          {opt.label}
+                                  {/* source alias rows */}
+                                  {rows.map((m,ri)=>{
+                                    const isPrimary=m.id===primary?.id;
+                                    return (
+                                      <div key={m.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 16px 9px 20px',opacity:dim?0.55:1}}>
+                                        {/* primary write-back radio */}
+                                        <button onClick={()=>{ if(rsOn&&canPush) setPrimary(connId,m.id); }} title={rsOn&&canPush?'Use this name when writing back':'Enable reverse sync + connection push to choose'}
+                                          style={{width:15,height:15,borderRadius:'50%',border:`2px solid ${isPrimary&&rsOn&&canPush?T.accent:T.border}`,background:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,cursor:rsOn&&canPush?'pointer':'default',padding:0}}>
+                                          {isPrimary&&<span style={{width:7,height:7,borderRadius:'50%',background:rsOn&&canPush?T.accent:T.textMuted,display:'block'}}/>}
                                         </button>
-                                      ))}
-                                    </div>
-                                    <div style={{fontSize:11,color:T.textMuted,marginTop:5}}>{dirOpt.desc}</div>
-                                  </div>
+                                        <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,background:T.bgElevated,color:T.text,padding:'2px 8px',borderRadius:4}}>{m.sourceTagName}</span>
+                                        {isPrimary&&rsOn&&canPush&&<span style={{fontSize:10.5,color:T.accent,display:'inline-flex',alignItems:'center',gap:3}}>↗ writes as <b style={{fontFamily:"'Geist Mono',monospace"}}>{m.reverseSyncAlias||m.sourceTagName}</b></span>}
+                                        <span style={{flex:1}}/>
+                                        <span style={{fontSize:10.5,padding:'2px 7px',borderRadius:4,background:m.status==='ambiguous'?T.amberDim:m.status==='unmapped'?T.bgElevated:'rgba(22,163,74,.10)',color:m.status==='ambiguous'?T.amber:m.status==='unmapped'?T.textMuted:'#16a34a',fontWeight:600,flexShrink:0}}>
+                                          {m.status==='ambiguous'?'⚠ Ambiguous':m.status==='unmapped'?'Unmapped':'✓ Mapped'}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               );
                             })
@@ -32160,8 +32418,46 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                           </div>
                         </div>
                       </div>
+
+                      {/* Reverse-sync enable preview (blast radius) */}
+                      {rsPreview&&(
+                        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1200,backdropFilter:'blur(3px)'}} onClick={()=>setRsPreview(false)}>
+                          <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,width:440,boxShadow:'0 24px 60px rgba(0,0,0,.35)'}} onClick={e=>e.stopPropagation()}>
+                            <div style={{padding:'16px 18px',borderBottom:`1px solid ${T.border}`}}>
+                              <div style={{fontSize:14,fontWeight:700,color:T.text,display:'flex',alignItems:'center',gap:8}}>Enable reverse sync <TagPill tagDef={selTag} size='sm'/></div>
+                            </div>
+                            <div style={{padding:'16px 18px'}}>
+                              <div style={{padding:'12px 14px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:14}}>
+                                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                                  <span style={{fontSize:20,fontWeight:800,color:T.accent,fontFamily:"'Geist Mono',monospace"}}>{affectedAssets.length}</span>
+                                  <span style={{fontSize:12.5,color:T.textSub}}>tagged object{affectedAssets.length!==1?'s':''} will be written to source</span>
+                                </div>
+                                <div style={{fontSize:11.5,color:T.textMuted}}>Across {pushable.length} push-enabled source{pushable.length!==1?'s':''}:</div>
+                              </div>
+                              {pushable.length===0
+                                ? <div style={{fontSize:12,color:T.amber,padding:'0 0 10px'}}>⚠ No connected source has push enabled. Turn on push in a connection's Tag sync tab first — reverse sync will stay armed but write nothing until then.</div>
+                                : <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:4}}>
+                                    {pushable.map(id=>{const rows=byConn[id].rows;const p=rows.find(r=>r.writebackPrimary)||rows[0];return(
+                                      <div key={id} style={{display:'flex',alignItems:'center',gap:9,padding:'8px 10px',border:`1px solid ${T.border}`,borderRadius:7}}>
+                                        <ServiceIcon service={id} size={18}/>
+                                        <span style={{flex:1,fontSize:12,color:T.text,fontWeight:500}}>{nice(id)}</span>
+                                        <span style={{fontSize:11,color:T.accent}}>↗ writes as <b style={{fontFamily:"'Geist Mono',monospace"}}>{p?.reverseSyncAlias||p?.sourceTagName}</b></span>
+                                      </div>
+                                    );})}
+                                  </div>
+                              }
+                            </div>
+                            <div style={{padding:'12px 18px',borderTop:`1px solid ${T.border}`,display:'flex',gap:8,justifyContent:'flex-end'}}>
+                              <button onClick={()=>setRsPreview(false)} style={{padding:'8px 14px',background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,borderRadius:7,fontSize:12.5,cursor:'pointer'}}>Cancel</button>
+                              <button onClick={()=>{ setTagReverseSync(selTag.id,true); setRsPreview(false); onToast(`Reverse sync enabled for ${selTag.name}`,'success'); }}
+                                style={{padding:'8px 18px',background:T.accent,border:'none',color:'#fff',borderRadius:7,fontSize:12.5,fontWeight:700,cursor:'pointer'}}>Enable & sync</button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
+                    );
+                  })()}
 
                   {/* ── ACTIVITY TAB ── */}
                   {detailTab==='activity'&&(()=>{
