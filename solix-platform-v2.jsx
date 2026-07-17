@@ -32336,83 +32336,53 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
 
                   {/* ── SOURCES & SYNC TAB ── */}
                   {detailTab==='connectors'&&(()=>{
-                    // Two-tier model: this EDG classification (parent) → its source-system variants (children).
-                    const rsDefault = selTag.category==='sensitivity'||selTag.category==='regulatory';
-                    const rsOn = selTag.reverseSyncEnabled ?? rsDefault;
-                    const byConn = {};
-                    tagSyncRows.forEach(({connId,cfg,m})=>{ (byConn[connId] || (byConn[connId]={cfg,rows:[]})).rows.push(m); });
-                    const pushable = tagConnIds.filter(id=>connectorConfigs[id]?.reverseSyncEnabled);
-                    const activeSources = rsOn ? pushable.length : 0;
-                    const setPrimary = (connId,mapId)=>{ (byConn[connId]?.rows||[]).forEach(r=>upsertNameMapping(connId,{...r,writebackPrimary:r.id===mapId})); };
+                    // Flat model: one row per source tag = connector logo + source tag name + its own reverse-sync toggle.
                     const nice = id => id.charAt(0).toUpperCase()+id.slice(1);
+                    const rsDefault = selTag.category==='sensitivity'||selTag.category==='regulatory';
+                    const tagDefault = selTag.reverseSyncEnabled ?? rsDefault; // seed-level default for this tag's rows
+                    const canPushOf = connId => !!connectorConfigs[connId]?.reverseSyncEnabled;
+                    const isOn = (connId,m) => (m.reverseSync ?? tagDefault) && canPushOf(connId);
+                    const onCount = tagSyncRows.filter(({connId,m})=>isOn(connId,m)).length;
+                    const toggleRS = (connId,m) => {
+                      if(!canPushOf(connId)) return;
+                      const cur = (m.reverseSync ?? tagDefault);
+                      upsertNameMapping(connId,{...m,reverseSync:!cur});
+                      onToast(!cur ? `Reverse sync on — ${selTag.name} → ${nice(connId)} as ${m.reverseSyncAlias||m.sourceTagName}` : `Reverse sync off — ${m.sourceTagName} (${nice(connId)})`,'success');
+                    };
                     return (
-                    <div style={{maxWidth:680,display:'flex',flexDirection:'column',gap:16}}>
+                    <div style={{maxWidth:640,display:'flex',flexDirection:'column',gap:14}}>
 
-                      {/* ── Reverse sync master (tag-level intent) ── */}
-                      <div style={{background:T.bgSurface,border:`1px solid ${rsOn?T.accent+'44':T.border}`,borderRadius:10,overflow:'hidden'}}>
-                        <div style={{padding:'14px 16px',display:'flex',alignItems:'flex-start',gap:12}}>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
-                              <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Reverse sync</span>
-                              <span style={{fontSize:10.5,fontWeight:700,padding:'1px 7px',borderRadius:99,background:rsOn?'rgba(22,163,74,.12)':T.bgElevated,color:rsOn?'#16a34a':T.textMuted}}>{rsOn?`→ ${activeSources} of ${tagConnIds.length} sources`:'Off'}</span>
-                            </div>
-                            <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.55}}>Mirror this classification back to source systems. Writes only to sources whose connection allows push (below).</div>
-                          </div>
-                          <div onClick={()=>{ if(rsOn){ setTagReverseSync(selTag.id,false); onToast(`Reverse sync disabled for ${selTag.name}`,'success'); } else { setRsPreview(true); } }}
-                            style={{width:34,height:19,borderRadius:10,background:rsOn?T.accent:T.border,position:'relative',cursor:'pointer',transition:'background .2s',flexShrink:0,marginTop:2}}>
-                            <div style={{position:'absolute',top:3,left:rsOn?18:3,width:13,height:13,borderRadius:'50%',background:'#fff',transition:'left .2s'}}/>
-                          </div>
-                        </div>
-                        {rsOn&&pushable.length<tagConnIds.length&&(
-                          <div style={{padding:'8px 16px',borderTop:`1px solid ${T.border}`,background:T.amberDim,fontSize:11,color:T.amber,display:'flex',alignItems:'center',gap:6}}>
-                            ⚠ {tagConnIds.length-pushable.length} source{tagConnIds.length-pushable.length!==1?'s':''} won't receive pushes — push is disabled on that connection.
-                          </div>
-                        )}
+                      {/* Summary line (no master toggle) */}
+                      <div style={{fontSize:12,color:T.textMuted,display:'flex',alignItems:'center',gap:8}}>
+                        <span style={{fontWeight:600,color:T.textSub}}>Reverse sync</span>
+                        <span style={{fontSize:10.5,fontWeight:700,padding:'1px 8px',borderRadius:99,background:onCount>0?'rgba(22,163,74,.12)':T.bgElevated,color:onCount>0?'#16a34a':T.textMuted}}>{onCount} of {tagSyncRows.length} source tags syncing back</span>
                       </div>
 
-                      {/* ── Two-tier: EDG classification → source variants per connector ── */}
+                      {/* Flat source-tag list — logo · tag · toggle */}
                       <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
-                        <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.border}`,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Source variants</div>
-                        {tagConnIds.length===0
+                        {tagSyncRows.length===0
                           ? <div style={{padding:'40px 24px',textAlign:'center'}}>
                               <div style={{fontSize:26,marginBottom:10,opacity:.25}}>⇄</div>
-                              <div style={{fontSize:13,fontWeight:500,color:T.textSub,marginBottom:4}}>No source variants mapped</div>
+                              <div style={{fontSize:13,fontWeight:500,color:T.textSub,marginBottom:4}}>No source tags mapped</div>
                               <div style={{fontSize:12,color:T.textMuted}}>Map source tag names to this classification from a connector's Tag sync tab.</div>
                             </div>
-                          : tagConnIds.map((connId,ci)=>{
-                              const {rows}=byConn[connId];
-                              const canPush=!!connectorConfigs[connId]?.reverseSyncEnabled;
-                              const primary=rows.find(r=>r.writebackPrimary)||rows[0];
-                              const dim = !(rsOn&&canPush);
+                          : tagSyncRows.map(({connId,m},i)=>{
+                              const canPush = canPushOf(connId);
+                              const on = isOn(connId,m);
                               return (
-                                <div key={connId} style={{borderBottom:ci<tagConnIds.length-1?`1px solid ${T.border}`:'none'}}>
-                                  {/* connector header */}
-                                  <div style={{display:'flex',alignItems:'center',gap:10,padding:'11px 16px',background:T.bgElevated}}>
-                                    <ServiceIcon service={connId} size={20}/>
-                                    <span style={{flex:1,fontSize:12.5,fontWeight:600,color:T.text}}>{nice(connId)}</span>
-                                    {canPush
-                                      ? <span style={{fontSize:10.5,fontWeight:600,padding:'2px 8px',borderRadius:99,background:'rgba(22,163,74,.12)',color:'#16a34a'}}>Push enabled</span>
-                                      : <span title="Enable push on this connection's Tag sync tab" style={{fontSize:10.5,fontWeight:600,padding:'2px 8px',borderRadius:99,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textMuted}}>Push disabled</span>}
+                                <div key={m.id} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 16px',borderBottom:i<tagSyncRows.length-1?`1px solid ${T.border}`:'none'}}>
+                                  {/* connector logo (tooltip only — no repeated name) */}
+                                  <span title={nice(connId)} style={{flexShrink:0,display:'flex'}}><ServiceIcon service={connId} size={22}/></span>
+                                  {/* source tag */}
+                                  <span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.text,fontWeight:500}}>{m.sourceTagName}</span>
+                                  {on&&<span style={{fontSize:10.5,color:T.accent,display:'inline-flex',alignItems:'center',gap:3}}>↗ writes back</span>}
+                                  <span style={{flex:1}}/>
+                                  {!canPush&&<span title="Enable push on this connection's Tag sync tab" style={{fontSize:10.5,color:T.textMuted}}>push disabled</span>}
+                                  {/* reverse-sync toggle */}
+                                  <div onClick={()=>toggleRS(connId,m)} title={canPush?'Reverse sync this source tag':'Connection push is disabled'}
+                                    style={{width:34,height:19,borderRadius:10,background:on?T.accent:T.border,position:'relative',cursor:canPush?'pointer':'not-allowed',opacity:canPush?1:0.45,transition:'background .2s',flexShrink:0}}>
+                                    <div style={{position:'absolute',top:3,left:on?18:3,width:13,height:13,borderRadius:'50%',background:'#fff',transition:'left .2s'}}/>
                                   </div>
-                                  {/* source alias rows */}
-                                  {rows.map((m,ri)=>{
-                                    const isPrimary=m.id===primary?.id;
-                                    return (
-                                      <div key={m.id} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 16px 9px 20px',opacity:dim?0.55:1}}>
-                                        {/* primary write-back radio */}
-                                        <button onClick={()=>{ if(rsOn&&canPush) setPrimary(connId,m.id); }} title={rsOn&&canPush?'Use this name when writing back':'Enable reverse sync + connection push to choose'}
-                                          style={{width:15,height:15,borderRadius:'50%',border:`2px solid ${isPrimary&&rsOn&&canPush?T.accent:T.border}`,background:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,cursor:rsOn&&canPush?'pointer':'default',padding:0}}>
-                                          {isPrimary&&<span style={{width:7,height:7,borderRadius:'50%',background:rsOn&&canPush?T.accent:T.textMuted,display:'block'}}/>}
-                                        </button>
-                                        <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,background:T.bgElevated,color:T.text,padding:'2px 8px',borderRadius:4}}>{m.sourceTagName}</span>
-                                        {isPrimary&&rsOn&&canPush&&<span style={{fontSize:10.5,color:T.accent,display:'inline-flex',alignItems:'center',gap:3}}>↗ writes as <b style={{fontFamily:"'Geist Mono',monospace"}}>{m.reverseSyncAlias||m.sourceTagName}</b></span>}
-                                        <span style={{flex:1}}/>
-                                        <span style={{fontSize:10.5,padding:'2px 7px',borderRadius:4,background:m.status==='ambiguous'?T.amberDim:m.status==='unmapped'?T.bgElevated:'rgba(22,163,74,.10)',color:m.status==='ambiguous'?T.amber:m.status==='unmapped'?T.textMuted:'#16a34a',fontWeight:600,flexShrink:0}}>
-                                          {m.status==='ambiguous'?'⚠ Ambiguous':m.status==='unmapped'?'Unmapped':'✓ Mapped'}
-                                        </span>
-                                      </div>
-                                    );
-                                  })}
                                 </div>
                               );
                             })
@@ -32429,43 +32399,6 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                           </div>
                         </div>
                       </div>
-
-                      {/* Reverse-sync enable preview (blast radius) */}
-                      {rsPreview&&(
-                        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1200,backdropFilter:'blur(3px)'}} onClick={()=>setRsPreview(false)}>
-                          <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,width:440,boxShadow:'0 24px 60px rgba(0,0,0,.35)'}} onClick={e=>e.stopPropagation()}>
-                            <div style={{padding:'16px 18px',borderBottom:`1px solid ${T.border}`}}>
-                              <div style={{fontSize:14,fontWeight:700,color:T.text,display:'flex',alignItems:'center',gap:8}}>Enable reverse sync <TagPill tagDef={selTag} size='sm'/></div>
-                            </div>
-                            <div style={{padding:'16px 18px'}}>
-                              <div style={{padding:'12px 14px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:14}}>
-                                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
-                                  <span style={{fontSize:20,fontWeight:800,color:T.accent,fontFamily:"'Geist Mono',monospace"}}>{affectedAssets.length}</span>
-                                  <span style={{fontSize:12.5,color:T.textSub}}>tagged object{affectedAssets.length!==1?'s':''} will be written to source</span>
-                                </div>
-                                <div style={{fontSize:11.5,color:T.textMuted}}>Across {pushable.length} push-enabled source{pushable.length!==1?'s':''}:</div>
-                              </div>
-                              {pushable.length===0
-                                ? <div style={{fontSize:12,color:T.amber,padding:'0 0 10px'}}>⚠ No connected source has push enabled. Turn on push in a connection's Tag sync tab first — reverse sync will stay armed but write nothing until then.</div>
-                                : <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:4}}>
-                                    {pushable.map(id=>{const rows=byConn[id].rows;const p=rows.find(r=>r.writebackPrimary)||rows[0];return(
-                                      <div key={id} style={{display:'flex',alignItems:'center',gap:9,padding:'8px 10px',border:`1px solid ${T.border}`,borderRadius:7}}>
-                                        <ServiceIcon service={id} size={18}/>
-                                        <span style={{flex:1,fontSize:12,color:T.text,fontWeight:500}}>{nice(id)}</span>
-                                        <span style={{fontSize:11,color:T.accent}}>↗ writes as <b style={{fontFamily:"'Geist Mono',monospace"}}>{p?.reverseSyncAlias||p?.sourceTagName}</b></span>
-                                      </div>
-                                    );})}
-                                  </div>
-                              }
-                            </div>
-                            <div style={{padding:'12px 18px',borderTop:`1px solid ${T.border}`,display:'flex',gap:8,justifyContent:'flex-end'}}>
-                              <button onClick={()=>setRsPreview(false)} style={{padding:'8px 14px',background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,borderRadius:7,fontSize:12.5,cursor:'pointer'}}>Cancel</button>
-                              <button onClick={()=>{ setTagReverseSync(selTag.id,true); setRsPreview(false); onToast(`Reverse sync enabled for ${selTag.name}`,'success'); }}
-                                style={{padding:'8px 18px',background:T.accent,border:'none',color:'#fff',borderRadius:7,fontSize:12.5,fontWeight:700,cursor:'pointer'}}>Enable & sync</button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
                     </div>
                     );
                   })()}
