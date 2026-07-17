@@ -567,6 +567,7 @@ const INITIAL_CONNECTOR_CONFIGS = {
     nameMappings:[
       { id:'m1',  sourceTagName:'pii_column',    edgTagId:'t1', reverseSyncAlias:'pii_column',    status:'mapped'    },
       { id:'m2',  sourceTagName:'pii_flag',       edgTagId:'t1', reverseSyncAlias:'pii_flag',       status:'mapped'    },
+      { id:'m2b', sourceTagName:'is_pii',         edgTagId:'t1', reverseSyncAlias:'is_pii',         status:'mapped'    },
       { id:'m3',  sourceTagName:'phi_flag',       edgTagId:'t2', reverseSyncAlias:'phi_flag',       status:'mapped'    },
       { id:'m4',  sourceTagName:'pci_scope',      edgTagId:'t3', reverseSyncAlias:'pci_scope',      status:'mapped'    },
       { id:'m5',  sourceTagName:'gdpr_scope',     edgTagId:'t4', reverseSyncAlias:'gdpr_scope',     status:'mapped'    },
@@ -583,7 +584,12 @@ const INITIAL_CONNECTOR_CONFIGS = {
       { id:'m10', sourceTagName:'PIIData',         edgTagId:'t1', reverseSyncAlias:'PIIData',         status:'mapped' },
       { id:'m11', sourceTagName:'protected_health', edgTagId:'t2', reverseSyncAlias:'protected_health', status:'mapped' },
     ]},
-  databricks: { connectorId:'databricks', syncEnabled:false, reverseSyncEnabled:false, reverseSyncApproval:false, conflictRule:'flag_always',  lastSyncAt:null,                   lastSyncStatus:null,       lastSyncNewTags:0, lastSyncConflicts:0, nameMappings:[] },
+  databricks: { connectorId:'databricks', syncEnabled:true,  reverseSyncEnabled:true,  reverseSyncApproval:true,  conflictRule:'flag_always',  lastSyncAt:'2026-04-20T08:15:00Z', lastSyncStatus:'success',  lastSyncNewTags:1, lastSyncConflicts:0,
+    nameMappings:[
+      { id:'m12', sourceTagName:'pii',            edgTagId:'t1', reverseSyncAlias:'pii',            status:'mapped'    },
+      { id:'m13', sourceTagName:'personal_data',  edgTagId:'t1', reverseSyncAlias:'personal_data',  status:'mapped'    },
+      { id:'m14', sourceTagName:'phi',            edgTagId:'t2', reverseSyncAlias:'phi',            status:'mapped'    },
+    ]},
 };
 
 const INITIAL_INBOX = [
