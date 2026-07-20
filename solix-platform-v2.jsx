@@ -29967,6 +29967,9 @@ const SettingsView = ({onToast})=>{
   const tagCtx = useTagCtx();
   const [rsJobOpen, setRsJobOpen] = useState(null);   // selected run id (detail view inside drawer)
   const [rsPanelOpen, setRsPanelOpen] = useState(false); // reverse-sync job drawer open
+  const [rsSearch, setRsSearch] = useState("");        // run-list search (tag / object)
+  const [rsSourceFilter, setRsSourceFilter] = useState("all");
+  const [rsDateFilter, setRsDateFilter] = useState("all"); // all | today | 7d | 30d
   const rsRelTime = (iso)=>{ if(!iso) return '—'; const d=(Date.now()-new Date(iso).getTime())/1000; if(d<3600) return Math.max(1,Math.round(d/60))+'m ago'; if(d<86400) return Math.round(d/3600)+'h ago'; return Math.round(d/86400)+'d ago'; };
   const [section,   setSection]   = useState("connections");
   const [svcSel,    setSvcSel]    = useState(null);
@@ -30495,6 +30498,17 @@ const SettingsView = ({onToast})=>{
                   else L.push({ts:t1||t0, lvl:'err', msg:`Run failed`});
                   return L;
                 };
+                // ── list filters (source + date + search) ──
+                const sources = [...new Set(runs.map(r=>r.connId))];
+                const inDate = (r)=>{ if(rsDateFilter==='all') return true; const ts=new Date(r.finishedAt||r.startedAt).getTime(); const day=86400000; const d=Date.now()-ts; if(rsDateFilter==='today') return d<day; if(rsDateFilter==='7d') return d<7*day; if(rsDateFilter==='30d') return d<30*day; return true; };
+                const q = rsSearch.trim().toLowerCase();
+                const filteredRuns = runs.filter(r=>{
+                  const def=tagCtx.getTagDef(r.tagId);
+                  const mSrc = rsSourceFilter==='all'||r.connId===rsSourceFilter;
+                  const mQ = !q || (def?.name||r.tagId).toLowerCase().includes(q) || nice(r.connId).toLowerCase().includes(q) || (r.objects||[]).some(o=>(o.name||'').toLowerCase().includes(q));
+                  return mSrc && inDate(r) && mQ;
+                });
+                const selStyle = {height:32,padding:"0 8px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:11.5,outline:"none",cursor:"pointer"};
                 return (
                 <>
                   <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"4px 0 8px"}}>Governance jobs</div>
@@ -30540,21 +30554,43 @@ const SettingsView = ({onToast})=>{
                               <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 2l8 8M10 2L2 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
                             </button>
                           </div>
-                          <div style={{padding:"10px 20px 6px",fontSize:11,color:T.textMuted,flexShrink:0}}>Recent runs — click one to see its log and the objects written.</div>
+                          {/* filter bar */}
+                          <div style={{padding:"12px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:8,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
+                            <div style={{position:"relative",flex:"1 1 180px",minWidth:150}}>
+                              <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none",display:"flex"}}>{Ic.search(12)}</span>
+                              <input value={rsSearch} onChange={e=>setRsSearch(e.target.value)} placeholder="Search tag or object…"
+                                style={{width:"100%",height:32,padding:"0 10px 0 30px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgElevated,fontSize:11.5,color:T.text,outline:"none",boxSizing:"border-box"}}/>
+                            </div>
+                            <select value={rsSourceFilter} onChange={e=>setRsSourceFilter(e.target.value)} style={selStyle}>
+                              <option value="all">All sources</option>
+                              {sources.map(s=><option key={s} value={s}>{nice(s)}</option>)}
+                            </select>
+                            <select value={rsDateFilter} onChange={e=>setRsDateFilter(e.target.value)} style={selStyle}>
+                              <option value="all">Any date</option>
+                              <option value="today">Today</option>
+                              <option value="7d">Last 7 days</option>
+                              <option value="30d">Last 30 days</option>
+                            </select>
+                          </div>
+                          <div style={{padding:"9px 20px 4px",fontSize:11,color:T.textMuted,flexShrink:0}}>{filteredRuns.length} of {runs.length} run{runs.length!==1?'s':''} · click a row for its log &amp; objects</div>
                           <div style={{flex:1,overflowY:"auto",padding:"4px 20px 20px"}}>
                             <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                              {runs.length===0
-                                ? <div style={{padding:"28px",textAlign:"center",fontSize:12,color:T.textMuted}}>No runs yet.</div>
-                                : runs.map((r,i)=>{ const def=tagCtx.getTagDef(r.tagId); const sc=r.status==='done'?T.green:r.status==='running'?T.amber:T.rose; return (
+                              {/* table header */}
+                              <div style={{display:"grid",gridTemplateColumns:"26px 1fr 66px 92px 62px 14px",gap:10,padding:"8px 14px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
+                                {["","Tag → Source","Objects","Status","When",""].map((h,k)=>(<div key={k} style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{h}</div>))}
+                              </div>
+                              {filteredRuns.length===0
+                                ? <div style={{padding:"28px",textAlign:"center",fontSize:12,color:T.textMuted}}>No runs match these filters.</div>
+                                : filteredRuns.map((r,i)=>{ const def=tagCtx.getTagDef(r.tagId); const sc=r.status==='done'?T.green:r.status==='running'?T.amber:T.rose; return (
                                     <div key={r.id} onClick={()=>setRsJobOpen(r.id)}
-                                      style={{display:"grid",gridTemplateColumns:"22px 1fr 70px 84px 60px 14px",gap:10,padding:"11px 14px",alignItems:"center",cursor:"pointer",borderBottom:i<runs.length-1?`1px solid ${T.border}`:"none"}}
-                                      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                                      <span style={{display:"flex"}}><ServiceIcon service={r.connId} size={18}/></span>
+                                      style={{display:"grid",gridTemplateColumns:"26px 1fr 66px 92px 62px 14px",gap:10,padding:"11px 14px",alignItems:"center",cursor:"pointer",borderBottom:i<filteredRuns.length-1?`1px solid ${T.border}`:"none",background:i%2?T.bgElevated:"transparent"}}
+                                      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=i%2?T.bgElevated:"transparent"}>
+                                      <span style={{display:"flex"}}><ServiceIcon service={r.connId} size={20}/></span>
                                       <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
                                         <span style={{fontSize:12,fontWeight:600,color:T.text}}>{def?.name||r.tagId}</span>
                                         <span style={{fontSize:11,color:T.textMuted}}>→ {nice(r.connId)}</span>
                                       </div>
-                                      <span style={{fontSize:11,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{(r.objects||[]).length} obj</span>
+                                      <span style={{fontSize:11,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{(r.objects||[]).length}</span>
                                       <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:600,color:sc}}><span style={{width:6,height:6,borderRadius:"50%",background:sc,display:"inline-block"}}/>{r.status==='done'?'Success':r.status==='running'?'Running':'Failed'}</span>
                                       <span style={{fontSize:10.5,color:T.textMuted}}>{rsRelTime(r.finishedAt||r.startedAt)}</span>
                                       <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted}}><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -30613,14 +30649,26 @@ const SettingsView = ({onToast})=>{
                                   ))}
                                 </div>
                               </div>
-                              {/* objects written */}
+                              {/* objects written — asset table */}
                               <div>
                                 <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Objects written ({(sel.objects||[]).length})</div>
                                 <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
-                                  {(sel.objects||[]).map((o,j)=>{ const orc=o.result==='success'?T.green:o.result==='pending'?T.amber:T.rose; return (
-                                    <div key={j} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderBottom:j<sel.objects.length-1?`1px solid ${T.border}`:"none",background:j%2?T.bgElevated:"transparent"}}>
-                                      <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:T.text,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis"}}>{o.name}</span>
-                                      <span style={{fontSize:10.5,color:T.accent}}>↗ <b style={{fontFamily:"'Geist Mono',monospace"}}>{o.alias}</b></span>
+                                  {/* table header */}
+                                  <div style={{display:"grid",gridTemplateColumns:"1fr 130px 82px",gap:10,padding:"8px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
+                                    {["Object","Tag written","Result"].map((h,k)=>(<div key={k} style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{h}</div>))}
+                                  </div>
+                                  {(sel.objects||[]).map((o,j)=>{ const orc=o.result==='success'?T.green:o.result==='pending'?T.amber:T.rose;
+                                    const parts=(o.name||'').split('.'); const leaf=parts[parts.length-1]; const path=parts.slice(0,-1).join('.');
+                                    return (
+                                    <div key={j} style={{display:"grid",gridTemplateColumns:"1fr 130px 82px",gap:10,padding:"9px 12px",alignItems:"center",borderBottom:j<sel.objects.length-1?`1px solid ${T.border}`:"none",background:j%2?T.bgElevated:"transparent"}}>
+                                      <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
+                                        <span style={{flexShrink:0,display:"flex"}}><ServiceIcon service={sel.connId} size={16}/></span>
+                                        <div style={{minWidth:0}}>
+                                          <div style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{leaf}</div>
+                                          {path&&<div style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{path}</div>}
+                                        </div>
+                                      </div>
+                                      <span style={{fontSize:10.5,color:T.accent,display:"inline-flex",alignItems:"center",gap:3,minWidth:0}}>↗ <b style={{fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.alias}</b></span>
                                       <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:600,color:orc,flexShrink:0}}><span style={{width:5,height:5,borderRadius:"50%",background:orc,display:"inline-block"}}/>{o.result==='success'?'Written':o.result==='pending'?'Pending':'Failed'}</span>
                                     </div>
                                   );})}
