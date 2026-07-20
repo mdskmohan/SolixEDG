@@ -30509,14 +30509,14 @@ const SettingsView = ({onToast})=>{
                             <span style={{width:4,height:4,borderRadius:"50%",background:T.accent,display:"inline-block"}}/>Active
                           </span>
                         </div>
-                        <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.5,marginBottom:8}}>Writes governed tags back into source systems. Runs continuously as tags change and on a nightly reconciliation sweep; can also be run on-demand.</div>
+                        <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.5,marginBottom:8}}>Writes governed tags back into source systems automatically whenever a governed tag changes on an object.</div>
                       </div>
                       <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:600,color:T.accent,flexShrink:0,whiteSpace:"nowrap"}}>View runs
                         <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                       </span>
                     </div>
                     <div style={{display:"flex",gap:16,fontSize:11,color:T.textMuted,paddingTop:8,borderTop:`1px solid ${T.border}`,flexWrap:"wrap"}}>
-                      <span>{Ic.refresh(11)} <b style={{color:T.textSub}}>On-demand + nightly 2AM</b></span>
+                      <span>{Ic.refresh(11)} <b style={{color:T.textSub}}>Automatic · background job</b></span>
                       <span>Last run: <b style={{color:T.textSub}}>{lastRun}</b></span>
                       <span><b style={{color:T.textSub}}>{runs.length}</b> runs · <b style={{color:T.textSub}}>{totalObjs}</b> objects written</span>
                       <span style={{marginLeft:"auto",color:sr>=98?T.accent:T.amber,fontWeight:700}}>{sr}% success</span>
