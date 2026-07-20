@@ -696,7 +696,7 @@ const INITIAL_REVERSE_SYNC_RUNS = [
   { id:'rs3', connId:'snowflake',  tagId:'t2', trigger:'scheduled', startedAt:'2026-04-19T10:00:00Z', finishedAt:'2026-04-19T10:00:04Z', status:'done', objects:[
       {name:'HEALTH.patients.mrn', alias:'phi_flag', result:'success'},
   ]},
-  { id:'rs4', connId:'snowflake',  tagId:'t1', trigger:'event',     startedAt:'2026-04-20T11:30:00Z', finishedAt:null,                   status:'running', objects:[
+  { id:'rs4', connId:'snowflake',  tagId:'t1', trigger:'scheduled', startedAt:'2026-04-20T11:30:00Z', finishedAt:null,                   status:'running', objects:[
       {name:'COMMERCE.orders_2026.customer_id', alias:'pii_column', result:'pending'},
   ]},
 ];
@@ -847,7 +847,7 @@ function TagProvider({ children }) {
       // ── Incremental chain: newly-propagated objects that carry a reverse-sync tag get pushed back automatically (event-driven) ──
       const base = meta.baseName || 'object';
       const names = (meta.targets&&meta.targets.length) ? meta.targets : Array.from({length:Math.min(target,4)},(_,i)=>`${base}.downstream_${i+1}`);
-      logReverseSync(tagId, names, 'event');
+      logReverseSync(tagId, names, 'scheduled');
     }, 1500);
     return id;
   };
@@ -29965,7 +29965,8 @@ const TagPoliciesSection = ({onToast}) => {
 const SettingsView = ({onToast})=>{
   const {isDark, toggleTheme:onThemeToggle} = useTheme();
   const tagCtx = useTagCtx();
-  const [rsJobOpen, setRsJobOpen] = useState(null); // expanded reverse-sync run id
+  const [rsJobOpen, setRsJobOpen] = useState(null);   // selected run id (detail view inside drawer)
+  const [rsPanelOpen, setRsPanelOpen] = useState(false); // reverse-sync job drawer open
   const rsRelTime = (iso)=>{ if(!iso) return '—'; const d=(Date.now()-new Date(iso).getTime())/1000; if(d<3600) return Math.max(1,Math.round(d/60))+'m ago'; if(d<86400) return Math.round(d/3600)+'h ago'; return Math.round(d/86400)+'d ago'; };
   const [section,   setSection]   = useState("connections");
   const [svcSel,    setSvcSel]    = useState(null);
@@ -30466,12 +30467,14 @@ const SettingsView = ({onToast})=>{
                 </div>
               </div>
 
-              {/* ── Tag reverse-sync jobs (observability) ── */}
+              {/* ── Tag reverse-sync — a background job, shown as a card (like the maintenance jobs) ── */}
               {tagCtx&&(()=>{
                 const runs = tagCtx.getReverseSyncRuns();
                 const nice = id => id.charAt(0).toUpperCase()+id.slice(1);
-                const trigMeta = { scheduled:{label:'Scheduled',color:T.blue}, manual:{label:'Manual',color:T.violet}, event:{label:'Event',color:T.amber} };
                 const totalObjs = runs.reduce((n,r)=>n+(r.objects||[]).length,0);
+                const doneRuns = runs.filter(r=>r.status==='done').length;
+                const sr = runs.length? Math.round(doneRuns/runs.length*100) : 100;
+                const lastRun = runs.length ? rsRelTime(runs[0].finishedAt||runs[0].startedAt) : '—';
                 const fmtT = iso => iso ? iso.slice(11,19) : '—';
                 const fmtDate = iso => iso ? iso.slice(0,10) : '—';
                 const durOf = r => { if(!r.finishedAt||!r.startedAt) return r.status==='running'?'in progress':'—'; const s=(new Date(r.finishedAt)-new Date(r.startedAt))/1000; return s<0?'—':`${s.toFixed(1)}s`; };
@@ -30481,7 +30484,7 @@ const SettingsView = ({onToast})=>{
                 const runLog = (r) => {
                   const rdef = tagCtx.getTagDef(r.tagId); const t0=r.startedAt, t1=r.finishedAt;
                   const L = [
-                    {ts:t0, lvl:'info', msg:`Run queued · trigger: ${r.trigger}`},
+                    {ts:t0, lvl:'info', msg:`Reverse-sync job started`},
                     {ts:t0, lvl:'info', msg:`Authenticating to ${nice(r.connId)} (service account)`},
                     {ts:t0, lvl:'ok',   msg:`Connected · write scope verified`},
                     {ts:t0, lvl:'info', msg:`Resolved ${(r.objects||[]).length} object(s) carrying ${rdef?.name||r.tagId}`},
@@ -30493,127 +30496,151 @@ const SettingsView = ({onToast})=>{
                   return L;
                 };
                 return (
-                <div style={{marginBottom:22}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,margin:"4px 0 8px"}}>
-                    <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>Tag reverse-sync jobs</span>
-                    <span style={{fontSize:10.5,fontWeight:700,padding:"1px 8px",borderRadius:99,background:T.accentDim,color:T.accent}}>{runs.length} runs · {totalObjs} objects written</span>
-                  </div>
-                  <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6,marginBottom:10}}>
-                    Every push of a tag back into a source system. Scheduled runs reconcile drift; event runs fire when a new object is propagated a reverse-sync tag. Click a run to see its full log and the objects written.
-                  </div>
-                  <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                    <div style={{display:"grid",gridTemplateColumns:"22px 1fr 90px 84px 92px 70px 16px",gap:10,padding:"8px 14px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
-                      {["","Tag → Source","Trigger","Objects","Status","When",""].map((h,i)=>(<div key={i} style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{h}</div>))}
+                <>
+                  <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"4px 0 8px"}}>Governance jobs</div>
+                  {/* Job card — identical style to platform maintenance, clickable */}
+                  <div onClick={()=>{setRsPanelOpen(true);setRsJobOpen(null);}} style={{padding:"14px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,marginBottom:22,cursor:"pointer",transition:"border-color .15s"}}
+                    onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent+'66'} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:6,gap:10}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
+                          <span style={{fontSize:13,fontWeight:600,color:T.text}}>Tag Reverse Sync</span>
+                          <span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,fontWeight:600,padding:"1px 7px",borderRadius:99,background:T.accentDim,color:T.accent}}>
+                            <span style={{width:4,height:4,borderRadius:"50%",background:T.accent,display:"inline-block"}}/>Active
+                          </span>
+                        </div>
+                        <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.5,marginBottom:8}}>Writes governed tags back into source systems. Runs continuously as tags change and on a nightly reconciliation sweep; can also be run on-demand.</div>
+                      </div>
+                      <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:600,color:T.accent,flexShrink:0,whiteSpace:"nowrap"}}>View runs
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </span>
                     </div>
-                    {runs.length===0
-                      ? <div style={{padding:"28px",textAlign:"center",fontSize:12,color:T.textMuted}}>No reverse-sync runs yet.</div>
-                      : runs.map((r,i)=>{
-                          const def=tagCtx.getTagDef(r.tagId); const tm=trigMeta[r.trigger]||trigMeta.manual; const active=rsJobOpen===r.id;
-                          const sc = r.status==='done'?T.green:r.status==='running'?T.amber:T.rose;
-                          return (
-                            <div key={r.id} onClick={()=>setRsJobOpen(active?null:r.id)}
-                              style={{display:"grid",gridTemplateColumns:"22px 1fr 90px 84px 92px 70px 16px",gap:10,padding:"10px 14px",alignItems:"center",cursor:"pointer",borderBottom:i<runs.length-1?`1px solid ${T.border}`:"none",background:active?T.accentDim:"transparent",borderLeft:`2px solid ${active?T.accent:'transparent'}`}}
-                              onMouseEnter={e=>{if(!active)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!active)e.currentTarget.style.background="transparent";}}>
-                              <span style={{display:"flex"}}><ServiceIcon service={r.connId} size={18}/></span>
-                              <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
-                                <span style={{fontSize:12,fontWeight:600,color:T.text}}>{def?.name||r.tagId}</span>
-                                <span style={{fontSize:11,color:T.textMuted}}>→ {nice(r.connId)}</span>
-                              </div>
-                              <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:10.5,fontWeight:600,color:tm.color}}><span style={{width:5,height:5,borderRadius:"50%",background:tm.color,display:"inline-block"}}/>{tm.label}</span>
-                              <span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{(r.objects||[]).length}</span>
-                              <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:600,color:sc}}><span style={{width:6,height:6,borderRadius:"50%",background:sc,display:"inline-block"}}/>{r.status==='done'?'Success':r.status==='running'?'Running':'Failed'}</span>
-                              <span style={{fontSize:10.5,color:T.textMuted}}>{rsRelTime(r.finishedAt||r.startedAt)}</span>
-                              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:active?T.accent:T.textMuted}}><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                            </div>
-                          );
-                        })
-                    }
+                    <div style={{display:"flex",gap:16,fontSize:11,color:T.textMuted,paddingTop:8,borderTop:`1px solid ${T.border}`,flexWrap:"wrap"}}>
+                      <span>{Ic.refresh(11)} <b style={{color:T.textSub}}>On-demand + nightly 2AM</b></span>
+                      <span>Last run: <b style={{color:T.textSub}}>{lastRun}</b></span>
+                      <span><b style={{color:T.textSub}}>{runs.length}</b> runs · <b style={{color:T.textSub}}>{totalObjs}</b> objects written</span>
+                      <span style={{marginLeft:"auto",color:sr>=98?T.accent:T.amber,fontWeight:700}}>{sr}% success</span>
+                    </div>
                   </div>
 
-                  {/* ── Right-side run-detail drawer ── */}
-                  {sel&&(()=>{
-                    const tm=trigMeta[sel.trigger]||trigMeta.manual;
-                    const sc = sel.status==='done'?T.green:sel.status==='running'?T.amber:T.rose;
-                    const log = runLog(sel);
-                    return (
-                    <div onClick={()=>setRsJobOpen(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:1000,backdropFilter:"blur(3px)",display:"flex",justifyContent:"flex-end"}}>
-                      <div onClick={e=>e.stopPropagation()} className="slideInRight" style={{width:560,maxWidth:"96vw",height:"100%",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,boxShadow:"-24px 0 64px rgba(0,0,0,.4)",display:"flex",flexDirection:"column"}}>
-                        {/* header */}
-                        <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"flex-start",gap:12,flexShrink:0}}>
-                          <span style={{display:"flex",marginTop:2}}><ServiceIcon service={sel.connId} size={30}/></span>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:15,fontWeight:700,color:T.text,display:"flex",alignItems:"center",gap:7}}>{selDef?.name||sel.tagId} <span style={{fontSize:12,color:T.textMuted,fontWeight:400}}>→ {nice(sel.connId)}</span></div>
-                            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Reverse-sync run · <span style={{fontFamily:"'Geist Mono',monospace"}}>{sel.id}</span></div>
+                  {/* ── Right-side drawer: run list ↔ run detail ── */}
+                  {rsPanelOpen&&(
+                    <div onClick={()=>{setRsPanelOpen(false);setRsJobOpen(null);}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:1000,backdropFilter:"blur(3px)",display:"flex",justifyContent:"flex-end"}}>
+                      <div onClick={e=>e.stopPropagation()} className="slideInRight" style={{width:580,maxWidth:"96vw",height:"100%",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,boxShadow:"-24px 0 64px rgba(0,0,0,.4)",display:"flex",flexDirection:"column"}}>
+                        {!sel ? (<>
+                          {/* ── LIST VIEW ── */}
+                          <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+                            <div style={{width:34,height:34,borderRadius:9,background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent,flexShrink:0}}>{Ic.refresh(16)}</div>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:15,fontWeight:700,color:T.text}}>Tag Reverse Sync</div>
+                              <div style={{fontSize:11.5,color:T.textMuted}}>{runs.length} runs · {totalObjs} objects written · {sr}% success</div>
+                            </div>
+                            <button onClick={()=>{setRsPanelOpen(false);setRsJobOpen(null);}} style={{width:30,height:30,borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+                              onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;e.currentTarget.style.color=T.text;}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;}}>
+                              <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 2l8 8M10 2L2 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                            </button>
                           </div>
-                          <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:700,color:sc,padding:"3px 10px",borderRadius:99,background:sc+'18',flexShrink:0}}><span style={{width:6,height:6,borderRadius:"50%",background:sc,display:"inline-block"}}/>{sel.status==='done'?'Success':sel.status==='running'?'Running':'Failed'}</span>
-                          <button onClick={()=>setRsJobOpen(null)} style={{width:30,height:30,borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
-                            onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;e.currentTarget.style.color=T.text;}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;}}>
-                            <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 2l8 8M10 2L2 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                          </button>
-                        </div>
-
-                        {/* body */}
-                        <div style={{flex:1,overflowY:"auto",padding:"18px 20px",display:"flex",flexDirection:"column",gap:20}}>
-                          {/* summary grid */}
-                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9}}>
-                            {[
-                              {l:"Trigger", v:tm.label, c:tm.color},
-                              {l:"Objects written", v:(sel.objects||[]).length},
-                              {l:"Duration", v:durOf(sel)},
-                              {l:"Date", v:fmtDate(sel.startedAt)},
-                              {l:"Started", v:fmtT(sel.startedAt), mono:true},
-                              {l:"Finished", v:fmtT(sel.finishedAt), mono:true},
-                            ].map(s=>(
-                              <div key={s.l} style={{padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
-                                <div style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",color:T.textMuted,marginBottom:4}}>{s.l}</div>
-                                <div style={{fontSize:12.5,fontWeight:600,color:s.c||T.text,fontFamily:s.mono?"'Geist Mono',monospace":"inherit"}}>{s.v}</div>
+                          <div style={{padding:"10px 20px 6px",fontSize:11,color:T.textMuted,flexShrink:0}}>Recent runs — click one to see its log and the objects written.</div>
+                          <div style={{flex:1,overflowY:"auto",padding:"4px 20px 20px"}}>
+                            <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                              {runs.length===0
+                                ? <div style={{padding:"28px",textAlign:"center",fontSize:12,color:T.textMuted}}>No runs yet.</div>
+                                : runs.map((r,i)=>{ const def=tagCtx.getTagDef(r.tagId); const sc=r.status==='done'?T.green:r.status==='running'?T.amber:T.rose; return (
+                                    <div key={r.id} onClick={()=>setRsJobOpen(r.id)}
+                                      style={{display:"grid",gridTemplateColumns:"22px 1fr 70px 84px 60px 14px",gap:10,padding:"11px 14px",alignItems:"center",cursor:"pointer",borderBottom:i<runs.length-1?`1px solid ${T.border}`:"none"}}
+                                      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                                      <span style={{display:"flex"}}><ServiceIcon service={r.connId} size={18}/></span>
+                                      <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+                                        <span style={{fontSize:12,fontWeight:600,color:T.text}}>{def?.name||r.tagId}</span>
+                                        <span style={{fontSize:11,color:T.textMuted}}>→ {nice(r.connId)}</span>
+                                      </div>
+                                      <span style={{fontSize:11,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{(r.objects||[]).length} obj</span>
+                                      <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:600,color:sc}}><span style={{width:6,height:6,borderRadius:"50%",background:sc,display:"inline-block"}}/>{r.status==='done'?'Success':r.status==='running'?'Running':'Failed'}</span>
+                                      <span style={{fontSize:10.5,color:T.textMuted}}>{rsRelTime(r.finishedAt||r.startedAt)}</span>
+                                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted}}><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                    </div>
+                                  );})
+                              }
+                            </div>
+                          </div>
+                        </>) : (()=>{
+                          const sc = sel.status==='done'?T.green:sel.status==='running'?T.amber:T.rose;
+                          const log = runLog(sel);
+                          return (<>
+                            {/* ── DETAIL VIEW ── */}
+                            <div style={{padding:"14px 20px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                              <button onClick={()=>setRsJobOpen(null)} style={{display:"inline-flex",alignItems:"center",gap:5,background:"none",border:"none",color:T.textMuted,fontSize:11.5,cursor:"pointer",padding:0,marginBottom:10}}
+                                onMouseEnter={e=>e.currentTarget.style.color=T.accent} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
+                                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M7 2L3 5l4 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                All runs
+                              </button>
+                              <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
+                                <span style={{display:"flex",marginTop:2}}><ServiceIcon service={sel.connId} size={28}/></span>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontSize:15,fontWeight:700,color:T.text,display:"flex",alignItems:"center",gap:7}}>{selDef?.name||sel.tagId} <span style={{fontSize:12,color:T.textMuted,fontWeight:400}}>→ {nice(sel.connId)}</span></div>
+                                  <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Run <span style={{fontFamily:"'Geist Mono',monospace"}}>{sel.id}</span></div>
+                                </div>
+                                <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:700,color:sc,padding:"3px 10px",borderRadius:99,background:sc+'18',flexShrink:0}}><span style={{width:6,height:6,borderRadius:"50%",background:sc,display:"inline-block"}}/>{sel.status==='done'?'Success':sel.status==='running'?'Running':'Failed'}</span>
                               </div>
-                            ))}
-                          </div>
-
-                          {/* run log — terminal style */}
-                          <div>
-                            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Run log</div>
-                            <div style={{background:T.bg,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",fontFamily:"'Geist Mono',monospace",fontSize:11,lineHeight:1.8,maxHeight:220,overflowY:"auto"}}>
-                              {log.map((ln,j)=>(
-                                <div key={j} style={{display:"flex",gap:8,alignItems:"baseline"}}>
-                                  <span style={{color:T.border,flexShrink:0}}>{fmtT(ln.ts)}</span>
-                                  <span style={{color:lvlColor[ln.lvl],flexShrink:0,width:8}}>{ln.lvl==='ok'?'✓':ln.lvl==='err'?'✕':ln.lvl==='warn'?'!':'·'}</span>
-                                  <span style={{color:ln.lvl==='err'?T.rose:ln.lvl==='warn'?T.amber:T.textSub}}>{ln.msg}</span>
-                                </div>
-                              ))}
                             </div>
-                          </div>
-
-                          {/* objects written */}
-                          <div>
-                            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Objects written ({(sel.objects||[]).length})</div>
-                            <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
-                              {(sel.objects||[]).map((o,j)=>{ const orc=o.result==='success'?T.green:o.result==='pending'?T.amber:T.rose; return (
-                                <div key={j} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderBottom:j<sel.objects.length-1?`1px solid ${T.border}`:"none",background:j%2?T.bgElevated:"transparent"}}>
-                                  <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:T.text,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis"}}>{o.name}</span>
-                                  <span style={{fontSize:10.5,color:T.accent}}>↗ <b style={{fontFamily:"'Geist Mono',monospace"}}>{o.alias}</b></span>
-                                  <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:600,color:orc,flexShrink:0}}><span style={{width:5,height:5,borderRadius:"50%",background:orc,display:"inline-block"}}/>{o.result==='success'?'Written':o.result==='pending'?'Pending':'Failed'}</span>
+                            <div style={{flex:1,overflowY:"auto",padding:"18px 20px",display:"flex",flexDirection:"column",gap:20}}>
+                              {/* summary grid — no trigger */}
+                              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9}}>
+                                {[
+                                  {l:"Objects written", v:(sel.objects||[]).length},
+                                  {l:"Duration", v:durOf(sel)},
+                                  {l:"Result", v:sel.status==='done'?'Success':sel.status==='running'?'Running':'Failed', c:sc},
+                                  {l:"Date", v:fmtDate(sel.startedAt)},
+                                  {l:"Started", v:fmtT(sel.startedAt), mono:true},
+                                  {l:"Finished", v:fmtT(sel.finishedAt), mono:true},
+                                ].map(s=>(
+                                  <div key={s.l} style={{padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+                                    <div style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",color:T.textMuted,marginBottom:4}}>{s.l}</div>
+                                    <div style={{fontSize:12.5,fontWeight:600,color:s.c||T.text,fontFamily:s.mono?"'Geist Mono',monospace":"inherit"}}>{s.v}</div>
+                                  </div>
+                                ))}
+                              </div>
+                              {/* run log */}
+                              <div>
+                                <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Run log</div>
+                                <div style={{background:T.bg,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",fontFamily:"'Geist Mono',monospace",fontSize:11,lineHeight:1.8,maxHeight:220,overflowY:"auto"}}>
+                                  {log.map((ln,j)=>(
+                                    <div key={j} style={{display:"flex",gap:8,alignItems:"baseline"}}>
+                                      <span style={{color:T.border,flexShrink:0}}>{fmtT(ln.ts)}</span>
+                                      <span style={{color:lvlColor[ln.lvl],flexShrink:0,width:8}}>{ln.lvl==='ok'?'✓':ln.lvl==='err'?'✕':ln.lvl==='warn'?'!':'·'}</span>
+                                      <span style={{color:ln.lvl==='err'?T.rose:ln.lvl==='warn'?T.amber:T.textSub}}>{ln.msg}</span>
+                                    </div>
+                                  ))}
                                 </div>
-                              );})}
+                              </div>
+                              {/* objects written */}
+                              <div>
+                                <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Objects written ({(sel.objects||[]).length})</div>
+                                <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+                                  {(sel.objects||[]).map((o,j)=>{ const orc=o.result==='success'?T.green:o.result==='pending'?T.amber:T.rose; return (
+                                    <div key={j} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderBottom:j<sel.objects.length-1?`1px solid ${T.border}`:"none",background:j%2?T.bgElevated:"transparent"}}>
+                                      <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:T.text,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis"}}>{o.name}</span>
+                                      <span style={{fontSize:10.5,color:T.accent}}>↗ <b style={{fontFamily:"'Geist Mono',monospace"}}>{o.alias}</b></span>
+                                      <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:600,color:orc,flexShrink:0}}><span style={{width:5,height:5,borderRadius:"50%",background:orc,display:"inline-block"}}/>{o.result==='success'?'Written':o.result==='pending'?'Pending':'Failed'}</span>
+                                    </div>
+                                  );})}
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        </div>
-
-                        {/* footer */}
-                        <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,justifyContent:"flex-end",flexShrink:0}}>
-                          <button onClick={()=>setRsJobOpen(null)} style={{padding:"8px 14px",background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,borderRadius:8,fontSize:12.5,cursor:"pointer"}}>Close</button>
-                          <button onClick={()=>{ const n=tagCtx.logReverseSync(sel.tagId,(sel.objects||[]).map(o=>o.name),'manual',sel.connId); onToast(`Re-ran reverse sync — ${n} object(s) written to ${nice(sel.connId)}`,'success'); setRsJobOpen(null); }}
-                            style={{padding:"8px 16px",background:T.accent,border:"none",color:"#fff",borderRadius:8,fontSize:12.5,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6}}>
-                            <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M11.5 7a4.5 4.5 0 11-1.3-3.2M11.5 1.5V4H9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                            Re-run
-                          </button>
-                        </div>
+                            <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,justifyContent:"flex-end",flexShrink:0}}>
+                              <button onClick={()=>setRsJobOpen(null)} style={{padding:"8px 14px",background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,borderRadius:8,fontSize:12.5,cursor:"pointer"}}>Back</button>
+                              <button onClick={()=>{ const n=tagCtx.logReverseSync(sel.tagId,(sel.objects||[]).map(o=>o.name),'manual',sel.connId); onToast(`Re-ran reverse sync — ${n} object(s) written to ${nice(sel.connId)}`,'success'); setRsJobOpen(null); }}
+                                style={{padding:"8px 16px",background:T.accent,border:"none",color:"#fff",borderRadius:8,fontSize:12.5,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6}}>
+                                <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M11.5 7a4.5 4.5 0 11-1.3-3.2M11.5 1.5V4H9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                Re-run
+                              </button>
+                            </div>
+                          </>);
+                        })()}
                       </div>
                     </div>
-                    );
-                  })()}
-                </div>
+                  )}
+                </>
                 );
               })()}
 
