@@ -29998,6 +29998,14 @@ const SettingsView = ({onToast})=>{
   });
   const [ldapRoleGroupOpen, setLdapRoleGroupOpen] = useState({});
 
+  // ── Enterprise SSO (OIDC / SAML) state ──
+  // Mirrors the exact field set OpenMetadata asks admins for (OIDC + SAML + shared authorizer).
+  const [ssoPanel,   setSsoPanel]   = useState(null);   // providerId whose config panel is open
+  const [ssoDraft,   setSsoDraft]   = useState(null);   // working form for the open panel
+  const [ssoState,   setSsoState]   = useState({});     // { [providerId]: {configured, protocol, draft} }
+  const [ssoTest,    setSsoTest]    = useState("idle"); // idle | testing | success | error
+  const [ssoAdvOpen, setSsoAdvOpen] = useState(false);  // OIDC "Advanced" expander
+
   // ── Channels (outbound delivery: email, Slack, Teams) state ──
   const [channelPanelOpen, setChannelPanelOpen] = useState(null); // null | "email" | "slack" | "teams"
   const [channelTestState, setChannelTestState] = useState("idle"); // idle | testing | success
@@ -30301,7 +30309,97 @@ const SettingsView = ({onToast})=>{
   const ROLES=[{name:"Admin",users:3,icon:"settings",desc:"Full platform access including settings and user management."},{name:"Data Steward",users:8,icon:"steward",desc:"Govern assets: apply policies, certify data, manage glossary."},{name:"Data Analyst",users:32,icon:"search",desc:"Browse catalog, run queries, view lineage and quality scores."},{name:"Viewer",users:21,icon:"access",desc:"Read-only access to approved domains and dashboards."},{name:"Bot",users:3,icon:"bot",desc:"Service accounts for automated ingestion and processing."}];
   const BOTS=[{id:"b1",name:"ingestion-bot",scope:"Read metadata · Write lineage",token:"bot_ing_••••••",created:"2024-01-10",active:true},{id:"b2",name:"quality-bot",scope:"Read assets · Write quality results",token:"bot_qlt_••••••",created:"2024-02-01",active:true},{id:"b3",name:"notification-bot",scope:"Read all · Send notifications",token:"bot_ntf_••••••",created:"2024-03-15",active:false}];
   const PERSONAS=[{id:"p1",name:"Data Engineer",color:"#38bdf8",users:14,desc:"Full access to pipelines, lineage and technical metadata."},{id:"p2",name:"Data Analyst",color:"#34d399",users:32,desc:"Read access to catalog, dashboards and quality metrics."},{id:"p3",name:"Data Steward",color:"#fbbf24",users:8,desc:"Write access to governance: policies, glossary, certs."},{id:"p4",name:"Exec Viewer",color:"#a78bfa",users:6,desc:"High-level dashboards and compliance summaries only."}];
-  const SSO_PROVIDERS=[];
+  // ── Enterprise SSO catalog + config model (OpenMetadata field parity) ──
+  const ssoIcon=(id,size=22)=>{
+    if(id==="entra") return <svg width={size} height={size} viewBox="0 0 23 23" fill="none"><rect x="1" y="1" width="10" height="10" fill="#f25022"/><rect x="12" y="1" width="10" height="10" fill="#7fba00"/><rect x="1" y="12" width="10" height="10" fill="#00a4ef"/><rect x="12" y="12" width="10" height="10" fill="#ffb900"/></svg>;
+    if(id==="okta")  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="4"/></svg>;
+    if(id==="oidc")  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none"><circle cx="9" cy="12" r="4" stroke="currentColor" strokeWidth="1.7"/><path d="M13 12h8M18 9l3 3-3 3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+    return <svg width={size} height={size} viewBox="0 0 24 24" fill="none"><path d="M12 2l8 3v6c0 5-3.5 8-8 11-4.5-3-8-6-8-11V5l8-3z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+  };
+  const SSO_CATALOG=[
+    {id:"entra",name:"Microsoft Entra ID",group:"Recommended",protocols:["oidc","saml"],defaultProtocol:"oidc",color:"#0078d4",blurb:"Azure AD — Microsoft's recommended default for modern SaaS. OIDC or SAML."},
+    {id:"okta", name:"Okta",             group:"Recommended",protocols:["oidc","saml"],defaultProtocol:"oidc",color:"#007dc1",blurb:"Okta Workforce Identity via OIDC or SAML."},
+    {id:"oidc", name:"Generic OpenID Connect",group:"Other Providers",protocols:["oidc"],defaultProtocol:"oidc",color:"#f5a623",blurb:"Any OIDC-compliant identity provider."},
+    {id:"saml", name:"Generic SAML 2.0", group:"Other Providers",protocols:["saml"],defaultProtocol:"saml",color:"#7c3aed",blurb:"Any SAML 2.0 provider (Ping Identity, OneLogin…)."},
+  ];
+  const ssoOidcDefaults=(prov)=>({
+    clientId:"", clientSecret:"",
+    discoveryUri: prov==="entra"?"https://login.microsoftonline.com/<tenant-id>/v2.0/.well-known/openid-configuration"
+                : prov==="okta" ?"https://<your-org>.okta.com/.well-known/openid-configuration"
+                : prov==="google"?"https://accounts.google.com/.well-known/openid-configuration":"",
+    callbackUrl:"https://edg.jnj.com/callback",
+    providerType: prov==="entra"?"azure":prov==="okta"?"okta":prov==="google"?"google":"custom",
+    scope:"openid email profile",
+    publicKeyUrls:"https://edg.jnj.com/api/v1/system/config/jwks",
+    serverUrl:"https://edg.jnj.com",
+    tenant:"",
+    responseType:"code",
+    preferredJwsAlgorithm:"RS256",
+    clientAuthenticationMethod:"client_secret_post",
+    disablePkce:true, useNonce:true,
+    maxClockSkew:"0", customParams:"",
+  });
+  const ssoSamlDefaults=(prov)=>({
+    idpEntityId: prov==="entra"?"https://sts.windows.net/<tenant-id>/":"",
+    idpSsoUrl: prov==="entra"?"https://login.microsoftonline.com/<tenant-id>/saml2"
+             : prov==="okta" ?"https://<your-org>.okta.com/app/<app-id>/sso/saml":"",
+    idpX509:"",
+    authorityUrl:"https://edg.jnj.com/api/v1/saml/login",
+    nameId:"urn:oasis:names:tc:SAML:2.0:nameid-format:emailAddress",
+    spEntityId:"https://edg.jnj.com/api/v1/saml/acs",
+    spAcsUrl:"https://edg.jnj.com/api/v1/saml/acs",
+    spX509:"", spPrivateKey:"",
+    strictMode:false, tokenValidity:"3600",
+    wantMessagesSigned:false, wantAssertionsSigned:false,
+    sendSignedAuthRequest:false, sendEncryptedNameId:false,
+    keyStoreFilePath:"", keyStoreAlias:"", keyStorePassword:"",
+  });
+  const ssoAuthzDefaults=()=>({
+    jwtPrincipalClaims:"email,preferred_username,sub",
+    jwtClaimsMapping:"",
+    initialAdmins:"admin",
+    principalDomain:"jnj.com",
+    enforcePrincipalDomain:false,
+    enableSelfSignup:true,
+  });
+  const buildSsoDraft=(prov,protocol)=>({protocol,oidc:ssoOidcDefaults(prov),saml:ssoSamlDefaults(prov),authz:ssoAuthzDefaults()});
+  const openSsoPanel=(p)=>{
+    const existing=ssoState[p.id];
+    setSsoDraft(existing?.draft || buildSsoDraft(p.id,p.defaultProtocol));
+    setSsoPanel(p.id); setSsoTest("idle"); setSsoAdvOpen(false);
+  };
+  // Field renderers (read/write the open ssoDraft)
+  const ssoSet=(grp,k,v)=>setSsoDraft(d=>({...d,[grp]:{...d[grp],[k]:v}}));
+  const renderSsoField=(grp,f)=>{
+    const val=ssoDraft?.[grp]?.[f.k] ?? "";
+    const iStyle={width:"100%",padding:"9px 12px",background:f.readonly?T.bgHover:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:f.readonly?T.textMuted:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:f.mono?"'Geist Mono',monospace":"inherit"};
+    return (
+      <div key={f.k} style={{gridColumn:f.full?"1 / -1":"auto"}}>
+        <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>
+          {f.l} {f.req&&<span style={{color:"#ee2424"}}>*</span>}
+          {f.readonly&&<span style={{color:T.textMuted,fontWeight:400}}> · auto</span>}
+        </label>
+        {f.textarea
+          ? <textarea value={val} readOnly={f.readonly} rows={3} placeholder={f.ph||""} onChange={e=>ssoSet(grp,f.k,e.target.value)}
+              style={{...iStyle,resize:"vertical",lineHeight:1.5,fontFamily:"'Geist Mono',monospace"}}
+              onFocus={e=>{if(!f.readonly)e.target.style.borderColor=T.accent;}} onBlur={e=>e.target.style.borderColor=T.border}/>
+          : <input type={f.type||"text"} value={val} readOnly={f.readonly} placeholder={f.ph||""} onChange={e=>ssoSet(grp,f.k,e.target.value)}
+              style={iStyle} onFocus={e=>{if(!f.readonly)e.target.style.borderColor=T.accent;}} onBlur={e=>e.target.style.borderColor=T.border}/>}
+      </div>
+    );
+  };
+  const renderSsoToggle=(grp,k,label,desc)=>(
+    <div key={k} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 12px",background:T.bgSurface,borderRadius:8,border:`1px solid ${T.border}`}}>
+      <div><div style={{fontSize:12,fontWeight:600,color:T.text}}>{label}</div>{desc&&<div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{desc}</div>}</div>
+      <Toggle on={!!ssoDraft?.[grp]?.[k]} onChange={()=>ssoSet(grp,k,!ssoDraft[grp][k])}/>
+    </div>
+  );
+  const SsoSectionBar=({color,label})=>(
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+      <div style={{width:3,height:16,borderRadius:2,background:color,flexShrink:0}}/>
+      <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>{label}</span>
+    </div>
+  );
   const CUSTOM_PROPS=[{name:"data_classification",type:"Enum",entity:"Table",required:false,vals:"Public, Internal, Confidential, Restricted"},{name:"retention_days",type:"Integer",entity:"Table",required:true,vals:""},{name:"business_criticality",type:"Enum",entity:"Dashboard",required:false,vals:"Low, Medium, High, Critical"},{name:"cost_center",type:"String",entity:"Pipeline",required:false,vals:""},{name:"data_product_owner",type:"User",entity:"Domain",required:true,vals:""}];
 
   // derived
@@ -30819,7 +30917,54 @@ const SettingsView = ({onToast})=>{
             </>}
 
             {section==="sso"&&<>
-              <SettSH icon={Ic.sso(16)} title="SSO" desc="Connect your LDAP server to enable single sign-on, auto-provision users, sync teams, and assign roles."/>
+              <SettSH icon={Ic.sso(16)} title="SSO" desc="Connect your enterprise identity provider for single sign-on. Provider templates pre-fill endpoints and claims — under the hood it's one OIDC engine and one SAML engine."/>
+
+              {/* ── Enterprise SSO provider cards (Entra / Okta / OIDC / SAML) ── */}
+              {["Recommended","Other Providers"].map(grp=>(
+                <div key={grp} style={{marginBottom:16}}>
+                  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.11em",marginBottom:8}}>
+                    {grp==="Recommended"?"Enterprise SSO · Recommended":"Other Providers"}
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                    {SSO_CATALOG.filter(p=>p.group===grp).map(p=>{
+                      const st=ssoState[p.id]; const on=st?.configured;
+                      const protoLabel=st?.protocol==="saml"?"SAML 2.0":"OpenID Connect";
+                      return (
+                        <div key={p.id} style={{display:"flex",alignItems:"center",gap:16,padding:"16px 18px",background:T.bgSurface,border:`1.5px solid ${on?T.accent:T.border}`,borderRadius:12,transition:"border-color .2s"}}>
+                          <div style={{width:44,height:44,borderRadius:11,background:on?T.accentDim:`${p.color}14`,border:`1.5px solid ${on?T.accent+"44":p.color+"33"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:p.color}}>
+                            {ssoIcon(p.id)}
+                          </div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:14,fontWeight:700,color:T.text,display:"flex",alignItems:"center",gap:8}}>
+                              {p.name}
+                              {on&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:99,background:`${p.color}18`,color:p.color,border:`1px solid ${p.color}40`,textTransform:"uppercase",letterSpacing:"0.04em"}}>{st.protocol}</span>}
+                            </div>
+                            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                              {on?`Connected · ${protoLabel} · users provisioned on first login`:p.blurb}
+                            </div>
+                          </div>
+                          <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+                            {on&&(
+                              <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:99,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}44`}}>
+                                <span style={{width:5,height:5,borderRadius:"50%",background:T.accent,display:"inline-block"}}/>Active
+                              </span>
+                            )}
+                            <button onClick={()=>openSsoPanel(p)}
+                              style={{padding:"7px 16px",borderRadius:8,background:on?T.bgElevated:T.accent,border:`1px solid ${on?T.border:T.accent}`,color:on?T.textSub:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",transition:"opacity .12s"}}
+                              onMouseEnter={e=>e.currentTarget.style.opacity=".85"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+                              {on?"Configure":"Configure →"}
+                            </button>
+                            {on&&<Btn small variant="danger" onClick={()=>{setSsoState(s=>{const n={...s};delete n[p.id];return n;});onToast(`${p.name} disconnected`,"success");}}>Disconnect</Btn>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              {/* ── Directory (LDAP) ── */}
+              <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.11em",marginBottom:8,marginTop:4}}>Directory</div>
 
               {/* LDAP card */}
               <div style={{display:"flex",alignItems:"center",gap:16,padding:"18px 20px",background:T.bgSurface,border:`1.5px solid ${ldapSaved?T.accent:T.border}`,borderRadius:12,transition:"border-color .2s"}}>
@@ -31171,6 +31316,175 @@ const SettingsView = ({onToast})=>{
                   </div>
                 </>
               )}
+
+              {/* ── Enterprise SSO (OIDC / SAML) slide-in config panel ── */}
+              {ssoPanel&&ssoDraft&&(()=>{
+                const sp=SSO_CATALOG.find(x=>x.id===ssoPanel);
+                const proto=ssoDraft.protocol;
+                const oidcEssential=[
+                  ...(sp.id==="entra"?[{k:"tenant",l:"Tenant ID",req:true,mono:true,ph:"your Entra tenant GUID"}]:[]),
+                  {k:"clientId",l:"Client ID",req:true,mono:true,ph:"application (client) ID"},
+                  {k:"clientSecret",l:"Client Secret",req:true,mono:true,type:"password",ph:"••••••••••••"},
+                  {k:"discoveryUri",l:"Discovery URI",req:true,mono:true,full:true,ph:".well-known/openid-configuration"},
+                  {k:"callbackUrl",l:"Callback URL",mono:true,full:true,readonly:true},
+                ];
+                const oidcAdvanced=[
+                  {k:"scope",l:"Scope"},
+                  {k:"serverUrl",l:"Server URL",mono:true},
+                  {k:"publicKeyUrls",l:"Public Key URLs",mono:true,full:true},
+                  {k:"tenant",l:"Tenant ID",mono:true},
+                  {k:"responseType",l:"Response Type"},
+                  {k:"preferredJwsAlgorithm",l:"Preferred JWS Algorithm"},
+                  {k:"clientAuthenticationMethod",l:"Client Auth Method"},
+                  {k:"maxClockSkew",l:"Max Clock Skew (s)"},
+                  {k:"customParams",l:"Custom Params",full:true},
+                ].filter(f=>!(sp.id==="entra"&&f.k==="tenant"));
+                const samlIdp=[
+                  {k:"idpEntityId",l:"IdP Entity ID",req:true,mono:true,full:true},
+                  {k:"idpSsoUrl",l:"IdP SSO Login URL",req:true,mono:true,full:true},
+                  {k:"idpX509",l:"IdP X.509 Certificate",req:true,textarea:true,full:true,ph:"-----BEGIN CERTIFICATE-----"},
+                  {k:"authorityUrl",l:"Authority URL",mono:true,full:true},
+                  {k:"nameId",l:"NameID Format",mono:true,full:true},
+                ];
+                const samlSp=[
+                  {k:"spEntityId",l:"SP Entity ID",mono:true,full:true},
+                  {k:"spAcsUrl",l:"ACS URL (callback)",mono:true,full:true,readonly:true},
+                  {k:"spX509",l:"SP X.509 Certificate",textarea:true,full:true},
+                  {k:"spPrivateKey",l:"SP Private Key",textarea:true,full:true,ph:"-----BEGIN PRIVATE KEY-----"},
+                ];
+                const samlSecFields=[
+                  {k:"tokenValidity",l:"Token Validity (s)"},
+                  {k:"keyStoreFilePath",l:"KeyStore File Path",mono:true,full:true},
+                  {k:"keyStoreAlias",l:"KeyStore Alias"},
+                  {k:"keyStorePassword",l:"KeyStore Password",type:"password"},
+                ];
+                const authzFields=[
+                  {k:"jwtPrincipalClaims",l:"JWT Principal Claims",mono:true,full:true,ph:"email,preferred_username,sub"},
+                  {k:"jwtClaimsMapping",l:"JWT Claims Mapping",mono:true,full:true,ph:"username:preferred_username;email:email"},
+                  {k:"initialAdmins",l:"Initial Admins",full:true,ph:"comma-separated usernames"},
+                  {k:"principalDomain",l:"Principal Domain"},
+                ];
+                return (
+                  <>
+                    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:700}} onClick={()=>setSsoPanel(null)}/>
+                    <div className="slideIn" style={{position:"fixed",top:0,right:0,bottom:0,width:560,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:800,display:"flex",flexDirection:"column",boxShadow:"-8px 0 40px rgba(0,0,0,.25)"}}>
+
+                      {/* header */}
+                      <div style={{padding:"18px 22px 0",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                          <div style={{display:"flex",alignItems:"center",gap:10}}>
+                            <div style={{width:34,height:34,borderRadius:9,background:`${sp.color}14`,border:`1.5px solid ${sp.color}33`,display:"flex",alignItems:"center",justifyContent:"center",color:sp.color}}>{ssoIcon(sp.id,18)}</div>
+                            <div>
+                              <div style={{fontSize:14,fontWeight:700,color:T.text}}>{sp.name}</div>
+                              <div style={{fontSize:11,color:T.textMuted}}>{proto==="oidc"?"OpenID Connect":"SAML 2.0"}{proto==="oidc"&&` · provider = ${ssoDraft.oidc.providerType}`}</div>
+                            </div>
+                          </div>
+                          <button onClick={()=>setSsoPanel(null)} style={{width:28,height:28,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+                        </div>
+                        {/* Protocol toggle (only when the provider supports both) */}
+                        {sp.protocols.length>1&&(
+                          <div style={{display:"flex",gap:0,marginBottom:-1}}>
+                            {sp.protocols.map(pr=>(
+                              <button key={pr} onClick={()=>{setSsoDraft(d=>({...d,protocol:pr}));setSsoTest("idle");}}
+                                style={{padding:"8px 18px",fontSize:12,fontWeight:proto===pr?700:500,cursor:"pointer",background:"transparent",border:"none",borderBottom:`2.5px solid ${proto===pr?T.accent:"transparent"}`,color:proto===pr?T.accent:T.textMuted,transition:"all .12s"}}>
+                                {pr==="oidc"?"OIDC":"SAML 2.0"}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {sp.protocols.length<2&&<div style={{height:8}}/>}
+                      </div>
+
+                      {/* body */}
+                      <div style={{flex:1,overflowY:"auto",padding:"22px 22px 0"}}>
+                        {proto==="oidc"?(
+                          <div style={{display:"flex",flexDirection:"column",gap:20}}>
+                            <div>
+                              <SsoSectionBar color={sp.color} label="Connection"/>
+                              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>{oidcEssential.map(f=>renderSsoField("oidc",f))}</div>
+                            </div>
+                            {/* Advanced expander */}
+                            <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                              <button onClick={()=>setSsoAdvOpen(o=>!o)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 14px",background:T.bgElevated,border:"none",cursor:"pointer"}}>
+                                <span style={{fontSize:11.5,fontWeight:700,color:T.textSub}}>Advanced <span style={{color:T.textMuted,fontWeight:400}}>· OpenMetadata defaults</span></span>
+                                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{transform:ssoAdvOpen?"rotate(180deg)":"none",transition:"transform .15s"}}><path d="M2.5 4.5L6 8l3.5-3.5" stroke={T.textMuted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                              </button>
+                              {ssoAdvOpen&&(
+                                <div style={{padding:"16px 14px",display:"flex",flexDirection:"column",gap:14,borderTop:`1px solid ${T.border}`}}>
+                                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>{oidcAdvanced.map(f=>renderSsoField("oidc",f))}</div>
+                                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                                    {renderSsoToggle("oidc","disablePkce","Disable PKCE","Proof Key for Code Exchange")}
+                                    {renderSsoToggle("oidc","useNonce","Use Nonce","Replay-attack protection")}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ):(
+                          <div style={{display:"flex",flexDirection:"column",gap:20}}>
+                            <div>
+                              <SsoSectionBar color={sp.color} label="Identity Provider (IdP)"/>
+                              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>{samlIdp.map(f=>renderSsoField("saml",f))}</div>
+                            </div>
+                            <div>
+                              <SsoSectionBar color={T.blue} label="Service Provider (SP)"/>
+                              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>{samlSp.map(f=>renderSsoField("saml",f))}</div>
+                            </div>
+                            <div>
+                              <SsoSectionBar color={T.amber} label="Security"/>
+                              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+                                {renderSsoToggle("saml","strictMode","Strict Mode")}
+                                {renderSsoToggle("saml","wantMessagesSigned","Want Messages Signed")}
+                                {renderSsoToggle("saml","wantAssertionsSigned","Want Assertions Signed")}
+                                {renderSsoToggle("saml","sendSignedAuthRequest","Send Signed AuthN Request")}
+                                {renderSsoToggle("saml","sendEncryptedNameId","Send Encrypted NameID")}
+                              </div>
+                              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>{samlSecFields.map(f=>renderSsoField("saml",f))}</div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Shared authorizer — user mapping & admins */}
+                        <div style={{marginTop:20,marginBottom:20}}>
+                          <SsoSectionBar color={T.violet} label="User Mapping & Admins"/>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:10}}>{authzFields.map(f=>renderSsoField("authz",f))}</div>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                            {renderSsoToggle("authz","enforcePrincipalDomain","Enforce Principal Domain","Only accept users in the domain above")}
+                            {renderSsoToggle("authz","enableSelfSignup","Enable Self Signup","Auto-create users on first login")}
+                          </div>
+                        </div>
+
+                        {/* Test banner */}
+                        {ssoTest==="success"&&(
+                          <div style={{marginBottom:20,padding:"10px 14px",background:"rgba(16,185,129,.08)",border:"1px solid rgba(16,185,129,.3)",borderRadius:9,display:"flex",alignItems:"center",gap:8,fontSize:12,color:"#10b981",fontWeight:600}}>
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.4"/><path d="M4.5 7l2 2 3-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            Metadata reachable — {proto==="oidc"?"discovery document resolved":"IdP metadata validated"}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* footer */}
+                      <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,alignItems:"center",flexShrink:0,background:T.bgSurface}}>
+                        <button onClick={()=>{setSsoTest("testing");setTimeout(()=>setSsoTest("success"),1300);}}
+                          style={{flex:1,padding:"9px",borderRadius:8,background:"transparent",border:`1.5px solid ${T.accent}`,color:T.accent,fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7,transition:"background .12s"}}
+                          onMouseEnter={e=>e.currentTarget.style.background=T.accentDim} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                          {ssoTest==="testing"
+                            ? <><svg width="13" height="13" viewBox="0 0 12 12" fill="none" style={{animation:"spin 1s linear infinite"}}><circle cx="6" cy="6" r="4.5" stroke="rgba(238,36,36,.3)" strokeWidth="1.5"/><path d="M6 1.5A4.5 4.5 0 0110.5 6" stroke={T.accent} strokeWidth="1.5" strokeLinecap="round"/></svg>Testing…</>
+                            : "Test Connection"}
+                        </button>
+                        <button onClick={()=>{setSsoState(s=>({...s,[sp.id]:{configured:true,protocol:proto,draft:ssoDraft}}));setSsoPanel(null);onToast(`${sp.name} (${proto.toUpperCase()}) SSO saved`,"success");}}
+                          style={{flex:1,padding:"9px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                          Save
+                        </button>
+                        <button onClick={()=>setSsoPanel(null)}
+                          style={{padding:"9px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
             </>}
 
             {/* ══ NOTIFICATIONS ══ */}
