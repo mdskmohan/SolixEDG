@@ -682,6 +682,25 @@ const INITIAL_PROP_JOBS = [
   { id:'pj2', assetId:ASSETS[1].id, tagId:'t5', scope:'both',      status:'done', startedAt:'2026-04-01T08:01:00Z', finishedAt:'2026-04-01T08:01:06Z', updated:1,  target:1,  by:'system',   targets:[ASSETS[3].name] },
 ];
 
+// Reverse-sync observability: each run = one push execution to a source, with per-object write records.
+// trigger: 'scheduled' (periodic reconciliation) · 'manual' (steward enabled it) · 'event' (new object propagated in)
+const INITIAL_REVERSE_SYNC_RUNS = [
+  { id:'rs1', connId:'snowflake',  tagId:'t1', trigger:'scheduled', startedAt:'2026-04-20T10:00:00Z', finishedAt:'2026-04-20T10:00:03Z', status:'done', objects:[
+      {name:'COMMERCE.orders.customer_id', alias:'pii_column', result:'success'},
+      {name:'COMMERCE.orders.email',        alias:'pii_column', result:'success'},
+      {name:'COMMERCE.customers.email',      alias:'pii_column', result:'success'},
+  ]},
+  { id:'rs2', connId:'databricks', tagId:'t1', trigger:'manual',    startedAt:'2026-04-20T09:12:00Z', finishedAt:'2026-04-20T09:12:02Z', status:'done', objects:[
+      {name:'analytics.user_events.user_id', alias:'pii', result:'success'},
+  ]},
+  { id:'rs3', connId:'snowflake',  tagId:'t2', trigger:'scheduled', startedAt:'2026-04-19T10:00:00Z', finishedAt:'2026-04-19T10:00:04Z', status:'done', objects:[
+      {name:'HEALTH.patients.mrn', alias:'phi_flag', result:'success'},
+  ]},
+  { id:'rs4', connId:'snowflake',  tagId:'t1', trigger:'event',     startedAt:'2026-04-20T11:30:00Z', finishedAt:null,                   status:'running', objects:[
+      {name:'COMMERCE.orders_2026.customer_id', alias:'pii_column', result:'pending'},
+  ]},
+];
+
 // ─────────────────────────────────────────────
 // TAG PROVIDER
 // ─────────────────────────────────────────────
@@ -692,6 +711,7 @@ function TagProvider({ children }) {
   const [inbox,            setInbox]            = useState(INITIAL_INBOX);
   const [tagPolicies,      setTagPolicies]      = useState(INITIAL_TAG_POLICIES);
   const [propagationJobs,  setPropagationJobs]  = useState(INITIAL_PROP_JOBS);
+  const [reverseSyncRuns,  setReverseSyncRuns]  = useState(INITIAL_REVERSE_SYNC_RUNS);
 
   const unresolvedCount = inbox.filter(i => !i.resolvedAt).length;
   const conflictCount   = Object.values(assignments).flat().filter(a => a.status==='conflict').length;
@@ -778,6 +798,43 @@ function TagProvider({ children }) {
       .filter(j => j.assetId===assetId && (tagId ? j.tagId===tagId : true))
       .sort((a,b)=> (b.startedAt||'').localeCompare(a.startedAt||''));
 
+  // ── Reverse-sync observability ──
+  const getReverseSyncRuns = (filter={}) => reverseSyncRuns
+    .filter(r => (filter.tagId?r.tagId===filter.tagId:true) && (filter.connId?r.connId===filter.connId:true))
+    .sort((a,b)=> (b.startedAt||'').localeCompare(a.startedAt||''));
+
+  // Which connectors this tag actively reverse-syncs to (push-enabled connection + an on source-tag mapping).
+  const pushTargetsForTag = (tagId) => {
+    const def = tagDefs.find(t=>t.id===tagId); if(!def) return [];
+    const tagDefault = def.reverseSyncEnabled ?? (def.category==='sensitivity'||def.category==='regulatory');
+    const out=[];
+    Object.entries(connectorConfigs).forEach(([connId,cfg])=>{
+      if(!cfg.reverseSyncEnabled) return;
+      const ms=(cfg.nameMappings||[]).filter(m=>m.edgTagId===tagId);
+      const onM=ms.find(m=>(m.reverseSync ?? tagDefault));
+      if(onM) out.push({connId, alias: onM.reverseSyncAlias||onM.sourceTagName});
+    });
+    return out;
+  };
+
+  // Rollup for provenance chips: how many objects pushed for a tag (optionally to one connector) + last push time.
+  const pushSummaryForTag = (tagId, connId=null) => {
+    const runs = reverseSyncRuns.filter(r=>r.tagId===tagId && (connId?r.connId===connId:true));
+    const objects = runs.reduce((n,r)=>n+(r.objects||[]).length,0);
+    const lastAt = runs.map(r=>r.finishedAt||r.startedAt).filter(Boolean).sort().slice(-1)[0]||null;
+    return { objects, lastAt, runs:runs.length };
+  };
+
+  // Record a reverse-sync execution (one run per push-enabled connector for this tag).
+  const logReverseSync = (tagId, objectNames=[], trigger='manual', connIdFilter=null) => {
+    const tgts = pushTargetsForTag(tagId).filter(t=>!connIdFilter||t.connId===connIdFilter);
+    if(!tgts.length || !objectNames.length) return 0;
+    const now = new Date().toISOString();
+    const runs = tgts.map(t=>({ id:'rs'+Date.now()+'_'+t.connId, connId:t.connId, tagId, trigger, startedAt:now, finishedAt:now, status:'done', objects:objectNames.map(n=>({name:n, alias:t.alias, result:'success'})) }));
+    setReverseSyncRuns(prev=>[...runs,...prev]);
+    return runs.reduce((n,r)=>n+r.objects.length,0);
+  };
+
   const startPropagation = (assetId, tagId, scope, meta={}) => {
     const id = 'pj'+Date.now();
     const target = meta.target ?? 0;
@@ -785,7 +842,13 @@ function TagProvider({ children }) {
     setPropagationJobs(prev=>[job,...prev]);
     // Simulate the async background worker: queued → running → done.
     setTimeout(()=>setPropagationJobs(prev=>prev.map(j=>j.id===id?{...j,status:'running',updated:Math.ceil(target/2)}:j)), 600);
-    setTimeout(()=>setPropagationJobs(prev=>prev.map(j=>j.id===id?{...j,status:'done',updated:target,finishedAt:new Date().toISOString()}:j)), 1500);
+    setTimeout(()=>{
+      setPropagationJobs(prev=>prev.map(j=>j.id===id?{...j,status:'done',updated:target,finishedAt:new Date().toISOString()}:j));
+      // ── Incremental chain: newly-propagated objects that carry a reverse-sync tag get pushed back automatically (event-driven) ──
+      const base = meta.baseName || 'object';
+      const names = (meta.targets&&meta.targets.length) ? meta.targets : Array.from({length:Math.min(target,4)},(_,i)=>`${base}.downstream_${i+1}`);
+      logReverseSync(tagId, names, 'event');
+    }, 1500);
     return id;
   };
 
@@ -793,7 +856,7 @@ function TagProvider({ children }) {
   const setTagReverseSync = (tagId, enabled) => setTagDefs(prev=>prev.map(t=>t.id===tagId?{...t,reverseSyncEnabled:enabled}:t));
 
   return (
-    <TagContext.Provider value={{ tagDefs, assignments, connectorConfigs, inbox, tagPolicies, propagationJobs, unresolvedCount, conflictCount, pendingCount, getAssetAssignments, getTagDef, applyTag, removeTag, resolveInboxItem, createTagDef, updateTagDef, deleteTagDef, updateConnectorConfig, upsertNameMapping, updateTagPolicies, getPropagationJobs, startPropagation, setTagReverseSync }}>
+    <TagContext.Provider value={{ tagDefs, assignments, connectorConfigs, inbox, tagPolicies, propagationJobs, reverseSyncRuns, unresolvedCount, conflictCount, pendingCount, getAssetAssignments, getTagDef, applyTag, removeTag, resolveInboxItem, createTagDef, updateTagDef, deleteTagDef, updateConnectorConfig, upsertNameMapping, updateTagPolicies, getPropagationJobs, startPropagation, setTagReverseSync, getReverseSyncRuns, pushSummaryForTag, logReverseSync }}>
       {children}
     </TagContext.Provider>
   );
@@ -18067,9 +18130,9 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
           <MetaLabel onEdit={()=>{setTagsOpen(p=>!p);setTagsSearch("");}}>Tags</MetaLabel>
           <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
             {(data.tags||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
-            {(showAllTags?data.tags||[]:(data.tags||[]).slice(0,3)).map(t=>{const c=tcFull(t);return(
-              <span key={t} title="Click to propagate" onClick={()=>{ const def=_tagCtx?.tagDefs.find(td=>td.name.toLowerCase()===t.toLowerCase()); const m=def?.propagationMode; setPropScope((m==='hierarchy'||m==='lineage'||m==='both')?m:'both'); setPropTag(t); }}
-                style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600,cursor:"pointer"}}>{t}<span style={{opacity:.5,fontSize:9}}>⇄</span></span>
+            {(showAllTags?data.tags||[]:(data.tags||[]).slice(0,3)).map(t=>{const c=tcFull(t);const _def=_tagCtx?.tagDefs.find(td=>td.name.toLowerCase()===t.toLowerCase());const _pushed=_def&&_tagCtx?.pushSummaryForTag?_tagCtx.pushSummaryForTag(_def.id).objects>0:false;return(
+              <span key={t} title={_pushed?"Reverse-synced to source · click to propagate":"Click to propagate"} onClick={()=>{ const def=_def; const m=def?.propagationMode; setPropScope((m==='hierarchy'||m==='lineage'||m==='both')?m:'both'); setPropTag(t); }}
+                style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600,cursor:"pointer"}}>{t}{_pushed&&<span title="Reverse-synced to source" style={{fontSize:9,opacity:.8}}>↗</span>}<span style={{opacity:.5,fontSize:9}}>⇄</span></span>
             );})}
             {(data.tags||[]).length>3&&!showAllTags&&<span onClick={()=>setShowAllTags(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{(data.tags||[]).length-3} more</span>}
             {(data.tags||[]).length>3&&showAllTags&&<span onClick={()=>setShowAllTags(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
@@ -18168,7 +18231,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
                 </div>
                 <div style={{padding:'12px 18px',borderTop:`1px solid ${T.border}`,display:'flex',gap:8,justifyContent:'flex-end'}}>
                   <button onClick={()=>setPropTag(null)} style={{padding:'8px 14px',background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,borderRadius:7,fontSize:12.5,cursor:'pointer'}}>Cancel</button>
-                  <button onClick={()=>{ _tagCtx?.startPropagation(asset.id, pTagId, scope, {target:est, by:meHandle}); onToast&&onToast(`Propagating ${propTag} (${scope}) — running in background`,'success'); setPropTag(null); }}
+                  <button onClick={()=>{ _tagCtx?.startPropagation(asset.id, pTagId, scope, {target:est, by:meHandle, baseName:asset.name}); onToast&&onToast(`Propagating ${propTag} (${scope}) — running in background${pDef&&_tagCtx?.pushSummaryForTag ? '. Reverse-sync-enabled objects will push automatically.' : ''}`,'success'); setPropTag(null); }}
                     style={{padding:'8px 18px',background:T.accent,border:'none',color:'#fff',borderRadius:7,fontSize:12.5,fontWeight:700,cursor:'pointer'}}>Propagate now</button>
                 </div>
               </div>
@@ -29901,6 +29964,9 @@ const TagPoliciesSection = ({onToast}) => {
 
 const SettingsView = ({onToast})=>{
   const {isDark, toggleTheme:onThemeToggle} = useTheme();
+  const tagCtx = useTagCtx();
+  const [rsJobOpen, setRsJobOpen] = useState(null); // expanded reverse-sync run id
+  const rsRelTime = (iso)=>{ if(!iso) return '—'; const d=(Date.now()-new Date(iso).getTime())/1000; if(d<3600) return Math.max(1,Math.round(d/60))+'m ago'; if(d<86400) return Math.round(d/3600)+'h ago'; return Math.round(d/86400)+'d ago'; };
   const [section,   setSection]   = useState("connections");
   const [svcSel,    setSvcSel]    = useState(null);
   const [appSel,    setAppSel]    = useState(null);
@@ -30399,6 +30465,70 @@ const SettingsView = ({onToast})=>{
                   Background jobs are automated platform tasks that keep Solix running smoothly. Unlike Service pipelines (which pull metadata from your sources) or Applications (which enrich metadata), these jobs maintain the platform itself — keeping search fresh, archiving logs, and running housekeeping. You don't need to trigger these manually.
                 </div>
               </div>
+
+              {/* ── Tag reverse-sync jobs (observability) ── */}
+              {tagCtx&&(()=>{
+                const runs = tagCtx.getReverseSyncRuns();
+                const nice = id => id.charAt(0).toUpperCase()+id.slice(1);
+                const trigMeta = { scheduled:{label:'Scheduled',color:T.blue}, manual:{label:'Manual',color:T.violet}, event:{label:'Event',color:T.amber} };
+                const totalObjs = runs.reduce((n,r)=>n+(r.objects||[]).length,0);
+                return (
+                <div style={{marginBottom:22}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,margin:"4px 0 8px"}}>
+                    <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>Tag reverse-sync jobs</span>
+                    <span style={{fontSize:10.5,fontWeight:700,padding:"1px 8px",borderRadius:99,background:T.accentDim,color:T.accent}}>{runs.length} runs · {totalObjs} objects written</span>
+                  </div>
+                  <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6,marginBottom:10}}>
+                    Every push of a tag back into a source system. Scheduled runs reconcile drift; event runs fire when a new object is propagated a reverse-sync tag. Expand a run to see which objects were written.
+                  </div>
+                  <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                    <div style={{display:"grid",gridTemplateColumns:"22px 1fr 90px 84px 92px 70px 20px",gap:10,padding:"8px 14px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
+                      {["","Tag → Source","Trigger","Objects","Status","When",""].map((h,i)=>(<div key={i} style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{h}</div>))}
+                    </div>
+                    {runs.length===0
+                      ? <div style={{padding:"28px",textAlign:"center",fontSize:12,color:T.textMuted}}>No reverse-sync runs yet.</div>
+                      : runs.map((r,i)=>{
+                          const def=tagCtx.getTagDef(r.tagId); const tm=trigMeta[r.trigger]||trigMeta.manual; const open=rsJobOpen===r.id;
+                          const sc = r.status==='done'?T.green:r.status==='running'?T.amber:T.rose;
+                          return (
+                            <div key={r.id} style={{borderBottom:i<runs.length-1?`1px solid ${T.border}`:"none"}}>
+                              <div onClick={()=>setRsJobOpen(open?null:r.id)} style={{display:"grid",gridTemplateColumns:"22px 1fr 90px 84px 92px 70px 20px",gap:10,padding:"10px 14px",alignItems:"center",cursor:"pointer",background:open?T.bgElevated:"transparent"}}
+                                onMouseEnter={e=>{if(!open)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!open)e.currentTarget.style.background="transparent";}}>
+                                <span style={{display:"flex"}}><ServiceIcon service={r.connId} size={18}/></span>
+                                <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+                                  <span style={{fontSize:12,fontWeight:600,color:T.text}}>{def?.name||r.tagId}</span>
+                                  <span style={{fontSize:11,color:T.textMuted}}>→ {nice(r.connId)}</span>
+                                </div>
+                                <span style={{fontSize:10.5,fontWeight:600,color:tm.color}}>{tm.label}</span>
+                                <span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{(r.objects||[]).length}</span>
+                                <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:600,color:sc}}><span style={{width:6,height:6,borderRadius:"50%",background:sc,display:"inline-block"}}/>{r.status==='done'?'Success':r.status==='running'?'Running':'Failed'}</span>
+                                <span style={{fontSize:10.5,color:T.textMuted}}>{rsRelTime(r.finishedAt||r.startedAt)}</span>
+                                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,transform:open?"rotate(90deg)":"none",transition:"transform .15s"}}><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                              </div>
+                              {open&&(
+                                <div style={{padding:"4px 14px 12px 44px",background:T.bgElevated}}>
+                                  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",margin:"6px 0"}}>Objects written ({(r.objects||[]).length})</div>
+                                  <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden",background:T.bgSurface}}>
+                                    {(r.objects||[]).map((o,j)=>{ const orc=o.result==='success'?T.green:o.result==='pending'?T.amber:T.rose; return (
+                                      <div key={j} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",borderBottom:j<r.objects.length-1?`1px solid ${T.border}`:"none"}}>
+                                        <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:T.text,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis"}}>{o.name}</span>
+                                        <span style={{fontSize:10.5,color:T.accent}}>↗ wrote <b style={{fontFamily:"'Geist Mono',monospace"}}>{o.alias}</b></span>
+                                        <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:600,color:orc}}><span style={{width:5,height:5,borderRadius:"50%",background:orc,display:"inline-block"}}/>{o.result==='success'?'Written':o.result==='pending'?'Pending':'Failed'}</span>
+                                      </div>
+                                    );})}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                    }
+                  </div>
+                </div>
+                );
+              })()}
+
+              <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"4px 0 8px"}}>Platform maintenance</div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {[
                   {name:"Search Index Refresh",    desc:"Re-indexes all catalog assets so search results stay current after every ingestion run.",             sched:"After every ingest + nightly 4AM", lastRun:"2m ago",  status:"Active",  runs:4021, sr:100},
@@ -31553,7 +31683,8 @@ const PersonPicker = ({value, onChange, placeholder='Unassigned', disabled=false
 };
 
 const TagManagementView = ({onToast, deepLinkTagId}) => {
-  const { tagDefs, assignments, connectorConfigs, inbox, createTagDef, updateTagDef, deleteTagDef, upsertNameMapping, setTagReverseSync, updateConnectorConfig } = useTagCtx();
+  const { tagDefs, assignments, connectorConfigs, inbox, createTagDef, updateTagDef, deleteTagDef, upsertNameMapping, setTagReverseSync, updateConnectorConfig, logReverseSync, pushSummaryForTag } = useTagCtx();
+  const relTime = (iso)=>{ if(!iso) return null; const d=(Date.now()-new Date(iso).getTime())/1000; if(d<3600) return Math.max(1,Math.round(d/60))+'m ago'; if(d<86400) return Math.round(d/3600)+'h ago'; return Math.round(d/86400)+'d ago'; };
   const navigate = useNav();
   const { role: tmvRole, roleCfg: tmvRoleCfg } = useRole();
   const meHandle = ((tmvRoleCfg&&tmvRoleCfg.email)||"you@jnj").split("@")[0];
@@ -32156,7 +32287,7 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                           const canPushOf = connId => !!connectorConfigs[connId]?.reverseSyncEnabled;
                           const isOn = (connId,m) => (m.reverseSync ?? tagDefault) && canPushOf(connId);
                           const onCount = tagSyncRows.filter(({connId,m})=>isOn(connId,m)).length;
-                          const toggleRS = (connId,m) => { if(!canPushOf(connId)) return; const cur=(m.reverseSync ?? tagDefault); upsertNameMapping(connId,{...m,reverseSync:!cur}); onToast(!cur?`Reverse sync on — ${selTag.name} → ${nice(connId)} as ${m.reverseSyncAlias||m.sourceTagName}`:`Reverse sync off — ${m.sourceTagName} (${nice(connId)})`,'success'); };
+                          const toggleRS = (connId,m) => { if(!canPushOf(connId)) return; const cur=(m.reverseSync ?? tagDefault); upsertNameMapping(connId,{...m,reverseSync:!cur}); if(!cur){ const objs=affectedAssets.map(a=>a.name); logReverseSync(selTag.id, objs.length?objs:[selTag.name], 'manual', connId); onToast(`Reverse sync on — pushed ${affectedAssets.length||0} object(s) to ${nice(connId)} as ${m.reverseSyncAlias||m.sourceTagName}`,'success'); } else { onToast(`Reverse sync off — ${m.sourceTagName} (${nice(connId)})`,'success'); } };
                           return (<>
                             <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
                               <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Source tags</div>
@@ -32166,12 +32297,13 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                             {tagSyncRows.length===0
                               ? <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No source tags mapped</span>
                               : <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden',background:T.bgSurface}}>
-                                  {tagSyncRows.map(({connId,m},i)=>{ const canPush=canPushOf(connId); const on=isOn(connId,m); return (
+                                  {tagSyncRows.map(({connId,m},i)=>{ const canPush=canPushOf(connId); const on=isOn(connId,m); const ps=pushSummaryForTag(selTag.id,connId); return (
                                     <div key={m.id} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 14px',borderBottom:i<tagSyncRows.length-1?`1px solid ${T.border}`:'none'}}>
                                       <span title={nice(connId)} style={{flexShrink:0,display:'flex'}}><ServiceIcon service={connId} size={20}/></span>
                                       <span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.text,fontWeight:500}}>{m.sourceTagName}</span>
                                       {on&&<span style={{fontSize:10.5,color:T.accent}}>↗ writes back</span>}
                                       <span style={{flex:1}}/>
+                                      {on&&ps.lastAt&&<span style={{fontSize:10,color:T.textMuted}} title={`${ps.objects} object write(s) logged`}>pushed {relTime(ps.lastAt)}</span>}
                                       {!canPush&&<span title="Enable push on this connection's Tag sync tab" style={{fontSize:10.5,color:T.textMuted}}>push disabled</span>}
                                       <div onClick={()=>toggleRS(connId,m)} title={canPush?'Reverse sync this source tag':'Connection push is disabled'}
                                         style={{width:34,height:19,borderRadius:10,background:on?T.accent:T.border,position:'relative',cursor:canPush?'pointer':'not-allowed',opacity:canPush?1:0.45,transition:'background .2s',flexShrink:0}}>
