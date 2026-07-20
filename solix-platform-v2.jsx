@@ -30472,6 +30472,26 @@ const SettingsView = ({onToast})=>{
                 const nice = id => id.charAt(0).toUpperCase()+id.slice(1);
                 const trigMeta = { scheduled:{label:'Scheduled',color:T.blue}, manual:{label:'Manual',color:T.violet}, event:{label:'Event',color:T.amber} };
                 const totalObjs = runs.reduce((n,r)=>n+(r.objects||[]).length,0);
+                const fmtT = iso => iso ? iso.slice(11,19) : '—';
+                const fmtDate = iso => iso ? iso.slice(0,10) : '—';
+                const durOf = r => { if(!r.finishedAt||!r.startedAt) return r.status==='running'?'in progress':'—'; const s=(new Date(r.finishedAt)-new Date(r.startedAt))/1000; return s<0?'—':`${s.toFixed(1)}s`; };
+                const sel = runs.find(r=>r.id===rsJobOpen);
+                const selDef = sel ? tagCtx.getTagDef(sel.tagId) : null;
+                const lvlColor = { ok:T.green, info:T.textMuted, warn:T.amber, err:T.rose };
+                const runLog = (r) => {
+                  const rdef = tagCtx.getTagDef(r.tagId); const t0=r.startedAt, t1=r.finishedAt;
+                  const L = [
+                    {ts:t0, lvl:'info', msg:`Run queued · trigger: ${r.trigger}`},
+                    {ts:t0, lvl:'info', msg:`Authenticating to ${nice(r.connId)} (service account)`},
+                    {ts:t0, lvl:'ok',   msg:`Connected · write scope verified`},
+                    {ts:t0, lvl:'info', msg:`Resolved ${(r.objects||[]).length} object(s) carrying ${rdef?.name||r.tagId}`},
+                  ];
+                  (r.objects||[]).forEach(o=>L.push({ts:t1||t0, lvl:o.result==='failed'?'err':o.result==='pending'?'warn':'ok', msg:`${o.result==='failed'?'FAILED to write':o.result==='pending'?'pending write':'wrote'} ${o.alias} → ${o.name}`}));
+                  if(r.status==='done') L.push({ts:t1, lvl:'ok', msg:`Completed · ${(r.objects||[]).length} written, 0 failed · ${durOf(r)}`});
+                  else if(r.status==='running') L.push({ts:t0, lvl:'warn', msg:`Running… write in progress`});
+                  else L.push({ts:t1||t0, lvl:'err', msg:`Run failed`});
+                  return L;
+                };
                 return (
                 <div style={{marginBottom:22}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,margin:"4px 0 8px"}}>
@@ -30479,51 +30499,120 @@ const SettingsView = ({onToast})=>{
                     <span style={{fontSize:10.5,fontWeight:700,padding:"1px 8px",borderRadius:99,background:T.accentDim,color:T.accent}}>{runs.length} runs · {totalObjs} objects written</span>
                   </div>
                   <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6,marginBottom:10}}>
-                    Every push of a tag back into a source system. Scheduled runs reconcile drift; event runs fire when a new object is propagated a reverse-sync tag. Expand a run to see which objects were written.
+                    Every push of a tag back into a source system. Scheduled runs reconcile drift; event runs fire when a new object is propagated a reverse-sync tag. Click a run to see its full log and the objects written.
                   </div>
                   <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                    <div style={{display:"grid",gridTemplateColumns:"22px 1fr 90px 84px 92px 70px 20px",gap:10,padding:"8px 14px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
+                    <div style={{display:"grid",gridTemplateColumns:"22px 1fr 90px 84px 92px 70px 16px",gap:10,padding:"8px 14px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
                       {["","Tag → Source","Trigger","Objects","Status","When",""].map((h,i)=>(<div key={i} style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{h}</div>))}
                     </div>
                     {runs.length===0
                       ? <div style={{padding:"28px",textAlign:"center",fontSize:12,color:T.textMuted}}>No reverse-sync runs yet.</div>
                       : runs.map((r,i)=>{
-                          const def=tagCtx.getTagDef(r.tagId); const tm=trigMeta[r.trigger]||trigMeta.manual; const open=rsJobOpen===r.id;
+                          const def=tagCtx.getTagDef(r.tagId); const tm=trigMeta[r.trigger]||trigMeta.manual; const active=rsJobOpen===r.id;
                           const sc = r.status==='done'?T.green:r.status==='running'?T.amber:T.rose;
                           return (
-                            <div key={r.id} style={{borderBottom:i<runs.length-1?`1px solid ${T.border}`:"none"}}>
-                              <div onClick={()=>setRsJobOpen(open?null:r.id)} style={{display:"grid",gridTemplateColumns:"22px 1fr 90px 84px 92px 70px 20px",gap:10,padding:"10px 14px",alignItems:"center",cursor:"pointer",background:open?T.bgElevated:"transparent"}}
-                                onMouseEnter={e=>{if(!open)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!open)e.currentTarget.style.background="transparent";}}>
-                                <span style={{display:"flex"}}><ServiceIcon service={r.connId} size={18}/></span>
-                                <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
-                                  <span style={{fontSize:12,fontWeight:600,color:T.text}}>{def?.name||r.tagId}</span>
-                                  <span style={{fontSize:11,color:T.textMuted}}>→ {nice(r.connId)}</span>
-                                </div>
-                                <span style={{fontSize:10.5,fontWeight:600,color:tm.color}}>{tm.label}</span>
-                                <span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{(r.objects||[]).length}</span>
-                                <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:600,color:sc}}><span style={{width:6,height:6,borderRadius:"50%",background:sc,display:"inline-block"}}/>{r.status==='done'?'Success':r.status==='running'?'Running':'Failed'}</span>
-                                <span style={{fontSize:10.5,color:T.textMuted}}>{rsRelTime(r.finishedAt||r.startedAt)}</span>
-                                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,transform:open?"rotate(90deg)":"none",transition:"transform .15s"}}><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            <div key={r.id} onClick={()=>setRsJobOpen(active?null:r.id)}
+                              style={{display:"grid",gridTemplateColumns:"22px 1fr 90px 84px 92px 70px 16px",gap:10,padding:"10px 14px",alignItems:"center",cursor:"pointer",borderBottom:i<runs.length-1?`1px solid ${T.border}`:"none",background:active?T.accentDim:"transparent",borderLeft:`2px solid ${active?T.accent:'transparent'}`}}
+                              onMouseEnter={e=>{if(!active)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!active)e.currentTarget.style.background="transparent";}}>
+                              <span style={{display:"flex"}}><ServiceIcon service={r.connId} size={18}/></span>
+                              <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+                                <span style={{fontSize:12,fontWeight:600,color:T.text}}>{def?.name||r.tagId}</span>
+                                <span style={{fontSize:11,color:T.textMuted}}>→ {nice(r.connId)}</span>
                               </div>
-                              {open&&(
-                                <div style={{padding:"4px 14px 12px 44px",background:T.bgElevated}}>
-                                  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",margin:"6px 0"}}>Objects written ({(r.objects||[]).length})</div>
-                                  <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden",background:T.bgSurface}}>
-                                    {(r.objects||[]).map((o,j)=>{ const orc=o.result==='success'?T.green:o.result==='pending'?T.amber:T.rose; return (
-                                      <div key={j} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",borderBottom:j<r.objects.length-1?`1px solid ${T.border}`:"none"}}>
-                                        <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:T.text,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis"}}>{o.name}</span>
-                                        <span style={{fontSize:10.5,color:T.accent}}>↗ wrote <b style={{fontFamily:"'Geist Mono',monospace"}}>{o.alias}</b></span>
-                                        <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:600,color:orc}}><span style={{width:5,height:5,borderRadius:"50%",background:orc,display:"inline-block"}}/>{o.result==='success'?'Written':o.result==='pending'?'Pending':'Failed'}</span>
-                                      </div>
-                                    );})}
-                                  </div>
-                                </div>
-                              )}
+                              <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:10.5,fontWeight:600,color:tm.color}}><span style={{width:5,height:5,borderRadius:"50%",background:tm.color,display:"inline-block"}}/>{tm.label}</span>
+                              <span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{(r.objects||[]).length}</span>
+                              <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:600,color:sc}}><span style={{width:6,height:6,borderRadius:"50%",background:sc,display:"inline-block"}}/>{r.status==='done'?'Success':r.status==='running'?'Running':'Failed'}</span>
+                              <span style={{fontSize:10.5,color:T.textMuted}}>{rsRelTime(r.finishedAt||r.startedAt)}</span>
+                              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:active?T.accent:T.textMuted}}><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                             </div>
                           );
                         })
                     }
                   </div>
+
+                  {/* ── Right-side run-detail drawer ── */}
+                  {sel&&(()=>{
+                    const tm=trigMeta[sel.trigger]||trigMeta.manual;
+                    const sc = sel.status==='done'?T.green:sel.status==='running'?T.amber:T.rose;
+                    const log = runLog(sel);
+                    return (
+                    <div onClick={()=>setRsJobOpen(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:1000,backdropFilter:"blur(3px)",display:"flex",justifyContent:"flex-end"}}>
+                      <div onClick={e=>e.stopPropagation()} className="slideInRight" style={{width:560,maxWidth:"96vw",height:"100%",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,boxShadow:"-24px 0 64px rgba(0,0,0,.4)",display:"flex",flexDirection:"column"}}>
+                        {/* header */}
+                        <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"flex-start",gap:12,flexShrink:0}}>
+                          <span style={{display:"flex",marginTop:2}}><ServiceIcon service={sel.connId} size={30}/></span>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:15,fontWeight:700,color:T.text,display:"flex",alignItems:"center",gap:7}}>{selDef?.name||sel.tagId} <span style={{fontSize:12,color:T.textMuted,fontWeight:400}}>→ {nice(sel.connId)}</span></div>
+                            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Reverse-sync run · <span style={{fontFamily:"'Geist Mono',monospace"}}>{sel.id}</span></div>
+                          </div>
+                          <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:700,color:sc,padding:"3px 10px",borderRadius:99,background:sc+'18',flexShrink:0}}><span style={{width:6,height:6,borderRadius:"50%",background:sc,display:"inline-block"}}/>{sel.status==='done'?'Success':sel.status==='running'?'Running':'Failed'}</span>
+                          <button onClick={()=>setRsJobOpen(null)} style={{width:30,height:30,borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+                            onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;e.currentTarget.style.color=T.text;}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;}}>
+                            <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 2l8 8M10 2L2 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                          </button>
+                        </div>
+
+                        {/* body */}
+                        <div style={{flex:1,overflowY:"auto",padding:"18px 20px",display:"flex",flexDirection:"column",gap:20}}>
+                          {/* summary grid */}
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9}}>
+                            {[
+                              {l:"Trigger", v:tm.label, c:tm.color},
+                              {l:"Objects written", v:(sel.objects||[]).length},
+                              {l:"Duration", v:durOf(sel)},
+                              {l:"Date", v:fmtDate(sel.startedAt)},
+                              {l:"Started", v:fmtT(sel.startedAt), mono:true},
+                              {l:"Finished", v:fmtT(sel.finishedAt), mono:true},
+                            ].map(s=>(
+                              <div key={s.l} style={{padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+                                <div style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",color:T.textMuted,marginBottom:4}}>{s.l}</div>
+                                <div style={{fontSize:12.5,fontWeight:600,color:s.c||T.text,fontFamily:s.mono?"'Geist Mono',monospace":"inherit"}}>{s.v}</div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* run log — terminal style */}
+                          <div>
+                            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Run log</div>
+                            <div style={{background:T.bg,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",fontFamily:"'Geist Mono',monospace",fontSize:11,lineHeight:1.8,maxHeight:220,overflowY:"auto"}}>
+                              {log.map((ln,j)=>(
+                                <div key={j} style={{display:"flex",gap:8,alignItems:"baseline"}}>
+                                  <span style={{color:T.border,flexShrink:0}}>{fmtT(ln.ts)}</span>
+                                  <span style={{color:lvlColor[ln.lvl],flexShrink:0,width:8}}>{ln.lvl==='ok'?'✓':ln.lvl==='err'?'✕':ln.lvl==='warn'?'!':'·'}</span>
+                                  <span style={{color:ln.lvl==='err'?T.rose:ln.lvl==='warn'?T.amber:T.textSub}}>{ln.msg}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* objects written */}
+                          <div>
+                            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Objects written ({(sel.objects||[]).length})</div>
+                            <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+                              {(sel.objects||[]).map((o,j)=>{ const orc=o.result==='success'?T.green:o.result==='pending'?T.amber:T.rose; return (
+                                <div key={j} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderBottom:j<sel.objects.length-1?`1px solid ${T.border}`:"none",background:j%2?T.bgElevated:"transparent"}}>
+                                  <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:T.text,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis"}}>{o.name}</span>
+                                  <span style={{fontSize:10.5,color:T.accent}}>↗ <b style={{fontFamily:"'Geist Mono',monospace"}}>{o.alias}</b></span>
+                                  <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:600,color:orc,flexShrink:0}}><span style={{width:5,height:5,borderRadius:"50%",background:orc,display:"inline-block"}}/>{o.result==='success'?'Written':o.result==='pending'?'Pending':'Failed'}</span>
+                                </div>
+                              );})}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* footer */}
+                        <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,justifyContent:"flex-end",flexShrink:0}}>
+                          <button onClick={()=>setRsJobOpen(null)} style={{padding:"8px 14px",background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,borderRadius:8,fontSize:12.5,cursor:"pointer"}}>Close</button>
+                          <button onClick={()=>{ const n=tagCtx.logReverseSync(sel.tagId,(sel.objects||[]).map(o=>o.name),'manual',sel.connId); onToast(`Re-ran reverse sync — ${n} object(s) written to ${nice(sel.connId)}`,'success'); setRsJobOpen(null); }}
+                            style={{padding:"8px 16px",background:T.accent,border:"none",color:"#fff",borderRadius:8,fontSize:12.5,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6}}>
+                            <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M11.5 7a4.5 4.5 0 11-1.3-3.2M11.5 1.5V4H9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            Re-run
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    );
+                  })()}
                 </div>
                 );
               })()}
