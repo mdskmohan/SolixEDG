@@ -4386,7 +4386,25 @@ const QualityView = () => {
   const [tcSQLThreshold,     setTcSQLThreshold]     = useState("");
   const [tcSQLPartitionExpr, setTcSQLPartitionExpr] = useState("");
   const [tcParams,     setTcParams]    = useState({});
+  const [tcParamDescs, setTcParamDescs]= useState({});
   const [tcDim,        setTcDim]       = useState("");
+
+  // ── Custom SQL template helpers (OpenMetadata-style parameterization) ──
+  // {{ table_name }} / {{ column_name }} are reserved and auto-bound from the
+  // selected table/column; any other {{ token }} is a user-defined parameter.
+  const RESERVED_SQL_PARAMS = ["table_name","column_name"];
+  const extractSQLTokens = (sql)=>{
+    const out=[]; const seen=new Set();
+    const re=/\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g; let m;
+    while((m=re.exec(sql||""))!==null){ if(!seen.has(m[1])){seen.add(m[1]);out.push(m[1]);} }
+    return out;
+  };
+  const resolveSQLTemplate = (sql,table,col,params)=>(sql||"").replace(/\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g,(full,name)=>{
+    if(name==="table_name") return table||full;
+    if(name==="column_name") return col||full;
+    const v=params&&params[name];
+    return (v!==undefined&&v!=="")?v:full;
+  });
 
   // DQ Suite schedule modal
   const [dqSchedModal,   setDqSchedModal]   = useState(null);
@@ -4491,14 +4509,22 @@ const QualityView = () => {
   const confirmResolve   = ()=>{if(!incResolveReason.trim())return;setIncidents(prev=>prev.map(i=>i.id===incResolveId?{...i,status:"Resolved",resolved:"Just now",resolutionReason:incResolveReason,timeline:[...(i.timeline||[]),{action:"Resolved",by:"dev.patel",at:"Just now",note:incResolveReason}]}:i));setIncResolveModal(false);showT("Incident resolved");};
   const addIncComment    = (id)=>{const txt=(incCommentText[id]||"").trim();if(!txt)return;setIncidents(prev=>prev.map(i=>i.id===id?{...i,comments:[...(i.comments||[]),{text:txt,by:"dev.patel",at:"Just now"}]}:i));setIncCommentText(prev=>({...prev,[id]:""}));};
 
-  const openTCModal = ()=>{setNewTCModal(true);setTcLevel("table");setTcSelTable("");setTcSelCol("");setTcSelType(null);setTcName("");setTcDesc("");setTcTags([]);setTcGlossary([]);setTcCustomSQL(false);setTcSQLQuery("");setTcParams({});setTcDim("");};
+  const openTCModal = ()=>{setNewTCModal(true);setTcLevel("table");setTcSelTable("");setTcSelCol("");setTcSelType(null);setTcName("");setTcDesc("");setTcTags([]);setTcGlossary([]);setTcCustomSQL(false);setTcSQLQuery("");setTcParams({});setTcParamDescs({});setTcDim("");};
   const handleAddTC = (runImmediately)=>{
-    if(!tcSelType||!tcSelTable) return;
+    if((!tcSelType&&!tcCustomSQL)||!tcSelTable) return;
     const level = tcLevel;
-    const autoName = tcName||(level==="column"&&tcSelCol?`${tcSelTable}.${tcSelCol}_${tcSelType.fn}`:level==="table"?`${tcSelTable}_${tcSelType.fn}`:tcSelType.name);
     const matchedSuite = suites.find(s=>s.type==="table"&&s.table===tcSelTable);
     const sId = matchedSuite?.id||"ts1";
-    const newCase = {id:`tc${Date.now()}`,name:autoName,suiteId:sId,table:tcSelTable,col:level!=="table"?tcSelCol:null,defId:tcSelType.id,defName:tcSelType.name,dim:tcSelType.dim,status:"Success",lastVal:"—",expected:Object.entries(tcParams).map(([k,v])=>`${k}: ${v}`).join(", ")||"—",lastRun:runImmediately?"just now":"Never",history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],params:tcParams,failedReason:"",incidentId:null};
+    let newCase;
+    if(tcCustomSQL){
+      const userParams = extractSQLTokens(tcSQLQuery).filter(t=>!RESERVED_SQL_PARAMS.includes(t));
+      const autoName = tcName||(level==="column"&&tcSelCol?`${tcSelTable}.${tcSelCol}_custom_sql`:`${tcSelTable}_custom_sql`);
+      const resolved = resolveSQLTemplate(tcSQLQuery,tcSelTable,tcSelCol,tcParams);
+      newCase = {id:`tc${Date.now()}`,name:autoName,suiteId:sId,table:tcSelTable,col:level!=="table"?tcSelCol:null,defId:"custom_sql",defName:"Custom SQL",dim:tcDim||"Consistency",status:"Success",lastVal:"—",expected:userParams.map(k=>`${k}: ${tcParams[k]||"—"}`).join(", ")||"—",lastRun:runImmediately?"just now":"Never",history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],params:tcParams,sql:tcSQLQuery,resolvedSql:resolved,failedReason:"",incidentId:null};
+    } else {
+      const autoName = tcName||(level==="column"&&tcSelCol?`${tcSelTable}.${tcSelCol}_${tcSelType.fn}`:level==="table"?`${tcSelTable}_${tcSelType.fn}`:tcSelType.name);
+      newCase = {id:`tc${Date.now()}`,name:autoName,suiteId:sId,table:tcSelTable,col:level!=="table"?tcSelCol:null,defId:tcSelType.id,defName:tcSelType.name,dim:tcSelType.dim,status:"Success",lastVal:"—",expected:Object.entries(tcParams).map(([k,v])=>`${k}: ${v}`).join(", ")||"—",lastRun:runImmediately?"just now":"Never",history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],params:tcParams,failedReason:"",incidentId:null};
+    }
     setTestCases(prev=>[...prev,newCase]);
     setSuites(prev=>prev.map(s=>s.id===sId?{...s,testCount:s.testCount+1,success:s.success+1}:s));
     setNewTCModal(false);setTab("testcases");showT(runImmediately?"Test case created — running now…":"Test case created");
@@ -5727,15 +5753,69 @@ const QualityView = () => {
                 {/* Custom SQL fields */}
                 {tcCustomSQL&&(
                   <div style={{display:"flex",flexDirection:"column",gap:12}}>
-                    {/* SQL Expression */}
+                    {/* SQL Expression — template */}
                     <div>
-                      <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>SQL Expression <span style={{color:T.rose}}>*</span></label>
+                      <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>SQL Expression <span style={{color:T.rose}}>*</span> <span style={{color:T.textMuted,fontWeight:400}}>(template)</span></label>
                       <textarea value={tcSQLQuery} onChange={e=>setTcSQLQuery(e.target.value)} rows={4}
-                        placeholder={"SELECT * FROM {{table}} WHERE amount < 0"}
+                        placeholder={"SELECT {{ column_name }} AS col\nFROM {{ table_name }}\nWHERE {{ column_name }} < {{ min_value }}"}
                         style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${tcSQLQuery?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box",lineHeight:1.6}}
                         onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=tcSQLQuery?T.accent:T.border}/>
-                      <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>Write SQL that returns rows representing problems. Test passes when 0 rows are returned.</div>
+                      <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>Use <code style={{color:"#2dd4bf",fontFamily:"'Geist Mono',monospace"}}>{"{{ table_name }}"}</code> / <code style={{color:"#2dd4bf",fontFamily:"'Geist Mono',monospace"}}>{"{{ column_name }}"}</code> (auto-filled) and any <code style={{color:"#fbbf24",fontFamily:"'Geist Mono',monospace"}}>{"{{ your_param }}"}</code> you declare below. Test passes when 0 rows are returned.</div>
                     </div>
+                    {/* Parameters — reserved (auto) + user-defined */}
+                    {(()=>{
+                      const tokens = extractSQLTokens(tcSQLQuery);
+                      const reserved = tokens.filter(t=>RESERVED_SQL_PARAMS.includes(t));
+                      const userTokens = tokens.filter(t=>!RESERVED_SQL_PARAMS.includes(t));
+                      const chip = (name,val,ok)=>(
+                        <div key={name} style={{display:"flex",alignItems:"center",gap:7,fontSize:11.5,background:T.bgElevated,border:`1px solid ${ok?"#2dd4bf55":T.border}`,borderRadius:8,padding:"6px 10px"}}>
+                          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 7V5a4 4 0 018 0v2m-9 0h10v6a1 1 0 01-1 1H4a1 1 0 01-1-1V7z" stroke={ok?"#2dd4bf":T.textMuted} strokeWidth="1.3"/></svg>
+                          <span style={{fontFamily:"'Geist Mono',monospace",color:"#2dd4bf"}}>{name}</span>
+                          <span style={{color:T.textMuted}}>· {ok?val:`select a ${name==="table_name"?"table":"column"} above`}</span>
+                        </div>
+                      );
+                      return (
+                        <div>
+                          <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Parameters</div>
+                          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                            {reserved.includes("table_name")&&chip("table_name",tcSelTable,!!tcSelTable)}
+                            {reserved.includes("column_name")&&chip("column_name",tcSelCol,!!tcSelCol)}
+                            {userTokens.map(name=>(
+                              <div key={name} style={{background:"#fbbf2410",border:"1px solid #fbbf2455",borderRadius:8,padding:"8px 10px"}}>
+                                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                                  <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:"#fbbf24",minWidth:90}}>{name}</span>
+                                  <input value={tcParams[name]||""} onChange={e=>setTcParams(p=>({...p,[name]:e.target.value}))}
+                                    placeholder="value"
+                                    style={{flex:1,padding:"6px 9px",background:T.bgElevated,border:`1.5px solid ${tcParams[name]?T.accent:T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"'Geist Mono',monospace"}}/>
+                                </div>
+                                <input value={tcParamDescs[name]||""} onChange={e=>setTcParamDescs(p=>({...p,[name]:e.target.value}))}
+                                  placeholder="Description (optional) — help the user know what to enter"
+                                  style={{width:"100%",marginTop:6,padding:"5px 9px",background:"transparent",border:`1px solid ${T.border}`,borderRadius:7,color:T.textSub,fontSize:11,outline:"none",boxSizing:"border-box"}}/>
+                              </div>
+                            ))}
+                            {tokens.length===0&&(
+                              <div style={{fontSize:11,color:T.textMuted,padding:"8px 10px",border:`1px dashed ${T.border}`,borderRadius:8}}>
+                                Add <code style={{color:"#2dd4bf",fontFamily:"'Geist Mono',monospace"}}>{"{{ table_name }}"}</code> to bind the selected table, or <code style={{color:"#fbbf24",fontFamily:"'Geist Mono',monospace"}}>{"{{ min_value }}"}</code>-style tokens to collect values.
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    {/* Resolved query preview */}
+                    {tcSQLQuery.trim()&&(()=>{
+                      const resolved = resolveSQLTemplate(tcSQLQuery,tcSelTable,tcSelCol,tcParams);
+                      const unresolved = extractSQLTokens(resolved);
+                      return (
+                        <div>
+                          <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Resolved query <span style={{color:T.textMuted,fontWeight:400}}>(what actually runs)</span></div>
+                          <pre style={{margin:0,padding:"10px 12px",background:T.bgElevated,border:`1px solid ${unresolved.length?"#fbbf2455":T.border}`,borderRadius:9,color:T.text,fontSize:12,fontFamily:"'Geist Mono',monospace",lineHeight:1.6,whiteSpace:"pre-wrap",boxSizing:"border-box"}}>{resolved}</pre>
+                          {unresolved.length>0&&(
+                            <div style={{fontSize:10.5,color:"#fbbf24",marginTop:4}}>Unfilled: {unresolved.map(t=>`{{ ${t} }}`).join(", ")} — bind the table/column above or enter a value.</div>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {/* Strategy */}
                     <div>
                       <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Strategy <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
@@ -5833,10 +5913,17 @@ const QualityView = () => {
             {/* Footer */}
             <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgElevated,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
               <button onClick={()=>setNewTCModal(false)} style={{padding:"8px 18px",borderRadius:9,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer",fontWeight:500}}>Cancel</button>
-              <button onClick={()=>handleAddTC(true)} disabled={(!tcSelType&&!tcCustomSQL)||!tcSelTable||(tcLevel==="column"&&!tcSelCol)||(tcCustomSQL&&!tcSQLQuery.trim())}
-                style={{display:"flex",alignItems:"center",gap:7,padding:"9px 22px",borderRadius:9,background:(tcSelType||tcCustomSQL)&&tcSelTable&&(tcLevel!=="column"||tcSelCol)&&(!tcCustomSQL||tcSQLQuery.trim())?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:(tcSelType||tcCustomSQL)&&tcSelTable?"pointer":"default"}}>
+              {(()=>{
+                const sqlUnresolved = tcCustomSQL && extractSQLTokens(resolveSQLTemplate(tcSQLQuery,tcSelTable,tcSelCol,tcParams)).length>0;
+                const blocked = (!tcSelType&&!tcCustomSQL)||!tcSelTable||(tcLevel==="column"&&!tcSelCol)||(tcCustomSQL&&(!tcSQLQuery.trim()||sqlUnresolved));
+                return (
+              <button onClick={()=>handleAddTC(true)} disabled={blocked}
+                title={sqlUnresolved?"Bind the table/column and fill every parameter before running":undefined}
+                style={{display:"flex",alignItems:"center",gap:7,padding:"9px 22px",borderRadius:9,background:!blocked?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:!blocked?"pointer":"default"}}>
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>Run now
               </button>
+                );
+              })()}
             </div>
           </div>
         </div>
