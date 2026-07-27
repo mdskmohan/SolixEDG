@@ -956,6 +956,26 @@ const QUALITY_RULES = [
   {id:8,table:"customers",rule:"Timeliness: updated_at < 6h",status:"passing",score:95,runs:240,lastRun:"8m ago",dim:"Timeliness"},
 ];
 
+// ── Custom SQL template helpers (OpenMetadata-style parameterization) ──
+// {{ table_name }} / {{ column_name }} are reserved and auto-bound from the
+// selected table/column; any other {{ token }} is a user-defined parameter.
+const RESERVED_SQL_PARAMS = ["table_name","column_name"];
+const extractSQLTokens = (sql)=>{
+  const out=[]; const seen=new Set();
+  const re=/\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g; let m;
+  while((m=re.exec(sql||""))!==null){ if(!seen.has(m[1])){seen.add(m[1]);out.push(m[1]);} }
+  return out;
+};
+const userSQLParams = (sql)=>extractSQLTokens(sql).filter(t=>!RESERVED_SQL_PARAMS.includes(t));
+const resolveSQLTemplate = (sql,table,col,values)=>(sql||"").replace(/\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g,(full,name)=>{
+  if(name==="table_name") return table||full;
+  if(name==="column_name") return col||full;
+  const v=values&&values[name];
+  return (v!==undefined&&v!=="")?v:full;
+});
+// normalize a definition's params to [{name,description}] (older presets store bare name strings)
+const normDefParams = (params)=>(params||[]).map(p=>typeof p==="string"?{name:p,description:""}:p);
+
 // entityType: "TABLE" | "COLUMN"  testPlatforms: array  dim: Data Quality Dimension  enabled: toggle state
 const DQ_TEST_DEFINITIONS = [
   {id:"td1",  name:"Table Row Count To Be Between",          entityType:"TABLE",  dim:"Completeness", testPlatforms:["OpenMetadata"],           enabled:true,  params:["minValue","maxValue"],              fn:"tableRowCountToBeBetween",          desc:"This defines the test TableRowCountToBeBetween. Test the number of rows to be between two values."},
@@ -4354,6 +4374,9 @@ const QualityView = () => {
   const [ndDesc,        setNdDesc]        = useState("");
   const [ndEntityType,  setNdEntityType]  = useState("COLUMN");
   const [ndDim,         setNdDim]         = useState("");
+  const [ndLogic,       setNdLogic]       = useState("preset");   // "preset" | "customSql"
+  const [ndSql,         setNdSql]         = useState("");
+  const [ndParamDescs,  setNdParamDescs]  = useState({});          // {paramName: description}
 
   // incident manager tab
   const [incTcFilter,     setIncTcFilter]     = useState("");
@@ -4493,15 +4516,35 @@ const QualityView = () => {
 
   const openTCModal = ()=>{setNewTCModal(true);setTcLevel("table");setTcSelTable("");setTcSelCol("");setTcSelType(null);setTcName("");setTcDesc("");setTcTags([]);setTcGlossary([]);setTcCustomSQL(false);setTcSQLQuery("");setTcParams({});setTcDim("");};
   const handleAddTC = (runImmediately)=>{
-    if(!tcSelType||!tcSelTable) return;
+    if((!tcSelType&&!tcCustomSQL)||!tcSelTable) return;
     const level = tcLevel;
-    const autoName = tcName||(level==="column"&&tcSelCol?`${tcSelTable}.${tcSelCol}_${tcSelType.fn}`:level==="table"?`${tcSelTable}_${tcSelType.fn}`:tcSelType.name);
     const matchedSuite = suites.find(s=>s.type==="table"&&s.table===tcSelTable);
     const sId = matchedSuite?.id||"ts1";
-    const newCase = {id:`tc${Date.now()}`,name:autoName,suiteId:sId,table:tcSelTable,col:level!=="table"?tcSelCol:null,defId:tcSelType.id,defName:tcSelType.name,dim:tcSelType.dim,status:"Success",lastVal:"—",expected:Object.entries(tcParams).map(([k,v])=>`${k}: ${v}`).join(", ")||"—",lastRun:runImmediately?"just now":"Never",history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],params:tcParams,failedReason:"",incidentId:null};
+    let newCase;
+    if(tcCustomSQL){
+      // inline quick custom SQL — one-off
+      const uParams = userSQLParams(tcSQLQuery);
+      const autoName = tcName||(level==="column"&&tcSelCol?`${tcSelTable}.${tcSelCol}_custom_sql`:`${tcSelTable}_custom_sql`);
+      const resolved = resolveSQLTemplate(tcSQLQuery,tcSelTable,tcSelCol,tcParams);
+      newCase = {id:`tc${Date.now()}`,name:autoName,suiteId:sId,table:tcSelTable,col:level!=="table"?tcSelCol:null,defId:"custom_sql",defName:"Custom SQL",dim:tcDim||"Consistency",status:"Success",lastVal:"—",expected:uParams.map(k=>`${k}: ${tcParams[k]||"—"}`).join(", ")||"—",lastRun:runImmediately?"just now":"Never",history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],params:tcParams,sql:tcSQLQuery,resolvedSql:resolved,failedReason:"",incidentId:null};
+    } else {
+      const isCustomDef = tcSelType.logic==="customSql";
+      const autoName = tcName||(level==="column"&&tcSelCol?`${tcSelTable}.${tcSelCol}_${tcSelType.fn}`:level==="table"?`${tcSelTable}_${tcSelType.fn}`:tcSelType.name);
+      const resolved = isCustomDef?resolveSQLTemplate(tcSelType.sql,tcSelTable,tcSelCol,tcParams):undefined;
+      newCase = {id:`tc${Date.now()}`,name:autoName,suiteId:sId,table:tcSelTable,col:level!=="table"?tcSelCol:null,defId:tcSelType.id,defName:tcSelType.name,dim:tcSelType.dim,status:"Success",lastVal:"—",expected:Object.entries(tcParams).map(([k,v])=>`${k}: ${v}`).join(", ")||"—",lastRun:runImmediately?"just now":"Never",history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],params:tcParams,...(isCustomDef?{sql:tcSelType.sql,resolvedSql:resolved}:{}),failedReason:"",incidentId:null};
+    }
     setTestCases(prev=>[...prev,newCase]);
     setSuites(prev=>prev.map(s=>s.id===sId?{...s,testCount:s.testCount+1,success:s.success+1}:s));
     setNewTCModal(false);setTab("testcases");showT(runImmediately?"Test case created — running now…":"Test case created");
+  };
+  // promote an inline custom-SQL one-off into a reusable Test Definition
+  const handleSaveCustomAsDef = ()=>{
+    if(!tcSQLQuery.trim()){showT("Write a SQL expression first");return;}
+    const name = (tcName.trim()||`Custom SQL — ${tcSelTable||"template"}`);
+    const params = userSQLParams(tcSQLQuery).map(n=>({name:n,description:""}));
+    const nd = {id:`td${Date.now()}`,name,entityType:tcLevel==="column"?"COLUMN":"TABLE",dim:tcDim||"Consistency",testPlatforms:["OpenMetadata"],enabled:true,logic:"customSql",sql:tcSQLQuery,params,fn:"customSql",desc:tcDesc||name};
+    setDefinitions(prev=>[...prev,nd]);
+    showT("Saved as reusable definition — now in your test library");
   };
 
   const handleCreateBundleSuite = ()=>{
@@ -4518,9 +4561,14 @@ const QualityView = () => {
 
   const handleCreateDef = ()=>{
     if(!ndName.trim()||!ndEntityType) return;
-    const nd = {id:`td${Date.now()}`,name:ndName,entityType:ndEntityType,dim:ndDim||"Validity",testPlatforms:["OpenMetadata"],enabled:true,params:[],fn:ndName.replace(/\s+/g,""),desc:ndDesc||ndName};
+    if(ndLogic==="customSql"&&!ndSql.trim()) return;
+    const isCustom = ndLogic==="customSql";
+    const params = isCustom
+      ? userSQLParams(ndSql).map(name=>({name,description:ndParamDescs[name]||""}))
+      : [];
+    const nd = {id:`td${Date.now()}`,name:ndName,entityType:ndEntityType,dim:ndDim||"Validity",testPlatforms:["OpenMetadata"],enabled:true,logic:ndLogic,sql:isCustom?ndSql:"",params,fn:isCustom?"customSql":ndName.replace(/\s+/g,""),desc:ndDesc||ndName};
     setDefinitions(prev=>[...prev,nd]);
-    setAddDefPanel(false);setNdName("");setNdDisplay("");setNdDesc("");setNdEntityType("COLUMN");setNdDim("");
+    setAddDefPanel(false);setNdName("");setNdDisplay("");setNdDesc("");setNdEntityType("COLUMN");setNdDim("");setNdLogic("preset");setNdSql("");setNdParamDescs({});
     showT("Test definition created");
   };
 
@@ -5130,6 +5178,10 @@ const QualityView = () => {
                 {defSearch&&<button onClick={()=>setDefSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:16,lineHeight:1}}>×</button>}
               </div>
               <span style={{fontSize:12,color:T.textMuted,whiteSpace:"nowrap"}}>{filteredDefs.length} of {definitions.length}</span>
+              <button onClick={()=>{setNdName("");setNdDisplay("");setNdDesc("");setNdEntityType("COLUMN");setNdDim("");setNdLogic("preset");setNdSql("");setNdParamDescs({});setAddDefPanel(true);}}
+                style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>Add Definition
+              </button>
             </div>
             <div style={{padding:"10px 16px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
@@ -5727,15 +5779,46 @@ const QualityView = () => {
                 {/* Custom SQL fields */}
                 {tcCustomSQL&&(
                   <div style={{display:"flex",flexDirection:"column",gap:12}}>
-                    {/* SQL Expression */}
+                    {/* SQL Expression — template */}
                     <div>
-                      <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>SQL Expression <span style={{color:T.rose}}>*</span></label>
+                      <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>SQL Expression <span style={{color:T.rose}}>*</span> <span style={{color:T.textMuted,fontWeight:400}}>(template)</span></label>
                       <textarea value={tcSQLQuery} onChange={e=>setTcSQLQuery(e.target.value)} rows={4}
-                        placeholder={"SELECT * FROM {{table}} WHERE amount < 0"}
+                        placeholder={"SELECT {{ column_name }} AS col\nFROM {{ table_name }}\nWHERE {{ column_name }} < {{ min_value }}"}
                         style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${tcSQLQuery?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box",lineHeight:1.6}}
                         onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=tcSQLQuery?T.accent:T.border}/>
-                      <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>Write SQL that returns rows representing problems. Test passes when 0 rows are returned.</div>
+                      <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>Use <code style={{color:"#2dd4bf",fontFamily:"'Geist Mono',monospace"}}>{"{{ table_name }}"}</code> / <code style={{color:"#2dd4bf",fontFamily:"'Geist Mono',monospace"}}>{"{{ column_name }}"}</code> (auto-filled from your selections above) and any <code style={{color:"#fbbf24",fontFamily:"'Geist Mono',monospace"}}>{"{{ token }}"}</code> to collect a value. Test passes when 0 rows are returned.</div>
                     </div>
+                    {/* Parameters — reserved (auto) + user-defined values */}
+                    {(()=>{
+                      const tokens = extractSQLTokens(tcSQLQuery);
+                      const reserved = tokens.filter(t=>RESERVED_SQL_PARAMS.includes(t));
+                      const userTokens = tokens.filter(t=>!RESERVED_SQL_PARAMS.includes(t));
+                      if(tokens.length===0) return null;
+                      const chip = (name,val,ok)=>(
+                        <div key={name} style={{display:"flex",alignItems:"center",gap:7,fontSize:11.5,background:T.bgElevated,border:`1px solid ${ok?"#2dd4bf55":T.border}`,borderRadius:8,padding:"6px 10px"}}>
+                          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 7V5a4 4 0 018 0v2m-9 0h10v6a1 1 0 01-1 1H4a1 1 0 01-1-1V7z" stroke={ok?"#2dd4bf":T.textMuted} strokeWidth="1.3"/></svg>
+                          <span style={{fontFamily:"'Geist Mono',monospace",color:"#2dd4bf"}}>{name}</span>
+                          <span style={{color:T.textMuted}}>· {ok?val:`select a ${name==="table_name"?"table":"column"} above`}</span>
+                        </div>
+                      );
+                      return (
+                        <div>
+                          <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Parameters</div>
+                          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                            {reserved.includes("table_name")&&chip("table_name",tcSelTable,!!tcSelTable)}
+                            {reserved.includes("column_name")&&chip("column_name",tcSelCol,!!tcSelCol)}
+                            {userTokens.map(name=>(
+                              <div key={name} style={{display:"flex",alignItems:"center",gap:8,background:"#fbbf2410",border:"1px solid #fbbf2455",borderRadius:8,padding:"8px 10px"}}>
+                                <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:"#fbbf24",minWidth:90}}>{name}</span>
+                                <input value={tcParams[name]||""} onChange={e=>setTcParams(p=>({...p,[name]:e.target.value}))}
+                                  placeholder="value"
+                                  style={{flex:1,padding:"6px 9px",background:T.bgElevated,border:`1.5px solid ${tcParams[name]?T.accent:T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"'Geist Mono',monospace"}}/>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
                     {/* Strategy */}
                     <div>
                       <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Strategy <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
@@ -5778,17 +5861,30 @@ const QualityView = () => {
                         onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
                       <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>SQL expression to group results for row-level analysis.</div>
                     </div>
+                    {/* Save as reusable definition */}
+                    <button onClick={handleSaveCustomAsDef} disabled={!tcSQLQuery.trim()}
+                      style={{display:"flex",alignItems:"center",gap:7,alignSelf:"flex-start",padding:"7px 14px",borderRadius:8,background:"transparent",border:`1px solid ${tcSQLQuery.trim()?T.accent:T.border}`,color:tcSQLQuery.trim()?T.accent:T.textMuted,fontSize:11.5,fontWeight:600,cursor:tcSQLQuery.trim()?"pointer":"default"}}>
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 3h8l2 2v8H3V3z" stroke="currentColor" strokeWidth="1.3"/><path d="M6 3v4h4" stroke="currentColor" strokeWidth="1.3"/></svg>
+                      Save as reusable definition
+                    </button>
+                    <div style={{fontSize:10.5,color:T.textMuted,marginTop:-4}}>Reuse this SQL as a Test Definition across other tables. Declared parameters carry over.</div>
                   </div>
                 )}
               </div>
 
-              {/* Parameters */}
-              {!tcCustomSQL&&tcSelType&&tcSelType.params.length>0&&(
+              {/* Parameters — preset definitions (bare names) or custom definitions ({name,description}) */}
+              {!tcCustomSQL&&tcSelType&&(tcSelType.params||[]).length>0&&(
                 <div>
                   <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Parameters</div>
-                  {tcSelType.params.map(param=>(
+                  {tcSelType.logic==="customSql"&&(
+                    <div style={{fontSize:10.5,color:T.textMuted,marginBottom:8}}>
+                      <code style={{color:"#2dd4bf",fontFamily:"'Geist Mono',monospace"}}>{"{{ table_name }}"}</code>{tcLevel==="column"&&<> / <code style={{color:"#2dd4bf",fontFamily:"'Geist Mono',monospace"}}>{"{{ column_name }}"}</code></>} auto-bind to your selections above. Fill the parameters below.
+                    </div>
+                  )}
+                  {normDefParams(tcSelType.params).map(({name:param,description})=>(
                     <div key={param} style={{marginBottom:10}}>
                       <label style={{display:"block",fontSize:11,fontWeight:500,color:T.textSub,marginBottom:5,textTransform:"capitalize"}}>{param.replace(/([A-Z])/g," $1").trim()}</label>
+                      {description&&<div style={{fontSize:10.5,color:T.textMuted,marginBottom:5}}>{description}</div>}
                       <input value={tcParams[param]||""} onChange={e=>setTcParams(p=>({...p,[param]:e.target.value}))}
                         placeholder={`e.g. ${param.includes("min")||param.includes("Min")?"0":param.includes("max")||param.includes("Max")?"1000":param.includes("regex")?"^[A-Z].*":param.includes("Values")||param.includes("Set")?"value1, value2":"..."}`}
                         style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${tcParams[param]?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:param.includes("regex")||param.includes("sql")?"'Geist Mono',monospace":"inherit"}}
@@ -5833,10 +5929,18 @@ const QualityView = () => {
             {/* Footer */}
             <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgElevated,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
               <button onClick={()=>setNewTCModal(false)} style={{padding:"8px 18px",borderRadius:9,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer",fontWeight:500}}>Cancel</button>
-              <button onClick={()=>handleAddTC(true)} disabled={(!tcSelType&&!tcCustomSQL)||!tcSelTable||(tcLevel==="column"&&!tcSelCol)||(tcCustomSQL&&!tcSQLQuery.trim())}
-                style={{display:"flex",alignItems:"center",gap:7,padding:"9px 22px",borderRadius:9,background:(tcSelType||tcCustomSQL)&&tcSelTable&&(tcLevel!=="column"||tcSelCol)&&(!tcCustomSQL||tcSQLQuery.trim())?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:(tcSelType||tcCustomSQL)&&tcSelTable?"pointer":"default"}}>
+              {(()=>{
+                const inlineUnresolved = tcCustomSQL && extractSQLTokens(resolveSQLTemplate(tcSQLQuery,tcSelTable,tcSelCol,tcParams)).length>0;
+                const defUnfilled = !tcCustomSQL && tcSelType && tcSelType.logic==="customSql" && userSQLParams(tcSelType.sql).some(p=>!tcParams[p]);
+                const blocked = (!tcSelType&&!tcCustomSQL)||!tcSelTable||(tcLevel==="column"&&!tcSelCol)||(tcCustomSQL&&(!tcSQLQuery.trim()||inlineUnresolved))||defUnfilled;
+                return (
+              <button onClick={()=>handleAddTC(true)} disabled={blocked}
+                title={inlineUnresolved||defUnfilled?"Bind the table/column and fill every parameter before running":undefined}
+                style={{display:"flex",alignItems:"center",gap:7,padding:"9px 22px",borderRadius:9,background:!blocked?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:!blocked?"pointer":"default"}}>
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>Run now
               </button>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -6043,6 +6147,68 @@ const QualityView = () => {
                   {DQ_DIMS.map(d=><option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
+              {/* Logic type — Preset marker vs. Custom SQL template */}
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Logic Type <span style={{color:T.rose}}>*</span></label>
+                <div style={{display:"flex",gap:6}}>
+                  {[{k:"preset",l:"Preset",d:"Built-in check, no SQL"},{k:"customSql",l:"Custom SQL",d:"Your own SQL template"}].map(({k,l,d})=>(
+                    <button key={k} onClick={()=>setNdLogic(k)} style={{flex:1,padding:"10px 12px",borderRadius:9,border:`1.5px solid ${ndLogic===k?T.accent:T.border}`,background:ndLogic===k?`${T.accent}08`:T.bgElevated,cursor:"pointer",textAlign:"left",transition:"all .12s"}}>
+                      <div style={{fontSize:12,fontWeight:700,color:ndLogic===k?T.accent:T.text,marginBottom:2}}>{l}</div>
+                      <div style={{fontSize:10.5,color:T.textMuted}}>{d}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* Custom SQL template + declared parameters */}
+              {ndLogic==="customSql"&&(
+                <>
+                  <div>
+                    <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>SQL Expression <span style={{color:T.rose}}>*</span> <span style={{color:T.textMuted,fontWeight:400}}>(template)</span></label>
+                    <textarea value={ndSql} onChange={e=>setNdSql(e.target.value)} rows={5}
+                      placeholder={"SELECT {{ column_name }} AS col\nFROM {{ table_name }}\nWHERE {{ column_name }} < {{ min_value }}"}
+                      style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${ndSql?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box",lineHeight:1.6}}
+                      onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=ndSql?T.accent:T.border}/>
+                    <div style={{fontSize:10.5,color:T.textMuted,marginTop:4,lineHeight:1.5}}>
+                      <code style={{color:"#2dd4bf",fontFamily:"'Geist Mono',monospace"}}>{"{{ table_name }}"}</code> / <code style={{color:"#2dd4bf",fontFamily:"'Geist Mono',monospace"}}>{"{{ column_name }}"}</code> are auto-filled when the test runs. Any other <code style={{color:"#fbbf24",fontFamily:"'Geist Mono',monospace"}}>{"{{ token }}"}</code> becomes a parameter you declare below. Test passes when 0 rows are returned.
+                    </div>
+                  </div>
+                  {(()=>{
+                    const tokens = extractSQLTokens(ndSql);
+                    const reserved = tokens.filter(t=>RESERVED_SQL_PARAMS.includes(t));
+                    const userTokens = tokens.filter(t=>!RESERVED_SQL_PARAMS.includes(t));
+                    return (
+                      <div>
+                        <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Parameters</label>
+                        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                          {reserved.map(name=>(
+                            <div key={name} style={{display:"flex",alignItems:"center",gap:7,fontSize:11.5,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,padding:"7px 10px"}}>
+                              <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 7V5a4 4 0 018 0v2m-9 0h10v6a1 1 0 01-1 1H4a1 1 0 01-1-1V7z" stroke="#2dd4bf" strokeWidth="1.3"/></svg>
+                              <span style={{fontFamily:"'Geist Mono',monospace",color:"#2dd4bf"}}>{name}</span>
+                              <span style={{color:T.textMuted}}>· reserved — auto-filled at run time</span>
+                            </div>
+                          ))}
+                          {userTokens.map(name=>(
+                            <div key={name} style={{background:"#fbbf2410",border:"1px solid #fbbf2455",borderRadius:8,padding:"8px 10px"}}>
+                              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                                <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:"#fbbf24"}}>{name}</span>
+                                <span style={{fontSize:10.5,color:T.textMuted}}>· user supplies a value per test case</span>
+                              </div>
+                              <input value={ndParamDescs[name]||""} onChange={e=>setNdParamDescs(p=>({...p,[name]:e.target.value}))}
+                                placeholder="Description (optional) — help the user know what to enter"
+                                style={{width:"100%",padding:"6px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box"}}/>
+                            </div>
+                          ))}
+                          {tokens.length===0&&(
+                            <div style={{fontSize:11,color:T.textMuted,padding:"8px 10px",border:`1px dashed ${T.border}`,borderRadius:8}}>
+                              Add tokens like <code style={{color:"#2dd4bf",fontFamily:"'Geist Mono',monospace"}}>{"{{ table_name }}"}</code> or <code style={{color:"#fbbf24",fontFamily:"'Geist Mono',monospace"}}>{"{{ min_value }}"}</code> to your SQL above.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
               <div style={{padding:"12px 14px",background:T.bgElevated,borderRadius:9,border:`1px solid ${T.border}`}}>
                 <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:4,textTransform:"uppercase"}}>Test Platforms</div>
                 <div style={{fontSize:12,color:T.textSub}}>Defaults to <strong style={{color:T.text}}>OpenMetadata</strong>. Additional platforms can be configured after creation.</div>
@@ -6050,10 +6216,12 @@ const QualityView = () => {
             </div>
             <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgElevated,display:"flex",gap:8,justifyContent:"flex-end"}}>
               <button onClick={()=>setAddDefPanel(false)} style={{padding:"9px 18px",borderRadius:9,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer",fontWeight:500}}>Cancel</button>
-              <button onClick={handleCreateDef} disabled={!ndName.trim()}
-                style={{padding:"9px 22px",borderRadius:9,background:ndName.trim()?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:ndName.trim()?"pointer":"default"}}>
+              {(()=>{const ok = ndName.trim()&&(ndLogic!=="customSql"||ndSql.trim());return (
+              <button onClick={handleCreateDef} disabled={!ok}
+                style={{padding:"9px 22px",borderRadius:9,background:ok?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:ok?"pointer":"default"}}>
                 Create Test Definition
               </button>
+              );})()}
             </div>
           </div>
         </div>
