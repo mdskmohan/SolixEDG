@@ -4590,6 +4590,7 @@ const QualityView = () => {
   const INC_STATE_LABEL = {"In Progress":"In Review","In Review":"In Review","Open":"Open","Resolved":"Resolved","Dismissed":"Dismissed"};
   const TABS = [
     {key:"testcases",  label:"Test Cases"},
+    {key:"rules",      label:"Test Definitions"},
     {key:"incidents",  label:openIncCount>0?`Incidents (${openIncCount} open)`:"Incidents"},
   ];
 
@@ -10420,15 +10421,45 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                             {availTables.map(a=><option key={a.name} value={a.name}>{a.name} ({a.type})</option>)}
                                           </select>
                                         </div>
-                                        {/* SQL Expression */}
+                                        {/* SQL Expression — template */}
                                         <div>
-                                          <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>SQL Expression <span style={{color:T.rose}}>*</span></label>
+                                          <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>SQL Expression <span style={{color:T.rose}}>*</span> <span style={{color:T.textMuted,fontWeight:400}}>(template)</span></label>
                                           <textarea value={r.sql} onChange={e=>updSqlRule(r.id,"sql",e.target.value)} rows={4}
-                                            placeholder={"SELECT * FROM {{table}} WHERE amount < 0"}
+                                            placeholder={"SELECT * FROM {{ table_name }} WHERE {{ column }} < {{ min_value }}"}
                                             style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${r.sql?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box",lineHeight:1.6}}
                                             onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=r.sql?T.accent:T.border}/>
-                                          <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>Write SQL that returns rows representing problems. Test passes when 0 rows are returned.</div>
+                                          <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>Use <code style={{color:"#2dd4bf",fontFamily:"'Geist Mono',monospace"}}>{"{{ table_name }}"}</code> (auto-filled from Target Table) and any <code style={{color:"#fbbf24",fontFamily:"'Geist Mono',monospace"}}>{"{{ token }}"}</code> to collect a value. Rule passes when 0 rows are returned.</div>
                                         </div>
+                                        {/* Parameters — reserved (auto) + user-defined values */}
+                                        {(()=>{
+                                          const tokens = extractSQLTokens(r.sql);
+                                          if(tokens.length===0) return null;
+                                          const reserved = tokens.filter(t=>RESERVED_SQL_PARAMS.includes(t));
+                                          const userTokens = tokens.filter(t=>!RESERVED_SQL_PARAMS.includes(t));
+                                          const pv = r.paramValues||{};
+                                          return (
+                                            <div>
+                                              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Parameters</label>
+                                              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                                                {reserved.includes("table_name")&&(
+                                                  <div style={{display:"flex",alignItems:"center",gap:7,fontSize:11.5,background:T.bgElevated,border:`1px solid ${r.table?"#2dd4bf55":T.border}`,borderRadius:8,padding:"6px 10px"}}>
+                                                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 7V5a4 4 0 018 0v2m-9 0h10v6a1 1 0 01-1 1H4a1 1 0 01-1-1V7z" stroke={r.table?"#2dd4bf":T.textMuted} strokeWidth="1.3"/></svg>
+                                                    <span style={{fontFamily:"'Geist Mono',monospace",color:"#2dd4bf"}}>table_name</span>
+                                                    <span style={{color:T.textMuted}}>· {r.table?r.table:"select a Target Table above"}</span>
+                                                  </div>
+                                                )}
+                                                {userTokens.map(name=>(
+                                                  <div key={name} style={{display:"flex",alignItems:"center",gap:8,background:"#fbbf2410",border:"1px solid #fbbf2455",borderRadius:8,padding:"8px 10px"}}>
+                                                    <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:"#fbbf24",minWidth:90}}>{name}</span>
+                                                    <input value={pv[name]||""} onChange={e=>updSqlRule(r.id,"paramValues",{...pv,[name]:e.target.value})}
+                                                      placeholder="value"
+                                                      style={{flex:1,padding:"6px 9px",background:T.bgElevated,border:`1.5px solid ${pv[name]?T.accent:T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"'Geist Mono',monospace"}}/>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          );
+                                        })()}
                                         {/* Strategy */}
                                         <div>
                                           <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Strategy <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
@@ -15388,15 +15419,47 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
                   )}
                   {aqTcCustomSQL&&(
                     <div style={{display:"flex",flexDirection:"column",gap:12}}>
-                      {/* SQL Expression */}
+                      {/* SQL Expression — template */}
                       <div>
-                        <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>SQL Expression <span style={{color:T.rose}}>*</span></label>
+                        <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>SQL Expression <span style={{color:T.rose}}>*</span> <span style={{color:T.textMuted,fontWeight:400}}>(template)</span></label>
                         <textarea value={aqTcSQLQuery} onChange={e=>setAqTcSQLQuery(e.target.value)} rows={4}
-                          placeholder="SELECT * FROM table WHERE amount < 0"
+                          placeholder={"SELECT {{ column_name }} AS col\nFROM {{ table_name }}\nWHERE {{ column_name }} < {{ min_value }}"}
                           style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${aqTcSQLQuery?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",resize:"vertical",fontFamily:"'Geist Mono',monospace",lineHeight:1.6,boxSizing:"border-box"}}
                           onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                        <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>Write SQL that returns rows representing problems. Test passes when 0 rows are returned.</div>
+                        <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>Use <code style={{color:"#2dd4bf",fontFamily:"'Geist Mono',monospace"}}>{"{{ table_name }}"}</code> / <code style={{color:"#2dd4bf",fontFamily:"'Geist Mono',monospace"}}>{"{{ column_name }}"}</code> (auto-filled) and any <code style={{color:"#fbbf24",fontFamily:"'Geist Mono',monospace"}}>{"{{ token }}"}</code> to collect a value. Test passes when 0 rows are returned.</div>
                       </div>
+                      {/* Parameters — reserved (auto) + user-defined values */}
+                      {(()=>{
+                        const tokens = extractSQLTokens(aqTcSQLQuery);
+                        if(tokens.length===0) return null;
+                        const reserved = tokens.filter(t=>RESERVED_SQL_PARAMS.includes(t));
+                        const userTokens = tokens.filter(t=>!RESERVED_SQL_PARAMS.includes(t));
+                        const colBound = aqTcLevel==="column"?aqTcSelCol:"";
+                        const chip = (name,val,ok)=>(
+                          <div key={name} style={{display:"flex",alignItems:"center",gap:7,fontSize:11.5,background:T.bgElevated,border:`1px solid ${ok?"#2dd4bf55":T.border}`,borderRadius:8,padding:"6px 10px"}}>
+                            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 7V5a4 4 0 018 0v2m-9 0h10v6a1 1 0 01-1 1H4a1 1 0 01-1-1V7z" stroke={ok?"#2dd4bf":T.textMuted} strokeWidth="1.3"/></svg>
+                            <span style={{fontFamily:"'Geist Mono',monospace",color:"#2dd4bf"}}>{name}</span>
+                            <span style={{color:T.textMuted}}>· {ok?val:(name==="column_name"?"enter a column above":"—")}</span>
+                          </div>
+                        );
+                        return (
+                          <div>
+                            <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Parameters</div>
+                            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                              {reserved.includes("table_name")&&chip("table_name",asset.name,!!asset.name)}
+                              {reserved.includes("column_name")&&chip("column_name",colBound,!!colBound)}
+                              {userTokens.map(name=>(
+                                <div key={name} style={{display:"flex",alignItems:"center",gap:8,background:"#fbbf2410",border:"1px solid #fbbf2455",borderRadius:8,padding:"8px 10px"}}>
+                                  <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:"#fbbf24",minWidth:90}}>{name}</span>
+                                  <input value={aqTcParams[name]||""} onChange={e=>setAqTcParams(p=>({...p,[name]:e.target.value}))}
+                                    placeholder="value"
+                                    style={{flex:1,padding:"6px 9px",background:T.bgElevated,border:`1.5px solid ${aqTcParams[name]?T.accent:T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"'Geist Mono',monospace"}}/>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()}
                       {/* Strategy */}
                       <div>
                         <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Strategy <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
