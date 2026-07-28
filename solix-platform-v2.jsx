@@ -17434,12 +17434,6 @@ const FileAssetDetail = ({asset, onBack, onToast}) => {
 
       {/* ── Hero header ── */}
       <div style={{background:T.bgSurface,borderBottom:`1px solid ${T.border}`,flexShrink:0,padding:"20px 28px 0"}}>
-        {asset.archived&&(
-          <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",marginBottom:14,borderRadius:8,background:`${T.amber}12`,border:`1px solid ${T.amber}44`}}>
-            <span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4,background:`${T.amber}22`,color:T.amber,border:`1px solid ${T.amber}55`,textTransform:"uppercase",letterSpacing:"0.05em",flexShrink:0}}>Archived</span>
-            <span style={{fontSize:12,color:T.textSub,lineHeight:1.4}}>{asset.archivedReason||"Object deleted from source"}{asset.archivedAt?` · archived ${asset.archivedAt}`:""}{asset.archivedRun?` · ${asset.archivedRun}`:""}. Retained for lineage, policy history and audit — read-only.</span>
-          </div>
-        )}
         <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:16}}>
           {/* Service icon */}
           <div style={{width:52,height:52,borderRadius:13,background:`${fc}12`,border:`1.5px solid ${fc}30`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:2}}>
@@ -17807,12 +17801,6 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
 
     {/* ── Asset header ── */}
     <div style={{background:T.bgSurface,borderBottom:`1px solid ${T.border}`,flexShrink:0,padding:"16px 28px 0"}}>
-      {data.archived&&(
-        <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",marginBottom:12,borderRadius:8,background:`${T.amber}12`,border:`1px solid ${T.amber}44`}}>
-          <span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4,background:`${T.amber}22`,color:T.amber,border:`1px solid ${T.amber}55`,textTransform:"uppercase",letterSpacing:"0.05em",flexShrink:0}}>Archived</span>
-          <span style={{fontSize:12,color:T.textSub,lineHeight:1.4}}>{data.archivedReason||"No longer present in source"}{data.archivedAt?` · archived ${data.archivedAt}`:""}{data.archivedRun?` · ${data.archivedRun}`:""}. Retained for lineage, policy history and audit — read-only.</span>
-        </div>
-      )}
       {/* type + db path */}
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
         <TypeBadge type={data.type}/>
@@ -18770,7 +18758,7 @@ const CatalogView = ({onAsset})=>{
   const [selTags,          setSelTags]          = useState(new Set());
   const [selGlossaryTerms, setSelGlossaryTerms] = useState(new Set());
   const [selStatus,  setSelStatus]  = useState(new Set()); // source status: "Active" | "Archived". Empty = active only (archived hidden by default).
-  const [openGroup,  setOpenGroup]  = useState({status:true,conntype:true,connection:false,domain:true,type:true,cert:false,tier:false,owner:false,tags:false,glossary:false});
+  const [openGroup,  setOpenGroup]  = useState({conntype:true,connection:false,domain:true,type:true,cert:false,tier:false,owner:false,tags:false,glossary:false,status:false});
   const PAGE_SIZE = 25;
   const [page, setPage] = useState(1);
   useEffect(()=>{ setPage(1); },[q,selConnTypes,selTypes,selDomains,selCerts,selTiers,selConns,selOwners,selTags,selGlossaryTerms,selStatus]);
@@ -18922,11 +18910,6 @@ const CatalogView = ({onAsset})=>{
             <button onClick={clearAll} disabled={totalActive===0} style={{fontSize:11,color:totalActive>0?T.textMuted:"transparent",background:"none",border:"none",cursor:totalActive>0?"pointer":"default",transition:"color .15s"}} onMouseEnter={e=>{if(totalActive>0)e.currentTarget.style.color=T.rose;}} onMouseLeave={e=>{if(totalActive>0)e.currentTarget.style.color=T.textMuted;}}>Clear all</button>
           </div>
           <div style={{flex:1,overflowY:"auto"}}>
-            <FacetGroup id="status" label="Status" icon={Ic.clock?Ic.clock(11):null}
-              items={[{val:"Active",label:"Active"},{val:"Archived",label:"Archived"}]}
-              sel={selStatus} onToggle={(v,c)=>c?setSelStatus(new Set()):toggle(setSelStatus,v)}
-              headerNote="Archived = removed from source. Hidden by default."
-              renderItem={item=><div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:7,height:7,borderRadius:"50%",background:item.val==="Archived"?T.amber:"#16a34a",display:"block",flexShrink:0}}/><span style={{fontSize:11.5,color:T.textSub}}>{item.label}</span></div>}/>
             <FacetGroup id="conntype" label="Connector Type" icon={Ic.plug(11)}
               items={allConnTypes.map(v=>({val:v,label:CONN_TYPE_LABELS[v]||v}))}
               sel={selConnTypes} onToggle={(v,c)=>c?setSelConnTypes(new Set()):toggle(setSelConnTypes,v)}
@@ -18961,6 +18944,11 @@ const CatalogView = ({onAsset})=>{
                   {item.abbr&&item.abbr!=='—'&&<span style={{fontSize:9.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace",flexShrink:0}}>{item.abbr}</span>}
                 </div>
               )}/>
+            <FacetGroup id="status" label="Status" icon={Ic.clock?Ic.clock(11):null}
+              items={[{val:"Active",label:"Active"},{val:"Archived",label:"Archived"}]}
+              sel={selStatus} onToggle={(v,c)=>c?setSelStatus(new Set()):toggle(setSelStatus,v)}
+              headerNote="Archived = removed from source. Hidden by default."
+              renderItem={item=><div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:7,height:7,borderRadius:"50%",background:item.val==="Archived"?T.amber:"#16a34a",display:"block",flexShrink:0}}/><span style={{fontSize:11.5,color:T.textSub}}>{item.label}</span></div>}/>
           </div>
         </div>
 
