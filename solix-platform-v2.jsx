@@ -1190,12 +1190,10 @@ const ACCESS_REQUESTS = [
   {id:5,user:"marc.tran",asset:"product_events",level:"Read",status:"Pending",since:"30m ago",reason:"Funnel analysis",team:"Analytics"},
 ];
 
-const CONTRACTS = [
-  {id:1,name:"orders-v2",provider:"etl_orders_pipeline",consumer:"revenue_dashboard",status:"Active",version:"2.1.0",sla:"99.9%",schema:"orders_v2",owners:["james.oh","sarah.kim"],updated:"2d ago",description:"Guarantees orders schema stability and freshness for downstream BI."},
-  {id:2,name:"customers-v1",provider:"crm_sync",consumer:"ml_churn_model",status:"Active",version:"1.4.2",sla:"99.5%",schema:"customers_v1",owners:["dev.patel","priya.nair"],updated:"5d ago",description:"CRM customer data contract for ML feature pipeline consumption."},
-  {id:3,name:"events-v3",provider:"kafka_events",consumer:"product_events",status:"Deprecated",version:"3.0.1",sla:"98%",schema:"events_v3",owners:["alex.wu"],updated:"2w ago",description:"Legacy events contract. Migrate to events-v4 immediately."},
-  {id:4,name:"finance-agg-v1",provider:"finance_summary",consumer:"exec_reporting",status:"Active",version:"1.0.0",sla:"99.9%",schema:"finance_v1",owners:["sarah.kim"],updated:"1w ago",description:"Aggregated finance metrics for executive reporting layer."},
-];
+// NOTE: The legacy top-level CONTRACTS array + ContractsView/ContractDetail
+// (a shallow provider/consumer mock) were removed. The real data-contract feature
+// is AssetContractTab — a per-asset contract on the Catalog asset detail, seeded
+// from CONTRACT_BY_ASSET and persisted in CONTRACT_STORE.
 
 const COMMENTS_BY_ASSET = {
   orders:[
@@ -14189,6 +14187,13 @@ const CONTRACT_BY_ASSET = {
   orders:{
     name:"orders_contract", version:"2.1.0", status:"Active", owners:["maya.chen","dev.patel"],
     description:"Governance agreement for the commerce.orders fact table between the Commerce data team (producer) and Finance/BI consumers.",
+    // parties to the agreement — the producing pipeline/team and the registered downstream consumers
+    producer:{name:"etl_orders_pipeline", team:"Commerce Data Engineering"},
+    consumers:[
+      {name:"revenue_dashboard", team:"Finance BI", contact:"sarah.kim", notify:true},
+      {name:"ml_churn_model", team:"Data Science", contact:"priya.nair", notify:true},
+      {name:"exec_reporting", team:"Finance", contact:"sarah.kim", notify:false},
+    ],
     updated:"2d ago", lastRun:"Today, 05:30 AM", schedule:{freq:"daily",time:"05:00",tz:"UTC",enabled:true},
     schema:[
       {name:"order_id",type:"BIGINT",constraint:"NOT NULL · UNIQUE",required:true},
@@ -14244,6 +14249,126 @@ const CONTRACT_BY_ASSET = {
         sla:{refreshInterval:1,refreshUnit:"Day",latencyValue:4,latencyUnit:"Hours",availabilityTime:"09:00",availabilityTz:"UTC",retentionPeriod:365,retentionUnit:"Days",refreshColumn:"updated_at"}},
     ],
   },
+  customers:{
+    name:"customers_contract", version:"1.3.0", status:"Active", owners:["dev.patel","maya.chen"], stewards:["dev.patel"],
+    description:"Contract for the commerce.customers master dimension between the CRM integration team (producer) and analytics/ML consumers.",
+    producer:{name:"crm_sync", team:"Salesforce Integration"},
+    consumers:[
+      {name:"ml_churn_model", team:"Data Science", contact:"priya.nair", notify:true},
+      {name:"revenue_dashboard", team:"Finance BI", contact:"sarah.kim", notify:true},
+    ],
+    updated:"4d ago", lastRun:"Today, 05:30 AM", schedule:{freq:"daily",time:"05:00",tz:"UTC",enabled:true},
+    schema:[
+      {name:"customer_id",type:"BIGINT",constraint:"NOT NULL · UNIQUE",required:true},
+      {name:"email",type:"VARCHAR",constraint:"NOT NULL · valid email",required:true},
+      {name:"country",type:"VARCHAR",constraint:"ISO 3166",required:false},
+      {name:"created_at",type:"TIMESTAMP",constraint:"NOT NULL",required:true},
+      {name:"updated_at",type:"TIMESTAMP",constraint:"NOT NULL",required:true},
+    ],
+    semantics:[
+      {key:"owners",rule:"Owners must be assigned"},
+      {key:"description",rule:"Description must be provided"},
+      {key:"domain",rule:"Domain must be assigned"},
+      {key:"tier",rule:"Tier must be classified"},
+    ],
+    quality:[
+      {name:"customer_id unique",pass:true},
+      {name:"email format valid",pass:true},
+    ],
+    policies:[{policyId:1,name:"PII Data Handling"},{policyId:3,name:"GDPR Compliance"}],
+    security:{classification:"PII",accessNote:"Restricted — PII; access via the Customer Data Policy."},
+    sla:{refreshInterval:1,refreshUnit:"Day",latencyValue:24,latencyUnit:"Hours",availabilityTime:"08:00",availabilityTz:"UTC",retentionPeriod:730,retentionUnit:"Days",refreshColumn:"updated_at"},
+    terms:{purpose:"Master customer records for analytics, retention and ML feature pipelines.",allowed:["Internal analytics","ML features","Reporting"],disallowed:["Third-party sharing","External redistribution"],compliance:["GDPR","SOC2"]},
+    validationMode:"scheduled",
+    runs:[
+      {at:"Today, 05:30 AM", by:"system", trigger:"Scheduled", result:"Success", total:5, passed:5, failed:[], detail:{Schema:{pass:true},Semantics:{pass:true},Quality:{pass:true},Policies:{pass:true},SLA:{pass:true}}},
+    ],
+    versions:[
+      {version:"1.0.0", at:"2 months ago", by:"dev.patel", note:"Initial contract",
+        schema:[{name:"customer_id",type:"BIGINT",constraint:"NOT NULL · UNIQUE",required:true},{name:"email",type:"VARCHAR",constraint:"NOT NULL",required:true},{name:"created_at",type:"TIMESTAMP",constraint:"NOT NULL",required:true}],
+        semantics:[{key:"owners",rule:"Owners must be assigned"},{key:"description",rule:"Description must be provided"}],
+        quality:[{name:"customer_id unique",pass:true}],
+        policies:[{policyId:1,name:"PII Data Handling"}],
+        sla:{refreshInterval:1,refreshUnit:"Day",latencyValue:24,latencyUnit:"Hours",availabilityTime:"08:00",availabilityTz:"UTC",retentionPeriod:730,retentionUnit:"Days",refreshColumn:"updated_at"}},
+    ],
+  },
+  transactions:{
+    name:"transactions_contract", version:"1.0.0", status:"Active", owners:["sarah.kim"], stewards:["sarah.kim"],
+    description:"Contract for the finance.transactions ledger — the source of truth for monetary movements — between Finance Data Engineering and reporting consumers.",
+    producer:{name:"finance_ledger_sync", team:"Finance Data Engineering"},
+    consumers:[
+      {name:"exec_reporting", team:"Finance", contact:"sarah.kim", notify:true},
+      {name:"regulatory_reporting", team:"Compliance", contact:"james.oh", notify:true},
+    ],
+    updated:"6h ago", lastRun:"Today, 06:00 AM", schedule:{freq:"hourly",tz:"UTC",enabled:true},
+    schema:[
+      {name:"transaction_id",type:"BIGINT",constraint:"NOT NULL · UNIQUE",required:true},
+      {name:"account_id",type:"BIGINT",constraint:"NOT NULL",required:true},
+      {name:"amount",type:"DECIMAL(18,2)",constraint:"NOT NULL",required:true},
+      {name:"currency",type:"CHAR(3)",constraint:"ISO 4217",required:true},
+      {name:"created_at",type:"TIMESTAMP",constraint:"NOT NULL",required:true},
+    ],
+    semantics:[
+      {key:"owners",rule:"Owners must be assigned"},
+      {key:"description",rule:"Description must be provided"},
+      {key:"domain",rule:"Domain must be assigned"},
+      {key:"tier",rule:"Tier must be classified"},
+    ],
+    quality:[
+      {name:"transaction_id unique",pass:true},
+      {name:"amount not null",pass:true},
+    ],
+    policies:[],
+    security:{classification:"Confidential",accessNote:"Restricted — financial records; SOX-relevant."},
+    sla:{refreshInterval:1,refreshUnit:"Hour",latencyValue:2,latencyUnit:"Hours",availabilityTime:"07:00",availabilityTz:"UTC",retentionPeriod:2555,retentionUnit:"Days",refreshColumn:"created_at"},
+    terms:{purpose:"Financial ledger for executive and regulatory reporting. Not for operational use.",allowed:["Reporting","Regulatory filings","Reconciliation"],disallowed:["External sharing","Marketing use"],compliance:["SOX","SOC2"]},
+    validationMode:"scheduled",
+    runs:[
+      {at:"Today, 06:00 AM", by:"system", trigger:"Scheduled", result:"Success", total:5, passed:5, failed:[], detail:{Schema:{pass:true},Semantics:{pass:true},Quality:{pass:true},Policies:{pass:true},SLA:{pass:true}}},
+    ],
+    versions:[],
+  },
+  product_events:{
+    name:"product_events_contract", version:"2.0.0", status:"Active", owners:["alex.wu"], stewards:["alex.wu"],
+    description:"Streaming contract for raw product analytics events between the Kafka events pipeline (producer) and product/growth consumers.",
+    producer:{name:"kafka_events", team:"Product Analytics"},
+    consumers:[
+      {name:"product_dashboard", team:"Product", contact:"alex.wu", notify:true},
+      {name:"growth_experiments", team:"Growth", contact:"alex.wu", notify:true},
+    ],
+    updated:"1w ago", lastRun:"3h ago", schedule:{freq:"hourly",tz:"UTC",enabled:true},
+    schema:[
+      {name:"event_id",type:"BIGINT",constraint:"NOT NULL · UNIQUE",required:true},
+      {name:"user_id",type:"BIGINT",constraint:"NOT NULL",required:true},
+      {name:"event_type",type:"VARCHAR",constraint:"NOT NULL",required:true},
+      {name:"timestamp",type:"TIMESTAMP",constraint:"NOT NULL",required:true},
+    ],
+    semantics:[
+      {key:"owners",rule:"Owners must be assigned"},
+      {key:"description",rule:"Description must be provided"},
+    ],
+    // links to live DQ cases on analytics.product_events (tc7 row-count is currently Failed)
+    quality:[
+      {tcId:"tc7", name:"product_events row count"},
+      {tcId:"tc8", name:"product_events.event_type not null"},
+    ],
+    policies:[],
+    security:{classification:"Internal",accessNote:"Internal analytics only."},
+    sla:{refreshInterval:1,refreshUnit:"Hour",latencyValue:6,latencyUnit:"Hours",availabilityTime:"00:00",availabilityTz:"UTC",retentionPeriod:90,retentionUnit:"Days",refreshColumn:"timestamp"},
+    terms:{purpose:"Raw event stream powering product and growth analytics.",allowed:["Internal analytics","Experimentation"],disallowed:["PII enrichment","External sharing"],compliance:["SOC2"]},
+    validationMode:"scheduled",
+    runs:[
+      {at:"3h ago", by:"system", trigger:"Scheduled", result:"Failed", total:5, passed:3, failed:["Quality","SLA"], detail:{Schema:{pass:true},Semantics:{pass:true},Quality:{pass:false,items:["product_events row count"]},Policies:{pass:true},SLA:{pass:false,items:["Stale — data age 5d exceeds 6h max latency"]}}},
+    ],
+    versions:[
+      {version:"1.0.0", at:"4 months ago", by:"alex.wu", note:"Initial contract",
+        schema:[{name:"event_id",type:"BIGINT",constraint:"NOT NULL",required:true},{name:"event_type",type:"VARCHAR",constraint:"NOT NULL",required:true}],
+        semantics:[{key:"owners",rule:"Owners must be assigned"}],
+        quality:[{tcId:"tc8",name:"product_events.event_type not null"}],
+        policies:[],
+        sla:{refreshInterval:1,refreshUnit:"Hour",latencyValue:6,latencyUnit:"Hours",availabilityTime:"00:00",availabilityTz:"UTC",retentionPeriod:90,retentionUnit:"Days",refreshColumn:"timestamp"}},
+    ],
+  },
 };
 // Human-readable diff between two contract definition snapshots
 function diffContracts(prev,cur){
@@ -14268,6 +14393,41 @@ const getStoredContract = (name)=>{
   if(!(name in CONTRACT_STORE)) CONTRACT_STORE[name]=CONTRACT_BY_ASSET[name]?JSON.parse(JSON.stringify(CONTRACT_BY_ASSET[name])):null;
   return CONTRACT_STORE[name];
 };
+
+// ── Freshness helpers (SLA validation) ──
+// Parse a relative "updated" label ("2h ago", "30m ago", "1d ago", "2w ago", "Just now") → hours.
+function relAgeHours(label){
+  if(!label) return null;
+  const s=String(label).toLowerCase();
+  if(s.includes("just now")) return 0;
+  const m=s.match(/(\d+(?:\.\d+)?)\s*(mo|months?|mins?|minutes?|m|hrs?|hours?|h|days?|d|wks?|weeks?|w|yrs?|years?|y)\b/);
+  if(!m) return null;
+  const n=parseFloat(m[1]), u=m[2];
+  if(u==="mo"||u.startsWith("month")) return n*24*30;
+  if(u==="m"||u.startsWith("min"))    return n/60;
+  if(u.startsWith("h"))               return n;
+  if(u.startsWith("d"))               return n*24;
+  if(u.startsWith("w"))               return n*24*7;
+  if(u.startsWith("y"))               return n*24*365;
+  return null;
+}
+// Convert a contract SLA latency (value + unit) → hours.
+function slaLatencyHours(sla){
+  if(!sla||sla.latencyValue==null||sla.latencyValue==="") return null;
+  const v=Number(sla.latencyValue); if(isNaN(v)) return null;
+  const u=(sla.latencyUnit||"Hours").toLowerCase();
+  if(u.startsWith("min")) return v/60;
+  if(u.startsWith("day")) return v*24;
+  if(u.startsWith("week")) return v*24*7;
+  return v; // hours (default)
+}
+// Round hours to a short human label ("3h", "1.5d", "45m").
+function humanHours(h){
+  if(h==null) return "—";
+  if(h<1) return `${Math.round(h*60)}m`;
+  if(h<48) return `${h%1===0?h:h.toFixed(1)}h`;
+  return `${(h/24)%1===0?h/24:(h/24).toFixed(1)}d`;
+}
 
 // ── Live validation: checks the contract against the asset's real metadata + tests ──
 function validateContract(contract,asset){
@@ -14295,9 +14455,28 @@ function validateContract(contract,asset){
     const pass=pol?((pol.violations||0)===0&&pol.lifecycle!=="Deprecated"):true;
     return {...p,pass,category:pol?.category,lifecycle:pol?.lifecycle,violations:pol?.violations||0};
   });
-  const sections={Schema:schemaPass,Semantics:semantics.every(s=>s.pass),Quality:quality.every(q=>q.pass),Policies:policies.every(p=>p.pass),SLA:true};
+  // SLA freshness: compare the asset's data age against the contract's max latency.
+  // Only evaluable when a refresh column is declared AND both ages are parseable —
+  // otherwise we can't measure freshness, so we don't fail the check.
+  const ageH=relAgeHours(asset.updated);
+  const maxH=slaLatencyHours(contract.sla);
+  const hasRefreshCol=!!(contract.sla&&contract.sla.refreshColumn&&String(contract.sla.refreshColumn).trim());
+  const slaEvaluable=ageH!=null&&maxH!=null&&hasRefreshCol;
+  const slaPass=slaEvaluable?ageH<=maxH:true;
+  const sla={
+    pass:slaPass, evaluable:slaEvaluable, ageHours:ageH, maxHours:maxH,
+    ageLabel:asset.updated||"—",
+    latencyLabel:(contract.sla&&contract.sla.latencyValue!=null&&contract.sla.latencyValue!=="")?`${contract.sla.latencyValue} ${contract.sla.latencyUnit}`:"—",
+    refreshColumn:contract.sla&&contract.sla.refreshColumn,
+    reason: !hasRefreshCol ? "No refresh column declared — freshness not evaluated"
+          : ageH==null ? "Asset age unknown — freshness not evaluated"
+          : maxH==null ? "No max latency set — freshness not evaluated"
+          : slaPass ? `Fresh — data age ${humanHours(ageH)} within ${humanHours(maxH)} SLA`
+          : `Stale — data age ${humanHours(ageH)} exceeds ${humanHours(maxH)} max latency`,
+  };
+  const sections={Schema:schemaPass,Semantics:semantics.every(s=>s.pass),Quality:quality.every(q=>q.pass),Policies:policies.every(p=>p.pass),SLA:slaPass};
   const failedSections=Object.entries(sections).filter(([,v])=>!v).map(([k])=>k);
-  return {schema,semantics,quality,policies,sections,failedSections,allPass:failedSections.length===0};
+  return {schema,semantics,quality,policies,sla,sections,failedSections,allPass:failedSections.length===0};
 }
 
 const AssetContractTab = ({asset,onToast})=>{
@@ -14351,7 +14530,7 @@ const AssetContractTab = ({asset,onToast})=>{
       Semantics:{pass:res.sections.Semantics,items:(res.semantics||[]).filter(s=>!s.pass).map(s=>s.rule)},
       Quality:{pass:res.sections.Quality,items:(res.quality||[]).filter(q=>!q.pass).map(q=>q.name)},
       Policies:{pass:res.sections.Policies,items:(res.policies||[]).filter(p=>!p.pass).map(p=>`${p.name}${p.violations?` — ${p.violations} violations`:""}`)},
-      SLA:{pass:res.sections.SLA},
+      SLA:{pass:res.sections.SLA,items:(res.sla&&!res.sla.pass)?[res.sla.reason]:[]},
     };
     const run={at:"Just now",by:"You",trigger:"Manual",result:status,total,passed,failed:res.failedSections,detail};
     let incidentOpened=false;
@@ -14383,13 +14562,16 @@ const AssetContractTab = ({asset,onToast})=>{
     else onToast&&onToast(`Validation ${status==="Failed"?"failed":"partially failed"} — ${res.failedSections.length} check(s) failing${incidentOpened?" · incident opened + alert sent":""}`,"error");
     },1500);
   };
+  // How many registered consumers get notified when the contract changes
+  const notifyCount=(c)=>(c&&c.consumers?c.consumers.filter(x=>x.notify).length:0);
+  const notifySuffix=(c)=>{const n=notifyCount(c);return n?` · ${n} consumer${n>1?"s":""} notified`:"";};
   const saveEdit=(updated)=>{
     // Steward/admin edits → stay Active. Connection admin edits → drop to Draft for re-approval.
     const newStatus = isStewardOrAdmin ? (contract.status||"Active") : "Draft";
     setContract(c=>({...updated,version:c.version,status:newStatus,versions:c.versions,schedule:updated.schedule??c.schedule,updated:"Just now"}));
     setWizard(false);
     if(!isStewardOrAdmin){ pushContractApprovalInbox(updated.name,"updated"); onToast&&onToast("Contract updated — pending steward approval to go Active","info"); }
-    else { onToast&&onToast("Contract updated","success"); }
+    else { onToast&&onToast(`Contract updated${notifySuffix(updated)}`,"success"); }
   };
   // Wizard submit — the two footer buttons (Run now / Schedule) both finalize creation/edit, then act.
   const submitWizard=(built,action)=>{
@@ -14400,7 +14582,7 @@ const AssetContractTab = ({asset,onToast})=>{
     else setContract({...built,status:newStatus,versions:[]});
     setWizard(false);
     if(!isStewardOrAdmin){ pushContractApprovalInbox(built.name, editing?"updated":"created"); onToast&&onToast(editing?"Contract updated — pending steward approval":"Contract created — pending steward approval to go Active","info"); return; }
-    if(action==="schedule"){ onToast&&onToast(editing?"Contract updated":`Contract "${built.name}" created`,"success"); setScheduleModal(true); }
+    if(action==="schedule"){ onToast&&onToast(editing?`Contract updated${notifySuffix(built)}`:`Contract "${built.name}" created`,"success"); setScheduleModal(true); }
     else { runNow(built); }
   };
   const doDelete=()=>{
@@ -14576,6 +14758,35 @@ const AssetContractTab = ({asset,onToast})=>{
           <span style={{fontSize:11,color:T.textMuted}}>Updated {contract.updated}</span>
         </div>
       </div>
+
+      {/* ── Parties: producer → consumers (the two sides of the agreement) ── */}
+      {(contract.producer||(contract.consumers&&contract.consumers.length))&&(
+        <div style={{display:"flex",gap:32,flexWrap:"wrap",alignItems:"flex-start",marginTop:16,paddingTop:16,borderTop:`1px solid ${T.border}`}}>
+          <div style={{minWidth:150}}>
+            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.6,marginBottom:8}}>Producer</div>
+            {contract.producer
+              ? <span style={{display:"inline-flex",alignItems:"center",gap:7,padding:"4px 12px 4px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,fontSize:12,color:T.textSub}}>
+                  <span style={{width:7,height:7,borderRadius:2,background:T.blue,flexShrink:0}}/>
+                  <span style={{...mono,color:T.text,fontWeight:600}}>{contract.producer.name}</span>
+                  {contract.producer.team&&<span style={{color:T.textMuted}}>· {contract.producer.team}</span>}
+                </span>
+              : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>Not set</span>}
+          </div>
+          <div style={{minWidth:0,flex:1}}>
+            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.6,marginBottom:8}}>Consumers <span style={{color:T.textMuted,fontWeight:600}}>({(contract.consumers||[]).length})</span></div>
+            <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+              {(contract.consumers||[]).length
+                ? contract.consumers.map((c,i)=>(
+                  <span key={i} title={c.notify?"Notified on contract change":"Not notified"} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 11px 4px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,fontSize:12,color:T.textSub}}>
+                    <span style={{...mono,color:T.text,fontWeight:600}}>{c.name}</span>
+                    {c.team&&<span style={{color:T.textMuted}}>· {c.team}</span>}
+                    {c.notify&&<svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" style={{color:T.accent,flexShrink:0}}><path d="M8 2a3.5 3.5 0 00-3.5 3.5c0 3-1.5 4-1.5 4h10s-1.5-1-1.5-4A3.5 3.5 0 008 2zM6.5 13a1.5 1.5 0 003 0"/></svg>}
+                  </span>))
+                : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>None registered</span>}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div></Card2>
 
@@ -14754,8 +14965,30 @@ const AssetContractTab = ({asset,onToast})=>{
     </Section>
 
     {/* ── SLA — each metric explained ── */}
-    <Section title="SLA">
-      <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>The service-level guarantees consumers can rely on. Each metric is explained below.</div>
+    <Section title="SLA" pass={v.sla&&v.sla.evaluable?sp.SLA:null}>
+      {/* Freshness result — the one SLA metric we actively validate against the live asset */}
+      {v.sla&&(
+        <div style={{marginBottom:12,padding:"11px 14px",borderRadius:9,
+          background:!v.sla.evaluable?T.bgElevated:(v.sla.pass?"rgba(22,163,74,.07)":"rgba(239,68,68,.07)"),
+          border:`1px solid ${!v.sla.evaluable?T.border:(v.sla.pass?"#16a34a33":T.rose+"33")}`}}>
+          <div style={{display:"flex",alignItems:"flex-start",gap:9}}>
+            <span style={{display:"flex",flexShrink:0,marginTop:1,color:!v.sla.evaluable?T.textMuted:(v.sla.pass?"#16a34a":T.rose)}}>
+              {!v.sla.evaluable
+                ? <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5v3.5M8 10.5v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                : v.sla.pass
+                  ? <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3.5 8.5l3 3 6-6.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  : <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M5 5l6 6M11 5l-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>}
+            </span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12.5,fontWeight:700,marginBottom:2,color:!v.sla.evaluable?T.textSub:(v.sla.pass?"#16a34a":T.rose)}}>
+                {!v.sla.evaluable?"Freshness not evaluated":(v.sla.pass?"Freshness within SLA":"Freshness SLA breached")}
+              </div>
+              <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.5}}>{v.sla.reason}{v.sla.evaluable&&v.sla.refreshColumn?<> · measured on <span style={{...mono,color:T.textSub}}>{v.sla.refreshColumn}</span></>:null}</div>
+            </div>
+          </div>
+        </div>
+      )}
+      <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>The service-level guarantees consumers can rely on. Freshness is validated on each run; the rest are declared guarantees.</div>
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
         {[
           {k:"Refresh Frequency", v:contract.sla.refreshInterval?`Every ${contract.sla.refreshInterval} ${contract.sla.refreshUnit}${contract.sla.refreshInterval>1?"s":""}`:"—", d:"How often the producer promises to update this data."},
@@ -15107,6 +15340,9 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
   const [retentionPeriod,setRetentionPeriod]=useState(existing?.sla?.retentionPeriod??365);
   const [retentionUnit,setRetentionUnit]=useState(existing?.sla?.retentionUnit||"Days");
   const [refreshColumn,setRefreshColumn]=useState(existing?.sla?.refreshColumn||"");
+  const [producer,setProducer]=useState(existing?.producer?.name||asset.service||"");
+  const [consumers,setConsumers]=useState(existing?.consumers||[]);
+  const addConsumer=(nm)=>{const v=(nm||"").trim(); if(!v||consumers.some(c=>c.name===v))return; setConsumers(cs=>[...cs,{name:v,notify:true}]);};
   const toggle=(arr,set,v)=>set(arr.includes(v)?arr.filter(x=>x!==v):[...arr,v]);
   const Lbl=({children,sub})=><div style={{marginBottom:8}}><div style={{fontSize:11.5,fontWeight:700,color:T.text}}>{children}</div>{sub&&<div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{sub}</div>}</div>;
   const Pill=({active,onClick,children})=><button onClick={onClick} style={{padding:"6px 13px",borderRadius:99,fontSize:12,fontWeight:active?600:400,cursor:"pointer",background:active?T.accent:T.bgElevated,color:active?"#fff":T.textSub,border:`1px solid ${active?T.accent:T.border}`}}>{children}</button>;
@@ -15136,6 +15372,8 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
       owners:existing?.owners||asset.owners||[asset.owner].filter(Boolean),
       stewards:existing?.stewards||asset.stewards||[asset.steward].filter(Boolean),
       description:desc.trim()||`Data contract for ${asset.name}.`,updated:"Just now",lastRun:existing?.lastRun||"Not yet run",
+      producer: producer.trim() ? {name:producer.trim(),team:existing?.producer?.team} : (existing?.producer||null),
+      consumers: consumers,
       validationMode: existing?.schedule ? "scheduled" : "ondemand",
       schedule: existing?.schedule||null,
       schema:schemaCols.map(c=>({name:c,type:exCol(c)?.type||"—",constraint:exCol(c)?.constraint||"NOT NULL",required:true})),
@@ -15190,6 +15428,29 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
                   <div><Lbl>Stewards</Lbl><div style={{display:"flex",gap:7,flexWrap:"wrap"}}>{stewards.length?stewards.map(personChip):<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>None</span>}</div></div>
                 </div>;
               })()}
+              {/* ── Parties: producer + consumers (the two sides of the agreement) ── */}
+              <div style={{paddingTop:16,borderTop:`1px solid ${T.border}`}}>
+                <Lbl sub="Who produces this data, and who depends on it. Consumers are notified when the contract changes.">Parties</Lbl>
+                <div style={{marginBottom:14}}>
+                  <div style={{fontSize:11.5,fontWeight:700,color:T.text,marginBottom:4}}>Producer</div>
+                  <input value={producer} onChange={e=>setProducer(e.target.value)} placeholder="e.g. etl_orders_pipeline" style={inp}/>
+                </div>
+                <div>
+                  <div style={{fontSize:11.5,fontWeight:700,color:T.text,marginBottom:4}}>Consumers</div>
+                  <div style={{fontSize:11,color:T.textMuted,marginBottom:8,lineHeight:1.5}}>Downstream systems or teams that rely on this data. Toggle the bell to notify on change.</div>
+                  {consumers.map((c,i)=>(
+                    <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6}}>
+                      <span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.text,flex:1}}>{c.name}</span>
+                      <button onClick={()=>setConsumers(cs=>cs.map((x,k)=>k===i?{...x,notify:!x.notify}:x))} title={c.notify?"Notified on change":"Not notified"}
+                        style={{background:"none",border:"none",cursor:"pointer",color:c.notify?T.accent:T.textMuted,display:"flex"}}>
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill={c.notify?"currentColor":"none"} stroke="currentColor" strokeWidth="1.3"><path d="M8 2a3.5 3.5 0 00-3.5 3.5c0 3-1.5 4-1.5 4h10s-1.5-1-1.5-4A3.5 3.5 0 008 2zM6.5 13a1.5 1.5 0 003 0" strokeLinejoin="round"/></svg>
+                      </button>
+                      <button onClick={()=>setConsumers(cs=>cs.filter((_,k)=>k!==i))} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex"}}>{Ic.x(10)}</button>
+                    </div>
+                  ))}
+                  <input placeholder="Add consumer + Enter" onKeyDown={e=>{if(e.key==="Enter"&&e.target.value.trim()){addConsumer(e.target.value);e.target.value="";}}} style={inp}/>
+                </div>
+              </div>
             </div>}
 
             {sec==="schema"&&<div style={{maxWidth:620}}>
@@ -19097,104 +19358,8 @@ const CatalogView = ({onAsset})=>{
   );
 };
 
-// ─────────────────────────────────────────────
-// DATA CONTRACTS
-// ─────────────────────────────────────────────
-const ContractsView = ({onToast})=>{
-  const [selected,setSelected]=useState(null);
-  if(selected) return <ContractDetail contract={selected} onBack={()=>setSelected(null)} onToast={onToast}/>;
-  return <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-    <Topbar breadcrumb={[{label:"Data Contracts"}]}/>
-    <div style={{flex:1,overflowY:"auto",padding:28}}>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
-        {[
-          {label:"Active Contracts",value:String(CONTRACTS.filter(c=>c.status==="Active").length),color:"#16a34a"},
-          {label:"Deprecated",      value:String(CONTRACTS.filter(c=>c.status==="Deprecated").length),color:T.rose},
-          {label:"Avg SLA",         value:"99.3%",color:T.accent},
-          {label:"Owners",          value:String(new Set(CONTRACTS.flatMap(c=>c.owners)).size),color:"#60a5fa"},
-        ].map((m,i)=><Metric key={i} label={m.label} value={m.value} color={m.color}/>)}
-      </div>
-      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}>
-        <Btn icon={Ic.plus(12)} variant="primary" onClick={()=>onToast("Contract wizard opened","success")}>New Contract</Btn>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
-        {CONTRACTS.map(c=>(
-          <div key={c.id} onClick={()=>setSelected(c)} style={{padding:18,background:T.bgSurface,border:`1px solid ${c.status==="Deprecated"?T.rose+"33":T.border}`,borderRadius:12,cursor:"pointer",transition:"all .15s"}}
-            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent+"55";e.currentTarget.style.transform="translateY(-1px)";}}
-            onMouseLeave={e=>{e.currentTarget.style.borderColor=c.status==="Deprecated"?T.rose+"33":T.border;e.currentTarget.style.transform="none";}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-              <span style={{fontSize:14,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{c.name}</span>
-              <Badge color={c.status==="Active"?T.accent:T.rose} bg={c.status==="Active"?T.accentDim:T.roseDim}>{c.status}</Badge>
-            </div>
-            <div style={{fontSize:12,color:T.textSub,lineHeight:1.5,marginBottom:12}}>{c.description}</div>
-            <div style={{display:"flex",flexDirection:"column",gap:5,fontSize:11.5,color:T.textMuted}}>
-              <div style={{display:"flex",justifyContent:"space-between"}}><span>Provider</span><span style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{c.provider}</span></div>
-              <div style={{display:"flex",justifyContent:"space-between"}}><span>Consumer</span><span style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{c.consumer}</span></div>
-              <div style={{display:"flex",justifyContent:"space-between"}}><span>SLA</span><span style={{color:"#16a34a",fontWeight:600}}>{c.sla}</span></div>
-              <div style={{display:"flex",justifyContent:"space-between"}}><span>Version</span><span style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{c.version}</span></div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  </div>;
-};;
-
-const ContractDetail = ({contract,onBack,onToast})=>(
-  <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-    <Topbar breadcrumb={[{label:"Data Contracts",onClick:onBack},{label:contract.name}]}/>
-    <div style={{flex:1,overflowY:"auto",padding:28}}>
-      <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:16}}>
-        <Btn small icon={Ic.branches(12)}>New Version</Btn>
-        <Btn small ghost>Edit</Btn>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:20}}>
-        <div style={{display:"flex",flexDirection:"column",gap:16}}>
-          <Card2><div style={{padding:16}}>
-            <SH title="Contract Definition"/>
-            <p style={{fontSize:13,color:T.textSub,marginBottom:14,lineHeight:1.7}}>{contract.description}</p>
-            <div style={{background:T.bgHover,borderRadius:8,padding:16,fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.textSub,lineHeight:1.9}}>
-              <span style={{color:T.violet}}>contract</span> <span style={{color:T.accent}}>{contract.name}</span> {"{"}<br/>
-              &nbsp;&nbsp;<span style={{color:T.violet}}>version</span>: <span style={{color:T.amber}}>"{contract.version}"</span><br/>
-              &nbsp;&nbsp;<span style={{color:T.violet}}>provider</span>: <span style={{color:T.amber}}>"{contract.provider}"</span><br/>
-              &nbsp;&nbsp;<span style={{color:T.violet}}>consumer</span>: <span style={{color:T.amber}}>"{contract.consumer}"</span><br/>
-              &nbsp;&nbsp;<span style={{color:T.violet}}>sla</span>: {"{"} <span style={{color:T.blue}}>availability</span>: <span style={{color:T.amber}}>"{contract.sla}"</span>, <span style={{color:T.blue}}>freshness</span>: <span style={{color:T.amber}}>"2h"</span> {"}"}<br/>
-              &nbsp;&nbsp;<span style={{color:T.violet}}>schema</span>: <span style={{color:T.amber}}>"{contract.schema}"</span><br/>
-              &nbsp;&nbsp;<span style={{color:T.violet}}>owners</span>: [<span style={{color:T.blue}}>{contract.owners.map(o=>`"${o}"`).join(", ")}</span>]<br/>
-              {"}"}
-            </div>
-          </div></Card2>
-          <Card2><div style={{padding:16}}>
-            <SH title="Schema Snapshot" action={<Badge color={T.accent} bg={T.accentDim}>v{contract.version}</Badge>}/>
-            <div style={{display:"flex",flexDirection:"column",gap:6}}>
-              {["id: BIGINT NOT NULL","customer_id: BIGINT","amount: DECIMAL(12,2)","status: ENUM","created_at: TIMESTAMP"].map((f,i)=>(
-                <div key={i} style={{padding:"7px 12px",background:T.bgHover,borderRadius:6,fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.textSub}}>{f}</div>
-              ))}
-            </div>
-          </div></Card2>
-        </div>
-        <div style={{display:"flex",flexDirection:"column",gap:12}}>
-          <Card2><div style={{padding:14}}>
-            <SH title="Contract Info"/>
-            {[{l:"Status",v:<><SDot status={contract.status}/> {contract.status}</>},{l:"Version",v:contract.version},{l:"SLA",v:<span style={{color:T.accent,fontFamily:"'Geist Mono',monospace"}}>{contract.sla}</span>},{l:"Provider",v:<span style={{color:T.amber,fontFamily:"'Geist Mono',monospace"}}>{contract.provider}</span>},{l:"Consumer",v:<span style={{color:T.violet,fontFamily:"'Geist Mono',monospace"}}>{contract.consumer}</span>},{l:"Updated",v:contract.updated}].map(m=>(
-              <div key={m.l} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,marginBottom:9}}><span style={{color:T.textMuted}}>{m.l}</span><span style={{color:T.text,display:"flex",alignItems:"center",gap:4}}>{m.v}</span></div>
-            ))}
-          </div></Card2>
-          <Card2><div style={{padding:14}}>
-            <SH title="Version History"/>
-            {[{v:contract.version,date:"2d ago",status:"Current"},{v:"2.0.2",date:"2w ago",status:"Deprecated"},{v:"1.x",date:"3mo ago",status:"Deprecated"}].map((v,i)=>(
-              <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 0",borderBottom:i<2?`1px solid ${T.border}`:"none"}}>
-                <span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.text}}>v{v.v}</span>
-                <span style={{fontSize:11,color:T.textMuted,flex:1}}>{v.date}</span>
-                <Badge color={v.status==="Current"?T.accent:T.textMuted}>{v.status}</Badge>
-              </div>
-            ))}
-          </div></Card2>
-        </div>
-      </div>
-    </div>
-  </div>
-);
+// (Legacy ContractsView / ContractDetail removed — dead code. The real
+//  data-contract feature is AssetContractTab on the Catalog asset detail.)
 
 // ─────────────────────────────────────────────
 // OBSERVABILITY
