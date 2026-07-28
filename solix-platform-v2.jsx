@@ -4376,6 +4376,8 @@ const QualityView = () => {
   const [ndLogic,       setNdLogic]       = useState("customSql");  // user-authored defs are always Custom SQL
   const [ndSql,         setNdSql]         = useState("");
   const [ndParamDescs,  setNdParamDescs]  = useState({});          // {paramName: description}
+  const [defDetail,     setDefDetail]     = useState(null);        // definition shown in the end-to-end detail panel
+  const [defDeleteId,   setDefDeleteId]   = useState(null);        // custom definition pending delete confirmation
 
   // incident manager tab
   const [incTcFilter,     setIncTcFilter]     = useState("");
@@ -4547,6 +4549,14 @@ const QualityView = () => {
 
   const toggleDefEnabled = (id)=>{
     setDefinitions(prev=>prev.map(d=>d.id===id?{...d,enabled:!d.enabled}:d));
+  };
+  // only user-authored (Custom SQL) definitions can be deleted; presets are read-only
+  const isCustomDefinition = (d)=>d&&d.logic==="customSql";
+  const handleDeleteDef = (id)=>{
+    setDefinitions(prev=>prev.filter(d=>d.id!==id));
+    setDefDeleteId(null);
+    if(defDetail&&defDetail.id===id) setDefDetail(null);
+    showT("Test definition deleted");
   };
 
   const handleCreateDef = ()=>{
@@ -5205,8 +5215,8 @@ const QualityView = () => {
             <table style={{width:"100%",borderCollapse:"collapse"}}>
               <thead>
                 <tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
-                  {["Name","Description","Entity Type","Test Platforms","Enabled"].map(l=>(
-                    <th key={l} style={{padding:"9px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textAlign:"left",letterSpacing:.5,textTransform:"uppercase",whiteSpace:"nowrap"}}>{l}</th>
+                  {["Name","Description","Entity Type","Test Platforms","Enabled",""].map((l,li)=>(
+                    <th key={li} style={{padding:"9px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textAlign:"left",letterSpacing:.5,textTransform:"uppercase",whiteSpace:"nowrap"}}>{l}</th>
                   ))}
                 </tr>
               </thead>
@@ -5214,7 +5224,8 @@ const QualityView = () => {
                 {filteredDefs.map((def,i)=>(
                   <tr
                     key={def.id}
-                    style={{borderBottom:i<filteredDefs.length-1?`1px solid ${T.border}`:"none",transition:"background .1s"}}
+                    onClick={()=>setDefDetail(def)}
+                    style={{borderBottom:i<filteredDefs.length-1?`1px solid ${T.border}`:"none",transition:"background .1s",cursor:"pointer"}}
                     onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
                     onMouseLeave={e=>e.currentTarget.style.background="transparent"}
                   >
@@ -5243,6 +5254,19 @@ const QualityView = () => {
                       >
                         <div style={{width:14,height:14,borderRadius:"50%",background:def.enabled?"#fff":T.textMuted,position:"absolute",top:1,left:def.enabled?19:1,transition:"left .2s"}}/>
                       </div>
+                    </td>
+                    {/* Delete — custom definitions only; presets are read-only */}
+                    <td style={{padding:"10px 14px",textAlign:"right"}} onClick={e=>e.stopPropagation()}>
+                      {isCustomDefinition(def)?(
+                        <button onClick={()=>setDefDeleteId(def.id)} title="Delete definition"
+                          style={{width:28,height:28,borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center"}}
+                          onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
+                          onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>
+                          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 5h10M6.5 5V3.5h3V5M5 5l.5 8h5l.5-8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </button>
+                      ):(
+                        <span style={{fontSize:10,color:T.textMuted,padding:"2px 7px",borderRadius:4,background:T.bgElevated,border:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>Built-in</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -6191,6 +6215,101 @@ const QualityView = () => {
           </div>
         </div>
       )}
+
+      {/* ════════════════ TEST DEFINITION DETAIL SLIDE-IN ════════════════ */}
+      {defDetail&&(()=>{
+        const d = defDetail;
+        const custom = isCustomDefinition(d);
+        const reservedUsed = custom ? extractSQLTokens(d.sql).filter(t=>RESERVED_SQL_PARAMS.includes(t)) : [];
+        const params = normDefParams(d.params);
+        const meta = (label,val)=>(
+          <div style={{flex:"1 1 40%",minWidth:150}}>
+            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.5,marginBottom:3}}>{label}</div>
+            <div style={{fontSize:12.5,color:T.text}}>{val}</div>
+          </div>
+        );
+        return (
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:900,backdropFilter:"blur(2px)"}} onClick={()=>setDefDetail(null)}>
+            <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:0,right:0,bottom:0,width:520,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
+              <div style={{padding:"20px 24px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0,display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+                <div>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                    <div style={{fontSize:15,fontWeight:700,color:T.text}}>{d.name}</div>
+                    <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:5,background:custom?"#fbbf2418":T.accentDim,color:custom?"#b45309":T.accent,border:`1px solid ${custom?"#fbbf2455":T.accent+"33"}`}}>{custom?"CUSTOM SQL":"BUILT-IN PRESET"}</span>
+                  </div>
+                  <code style={{fontSize:10.5,color:T.violet,fontFamily:"'Geist Mono',monospace"}}>{d.fn}</code>
+                </div>
+                <button onClick={()=>setDefDetail(null)} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.x(11)}</button>
+              </div>
+              <div style={{flex:1,overflowY:"auto",padding:"20px 24px",display:"flex",flexDirection:"column",gap:18}}>
+                <div style={{display:"flex",flexWrap:"wrap",gap:14}}>
+                  {meta("Entity Type",<span style={{fontWeight:700,color:d.entityType==="TABLE"?T.accent:T.violet}}>{d.entityType}</span>)}
+                  {meta("DQ Dimension",d.dim||"—")}
+                  {meta("Platforms",(d.testPlatforms||[]).join(", ")||"—")}
+                  {meta("Status",<span style={{color:d.enabled?"#16a34a":T.textMuted,fontWeight:600}}>{d.enabled?"Enabled":"Disabled"}</span>)}
+                </div>
+                <div>
+                  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.5,marginBottom:5}}>Description</div>
+                  <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6}}>{d.desc||"—"}</div>
+                </div>
+                {custom&&(
+                  <div>
+                    <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.5,marginBottom:5}}>SQL Expression <span style={{color:T.textMuted}}>(template)</span></div>
+                    <pre style={{margin:0,padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,fontFamily:"'Geist Mono',monospace",lineHeight:1.6,whiteSpace:"pre-wrap",boxSizing:"border-box"}}>{d.sql}</pre>
+                  </div>
+                )}
+                <div>
+                  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.5,marginBottom:7}}>Parameters</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                    {custom&&reservedUsed.map(name=>(
+                      <div key={name} style={{display:"flex",alignItems:"center",gap:7,fontSize:11.5,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,padding:"7px 10px"}}>
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 7V5a4 4 0 018 0v2m-9 0h10v6a1 1 0 01-1 1H4a1 1 0 01-1-1V7z" stroke="#2dd4bf" strokeWidth="1.3"/></svg>
+                        <span style={{fontFamily:"'Geist Mono',monospace",color:"#2dd4bf"}}>{name}</span>
+                        <span style={{color:T.textMuted}}>· reserved — auto-filled at run time</span>
+                      </div>
+                    ))}
+                    {params.length>0?params.map(p=>(
+                      <div key={p.name} style={{background:custom?"#fbbf2410":T.bgElevated,border:`1px solid ${custom?"#fbbf2455":T.border}`,borderRadius:8,padding:"7px 10px"}}>
+                        <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:custom?"#b45309":T.text}}>{p.name}</span>
+                        {p.description&&<div style={{fontSize:11,color:T.textMuted,marginTop:3}}>{p.description}</div>}
+                      </div>
+                    )):reservedUsed.length===0&&(
+                      <div style={{fontSize:11.5,color:T.textMuted}}>No parameters — this check takes no user input.</div>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.5,marginBottom:5}}>Evaluation</div>
+                  <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.6}}>The test <strong style={{color:T.text}}>passes when the query returns 0 rows</strong>{custom?" (subject to the case's strategy/operator/threshold).":"."}</div>
+                </div>
+              </div>
+              <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgElevated,display:"flex",gap:8,justifyContent:"space-between",alignItems:"center"}}>
+                {custom
+                  ? <button onClick={()=>setDefDeleteId(d.id)} style={{padding:"9px 16px",borderRadius:9,background:"transparent",border:`1px solid ${T.rose}55`,color:T.rose,fontSize:12.5,cursor:"pointer",fontWeight:600,display:"flex",alignItems:"center",gap:6}}><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 5h10M6.5 5V3.5h3V5M5 5l.5 8h5l.5-8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>Delete definition</button>
+                  : <span style={{fontSize:11.5,color:T.textMuted}}>Built-in preset — cannot be edited or deleted.</span>}
+                <button onClick={()=>setDefDetail(null)} style={{padding:"9px 18px",borderRadius:9,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer",fontWeight:500}}>Close</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ════════════════ DELETE DEFINITION CONFIRM ════════════════ */}
+      {defDeleteId&&(()=>{
+        const d = definitions.find(x=>x.id===defDeleteId);
+        return (
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:950,backdropFilter:"blur(2px)",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setDefDeleteId(null)}>
+            <div onClick={e=>e.stopPropagation()} style={{width:400,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,padding:"22px 24px",boxShadow:"0 24px 64px rgba(0,0,0,.4)"}}>
+              <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:8}}>Delete test definition?</div>
+              <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6,marginBottom:18}}><strong style={{color:T.text}}>{d?.name}</strong> will be removed from the library and can no longer be selected for new test cases. Existing test cases already using it are unaffected. This can't be undone.</div>
+              <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                <button onClick={()=>setDefDeleteId(null)} style={{padding:"9px 18px",borderRadius:9,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer",fontWeight:500}}>Cancel</button>
+                <button onClick={()=>handleDeleteDef(defDeleteId)} style={{padding:"9px 20px",borderRadius:9,background:T.rose,border:"none",color:"#fff",fontSize:12.5,cursor:"pointer",fontWeight:700}}>Delete</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
@@ -18838,8 +18957,23 @@ const CatalogView = ({onAsset})=>{
                           <div style={{fontSize:10,color:T.textMuted,marginBottom:4,letterSpacing:"0.02em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.db}</div>
                           <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.45,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:1,WebkitBoxOrient:"vertical"}}>{a.description}</div>
                         </div>
-                        <div style={{display:"flex",alignItems:"center",gap:7,flex:1,flexWrap:"wrap",minWidth:0}}>
+                        <div style={{display:"flex",alignItems:"center",gap:6,flex:1,flexWrap:"wrap",minWidth:0}}>
                           <TypeBadge type={a.type}/>
+                          {(()=>{
+                            const asns = tagCtx ? tagCtx.getAssetAssignments(a.id).filter(x=>x.status!=='rejected') : [];
+                            if(asns.length>0){
+                              return (<>
+                                {asns.slice(0,3).map(asn=>{const def=tagCtx.getTagDef(asn.tagId);return def?<TagPill key={asn.id} tagDef={def} assignment={asn} size="sm"/>:null;})}
+                                {asns.length>3&&<span style={{fontSize:10,color:T.textMuted}}>+{asns.length-3}</span>}
+                              </>);
+                            }
+                            return (<>
+                              {(a.tags||[]).slice(0,3).map(t=>(
+                                <span key={t} style={{fontSize:10,padding:"1px 7px",borderRadius:99,background:`${T.accent}10`,color:T.accent,border:`1px solid ${T.accent}22`}}>{t}</span>
+                              ))}
+                              {(a.tags||[]).length>3&&<span style={{fontSize:10,color:T.textMuted}}>+{(a.tags||[]).length-3}</span>}
+                            </>);
+                          })()}
                         </div>
                         <div style={{display:"flex",alignItems:"center",gap:16,flexShrink:0}}>
                           <div style={{textAlign:"center",width:40}}><div style={{fontSize:15,fontWeight:700,color:a.quality>=90?T.accent:a.quality>=70?T.amber:T.rose,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{a.quality}</div><div style={{fontSize:9,color:T.textMuted,marginTop:2}}>quality</div></div>
