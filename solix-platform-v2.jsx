@@ -128,6 +128,9 @@ const ASSETS = [
   {id:7, name:"user_sessions",       type:"Table",     domain:"Product",   owner:"alex.wu",    owners:["alex.wu"],                 steward:"alex.wu",    stewards:["alex.wu"],                cert:"Deprecated",  quality:45, usage:"Low",  updated:"2w ago",  service:"postgres",   connectionLabel:"PostgreSQL Prod",  db:"postgresql_prod / PRODUCT / sessions", tier:3, rows:"890M",   size:"142 GB",  tags:["PII","events"],           description:"Legacy session table. Use product_events instead.",                         slaFreshness:"4h"},
   {id:9, name:"dim_products",        type:"Table",     domain:"Commerce",  owner:"james.oh",   owners:["james.oh"],                steward:"maya.chen",  stewards:["maya.chen","dev.patel"],  cert:"Approved",   quality:98, usage:"High", updated:"1h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",   db:"snowflake_prod / COMMERCE / dim_products", tier:1, rows:"82K",    size:"45 MB",   tags:["dimension"],              description:"Product dimension with SKU, categories, pricing.",                          slaFreshness:"24h"},
   {id:12,name:"user_events",         type:"Table",     domain:"Product",   owner:"alex.wu",    owners:["alex.wu"],                 steward:"priya.nair", stewards:["priya.nair"],             cert:"Approved",   quality:90, usage:"High", updated:"1h ago",  service:"databricks", connectionLabel:"Databricks Unity", db:"unity_catalog / analytics / user_events",  tier:2, rows:"120M",   size:"22 GB",   tags:["PII"],                    description:"User interaction events, Delta table in Databricks Unity Catalog.",           slaFreshness:"1h"},
+  // ── Archived assets — objects no longer present in the source. Retained in the catalog (not deleted) so lineage, policy history and audit trail survive the source deletion. Detected and archived automatically on the next connection/workflow run. Hidden from the default catalog view. ──
+  {id:8001,name:"legacy_promotions", type:"Table",     domain:"Commerce",  owner:"maya.chen",  owners:["maya.chen"],               steward:"dev.patel",  stewards:["dev.patel"],              cert:"Deprecated", quality:61, usage:"Low",  updated:"2d ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",    db:"SNOWFLAKE_PROD / COMMERCE / legacy_promotions", tier:3, rows:"1.2M",  size:"680 MB",  tags:["revenue"],                description:"Legacy promotions table. Dropped from Snowflake during the Q3 schema cleanup.",          slaFreshness:"—", archived:true, archivedAt:"2026-07-26", archivedRun:"Snowflake DWH · run #4821", archivedReason:"No longer present in source at last scan"},
+  {id:8002,name:"exports_2025_q4.csv",type:"Object",   domain:"Finance",   owner:"sarah.kim",  owners:["sarah.kim"],               steward:"sarah.kim",  stewards:["sarah.kim"],              cert:"Approved",   quality:0,  usage:"Low",  updated:"1w ago",  service:"s3",         connectionLabel:"AWS S3 Data Lake", db:"jnj-data-lake-prod / archive / exports_2025_q4.csv", tier:3, rows:"—",  size:"3.1 GB",  tags:[],                         description:"Q4 2025 finance export. Object deleted from the S3 bucket at source.",                  slaFreshness:"—", assetLevel:"object", fileFormat:"CSV", archived:true, archivedAt:"2026-07-27", archivedRun:"AWS S3 Data Lake · run #2290", archivedReason:"Object deleted from source at last scan"},
 ];
 
 // ── Hierarchy assets (Database → Schema → Table/View, Bucket → Folder → Object, etc.) ──
@@ -17431,6 +17434,12 @@ const FileAssetDetail = ({asset, onBack, onToast}) => {
 
       {/* ── Hero header ── */}
       <div style={{background:T.bgSurface,borderBottom:`1px solid ${T.border}`,flexShrink:0,padding:"20px 28px 0"}}>
+        {asset.archived&&(
+          <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",marginBottom:14,borderRadius:8,background:`${T.amber}12`,border:`1px solid ${T.amber}44`}}>
+            <span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4,background:`${T.amber}22`,color:T.amber,border:`1px solid ${T.amber}55`,textTransform:"uppercase",letterSpacing:"0.05em",flexShrink:0}}>Archived</span>
+            <span style={{fontSize:12,color:T.textSub,lineHeight:1.4}}>{asset.archivedReason||"Object deleted from source"}{asset.archivedAt?` · archived ${asset.archivedAt}`:""}{asset.archivedRun?` · ${asset.archivedRun}`:""}. Retained for lineage, policy history and audit — read-only.</span>
+          </div>
+        )}
         <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:16}}>
           {/* Service icon */}
           <div style={{width:52,height:52,borderRadius:13,background:`${fc}12`,border:`1.5px solid ${fc}30`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:2}}>
@@ -17798,6 +17807,12 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
 
     {/* ── Asset header ── */}
     <div style={{background:T.bgSurface,borderBottom:`1px solid ${T.border}`,flexShrink:0,padding:"16px 28px 0"}}>
+      {data.archived&&(
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",marginBottom:12,borderRadius:8,background:`${T.amber}12`,border:`1px solid ${T.amber}44`}}>
+          <span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4,background:`${T.amber}22`,color:T.amber,border:`1px solid ${T.amber}55`,textTransform:"uppercase",letterSpacing:"0.05em",flexShrink:0}}>Archived</span>
+          <span style={{fontSize:12,color:T.textSub,lineHeight:1.4}}>{data.archivedReason||"No longer present in source"}{data.archivedAt?` · archived ${data.archivedAt}`:""}{data.archivedRun?` · ${data.archivedRun}`:""}. Retained for lineage, policy history and audit — read-only.</span>
+        </div>
+      )}
       {/* type + db path */}
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
         <TypeBadge type={data.type}/>
@@ -18754,10 +18769,11 @@ const CatalogView = ({onAsset})=>{
   const [selOwners,  setSelOwners]  = useState(new Set());
   const [selTags,          setSelTags]          = useState(new Set());
   const [selGlossaryTerms, setSelGlossaryTerms] = useState(new Set());
-  const [openGroup,  setOpenGroup]  = useState({conntype:true,connection:false,domain:true,type:true,cert:false,tier:false,owner:false,tags:false,glossary:false});
+  const [selStatus,  setSelStatus]  = useState(new Set()); // source status: "Active" | "Archived". Empty = active only (archived hidden by default).
+  const [openGroup,  setOpenGroup]  = useState({status:true,conntype:true,connection:false,domain:true,type:true,cert:false,tier:false,owner:false,tags:false,glossary:false});
   const PAGE_SIZE = 25;
   const [page, setPage] = useState(1);
-  useEffect(()=>{ setPage(1); },[q,selConnTypes,selTypes,selDomains,selCerts,selTiers,selConns,selOwners,selTags,selGlossaryTerms]);
+  useEffect(()=>{ setPage(1); },[q,selConnTypes,selTypes,selDomains,selCerts,selTiers,selConns,selOwners,selTags,selGlossaryTerms,selStatus]);
   const DRILLABLE_TYPES = new Set(["Database","Catalog","Schema","Bucket","Container","Folder"]);
   const CONN_TYPE_ASSET_TYPES = {
     snowflake:  ["Database","Schema","Table","View"],
@@ -18784,7 +18800,9 @@ const CatalogView = ({onAsset})=>{
     const mo  = selOwners.size===0  || selOwners.has(a.owner);
     const mTag= selTags.size===0    || (a.tags||[]).some(t=>selTags.has(t));
     const mGT = selGlossaryTerms.size===0 || GLOSSARY_TERMS.filter(t=>selGlossaryTerms.has(t.id)).some(t=>(t.linkedAssets||[]).some(la=>la.name===a.name));
-    return mq&&mct&&mt&&md&&mc&&mti&&ms&&mo&&mTag&&mGT;
+    // Source status: archived assets (deleted from source) are hidden unless explicitly requested.
+    const mSt = selStatus.size===0 ? !a.archived : ((selStatus.has("Archived")&&a.archived) || (selStatus.has("Active")&&!a.archived));
+    return mq&&mct&&mt&&md&&mc&&mti&&ms&&mo&&mTag&&mGT&&mSt;
   }).sort((a,b)=>{
     if(sortBy==="quality") return b.quality-a.quality;
     if(sortBy==="name")    return a.name.localeCompare(b.name);
@@ -18794,11 +18812,13 @@ const CatalogView = ({onAsset})=>{
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const pagedRows  = filtered.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE);
 
-  const totalActive = selConnTypes.size+selTypes.size+selDomains.size+selCerts.size+selTiers.size+selConns.size+selOwners.size+selTags.size+selGlossaryTerms.size;
-  const clearAll = () => { setSelConnTypes(new Set()); setSelTypes(new Set()); setSelDomains(new Set()); setSelCerts(new Set()); setSelTiers(new Set()); setSelConns(new Set()); setSelOwners(new Set()); setSelTags(new Set()); setSelGlossaryTerms(new Set()); };
+  const totalActive = selConnTypes.size+selTypes.size+selDomains.size+selCerts.size+selTiers.size+selConns.size+selOwners.size+selTags.size+selGlossaryTerms.size+selStatus.size;
+  const clearAll = () => { setSelConnTypes(new Set()); setSelTypes(new Set()); setSelDomains(new Set()); setSelCerts(new Set()); setSelTiers(new Set()); setSelConns(new Set()); setSelOwners(new Set()); setSelTags(new Set()); setSelGlossaryTerms(new Set()); setSelStatus(new Set()); };
   const countFor = (field, val) => ASSETS.filter(a => {
     const mq = !q || a.name.toLowerCase().includes(q.toLowerCase());
     if(!mq) return false;
+    if(field==="status")     return val==="Archived" ? !!a.archived : !a.archived;
+    if(a.archived) return false; // other facet counts reflect the default (active) view
     if(field==="conntype")   return a.service===val;
     if(field==="type")       return a.type===val;
     if(field==="domain")     return a.domain===val;
@@ -18856,6 +18876,7 @@ const CatalogView = ({onAsset})=>{
   };
 
   const activeChips = [
+    ...[...selStatus].map(v=>({label:v==="Archived"?"Archived":"Active",clear:()=>toggle(setSelStatus,v)})),
     ...[...selConnTypes].map(v=>({label:CONN_TYPE_LABELS[v]||v,clear:()=>toggle(setSelConnTypes,v)})),
     ...[...selTypes].map(v=>({label:v,clear:()=>toggle(setSelTypes,v)})),
     ...[...selDomains].map(v=>({label:v,clear:()=>toggle(setSelDomains,v)})),
@@ -18872,11 +18893,12 @@ const CatalogView = ({onAsset})=>{
     {key:"name",label:"Asset Name",render:(v,r)=>(
       <div style={{display:"flex",alignItems:"center",gap:10}}>
         <ServiceIcon service={r.service} size={18}/>
-        <div>
+        <div style={{opacity:r.archived?0.6:1}}>
           <div style={{display:"flex",alignItems:"center",gap:6}}>
             <span style={{fontSize:13,fontWeight:500,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{v}</span>
             {DRILLABLE_TYPES.has(r.type)&&<svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,flexShrink:0}}><path d="M3.5 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
             {r.fileFormat&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:3,background:`${FILE_FORMAT_COLORS[r.fileFormat]||T.textMuted}18`,color:FILE_FORMAT_COLORS[r.fileFormat]||T.textMuted,border:`1px solid ${FILE_FORMAT_COLORS[r.fileFormat]||T.textMuted}33`}}>{r.fileFormat}</span>}
+            {r.archived&&<span title={`${r.archivedReason||"Removed from source"} · ${r.archivedRun||""}`.trim()} style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:`${T.amber}18`,color:T.amber,border:`1px solid ${T.amber}44`,textTransform:"uppercase",letterSpacing:"0.04em",flexShrink:0}}>Archived</span>}
           </div>
           {r.path&&r.path.length>0&&<div style={{fontSize:10,color:T.textMuted,marginTop:2,fontFamily:"'Geist Mono',monospace"}}>{r.path.join(" / ")}</div>}
           {(!r.path||r.path.length===0)&&r.db&&<div style={{fontSize:10,color:T.textMuted,marginTop:1}}>{r.db}</div>}
@@ -18900,6 +18922,11 @@ const CatalogView = ({onAsset})=>{
             <button onClick={clearAll} disabled={totalActive===0} style={{fontSize:11,color:totalActive>0?T.textMuted:"transparent",background:"none",border:"none",cursor:totalActive>0?"pointer":"default",transition:"color .15s"}} onMouseEnter={e=>{if(totalActive>0)e.currentTarget.style.color=T.rose;}} onMouseLeave={e=>{if(totalActive>0)e.currentTarget.style.color=T.textMuted;}}>Clear all</button>
           </div>
           <div style={{flex:1,overflowY:"auto"}}>
+            <FacetGroup id="status" label="Status" icon={Ic.clock?Ic.clock(11):null}
+              items={[{val:"Active",label:"Active"},{val:"Archived",label:"Archived"}]}
+              sel={selStatus} onToggle={(v,c)=>c?setSelStatus(new Set()):toggle(setSelStatus,v)}
+              headerNote="Archived = removed from source. Hidden by default."
+              renderItem={item=><div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:7,height:7,borderRadius:"50%",background:item.val==="Archived"?T.amber:"#16a34a",display:"block",flexShrink:0}}/><span style={{fontSize:11.5,color:T.textSub}}>{item.label}</span></div>}/>
             <FacetGroup id="conntype" label="Connector Type" icon={Ic.plug(11)}
               items={allConnTypes.map(v=>({val:v,label:CONN_TYPE_LABELS[v]||v}))}
               sel={selConnTypes} onToggle={(v,c)=>c?setSelConnTypes(new Set()):toggle(setSelConnTypes,v)}
@@ -18996,10 +19023,10 @@ const CatalogView = ({onAsset})=>{
                     <div key={a.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,cursor:"pointer",transition:"all .15s",overflow:"hidden"}}
                       onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent+"55";e.currentTarget.style.background=T.bgHover;}}
                       onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.bgSurface;}}>
-                      <div onClick={()=>onAsset(a)} style={{display:"flex",alignItems:"center",gap:16,padding:"14px 16px"}}>
+                      <div onClick={()=>onAsset(a)} style={{display:"flex",alignItems:"center",gap:16,padding:"14px 16px",opacity:a.archived?0.62:1}}>
                         <ServiceIcon service={a.service} size={32}/>
                         <div style={{flex:"0 0 280px",minWidth:0}}>
-                          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}><span style={{fontSize:13.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</span></div>
+                          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}><span style={{fontSize:13.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</span>{a.archived&&<span title={`${a.archivedReason||"Removed from source"} · ${a.archivedRun||""}`.trim()} style={{fontSize:8.5,fontWeight:700,padding:"1px 6px",borderRadius:3,background:`${T.amber}18`,color:T.amber,border:`1px solid ${T.amber}44`,textTransform:"uppercase",letterSpacing:"0.04em",flexShrink:0}}>Archived</span>}</div>
                           <div style={{fontSize:10,color:T.textMuted,marginBottom:4,letterSpacing:"0.02em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.db}</div>
                           <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.45,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:1,WebkitBoxOrient:"vertical"}}>{a.description}</div>
                         </div>
