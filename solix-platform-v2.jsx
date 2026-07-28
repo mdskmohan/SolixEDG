@@ -30349,7 +30349,7 @@ const SettingsView = ({onToast})=>{
   const [ldapRoleGroupOpen, setLdapRoleGroupOpen] = useState({});
 
   // ── Enterprise SSO (OIDC / SAML) state ──
-  // Mirrors the exact field set OpenMetadata asks admins for (OIDC + SAML + shared authorizer).
+  // Solix EDG identity federation: one OIDC engine + one SAML engine + a shared authorizer/provisioning layer.
   const [ssoPanel,   setSsoPanel]   = useState(null);   // providerId whose config panel is open
   const [ssoDraft,   setSsoDraft]   = useState(null);   // working form for the open panel
   const [ssoState,   setSsoState]   = useState({});     // { [providerId]: {configured, protocol, draft} }
@@ -30659,7 +30659,7 @@ const SettingsView = ({onToast})=>{
   const ROLES=[{name:"Admin",users:3,icon:"settings",desc:"Full platform access including settings and user management."},{name:"Data Steward",users:8,icon:"steward",desc:"Govern assets: apply policies, certify data, manage glossary."},{name:"Data Analyst",users:32,icon:"search",desc:"Browse catalog, run queries, view lineage and quality scores."},{name:"Viewer",users:21,icon:"access",desc:"Read-only access to approved domains and dashboards."},{name:"Bot",users:3,icon:"bot",desc:"Service accounts for automated ingestion and processing."}];
   const BOTS=[{id:"b1",name:"ingestion-bot",scope:"Read metadata · Write lineage",token:"bot_ing_••••••",created:"2024-01-10",active:true},{id:"b2",name:"quality-bot",scope:"Read assets · Write quality results",token:"bot_qlt_••••••",created:"2024-02-01",active:true},{id:"b3",name:"notification-bot",scope:"Read all · Send notifications",token:"bot_ntf_••••••",created:"2024-03-15",active:false}];
   const PERSONAS=[{id:"p1",name:"Data Engineer",color:"#38bdf8",users:14,desc:"Full access to pipelines, lineage and technical metadata."},{id:"p2",name:"Data Analyst",color:"#34d399",users:32,desc:"Read access to catalog, dashboards and quality metrics."},{id:"p3",name:"Data Steward",color:"#fbbf24",users:8,desc:"Write access to governance: policies, glossary, certs."},{id:"p4",name:"Exec Viewer",color:"#a78bfa",users:6,desc:"High-level dashboards and compliance summaries only."}];
-  // ── Enterprise SSO catalog + config model (OpenMetadata field parity) ──
+  // ── Enterprise SSO catalog + config model (Solix EDG identity federation) ──
   const ssoIcon=(id,size=22)=>{
     if(id==="entra") return <svg width={size} height={size} viewBox="0 0 23 23" fill="none"><rect x="1" y="1" width="10" height="10" fill="#f25022"/><rect x="12" y="1" width="10" height="10" fill="#7fba00"/><rect x="1" y="12" width="10" height="10" fill="#00a4ef"/><rect x="12" y="12" width="10" height="10" fill="#ffb900"/></svg>;
     if(id==="okta")  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="4"/></svg>;
@@ -30711,6 +30711,13 @@ const SettingsView = ({onToast})=>{
     principalDomain:"jnj.com",
     enforcePrincipalDomain:false,
     enableSelfSignup:true,
+    // ── User & team provisioning ──
+    groupClaim:"groups",              // claim/attribute carrying the user's IdP group names (or IDs)
+    teamSyncMode:"selected",          // "selected" = only groups mapped below · "all" = every group becomes a team
+    autoAssignRoles:true,             // also derive the EDG role from the matched group
+    teamRules:[{group:"",team:"",role:"Viewer"}],  // group → team → role
+    defaultRole:"Viewer",             // role for users whose groups match no rule
+    syncOnLogin:true,                 // re-apply team & role on every login (keeps IdP as source of truth)
   });
   const buildSsoDraft=(prov,protocol)=>({protocol,oidc:ssoOidcDefaults(prov),saml:ssoSamlDefaults(prov),authz:ssoAuthzDefaults()});
   const openSsoPanel=(p)=>{
@@ -30718,6 +30725,13 @@ const SettingsView = ({onToast})=>{
     setSsoDraft(existing?.draft || buildSsoDraft(p.id,p.defaultProtocol));
     setSsoPanel(p.id); setSsoTest("idle"); setSsoAdvOpen(false);
   };
+  // Team & role provisioning options (mirror EDG's own Teams & Access Control vocab)
+  const SSO_TEAM_OPTIONS=["Data Engineering","Analytics","Finance","Governance","Platform"];
+  const SSO_ROLE_OPTIONS=["Viewer","Steward","Connection Admin","Admin"];
+  // Rulebook row handlers (group → team → role)
+  const ssoAddRule=()=>setSsoDraft(d=>({...d,authz:{...d.authz,teamRules:[...(d.authz.teamRules||[]),{group:"",team:"",role:"Viewer"}]}}));
+  const ssoSetRule=(i,key,val)=>setSsoDraft(d=>({...d,authz:{...d.authz,teamRules:d.authz.teamRules.map((r,idx)=>idx===i?{...r,[key]:val}:r)}}));
+  const ssoRemoveRule=(i)=>setSsoDraft(d=>({...d,authz:{...d.authz,teamRules:d.authz.teamRules.filter((_,idx)=>idx!==i)}}));
   // Field renderers (read/write the open ssoDraft)
   const ssoSet=(grp,k,v)=>setSsoDraft(d=>({...d,[grp]:{...d[grp],[k]:v}}));
   const renderSsoField=(grp,f)=>{
@@ -31756,7 +31770,7 @@ const SettingsView = ({onToast})=>{
                             {/* Advanced expander */}
                             <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
                               <button onClick={()=>setSsoAdvOpen(o=>!o)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 14px",background:T.bgElevated,border:"none",cursor:"pointer"}}>
-                                <span style={{fontSize:11.5,fontWeight:700,color:T.textSub}}>Advanced <span style={{color:T.textMuted,fontWeight:400}}>· OpenMetadata defaults</span></span>
+                                <span style={{fontSize:11.5,fontWeight:700,color:T.textSub}}>Advanced <span style={{color:T.textMuted,fontWeight:400}}>· recommended defaults</span></span>
                                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{transform:ssoAdvOpen?"rotate(180deg)":"none",transition:"transform .15s"}}><path d="M2.5 4.5L6 8l3.5-3.5" stroke={T.textMuted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                               </button>
                               {ssoAdvOpen&&(
@@ -31794,15 +31808,110 @@ const SettingsView = ({onToast})=>{
                           </div>
                         )}
 
-                        {/* Shared authorizer — user mapping & admins */}
+                        {/* Shared authorizer — identity & sign-in */}
                         <div style={{marginTop:20,marginBottom:20}}>
-                          <SsoSectionBar color={T.violet} label="User Mapping & Admins"/>
+                          <SsoSectionBar color={T.violet} label="Identity & Sign-in"/>
                           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:10}}>{authzFields.map(f=>renderSsoField("authz",f))}</div>
                           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                             {renderSsoToggle("authz","enforcePrincipalDomain","Enforce Principal Domain","Only accept users in the domain above")}
                             {renderSsoToggle("authz","enableSelfSignup","Enable Self Signup","Auto-create users on first login")}
                           </div>
+                          {!ssoDraft.authz.enableSelfSignup&&(
+                            <div style={{marginTop:10,padding:"9px 12px",background:`${T.amber}12`,border:`1px solid ${T.amber}33`,borderRadius:8,fontSize:11,color:T.textSub,lineHeight:1.55}}>
+                              <b style={{color:T.amber,fontWeight:700}}>Self-signup off.</b> Only people already added under <b style={{color:T.text}}>Teams &amp; Users</b> can sign in — new logins are blocked until an admin pre-creates them (matched by email). EDG never creates accounts back in {sp.name}.
+                            </div>
+                          )}
                         </div>
+
+                        {/* Shared authorizer — team & role provisioning */}
+                        {(()=>{
+                          const withRoles=!!ssoDraft.authz.autoAssignRoles;
+                          const gridCols=withRoles?"1.15fr 12px 1fr 1fr 24px":"1.5fr 12px 1fr 24px";
+                          const cellStyle={width:"100%",padding:"7px 8px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box"};
+                          const lockIcon=<svg width="11" height="11" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="9" rx="2" stroke={T.textMuted} strokeWidth="2"/><path d="M8 11V8a4 4 0 018 0v3" stroke={T.textMuted} strokeWidth="2"/></svg>;
+                          return (
+                          <div style={{marginBottom:20}}>
+                            <SsoSectionBar color={sp.color} label="Team & Role Provisioning"/>
+                            {/* group claim */}
+                            <div style={{marginBottom:14}}>
+                              <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Group / team claim</label>
+                              <input value={ssoDraft.authz.groupClaim} onChange={e=>ssoSet("authz","groupClaim",e.target.value)} placeholder="groups"
+                                style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"'Geist Mono',monospace"}}
+                                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                              <div style={{fontSize:10.5,color:T.textMuted,marginTop:6,lineHeight:1.55}}>
+                                The claim carrying the user's group memberships. For {sp.id==="okta"?"Okta":sp.id==="entra"?"Entra ID":"most providers"} this is <code style={{fontFamily:"'Geist Mono',monospace",color:T.blue}}>groups</code>.
+                                {sp.id==="entra"?" Entra may send group object IDs instead of names — rules match on whatever the token sends.":""}
+                                {proto==="oidc"?" Request the groups scope so it's included in the token.":" Map the group attribute in your IdP's SAML assertion."}
+                              </div>
+                            </div>
+                            {/* placement mode */}
+                            <div style={{marginBottom:14}}>
+                              <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>How to place people</label>
+                              <div style={{display:"flex",gap:8}}>
+                                {[{v:"selected",l:"Map selected groups"},{v:"all",l:"Sync all groups as teams"}].map(o=>{
+                                  const on=ssoDraft.authz.teamSyncMode===o.v;
+                                  return <button key={o.v} onClick={()=>ssoSet("authz","teamSyncMode",o.v)}
+                                    style={{flex:1,padding:"9px 12px",borderRadius:8,fontSize:12,fontWeight:on?700:500,cursor:"pointer",textAlign:"center",background:on?T.bgHover:T.bgElevated,border:`1.5px solid ${on?T.accent:T.border}`,color:on?T.text:T.textMuted,transition:"all .12s"}}>{o.l}</button>;
+                                })}
+                              </div>
+                            </div>
+                            {/* rulebook — only when mapping selected groups */}
+                            {ssoDraft.authz.teamSyncMode==="selected"?(
+                              <>
+                                <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Mapping rulebook</label>
+                                <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                                  <div style={{display:"grid",gridTemplateColumns:gridCols,gap:8,alignItems:"center",padding:"8px 10px",background:T.bgElevated,fontSize:9.5,fontWeight:700,color:T.textMuted,letterSpacing:"0.04em"}}>
+                                    <div>IF IDP GROUP IS</div><div/><div>PUT ON TEAM</div>{withRoles&&<div>WITH ROLE</div>}<div/>
+                                  </div>
+                                  {(ssoDraft.authz.teamRules||[]).map((r,i)=>(
+                                    <div key={i} style={{display:"grid",gridTemplateColumns:gridCols,gap:8,alignItems:"center",padding:"8px 10px",borderTop:`1px solid ${T.border}`}}>
+                                      <input value={r.group} onChange={e=>ssoSetRule(i,"group",e.target.value)} placeholder="e.g. Finance-Team"
+                                        style={{...cellStyle,fontFamily:"'Geist Mono',monospace",color:T.blue}}
+                                        onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                                      <div style={{color:T.textMuted,textAlign:"center",fontSize:12}}>→</div>
+                                      <select value={r.team} onChange={e=>ssoSetRule(i,"team",e.target.value)} style={cellStyle}>
+                                        <option value="">Select team…</option>
+                                        {SSO_TEAM_OPTIONS.map(t=><option key={t} value={t}>{t}</option>)}
+                                      </select>
+                                      {withRoles&&(
+                                        <select value={r.role} onChange={e=>ssoSetRule(i,"role",e.target.value)} style={cellStyle}>
+                                          {SSO_ROLE_OPTIONS.map(rl=><option key={rl} value={rl}>{rl}</option>)}
+                                        </select>
+                                      )}
+                                      <button onClick={()=>ssoRemoveRule(i)} title="Remove rule" style={{width:22,height:22,borderRadius:6,background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(10)}</button>
+                                    </div>
+                                  ))}
+                                  <div onClick={ssoAddRule} style={{padding:"9px 10px",borderTop:`1px solid ${T.border}`,color:T.accent,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>+ Add rule</div>
+                                  <div style={{display:"grid",gridTemplateColumns:gridCols,gap:8,alignItems:"center",padding:"9px 10px",borderTop:`1px solid ${T.border}`,background:T.bgHover}}>
+                                    <div style={{fontSize:11.5,color:T.textMuted,fontStyle:"italic"}}>Anything else</div>
+                                    <div style={{color:T.textMuted,textAlign:"center"}}>→</div>
+                                    <div style={{fontSize:11.5,color:T.textMuted}}>No team</div>
+                                    {withRoles&&(
+                                      <select value={ssoDraft.authz.defaultRole} onChange={e=>ssoSet("authz","defaultRole",e.target.value)} style={cellStyle}>
+                                        {SSO_ROLE_OPTIONS.map(rl=><option key={rl} value={rl}>{rl}</option>)}
+                                      </select>
+                                    )}
+                                    <div style={{textAlign:"center",display:"flex",justifyContent:"center"}} title="Safety net — cannot be removed">{lockIcon}</div>
+                                  </div>
+                                </div>
+                                <div style={{fontSize:10.5,color:T.textMuted,marginTop:6,lineHeight:1.5}}>Safe by default — anyone whose groups match no rule gets no team and the <b style={{color:T.textSub}}>{ssoDraft.authz.defaultRole}</b> role. Nobody is auto-granted admin by accident.</div>
+                              </>
+                            ):(
+                              <div style={{padding:"11px 13px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,fontSize:11,color:T.textSub,lineHeight:1.55}}>
+                                Every group in the token becomes an EDG team (created on demand, matched by name). Roles still come from the rulebook or default to <b style={{color:T.textSub}}>{ssoDraft.authz.defaultRole}</b>. Switch to <b style={{color:T.text}}>Map selected groups</b> for tighter control.
+                              </div>
+                            )}
+                            {/* provisioning toggles */}
+                            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:12}}>
+                              {renderSsoToggle("authz","autoAssignRoles","Assign roles from groups","Also set each user's EDG role")}
+                              {renderSsoToggle("authz","syncOnLogin","Keep in sync on every login","Re-apply team & role each sign-in")}
+                            </div>
+                            {!ssoDraft.authz.enableSelfSignup&&ssoDraft.authz.syncOnLogin&&(
+                              <div style={{fontSize:10.5,color:T.textMuted,marginTop:8,lineHeight:1.5}}>With self-signup off, this keeps pre-created users' teams &amp; roles aligned to {sp.name} on each login. Turn it off to let admins manage team &amp; role manually in EDG.</div>
+                            )}
+                          </div>
+                          );
+                        })()}
 
                         {/* Test banner */}
                         {ssoTest==="success"&&(
