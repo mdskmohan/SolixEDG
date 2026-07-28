@@ -18323,14 +18323,33 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
         {/* TAGS */}
         <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
           <MetaLabel onEdit={()=>{setTagsOpen(p=>!p);setTagsSearch("");}}>Tags</MetaLabel>
-          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-            {(data.tags||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
-            {(showAllTags?data.tags||[]:(data.tags||[]).slice(0,3)).map(t=>{const c=tcFull(t);const _def=_tagCtx?.tagDefs.find(td=>td.name.toLowerCase()===t.toLowerCase());const _pushed=_def&&_tagCtx?.pushSummaryForTag?_tagCtx.pushSummaryForTag(_def.id).objects>0:false;return(
-              <span key={t} title={_pushed?"Reverse-synced to source · click to propagate":"Click to propagate"} onClick={()=>{ const def=_def; const m=def?.propagationMode; setPropScope((m==='hierarchy'||m==='lineage'||m==='both')?m:'both'); setPropTag(t); }}
-                style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600,cursor:"pointer"}}>{t}{_pushed&&<span title="Reverse-synced to source" style={{fontSize:9,opacity:.8}}>↗</span>}<span style={{opacity:.5,fontSize:9}}>⇄</span></span>
-            );})}
-            {(data.tags||[]).length>3&&!showAllTags&&<span onClick={()=>setShowAllTags(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{(data.tags||[]).length-3} more</span>}
-            {(data.tags||[]).length>3&&showAllTags&&<span onClick={()=>setShowAllTags(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
+          <div style={{display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}>
+            {(()=>{
+              // Prefer the governed assignment model (carries source provenance); fall back to plain string tags.
+              const asns = _tagCtx ? _tagCtx.getAssetAssignments(asset.id).filter(a=>a.status!=='rejected') : [];
+              const moreBtn = (n)=>(!showAllTags
+                ? <span onClick={()=>setShowAllTags(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{n} more</span>
+                : <span onClick={()=>setShowAllTags(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>);
+              if(asns.length>0){
+                const shown = showAllTags?asns:asns.slice(0,4);
+                return (<>
+                  {shown.map(asn=>{ const def=_tagCtx.getTagDef(asn.tagId); if(!def) return null; return (
+                    <TagPill key={asn.id} tagDef={def} assignment={asn} size="sm"
+                      onClick={()=>{ const m=def.propagationMode; setPropScope((m==='hierarchy'||m==='lineage'||m==='both')?m:'both'); setPropTag(def.name); }}/>
+                  );})}
+                  {asns.length>4&&moreBtn(asns.length-4)}
+                </>);
+              }
+              // fallback — plain string tags (assets with no governed assignments)
+              return (<>
+                {(data.tags||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
+                {(showAllTags?data.tags||[]:(data.tags||[]).slice(0,3)).map(t=>{const c=tcFull(t);return(
+                  <span key={t} title="Click to propagate" onClick={()=>{ const def=_tagCtx?.tagDefs.find(td=>td.name.toLowerCase()===t.toLowerCase()); const m=def?.propagationMode; setPropScope((m==='hierarchy'||m==='lineage'||m==='both')?m:'both'); setPropTag(t); }}
+                    style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600,cursor:"pointer"}}>{t}<span style={{opacity:.5,fontSize:9}}>⇄</span></span>
+                );})}
+                {(data.tags||[]).length>3&&moreBtn((data.tags||[]).length-3)}
+              </>);
+            })()}
           </div>
           {tagsOpen&&(
             <div style={{marginTop:8,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden",boxShadow:"0 4px 12px rgba(0,0,0,.12)"}}>
