@@ -30686,7 +30686,7 @@ const SettingsView = ({onToast})=>{
     responseType:"code",
     preferredJwsAlgorithm:"RS256",
     clientAuthenticationMethod:"client_secret_post",
-    disablePkce:true, useNonce:true,
+    disablePkce:false, useNonce:true,
     maxClockSkew:"0", customParams:"",
   });
   const ssoSamlDefaults=(prov)=>({
@@ -30695,8 +30695,8 @@ const SettingsView = ({onToast})=>{
              : prov==="okta" ?"https://<your-org>.okta.com/app/<app-id>/sso/saml":"",
     idpX509:"",
     authorityUrl:"https://edg.jnj.com/api/v1/saml/login",
-    nameId:"urn:oasis:names:tc:SAML:2.0:nameid-format:emailAddress",
-    spEntityId:"https://edg.jnj.com/api/v1/saml/acs",
+    nameId:"urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress",
+    spEntityId:"https://edg.jnj.com/api/v1/saml/metadata",
     spAcsUrl:"https://edg.jnj.com/api/v1/saml/acs",
     spX509:"", spPrivateKey:"",
     strictMode:false, tokenValidity:"3600",
