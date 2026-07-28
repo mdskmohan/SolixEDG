@@ -10083,11 +10083,6 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   const scopeAssetTypes = (newPol.scope?.assetTypes
                     || (newPol.scope?.assetType==="table"?["Table"]:newPol.scope?.assetType==="view"?["View"]:newPol.scope?.assetType==="both"?["Table","View"]:[])
                   ).filter(t=>availAssetTypes.includes(t));
-                  const toggleAssetType = (t)=>{
-                    const cur  = scopeAssetTypes;
-                    const next = cur.includes(t) ? cur.filter(x=>x!==t) : [...cur, t];
-                    setNewPol(p=>({...p,scope:{...p.scope,assetTypes:next,assetType:undefined}}));
-                  };
                   return (
                     <div style={{display:"flex",flexDirection:"column",gap:20}}>
                       {secHead("Policy Scope","Define which sources and asset types this policy governs. Specific tables and columns are selected per rule in the next step.")}
@@ -10131,27 +10126,32 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                         {scopeSrcs.length===0&&<div style={{fontSize:10.5,color:T.rose,marginTop:4}}>Select at least one source to continue.</div>}
                       </div>
 
-                      {/* ── Object Types (required, source-aware multi-select) ── */}
+                      {/* ── Object Types (required, source-aware multi-select dropdown) ── */}
                       <div>
-                        <label style={lbl}>Object Types <span style={{color:T.rose}}>*</span></label>
                         {scopeSrcs.length===0
-                          ? <div style={{fontSize:11.5,color:T.textMuted,padding:"7px 0"}}>Select a source above to choose which objects this policy governs.</div>
+                          ? <>
+                              <label style={lbl}>Object Types <span style={{color:T.rose}}>*</span></label>
+                              <div style={{fontSize:11.5,color:T.textMuted,padding:"7px 0"}}>Select a source above to choose which objects this policy governs.</div>
+                            </>
                           : <>
-                              <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                                {availAssetTypes.map(t=>{
-                                  const sel=scopeAssetTypes.includes(t);
-                                  return (
-                                    <button key={t} type="button" onClick={()=>toggleAssetType(t)}
-                                      style={{padding:"7px 14px",borderRadius:8,fontSize:12.5,fontWeight:sel?700:500,cursor:"pointer",transition:"all .12s",border:`1.5px solid ${sel?T.accent:T.border}`,background:sel?T.accentDim:"transparent",color:sel?T.accent:T.textSub,display:"flex",alignItems:"center",gap:6}}>
-                                      {sel&&<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2" stroke={T.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                                      <span>{OBJ_ICON[t]||"📦"}</span>{t}
-                                    </button>
-                                  );
-                                })}
-                              </div>
+                              <CatFieldDropdown
+                                label="Object Types"
+                                required
+                                placeholder="Select object types…"
+                                options={availAssetTypes}
+                                selected={scopeAssetTypes}
+                                onChange={v=>setNewPol(p=>({...p,scope:{...p.scope,assetTypes:v,assetType:undefined}}))}
+                                renderOpt={(o,sel)=>(
+                                  <>
+                                    <span style={{fontSize:14,flexShrink:0}}>{OBJ_ICON[o]||"📦"}</span>
+                                    <span style={{flex:1,fontSize:12.5,color:sel?T.accent:T.text}}>{o}</span>
+                                  </>
+                                )}
+                                renderChip={o=><span style={{display:"inline-flex",alignItems:"center",gap:4}}><span>{OBJ_ICON[o]||"📦"}</span>{o}</span>}
+                              />
                               {hasUnstruct
-                                ? <div style={{fontSize:11,color:T.textMuted,marginTop:8,lineHeight:1.6}}>Unstructured sources (S3, ADLS) expose a single enforceable <strong>Object</strong> type — policies apply at the object level.</div>
-                                : <div style={{fontSize:11,color:T.textMuted,marginTop:8}}>Tables are base data — use Views for derived or aggregated datasets.</div>}
+                                ? <div style={{fontSize:11,color:T.textMuted,marginTop:6,lineHeight:1.6}}>Unstructured sources (S3, ADLS) expose a single enforceable <strong>Object</strong> type — policies apply at the object level.</div>
+                                : <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Tables are base data — use Views for derived or aggregated datasets.</div>}
                               {scopeAssetTypes.length===0&&<div style={{fontSize:10.5,color:T.rose,marginTop:6}}>Select at least one object type to continue.</div>}
                             </>
                         }
