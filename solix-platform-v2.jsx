@@ -4385,7 +4385,7 @@ const QualityView = () => {
   // incident manager tab
   const [incTcFilter,     setIncTcFilter]     = useState("");
   const [incAssigneeF,    setIncAssigneeF]     = useState("");
-  const [incStatusF,      setIncStatusF]       = useState("all");
+  const [incStatusSel,    setIncStatusSel]     = useState([]);   // multi-select status filter ([] = all)
   const [expandedInc,     setExpandedInc]     = useState(null);
   const [incCommentText,  setIncCommentText]  = useState({});
   const [incAssignModal,  setIncAssignModal]  = useState(false);
@@ -4466,7 +4466,7 @@ const QualityView = () => {
   });
 
   const filteredInc = incidents.filter(i=>{
-    if(incStatusF!=="all"&&i.status!==incStatusF) return false;
+    if(incStatusSel.length>0&&!incStatusSel.includes(i.status)) return false;
     if(incAssigneeF&&!(i.assignee||"").toLowerCase().includes(incAssigneeF.toLowerCase())) return false;
     if(incTcFilter){const tc=testCases.find(t=>t.id===i.tcId);if(!tc||!tc.name.toLowerCase().includes(incTcFilter.toLowerCase())) return false;}
     return true;
@@ -4749,14 +4749,17 @@ const QualityView = () => {
             {/* status filter — multi-select dropdown */}
             <StatusFilterDropdown selected={tcStatusSel} onChange={setTcStatusSel} counts={{Success:tcSuccess,Failed:tcFailed,Aborted:tcAborted}}/>
             {/* tables filter */}
-            <select
-              value={tcTableFilter}
-              onChange={e=>setTcTableFilter(e.target.value)}
-              style={{padding:"5px 10px",background:T.bgElevated,border:`1.5px solid ${tcTableFilter!=="all"?T.accent:T.border}`,borderRadius:7,color:tcTableFilter!=="all"?T.accent:T.textSub,fontSize:12,outline:"none",cursor:"pointer"}}
-            >
-              <option value="all">All Tables</option>
-              {[...new Set(testCases.map(t=>t.table))].map(tbl=><option key={tbl} value={tbl}>{tbl}</option>)}
-            </select>
+            <div style={{position:"relative",display:"inline-flex",alignItems:"center"}}>
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{position:"absolute",left:9,pointerEvents:"none",opacity:.85,color:tcTableFilter!=="all"?T.accent:T.textMuted}}><path d="M2 3.5h12L9.5 9v4L6.5 14.5V9L2 3.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+              <select
+                value={tcTableFilter}
+                onChange={e=>setTcTableFilter(e.target.value)}
+                style={{padding:"5px 10px 5px 27px",background:T.bgElevated,border:`1.5px solid ${tcTableFilter!=="all"?T.accent:T.border}`,borderRadius:7,color:tcTableFilter!=="all"?T.accent:T.textSub,fontSize:12,outline:"none",cursor:"pointer"}}
+              >
+                <option value="all">Tables</option>
+                {[...new Set(testCases.map(t=>t.table))].map(tbl=><option key={tbl} value={tbl}>{tbl}</option>)}
+              </select>
+            </div>
             {(tcTableFilter!=="all"||tcStatusSel.length>0||tcSearch)&&(
               <button
                 onClick={()=>{setTcTableFilter("all");setTcStatusSel([]);setTcSearch("");}}
@@ -5300,6 +5303,14 @@ const QualityView = () => {
                   onBlur={e=>e.target.style.borderColor=incAssigneeF?T.accent:T.border}
                 />
               </div>
+              {/* status filter — multi-select dropdown with funnel icon */}
+              <StatusFilterDropdown
+                selected={incStatusSel}
+                onChange={setIncStatusSel}
+                placeholder="Status"
+                options={[{v:"Open",c:T.rose},{v:"In Progress",c:T.amber,label:"In Review"},{v:"Resolved",c:"#16a34a"},{v:"Dismissed",c:T.textMuted}]}
+                counts={{Open:incidents.filter(i=>i.status==="Open").length,"In Progress":incidents.filter(i=>i.status==="In Progress").length,Resolved:incidents.filter(i=>i.status==="Resolved").length,Dismissed:incidents.filter(i=>i.status==="Dismissed").length}}
+              />
               <span style={{fontSize:12,color:T.textMuted,whiteSpace:"nowrap"}}>{filteredInc.length} result{filteredInc.length!==1?"s":""}</span>
             </div>
             {/* ── Stat summary bar ── */}
@@ -5311,8 +5322,10 @@ const QualityView = () => {
                 {key:"Dismissed",   label:"Dismissed", color:T.textMuted, bg:T.bgElevated},
               ].map(s=>{
                 const cnt=incidents.filter(i=>i.status===s.key).length;
+                const sel=incStatusSel.includes(s.key);
+                const toggle=()=>setIncStatusSel(prev=>prev.includes(s.key)?prev.filter(x=>x!==s.key):[...prev,s.key]);
                 return (
-                  <div key={s.key} onClick={()=>setIncStatusF(s.key)} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 12px",borderRadius:7,background:s.bg,border:`1px solid ${s.color}30`,cursor:"pointer",transition:"opacity .1s"}} onMouseEnter={e=>e.currentTarget.style.opacity=".75"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+                  <div key={s.key} onClick={toggle} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 12px",borderRadius:7,background:s.bg,border:`1px solid ${sel?s.color:`${s.color}30`}`,boxShadow:sel?`0 0 0 1px ${s.color}`:"none",cursor:"pointer",transition:"opacity .1s"}} onMouseEnter={e=>e.currentTarget.style.opacity=".75"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
                     <span style={{width:6,height:6,borderRadius:"50%",background:s.color,display:"block",flexShrink:0}}/>
                     <span style={{fontSize:11,fontWeight:700,color:s.color}}>{cnt}</span>
                     <span style={{fontSize:11,color:s.color,opacity:.85}}>{s.label}</span>
@@ -5321,26 +5334,7 @@ const QualityView = () => {
               })}
               <div style={{marginLeft:"auto",alignSelf:"center",fontSize:11,color:T.textMuted}}>{incidents.length} total</div>
             </div>
-            {/* ── Filter pills ── */}
-            <div style={{padding:"8px 16px 10px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-              {["all","Open","In Progress","Resolved","Dismissed"].map(s=>{
-                const cfg = s==="all"?null:(INC_STATUS_CFG[s]||INC_STATUS_CFG["In Review"]);
-                const label = s==="all"?"All":s==="In Progress"?"In Review":s;
-                return (
-                  <FPill
-                    key={s}
-                    active={incStatusF===s}
-                    onClick={()=>setIncStatusF(s)}
-                    color={cfg?cfg.color:undefined}
-                  >
-                    {label}
-                    <span style={{fontSize:10,opacity:.7,marginLeft:4}}>
-                      {s==="all"?incidents.length:incidents.filter(i=>i.status===s).length}
-                    </span>
-                  </FPill>
-                );
-              })}
-            </div>
+            <div style={{height:12}}/>
           </div>
 
           {/* ── Incidents Table ── */}
@@ -6301,7 +6295,7 @@ const QualityView = () => {
 };
 
 /* Compact multi-select Status filter for the DQ Test Cases filter bar (bare, no label) */
-const StatusFilterDropdown = ({selected, onChange, counts}) => {
+const StatusFilterDropdown = ({selected, onChange, counts, options, placeholder="Status"}) => {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef(null);
   React.useEffect(()=>{
@@ -6310,27 +6304,29 @@ const StatusFilterDropdown = ({selected, onChange, counts}) => {
     document.addEventListener("mousedown",h);
     return()=>document.removeEventListener("mousedown",h);
   },[open]);
-  const OPTS=[{v:"Success",c:"#16a34a"},{v:"Failed",c:T.rose},{v:"Aborted",c:T.amber}];
+  const OPTS=(options||[{v:"Success",c:"#16a34a"},{v:"Failed",c:T.rose},{v:"Aborted",c:T.amber}]).map(o=>({label:o.v,...o}));
+  const labelFor=v=>{const o=OPTS.find(x=>x.v===v);return o?o.label:v;};
   const active = selected.length>0;
-  const label = selected.length===0?"All statuses":selected.length===1?selected[0]:`${selected.length} statuses`;
+  const label = selected.length===0?placeholder:selected.length===1?labelFor(selected[0]):`${selected.length} selected`;
   const toggle=v=>onChange(selected.includes(v)?selected.filter(x=>x!==v):[...selected,v]);
   return (
     <div ref={ref} style={{position:"relative"}}>
       <div onClick={()=>setOpen(o=>!o)}
         style={{display:"flex",alignItems:"center",gap:7,padding:"5px 10px",background:T.bgElevated,border:`1.5px solid ${active?T.accent:T.border}`,borderRadius:7,color:active?T.accent:T.textSub,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,opacity:.85}}><path d="M2 3.5h12L9.5 9v4L6.5 14.5V9L2 3.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
         {label}
         <svg width="9" height="6" viewBox="0 0 10 7" fill="none" style={{flexShrink:0,color:"currentColor",transform:open?"rotate(180deg)":"none",transition:"transform .15s",opacity:.6}}><path d="M1 1.5l4 4 4-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </div>
       {open&&(
         <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,minWidth:180,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.2)",zIndex:500,overflow:"hidden",padding:4}}>
-          {OPTS.map(({v,c})=>{
+          {OPTS.map(({v,c,label:optLabel})=>{
             const sel=selected.includes(v);
             return (
               <button key={v} onClick={()=>toggle(v)}
                 style={{width:"100%",padding:"8px 10px",background:sel?T.bgElevated:"transparent",border:"none",borderRadius:7,textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}
                 onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
                 <span style={{width:8,height:8,borderRadius:"50%",background:c,flexShrink:0}}/>
-                <span style={{flex:1,fontSize:12.5,color:T.text}}>{v}</span>
+                <span style={{flex:1,fontSize:12.5,color:T.text}}>{optLabel}</span>
                 <span style={{fontSize:10.5,color:T.textMuted}}>{counts?.[v]??0}</span>
                 {sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{flexShrink:0}}><path d="M2.5 7.5l3 3 6-6" stroke={T.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
               </button>
