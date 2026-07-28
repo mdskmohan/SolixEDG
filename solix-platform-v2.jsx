@@ -4350,7 +4350,7 @@ const QualityView = () => {
   // test cases tab
   const [tcTableFilter, setTcTableFilter] = useState("all");
   const [tcTypeFilter,  setTcTypeFilter]  = useState("all");
-  const [tcStatusFilter,setTcStatusFilter]= useState("all");
+  const [tcStatusSel,   setTcStatusSel]   = useState([]);   // multi-select status filter ([] = all)
   const [tcSearch,      setTcSearch]      = useState("");
   const [tcDetail,      setTcDetail]      = useState(null);
   const [tcDetailEditing, setTcDetailEditing] = useState(false);
@@ -4449,11 +4449,11 @@ const QualityView = () => {
   const filteredTC = testCases.filter(t=>{
     if(tcTableFilter!=="all"&&t.table!==tcTableFilter) return false;
     if(tcTypeFilter!=="all"&&t.defId!==tcTypeFilter) return false;
-    if(tcStatusFilter!=="all"&&t.status!==tcStatusFilter) return false;
+    if(tcStatusSel.length>0&&!tcStatusSel.includes(t.status)) return false;
     if(tcSearch&&!t.name.toLowerCase().includes(tcSearch.toLowerCase())&&!t.table.toLowerCase().includes(tcSearch.toLowerCase())) return false;
     return true;
   });
-  const tcFiltersActive = tcTableFilter!=="all"||tcTypeFilter!=="all"||tcStatusFilter!=="all"||tcSearch;
+  const tcFiltersActive = tcTableFilter!=="all"||tcTypeFilter!=="all"||tcStatusSel.length>0||tcSearch;
   const tcTotalPages = Math.ceil(filteredTC.length/TC_PAGE_SIZE);
   const safeTcPage = Math.min(tcPage, Math.max(0, tcTotalPages-1));
   const pagedTC = filteredTC.slice(safeTcPage*TC_PAGE_SIZE, (safeTcPage+1)*TC_PAGE_SIZE);
@@ -4746,14 +4746,8 @@ const QualityView = () => {
               />
               {tcSearch&&<button onClick={()=>setTcSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:16,lineHeight:1}}>×</button>}
             </div>
-            {/* status pills */}
-            <div style={{display:"flex",alignItems:"center",gap:6}}>
-              <FPill active={tcStatusFilter==="all"} onClick={()=>setTcStatusFilter("all")}>All <span style={{fontSize:10,opacity:.7}}>{testCases.length}</span></FPill>
-              <FPill active={tcStatusFilter==="Success"} onClick={()=>setTcStatusFilter("Success")} color="#16a34a">Success <span style={{fontSize:10,opacity:.75}}>{tcSuccess}</span></FPill>
-              <FPill active={tcStatusFilter==="Failed"} onClick={()=>setTcStatusFilter("Failed")} color={T.rose}>Failed <span style={{fontSize:10,opacity:.75}}>{tcFailed}</span></FPill>
-              <FPill active={tcStatusFilter==="Aborted"} onClick={()=>setTcStatusFilter("Aborted")} color={T.amber}>Aborted <span style={{fontSize:10,opacity:.75}}>{tcAborted}</span></FPill>
-            </div>
-            <div style={{width:1,height:22,background:T.border,flexShrink:0}}/>
+            {/* status filter — multi-select dropdown */}
+            <StatusFilterDropdown selected={tcStatusSel} onChange={setTcStatusSel} counts={{Success:tcSuccess,Failed:tcFailed,Aborted:tcAborted}}/>
             {/* tables filter */}
             <select
               value={tcTableFilter}
@@ -4763,9 +4757,9 @@ const QualityView = () => {
               <option value="all">All Tables</option>
               {[...new Set(testCases.map(t=>t.table))].map(tbl=><option key={tbl} value={tbl}>{tbl}</option>)}
             </select>
-            {(tcTableFilter!=="all"||tcStatusFilter!=="all"||tcSearch)&&(
+            {(tcTableFilter!=="all"||tcStatusSel.length>0||tcSearch)&&(
               <button
-                onClick={()=>{setTcTableFilter("all");setTcStatusFilter("all");setTcSearch("");}}
+                onClick={()=>{setTcTableFilter("all");setTcStatusSel([]);setTcSearch("");}}
                 style={{fontSize:11,color:T.rose,background:T.roseDim,border:"none",cursor:"pointer",padding:"3px 8px",borderRadius:6}}
               >
                 ✕ Clear
@@ -6302,6 +6296,48 @@ const QualityView = () => {
           </div>
         );
       })()}
+    </div>
+  );
+};
+
+/* Compact multi-select Status filter for the DQ Test Cases filter bar (bare, no label) */
+const StatusFilterDropdown = ({selected, onChange, counts}) => {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(()=>{
+    if(!open) return;
+    const h=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};
+    document.addEventListener("mousedown",h);
+    return()=>document.removeEventListener("mousedown",h);
+  },[open]);
+  const OPTS=[{v:"Success",c:"#16a34a"},{v:"Failed",c:T.rose},{v:"Aborted",c:T.amber}];
+  const active = selected.length>0;
+  const label = selected.length===0?"All statuses":selected.length===1?selected[0]:`${selected.length} statuses`;
+  const toggle=v=>onChange(selected.includes(v)?selected.filter(x=>x!==v):[...selected,v]);
+  return (
+    <div ref={ref} style={{position:"relative"}}>
+      <div onClick={()=>setOpen(o=>!o)}
+        style={{display:"flex",alignItems:"center",gap:7,padding:"5px 10px",background:T.bgElevated,border:`1.5px solid ${active?T.accent:T.border}`,borderRadius:7,color:active?T.accent:T.textSub,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>
+        {label}
+        <svg width="9" height="6" viewBox="0 0 10 7" fill="none" style={{flexShrink:0,color:"currentColor",transform:open?"rotate(180deg)":"none",transition:"transform .15s",opacity:.6}}><path d="M1 1.5l4 4 4-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </div>
+      {open&&(
+        <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,minWidth:180,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,.2)",zIndex:500,overflow:"hidden",padding:4}}>
+          {OPTS.map(({v,c})=>{
+            const sel=selected.includes(v);
+            return (
+              <button key={v} onClick={()=>toggle(v)}
+                style={{width:"100%",padding:"8px 10px",background:sel?T.bgElevated:"transparent",border:"none",borderRadius:7,textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}
+                onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
+                <span style={{width:8,height:8,borderRadius:"50%",background:c,flexShrink:0}}/>
+                <span style={{flex:1,fontSize:12.5,color:T.text}}>{v}</span>
+                <span style={{fontSize:10.5,color:T.textMuted}}>{counts?.[v]??0}</span>
+                {sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{flexShrink:0}}><path d="M2.5 7.5l3 3 6-6" stroke={T.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };
