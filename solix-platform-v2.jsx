@@ -2998,7 +2998,7 @@ const Card2 = ({children,style})=>(
   <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,...style}}>{children}</div>
 );
 
-const DataTable = ({cols,rows,onRowClick,emptyMsg="No data"})=>(
+const DataTable = ({cols,rows,onRowClick,emptyMsg="No data",rowStyle})=>(
   <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
     <div style={{overflowX:"auto"}}>
       {rows.length===0
@@ -3012,7 +3012,7 @@ const DataTable = ({cols,rows,onRowClick,emptyMsg="No data"})=>(
             <tbody>
               {rows.map((row,i)=>(
                 <tr key={i} className={onRowClick?"row-hover":""} onClick={()=>onRowClick&&onRowClick(row)}
-                  style={{borderBottom:i<rows.length-1?`1px solid ${T.border}`:"none",transition:"background .1s"}}>
+                  style={{borderBottom:i<rows.length-1?`1px solid ${T.border}`:"none",transition:"background .1s",...(rowStyle?rowStyle(row):null)}}>
                   {cols.map(c=><td key={c.key} style={{padding:"11px 14px",fontSize:12,color:T.text,verticalAlign:"middle"}}>{c.render?c.render(row[c.key],row):row[c.key]}</td>)}
                 </tr>
               ))}
@@ -4728,60 +4728,49 @@ const QualityView = () => {
             </button>
           </div>
 
-          {/* ── Filter bar ── */}
-          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden",marginBottom:18}}>
-            {/* Row 1: search */}
-            <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
-              <div style={{flex:1,position:"relative"}}>
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}>
-                  <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/>
-                  <path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-                </svg>
-                <input
-                  value={tcSearch}
-                  onChange={e=>setTcSearch(e.target.value)}
-                  placeholder="Search test cases, tables…"
-                  style={{width:"100%",padding:"8px 12px 8px 33px",background:T.bgElevated,border:`1.5px solid ${tcSearch?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box",transition:"border-color .15s"}}
-                  onFocus={e=>e.target.style.borderColor=T.accent}
-                  onBlur={e=>e.target.style.borderColor=tcSearch?T.accent:T.border}
-                />
-                {tcSearch&&<button onClick={()=>setTcSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:16,lineHeight:1}}>×</button>}
-              </div>
+          {/* ── Filter bar: search + status + tables, one horizontal row ── */}
+          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,padding:"12px 16px",marginBottom:18,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+            {/* search */}
+            <div style={{flex:"1 1 240px",minWidth:200,position:"relative"}}>
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}>
+                <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/>
+                <path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+              </svg>
+              <input
+                value={tcSearch}
+                onChange={e=>setTcSearch(e.target.value)}
+                placeholder="Search test cases, tables…"
+                style={{width:"100%",padding:"8px 12px 8px 33px",background:T.bgElevated,border:`1.5px solid ${tcSearch?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box",transition:"border-color .15s"}}
+                onFocus={e=>e.target.style.borderColor=T.accent}
+                onBlur={e=>e.target.style.borderColor=tcSearch?T.accent:T.border}
+              />
+              {tcSearch&&<button onClick={()=>setTcSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:16,lineHeight:1}}>×</button>}
             </div>
-            {/* Row 2: pills + dropdowns */}
-            <div style={{padding:"10px 16px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-              <div style={{display:"flex",alignItems:"center",gap:6}}>
-                <FPill active={tcStatusFilter==="all"} onClick={()=>setTcStatusFilter("all")}>All <span style={{fontSize:10,opacity:.7}}>{testCases.length}</span></FPill>
-                <FPill active={tcStatusFilter==="Success"} onClick={()=>setTcStatusFilter("Success")} color="#16a34a">Success <span style={{fontSize:10,opacity:.75}}>{tcSuccess}</span></FPill>
-                <FPill active={tcStatusFilter==="Failed"} onClick={()=>setTcStatusFilter("Failed")} color={T.rose}>Failed <span style={{fontSize:10,opacity:.75}}>{tcFailed}</span></FPill>
-                <FPill active={tcStatusFilter==="Aborted"} onClick={()=>setTcStatusFilter("Aborted")} color={T.amber}>Aborted <span style={{fontSize:10,opacity:.75}}>{tcAborted}</span></FPill>
-              </div>
-              <div style={{width:1,height:22,background:T.border,flexShrink:0}}/>
-              <select
-                value={tcTableFilter}
-                onChange={e=>setTcTableFilter(e.target.value)}
-                style={{padding:"5px 10px",background:T.bgElevated,border:`1.5px solid ${tcTableFilter!=="all"?T.accent:T.border}`,borderRadius:7,color:tcTableFilter!=="all"?T.accent:T.textSub,fontSize:12,outline:"none",cursor:"pointer"}}
-              >
-                <option value="all">All Tables</option>
-                {[...new Set(testCases.map(t=>t.table))].map(tbl=><option key={tbl} value={tbl}>{tbl}</option>)}
-              </select>
-              <select
-                value={tcTypeFilter}
-                onChange={e=>setTcTypeFilter(e.target.value)}
-                style={{padding:"5px 10px",background:T.bgElevated,border:`1.5px solid ${tcTypeFilter!=="all"?T.accent:T.border}`,borderRadius:7,color:tcTypeFilter!=="all"?T.accent:T.textSub,fontSize:12,outline:"none",cursor:"pointer"}}
-              >
-                <option value="all">All Types</option>
-                {[...new Set(testCases.map(t=>t.defId))].map(did=>{const def=definitions.find(d=>d.id===did);return <option key={did} value={did}>{def?def.name:did}</option>;})}
-              </select>
-              {(tcTableFilter!=="all"||tcTypeFilter!=="all"||tcStatusFilter!=="all"||tcSearch)&&(
-                <button
-                  onClick={()=>{setTcTableFilter("all");setTcTypeFilter("all");setTcStatusFilter("all");setTcSearch("");}}
-                  style={{fontSize:11,color:T.rose,background:T.roseDim,border:"none",cursor:"pointer",padding:"3px 8px",borderRadius:6}}
-                >
-                  ✕ Clear
-                </button>
-              )}
+            {/* status pills */}
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <FPill active={tcStatusFilter==="all"} onClick={()=>setTcStatusFilter("all")}>All <span style={{fontSize:10,opacity:.7}}>{testCases.length}</span></FPill>
+              <FPill active={tcStatusFilter==="Success"} onClick={()=>setTcStatusFilter("Success")} color="#16a34a">Success <span style={{fontSize:10,opacity:.75}}>{tcSuccess}</span></FPill>
+              <FPill active={tcStatusFilter==="Failed"} onClick={()=>setTcStatusFilter("Failed")} color={T.rose}>Failed <span style={{fontSize:10,opacity:.75}}>{tcFailed}</span></FPill>
+              <FPill active={tcStatusFilter==="Aborted"} onClick={()=>setTcStatusFilter("Aborted")} color={T.amber}>Aborted <span style={{fontSize:10,opacity:.75}}>{tcAborted}</span></FPill>
             </div>
+            <div style={{width:1,height:22,background:T.border,flexShrink:0}}/>
+            {/* tables filter */}
+            <select
+              value={tcTableFilter}
+              onChange={e=>setTcTableFilter(e.target.value)}
+              style={{padding:"5px 10px",background:T.bgElevated,border:`1.5px solid ${tcTableFilter!=="all"?T.accent:T.border}`,borderRadius:7,color:tcTableFilter!=="all"?T.accent:T.textSub,fontSize:12,outline:"none",cursor:"pointer"}}
+            >
+              <option value="all">All Tables</option>
+              {[...new Set(testCases.map(t=>t.table))].map(tbl=><option key={tbl} value={tbl}>{tbl}</option>)}
+            </select>
+            {(tcTableFilter!=="all"||tcStatusFilter!=="all"||tcSearch)&&(
+              <button
+                onClick={()=>{setTcTableFilter("all");setTcStatusFilter("all");setTcSearch("");}}
+                style={{fontSize:11,color:T.rose,background:T.roseDim,border:"none",cursor:"pointer",padding:"3px 8px",borderRadius:6}}
+              >
+                ✕ Clear
+              </button>
+            )}
           </div>
 
           {/* ── Test Cases Table ── */}
@@ -19142,7 +19131,7 @@ const CatalogView = ({onAsset})=>{
     {key:"name",label:"Asset Name",render:(v,r)=>(
       <div style={{display:"flex",alignItems:"center",gap:10}}>
         <ServiceIcon service={r.service} size={18}/>
-        <div style={{opacity:r.archived?0.6:1}}>
+        <div>
           <div style={{display:"flex",alignItems:"center",gap:6}}>
             <span style={{fontSize:13,fontWeight:500,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{v}</span>
             {DRILLABLE_TYPES.has(r.type)&&<svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,flexShrink:0}}><path d="M3.5 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
@@ -19263,7 +19252,7 @@ const CatalogView = ({onAsset})=>{
           )}
           <div style={{flex:1,overflowY:"auto",padding:"18px 20px"}}>
             {filtered.length===0&&<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:200,gap:8}}><div style={{color:T.textMuted,opacity:.25}}>{Ic.catalog(36)}</div><div style={{fontSize:13,fontWeight:600,color:T.textSub}}>No assets match your filters</div><button onClick={clearAll} style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer"}}>Clear all filters</button></div>}
-            {view==="table"&&filtered.length>0&&<DataTable cols={cols} rows={pagedRows} onRowClick={r=>onAsset(r)}/>}
+            {view==="table"&&filtered.length>0&&<DataTable cols={cols} rows={pagedRows} onRowClick={r=>onAsset(r)} rowStyle={r=>r.archived?{opacity:0.55}:null}/>}
             {view==="card"&&filtered.length>0&&(
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {pagedRows.map(a=>{
@@ -19272,7 +19261,7 @@ const CatalogView = ({onAsset})=>{
                     <div key={a.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,cursor:"pointer",transition:"all .15s",overflow:"hidden"}}
                       onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent+"55";e.currentTarget.style.background=T.bgHover;}}
                       onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.bgSurface;}}>
-                      <div onClick={()=>onAsset(a)} style={{display:"flex",alignItems:"center",gap:16,padding:"14px 16px",opacity:a.archived?0.62:1}}>
+                      <div onClick={()=>onAsset(a)} style={{display:"flex",alignItems:"center",gap:16,padding:"14px 16px",opacity:a.archived?0.55:1}}>
                         <ServiceIcon service={a.service} size={32}/>
                         <div style={{flex:"0 0 280px",minWidth:0}}>
                           <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}><span style={{fontSize:13.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</span>{a.archived&&<span title={`${a.archivedReason||"Removed from source"} · ${a.archivedRun||""}`.trim()} style={{fontSize:8.5,fontWeight:700,padding:"1px 6px",borderRadius:3,background:`${T.amber}18`,color:T.amber,border:`1px solid ${T.amber}44`,textTransform:"uppercase",letterSpacing:"0.04em",flexShrink:0}}>Archived</span>}</div>
