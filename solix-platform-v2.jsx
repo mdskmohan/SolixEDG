@@ -127,6 +127,7 @@ const ASSETS = [
   {id:6, name:"etl_orders_pipeline", type:"Pipeline",  domain:"Commerce",  owner:"james.oh",   owners:["james.oh"],                steward:"james.oh",   stewards:["james.oh"],               cert:"Approved",   quality:96, usage:"High", updated:"30m ago", service:"airflow",    connectionLabel:"Airflow",         db:"airflow_prod / PIPELINES",                 tier:1, rows:"—",      size:"—",       tags:["etl"],                    description:"Fivetran-powered orders ETL. Runs hourly.",                                 slaFreshness:"2h"},
   {id:7, name:"user_sessions",       type:"Table",     domain:"Product",   owner:"alex.wu",    owners:["alex.wu"],                 steward:"alex.wu",    stewards:["alex.wu"],                cert:"Deprecated",  quality:45, usage:"Low",  updated:"2w ago",  service:"postgres",   connectionLabel:"PostgreSQL Prod",  db:"postgresql_prod / PRODUCT / sessions", tier:3, rows:"890M",   size:"142 GB",  tags:["PII","events"],           description:"Legacy session table. Use product_events instead.",                         slaFreshness:"4h"},
   {id:9, name:"dim_products",        type:"Table",     domain:"Commerce",  owner:"james.oh",   owners:["james.oh"],                steward:"maya.chen",  stewards:["maya.chen","dev.patel"],  cert:"Approved",   quality:98, usage:"High", updated:"1h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",   db:"snowflake_prod / COMMERCE / dim_products", tier:1, rows:"82K",    size:"45 MB",   tags:["dimension"],              description:"Product dimension with SKU, categories, pricing.",                          slaFreshness:"24h"},
+  {id:12,name:"user_events",         type:"Table",     domain:"Product",   owner:"alex.wu",    owners:["alex.wu"],                 steward:"priya.nair", stewards:["priya.nair"],             cert:"Approved",   quality:90, usage:"High", updated:"1h ago",  service:"databricks", connectionLabel:"Databricks Unity", db:"unity_catalog / analytics / user_events",  tier:2, rows:"120M",   size:"22 GB",   tags:["PII"],                    description:"User interaction events, Delta table in Databricks Unity Catalog.",           slaFreshness:"1h"},
 ];
 
 // ── Hierarchy assets (Database → Schema → Table/View, Bucket → Folder → Object, etc.) ──
@@ -556,44 +557,45 @@ const INITIAL_ASSIGNMENTS = {
     { id:'a11', tagId:'t10', assetId:ASSETS[3].id, origin:'manual',              sourceSystem:null,        sourceSystems:[],                  status:'active',   appliedBy:'Priya K.',appliedAt:'2026-03-20T09:00:00Z', stewardNote:'', propagationChain:[]             },
   ],
   [ASSETS[4].id]: [
+    { id:'a12s',tagId:'t1',  assetId:ASSETS[4].id, origin:'synced',              sourceSystem:'Snowflake', sourceSystems:['Snowflake'],       status:'active',   appliedBy:'system',  appliedAt:'2026-04-20T09:00:00Z', stewardNote:'', propagationChain:[]             },
     { id:'a12', tagId:'t8',  assetId:ASSETS[4].id, origin:'propagated_hierarchy',sourceSystem:null,        sourceSystems:[],                  status:'active',   appliedBy:'system',  appliedAt:'2026-04-02T07:00:00Z', stewardNote:'', propagationChain:[]             },
     { id:'a13', tagId:'t9',  assetId:ASSETS[4].id, origin:'manual',              sourceSystem:null,        sourceSystems:[],                  status:'active',   appliedBy:'Rahul M.',appliedAt:'2026-04-05T10:00:00Z', stewardNote:'', propagationChain:[]             },
     { id:'a14', tagId:'t13', assetId:ASSETS[4].id, origin:'manual',              sourceSystem:null,        sourceSystems:[],                  status:'active',   appliedBy:'Analyst', appliedAt:'2026-04-19T16:00:00Z', stewardNote:'', propagationChain:[]             },
   ],
+  12: [
+    { id:'a20', tagId:'t1',  assetId:12,           origin:'synced',              sourceSystem:'Databricks',sourceSystems:['Databricks'],      status:'active',   appliedBy:'system',  appliedAt:'2026-04-20T08:00:00Z', stewardNote:'', propagationChain:[]             },
+  ],
 };
 
+// Same-name mapping only: a source tag maps to the EDG tag of the SAME name. A source tag with
+// no same-named EDG tag stays 'unmapped' until sync auto-creates a new EDG tag of that name.
 const INITIAL_CONNECTOR_CONFIGS = {
   snowflake:  { connectorId:'snowflake',  syncEnabled:true,  reverseSyncEnabled:true,  reverseSyncApproval:true,  conflictRule:'flag_always',  lastSyncAt:'2026-04-20T10:00:00Z', lastSyncStatus:'partial',  lastSyncNewTags:1, lastSyncConflicts:2,
     nameMappings:[
-      { id:'m1',  sourceTagName:'pii_column',    edgTagId:'t1', reverseSyncAlias:'pii_column',    status:'mapped'    },
-      { id:'m2',  sourceTagName:'pii_flag',       edgTagId:'t1', reverseSyncAlias:'pii_flag',       status:'mapped'    },
-      { id:'m2b', sourceTagName:'is_pii',         edgTagId:'t1', reverseSyncAlias:'is_pii',         status:'mapped'    },
-      { id:'m3',  sourceTagName:'phi_flag',       edgTagId:'t2', reverseSyncAlias:'phi_flag',       status:'mapped'    },
-      { id:'m4',  sourceTagName:'pci_scope',      edgTagId:'t3', reverseSyncAlias:'pci_scope',      status:'mapped'    },
-      { id:'m5',  sourceTagName:'gdpr_scope',     edgTagId:'t4', reverseSyncAlias:'gdpr_scope',     status:'mapped'    },
-      { id:'m6',  sourceTagName:'restricted',     edgTagId:null, reverseSyncAlias:'restricted',     status:'ambiguous' },
-      { id:'m15', sourceTagName:'crm_source',     edgTagId:'t12',reverseSyncAlias:'crm_source',     status:'mapped'    },
-      { id:'m16', sourceTagName:'deprecated',     edgTagId:'t14',reverseSyncAlias:'deprecated',     status:'mapped'    },
+      { id:'m1',  sourceTagName:'PII',       edgTagId:'t1', reverseSyncAlias:'PII',       status:'mapped'   },
+      { id:'m3',  sourceTagName:'PHI',       edgTagId:'t2', reverseSyncAlias:'PHI',       status:'mapped'   },
+      { id:'m4',  sourceTagName:'PCI-DSS',   edgTagId:'t3', reverseSyncAlias:'PCI-DSS',   status:'mapped'   },
+      { id:'m5',  sourceTagName:'GDPR',      edgTagId:'t4', reverseSyncAlias:'GDPR',      status:'mapped'   },
+      { id:'m15', sourceTagName:'crm-source',edgTagId:'t12',reverseSyncAlias:'crm-source',status:'mapped'   },
+      { id:'m16', sourceTagName:'deprecated',edgTagId:'t14',reverseSyncAlias:'deprecated',status:'mapped'   },
+      { id:'m6',  sourceTagName:'restricted',edgTagId:null, reverseSyncAlias:'restricted',status:'unmapped' },
     ]},
   dbt:        { connectorId:'dbt',        syncEnabled:true,  reverseSyncEnabled:false, reverseSyncApproval:false, conflictRule:'flag_always',  lastSyncAt:'2026-04-20T09:42:00Z', lastSyncStatus:'success',  lastSyncNewTags:1, lastSyncConflicts:0,
     nameMappings:[
-      { id:'m7',  sourceTagName:'contains_pii',      edgTagId:'t1', reverseSyncAlias:'contains_pii',      status:'mapped'   },
-      { id:'m8',  sourceTagName:'hipaa_flag',         edgTagId:'t5', reverseSyncAlias:'hipaa_flag',         status:'mapped'   },
+      { id:'m7',  sourceTagName:'PII',   edgTagId:'t1', reverseSyncAlias:'PII',   status:'mapped'   },
+      { id:'m8',  sourceTagName:'HIPAA', edgTagId:'t5', reverseSyncAlias:'HIPAA', status:'mapped'   },
       { id:'m9',  sourceTagName:'financial_forecast', edgTagId:null, reverseSyncAlias:'financial_forecast', status:'unmapped' },
-      { id:'m19', sourceTagName:'source_crm',         edgTagId:'t12',reverseSyncAlias:'source_crm',         status:'mapped'   },
     ]},
   bigquery:   { connectorId:'bigquery',   syncEnabled:true,  reverseSyncEnabled:false, reverseSyncApproval:false, conflictRule:'steward_wins', lastSyncAt:'2026-04-19T22:00:00Z', lastSyncStatus:'success',  lastSyncNewTags:0, lastSyncConflicts:0,
     nameMappings:[
-      { id:'m10', sourceTagName:'PIIData',         edgTagId:'t1', reverseSyncAlias:'PIIData',         status:'mapped' },
-      { id:'m11', sourceTagName:'protected_health', edgTagId:'t2', reverseSyncAlias:'protected_health', status:'mapped' },
+      { id:'m10', sourceTagName:'PII', edgTagId:'t1', reverseSyncAlias:'PII', status:'mapped' },
+      { id:'m11', sourceTagName:'PHI', edgTagId:'t2', reverseSyncAlias:'PHI', status:'mapped' },
     ]},
   databricks: { connectorId:'databricks', syncEnabled:true,  reverseSyncEnabled:true,  reverseSyncApproval:true,  conflictRule:'flag_always',  lastSyncAt:'2026-04-20T08:15:00Z', lastSyncStatus:'success',  lastSyncNewTags:1, lastSyncConflicts:0,
     nameMappings:[
-      { id:'m12', sourceTagName:'pii',            edgTagId:'t1', reverseSyncAlias:'pii',            status:'mapped'    },
-      { id:'m13', sourceTagName:'personal_data',  edgTagId:'t1', reverseSyncAlias:'personal_data',  status:'mapped'    },
-      { id:'m14', sourceTagName:'phi',            edgTagId:'t2', reverseSyncAlias:'phi',            status:'mapped'    },
-      { id:'m17', sourceTagName:'crm_origin',     edgTagId:'t12',reverseSyncAlias:'crm_origin',     status:'mapped'    },
-      { id:'m18', sourceTagName:'is_deprecated',  edgTagId:'t14',reverseSyncAlias:'is_deprecated',  status:'mapped'    },
+      { id:'m12', sourceTagName:'PII',       edgTagId:'t1', reverseSyncAlias:'PII',       status:'mapped' },
+      { id:'m14', sourceTagName:'PHI',       edgTagId:'t2', reverseSyncAlias:'PHI',       status:'mapped' },
+      { id:'m17', sourceTagName:'crm-source',edgTagId:'t12',reverseSyncAlias:'crm-source',status:'mapped' },
     ]},
 };
 
@@ -18453,7 +18455,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
                 const shown = showAllTags?asns:asns.slice(0,4);
                 return (<>
                   {shown.map(asn=>{ const def=_tagCtx.getTagDef(asn.tagId); if(!def) return null; return (
-                    <TagPill key={asn.id} tagDef={def} assignment={asn} size="sm"
+                    <TagPill key={asn.id} tagDef={def} assignment={asn} size="sm" sourceScope={asset.service}
                       onClick={()=>{ const m=def.propagationMode; setPropScope((m==='hierarchy'||m==='lineage'||m==='both')?m:'both'); setPropTag(def.name); }}/>
                   );})}
                   {asns.length>4&&moreBtn(asns.length-4)}
@@ -18963,7 +18965,7 @@ const CatalogView = ({onAsset})=>{
                             const asns = tagCtx ? tagCtx.getAssetAssignments(a.id).filter(x=>x.status!=='rejected') : [];
                             if(asns.length>0){
                               return (<>
-                                {asns.slice(0,3).map(asn=>{const def=tagCtx.getTagDef(asn.tagId);return def?<TagPill key={asn.id} tagDef={def} assignment={asn} size="sm"/>:null;})}
+                                {asns.slice(0,3).map(asn=>{const def=tagCtx.getTagDef(asn.tagId);return def?<TagPill key={asn.id} tagDef={def} assignment={asn} size="sm" sourceScope={a.service}/>:null;})}
                                 {asns.length>3&&<span style={{fontSize:10,color:T.textMuted}}>+{asns.length-3}</span>}
                               </>);
                             }
@@ -32403,7 +32405,7 @@ const SettingsView = ({onToast})=>{
 // ─────────────────────────────────────────────
 // TAG PILL — atomic tag display component
 // ─────────────────────────────────────────────
-function TagPill({ tagDef, assignment, size='md', onRemove=null, onClick=null }) {
+function TagPill({ tagDef, assignment, size='md', onRemove=null, onClick=null, sourceScope=null }) {
   const [hovered, setHovered] = useState(false);
   const tagCtx = useTagCtx();
   if (!tagDef) return null;
@@ -32425,18 +32427,15 @@ function TagPill({ tagDef, assignment, size='md', onRemove=null, onClick=null })
   const statusColor = isPending ? T.amber : isConflict ? T.rose : null;
   const statusDot   = statusColor ? <span style={{width:5,height:5,borderRadius:'50%',background:statusColor,flexShrink:0,display:'block'}}/> : null;
 
-  // ── source provenance (canonical name on the chip; sources shown as logos + "known as" popover) ──
+  // ── source provenance: an object shows ONLY its own connection's synced tag (same-name mapping) ──
   const origin   = assignment?.origin || 'manual';
-  const isProp    = origin.startsWith && origin.startsWith('propagated');
-  const srcNames  = (assignment?.sourceSystems && assignment.sourceSystems.length) ? assignment.sourceSystems : (assignment?.sourceSystem ? [assignment.sourceSystem] : []);
-  const isSynced  = srcNames.length>0;
-  const connIdOf  = n => (n||'').toLowerCase().replace('google','').replace(/[^a-z]/g,'');
-  const rawNameFor= connId => tagCtx?.connectorConfigs?.[connId]?.nameMappings?.find(x=>x.edgTagId===tagDef.id)?.sourceTagName || null;
-  const srcList   = srcNames.map(n=>{ const cid=connIdOf(n); return { name:n, connId:cid, raw:rawNameFor(cid) }; });
-  const logoSz    = size==='sm'?11:13;
-  const shownLogos= srcList.slice(0,3);
-  const extraSrc  = srcList.length - shownLogos.length;
-  const showPopover = hovered && (isSynced || isProp || isConflict);
+  const isProp   = !!(origin.startsWith && origin.startsWith('propagated'));
+  const isSynced = origin === 'synced';
+  const nice     = s => s ? s.charAt(0).toUpperCase()+s.slice(1) : s;
+  const srcConn  = sourceScope || null;              // the object's own connection
+  const showSrcLogo = isSynced && !!srcConn;
+  const logoSz   = size==='sm'?11:13;
+  const showPopover = hovered && (showSrcLogo || isProp || isConflict);
   const propKind  = origin.includes('both') ? 'hierarchy & lineage' : origin.includes('lineage') ? 'lineage' : origin.includes('hierarchy') ? 'hierarchy' : 'propagation';
 
   return (
@@ -32449,35 +32448,24 @@ function TagPill({ tagDef, assignment, size='md', onRemove=null, onClick=null })
       {statusDot}
       {tagDef.name}
       {tagDef.propagationLocked && <span style={{fontSize:9,opacity:.7}}>🔒</span>}
-      {isSynced && (
-        <span style={{display:'inline-flex',alignItems:'center',gap:2,marginLeft:2}}>
-          {shownLogos.map((s,i)=><span key={i} style={{display:'flex'}}><ServiceIcon service={s.connId} size={logoSz}/></span>)}
-          {extraSrc>0 && <span style={{fontSize:9,fontWeight:700,opacity:.75}}>+{extraSrc}</span>}
-        </span>
-      )}
+      {showSrcLogo && <span title={`Synced from ${nice(srcConn)}`} style={{display:'inline-flex',marginLeft:2}}><ServiceIcon service={srcConn} size={logoSz}/></span>}
       {!isSynced && isProp && <span style={{fontSize:10,opacity:.65,marginLeft:1}}>⤳</span>}
       {onRemove && hovered && (
         <span onClick={e=>{e.stopPropagation();onRemove();}} style={{fontSize:12,cursor:'pointer',opacity:0.6,lineHeight:1,marginLeft:1}} onMouseEnter={e=>e.currentTarget.style.opacity='1'} onMouseLeave={e=>e.currentTarget.style.opacity='.6'}>×</span>
       )}
       {showPopover && (
         <span onClick={e=>e.stopPropagation()} style={{position:'absolute',top:'100%',left:0,zIndex:600,paddingTop:6,cursor:'default',whiteSpace:'normal',fontWeight:400}}>
-          <span style={{display:'block',background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 10px 28px rgba(0,0,0,.28)',padding:'9px 11px',width:238,color:T.text}}>
+          <span style={{display:'block',background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 10px 28px rgba(0,0,0,.28)',padding:'9px 11px',width:224,color:T.text}}>
             <span style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
               <span style={{width:8,height:8,borderRadius:'50%',background:tagDef.color,display:'block',flexShrink:0}}/>
               <span style={{fontSize:12,fontWeight:700,color:T.text}}>{tagDef.name}</span>
               {tagDef.category&&<span style={{fontSize:10,color:T.textMuted,textTransform:'capitalize'}}>· {tagDef.category}</span>}
             </span>
-            {isConflict&&<span style={{display:'block',fontSize:11,color:T.rose,marginBottom:6}}>⚠ Source conflict — sources disagree with the steward decision. Resolve in the asset's Tags view.</span>}
-            {isSynced&&<>
-              <span style={{display:'block',fontSize:10.5,color:T.textMuted,marginBottom:5}}>{isConflict?'Reported by:':`Confirmed by ${srcList.length} source${srcList.length!==1?'s':''} — known as:`}</span>
-              {srcList.map((s,i)=>(
-                <span key={i} style={{display:'flex',alignItems:'center',gap:7,padding:'3px 0'}}>
-                  <span style={{display:'flex',flexShrink:0}}><ServiceIcon service={s.connId} size={15}/></span>
-                  <span style={{fontSize:11.5,color:T.textSub,flex:1}}>{s.name}</span>
-                  {s.raw&&<span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.text}}>{s.raw}</span>}
-                </span>
-              ))}
-            </>}
+            {isConflict&&<span style={{display:'block',fontSize:11,color:T.rose,marginBottom:showSrcLogo?6:0}}>⚠ Source conflict — the source and the steward decision disagree. Resolve in the asset's Tags view.</span>}
+            {showSrcLogo&&<span style={{display:'flex',alignItems:'center',gap:7}}>
+              <span style={{display:'flex',flexShrink:0}}><ServiceIcon service={srcConn} size={15}/></span>
+              <span style={{fontSize:11.5,color:T.textSub}}>Synced from <b style={{color:T.text}}>{nice(srcConn)}</b></span>
+            </span>}
             {!isSynced&&isProp&&<span style={{display:'block',fontSize:11,color:T.textSub}}>↳ Inherited via {propKind} propagation</span>}
           </span>
         </span>
