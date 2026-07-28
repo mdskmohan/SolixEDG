@@ -6879,7 +6879,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   const [assetSearchQ,  setAssetSearchQ]= useState("");
   const [selAssetIds,   setSelAssetIds] = useState(new Set());
   const [assetRel,      setAssetRel]    = useState("governs");
-  const EMPTY_POL = {name:"",category:"Data",description:"",owner:[],stewards:[],tags:[],regulations:[],regulationArticles:{},scope:{domains:[],sources:[],assetType:"both"},criteria:[],rules:[],links:[],history:[],fqn:"",version:1,severity:"Medium",policyTypes:[],consequence:{severity:"Medium",onViolation:"Warn",notify:"Both"},ruleLogic:"independent",runMode:"draft",wizardSchedFreq:"daily",wizardSchedTime:"08:00",wizardSchedDay:"monday",wizardSchedCron:""};
+  const EMPTY_POL = {name:"",category:"Data",description:"",owner:[],stewards:[],tags:[],regulations:[],regulationArticles:{},scope:{domains:[],sources:[],assetTypes:[]},criteria:[],rules:[],links:[],history:[],fqn:"",version:1,severity:"Medium",policyTypes:[],consequence:{severity:"Medium",onViolation:"Warn",notify:"Both"},ruleLogic:"independent",runMode:"draft",wizardSchedFreq:"daily",wizardSchedTime:"08:00",wizardSchedDay:"monday",wizardSchedCron:""};
   const [newPol,         setNewPol]        = useState(EMPTY_POL);
   const [catFilter,      setCatFilter]     = useState([]);
   const [filterDropOpen, setFilterDropOpen]= useState(false);
@@ -7368,9 +7368,10 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   const openEditWizard = (pol) => {
     // Normalize scope so Step 1 dropdowns show correct values and validation passes
     const normalizedScope = {
-      domains:   pol.scope?.domains   || [],
-      sources:   pol.scope?.sources   || [],
-      assetType: pol.scope?.assetType || "both",
+      domains:    pol.scope?.domains  || [],
+      sources:    pol.scope?.sources  || [],
+      assetTypes: pol.scope?.assetTypes
+        || (pol.scope?.assetType==="table"?["Table"]:pol.scope?.assetType==="view"?["View"]:pol.scope?.assetType==="both"?["Table","View"]:[]),
     };
     // owner/stewards must be arrays for the multi-select dropdowns (older policies store owner as a string)
     const ownerArr = Array.isArray(pol.owner)?pol.owner:(pol.owner?[pol.owner]:(pol.owners||[]));
@@ -7450,7 +7451,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
     const p = {
       ...EMPTY_POL, id:`pol-${Date.now()}`, fqn:`policies.${cat}.${nm}`, version:1,
       name:packDef.name, category:packDef.category, description:packDef.description, severity:packDef.severity,
-      owner:"", owners:[], stewards:[], tags:[], scope:{domains:[],sources:[],assetType:"both"},
+      owner:"", owners:[], stewards:[], tags:[], scope:{domains:[],sources:[],assetTypes:["Table","View"]},
       regulations:[reg.name], regulationArticles:{[reg.name]:[reqId]},
       criteria:rules.map(r=>r.name), rules, links:[], lifecycle:"Draft",
       created:today(), updated:today(), ruleLogic:"independent",
@@ -8234,9 +8235,11 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                             {/* Asset Type */}
                             <div style={{padding:"10px 12px",background:T.bgElevated,borderRadius:9,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:8}}>
                               <svg width="11" height="11" viewBox="0 0 14 14" fill="none" style={{color:T.textMuted,flexShrink:0}}><rect x="1.5" y="1.5" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="1.3"/><line x1="1.5" y1="5" x2="12.5" y2="5" stroke="currentColor" strokeWidth="1.1"/><line x1="5" y1="5" x2="5" y2="12.5" stroke="currentColor" strokeWidth="1.1"/></svg>
-                              <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",minWidth:70}}>Asset Type</span>
+                              <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",minWidth:70}}>Object Types</span>
                               <span style={{fontSize:11.5,color:T.textSub,fontWeight:500}}>
-                                {p.scope?.assetType==="table"?"Tables only":p.scope?.assetType==="view"?"Views only":"Tables & Views"}
+                                {(p.scope?.assetTypes&&p.scope.assetTypes.length)
+                                  ? p.scope.assetTypes.join(", ")
+                                  : p.scope?.assetType==="table"?"Table":p.scope?.assetType==="view"?"View":"Table, View"}
                               </span>
                             </div>
                           </div>
@@ -10062,11 +10065,29 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                 if(createStep===1){
                   const scopeDoms  = newPol.scope?.domains||[];
                   const scopeSrcs  = newPol.scope?.sources||[];
-                  const assetType  = newPol.scope?.assetType||"both";
                   const SOLIX_SOURCES    = ["CDP","ECS"];
                   const EXTERNAL_SOURCES = ["Snowflake","Databricks","PostgreSQL","Oracle","BigQuery","Redshift"];
-                  const ALL_SOURCES      = [...SOLIX_SOURCES, ...EXTERNAL_SOURCES];
-                  const SRC_ICON = {"CDP":"🗄️","ECS":"📁","Snowflake":"❄️","Databricks":"🧱","PostgreSQL":"🐘","Oracle":"🔴","BigQuery":"🔷","Redshift":"🌀"};
+                  const UNSTRUCT_SOURCES = ["Amazon S3","ADLS"];
+                  const ALL_SOURCES      = [...SOLIX_SOURCES, ...EXTERNAL_SOURCES, ...UNSTRUCT_SOURCES];
+                  const SRC_ICON = {"CDP":"🗄️","ECS":"📁","Snowflake":"❄️","Databricks":"🧱","PostgreSQL":"🐘","Oracle":"🔴","BigQuery":"🔷","Redshift":"🌀","Amazon S3":"🪣","ADLS":"🔷"};
+                  // Object types EDG can enforce policies on, per source. Structured sources → Table/View. Unstructured (S3, ADLS) → a single Object type.
+                  const SOURCE_OBJECT_TYPES = {"CDP":["Table","View"],"ECS":["Table","View"],"Snowflake":["Table","View"],"Databricks":["Table","View"],"PostgreSQL":["Table","View"],"Oracle":["Table","View"],"BigQuery":["Table","View"],"Redshift":["Table","View"],"Amazon S3":["Object"],"ADLS":["Object"]};
+                  const UNSTRUCT_SET = new Set(UNSTRUCT_SOURCES);
+                  const OBJ_ORDER = ["Table","View","Object"];
+                  const OBJ_ICON  = {"Table":"📋","View":"👁️","Object":"📦"};
+                  // Union of enforceable object types across the selected sources (Table, View, Object order preserved)
+                  const availAssetTypes = [...new Set(scopeSrcs.flatMap(s=>SOURCE_OBJECT_TYPES[s]||["Table","View"]))].sort((a,b)=>OBJ_ORDER.indexOf(a)-OBJ_ORDER.indexOf(b));
+                  const hasUnstruct = scopeSrcs.some(s=>UNSTRUCT_SET.has(s));
+                  const hasStruct   = scopeSrcs.some(s=>!UNSTRUCT_SET.has(s));
+                  // Migrate any legacy single-select assetType → assetTypes[] and clamp to what the selected sources allow
+                  const scopeAssetTypes = (newPol.scope?.assetTypes
+                    || (newPol.scope?.assetType==="table"?["Table"]:newPol.scope?.assetType==="view"?["View"]:newPol.scope?.assetType==="both"?["Table","View"]:[])
+                  ).filter(t=>availAssetTypes.includes(t));
+                  const toggleAssetType = (t)=>{
+                    const cur  = scopeAssetTypes;
+                    const next = cur.includes(t) ? cur.filter(x=>x!==t) : [...cur, t];
+                    setNewPol(p=>({...p,scope:{...p.scope,assetTypes:next,assetType:undefined}}));
+                  };
                   return (
                     <div style={{display:"flex",flexDirection:"column",gap:20}}>
                       {secHead("Policy Scope","Define which sources and asset types this policy governs. Specific tables and columns are selected per rule in the next step.")}
@@ -10089,7 +10110,15 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                           placeholder="Search and select data sources…"
                           options={ALL_SOURCES}
                           selected={scopeSrcs}
-                          onChange={v=>setNewPol(p=>({...p,scope:{...p.scope,sources:v}}))}
+                          onChange={v=>setNewPol(p=>{
+                            const availSet = new Set(v.flatMap(s=>SOURCE_OBJECT_TYPES[s]||["Table","View"]));
+                            const prev = p.scope?.assetTypes
+                              || (p.scope?.assetType==="table"?["Table"]:p.scope?.assetType==="view"?["View"]:p.scope?.assetType?["Table","View"]:[]);
+                            let kept = prev.filter(t=>availSet.has(t));
+                            // When the new source set invalidates the prior picks, default to every applicable object type
+                            if(kept.length===0 && v.length>0) kept = [...availSet];
+                            return {...p,scope:{...p.scope,sources:v,assetTypes:kept,assetType:undefined}};
+                          })}
                           renderOpt={(o,sel)=>(
                             <>
                               <span style={{fontSize:14,flexShrink:0}}>{SRC_ICON[o]||"🗄️"}</span>
@@ -10102,27 +10131,41 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                         {scopeSrcs.length===0&&<div style={{fontSize:10.5,color:T.rose,marginTop:4}}>Select at least one source to continue.</div>}
                       </div>
 
-                      {/* ── Asset Type (required single-select) ── */}
+                      {/* ── Object Types (required, source-aware multi-select) ── */}
                       <div>
-                        <label style={lbl}>Asset Type <span style={{color:T.rose}}>*</span></label>
-                        <select value={assetType} onChange={e=>setNewPol(p=>({...p,scope:{...p.scope,assetType:e.target.value}}))}
-                          style={{...inp,cursor:"pointer",appearance:"auto"}}>
-                          <option value="both">Tables &amp; Views</option>
-                          <option value="table">Tables only</option>
-                          <option value="view">Views only</option>
-                        </select>
-                        <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>Tables are base data — use Views for derived or aggregated datasets.</div>
+                        <label style={lbl}>Object Types <span style={{color:T.rose}}>*</span></label>
+                        {scopeSrcs.length===0
+                          ? <div style={{fontSize:11.5,color:T.textMuted,padding:"7px 0"}}>Select a source above to choose which objects this policy governs.</div>
+                          : <>
+                              <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                                {availAssetTypes.map(t=>{
+                                  const sel=scopeAssetTypes.includes(t);
+                                  return (
+                                    <button key={t} type="button" onClick={()=>toggleAssetType(t)}
+                                      style={{padding:"7px 14px",borderRadius:8,fontSize:12.5,fontWeight:sel?700:500,cursor:"pointer",transition:"all .12s",border:`1.5px solid ${sel?T.accent:T.border}`,background:sel?T.accentDim:"transparent",color:sel?T.accent:T.textSub,display:"flex",alignItems:"center",gap:6}}>
+                                      {sel&&<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2" stroke={T.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                      <span>{OBJ_ICON[t]||"📦"}</span>{t}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              {hasUnstruct
+                                ? <div style={{fontSize:11,color:T.textMuted,marginTop:8,lineHeight:1.6}}>Unstructured sources (S3, ADLS) expose a single enforceable <strong>Object</strong> type — policies apply at the object level.</div>
+                                : <div style={{fontSize:11,color:T.textMuted,marginTop:8}}>Tables are base data — use Views for derived or aggregated datasets.</div>}
+                              {scopeAssetTypes.length===0&&<div style={{fontSize:10.5,color:T.rose,marginTop:6}}>Select at least one object type to continue.</div>}
+                            </>
+                        }
                       </div>
 
                       {/* Preview banner */}
-                      {scopeSrcs.length>0&&(
+                      {scopeSrcs.length>0&&scopeAssetTypes.length>0&&(
                         <div style={{padding:"12px 16px",borderRadius:9,background:T.accentDim,border:`1px solid ${T.accent}30`,display:"flex",alignItems:"center",gap:10}}>
                           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{color:T.accent,flexShrink:0}}><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/><line x1="8" y1="5.5" x2="8" y2="8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="10.5" r=".6" fill="currentColor" stroke="none"/></svg>
                           <span style={{fontSize:12,color:T.accent,lineHeight:1.7}}>
                             <strong>{scopeSrcs.join(", ")}</strong> selected
                             {scopeDoms.length>0&&<> · domain: <strong>{scopeDoms.join(", ")}</strong></>}
-                            {" · "}<strong>{assetType==="both"?"Tables & Views":assetType==="table"?"Tables only":"Views only"}</strong>
-                            <span style={{color:T.textSub,fontWeight:400}}> — pick specific tables &amp; columns inside each rule in Step 2.</span>
+                            {" · "}<strong>{scopeAssetTypes.join(" + ")}</strong>
+                            <span style={{color:T.textSub,fontWeight:400}}> — pick specific {hasUnstruct&&!hasStruct?"objects":"tables & columns"} inside each rule in Step 2.</span>
                           </span>
                         </div>
                       )}
@@ -10215,12 +10258,13 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
 
                   // ── Tables available for rule-level picking (from Step 1 source + assetType) ──
                   const scopeSrcs2  = newPol.scope?.sources||[];
-                  const assetType2  = newPol.scope?.assetType||"both";
-                  const SRC_SVC2    = {"CDP":["cdp"],"ECS":["ecs"],"Snowflake":["snowflake"],"Databricks":["databricks"],"PostgreSQL":["postgres","postgresql"],"Oracle":["oracle"],"BigQuery":["bigquery"],"Redshift":["redshift"]};
-                  const SRC_ICON2   = {"cdp":"🗄️","ecs":"📁","snowflake":"❄️","databricks":"🧱","postgres":"🐘","postgresql":"🐘","oracle":"🔴","bigquery":"🔷","redshift":"🌀"};
+                  const assetTypes2 = newPol.scope?.assetTypes
+                    || (newPol.scope?.assetType==="table"?["Table"]:newPol.scope?.assetType==="view"?["View"]:["Table","View"]);
+                  const SRC_SVC2    = {"CDP":["cdp"],"ECS":["ecs"],"Snowflake":["snowflake"],"Databricks":["databricks"],"PostgreSQL":["postgres","postgresql"],"Oracle":["oracle"],"BigQuery":["bigquery"],"Redshift":["redshift"],"Amazon S3":["s3"],"ADLS":["adls","azureblob"]};
+                  const SRC_ICON2   = {"cdp":"🗄️","ecs":"📁","snowflake":"❄️","databricks":"🧱","postgres":"🐘","postgresql":"🐘","oracle":"🔴","bigquery":"🔷","redshift":"🌀","s3":"🪣","adls":"🔷","azureblob":"🔷"};
                   const availTables = ASSETS.filter(a=>{
                     const svcMatch = scopeSrcs2.length===0 || scopeSrcs2.some(s=>(SRC_SVC2[s]||[]).includes((a.service||"").toLowerCase()));
-                    const typeOk   = assetType2==="both" || (assetType2==="table"&&a.type==="Table") || (assetType2==="view"&&a.type==="View");
+                    const typeOk   = assetTypes2.length===0 || assetTypes2.includes(a.type);
                     return svcMatch && typeOk && !!ASSET_COLUMNS[a.name];
                   });
 
@@ -11088,7 +11132,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                 </button>
                 {createStep<W_STEPS.length
                   ? (()=>{
-                      const step1ok=(newPol.scope?.domains||[]).length>0 && (newPol.scope?.sources||[]).length>0 && !!(newPol.scope?.assetType);
+                      const step1ok=(newPol.scope?.domains||[]).length>0 && (newPol.scope?.sources||[]).length>0 && (newPol.scope?.assetTypes||[]).length>0;
                       const step2ok=newPol.name.trim().length>0;
                       // In edit mode the policy already exists — don't block on missing scope fields
                       const canContinue=isEditMode?true:(createStep===1?step1ok:createStep===2?step2ok:true);
