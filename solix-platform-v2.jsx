@@ -32252,6 +32252,7 @@ const SettingsView = ({onToast})=>{
 // ─────────────────────────────────────────────
 function TagPill({ tagDef, assignment, size='md', onRemove=null, onClick=null }) {
   const [hovered, setHovered] = useState(false);
+  const tagCtx = useTagCtx();
   if (!tagDef) return null;
 
   const isConflict = assignment?.status === 'conflict';
@@ -32271,18 +32272,62 @@ function TagPill({ tagDef, assignment, size='md', onRemove=null, onClick=null })
   const statusColor = isPending ? T.amber : isConflict ? T.rose : null;
   const statusDot   = statusColor ? <span style={{width:5,height:5,borderRadius:'50%',background:statusColor,flexShrink:0,display:'block'}}/> : null;
 
+  // ── source provenance (canonical name on the chip; sources shown as logos + "known as" popover) ──
+  const origin   = assignment?.origin || 'manual';
+  const isProp    = origin.startsWith && origin.startsWith('propagated');
+  const srcNames  = (assignment?.sourceSystems && assignment.sourceSystems.length) ? assignment.sourceSystems : (assignment?.sourceSystem ? [assignment.sourceSystem] : []);
+  const isSynced  = srcNames.length>0;
+  const connIdOf  = n => (n||'').toLowerCase().replace('google','').replace(/[^a-z]/g,'');
+  const rawNameFor= connId => tagCtx?.connectorConfigs?.[connId]?.nameMappings?.find(x=>x.edgTagId===tagDef.id)?.sourceTagName || null;
+  const srcList   = srcNames.map(n=>{ const cid=connIdOf(n); return { name:n, connId:cid, raw:rawNameFor(cid) }; });
+  const logoSz    = size==='sm'?11:13;
+  const shownLogos= srcList.slice(0,3);
+  const extraSrc  = srcList.length - shownLogos.length;
+  const showPopover = hovered && (isSynced || isProp || isConflict);
+  const propKind  = origin.includes('both') ? 'hierarchy & lineage' : origin.includes('lineage') ? 'lineage' : origin.includes('hierarchy') ? 'hierarchy' : 'propagation';
+
   return (
     <span
       onMouseEnter={()=>setHovered(true)}
       onMouseLeave={()=>setHovered(false)}
       onClick={onClick}
-      style={{ display:'inline-flex', alignItems:'center', gap, padding:pad, borderRadius:99, background:bg, color:baseColor, border, fontSize:fs, fontWeight:500, cursor:onClick?'pointer':'default', opacity, userSelect:'none', transition:'all 0.15s', whiteSpace:'nowrap' }}
+      style={{ position:'relative', display:'inline-flex', alignItems:'center', gap, padding:pad, borderRadius:99, background:bg, color:baseColor, border, fontSize:fs, fontWeight:500, cursor:onClick?'pointer':'default', opacity, userSelect:'none', transition:'all 0.15s', whiteSpace:'nowrap' }}
     >
       {statusDot}
       {tagDef.name}
       {tagDef.propagationLocked && <span style={{fontSize:9,opacity:.7}}>🔒</span>}
+      {isSynced && (
+        <span style={{display:'inline-flex',alignItems:'center',gap:2,marginLeft:2}}>
+          {shownLogos.map((s,i)=><span key={i} style={{display:'flex'}}><ServiceIcon service={s.connId} size={logoSz}/></span>)}
+          {extraSrc>0 && <span style={{fontSize:9,fontWeight:700,opacity:.75}}>+{extraSrc}</span>}
+        </span>
+      )}
+      {!isSynced && isProp && <span style={{fontSize:10,opacity:.65,marginLeft:1}}>⤳</span>}
       {onRemove && hovered && (
         <span onClick={e=>{e.stopPropagation();onRemove();}} style={{fontSize:12,cursor:'pointer',opacity:0.6,lineHeight:1,marginLeft:1}} onMouseEnter={e=>e.currentTarget.style.opacity='1'} onMouseLeave={e=>e.currentTarget.style.opacity='.6'}>×</span>
+      )}
+      {showPopover && (
+        <span onClick={e=>e.stopPropagation()} style={{position:'absolute',top:'100%',left:0,zIndex:600,paddingTop:6,cursor:'default',whiteSpace:'normal',fontWeight:400}}>
+          <span style={{display:'block',background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 10px 28px rgba(0,0,0,.28)',padding:'9px 11px',width:238,color:T.text}}>
+            <span style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+              <span style={{width:8,height:8,borderRadius:'50%',background:tagDef.color,display:'block',flexShrink:0}}/>
+              <span style={{fontSize:12,fontWeight:700,color:T.text}}>{tagDef.name}</span>
+              {tagDef.category&&<span style={{fontSize:10,color:T.textMuted,textTransform:'capitalize'}}>· {tagDef.category}</span>}
+            </span>
+            {isConflict&&<span style={{display:'block',fontSize:11,color:T.rose,marginBottom:6}}>⚠ Source conflict — sources disagree with the steward decision. Resolve in the asset's Tags view.</span>}
+            {isSynced&&<>
+              <span style={{display:'block',fontSize:10.5,color:T.textMuted,marginBottom:5}}>{isConflict?'Reported by:':`Confirmed by ${srcList.length} source${srcList.length!==1?'s':''} — known as:`}</span>
+              {srcList.map((s,i)=>(
+                <span key={i} style={{display:'flex',alignItems:'center',gap:7,padding:'3px 0'}}>
+                  <span style={{display:'flex',flexShrink:0}}><ServiceIcon service={s.connId} size={15}/></span>
+                  <span style={{fontSize:11.5,color:T.textSub,flex:1}}>{s.name}</span>
+                  {s.raw&&<span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.text}}>{s.raw}</span>}
+                </span>
+              ))}
+            </>}
+            {!isSynced&&isProp&&<span style={{display:'block',fontSize:11,color:T.textSub}}>↳ Inherited via {propKind} propagation</span>}
+          </span>
+        </span>
       )}
     </span>
   );
@@ -32912,6 +32957,7 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                     {[
                       {key:'overview',   label:'Overview'},
                       {key:'assets',     label:'Linked Assets', count:affectedAssets.length},
+                      {key:'sources',    label:'Sources & Sync', count:tagConnIds.length},
                       {key:'activity',   label:'Audit Logs',   count:tagActivity.length},
                     ].map(({key:t,label,count})=>(
                       <button key={t} onClick={()=>setDetailTab(t)}
@@ -32951,42 +32997,26 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
 
                       <hr style={{border:'none',borderTop:`1px solid ${T.border}`,margin:0}}/>
 
-                      {/* Source tags & reverse sync (moved into Overview) */}
+                      {/* Source tags — compact summary that deep-links to the Sources & Sync tab */}
                       <div>
+                        <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:10}}>Source tags</div>
                         {(()=>{
-                          const nice = id => id.charAt(0).toUpperCase()+id.slice(1);
                           const rsDefault = selTag.category==='sensitivity'||selTag.category==='regulatory';
                           const tagDefault = selTag.reverseSyncEnabled ?? rsDefault;
-                          const canPushOf = connId => !!connectorConfigs[connId]?.reverseSyncEnabled;
-                          const isOn = (connId,m) => (m.reverseSync ?? tagDefault) && canPushOf(connId);
-                          const onCount = tagSyncRows.filter(({connId,m})=>isOn(connId,m)).length;
-                          const toggleRS = (connId,m) => { if(!canPushOf(connId)) return; const cur=(m.reverseSync ?? tagDefault); upsertNameMapping(connId,{...m,reverseSync:!cur}); if(!cur){ const objs=affectedAssets.map(a=>a.name); logReverseSync(selTag.id, objs.length?objs:[selTag.name], 'manual', connId); onToast(`Reverse sync on — pushed ${affectedAssets.length||0} object(s) to ${nice(connId)} as ${m.reverseSyncAlias||m.sourceTagName}`,'success'); } else { onToast(`Reverse sync off — ${m.sourceTagName} (${nice(connId)})`,'success'); } };
-                          return (<>
-                            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
-                              <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Source tags</div>
-                              {tagSyncRows.length>0&&<span style={{fontSize:10.5,fontWeight:700,padding:'1px 8px',borderRadius:99,background:onCount>0?'rgba(22,163,74,.12)':T.bgElevated,color:onCount>0?'#16a34a':T.textMuted}}>{onCount} of {tagSyncRows.length} syncing back</span>}
+                          const onCount = tagSyncRows.filter(({connId,m})=>(m.reverseSync ?? tagDefault) && connectorConfigs[connId]?.reverseSyncEnabled).length;
+                          return (
+                            <div onClick={()=>setDetailTab('sources')} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 14px',border:`1px solid ${T.border}`,borderRadius:10,background:T.bgSurface,cursor:'pointer',transition:'border-color .15s'}}
+                              onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent+'66'} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                              <span style={{color:T.accent,display:'flex',flexShrink:0}}>{Ic.tag(15)}</span>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{tagSyncRows.length===0?'No source tags mapped':`Mapped in ${tagConnIds.length} source${tagConnIds.length!==1?'s':''}`}</div>
+                                <div style={{fontSize:11.5,color:T.textMuted}}>{tagSyncRows.length===0?'This classification is not yet named in any connected source.':`${tagSyncRows.length} source tag${tagSyncRows.length!==1?'s':''} · ${onCount} syncing back to source`}</div>
+                              </div>
+                              <span style={{fontSize:11,fontWeight:600,color:T.accent,display:'inline-flex',alignItems:'center',gap:4,flexShrink:0}}>Sources &amp; Sync
+                                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                              </span>
                             </div>
-                            <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>How this tag is named in each source system — toggle reverse sync to mirror it back to that source.</div>
-                            {tagSyncRows.length===0
-                              ? <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No source tags mapped</span>
-                              : <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden',background:T.bgSurface}}>
-                                  {tagSyncRows.map(({connId,m},i)=>{ const canPush=canPushOf(connId); const on=isOn(connId,m); const ps=pushSummaryForTag(selTag.id,connId); return (
-                                    <div key={m.id} style={{display:'flex',alignItems:'center',gap:11,padding:'10px 14px',borderBottom:i<tagSyncRows.length-1?`1px solid ${T.border}`:'none'}}>
-                                      <span title={nice(connId)} style={{flexShrink:0,display:'flex'}}><ServiceIcon service={connId} size={20}/></span>
-                                      <span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.text,fontWeight:500}}>{m.sourceTagName}</span>
-                                      {on&&<span style={{fontSize:10.5,color:T.accent}}>↗ writes back</span>}
-                                      <span style={{flex:1}}/>
-                                      {on&&ps.lastAt&&<span style={{fontSize:10,color:T.textMuted}} title={`${ps.objects} object write(s) logged`}>pushed {relTime(ps.lastAt)}</span>}
-                                      {!canPush&&<span title="Enable push on this connection's Tag sync tab" style={{fontSize:10.5,color:T.textMuted}}>push disabled</span>}
-                                      <div onClick={()=>toggleRS(connId,m)} title={canPush?'Reverse sync this source tag':'Connection push is disabled'}
-                                        style={{width:34,height:19,borderRadius:10,background:on?T.accent:T.border,position:'relative',cursor:canPush?'pointer':'not-allowed',opacity:canPush?1:0.45,transition:'background .2s',flexShrink:0}}>
-                                        <div style={{position:'absolute',top:3,left:on?18:3,width:13,height:13,borderRadius:'50%',background:'#fff',transition:'left .2s'}}/>
-                                      </div>
-                                    </div>
-                                  );})}
-                                </div>
-                            }
-                          </>);
+                          );
                         })()}
                       </div>
 
@@ -33136,6 +33166,49 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                       }
                     </div>
                   )}
+
+                  {/* ── SOURCES & SYNC TAB ── */}
+                  {detailTab==='sources'&&(()=>{
+                    const nice = id => id.charAt(0).toUpperCase()+id.slice(1);
+                    const rsDefault = selTag.category==='sensitivity'||selTag.category==='regulatory';
+                    const tagDefault = selTag.reverseSyncEnabled ?? rsDefault;
+                    const canPushOf = connId => !!connectorConfigs[connId]?.reverseSyncEnabled;
+                    const isOn = (connId,m) => (m.reverseSync ?? tagDefault) && canPushOf(connId);
+                    const onCount = tagSyncRows.filter(({connId,m})=>isOn(connId,m)).length;
+                    const toggleRS = (connId,m) => { if(!canPushOf(connId)) return; const cur=(m.reverseSync ?? tagDefault); upsertNameMapping(connId,{...m,reverseSync:!cur}); if(!cur){ const objs=affectedAssets.map(a=>a.name); logReverseSync(selTag.id, objs.length?objs:[selTag.name], 'manual', connId); onToast(`Reverse sync on — pushed ${affectedAssets.length||0} object(s) to ${nice(connId)} as ${m.reverseSyncAlias||m.sourceTagName}`,'success'); } else { onToast(`Reverse sync off — ${m.sourceTagName} (${nice(connId)})`,'success'); } };
+                    return (
+                    <div style={{maxWidth:680}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
+                        <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Source tags</div>
+                        {tagSyncRows.length>0&&<span style={{fontSize:10.5,fontWeight:700,padding:'1px 8px',borderRadius:99,background:onCount>0?'rgba(22,163,74,.12)':T.bgElevated,color:onCount>0?'#16a34a':T.textMuted}}>{onCount} of {tagSyncRows.length} syncing back</span>}
+                      </div>
+                      <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>How this classification is named in each source system — toggle reverse sync to mirror it back to that source. Push is gated by each connection's Tag sync settings.</div>
+                      {tagSyncRows.length===0
+                        ? <div style={{padding:'40px 24px',textAlign:'center',border:`1px solid ${T.border}`,borderRadius:10,background:T.bgSurface}}>
+                            <div style={{fontSize:26,marginBottom:10,opacity:.25}}>⇄</div>
+                            <div style={{fontSize:13,fontWeight:500,color:T.textSub,marginBottom:4}}>No source tags mapped</div>
+                            <div style={{fontSize:12,color:T.textMuted}}>Map source tag names to this classification from a connector's Tag sync tab.</div>
+                          </div>
+                        : <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden',background:T.bgSurface}}>
+                            {tagSyncRows.map(({connId,m},i)=>{ const canPush=canPushOf(connId); const on=isOn(connId,m); const ps=pushSummaryForTag(selTag.id,connId); return (
+                              <div key={m.id} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 14px',borderBottom:i<tagSyncRows.length-1?`1px solid ${T.border}`:'none'}}>
+                                <span title={nice(connId)} style={{flexShrink:0,display:'flex'}}><ServiceIcon service={connId} size={20}/></span>
+                                <span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.text,fontWeight:500}}>{m.sourceTagName}</span>
+                                {on&&<span style={{fontSize:10.5,color:T.accent}}>↗ writes back</span>}
+                                <span style={{flex:1}}/>
+                                {on&&ps.lastAt&&<span style={{fontSize:10,color:T.textMuted}} title={`${ps.objects} object write(s) logged`}>pushed {relTime(ps.lastAt)}</span>}
+                                {!canPush&&<span title="Enable push on this connection's Tag sync tab" style={{fontSize:10.5,color:T.textMuted}}>push disabled</span>}
+                                <div onClick={()=>toggleRS(connId,m)} title={canPush?'Reverse sync this source tag':'Connection push is disabled'}
+                                  style={{width:34,height:19,borderRadius:10,background:on?T.accent:T.border,position:'relative',cursor:canPush?'pointer':'not-allowed',opacity:canPush?1:0.45,transition:'background .2s',flexShrink:0}}>
+                                  <div style={{position:'absolute',top:3,left:on?18:3,width:13,height:13,borderRadius:'50%',background:'#fff',transition:'left .2s'}}/>
+                                </div>
+                              </div>
+                            );})}
+                          </div>
+                      }
+                    </div>
+                    );
+                  })()}
 
                   {/* ── ACTIVITY TAB ── */}
                   {detailTab==='activity'&&(()=>{
