@@ -6091,6 +6091,15 @@ const QualityView = () => {
                   style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box",lineHeight:1.5}}
                   onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
               </div>
+              {/* DQ Dimension — kept above the scope selector (Entity Type), consistent with Add Test Case */}
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>DQ Dimension</label>
+                <select value={ndDim} onChange={e=>setNdDim(e.target.value)}
+                  style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${ndDim?T.accent:T.border}`,borderRadius:9,color:ndDim?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer"}}>
+                  <option value="">Select a dimension…</option>
+                  {DQ_DIMS.map(d=><option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
               <div>
                 <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Entity Type <span style={{color:T.rose}}>*</span></label>
                 <div style={{display:"flex",gap:6}}>
@@ -6101,14 +6110,6 @@ const QualityView = () => {
                     </button>
                   ))}
                 </div>
-              </div>
-              <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Data Quality Dimension</label>
-                <select value={ndDim} onChange={e=>setNdDim(e.target.value)}
-                  style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${ndDim?T.accent:T.border}`,borderRadius:9,color:ndDim?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer"}}>
-                  <option value="">Select a dimension…</option>
-                  {DQ_DIMS.map(d=><option key={d} value={d}>{d}</option>)}
-                </select>
               </div>
               {/* Custom SQL template + declared parameters — user-authored definitions are always Custom SQL
                   (preset checks td1–td27 are the built-in library we ship, not user-authored) */}
@@ -7012,8 +7013,9 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
 
   // ─── wizard constants ────────────────────────────────────────────────
   const W_STEPS = [
-    {id:"scope",     label:"Scope",          sub:"Domain, asset type, source & asset"},
-    {id:"policy",    label:"Policy & Rules", sub:"Type, conditions & consequence"},
+    {id:"details",   label:"Details",        sub:"Name, type, description & category", required:true},
+    {id:"scope",     label:"Scope",          sub:"Domain, source & object types",       required:true},
+    {id:"rules",     label:"Rules",          sub:"Conditions & consequence"},
     {id:"ownership", label:"Ownership",      sub:"Owner, stewards & frameworks"},
     {id:"review",    label:"Review",         sub:"Confirm & create"},
   ];
@@ -10018,43 +10020,43 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
       {createOpen&&(
         <>
           <div onClick={closeWizard} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1200}}/>
-          <div className="slideInRight" style={{position:"fixed",right:0,top:0,height:"100vh",width:620,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:1201,display:"flex",flexDirection:"column",boxShadow:"-16px 0 48px rgba(0,0,0,.28)"}}>
+          <div className="slideInRight" style={{position:"fixed",right:0,top:0,height:"100vh",width:860,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:1201,display:"flex",flexDirection:"column",boxShadow:"-16px 0 48px rgba(0,0,0,.28)"}}>
 
             {/* Header */}
-            <div style={{padding:"16px 22px 14px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-                <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  <div style={{width:30,height:30,borderRadius:7,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent}}>{Ic.shield(14)}</div>
-                  <div>
-                    <div style={{fontSize:14,fontWeight:700,color:T.text}}>{isEditMode?"Edit Policy":"New Policy"}</div>
-                    <div style={{fontSize:11,color:T.textMuted}}>{W_STEPS[createStep-1].label}</div>
-                  </div>
+            <div style={{padding:"14px 22px",borderBottom:`1px solid ${T.border}`,flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center",background:T.bgElevated}}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:30,height:30,borderRadius:7,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent}}>{Ic.shield(14)}</div>
+                <div>
+                  <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{isEditMode?"Edit Policy":"New Policy"}</div>
+                  <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Define what this policy governs and how it's enforced.</div>
                 </div>
-                <button onClick={closeWizard} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:4}}>{Ic.x(14)}</button>
               </div>
-              {/* 3-step indicator */}
-              <div style={{display:"flex",alignItems:"center"}}>
+              <button onClick={closeWizard} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.x(12)}</button>
+            </div>
+
+            {/* body: section rail + content */}
+            <div style={{flex:1,display:"flex",minHeight:0}}>
+              {/* section rail */}
+              <div style={{width:212,flexShrink:0,borderRight:`1px solid ${T.border}`,overflowY:"auto",padding:"14px 10px",display:"flex",flexDirection:"column",gap:3,background:T.bg}}>
                 {W_STEPS.map((s,i)=>{
-                  const n=i+1,done=createStep>n,active=createStep===n;
+                  const n=i+1, on=createStep===n;
+                  const done = s.id==="details" ? newPol.name.trim().length>0
+                    : s.id==="scope" ? ((newPol.scope?.domains||[]).length>0 && (newPol.scope?.sources||[]).length>0 && (newPol.scope?.assetTypes||[]).length>0)
+                    : s.id==="rules" ? (wizardRules.length+wizardSqlRules.length>0)
+                    : s.id==="ownership" ? ((newPol.owner||[]).length>0 || (newPol.stewards||[]).length>0)
+                    : false;
                   return (
-                    <React.Fragment key={n}>
-                      <div style={{display:"flex",flexDirection:"column",alignItems:"center",flex:1,cursor:done?"pointer":"default"}} onClick={()=>{if(done)setCreateStep(n);}}>
-                        <div style={{width:22,height:22,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",background:active?T.accent:done?T.green:T.bgElevated,border:`1.5px solid ${active?T.accent:done?T.green:T.border}`,transition:"all .2s",marginBottom:4}}>
-                          {done
-                            ? <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5 3.5-4" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                            : <span style={{fontSize:9,fontWeight:700,color:active?"#fff":T.textMuted}}>{n}</span>}
-                        </div>
-                        <span style={{fontSize:9.5,color:active?T.accent:done?T.textSub:T.textMuted,fontWeight:active?600:400,whiteSpace:"nowrap"}}>{s.label}</span>
-                      </div>
-                      {i<W_STEPS.length-1&&<div style={{height:1.5,flex:2,background:done?T.accent:T.border,marginBottom:16,transition:"background .3s"}}/>}
-                    </React.Fragment>
+                    <button key={s.id} onClick={()=>setCreateStep(n)} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 11px",borderRadius:8,background:on?T.bgSurface:"transparent",border:`1px solid ${on?T.border:"transparent"}`,color:on?T.text:T.textMuted,fontSize:12.5,fontWeight:on?700:500,cursor:"pointer",textAlign:"left",boxShadow:on?"0 1px 2px rgba(0,0,0,.06)":"none"}}>
+                      <span style={{width:8,height:8,borderRadius:"50%",flexShrink:0,background:done?T.accent:T.borderLight}}/>
+                      <span style={{flex:1}}>{s.label}</span>
+                      {s.required&&!done&&<span style={{fontSize:13,color:T.textMuted,lineHeight:1}}>*</span>}
+                    </button>
                   );
                 })}
               </div>
-            </div>
 
             {/* Step content */}
-            <div style={{flex:1,overflowY:"auto",minHeight:0,padding:"22px 24px"}}>
+            <div style={{flex:1,overflowY:"auto",minHeight:0,padding:"22px 26px"}}>
               {(()=>{
                 const inp={width:"100%",padding:"8px 11px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
                 const lbl={display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5};
@@ -10066,8 +10068,53 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                 );
                 const divider=<div style={{borderTop:`1px solid ${T.border}`,margin:"20px 0"}}/>;
 
-                /* ─── Step 1: Scope ─── */
+                /* ─── Step 1: Details ─── */
                 if(createStep===1){
+                  const scopeTypes = newPol.scope?.assetTypes||[];
+                  const TYPE_BY_ASSET = {"Table":["Governance","Quality","Retention","Access"],"View":["Governance","Quality","Access"],"Schema":["Governance","Retention","Access"],"Database":["Governance","Retention","Access"]};
+                  const ALL_PTYPES = ["Governance","Security","Quality","Retention","Access","Privacy"];
+                  const availPTypes = scopeTypes.length>0 ? [...new Set(scopeTypes.flatMap(t=>TYPE_BY_ASSET[t]||ALL_PTYPES))] : ALL_PTYPES;
+                  const selPTypes = newPol.policyTypes||[];
+                  return (
+                    <div style={{display:"flex",flexDirection:"column",gap:18,maxWidth:600}}>
+                      {secHead("Policy Details","Name this policy, choose the type(s) it governs, and describe its purpose.")}
+                      {/* Policy Name */}
+                      <div>
+                        <label style={lbl}>Policy Name <span style={{color:T.rose}}>*</span></label>
+                        <input value={newPol.name} onChange={e=>setNewPol(p=>({...p,name:e.target.value}))} autoFocus
+                          placeholder="e.g. PII Table Access Control, HIPAA Retention Enforcement…"
+                          style={inp} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                      </div>
+                      {/* Policy Type */}
+                      <CatFieldDropdown
+                        label="Policy Type"
+                        placeholder="Search and select policy types…"
+                        options={availPTypes}
+                        selected={selPTypes}
+                        onChange={v=>setNewPol(p=>({...p,policyTypes:v}))}
+                      />
+                      {/* Description */}
+                      <div>
+                        <label style={lbl}>Description</label>
+                        <textarea value={newPol.description} onChange={e=>setNewPol(p=>({...p,description:e.target.value}))} rows={3}
+                          placeholder="Business or compliance reason for this policy…"
+                          style={{...inp,resize:"vertical"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                      </div>
+                      {/* Category */}
+                      <div>
+                        <label style={lbl}>Category</label>
+                        <select value={newPol.category||""} onChange={e=>setNewPol(p=>({...p,category:e.target.value}))}
+                          style={{...inp,cursor:"pointer",appearance:"auto"}}>
+                          {POLICY_CATS.map(c=><option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <div style={{fontSize:11,color:T.textMuted,marginTop:6,lineHeight:1.6}}>Groups this policy under a category in the Policy Manager.</div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                /* ─── Step 2: Scope ─── */
+                if(createStep===2){
                   const scopeDoms  = newPol.scope?.domains||[];
                   const scopeSrcs  = newPol.scope?.sources||[];
                   const SOLIX_SOURCES    = ["CDP","ECS"];
@@ -10131,35 +10178,36 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                         {scopeSrcs.length===0&&<div style={{fontSize:10.5,color:T.rose,marginTop:4}}>Select at least one source to continue.</div>}
                       </div>
 
-                      {/* ── Object Types (required, source-aware multi-select dropdown) ── */}
+                      {/* ── Object Types (required) — always shown; options are filtered by the Source above ── */}
                       <div>
+                        {(()=>{
+                          // Before a source is picked, offer every object type; once sources are selected the list
+                          // narrows to what those sources actually expose (Table/View for structured, Object for S3/ADLS).
+                          const objOptions = scopeSrcs.length>0 ? availAssetTypes : OBJ_ORDER;
+                          return (
+                            <CatFieldDropdown
+                              label="Object Types"
+                              required
+                              placeholder="Select object types…"
+                              options={objOptions}
+                              selected={scopeAssetTypes}
+                              onChange={v=>setNewPol(p=>({...p,scope:{...p.scope,assetTypes:v,assetType:undefined}}))}
+                              renderOpt={(o,sel)=>(
+                                <>
+                                  <span style={{fontSize:14,flexShrink:0}}>{OBJ_ICON[o]||"📦"}</span>
+                                  <span style={{flex:1,fontSize:12.5,color:sel?T.accent:T.text}}>{o}</span>
+                                </>
+                              )}
+                              renderChip={o=><span style={{display:"inline-flex",alignItems:"center",gap:4}}><span>{OBJ_ICON[o]||"📦"}</span>{o}</span>}
+                            />
+                          );
+                        })()}
                         {scopeSrcs.length===0
-                          ? <>
-                              <label style={lbl}>Object Types <span style={{color:T.rose}}>*</span></label>
-                              <div style={{fontSize:11.5,color:T.textMuted,padding:"7px 0"}}>Select a source above to choose which objects this policy governs.</div>
-                            </>
-                          : <>
-                              <CatFieldDropdown
-                                label="Object Types"
-                                required
-                                placeholder="Select object types…"
-                                options={availAssetTypes}
-                                selected={scopeAssetTypes}
-                                onChange={v=>setNewPol(p=>({...p,scope:{...p.scope,assetTypes:v,assetType:undefined}}))}
-                                renderOpt={(o,sel)=>(
-                                  <>
-                                    <span style={{fontSize:14,flexShrink:0}}>{OBJ_ICON[o]||"📦"}</span>
-                                    <span style={{flex:1,fontSize:12.5,color:sel?T.accent:T.text}}>{o}</span>
-                                  </>
-                                )}
-                                renderChip={o=><span style={{display:"inline-flex",alignItems:"center",gap:4}}><span>{OBJ_ICON[o]||"📦"}</span>{o}</span>}
-                              />
-                              {hasUnstruct
-                                ? <div style={{fontSize:11,color:T.textMuted,marginTop:6,lineHeight:1.6}}>Unstructured sources (S3, ADLS) expose a single enforceable <strong>Object</strong> type — policies apply at the object level.</div>
-                                : <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Tables are base data — use Views for derived or aggregated datasets.</div>}
-                              {scopeAssetTypes.length===0&&<div style={{fontSize:10.5,color:T.rose,marginTop:6}}>Select at least one object type to continue.</div>}
-                            </>
-                        }
+                          ? <div style={{fontSize:11,color:T.textMuted,marginTop:6,lineHeight:1.6}}>Showing all object types — pick a <strong>Source</strong> above to narrow this to what that source exposes.</div>
+                          : hasUnstruct
+                            ? <div style={{fontSize:11,color:T.textMuted,marginTop:6,lineHeight:1.6}}>Filtered by your sources. Unstructured sources (S3, ADLS) expose a single enforceable <strong>Object</strong> type — policies apply at the object level.</div>
+                            : <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Filtered by your sources. Tables are base data — use Views for derived or aggregated datasets.</div>}
+                        {scopeAssetTypes.length===0&&<div style={{fontSize:10.5,color:T.rose,marginTop:6}}>Select at least one object type to continue.</div>}
                       </div>
 
                       {/* Preview banner */}
@@ -10170,7 +10218,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                             <strong>{scopeSrcs.join(", ")}</strong> selected
                             {scopeDoms.length>0&&<> · domain: <strong>{scopeDoms.join(", ")}</strong></>}
                             {" · "}<strong>{scopeAssetTypes.join(" + ")}</strong>
-                            <span style={{color:T.textSub,fontWeight:400}}> — pick specific {hasUnstruct&&!hasStruct?"objects":"tables & columns"} inside each rule in Step 2.</span>
+                            <span style={{color:T.textSub,fontWeight:400}}> — pick specific {hasUnstruct&&!hasStruct?"objects":"tables & columns"} inside each rule in the Rules step.</span>
                           </span>
                         </div>
                       )}
@@ -10178,8 +10226,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   );
                 }
 
-                /* ─── Step 2: Policy & Rules ─── */
-                if(createStep===2){
+                /* ─── Step 3: Rules ─── */
+                if(createStep===3){
                   const scopeTypes = newPol.scope?.assetTypes||[];
                   const selPTypes  = newPol.policyTypes||[];
                   const TYPE_BY_ASSET = {
@@ -10423,37 +10471,6 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   };
                   return (
                     <div style={{display:"flex",flexDirection:"column",gap:0}}>
-
-                      {/* ── Identity ── */}
-                      {secHead("Policy Identity","Name this policy and write a description.")}
-                      <div style={{display:"flex",flexDirection:"column",gap:16,marginBottom:4}}>
-                        <div>
-                          <label style={lbl}>Policy Name <span style={{color:T.rose}}>*</span></label>
-                          <input value={newPol.name} onChange={e=>setNewPol(p=>({...p,name:e.target.value}))} autoFocus
-                            placeholder="e.g. PII Table Access Control, HIPAA Retention Enforcement…"
-                            style={inp} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                        </div>
-                        <div>
-                          <label style={lbl}>Description</label>
-                          <textarea value={newPol.description} onChange={e=>setNewPol(p=>({...p,description:e.target.value}))} rows={2}
-                            placeholder="Business or compliance reason for this policy…"
-                            style={{...inp,resize:"vertical"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                        </div>
-                      </div>
-                      {divider}
-
-                      {/* ── Policy Type ── */}
-                      {secHead("Policy Type","Select the type(s) this policy governs.")}
-                      <div style={{marginBottom:4}}>
-                        <CatFieldDropdown
-                          label="Policy Type"
-                          placeholder="Search and select policy types…"
-                          options={availPTypes}
-                          selected={selPTypes}
-                          onChange={v=>setNewPol(p=>({...p,policyTypes:v}))}
-                        />
-                      </div>
-                      {divider}
 
                       {/* ── Rules ── */}
                       {secHead("Rules","Define the conditions evaluated against each in-scope asset.")}
@@ -10966,8 +10983,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   );
                 }
 
-                /* ─── Step 3: Ownership ─── */
-                if(createStep===3){
+                /* ─── Step 4: Ownership ─── */
+                if(createStep===4){
                   const ava=u=>u.split(".").map(s=>s[0]?.toUpperCase()).join("");
                   const userRenderOpt=u=>(
                     <>
@@ -11042,8 +11059,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   );
                 }
 
-                /* ─── Step 4: Review & Create ─── */
-                if(createStep===4){
+                /* ─── Step 5: Review & Create ─── */
+                if(createStep===5){
                   const cq=newPol.consequence||{severity:"Medium",onViolation:"Warn",notify:"Both"};
                   const scopeAssetCount=(newPol.scope?.assetIds||[]).length;
                   const runMode=newPol.runMode||"draft";
@@ -11066,6 +11083,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                         ]},
                         {title:"Policy", rows:[
                           ["Name",         <span style={{fontWeight:700,color:T.text}}>{newPol.name||"—"}</span>],
+                          ["Category",     newPol.category||"Not set"],
                           ["Policy Types", (newPol.policyTypes||[]).join(", ")||"Not set"],
                           ["On Violation", cq.onViolation||"Warn"],
                           ["Severity",     <span style={{padding:"2px 9px",borderRadius:5,background:SEV_BG[cq.severity]||T.bgElevated,color:SEV_COLOR[cq.severity]||T.textMuted,fontWeight:700,fontSize:11}}>{cq.severity||"Medium"}</span>],
@@ -11124,6 +11142,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                 return null;
               })()}
             </div>
+            </div>
 
             {/* Footer */}
             <div style={{padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:T.bgBase}}>
@@ -11137,10 +11156,10 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                 </button>
                 {createStep<W_STEPS.length
                   ? (()=>{
-                      const step1ok=(newPol.scope?.domains||[]).length>0 && (newPol.scope?.sources||[]).length>0 && (newPol.scope?.assetTypes||[]).length>0;
-                      const step2ok=newPol.name.trim().length>0;
+                      const detailsOk=newPol.name.trim().length>0;
+                      const scopeOk=(newPol.scope?.domains||[]).length>0 && (newPol.scope?.sources||[]).length>0 && (newPol.scope?.assetTypes||[]).length>0;
                       // In edit mode the policy already exists — don't block on missing scope fields
-                      const canContinue=isEditMode?true:(createStep===1?step1ok:createStep===2?step2ok:true);
+                      const canContinue=isEditMode?true:(createStep===1?detailsOk:createStep===2?scopeOk:true);
                       return (
                         <button onClick={()=>{if(!canContinue)return;setCreateStep(s=>s+1);}}
                           style={{padding:"7px 22px",borderRadius:7,background:canContinue?T.accent:T.bgElevated,border:`1px solid ${canContinue?T.accent:T.border}`,color:canContinue?"#fff":T.textMuted,fontSize:12,fontWeight:700,cursor:canContinue?"pointer":"not-allowed",transition:"all .1s"}}>
