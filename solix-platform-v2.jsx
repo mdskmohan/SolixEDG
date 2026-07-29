@@ -4384,7 +4384,7 @@ const QualityView = () => {
 
   // incident manager tab
   const [incTcFilter,     setIncTcFilter]     = useState("");
-  const [incAssigneeF,    setIncAssigneeF]     = useState("");
+  const [incAssigneeSel,  setIncAssigneeSel]   = useState([]);   // multi-select assignee filter ([] = all)
   const [incStatusSel,    setIncStatusSel]     = useState([]);   // multi-select status filter ([] = all)
   const [expandedInc,     setExpandedInc]     = useState(null);
   const [incCommentText,  setIncCommentText]  = useState({});
@@ -4467,7 +4467,7 @@ const QualityView = () => {
 
   const filteredInc = incidents.filter(i=>{
     if(incStatusSel.length>0&&!incStatusSel.includes(i.status)) return false;
-    if(incAssigneeF&&!(i.assignee||"").toLowerCase().includes(incAssigneeF.toLowerCase())) return false;
+    if(incAssigneeSel.length>0&&!incAssigneeSel.includes(i.assignee||"—")) return false;
     if(incTcFilter){const tc=testCases.find(t=>t.id===i.tcId);if(!tc||!tc.name.toLowerCase().includes(incTcFilter.toLowerCase())) return false;}
     return true;
   });
@@ -5276,10 +5276,16 @@ const QualityView = () => {
 
         {/* ════════════════ INCIDENT MANAGER ════════════════ */}
         {tab==="incidents"&&<>
-          {/* ── Filter bar ── */}
-          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden",marginBottom:18}}>
-            <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-              <div style={{flex:1,minWidth:180,position:"relative"}}>
+          {/* ── Filter bar: search + assignee + status, one clean row ── */}
+          {(()=>{
+            const pretty=a=>a==="—"?"Unassigned":a.split(/[._]/).map(w=>w?w[0].toUpperCase()+w.slice(1):w).join(" ");
+            const assignees=[...new Set(incidents.map(i=>i.assignee||"—"))].sort((a,b)=>a==="—"?1:b==="—"?-1:a.localeCompare(b));
+            const assigneeCounts=Object.fromEntries(assignees.map(a=>[a,incidents.filter(i=>(i.assignee||"—")===a).length]));
+            const anyFilter=incTcFilter||incStatusSel.length>0||incAssigneeSel.length>0;
+            return (
+            <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,padding:"12px 16px",marginBottom:18,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+              {/* search by test case */}
+              <div style={{flex:"1 1 220px",minWidth:180,position:"relative"}}>
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}>
                   <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/>
                   <path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
@@ -5287,21 +5293,12 @@ const QualityView = () => {
                 <input
                   value={incTcFilter}
                   onChange={e=>setIncTcFilter(e.target.value)}
-                  placeholder="Filter by test case name…"
+                  placeholder="Search test case…"
                   style={{width:"100%",padding:"8px 12px 8px 33px",background:T.bgElevated,border:`1.5px solid ${incTcFilter?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box",transition:"border-color .15s"}}
                   onFocus={e=>e.target.style.borderColor=T.accent}
                   onBlur={e=>e.target.style.borderColor=incTcFilter?T.accent:T.border}
                 />
-              </div>
-              <div style={{flex:1,minWidth:150,position:"relative"}}>
-                <input
-                  value={incAssigneeF}
-                  onChange={e=>setIncAssigneeF(e.target.value)}
-                  placeholder="Filter by assignee…"
-                  style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${incAssigneeF?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box",transition:"border-color .15s"}}
-                  onFocus={e=>e.target.style.borderColor=T.accent}
-                  onBlur={e=>e.target.style.borderColor=incAssigneeF?T.accent:T.border}
-                />
+                {incTcFilter&&<button onClick={()=>setIncTcFilter("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:16,lineHeight:1}}>×</button>}
               </div>
               {/* status filter — multi-select dropdown with funnel icon */}
               <StatusFilterDropdown
@@ -5311,31 +5308,24 @@ const QualityView = () => {
                 options={[{v:"Open",c:T.rose},{v:"In Progress",c:T.amber,label:"In Review"},{v:"Resolved",c:"#16a34a"},{v:"Dismissed",c:T.textMuted}]}
                 counts={{Open:incidents.filter(i=>i.status==="Open").length,"In Progress":incidents.filter(i=>i.status==="In Progress").length,Resolved:incidents.filter(i=>i.status==="Resolved").length,Dismissed:incidents.filter(i=>i.status==="Dismissed").length}}
               />
-              <span style={{fontSize:12,color:T.textMuted,whiteSpace:"nowrap"}}>{filteredInc.length} result{filteredInc.length!==1?"s":""}</span>
+              {/* assignee filter — multi-select dropdown with funnel icon */}
+              <StatusFilterDropdown
+                selected={incAssigneeSel}
+                onChange={setIncAssigneeSel}
+                placeholder="Assignee"
+                options={assignees.map(a=>({v:a,label:pretty(a)}))}
+                counts={assigneeCounts}
+              />
+              {anyFilter&&(
+                <button
+                  onClick={()=>{setIncTcFilter("");setIncStatusSel([]);setIncAssigneeSel([]);}}
+                  style={{fontSize:11,color:T.rose,background:T.roseDim,border:"none",cursor:"pointer",padding:"4px 9px",borderRadius:6}}
+                >✕ Clear</button>
+              )}
+              <span style={{marginLeft:"auto",fontSize:12,color:T.textMuted,whiteSpace:"nowrap"}}>{filteredInc.length} of {incidents.length}</span>
             </div>
-            {/* ── Stat summary bar ── */}
-            <div style={{padding:"12px 16px 0",display:"flex",gap:8,flexWrap:"wrap"}}>
-              {[
-                {key:"Open",        label:"Open",      color:T.rose,      bg:`${T.rose}12`},
-                {key:"In Progress", label:"In Review", color:T.amber,     bg:`${T.amber}12`},
-                {key:"Resolved",    label:"Resolved",  color:"#16a34a",   bg:"#16a34a12"},
-                {key:"Dismissed",   label:"Dismissed", color:T.textMuted, bg:T.bgElevated},
-              ].map(s=>{
-                const cnt=incidents.filter(i=>i.status===s.key).length;
-                const sel=incStatusSel.includes(s.key);
-                const toggle=()=>setIncStatusSel(prev=>prev.includes(s.key)?prev.filter(x=>x!==s.key):[...prev,s.key]);
-                return (
-                  <div key={s.key} onClick={toggle} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 12px",borderRadius:7,background:s.bg,border:`1px solid ${sel?s.color:`${s.color}30`}`,boxShadow:sel?`0 0 0 1px ${s.color}`:"none",cursor:"pointer",transition:"opacity .1s"}} onMouseEnter={e=>e.currentTarget.style.opacity=".75"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
-                    <span style={{width:6,height:6,borderRadius:"50%",background:s.color,display:"block",flexShrink:0}}/>
-                    <span style={{fontSize:11,fontWeight:700,color:s.color}}>{cnt}</span>
-                    <span style={{fontSize:11,color:s.color,opacity:.85}}>{s.label}</span>
-                  </div>
-                );
-              })}
-              <div style={{marginLeft:"auto",alignSelf:"center",fontSize:11,color:T.textMuted}}>{incidents.length} total</div>
-            </div>
-            <div style={{height:12}}/>
-          </div>
+            );
+          })()}
 
           {/* ── Incidents Table ── */}
           <Card2 style={{padding:0,overflow:"hidden"}}>
@@ -6325,7 +6315,7 @@ const StatusFilterDropdown = ({selected, onChange, counts, options, placeholder=
               <button key={v} onClick={()=>toggle(v)}
                 style={{width:"100%",padding:"8px 10px",background:sel?T.bgElevated:"transparent",border:"none",borderRadius:7,textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}
                 onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
-                <span style={{width:8,height:8,borderRadius:"50%",background:c,flexShrink:0}}/>
+                {c&&<span style={{width:8,height:8,borderRadius:"50%",background:c,flexShrink:0}}/>}
                 <span style={{flex:1,fontSize:12.5,color:T.text}}>{optLabel}</span>
                 <span style={{fontSize:10.5,color:T.textMuted}}>{counts?.[v]??0}</span>
                 {sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{flexShrink:0}}><path d="M2.5 7.5l3 3 6-6" stroke={T.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
