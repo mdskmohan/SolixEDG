@@ -522,13 +522,13 @@ const HoldRemoveMenu = ({ onFull, onPartial, style, asX=false }) => {
 // TAG MANAGEMENT MOCK DATA
 // ─────────────────────────────────────────────
 const INITIAL_TAG_DEFS = [
-  { id:'t1',  cert:'Approved', name:'PII',               category:'sensitivity', color:'#ee2424', propagationMode:'both',      propagationLocked:true,  governanceRequired:true,  managedBy:'Priya K.', usageCount:48, description:'Personally identifiable information. Name, email, phone, address, SSN, DOB.',                            sourceAliases:['pii_column','contains_pii','PIIData','pii_flag','is_pii'],          createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin', system:true },
-  { id:'t2',  cert:'Approved', name:'PHI',               category:'sensitivity', color:'#ee2424', propagationMode:'both',      propagationLocked:true,  governanceRequired:true,  managedBy:'Priya K.', usageCount:12, description:'Protected health information under HIPAA. Medical records, diagnoses, treatments.',                     sourceAliases:['phi_flag','health_data','phi_column','protected_health'],            createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin', system:true },
-  { id:'t3',  cert:'Approved', name:'PCI-DSS',           category:'sensitivity', color:'#ee2424', propagationMode:'both',      propagationLocked:true,  governanceRequired:true,  managedBy:'Priya K.', usageCount:7, description:'Payment card data. Card numbers, CVV, expiry, cardholder name.',                                        sourceAliases:['pci_scope','pci_data','card_data'],                                  createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin', system:true },
-  { id:'t4',  cert:'Approved', name:'GDPR',              category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Priya K.', usageCount:31, description:'EU GDPR. Personal data of EU residents regardless of processing location.',                             sourceAliases:['gdpr_applicable','gdpr_scope','gdpr_flag','is_gdpr'],                createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin', system:true },
-  { id:'t5',  cert:'Approved', name:'HIPAA',             category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Rahul M.', usageCount:9, description:'US health data privacy. Any PHI used in US healthcare operations.',                                     sourceAliases:['hipaa_flag','hipaa_applicable','hipaa_scope'],                       createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin', system:true },
-  { id:'t6',  cert:'Approved', name:'CCPA',              category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Rahul M.', usageCount:6, description:'California Consumer Privacy Act. Personal data of California residents.',                               sourceAliases:['ccpa_scope','ccpa_flag'],                                            createdAt:'2026-02-01T00:00:00Z', createdBy:'Admin', system:true },
-  { id:'t7',  cert:'Approved', name:'DPDP',              category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Rahul M.', usageCount:4, description:'India Digital Personal Data Protection Act 2023.',                                                     sourceAliases:['dpdp_scope'],                                                        createdAt:'2026-03-01T00:00:00Z', createdBy:'Admin', system:true },
+  { id:'t1',  cert:'Approved', name:'PII',               category:'sensitivity', color:'#ee2424', propagationMode:'both',      propagationLocked:true,  governanceRequired:true,  managedBy:'Priya K.', usageCount:48, description:'Personally identifiable information. Name, email, phone, address, SSN, DOB.',                            sourceAliases:['pii_column','contains_pii','PIIData','pii_flag','is_pii'],          createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin' },
+  { id:'t2',  cert:'Approved', name:'PHI',               category:'sensitivity', color:'#ee2424', propagationMode:'both',      propagationLocked:true,  governanceRequired:true,  managedBy:'Priya K.', usageCount:12, description:'Protected health information under HIPAA. Medical records, diagnoses, treatments.',                     sourceAliases:['phi_flag','health_data','phi_column','protected_health'],            createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin' },
+  { id:'t3',  cert:'Approved', name:'PCI-DSS',           category:'sensitivity', color:'#ee2424', propagationMode:'both',      propagationLocked:true,  governanceRequired:true,  managedBy:'Priya K.', usageCount:7, description:'Payment card data. Card numbers, CVV, expiry, cardholder name.',                                        sourceAliases:['pci_scope','pci_data','card_data'],                                  createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin' },
+  { id:'t4',  cert:'Approved', name:'GDPR',              category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Priya K.', usageCount:31, description:'EU GDPR. Personal data of EU residents regardless of processing location.',                             sourceAliases:['gdpr_applicable','gdpr_scope','gdpr_flag','is_gdpr'],                createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin' },
+  { id:'t5',  cert:'Approved', name:'HIPAA',             category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Rahul M.', usageCount:9, description:'US health data privacy. Any PHI used in US healthcare operations.',                                     sourceAliases:['hipaa_flag','hipaa_applicable','hipaa_scope'],                       createdAt:'2026-01-10T00:00:00Z', createdBy:'Admin' },
+  { id:'t6',  cert:'Approved', name:'CCPA',              category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Rahul M.', usageCount:6, description:'California Consumer Privacy Act. Personal data of California residents.',                               sourceAliases:['ccpa_scope','ccpa_flag'],                                            createdAt:'2026-02-01T00:00:00Z', createdBy:'Admin' },
+  { id:'t7',  cert:'Approved', name:'DPDP',              category:'regulatory',  color:'#7dd3fc', propagationMode:'lineage',   propagationLocked:false, governanceRequired:true,  managedBy:'Rahul M.', usageCount:4, description:'India Digital Personal Data Protection Act 2023.',                                                     sourceAliases:['dpdp_scope'],                                                        createdAt:'2026-03-01T00:00:00Z', createdBy:'Admin' },
   { id:'t8',  cert:'Approved', name:'Finance domain',    category:'business',    color:'#fbbf24', propagationMode:'hierarchy', propagationLocked:false, governanceRequired:false, managedBy:'Rahul M.', usageCount:22, description:'Owned by the Finance domain. Revenue, costs, GL, AR/AP data.',                                         sourceAliases:[],                                                                    createdAt:'2026-02-01T00:00:00Z', createdBy:'Rahul M.' },
   { id:'t9',  cert:'Approved', name:'Board reporting',   category:'business',    color:'#fbbf24', propagationMode:'hierarchy', propagationLocked:false, governanceRequired:false, managedBy:'Rahul M.', usageCount:11, description:'Feeds board-level reports and investor materials.',                                                     sourceAliases:[],                                                                    createdAt:'2026-02-15T00:00:00Z', createdBy:'Rahul M.' },
   { id:'t10', cert:'Approved', name:'Clinical trial data',category:'business',   color:'#fbbf24', propagationMode:'hierarchy', propagationLocked:false, governanceRequired:true,  managedBy:'Priya K.', usageCount:8, description:'FDA-regulated clinical trial data. Subject to 21 CFR Part 11.',                                        sourceAliases:['trial_data','clinical_data'],                                        createdAt:'2026-02-20T00:00:00Z', createdBy:'Priya K.' },
@@ -772,15 +772,9 @@ function TagProvider({ children }) {
     setTagDefs(prev=>[...prev,{cert:'Draft',...def,id:'t'+Date.now(),usageCount:0,sourceAliases:def.sourceAliases||[],createdAt:new Date().toISOString(),createdBy:'Current User'}]);
   };
 
-  // System tags (PII/PHI/PCI + regulatory framework tags) are platform-seeded and referenced
-  // directly by compliance rules — name is immutable and they can never be deleted, only disabled.
-  const updateTagDef = (id, patch) => setTagDefs(prev=>prev.map(t=>t.id===id?{...t,...patch,name:t.system?t.name:(patch.name??t.name)}:t));
+  const updateTagDef = (id, patch) => setTagDefs(prev=>prev.map(t=>t.id===id?{...t,...patch,name:(patch.name??t.name)}:t));
 
-  const deleteTagDef = (id) => setTagDefs(prev=>{
-    const t = prev.find(x=>x.id===id);
-    if(t && t.system) return prev;
-    return prev.filter(x=>x.id!==id);
-  });
+  const deleteTagDef = (id) => setTagDefs(prev=>prev.filter(x=>x.id!==id));
 
   const updateConnectorConfig = (connectorId, patch) => setConnectorConfigs(prev=>({...prev,[connectorId]:{...prev[connectorId],...patch}}));
 
@@ -4367,8 +4361,8 @@ const QualityView = () => {
   const [expandedSuite, setExpandedSuite] = useState(null);
 
   // data quality rules tab
-  const [defEntityType, setDefEntityType] = useState("all");
-  const [defPlatform,   setDefPlatform]   = useState("all");
+  const [defEntitySel,  setDefEntitySel]  = useState([]);   // multi-select entity-type filter ([] = all)
+  const [defPlatformSel,setDefPlatformSel]= useState([]);   // multi-select platform filter ([] = all)
   const [defSearch,     setDefSearch]     = useState("");
   const [addDefPanel,   setAddDefPanel]   = useState(false);
   const [ndName,        setNdName]        = useState("");
@@ -4459,8 +4453,8 @@ const QualityView = () => {
   const pagedTC = filteredTC.slice(safeTcPage*TC_PAGE_SIZE, (safeTcPage+1)*TC_PAGE_SIZE);
 
   const filteredDefs = definitions.filter(d=>{
-    if(defEntityType!=="all"&&d.entityType!==defEntityType) return false;
-    if(defPlatform!=="all"&&!d.testPlatforms.includes(defPlatform)) return false;
+    if(defEntitySel.length>0&&!defEntitySel.includes(d.entityType)) return false;
+    if(defPlatformSel.length>0&&!(d.testPlatforms||[]).some(p=>defPlatformSel.includes(p))) return false;
     if(defSearch&&!d.name.toLowerCase().includes(defSearch.toLowerCase())&&!d.desc.toLowerCase().includes(defSearch.toLowerCase())) return false;
     return true;
   });
@@ -5145,10 +5139,13 @@ const QualityView = () => {
 
         {/* ════════════════ DATA QUALITY RULES ════════════════ */}
         {tab==="rules"&&<>
-          {/* ── Filter bar ── */}
-          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden",marginBottom:18}}>
-            <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
-              <div style={{flex:1,position:"relative"}}>
+          {/* ── Filter bar: search + entity type + platform, one row ── */}
+          {(()=>{
+            const PLATFORMS=["OpenMetadata","dbt","Great Expectations"];
+            const anyFilter=defSearch||defEntitySel.length>0||defPlatformSel.length>0;
+            return (
+            <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,padding:"12px 16px",marginBottom:18,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+              <div style={{flex:"1 1 220px",minWidth:180,position:"relative"}}>
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}>
                   <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/>
                   <path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
@@ -5163,44 +5160,41 @@ const QualityView = () => {
                 />
                 {defSearch&&<button onClick={()=>setDefSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:16,lineHeight:1}}>×</button>}
               </div>
-              <span style={{fontSize:12,color:T.textMuted,whiteSpace:"nowrap"}}>{filteredDefs.length} of {definitions.length}</span>
+              {/* entity type filter — multi-select dropdown */}
+              <StatusFilterDropdown
+                selected={defEntitySel}
+                onChange={setDefEntitySel}
+                placeholder="Entity type"
+                options={[{v:"TABLE",c:T.accent},{v:"COLUMN",c:T.violet}]}
+                counts={{TABLE:definitions.filter(d=>d.entityType==="TABLE").length,COLUMN:definitions.filter(d=>d.entityType==="COLUMN").length}}
+              />
+              {/* platform filter — multi-select dropdown */}
+              <StatusFilterDropdown
+                selected={defPlatformSel}
+                onChange={setDefPlatformSel}
+                placeholder="Platform"
+                options={PLATFORMS.map(p=>({v:p}))}
+                counts={Object.fromEntries(PLATFORMS.map(p=>[p,definitions.filter(d=>(d.testPlatforms||[]).includes(p)).length]))}
+              />
+              {anyFilter&&(
+                <button onClick={()=>{setDefSearch("");setDefEntitySel([]);setDefPlatformSel([]);}}
+                  style={{fontSize:11,color:T.rose,background:T.roseDim,border:"none",cursor:"pointer",padding:"4px 9px",borderRadius:6}}>✕ Clear</button>
+              )}
+              <span style={{marginLeft:"auto",fontSize:12,color:T.textMuted,whiteSpace:"nowrap"}}>{filteredDefs.length} of {definitions.length}</span>
               <button onClick={()=>{setNdName("");setNdDisplay("");setNdDesc("");setNdEntityType("COLUMN");setNdDim("");setNdLogic("customSql");setNdSql("");setNdParamDescs({});setAddDefPanel(true);}}
                 style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>Add Definition
               </button>
             </div>
-            <div style={{padding:"10px 16px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-              <div style={{display:"flex",alignItems:"center",gap:6}}>
-                <span style={{fontSize:11,fontWeight:600,color:T.textMuted}}>Entity Type</span>
-                <div style={{display:"flex",gap:4}}>
-                  <FPill active={defEntityType==="all"} onClick={()=>setDefEntityType("all")}>All</FPill>
-                  <FPill active={defEntityType==="TABLE"} onClick={()=>setDefEntityType("TABLE")} color={T.accent}>TABLE</FPill>
-                  <FPill active={defEntityType==="COLUMN"} onClick={()=>setDefEntityType("COLUMN")} color={T.violet}>COLUMN</FPill>
-                </div>
-              </div>
-              <div style={{width:1,height:22,background:T.border,flexShrink:0}}/>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                <span style={{fontSize:11,fontWeight:600,color:T.textMuted}}>Platform</span>
-                <select
-                  value={defPlatform}
-                  onChange={e=>setDefPlatform(e.target.value)}
-                  style={{padding:"5px 10px",background:T.bgElevated,border:`1.5px solid ${defPlatform!=="all"?T.accent:T.border}`,borderRadius:7,color:defPlatform!=="all"?T.accent:T.textSub,fontSize:12,outline:"none",cursor:"pointer"}}
-                >
-                  <option value="all">All Platforms</option>
-                  <option value="OpenMetadata">OpenMetadata</option>
-                  <option value="dbt">dbt</option>
-                  <option value="Great Expectations">Great Expectations</option>
-                </select>
-              </div>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* ── Definitions Table ── */}
           <Card2 style={{padding:0,overflow:"hidden"}}>
             <table style={{width:"100%",borderCollapse:"collapse"}}>
               <thead>
                 <tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
-                  {["Name","Description","Entity Type","Test Platforms","Enabled",""].map((l,li)=>(
+                  {["Name","Type","Description","Entity Type","Test Platforms","Enabled",""].map((l,li)=>(
                     <th key={li} style={{padding:"9px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textAlign:"left",letterSpacing:.5,textTransform:"uppercase",whiteSpace:"nowrap"}}>{l}</th>
                   ))}
                 </tr>
@@ -5217,6 +5211,11 @@ const QualityView = () => {
                     <td style={{padding:"10px 14px",maxWidth:200}}>
                       <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:3}}>{def.name}</div>
                       <code style={{fontSize:10.5,color:T.violet,fontFamily:"'Geist Mono',monospace",background:`${T.violet}08`,padding:"1px 6px",borderRadius:4}}>{def.fn}</code>
+                    </td>
+                    <td style={{padding:"10px 14px"}}>
+                      {isCustomDefinition(def)
+                        ? <span style={{fontSize:11,fontWeight:700,padding:"2px 9px",borderRadius:5,background:"#fbbf2418",color:"#b45309",border:"1px solid #fbbf2455",whiteSpace:"nowrap"}}>Custom</span>
+                        : <span style={{fontSize:11,fontWeight:700,padding:"2px 9px",borderRadius:5,background:`${T.accent}12`,color:T.accent,border:`1px solid ${T.accent}22`,whiteSpace:"nowrap"}}>Preset</span>}
                     </td>
                     <td style={{padding:"10px 14px",maxWidth:260}}>
                       <div style={{fontSize:12,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={def.desc}>{def.desc}</div>
@@ -5249,9 +5248,7 @@ const QualityView = () => {
                           onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>
                           <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M3 5h10M6.5 5V3.5h3V5M5 5l.5 8h5l.5-8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                         </button>
-                      ):(
-                        <span style={{fontSize:10,color:T.textMuted,padding:"2px 7px",borderRadius:4,background:T.bgElevated,border:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>Built-in</span>
-                      )}
+                      ):null}
                     </td>
                   </tr>
                 ))}
@@ -5262,7 +5259,7 @@ const QualityView = () => {
                 <div style={{fontSize:32,marginBottom:10,opacity:.15}}>◎</div>
                 <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:6}}>No definitions match your filters</div>
                 <button
-                  onClick={()=>{setDefEntityType("all");setDefPlatform("all");setDefSearch("");}}
+                  onClick={()=>{setDefEntitySel([]);setDefPlatformSel([]);setDefSearch("");}}
                   style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer"}}
                 >Clear all filters</button>
               </div>
@@ -6201,7 +6198,7 @@ const QualityView = () => {
                 <div>
                   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
                     <div style={{fontSize:15,fontWeight:700,color:T.text}}>{d.name}</div>
-                    <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:5,background:custom?"#fbbf2418":T.accentDim,color:custom?"#b45309":T.accent,border:`1px solid ${custom?"#fbbf2455":T.accent+"33"}`}}>{custom?"CUSTOM SQL":"BUILT-IN PRESET"}</span>
+                    <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:5,background:custom?"#fbbf2418":T.accentDim,color:custom?"#b45309":T.accent,border:`1px solid ${custom?"#fbbf2455":T.accent+"33"}`}}>{custom?"CUSTOM":"PRESET"}</span>
                   </div>
                   <code style={{fontSize:10.5,color:T.violet,fontFamily:"'Geist Mono',monospace"}}>{d.fn}</code>
                 </div>
@@ -6252,7 +6249,7 @@ const QualityView = () => {
               <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgElevated,display:"flex",gap:8,justifyContent:"space-between",alignItems:"center"}}>
                 {custom
                   ? <button onClick={()=>setDefDeleteId(d.id)} style={{padding:"9px 16px",borderRadius:9,background:"transparent",border:`1px solid ${T.rose}55`,color:T.rose,fontSize:12.5,cursor:"pointer",fontWeight:600,display:"flex",alignItems:"center",gap:6}}><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 5h10M6.5 5V3.5h3V5M5 5l.5 8h5l.5-8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>Delete definition</button>
-                  : <span style={{fontSize:11.5,color:T.textMuted}}>Built-in preset — cannot be edited or deleted.</span>}
+                  : <span style={{fontSize:11.5,color:T.textMuted}}>Preset — cannot be edited or deleted.</span>}
                 <button onClick={()=>setDefDetail(null)} style={{padding:"9px 18px",borderRadius:9,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer",fontWeight:500}}>Close</button>
               </div>
             </div>
@@ -32990,12 +32987,6 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
   };
 
   const deleteTag = (tagId) => {
-    const t = tagDefs.find(x=>x.id===tagId);
-    if(t&&t.system){
-      setDeleteConfirm(null);
-      onToast('System tags are seeded by the platform and used by compliance rules across HIPAA, GDPR, PCI DSS — they can be disabled in Settings but not deleted.','error');
-      return;
-    }
     deleteTagDef(tagId);
     setDeleteConfirm(null);
     setSelTagId(null);
@@ -33094,65 +33085,16 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                 )}
               </div>
             </div>
-          <div style={{display:'flex',gap:6,alignItems:'center'}}>
-            <div style={{flex:1}}><Input2 placeholder="Search tags…" value={search} onChange={e=>setSearch(e.target.value)} icon={Ic.search(11)}/></div>
-            {/* Filter button */}
-            <div ref={filterRef} style={{position:'relative',flexShrink:0}}>
-              <button onClick={()=>setFilterOpen(o=>!o)}
-                style={{height:32,padding:'0 10px',borderRadius:7,background:filterOpen||catFilters.length>0?T.accentDim:'transparent',border:`1px solid ${filterOpen||catFilters.length>0?T.accent:T.border}`,color:filterOpen||catFilters.length>0?T.accent:T.textMuted,cursor:'pointer',display:'flex',alignItems:'center',gap:5,fontSize:11,transition:'all .12s'}}
-                title="Filter by category">
-                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 4h12M4 8h8M7 12h2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-                {catFilters.length>0&&<span style={{minWidth:15,height:15,borderRadius:99,background:T.accent,color:'#fff',fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 3px'}}>{catFilters.length}</span>}
-              </button>
-              {/* Filter dropdown */}
-              {filterOpen&&(
-                <div style={{position:'absolute',top:'calc(100% + 6px)',right:0,width:200,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,.16)',zIndex:100,overflow:'hidden'}}>
-                  <div style={{padding:'9px 12px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                    <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Filter by Category</span>
-                    {catFilters.length>0&&<button onClick={()=>setCatFilters([])} style={{fontSize:10.5,color:T.accent,background:'none',border:'none',cursor:'pointer',padding:0,fontWeight:600}}>Clear</button>}
-                  </div>
-                  <div style={{maxHeight:200,overflowY:'auto',padding:'4px 0'}}>
-                    {allCategories.length===0
-                      ? <div style={{padding:'14px 12px',fontSize:12,color:T.textMuted,textAlign:'center',fontStyle:'italic'}}>No categories yet</div>
-                      : allCategories.map(cat=>{
-                          const cc = getCatStyle(cat);
-                          const checked = catFilters.includes(cat);
-                          const count = tagDefs.filter(t=>t.category===cat).length;
-                          return (
-                            <button key={cat} onClick={()=>setCatFilters(prev=>checked?prev.filter(c=>c!==cat):[...prev,cat])}
-                              style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'7px 12px',background:checked?T.accentDim:'transparent',border:'none',cursor:'pointer',textAlign:'left'}}
-                              onMouseEnter={e=>{if(!checked)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!checked)e.currentTarget.style.background='transparent';}}>
-                              <div style={{width:14,height:14,borderRadius:3,border:`1.5px solid ${checked?T.accent:T.border}`,background:checked?T.accent:'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'all .1s'}}>
-                                {checked&&<svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1 4l2 2 4-4" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                              </div>
-                              <span style={{flex:1,fontSize:12,color:T.text,textTransform:'capitalize'}}>{cat}</span>
-                              <span style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{count}</span>
-                            </button>
-                          );
-                        })
-                    }
-                  </div>
-                  <div style={{padding:'8px 10px',borderTop:`1px solid ${T.border}`}}>
-                    <button onClick={()=>setFilterOpen(false)} style={{width:'100%',padding:'5px',borderRadius:6,background:T.accent,border:'none',color:'#fff',fontSize:11.5,fontWeight:600,cursor:'pointer'}}>Done</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+          <div><Input2 placeholder="Search tags…" value={search} onChange={e=>setSearch(e.target.value)} icon={Ic.search(11)}/></div>
           </div>
 
-          {/* Active filter strip */}
-          {(search||catFilters.length>0)&&(
-            <div style={{padding:'5px 12px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',gap:5,flexShrink:0,flexWrap:'wrap',background:T.bgElevated}}>
+          {/* Active search strip */}
+          {search&&(
+            <div style={{padding:'5px 12px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',gap:5,flexShrink:0,background:T.bgElevated}}>
               <span style={{fontSize:10.5,color:T.textMuted,flexShrink:0}}>{filteredTags.length} result{filteredTags.length!==1?'s':''}:</span>
-              {catFilters.map(cat=>{const cc=getCatStyle(cat);return(
-                <span key={cat} style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:10.5,padding:'1px 7px',borderRadius:99,background:cc.bg,color:cc.color,border:`1px solid ${cc.color}44`,fontWeight:600,textTransform:'capitalize'}}>
-                  {cat}<button onClick={()=>setCatFilters(p=>p.filter(c=>c!==cat))} style={{background:'none',border:'none',cursor:'pointer',color:'inherit',padding:0,fontSize:11,lineHeight:1}}>×</button>
-                </span>
-              );})}
-              {search&&<span style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:10.5,padding:'1px 7px',borderRadius:99,background:T.bgSurface,color:T.textSub,border:`1px solid ${T.border}`,fontFamily:"'Geist Mono',monospace"}}>
+              <span style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:10.5,padding:'1px 7px',borderRadius:99,background:T.bgSurface,color:T.textSub,border:`1px solid ${T.border}`,fontFamily:"'Geist Mono',monospace"}}>
                 "{search}"<button onClick={()=>setSearch('')} style={{background:'none',border:'none',cursor:'pointer',color:T.textMuted,padding:0,fontSize:11,lineHeight:1}}>×</button>
-              </span>}
+              </span>
             </div>
           )}
 
@@ -33178,7 +33120,7 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                     <div style={{display:'flex',alignItems:'center',paddingRight:6,background:isCatSel?T.accentDim:catHov?T.bgHover:'transparent',borderLeft:`2.5px solid ${isCatSel?T.accent:'transparent'}`,transition:'background .1s'}}
                       onMouseEnter={()=>setHovItem(`cat:${cat}`)}
                       onMouseLeave={()=>setHovItem(null)}>
-                      <button onClick={()=>{setSelCatId(c=>c===cat?null:cat);setSelTagId(null);setNewPanelOpen(false);setNewCatPanelOpen(false);setEditing(false);}}
+                      <button onClick={()=>setExpCat(p=>({...p,[cat]:!expanded}))}
                         style={{flex:1,display:'flex',alignItems:'center',gap:5,padding:'6px 6px 6px 8px',background:'none',border:'none',cursor:'pointer',textAlign:'left',minWidth:0}}>
                         {/* Chevron */}
                         <span onClick={e=>{e.stopPropagation();setExpCat(p=>({...p,[cat]:!expanded}));}}
@@ -33246,8 +33188,7 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                                   Edit Tag
                                 </button>
                                 <button onClick={e=>{e.stopPropagation();setDotMenuOpen(null);
-                                  if(td.system){ onToast('System tags are seeded by the platform and used by compliance rules across HIPAA, GDPR, PCI DSS — they can be disabled in Settings but not deleted.','error'); return; }
-                                  if(tmvRole==='admin'||td.owner===meHandle){ setDeleteConfirm({type:'tag',id:td.id,name:td.name}); }
+                                    if(tmvRole==='admin'||td.owner===meHandle){ setDeleteConfirm({type:'tag',id:td.id,name:td.name}); }
                                   else { requestDeletion({kind:'tag',targetId:td.id,name:td.name,requestedBy:meHandle,note:'Requested via tag list',owner:td.owner||null}); pushNotif({category:"Ownership",type:"alert",title:`Deletion requested · ${td.name} (tag)`,body:`${meHandle} requested to delete this tag`,nav:"tags",navArg:{tagId:td.id}}); onToast('Deletion requested — pending owner approval','success'); }
                                 }}
                                   style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.rose,display:'flex',alignItems:'center',gap:8}}
@@ -33296,7 +33237,6 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                                 Edit Tag
                               </button>
                               <button onClick={e=>{e.stopPropagation();setDotMenuOpen(null);
-                                if(td.system){ onToast('System tags are seeded by the platform and used by compliance rules across HIPAA, GDPR, PCI DSS — they can be disabled in Settings but not deleted.','error'); return; }
                                 setDeleteConfirm({type:'tag',id:td.id,name:td.name});}}
                                 style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.rose,display:'flex',alignItems:'center',gap:8}}
                                 onMouseEnter={e=>e.currentTarget.style.background=T.roseDim} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
@@ -33404,11 +33344,7 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                   {/* Breadcrumb */}
                   {selTag.category&&(
                     <div style={{display:'flex',alignItems:'center',gap:5,marginBottom:10,fontSize:11,color:T.textMuted}}>
-                      <button onClick={()=>{setSelCatId(selTag.category);setSelTagId(null);setEditing(false);setEditDraft(null);}}
-                        style={{background:'none',border:'none',cursor:'pointer',color:T.textMuted,fontSize:11,padding:0,textTransform:'capitalize'}}
-                        onMouseEnter={e=>e.currentTarget.style.color=T.accent} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
-                        {selTag.category}
-                      </button>
+                      <span style={{color:T.textMuted,fontSize:11,textTransform:'capitalize'}}>{selTag.category}</span>
                       <svg width="7" height="10" viewBox="0 0 7 10" fill="none"><path d="M1.5 1.5l4 3.5-4 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                       <span style={{color:T.textSub,fontWeight:500}}>{selTag.name}</span>
                     </div>
@@ -33419,7 +33355,6 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                       <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                         <span style={{fontSize:17,fontWeight:700,color:T.text}}>{selTag.name}</span>
                         {selTag.category&&<span style={{fontSize:11,padding:'2px 9px',borderRadius:99,background:cc.bg,color:cc.color,fontWeight:600,textTransform:'capitalize',flexShrink:0}}>{selTag.category}</span>}
-                        {selTag.system&&<span title="Platform system tag — seeded automatically, referenced by compliance rules, cannot be renamed or deleted" style={{fontSize:11,fontWeight:700,padding:'2px 9px',borderRadius:99,background:T.roseDim,color:T.rose,flexShrink:0,display:'inline-flex',alignItems:'center',gap:4}}>🔒 System</span>}
                         {selTag.propagationLocked&&<span title="Propagation locked — contact Admin to change" style={{fontSize:11,color:T.textMuted,cursor:'help',borderBottom:`1px dashed ${T.textMuted}`,paddingBottom:1,flexShrink:0}}>🔒 Locked</span>}
                       </div>
                     </div>
@@ -33578,19 +33513,46 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                         </button>
                       </div>
 
-                      {/* ACTIONS */}
-                      <div style={{padding:'16px'}}>
-                        <SideLabel ch="Actions"/>
-                        {[
-                          {l:'Request Changes',action:()=>onToast('Review request sent','success')},
-                          {l:'Copy Link',action:()=>onToast('Link copied','success')},
-                          {l:'View in Catalog',action:()=>onToast('Opening catalog…','success')},
-                        ].map((a,i)=>(
-                          <button key={i} onClick={a.action} style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 0',background:'none',border:'none',borderBottom:i<2?`1px solid ${T.border}`:'none',color:T.textSub,fontSize:12.5,cursor:'pointer'}}
-                            onMouseEnter={e=>e.currentTarget.style.color=T.accent} onMouseLeave={e=>e.currentTarget.style.color=T.textSub}>
-                            {a.l}<svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-                          </button>
-                        ))}
+                      {/* CATEGORY — editable; move tag to any category (incl. from Uncategorized) or create one */}
+                      <div ref={catDropRef} style={{padding:'16px',position:'relative'}}>
+                        <SideLabel ch="Category" onEdit={()=>{setCatDropOpen(o=>!o);setCatDropSearch('');}}/>
+                        {selTag.category
+                          ? (()=>{const cc=getCatStyle(selTag.category);return <span style={{display:'inline-flex',alignItems:'center',fontSize:12,fontWeight:600,padding:'3px 10px',borderRadius:5,background:cc.bg,color:cc.color,border:`1px solid ${cc.color}44`,textTransform:'capitalize'}}>{selTag.category}</span>;})()
+                          : <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>Uncategorized</span>}
+                        {catDropOpen&&(
+                          <div style={{position:'absolute',top:'calc(100% - 6px)',left:16,right:16,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',zIndex:200,overflow:'hidden'}}>
+                            <div style={{padding:'7px 9px',borderBottom:`1px solid ${T.border}`}}>
+                              <input autoFocus value={catDropSearch} onChange={e=>setCatDropSearch(e.target.value)} placeholder="Search or create category…"
+                                style={{width:'100%',padding:'5px 8px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:5,color:T.text,fontSize:11.5,outline:'none',boxSizing:'border-box'}}/>
+                            </div>
+                            <div style={{maxHeight:190,overflowY:'auto',padding:'4px 0'}}>
+                              {allCategories.filter(c=>!catDropSearch||c.toLowerCase().includes(catDropSearch.toLowerCase())).map(cat=>{
+                                const cc=getCatStyle(cat); const sel=selTag.category===cat;
+                                return (
+                                  <button key={cat} onClick={()=>{updateTagDef(selTag.id,{category:cat});setCatDropOpen(false);setCatDropSearch('');onToast(`Moved to ${cat}`,'success');}}
+                                    style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'7px 12px',background:sel?T.accentDim:'transparent',border:'none',cursor:'pointer',textAlign:'left'}}
+                                    onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background='transparent';}}>
+                                    <span style={{width:9,height:9,borderRadius:'50%',background:cc.color,flexShrink:0,display:'block'}}/>
+                                    <span style={{flex:1,fontSize:12,color:T.text,textTransform:'capitalize'}}>{cat}</span>
+                                    {sel&&<span style={{fontSize:11,color:T.accent}}>✓</span>}
+                                  </button>
+                                );
+                              })}
+                              {selTag.category&&<button onClick={()=>{updateTagDef(selTag.id,{category:''});setCatDropOpen(false);setCatDropSearch('');onToast('Moved to Uncategorized','success');}}
+                                style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'7px 12px',background:'transparent',border:'none',cursor:'pointer',textAlign:'left'}}
+                                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                <span style={{width:9,height:9,borderRadius:'50%',background:T.textMuted,flexShrink:0,display:'block'}}/>
+                                <span style={{flex:1,fontSize:12,color:T.textMuted,fontStyle:'italic'}}>Uncategorized</span>
+                              </button>}
+                              {catDropSearch.trim()&&!allCategories.some(c=>c.toLowerCase()===catDropSearch.trim().toLowerCase())&&(
+                                <button onClick={()=>{const nc=catDropSearch.trim();updateTagDef(selTag.id,{category:nc});setCatDropOpen(false);setCatDropSearch('');onToast(`Created category "${nc}" and moved tag`,'success');}}
+                                  style={{width:'100%',display:'flex',alignItems:'center',gap:6,padding:'8px 12px',background:'transparent',border:'none',borderTop:`1px solid ${T.border}`,cursor:'pointer',textAlign:'left',color:T.accent,fontSize:12,fontWeight:600}}>
+                                  + Create "{catDropSearch.trim()}"
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                     </div>
