@@ -25581,7 +25581,8 @@ const AddServiceWizard = ({onClose, onDone}) => {
   const [svcName,      setSvcName]     = useState("");
   const [svcDesc,      setSvcDesc]     = useState("");
   const [svcEnv,       setSvcEnv]      = useState("Production");
-  const [svcOwner,     setSvcOwner]    = useState(CONNECTOR_ADMINS[0]?.name || "");
+  const [svcOwners,    setSvcOwners]   = useState([]);
+  const [svcOwnerOpen, setSvcOwnerOpen]= useState(false);
   const [svcAdmins,    setSvcAdmins]   = useState([]);
   const [svcAdminOpen, setSvcAdminOpen]= useState(false);
   const [schedFreq,    setSchedFreq]   = useState("daily");
@@ -25886,11 +25887,48 @@ const AddServiceWizard = ({onClose, onDone}) => {
                       </div>
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13,alignItems:"start"}}>
-                    <div>
-                      <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>Owner</label>
-                      <select value={svcOwner} onChange={e=>setSvcOwner(e.target.value)} style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",cursor:"pointer"}}>
-                        {CONNECTOR_ADMINS.map(u=><option key={u.id} value={u.name}>{u.name} · {u.team}</option>)}
-                      </select>
+                    {/* Assets Owner */}
+                    <div style={{position:"relative"}}>
+                      <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>Assets Owner</label>
+                      <div onClick={()=>setSvcOwnerOpen(o=>!o)}
+                        style={{display:"flex",flexWrap:"wrap",gap:5,padding:"7px 10px",background:T.bgSurface,border:`1.5px solid ${svcOwnerOpen?T.accent:T.border}`,borderRadius:9,minHeight:42,alignItems:"center",cursor:"pointer",transition:"border .15s"}}>
+                        {svcOwners.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic",flex:1}}>Select asset owners…</span>}
+                        {svcOwners.map(u=>(
+                          <span key={u.id} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:99,background:"rgba(238,36,36,.1)",border:"1px solid rgba(238,36,36,.25)",fontSize:11.5,color:"#ee2424",fontWeight:500}}>
+                            {u.name}
+                            <button onClick={e=>{e.stopPropagation();setSvcOwners(p=>p.filter(x=>x.id!==u.id));}} style={{background:"none",border:"none",cursor:"pointer",color:"#ee2424",fontSize:13,padding:"0 0 0 2px",lineHeight:1,opacity:.65}}>×</button>
+                          </span>
+                        ))}
+                        <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{marginLeft:"auto",flexShrink:0,color:T.textMuted,transform:svcOwnerOpen?"rotate(180deg)":"rotate(0deg)",transition:"transform .15s"}}><path d="M1.5 3.5l3.5 3.5 3.5-3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </div>
+                      {svcOwnerOpen&&(
+                        <>
+                          <div style={{position:"fixed",inset:0,zIndex:199}} onClick={()=>setSvcOwnerOpen(false)}/>
+                          <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 8px 24px rgba(0,0,0,.18)",zIndex:200,overflow:"hidden"}}>
+                            <div style={{maxHeight:180,overflowY:"auto"}}>
+                              {CONNECTOR_ADMINS.map(u=>{
+                                const sel=svcOwners.some(x=>x.id===u.id);
+                                const ini=u.name.split(' ').map(s=>s[0]).join('').slice(0,2).toUpperCase();
+                                return (
+                                  <button key={u.id} onClick={()=>setSvcOwners(p=>sel?p.filter(x=>x.id!==u.id):[...p,u])}
+                                    style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"9px 12px",background:sel?"rgba(238,36,36,.07)":"transparent",border:"none",cursor:"pointer",textAlign:"left"}}
+                                    onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
+                                    <div style={{width:26,height:26,borderRadius:6,background:"rgba(238,36,36,.1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#ee2424",flexShrink:0}}>{ini}</div>
+                                    <div style={{flex:1,minWidth:0}}>
+                                      <div style={{fontSize:12,fontWeight:sel?600:400,color:T.text}}>{u.name}</div>
+                                      <div style={{fontSize:10.5,color:T.textMuted}}>{u.team}</div>
+                                    </div>
+                                    {sel&&<span style={{fontSize:11,color:"#ee2424",flexShrink:0}}>✓</span>}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <div style={{padding:"8px 10px",borderTop:`1px solid ${T.border}`}}>
+                              <button onClick={()=>setSvcOwnerOpen(false)} style={{width:"100%",padding:"5px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Done</button>
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
                     {/* Connector Admin */}
                     <div style={{position:"relative"}}>
@@ -25958,13 +25996,9 @@ const AddServiceWizard = ({onClose, onDone}) => {
                       <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Credentials</span>
                       <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>All fields encrypted at rest</span>
                     </div>
-                    {/* Auth method — password-based (single method) */}
-                    <div style={{display:"flex",marginBottom:18,paddingBottom:16,borderBottom:`1px solid ${T.border}`}}>
-                      <div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"8px 16px",borderRadius:9,border:`1.5px solid #8b5cf6`,background:"rgba(139,92,246,.08)"}}>
-                        <span style={{width:7,height:7,borderRadius:"50%",background:"#8b5cf6",flexShrink:0}}/>
-                        <span style={{fontSize:12.5,fontWeight:700,color:"#8b5cf6"}}>Password</span>
-                        <span style={{fontSize:11,color:T.textMuted}}>· username &amp; password authentication</span>
-                      </div>
+                    {/* Auth method — shown as a normal tab (password-based auth) */}
+                    <div style={{display:"flex",borderBottom:`1px solid ${T.border}`,marginBottom:18}}>
+                      <button type="button" style={{padding:"8px 16px",background:"transparent",border:"none",borderBottom:`2px solid ${T.accent}`,color:T.text,fontSize:13,fontWeight:600,cursor:"pointer",marginBottom:-1,whiteSpace:"nowrap"}}>Password</button>
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:13}}>
                       {activeFields.map(f=>(
@@ -26205,7 +26239,8 @@ const AddServiceWizard = ({onClose, onDone}) => {
                   ]},
                   {title:"Connection", rows:[
                     ["Name", <span style={{fontWeight:700,color:T.text}}>{svcName||"—"}</span>],
-                    ["Owner", svcOwner||"—"],
+                    ["Asset Owners", svcOwners.length?svcOwners.map(u=>u.name).join(", "):"—"],
+                    ...(svcAdmins.length?[["Connector Admins", svcAdmins.map(u=>u.name).join(", ")]]:[]),
                     ...(svcDesc&&svcDesc.trim()?[["Description", svcDesc.trim()]]:[]),
                     ["Object Types", objTypesStr],
                   ]},
