@@ -4348,7 +4348,7 @@ const QualityView = () => {
   const [runningSuites, setRunningSuites] = useState(new Set());
 
   // test cases tab
-  const [tcTableFilter, setTcTableFilter] = useState("all");
+  const [tcTableSel,    setTcTableSel]    = useState([]);   // multi-select table filter ([] = all)
   const [tcTypeFilter,  setTcTypeFilter]  = useState("all");
   const [tcStatusSel,   setTcStatusSel]   = useState([]);   // multi-select status filter ([] = all)
   const [tcSearch,      setTcSearch]      = useState("");
@@ -4447,13 +4447,13 @@ const QualityView = () => {
 
   // filter helpers
   const filteredTC = testCases.filter(t=>{
-    if(tcTableFilter!=="all"&&t.table!==tcTableFilter) return false;
+    if(tcTableSel.length>0&&!tcTableSel.includes(t.table)) return false;
     if(tcTypeFilter!=="all"&&t.defId!==tcTypeFilter) return false;
     if(tcStatusSel.length>0&&!tcStatusSel.includes(t.status)) return false;
     if(tcSearch&&!t.name.toLowerCase().includes(tcSearch.toLowerCase())&&!t.table.toLowerCase().includes(tcSearch.toLowerCase())) return false;
     return true;
   });
-  const tcFiltersActive = tcTableFilter!=="all"||tcTypeFilter!=="all"||tcStatusSel.length>0||tcSearch;
+  const tcFiltersActive = tcTableSel.length>0||tcTypeFilter!=="all"||tcStatusSel.length>0||tcSearch;
   const tcTotalPages = Math.ceil(filteredTC.length/TC_PAGE_SIZE);
   const safeTcPage = Math.min(tcPage, Math.max(0, tcTotalPages-1));
   const pagedTC = filteredTC.slice(safeTcPage*TC_PAGE_SIZE, (safeTcPage+1)*TC_PAGE_SIZE);
@@ -4748,21 +4748,17 @@ const QualityView = () => {
             </div>
             {/* status filter — multi-select dropdown */}
             <StatusFilterDropdown selected={tcStatusSel} onChange={setTcStatusSel} counts={{Success:tcSuccess,Failed:tcFailed,Aborted:tcAborted}}/>
-            {/* tables filter */}
-            <div style={{position:"relative",display:"inline-flex",alignItems:"center"}}>
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{position:"absolute",left:9,pointerEvents:"none",opacity:.85,color:tcTableFilter!=="all"?T.accent:T.textMuted}}><path d="M2 3.5h12L9.5 9v4L6.5 14.5V9L2 3.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
-              <select
-                value={tcTableFilter}
-                onChange={e=>setTcTableFilter(e.target.value)}
-                style={{padding:"5px 10px 5px 27px",background:T.bgElevated,border:`1.5px solid ${tcTableFilter!=="all"?T.accent:T.border}`,borderRadius:7,color:tcTableFilter!=="all"?T.accent:T.textSub,fontSize:12,outline:"none",cursor:"pointer"}}
-              >
-                <option value="all">Tables</option>
-                {[...new Set(testCases.map(t=>t.table))].map(tbl=><option key={tbl} value={tbl}>{tbl}</option>)}
-              </select>
-            </div>
-            {(tcTableFilter!=="all"||tcStatusSel.length>0||tcSearch)&&(
+            {/* tables filter — same multi-select dropdown as status (consistent size) */}
+            <StatusFilterDropdown
+              selected={tcTableSel}
+              onChange={setTcTableSel}
+              placeholder="Tables"
+              options={[...new Set(testCases.map(t=>t.table))].map(tbl=>({v:tbl}))}
+              counts={Object.fromEntries([...new Set(testCases.map(t=>t.table))].map(tbl=>[tbl,testCases.filter(t=>t.table===tbl).length]))}
+            />
+            {(tcTableSel.length>0||tcStatusSel.length>0||tcSearch)&&(
               <button
-                onClick={()=>{setTcTableFilter("all");setTcStatusSel([]);setTcSearch("");}}
+                onClick={()=>{setTcTableSel([]);setTcStatusSel([]);setTcSearch("");}}
                 style={{fontSize:11,color:T.rose,background:T.roseDim,border:"none",cursor:"pointer",padding:"3px 8px",borderRadius:6}}
               >
                 ✕ Clear
