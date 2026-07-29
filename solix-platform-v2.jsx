@@ -5180,11 +5180,11 @@ const QualityView = () => {
                 <button onClick={()=>{setDefSearch("");setDefEntitySel([]);setDefPlatformSel([]);}}
                   style={{fontSize:11,color:T.rose,background:T.roseDim,border:"none",cursor:"pointer",padding:"4px 9px",borderRadius:6}}>✕ Clear</button>
               )}
-              <span style={{marginLeft:"auto",fontSize:12,color:T.textMuted,whiteSpace:"nowrap"}}>{filteredDefs.length} of {definitions.length}</span>
               <button onClick={()=>{setNdName("");setNdDisplay("");setNdDesc("");setNdEntityType("COLUMN");setNdDim("");setNdLogic("customSql");setNdSql("");setNdParamDescs({});setAddDefPanel(true);}}
-                style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+                style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
                 <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>Add Definition
               </button>
+              <span style={{fontSize:12,color:T.textMuted,whiteSpace:"nowrap"}}>{filteredDefs.length} of {definitions.length}</span>
             </div>
             );
           })()}
@@ -14390,6 +14390,44 @@ function diffContracts(prev,cur){
   [["refreshInterval","Refresh interval"],["refreshUnit","Refresh unit"],["latencyValue","Max latency"],["latencyUnit","Latency unit"],["availabilityTime","Availability time"],["availabilityTz","Timezone"],["retentionPeriod","Retention period"],["retentionUnit","Retention unit"],["refreshColumn","Refresh column"]].forEach(([k,label])=>{ if((prev.sla?.[k])!==(cur.sla?.[k])) ch.push({t:"change",label:`${label}: ${prev.sla?.[k]??"—"} → ${cur.sla?.[k]??"—"}`}); });
   return ch;
 }
+// Semantic-version bump: breaking change → major, otherwise → minor.
+function bumpVersion(v,breaking){
+  const p=String(v||"1.0.0").split(".").map(n=>parseInt(n,10)||0);
+  while(p.length<3) p.push(0);
+  if(breaking){ p[0]+=1; p[1]=0; p[2]=0; } else { p[1]+=1; p[2]=0; }
+  return p.join(".");
+}
+// Short human summary of a version's changes, for the Version History note.
+function summarizeChanges(structural,otherChanged,breaking){
+  const n=t=>structural.filter(c=>c.t===t).length;
+  const bits=[];
+  if(n("add"))    bits.push(`${n("add")} added`);
+  if(n("remove")) bits.push(`${n("remove")} removed`);
+  if(n("change")) bits.push(`${n("change")} changed`);
+  if(otherChanged) bits.push("metadata updated");
+  return `${breaking?"Breaking change — ":""}${bits.join(", ")||"minor update"}`;
+}
+// Given the previous contract and the newly-built one, produce the next contract
+// state with a bumped version + a snapshot of the previous definition pushed into
+// versions[]. Returns {next, changed, breaking, version}. No structural/metadata
+// change → version and history are left untouched.
+function computeContractEdit(prev,built,newStatus,editor){
+  const structural=diffContracts(prev,built);
+  const otherChanged= (prev.description||"")!==(built.description||"")
+    || JSON.stringify(prev.terms||{})!==JSON.stringify(built.terms||{})
+    || (prev.producer?.name||"")!==(built.producer?.name||"")
+    || JSON.stringify(prev.consumers||[])!==JSON.stringify(built.consumers||[]);
+  const changed=structural.length>0||otherChanged;
+  const base={...built,status:newStatus,schedule:built.schedule??prev.schedule,updated:"Just now"};
+  if(!changed){
+    return {next:{...base,version:prev.version,versions:prev.versions,versionNote:prev.versionNote}, changed:false, breaking:false, version:prev.version};
+  }
+  const breaking=structural.some(c=>c.t==="remove"&&/^Column/.test(c.label));
+  const version=bumpVersion(prev.version,breaking);
+  const snap={version:prev.version,at:prev.updated||"—",by:(prev.owners||[])[0]||editor,note:prev.versionNote,
+    schema:prev.schema,semantics:prev.semantics,quality:prev.quality,policies:prev.policies,sla:prev.sla};
+  return {next:{...base,version,versions:[snap,...(prev.versions||[])],versionNote:summarizeChanges(structural,otherChanged,breaking)}, changed:true, breaking, version};
+}
 
 // ── Session persistence: contracts live in a module store, seeded from the mocks ──
 const CONTRACT_STORE = {};
@@ -14572,22 +14610,26 @@ const AssetContractTab = ({asset,onToast})=>{
   const saveEdit=(updated)=>{
     // Steward/admin edits → stay Active. Connection admin edits → drop to Draft for re-approval.
     const newStatus = isStewardOrAdmin ? (contract.status||"Active") : "Draft";
-    setContract(c=>({...updated,version:c.version,status:newStatus,versions:c.versions,schedule:updated.schedule??c.schedule,updated:"Just now"}));
+    const ed=computeContractEdit(contract,updated,newStatus,meHandle);
+    setContract(ed.next);
     setWizard(false);
     if(!isStewardOrAdmin){ pushContractApprovalInbox(updated.name,"updated"); onToast&&onToast("Contract updated — pending steward approval to go Active","info"); }
-    else { onToast&&onToast(`Contract updated${notifySuffix(updated)}`,"success"); }
+    else { onToast&&onToast(ed.changed?`Contract updated → v${ed.version}${ed.breaking?" · breaking change":""}${notifySuffix(updated)}`:"No changes to save","success"); }
   };
   // Wizard submit — the two footer buttons (Run now / Schedule) both finalize creation/edit, then act.
   const submitWizard=(built,action)=>{
     const editing = wizard==="edit";
     // Steward/Admin → auto-Active. Connection Admin → Draft, needs steward approval.
     const newStatus = isStewardOrAdmin ? "Active" : "Draft";
-    if(editing) setContract(c=>({...built,version:c.version,status:newStatus,versions:c.versions,schedule:built.schedule??c.schedule,updated:"Just now"}));
-    else setContract({...built,status:newStatus,versions:[]});
+    // On edit: bump version + snapshot the prior definition into history. On create: seed v1.0.0.
+    const ed = editing ? computeContractEdit(contract,built,newStatus,meHandle) : null;
+    if(editing) setContract(ed.next);
+    else setContract({...built,status:newStatus,versions:[],versionNote:"Initial contract"});
     setWizard(false);
     if(!isStewardOrAdmin){ pushContractApprovalInbox(built.name, editing?"updated":"created"); onToast&&onToast(editing?"Contract updated — pending steward approval":"Contract created — pending steward approval to go Active","info"); return; }
-    if(action==="schedule"){ onToast&&onToast(editing?`Contract updated${notifySuffix(built)}`:`Contract "${built.name}" created`,"success"); setScheduleModal(true); }
-    else { runNow(built); }
+    const editMsg = ed ? (ed.changed?`Contract updated → v${ed.version}${ed.breaking?" · breaking change":""}${notifySuffix(built)}`:"No changes to save") : `Contract "${built.name}" created`;
+    if(action==="schedule"){ onToast&&onToast(editMsg,"success"); setScheduleModal(true); }
+    else { if(editing) onToast&&onToast(editMsg,"success"); runNow(built); }
   };
   const doDelete=()=>{
     if(!isStewardOrAdmin){
@@ -14623,7 +14665,7 @@ const AssetContractTab = ({asset,onToast})=>{
   const health=CONTRACT_HEALTH[contractHealthKey(v)];
   const failCount=v.failedSections.length;
   const TOTAL_CHECKS=Object.keys(v.sections).length;
-  const allVersions=[{version:contract.version,at:contract.updated,by:(contract.owners||[])[0]||"—",current:true,schema:contract.schema,semantics:contract.semantics,quality:contract.quality,policies:contract.policies,sla:contract.sla},...(contract.versions||[])];
+  const allVersions=[{version:contract.version,at:contract.updated,by:(contract.owners||[])[0]||"—",current:true,note:contract.versionNote,schema:contract.schema,semantics:contract.semantics,quality:contract.quality,policies:contract.policies,sla:contract.sla},...(contract.versions||[])];
 
   const Section=({title,pass,children,action})=>(
     <Card2><div style={{padding:"15px 18px"}}>
