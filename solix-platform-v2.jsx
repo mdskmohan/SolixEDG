@@ -25581,7 +25581,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
   const [svcName,      setSvcName]     = useState("");
   const [svcDesc,      setSvcDesc]     = useState("");
   const [svcEnv,       setSvcEnv]      = useState("Production");
-  const [svcOwner,     setSvcOwner]    = useState("data-eng");
+  const [svcOwner,     setSvcOwner]    = useState(CONNECTOR_ADMINS[0]?.name || "");
   const [svcAdmins,    setSvcAdmins]   = useState([]);
   const [svcAdminOpen, setSvcAdminOpen]= useState(false);
   const [schedFreq,    setSchedFreq]   = useState("daily");
@@ -25885,19 +25885,11 @@ const AddServiceWizard = ({onClose, onDone}) => {
                           onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
                       </div>
                     </div>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
-                      <div>
-                        <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>Environment</label>
-                        <select value={svcEnv} onChange={e=>setSvcEnv(e.target.value)} style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",cursor:"pointer"}}>
-                          {["Production","Staging","Development","Testing"].map(o=><option key={o}>{o}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>Team</label>
-                        <select value={svcOwner} onChange={e=>setSvcOwner(e.target.value)} style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",cursor:"pointer"}}>
-                          {["data-eng","analytics","platform","ai-team","governance"].map(o=><option key={o}>{o}</option>)}
-                        </select>
-                      </div>
+                    <div>
+                      <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>Owner</label>
+                      <select value={svcOwner} onChange={e=>setSvcOwner(e.target.value)} style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",cursor:"pointer"}}>
+                        {CONNECTOR_ADMINS.map(u=><option key={u.id} value={u.name}>{u.name} · {u.team}</option>)}
+                      </select>
                     </div>
                     {/* Connector Admin */}
                     <div style={{position:"relative"}}>
@@ -25947,46 +25939,16 @@ const AddServiceWizard = ({onClose, onDone}) => {
 
               </div>
 
-              {/* Row 2: Credentials — auth type selector + dynamic fields */}
+              {/* Row 2: Credentials — username / password only */}
               {(()=>{
-                const AUTH_OPTS=[
-                  {id:"userpass",label:"Username / Password",icon:"👤",desc:"Standard DB credentials"},
-                  {id:"oauth",   label:"OAuth 2.0",          icon:"🔑",desc:"Token-based auth"},
-                  {id:"keypair", label:"Key Pair",            icon:"🗝", desc:"Private key + passphrase"},
-                  {id:"token",   label:"API Token",           icon:"⚡",desc:"Service account token"},
+                const activeFields=[
+                  {k:"host",     l:"Host / URL",  ph:"db.company.com",   type:"text",req:true},
+                  {k:"port",     l:"Port",         ph:"5432",             type:"text"},
+                  {k:"database", l:"Database",     ph:"warehouse",        type:"text"},
+                  {k:"username", l:"Username",     ph:"solix_reader",     type:"text",req:true},
+                  {k:"password", l:"Password",     ph:"••••••••",         type:"password",req:true},
+                  {k:"ssl",      l:"Enable SSL",   type:"toggle",         val:true},
                 ];
-                const AUTH_FIELDS = {
-                  userpass:[
-                    {k:"host",     l:"Host / URL",    ph:"db.company.com",   type:"text",req:true},
-                    {k:"port",     l:"Port",           ph:"5432",             type:"text"},
-                    {k:"database", l:"Database",       ph:"warehouse",        type:"text"},
-                    {k:"username", l:"Username",       ph:"solix_reader",     type:"text",req:true},
-                    {k:"password", l:"Password",       ph:"••••••••",         type:"password",req:true},
-                    {k:"ssl",      l:"Enable SSL",     type:"toggle",         val:true},
-                  ],
-                  oauth:[
-                    {k:"host",          l:"Host / URL",    ph:"api.company.com",         type:"text",req:true},
-                    {k:"port",          l:"Port",           ph:"443",                     type:"text"},
-                    {k:"client_id",     l:"Client ID",      ph:"client_abc123",           type:"text",req:true},
-                    {k:"client_secret", l:"Client Secret",  ph:"••••••••",               type:"password",req:true},
-                    {k:"token_url",     l:"Token URL",      ph:"https://…/oauth/token",  type:"text",req:true},
-                    {k:"scope",         l:"Scope",          ph:"read:metadata",           type:"text"},
-                  ],
-                  keypair:[
-                    {k:"host",        l:"Host / URL",  ph:"db.company.com",                     type:"text",req:true},
-                    {k:"port",        l:"Port",         ph:"5432",                               type:"text"},
-                    {k:"database",    l:"Database",     ph:"warehouse",                          type:"text"},
-                    {k:"username",    l:"Username",     ph:"solix_reader",                       type:"text",req:true},
-                    {k:"private_key", l:"Private Key",  ph:"-----BEGIN RSA PRIVATE KEY-----…",  type:"textarea",req:true},
-                    {k:"passphrase",  l:"Passphrase",   ph:"key passphrase (leave blank if none)", type:"password"},
-                  ],
-                  token:[
-                    {k:"host",      l:"Host / URL",  ph:"api.company.com",  type:"text",req:true},
-                    {k:"port",      l:"Port",         ph:"443",              type:"text"},
-                    {k:"api_token", l:"API Token",    ph:"tok_••••••••",     type:"password",req:true},
-                  ],
-                };
-                const activeFields = AUTH_FIELDS[authType] || AUTH_FIELDS.userpass;
                 return (
                   <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
@@ -25994,25 +25956,9 @@ const AddServiceWizard = ({onClose, onDone}) => {
                       <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Credentials</span>
                       <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>All fields encrypted at rest</span>
                     </div>
-                    {/* Auth type selector */}
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:20,paddingBottom:18,borderBottom:`1px solid ${T.border}`}}>
-                      {AUTH_OPTS.map(a=>{
-                        const sel=authType===a.id;
-                        return (
-                          <button key={a.id} onClick={()=>setAuthType(a.id)} style={{padding:"11px 10px",borderRadius:10,textAlign:"left",border:`2px solid ${sel?"#8b5cf6":T.border}`,background:sel?"rgba(139,92,246,.07)":T.bgSurface,cursor:"pointer",transition:"all .14s"}}
-                            onMouseEnter={e=>{if(!sel){e.currentTarget.style.borderColor="#8b5cf655";e.currentTarget.style.background="rgba(139,92,246,.04)";}}}
-                            onMouseLeave={e=>{if(!sel){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.bgSurface;}}}>
-                            <div style={{fontSize:15,marginBottom:5}}>{a.icon}</div>
-                            <div style={{fontSize:11.5,fontWeight:700,color:sel?"#8b5cf6":T.textSub,lineHeight:1.2}}>{a.label}</div>
-                            <div style={{fontSize:10,color:T.textMuted,marginTop:3}}>{a.desc}</div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {/* Dynamic credential fields based on auth type */}
                     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:13}}>
                       {activeFields.map(f=>(
-                        <div key={f.k} style={f.type==="textarea"?{gridColumn:"1 / -1"}:{}}>
+                        <div key={f.k}>
                           <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>
                             {f.l}{f.req&&<span style={{color:"#ee2424",marginLeft:3}}>*</span>}
                           </label>
@@ -26021,10 +25967,6 @@ const AddServiceWizard = ({onClose, onDone}) => {
                                 <Toggle on={fields[f.k]!==undefined?fields[f.k]:!!f.val} onChange={()=>setFields(p=>({...p,[f.k]:!(p[f.k]!==undefined?p[f.k]:f.val)}))}/>
                                 <span style={{fontSize:12,color:T.textSub}}>{(fields[f.k]!==undefined?fields[f.k]:!!f.val)?"Enabled":"Disabled"}</span>
                               </label>
-                            : f.type==="textarea"
-                            ? <textarea value={fields[f.k]||""} onChange={e=>setFields(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph} rows={4}
-                                style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:11.5,outline:"none",resize:"vertical",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box",lineHeight:1.6}}
-                                onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
                             : <input type={f.type||"text"} value={fields[f.k]||""} onChange={e=>setFields(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph}
                                 style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",transition:"border .15s",fontFamily:f.type==="password"?"'Geist Mono',monospace":"inherit"}}
                                 onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
@@ -26036,29 +25978,20 @@ const AddServiceWizard = ({onClose, onDone}) => {
                 );
               })()}
 
-              {/* Row 3: Object Types */}
+              {/* Row 3: Object Types — multi-select dropdown */}
               <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <div style={{width:3,height:16,borderRadius:2,background:"#10b981",flexShrink:0}}/>
-                    <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Object Types to Extract</span>
-                  </div>
-                  <button onClick={()=>setObjTypes(objTypes.length===availObjTypes.length?[]:availObjTypes)} style={{fontSize:11.5,color:T.accent,background:"none",border:"none",cursor:"pointer",fontWeight:600,padding:0}}>
-                    {objTypes.length===availObjTypes.length?"Deselect All":"Select All"}
-                  </button>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                  <div style={{width:3,height:16,borderRadius:2,background:"#10b981",flexShrink:0}}/>
+                  <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Object Types to Extract</span>
                 </div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                  {availObjTypes.map(t=>{
-                    const sel=objTypes.includes(t);
-                    return (
-                      <button key={t} onClick={()=>toggleObjType(t)} style={{padding:"7px 14px",borderRadius:8,fontSize:12,fontWeight:sel?600:400,cursor:"pointer",transition:"all .12s",border:`1.5px solid ${sel?"#10b981":T.border}`,background:sel?"rgba(16,185,129,.08)":"transparent",color:sel?"#10b981":T.textSub,display:"flex",alignItems:"center",gap:6}}>
-                        {sel&&<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                        {t}
-                      </button>
-                    );
-                  })}
-                </div>
-                {objTypes.length===0&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:10}}>Select at least one object type to extract from this source.</div>}
+                <CatFieldDropdown
+                  label={null}
+                  placeholder="Select object types to extract…"
+                  options={availObjTypes}
+                  selected={objTypes}
+                  onChange={setObjTypes}
+                />
+                {objTypes.length===0&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:10}}>Leave empty to extract all object types from this source.</div>}
               </div>
 
               {/* Row 5: Test Connection */}
@@ -26155,16 +26088,6 @@ const AddServiceWizard = ({onClose, onDone}) => {
           {step===3&&(
             <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:20}}>
 
-              {/* Discovery summary at top */}
-              {discovery&&(
-                <div style={{padding:"14px 20px",background:"rgba(16,185,129,.05)",border:"1px solid rgba(16,185,129,.18)",borderRadius:12,display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
-                  <span style={{fontSize:12,fontWeight:600,color:"#10b981",flexShrink:0}}>Discovered:</span>
-                  {Object.entries(discovery).map(([k,v])=>(
-                    <span key={k} style={{fontSize:12,color:T.textSub}}><b style={{color:T.text}}>{v.toLocaleString()}</b> {k}</span>
-                  ))}
-                </div>
-              )}
-
               {/* Filter mode toggle */}
               <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
@@ -26226,32 +26149,17 @@ const AddServiceWizard = ({onClose, onDone}) => {
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:9}}>
                   {[
-                    {key:"metadata", label:"Metadata Ingestion", desc:"Tables, columns, schema & relationships. Always enabled.", value:true, disabled:true},
-                    {key:"lineage",  label:"Lineage",            desc:"Data flow between tables and transformations.", value:enableLineage, setter:setEnableLineage},
-                    {key:"profiling",label:"Data Profiling",     desc:"Column statistics: null %, distinct count, distributions.", value:enableProfiling, setter:setEnableProfiling},
-                    {key:"usage",    label:"Usage Analytics",    desc:"Query logs to surface popular and unused assets.", value:enableUsage, setter:setEnableUsage},
                     {key:"tagsync",  label:"Tag Sync",           desc:"Pull classification tags from this source during ingestion. New source tags auto-create an EDG tag for review. Push / reverse sync is configured later in the connection's Tag sync tab.", value:enableTagSync, setter:setEnableTagSync},
                   ].map(app=>(
                     <div key={app.key} style={{display:"flex",alignItems:"center",gap:14,padding:"11px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
                       <Toggle on={app.value} onChange={app.disabled?undefined:()=>app.setter(v=>!v)} disabled={app.disabled}/>
                       <div style={{flex:1}}>
-                        <div style={{fontSize:12.5,fontWeight:600,color:app.disabled?T.textMuted:T.text}}>{app.label}{app.disabled&&<span style={{fontSize:10,fontWeight:500,color:T.textMuted,marginLeft:8,padding:"1px 6px",background:T.bgHover,borderRadius:4}}>always on</span>}</div>
+                        <div style={{fontSize:12.5,fontWeight:600,color:app.disabled?T.textMuted:T.text}}>{app.label}</div>
                         <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{app.desc}</div>
                       </div>
                       <div style={{width:7,height:7,borderRadius:"50%",background:app.value?"#10b981":T.border,flexShrink:0,transition:"background .2s"}}/>
                     </div>
                   ))}
-                </div>
-              </div>
-
-              {/* Sync schedule — set after connecting, via the shared Schedule modal (consistent with Policy & Data Contract) */}
-              <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"16px 20px",display:"flex",alignItems:"flex-start",gap:12}}>
-                <div style={{width:30,height:30,borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent,flexShrink:0}}>
-                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>
-                </div>
-                <div>
-                  <div style={{fontSize:12.5,fontWeight:600,color:T.text,marginBottom:3}}>Sync schedule is set after connecting</div>
-                  <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.55}}>Connect first, then open the connection and click <strong style={{color:T.textSub}}>Schedule</strong> to choose how often it syncs — the same scheduling flow used for Policies and Data Contracts.</div>
                 </div>
               </div>
 
@@ -26269,7 +26177,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
                   {getLogo(connector,40)}
                   <div style={{minWidth:0}}>
                     <div style={{fontSize:16,fontWeight:700,color:T.text}}>{svcName||"Untitled connection"}</div>
-                    <div style={{fontSize:12,color:T.textMuted,marginTop:2}}>{connMeta?.name} · {category} · {svcEnv}</div>
+                    <div style={{fontSize:12,color:T.textMuted,marginTop:2}}>{connMeta?.name} · {category}</div>
                   </div>
                   <div style={{marginLeft:"auto",padding:"6px 16px",borderRadius:99,background:"rgba(16,185,129,.1)",border:"1px solid rgba(16,185,129,.25)",fontSize:12,fontWeight:700,color:"#10b981",flexShrink:0}}>Ready to Launch</div>
                 </div>
@@ -26279,7 +26187,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
               {(()=>{
                 const objTypesStr = objTypes.length>0 ? objTypes.join(", ") : "All object types";
                 const fmtList = arr => (arr&&arr.length) ? arr.join(", ") : "—";
-                const apps = ["Metadata", enableLineage&&"Lineage", enableProfiling&&"Profiling", enableUsage&&"Usage Analytics", enableTagSync&&"Tag Sync"].filter(Boolean).join(", ");
+                const apps = enableTagSync ? "Tag Sync" : "None";
                 const cards = [
                   {title:"Source & Connector", rows:[
                     ["Category", category||"—"],
@@ -26287,7 +26195,6 @@ const AddServiceWizard = ({onClose, onDone}) => {
                   ]},
                   {title:"Connection", rows:[
                     ["Name", <span style={{fontWeight:700,color:T.text}}>{svcName||"—"}</span>],
-                    ["Environment", svcEnv||"—"],
                     ["Owner", svcOwner||"—"],
                     ...(svcDesc&&svcDesc.trim()?[["Description", svcDesc.trim()]]:[]),
                     ["Object Types", objTypesStr],
@@ -26320,7 +26227,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
 
               {/* Launch hint */}
               <div style={{padding:"10px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textMuted,lineHeight:1.7}}>
-                <strong style={{color:T.textSub}}>Launch:</strong> <strong style={{color:T.text}}>Connect &amp; sync now</strong> creates the connection and runs the first sync immediately. <strong style={{color:T.text}}>Add without sync</strong> creates it so you can run or schedule from the connection page. Sync schedule is set afterwards from the connection page.
+                <strong style={{color:T.textSub}}>Launch:</strong> <strong style={{color:T.text}}>Run now</strong> creates the connection and runs the first sync immediately. <strong style={{color:T.text}}>Schedule</strong> creates it and opens the recurring sync schedule. Either one creates the connection.
               </div>
             </div>
           )}
@@ -26363,13 +26270,13 @@ const AddServiceWizard = ({onClose, onDone}) => {
                     : "Review →"}
                 </button>
               : <div style={{display:"flex",gap:8}}>
-                  <button onClick={()=>onDone(svcName,connector,category,"add")} title="Create the connection without an initial sync — you can run or schedule it from the connection page" style={{display:"flex",alignItems:"center",gap:7,padding:"10px 18px",borderRadius:10,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,fontSize:13,fontWeight:600,cursor:"pointer",transition:"all .15s"}}
+                  <button onClick={()=>onDone(svcName,connector,category,"schedule")} title="Create the connection and set a recurring sync schedule" style={{display:"flex",alignItems:"center",gap:7,padding:"10px 18px",borderRadius:10,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,fontSize:13,fontWeight:600,cursor:"pointer",transition:"all .15s"}}
                     onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
-                    Add without sync
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>Schedule
                   </button>
                   <button onClick={()=>onDone(svcName,connector,category,"run")} title="Create the connection and run the first sync now" style={{display:"flex",alignItems:"center",gap:8,padding:"10px 24px",borderRadius:10,border:"none",background:"#ee2424",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",transition:"all .15s",boxShadow:"0 4px 14px rgba(238,36,36,.38)"}}
                     onMouseEnter={e=>{e.currentTarget.style.opacity=".88";e.currentTarget.style.transform="translateY(-1px)";}} onMouseLeave={e=>{e.currentTarget.style.opacity="1";e.currentTarget.style.transform="none";}}>
-                    {Ic.plug(13)}Connect & sync now
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>Run now
                   </button>
                 </div>}
           </div>
