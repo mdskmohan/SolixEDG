@@ -25885,6 +25885,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
                           onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
                       </div>
                     </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13,alignItems:"start"}}>
                     <div>
                       <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>Owner</label>
                       <select value={svcOwner} onChange={e=>setSvcOwner(e.target.value)} style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",cursor:"pointer"}}>
@@ -25934,6 +25935,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
                         </>
                       )}
                     </div>
+                    </div>
                   </div>
                 </div>
 
@@ -25955,6 +25957,14 @@ const AddServiceWizard = ({onClose, onDone}) => {
                       <div style={{width:3,height:16,borderRadius:2,background:"#ee2424",flexShrink:0}}/>
                       <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Credentials</span>
                       <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>All fields encrypted at rest</span>
+                    </div>
+                    {/* Auth method — password-based (single method) */}
+                    <div style={{display:"flex",marginBottom:18,paddingBottom:16,borderBottom:`1px solid ${T.border}`}}>
+                      <div style={{display:"inline-flex",alignItems:"center",gap:8,padding:"8px 16px",borderRadius:9,border:`1.5px solid #8b5cf6`,background:"rgba(139,92,246,.08)"}}>
+                        <span style={{width:7,height:7,borderRadius:"50%",background:"#8b5cf6",flexShrink:0}}/>
+                        <span style={{fontSize:12.5,fontWeight:700,color:"#8b5cf6"}}>Password</span>
+                        <span style={{fontSize:11,color:T.textMuted}}>· username &amp; password authentication</span>
+                      </div>
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:13}}>
                       {activeFields.map(f=>(
@@ -30538,6 +30548,7 @@ const SettingsView = ({onToast})=>{
   const [svcSearch, setSvcSearch] = useState("");
   const [tick,      setTick]      = useState(0);
   const [addSvcOpen,setAddSvcOpen]= useState(false);
+  const [connSched, setConnSched] = useState(null); // {name} — open the shared Schedule modal for a just-created connection
   const timerRef = useRef(null);
 
   // ── LDAP SSO state ──
@@ -30987,7 +30998,8 @@ const SettingsView = ({onToast})=>{
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
       <Topbar breadcrumb={[{label:"Settings"}]}/>
       {appSel&&<AppConfigModal app={APPLICATIONS.find(a=>a.id===appSel)} onClose={()=>setAppSel(null)} onToast={onToast}/>}
-      {addSvcOpen&&<AddServiceWizard onClose={()=>setAddSvcOpen(false)} onDone={(name,conn,cat,mode)=>{setAddSvcOpen(false);onToast(mode==="run"?`${name} connected — syncing now…`:mode==="schedule"?`${name} connected — runs on the schedule you set`:`${name} (${cat}) added successfully`,"success");}}/>}
+      {addSvcOpen&&<AddServiceWizard onClose={()=>setAddSvcOpen(false)} onDone={(name,conn,cat,mode)=>{setAddSvcOpen(false);if(mode==="schedule"){setConnSched({name});}else{onToast(mode==="run"?`${name} connected — syncing now…`:`${name} (${cat}) added successfully`,"success");}}}/>}
+      {connSched&&createPortal(<ScheduleControl title="Sync schedule" subtitle={`How often "${connSched.name}" syncs metadata from the source`} schedule={null} onClose={()=>{const n=connSched.name;setConnSched(null);onToast(`${n} connected`,"success");}} onSave={(sched)=>{const n=connSched.name;setConnSched(null);onToast(sched.enabled===false?`${n} connected — schedule saved (paused)`:`${n} connected — runs on the schedule you set`,"success");}} onRunNow={()=>{const n=connSched.name;setConnSched(null);onToast(`${n} connected — syncing now…`,"success");}}/>,document.body)}
 
       <div style={{flex:1,display:"grid",gridTemplateColumns:"220px 1fr",overflow:"hidden"}}>
 
