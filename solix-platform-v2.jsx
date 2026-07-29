@@ -10908,10 +10908,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       {/* close preset tab */}
                       </>}
 
-                      {/* ── Rule Evaluation Logic — how multiple rules combine (only shown with 2+ rules) ── */}
+                      {/* ── Rule Evaluation Logic — how multiple rules combine (always shown) ── */}
                       {(()=>{
-                        const totalRules = wizardRules.length + wizardSqlRules.length;
-                        if(totalRules < 2) return null;
                         const rl = newPol.ruleLogic||"independent";
                         const OPTS=[
                           {id:"independent", label:"Each rule independently"},
@@ -10920,8 +10918,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                         ];
                         const EXPLAIN={
                           independent:"Each rule is checked and reported on its own — an asset can pass some and fail others.",
-                          and:`All ${totalRules} rules must pass — one failure flags the asset as non-compliant.`,
-                          or:`Any 1 of ${totalRules} rules passing is enough — all must fail to raise a violation.`,
+                          and:"All rules must pass — one failure flags the asset as non-compliant.",
+                          or:"At least one rule must pass — an asset fails only when every rule fails.",
                         };
                         const accent = rl==="and"?T.green:rl==="or"?T.violet:T.accent;
                         return (
@@ -10957,7 +10955,6 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       {secHead("Ownership & Compliance","Assign who's accountable for this policy, choose who's notified, and link it to regulations and tags.")}
                       <CatFieldDropdown label="Owner" placeholder="Search and select owners…" options={PMV_USERS} selected={newPol.owner||[]} onChange={v=>setNewPol(p=>({...p,owner:v}))} renderOpt={userRenderOpt}/>
                       <CatFieldDropdown label="Stewards" placeholder="Search and select stewards…" options={PMV_USERS} selected={newPol.stewards||[]} onChange={v=>setNewPol(p=>({...p,stewards:v}))} renderOpt={userRenderOpt}/>
-                      <CatFieldDropdown label="Notification" placeholder="Select who to notify on violation…" options={["Owner","Steward"]} selected={Array.isArray(newPol.consequence?.notify)?newPol.consequence.notify:[]} onChange={v=>setNewPol(p=>({...p,consequence:{...(p.consequence||{}),notify:v}}))}/>
                       {/* ── Regulatory Frameworks + Article picker ── */}
                       <div style={{display:"flex",flexDirection:"column",gap:10}}>
                         <CatFieldDropdown
@@ -11013,6 +11010,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                         })}
                       </div>
                       <CatFieldDropdown label="Tags" placeholder="Search and select tags…" options={POLICY_TAGS} selected={newPol.tags||[]} onChange={v=>setNewPol(p=>({...p,tags:v}))}/>
+                      <CatFieldDropdown label="Notification" placeholder="Select who to notify on violation…" options={["Owner","Steward"]} selected={Array.isArray(newPol.consequence?.notify)?newPol.consequence.notify:[]} onChange={v=>setNewPol(p=>({...p,consequence:{...(p.consequence||{}),notify:v}}))}/>
                       <div style={{padding:"10px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textMuted,lineHeight:1.7}}>
                         <strong style={{color:T.textSub}}>Evaluation:</strong> Policy conditions run automatically on every workflow run. Violations are created immediately when a condition fails on an asset.
                       </div>
