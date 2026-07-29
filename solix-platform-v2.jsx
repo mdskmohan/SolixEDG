@@ -25542,10 +25542,11 @@ const CONNECTOR_FIELDS = {
 
 const AddServiceWizard = ({onClose, onDone}) => {
   const STEPS = [
-    {id:"source",    label:"Select Source"},
-    {id:"connector", label:"Select Connector"},
-    {id:"configure", label:"Configure Connection"},
+    {id:"source",    label:"Source"},
+    {id:"connector", label:"Connector"},
+    {id:"configure", label:"Configure"},
     {id:"filters",   label:"Filters"},
+    {id:"review",    label:"Review"},
   ];
 
   // Object types available per source category
@@ -25635,7 +25636,16 @@ const AddServiceWizard = ({onClose, onDone}) => {
     if(step===1) return !!connector;
     if(step===2) return testState === "success" && svcName.trim().length >= 2;
     if(step===3) return true;
+    if(step===4) return true;
     return true;
+  };
+  // Which rail sections the user can jump to (respects dependencies)
+  const configureDone = testState === "success" && svcName.trim().length >= 2;
+  const canReach = (i) => {
+    if(i===0) return true;
+    if(i===1) return !!category;
+    if(i===2) return !!category && !!connector;
+    return !!category && !!connector && configureDone; // filters + review
   };
 
   const runTestConnection = () => {
@@ -25656,7 +25666,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
   const toggleObjType = (t) => setObjTypes(prev => prev.includes(t) ? prev.filter(x=>x!==t) : [...prev, t]);
 
   const handleNext = () => {
-    if(step===3) { onDone(svcName, connector, category); }
+    if(step===4) { onDone(svcName, connector, category); }
     else setStep(s=>s+1);
   };
 
@@ -25710,7 +25720,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:900,backdropFilter:"blur(3px)",display:"flex",justifyContent:"flex-end"}}>
       <div onClick={e=>e.stopPropagation()} className="slideInRight" style={{
         background:T.bgSurface,
-        width:720,maxWidth:"100vw",
+        width:940,maxWidth:"100vw",
         height:"100%",
         display:"flex",flexDirection:"column",
         borderLeft:`1px solid ${T.border}`,
@@ -25718,49 +25728,49 @@ const AddServiceWizard = ({onClose, onDone}) => {
         overflow:"hidden",
       }}>
 
-        {/* ── Top header: title + horizontal stepper ── */}
-        <div style={{padding:"24px 32px 0",flexShrink:0,borderBottom:`1px solid ${T.border}`}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:22}}>
-            <div style={{display:"flex",alignItems:"center",gap:12}}>
-              <div style={{width:36,height:36,borderRadius:10,background:"rgba(238,36,36,.12)",border:"1px solid rgba(238,36,36,.25)",display:"flex",alignItems:"center",justifyContent:"center",color:"#ee2424"}}>
-                {Ic.plug(16)}
-              </div>
-              <div>
-                <div style={{fontSize:16,fontWeight:700,color:T.text,lineHeight:1.2}}>Add Connection</div>
-                <div style={{fontSize:12,color:T.textMuted,marginTop:1}}>Connect a data source to the Solix platform</div>
-              </div>
+        {/* ── Top header: title + close ── */}
+        <div style={{padding:"14px 24px",flexShrink:0,borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",background:T.bgElevated}}>
+          <div style={{display:"flex",alignItems:"center",gap:12}}>
+            <div style={{width:34,height:34,borderRadius:9,background:"rgba(238,36,36,.12)",border:"1px solid rgba(238,36,36,.25)",display:"flex",alignItems:"center",justifyContent:"center",color:"#ee2424"}}>
+              {Ic.plug(16)}
             </div>
-            <button onClick={onClose} style={{width:32,height:32,borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .12s",flexShrink:0}}
-              onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;e.currentTarget.style.color=T.text;}}
-              onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;}}>
-              <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 2l8 8M10 2L2 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-            </button>
+            <div>
+              <div style={{fontSize:15,fontWeight:700,color:T.text,lineHeight:1.2}}>Add Connection</div>
+              <div style={{fontSize:12,color:T.textMuted,marginTop:2}}>Connect a data source to the Solix platform</div>
+            </div>
           </div>
-          {/* Horizontal step bar */}
-          <div style={{display:"flex",alignItems:"center",paddingBottom:14}}>
+          <button onClick={onClose} style={{width:32,height:32,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .12s",flexShrink:0}}
+            onMouseEnter={e=>{e.currentTarget.style.color=T.text;}}
+            onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;}}>
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 2l8 8M10 2L2 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        {/* ── Body: section rail + content ── */}
+        <div style={{flex:1,display:"flex",minHeight:0}}>
+          {/* section rail */}
+          <div style={{width:212,flexShrink:0,borderRight:`1px solid ${T.border}`,overflowY:"auto",padding:"14px 10px",display:"flex",flexDirection:"column",gap:3,background:T.bg}}>
             {STEPS.map((s,i)=>{
-              const done=i<step, active=i===step;
+              const on=i===step;
+              const done = s.id==="source" ? !!category
+                : s.id==="connector" ? !!connector
+                : s.id==="configure" ? configureDone
+                : s.id==="filters" ? (i<step)
+                : false;
+              const reachable = canReach(i);
               return (
-                <React.Fragment key={s.id}>
-                  <div onClick={()=>{if(done)setStep(i);}} style={{display:"flex",alignItems:"center",gap:7,cursor:done?"pointer":"default",position:"relative",flexShrink:0}}>
-                    <div style={{width:24,height:24,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s",flexShrink:0,
-                      background:done?"#ee2424":active?"rgba(238,36,36,.12)":"transparent",
-                      border:`2px solid ${done?"#ee2424":active?"#ee2424":T.border}`}}>
-                      {done
-                        ? <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 2" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        : <span style={{fontSize:9.5,fontWeight:700,color:active?"#ee2424":T.textMuted}}>{i+1}</span>}
-                    </div>
-                    <span style={{fontSize:11.5,fontWeight:active?700:done?600:400,color:active?T.text:done?T.textSub:T.textMuted,whiteSpace:"nowrap"}}>{s.label}</span>
-                  </div>
-                  {i<STEPS.length-1&&<div style={{flex:1,height:1,background:T.border,margin:"0 10px",minWidth:12}}/>}
-                </React.Fragment>
+                <button key={s.id} onClick={()=>{if(reachable)setStep(i);}} disabled={!reachable}
+                  style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 11px",borderRadius:8,background:on?T.bgSurface:"transparent",border:`1px solid ${on?T.border:"transparent"}`,color:on?T.text:reachable?T.textMuted:T.borderLight,fontSize:12.5,fontWeight:on?700:500,cursor:reachable?"pointer":"default",textAlign:"left",boxShadow:on?"0 1px 2px rgba(0,0,0,.06)":"none"}}>
+                  <span style={{width:8,height:8,borderRadius:"50%",flexShrink:0,background:done?"#ee2424":T.borderLight}}/>
+                  <span style={{flex:1}}>{s.label}</span>
+                  {i===STEPS.length-1&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:8,background:T.bgElevated,color:T.textMuted}}>last</span>}
+                </button>
               );
             })}
           </div>
-        </div>
 
         {/* ── Scrollable content area ── */}
-        <div style={{flex:1,overflowY:"auto",padding:"28px 32px"}}>
+        <div style={{flex:1,overflowY:"auto",padding:"28px 32px",minWidth:0}}>
 
           {/* ── STEP 0: Source ── */}
           {step===0&&(
@@ -26245,33 +26255,77 @@ const AddServiceWizard = ({onClose, onDone}) => {
                 </div>
               </div>
 
-              {/* Launch summary */}
-              <div style={{background:"linear-gradient(135deg,rgba(238,36,36,.06),rgba(99,102,241,.05))",border:"1px solid rgba(238,36,36,.15)",borderRadius:14,padding:"20px 22px"}}>
-                <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:14}}>
-                  {getLogo(connector,40)}
-                  <div>
-                    <div style={{fontSize:16,fontWeight:700,color:T.text}}>{svcName}</div>
-                    <div style={{fontSize:12,color:T.textMuted,marginTop:2}}>{connMeta?.name} · {category} · {svcEnv}</div>
-                  </div>
-                  <div style={{marginLeft:"auto",padding:"6px 16px",borderRadius:99,background:"rgba(16,185,129,.1)",border:"1px solid rgba(16,185,129,.25)",fontSize:12,fontWeight:700,color:"#10b981"}}>Ready to Launch</div>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:9}}>
-                  {[
-                    {l:"Owner",    v:svcOwner},
-                    {l:"Schedule", v:"Set after connecting"},
-                    {l:"Object Types", v:objTypes.length>0?objTypes.slice(0,3).join(", ")+(objTypes.length>3?` +${objTypes.length-3}`:""):"All"},
-                  ].map(({l,v,mono})=>(
-                    <div key={l} style={{padding:"10px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
-                      <div style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.07em",color:T.textMuted,marginBottom:4}}>{l}</div>
-                      <div style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:mono?"'Geist Mono',monospace":"inherit"}}>{v}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
             </div>
           )}
 
+          {/* ── STEP 4: Review ── */}
+          {step===4&&(
+            <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:16}}>
+              <p style={{margin:"0 0 2px",fontSize:13,color:T.textMuted,lineHeight:1.6}}>Review the connection before you launch. Jump back to any section on the left to make changes.</p>
+
+              {/* Hero */}
+              <div style={{background:"linear-gradient(135deg,rgba(238,36,36,.06),rgba(99,102,241,.05))",border:"1px solid rgba(238,36,36,.15)",borderRadius:14,padding:"20px 22px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:14}}>
+                  {getLogo(connector,40)}
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:16,fontWeight:700,color:T.text}}>{svcName||"Untitled connection"}</div>
+                    <div style={{fontSize:12,color:T.textMuted,marginTop:2}}>{connMeta?.name} · {category} · {svcEnv}</div>
+                  </div>
+                  <div style={{marginLeft:"auto",padding:"6px 16px",borderRadius:99,background:"rgba(16,185,129,.1)",border:"1px solid rgba(16,185,129,.25)",fontSize:12,fontWeight:700,color:"#10b981",flexShrink:0}}>Ready to Launch</div>
+                </div>
+              </div>
+
+              {/* Summary cards */}
+              {(()=>{
+                const objTypesStr = objTypes.length>0 ? objTypes.join(", ") : "All object types";
+                const fmtList = arr => (arr&&arr.length) ? arr.join(", ") : "—";
+                const apps = ["Metadata", enableLineage&&"Lineage", enableProfiling&&"Profiling", enableUsage&&"Usage Analytics", enableTagSync&&"Tag Sync"].filter(Boolean).join(", ");
+                const cards = [
+                  {title:"Source & Connector", rows:[
+                    ["Category", category||"—"],
+                    ["Connector", connMeta?.name||"—"],
+                  ]},
+                  {title:"Connection", rows:[
+                    ["Name", <span style={{fontWeight:700,color:T.text}}>{svcName||"—"}</span>],
+                    ["Environment", svcEnv||"—"],
+                    ["Owner", svcOwner||"—"],
+                    ...(svcDesc&&svcDesc.trim()?[["Description", svcDesc.trim()]]:[]),
+                    ["Object Types", objTypesStr],
+                  ]},
+                  ...(discovery ? [{title:"Discovered", rows:Object.entries(discovery).map(([k,v])=>[k.charAt(0).toUpperCase()+k.slice(1), v.toLocaleString()])}] : []),
+                  {title:"Ingestion Filters", rows: filterMode==="regex" ? [["Mode","Regex patterns"]] : [
+                    ["Include Schemas", fmtList(inclSchemas)],
+                    ["Exclude Schemas", fmtList(exclSchemas)],
+                    ["Include Tables", fmtList(inclTables)],
+                    ["Exclude Tables", fmtList(exclTables)],
+                  ]},
+                  {title:"Ingestion Apps", rows:[["Enabled", apps]]},
+                ];
+                return cards.map(sec=>(
+                  <div key={sec.title} style={{background:T.bgElevated,borderRadius:12,border:`1px solid ${T.border}`,overflow:"hidden"}}>
+                    <div style={{padding:"9px 16px",borderBottom:`1px solid ${T.border}`,background:T.bg}}>
+                      <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{sec.title}</span>
+                    </div>
+                    <div style={{padding:"2px 16px 8px"}}>
+                      {sec.rows.map(([l,v],i)=>(
+                        <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:16,padding:"7px 0",borderBottom:i<sec.rows.length-1?`1px solid ${T.border}`:"none"}}>
+                          <span style={{fontSize:11.5,color:T.textMuted,flexShrink:0}}>{l}</span>
+                          <span style={{fontSize:11.5,color:v?T.text:T.textMuted,textAlign:"right",lineHeight:1.5,wordBreak:"break-word"}}>{v||"—"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ));
+              })()}
+
+              {/* Launch hint */}
+              <div style={{padding:"10px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textMuted,lineHeight:1.7}}>
+                <strong style={{color:T.textSub}}>Launch:</strong> <strong style={{color:T.text}}>Connect &amp; sync now</strong> creates the connection and runs the first sync immediately. <strong style={{color:T.text}}>Add without sync</strong> creates it so you can run or schedule from the connection page. Sync schedule is set afterwards from the connection page.
+              </div>
+            </div>
+          )}
+
+        </div>
         </div>
 
         {/* ── Footer ── */}
@@ -26287,7 +26341,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
             <div style={{display:"flex",gap:5,alignItems:"center"}}>
               {STEPS.map((_,i)=><div key={i} style={{width:i===step?22:7,height:7,borderRadius:4,background:i===step?"#ee2424":i<step?"rgba(238,36,36,.4)":T.border,transition:"all .25s"}}/>)}
             </div>
-            {step<3
+            {step<4
               ? <button onClick={handleNext} disabled={!canNext()||(step===2&&testState==="running")} style={{
                   display:"flex",alignItems:"center",gap:8,padding:"10px 24px",borderRadius:10,border:"none",
                   background:(!canNext()||(step===2&&testState==="running"))?"rgba(238,36,36,.2)":"#ee2424",
@@ -26304,7 +26358,9 @@ const AddServiceWizard = ({onClose, onDone}) => {
                     ? "Select Connector →"
                     : step===1
                     ? "Configure Connection →"
-                    : (testState==="running"?"Testing…":testState==="success"?"Set Filters & Launch →":"Test Connection First")}
+                    : step===2
+                    ? (testState==="running"?"Testing…":testState==="success"?"Set Filters →":"Test Connection First")
+                    : "Review →"}
                 </button>
               : <div style={{display:"flex",gap:8}}>
                   <button onClick={()=>onDone(svcName,connector,category,"add")} title="Create the connection without an initial sync — you can run or schedule it from the connection page" style={{display:"flex",alignItems:"center",gap:7,padding:"10px 18px",borderRadius:10,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,fontSize:13,fontWeight:600,cursor:"pointer",transition:"all .15s"}}
