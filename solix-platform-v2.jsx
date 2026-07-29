@@ -4362,7 +4362,6 @@ const QualityView = () => {
 
   // data quality rules tab
   const [defEntitySel,  setDefEntitySel]  = useState([]);   // multi-select entity-type filter ([] = all)
-  const [defPlatformSel,setDefPlatformSel]= useState([]);   // multi-select platform filter ([] = all)
   const [defSearch,     setDefSearch]     = useState("");
   const [addDefPanel,   setAddDefPanel]   = useState(false);
   const [ndName,        setNdName]        = useState("");
@@ -4454,7 +4453,6 @@ const QualityView = () => {
 
   const filteredDefs = definitions.filter(d=>{
     if(defEntitySel.length>0&&!defEntitySel.includes(d.entityType)) return false;
-    if(defPlatformSel.length>0&&!(d.testPlatforms||[]).some(p=>defPlatformSel.includes(p))) return false;
     if(defSearch&&!d.name.toLowerCase().includes(defSearch.toLowerCase())&&!d.desc.toLowerCase().includes(defSearch.toLowerCase())) return false;
     return true;
   });
@@ -5141,8 +5139,7 @@ const QualityView = () => {
         {tab==="rules"&&<>
           {/* ── Filter bar: search + entity type + platform, one row ── */}
           {(()=>{
-            const PLATFORMS=["OpenMetadata","dbt","Great Expectations"];
-            const anyFilter=defSearch||defEntitySel.length>0||defPlatformSel.length>0;
+            const anyFilter=defSearch||defEntitySel.length>0;
             return (
             <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,padding:"12px 16px",marginBottom:18,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
               <div style={{flex:"1 1 220px",minWidth:180,position:"relative"}}>
@@ -5160,24 +5157,16 @@ const QualityView = () => {
                 />
                 {defSearch&&<button onClick={()=>setDefSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:16,lineHeight:1}}>×</button>}
               </div>
-              {/* entity type filter — multi-select dropdown */}
+              {/* asset type filter — multi-select dropdown */}
               <StatusFilterDropdown
                 selected={defEntitySel}
                 onChange={setDefEntitySel}
-                placeholder="Entity type"
+                placeholder="Asset type"
                 options={[{v:"TABLE",c:T.accent},{v:"COLUMN",c:T.violet}]}
                 counts={{TABLE:definitions.filter(d=>d.entityType==="TABLE").length,COLUMN:definitions.filter(d=>d.entityType==="COLUMN").length}}
               />
-              {/* platform filter — multi-select dropdown */}
-              <StatusFilterDropdown
-                selected={defPlatformSel}
-                onChange={setDefPlatformSel}
-                placeholder="Platform"
-                options={PLATFORMS.map(p=>({v:p}))}
-                counts={Object.fromEntries(PLATFORMS.map(p=>[p,definitions.filter(d=>(d.testPlatforms||[]).includes(p)).length]))}
-              />
               {anyFilter&&(
-                <button onClick={()=>{setDefSearch("");setDefEntitySel([]);setDefPlatformSel([]);}}
+                <button onClick={()=>{setDefSearch("");setDefEntitySel([]);}}
                   style={{fontSize:11,color:T.rose,background:T.roseDim,border:"none",cursor:"pointer",padding:"4px 9px",borderRadius:6}}>✕ Clear</button>
               )}
               <button onClick={()=>{setNdName("");setNdDisplay("");setNdDesc("");setNdEntityType("COLUMN");setNdDim("");setNdLogic("customSql");setNdSql("");setNdParamDescs({});setAddDefPanel(true);}}
@@ -5194,7 +5183,7 @@ const QualityView = () => {
             <table style={{width:"100%",borderCollapse:"collapse"}}>
               <thead>
                 <tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
-                  {["Name","Type","Description","Entity Type","Test Platforms","Enabled",""].map((l,li)=>(
+                  {["Name","Type","Description","Asset Type","Enabled",""].map((l,li)=>(
                     <th key={li} style={{padding:"9px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textAlign:"left",letterSpacing:.5,textTransform:"uppercase",whiteSpace:"nowrap"}}>{l}</th>
                   ))}
                 </tr>
@@ -5222,13 +5211,6 @@ const QualityView = () => {
                     </td>
                     <td style={{padding:"10px 14px"}}>
                       <span style={{fontSize:11,fontWeight:700,padding:"2px 9px",borderRadius:5,background:def.entityType==="TABLE"?`${T.accent}12`:`${T.violet}12`,color:def.entityType==="TABLE"?T.accent:T.violet,border:`1px solid ${def.entityType==="TABLE"?T.accent:T.violet}22`}}>{def.entityType}</span>
-                    </td>
-                    <td style={{padding:"10px 14px"}}>
-                      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                        {(def.testPlatforms||[]).map(p=>(
-                          <span key={p} style={{fontSize:10.5,padding:"2px 7px",borderRadius:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500,whiteSpace:"nowrap"}}>{p}</span>
-                        ))}
-                      </div>
                     </td>
                     <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
                       {/* Toggle switch */}
@@ -5259,7 +5241,7 @@ const QualityView = () => {
                 <div style={{fontSize:32,marginBottom:10,opacity:.15}}>◎</div>
                 <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:6}}>No definitions match your filters</div>
                 <button
-                  onClick={()=>{setDefEntitySel([]);setDefPlatformSel([]);setDefSearch("");}}
+                  onClick={()=>{setDefEntitySel([]);setDefSearch("");}}
                   style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer"}}
                 >Clear all filters</button>
               </div>
@@ -6101,7 +6083,7 @@ const QualityView = () => {
                 </select>
               </div>
               <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Entity Type <span style={{color:T.rose}}>*</span></label>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Asset Type <span style={{color:T.rose}}>*</span></label>
                 <div style={{display:"flex",gap:6}}>
                   {[{k:"TABLE",l:"TABLE",d:"Applies to an entire table"},{k:"COLUMN",l:"COLUMN",d:"Applies to a specific column"}].map(({k,l,d})=>(
                     <button key={k} onClick={()=>setNdEntityType(k)} style={{flex:1,padding:"10px 12px",borderRadius:9,border:`1.5px solid ${ndEntityType===k?T.accent:T.border}`,background:ndEntityType===k?`${T.accent}08`:T.bgElevated,cursor:"pointer",textAlign:"left",transition:"all .12s"}}>
@@ -6162,10 +6144,6 @@ const QualityView = () => {
                   })()}
                 </>
               )}
-              <div style={{padding:"12px 14px",background:T.bgElevated,borderRadius:9,border:`1px solid ${T.border}`}}>
-                <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:4,textTransform:"uppercase"}}>Test Platforms</div>
-                <div style={{fontSize:12,color:T.textSub}}>Defaults to <strong style={{color:T.text}}>OpenMetadata</strong>. Additional platforms can be configured after creation.</div>
-              </div>
             </div>
             <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgElevated,display:"flex",gap:8,justifyContent:"flex-end"}}>
               <button onClick={()=>setAddDefPanel(false)} style={{padding:"9px 18px",borderRadius:9,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer",fontWeight:500}}>Cancel</button>
@@ -6207,9 +6185,8 @@ const QualityView = () => {
               </div>
               <div style={{flex:1,overflowY:"auto",padding:"20px 24px",display:"flex",flexDirection:"column",gap:18}}>
                 <div style={{display:"flex",flexWrap:"wrap",gap:14}}>
-                  {meta("Entity Type",<span style={{fontWeight:700,color:d.entityType==="TABLE"?T.accent:T.violet}}>{d.entityType}</span>)}
+                  {meta("Asset Type",<span style={{fontWeight:700,color:d.entityType==="TABLE"?T.accent:T.violet}}>{d.entityType}</span>)}
                   {meta("DQ Dimension",d.dim||"—")}
-                  {meta("Platforms",(d.testPlatforms||[]).join(", ")||"—")}
                   {meta("Status",<span style={{color:d.enabled?"#16a34a":T.textMuted,fontWeight:600}}>{d.enabled?"Enabled":"Disabled"}</span>)}
                 </div>
                 <div>
@@ -33484,7 +33461,13 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                       <div style={{width:272,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto"}}>
 
 
-                      {/* CATEGORY — first field; editable (move to any category, Uncategorized, or create new) */}
+                      {/* STATUS */}
+                      <div style={{padding:'16px',borderBottom:`1px solid ${T.border}`}}>
+                        <SideLabel ch="Status" onEdit={()=>{setTagEditModal('status');setTagModalSearch('');}}/>
+                        <CertBadge cert={selTag.cert}/>
+                      </div>
+
+                      {/* CATEGORY — editable (move to any category, Uncategorized, or create new) */}
                       <div ref={catDropRef} style={{padding:'16px',borderBottom:`1px solid ${T.border}`,position:'relative'}}>
                         <SideLabel ch="Category" onEdit={()=>{setCatDropOpen(o=>!o);setCatDropSearch('');}}/>
                         {selTag.category
@@ -33535,12 +33518,6 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                             </div>
                           : <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No domain assigned</span>
                         }
-                      </div>
-
-                      {/* STATUS */}
-                      <div style={{padding:'16px',borderBottom:`1px solid ${T.border}`}}>
-                        <SideLabel ch="Status" onEdit={()=>{setTagEditModal('status');setTagModalSearch('');}}/>
-                        <CertBadge cert={selTag.cert}/>
                       </div>
 
                       {/* OWNERS */}
