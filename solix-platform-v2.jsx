@@ -6885,7 +6885,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   const [assetSearchQ,  setAssetSearchQ]= useState("");
   const [selAssetIds,   setSelAssetIds] = useState(new Set());
   const [assetRel,      setAssetRel]    = useState("governs");
-  const EMPTY_POL = {name:"",category:"Data",description:"",owner:[],stewards:[],tags:[],regulations:[],regulationArticles:{},scope:{domains:[],sources:[],assetTypes:[]},criteria:[],rules:[],links:[],history:[],fqn:"",version:1,severity:"Medium",policyTypes:[],consequence:{severity:"Medium",onViolation:"Warn",notify:"Both"},ruleLogic:"independent",runMode:"draft",wizardSchedFreq:"daily",wizardSchedTime:"08:00",wizardSchedDay:"monday",wizardSchedCron:""};
+  const EMPTY_POL = {name:"",category:"Data",description:"",owner:[],stewards:[],tags:[],regulations:[],regulationArticles:{},scope:{domains:[],sources:[],assetTypes:[]},criteria:[],rules:[],links:[],history:[],fqn:"",version:1,severity:"Medium",policyTypes:[],consequence:{severity:"Medium",onViolation:"Warn",notify:["Owner","Steward"]},ruleLogic:"independent",runMode:"draft",wizardSchedFreq:"daily",wizardSchedTime:"08:00",wizardSchedDay:"monday",wizardSchedCron:""};
   const [newPol,         setNewPol]        = useState(EMPTY_POL);
   const [catFilter,      setCatFilter]     = useState([]);
   const [filterDropOpen, setFilterDropOpen]= useState(false);
@@ -10070,14 +10070,9 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
 
                 /* ─── Step 1: Details ─── */
                 if(createStep===1){
-                  const scopeTypes = newPol.scope?.assetTypes||[];
-                  const TYPE_BY_ASSET = {"Table":["Governance","Quality","Retention","Access"],"View":["Governance","Quality","Access"],"Schema":["Governance","Retention","Access"],"Database":["Governance","Retention","Access"]};
-                  const ALL_PTYPES = ["Governance","Security","Quality","Retention","Access","Privacy"];
-                  const availPTypes = scopeTypes.length>0 ? [...new Set(scopeTypes.flatMap(t=>TYPE_BY_ASSET[t]||ALL_PTYPES))] : ALL_PTYPES;
-                  const selPTypes = newPol.policyTypes||[];
                   return (
                     <div style={{display:"flex",flexDirection:"column",gap:18,maxWidth:600}}>
-                      {secHead("Policy Details","Name this policy, choose the type(s) it governs, and describe its purpose.")}
+                      {secHead("Policy Details","Name this policy, describe its purpose, and file it under a category.")}
                       {/* Policy Name */}
                       <div>
                         <label style={lbl}>Policy Name <span style={{color:T.rose}}>*</span></label>
@@ -10085,14 +10080,6 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                           placeholder="e.g. PII Table Access Control, HIPAA Retention Enforcement…"
                           style={inp} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
                       </div>
-                      {/* Policy Type */}
-                      <CatFieldDropdown
-                        label="Policy Type"
-                        placeholder="Search and select policy types…"
-                        options={availPTypes}
-                        selected={selPTypes}
-                        onChange={v=>setNewPol(p=>({...p,policyTypes:v}))}
-                      />
                       {/* Description */}
                       <div>
                         <label style={lbl}>Description</label>
@@ -10250,16 +10237,10 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   };
                   // scope: "table" = no column input | "column" = column required | "both" = column optional
                   const W_RULE_FIELDS = [
-                    {id:"classification",   label:"Classification",          scope:"both",   type:"enum",       ops:["is","is not","is one of","is not one of"], vals:["PII","PHI","PCI","Confidential","Internal","Public","Not Set"], types:["Security","Privacy","Governance"], action:{verb:"Classify",engine:"EDG",maturity:"GA"}},
-                    {id:"sensitivity",      label:"Sensitivity",             scope:"both",   type:"enum",       ops:["is","is not"],                             vals:["Low","Medium","High","Critical","Not Set"], types:["Security","Access"], action:{verb:"Set sensitivity",engine:"EDG",maturity:"MVP"}},
                     {id:"masking_status",   label:"Masking",                 scope:"column", type:"enum",       ops:["is","is not"],                             vals:["true","false"], types:["Security"], action:{verb:"Mask",engine:"CDP",maturity:"GA"}},
                     {id:"encryption_status",label:"Encryption Status",       scope:"both",   type:"enum",       ops:["is","is not"],                             vals:["Enabled","Disabled","Unknown"], types:["Security"], action:{verb:"Encrypt",engine:"source",maturity:"Planned"}},
-                    {id:"row_security",     label:"Row Security",            scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Enabled","Disabled","Unknown"], types:["Security","Access"], action:{verb:"Restrict (row-level)",engine:"CDP",maturity:"GA"}},
-                    {id:"exposure",         label:"Exposure",                scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Public","Internal","Restricted","Not Set"], types:["Security","Access"], action:{verb:"Restrict access",engine:"CDP",maturity:"GA"}},
                     {id:"legal_hold",       label:"Legal Hold",              scope:"both",   type:"enum",       ops:["is","is not"],                             vals:["true","false"], types:["Retention"], action:{verb:"Legal hold",engine:"CDP",maturity:"GA"}},
                     {id:"retention_class",  label:"Retention",               scope:"both",   type:"enum",       ops:["is","is not"],                             vals:["true","false"], types:["Retention"], action:{verb:"Set disposition",engine:"CDP",maturity:"GA"}},
-                    {id:"access_level",     label:"Access Level",            scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Open","Controlled","Restricted","Not Set"], types:["Access"], action:{verb:"Restrict access",engine:"CDP",maturity:"GA"}},
-                    {id:"gdpr_erasure",     label:"GDPR Erasure Eligible",   scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Yes","No"], types:["Privacy"], action:{verb:"Erase / redact",engine:"CDP",maturity:"GA"}},
                     // ── Governance — all table-level catalog attributes ──
                     {id:"certification",  label:"Status",    scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Draft","In Review","Approved","Rejected","Deprecated"],  types:["Governance","Quality","Access"]},
                     {id:"domain",         label:"Domain",                  scope:"table",  type:"enum_multi", ops:["is","is not","is one of","is not one of"], vals:ALL_DOMAINS,                                               types:["Governance","Retention"]},
@@ -10281,12 +10262,10 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                     {id:"duplicate_rate", label:"Duplicate Rate (%)",      scope:"column", type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Quality"]},
                     // ── Retention — table-level catalog metadata ──
                     {id:"last_accessed",   label:"Last Accessed (days ago)",scope:"table", type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Retention"],                       hint:"Snowflake / BigQuery only — not available in PostgreSQL / Oracle"},
-                    {id:"archive_status",  label:"Archive Status",         scope:"table",  type:"enum",       ops:["is","is not"],                             vals:["Archived","Active","Pending Archival"],                  types:["Retention"],                       hint:"Catalog-stored — set manually or via workflow"},
                   ];
-                  // Filter fields by selected policy types — shows all when no type selected
-                  const filteredRuleFields = selPTypes.length>0
-                    ? W_RULE_FIELDS.filter(f=>f.types.some(t=>selPTypes.includes(t)))
-                    : W_RULE_FIELDS;
+                  // Policy Type no longer gates the rule catalog — every canonical field is available,
+                  // grouped by category in the field dropdown.
+                  const filteredRuleFields = W_RULE_FIELDS;
                   const defaultField = filteredRuleFields[0]||W_RULE_FIELDS[0];
                   const addPresetRule = () => setWizardRules(prev=>[...prev,{id:`wr-${Date.now()}`,field:defaultField.id,operator:defaultField.ops[0],value:"",table:"",column:"",severity:"Medium"}]);
                   // Deleting a Legal Hold rule that's already approved & in effect doesn't unhold the
@@ -10474,47 +10453,6 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
 
                       {/* ── Rules ── */}
                       {secHead("Rules","Define the conditions evaluated against each in-scope asset.")}
-
-                      {/* ── Rule Evaluation Logic (applies to all rules across both tabs) ── */}
-                      {(()=>{
-                        const rl = newPol.ruleLogic||"independent";
-                        const totalRules = wizardRules.length + wizardSqlRules.length;
-                        const LOGIC_OPTS=[
-                          {id:"independent", label:"Independent",        desc:"Each rule is evaluated and reported separately. An asset can pass some rules and fail others.", color:T.accent},
-                          {id:"and",         label:"AND — All must pass", desc:"Asset is compliant only when every rule passes. One failure = violation raised.",              color:T.green},
-                          {id:"or",          label:"OR — Any must pass",  desc:"Asset is compliant if at least one rule passes. All failing = violation raised.",              color:T.violet},
-                        ];
-                        return (
-                          <div style={{marginBottom:16}}>
-                            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Rule Evaluation Logic</div>
-                            <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                              {LOGIC_OPTS.map(opt=>{
-                                const sel=rl===opt.id;
-                                return (
-                                  <button key={opt.id} onClick={()=>setNewPol(p=>({...p,ruleLogic:opt.id}))}
-                                    style={{display:"flex",alignItems:"flex-start",gap:10,padding:"9px 12px",borderRadius:8,border:`1.5px solid ${sel?opt.color:T.border}`,background:sel?`${opt.color}12`:T.bgElevated,cursor:"pointer",textAlign:"left",outline:"none",transition:"all .12s"}}>
-                                    <div style={{width:14,height:14,borderRadius:"50%",border:`2px solid ${sel?opt.color:T.border}`,background:sel?opt.color:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1,transition:"all .12s"}}>
-                                      {sel&&<div style={{width:5,height:5,borderRadius:"50%",background:"#fff"}}/>}
-                                    </div>
-                                    <div>
-                                      <span style={{fontSize:12,fontWeight:sel?700:500,color:sel?opt.color:T.text}}>{opt.label}</span>
-                                      <div style={{fontSize:11,color:T.textMuted,marginTop:1,lineHeight:1.5}}>{opt.desc}</div>
-                                    </div>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                            {totalRules>1&&rl!=="independent"&&(
-                              <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",marginTop:8,background:(rl==="and"?T.green:T.violet)+"18",border:`1px solid ${(rl==="and"?T.green:T.violet)}30`,borderRadius:7,fontSize:11.5,color:rl==="and"?T.green:T.violet}}>
-                                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/><line x1="8" y1="5.5" x2="8" y2="8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="10.5" r=".6" fill="currentColor" stroke="none"/></svg>
-                                {rl==="and"
-                                  ? <span>All <strong>{totalRules} rules</strong> must pass — one failure flags the asset as non-compliant.</span>
-                                  : <span>Any <strong>1 of {totalRules} rules</strong> passing is enough — all must fail to raise a violation.</span>}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })()}
 
                       {/* ── Rule Type tabs: Preset Rules / Custom ── */}
                       <div style={{display:"flex",borderBottom:`2px solid ${T.border}`,marginBottom:16}}>
@@ -10768,7 +10706,13 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                           updRule(r.id,"value","");
                                           updRule(r.id,"column","");
                                         }} style={{...sel_s,flex:"1 1 155px",minWidth:120}}>
-                                          {filteredRuleFields.map(f=><option key={f.id} value={f.id}>{f.label}</option>)}
+                                          {(()=>{
+                                            const GROUP_ORDER=["Governance","Security","Quality","Retention","Access","Privacy"];
+                                            const grouped={};
+                                            filteredRuleFields.forEach(f=>{const g=(f.types&&f.types[0])||"Other";(grouped[g]=grouped[g]||[]).push(f);});
+                                            const order=[...GROUP_ORDER.filter(g=>grouped[g]),...Object.keys(grouped).filter(g=>!GROUP_ORDER.includes(g))];
+                                            return order.map(g=><optgroup key={g} label={g}>{grouped[g].map(f=><option key={f.id} value={f.id}>{f.label}</option>)}</optgroup>);
+                                          })()}
                                         </select>
                                         <select value={r.operator} onChange={e=>updRule(r.id,"operator",e.target.value)} style={{...sel_s,flex:"0 0 auto",minWidth:isPresence?100:105}}>
                                           {fd.ops.map(op=><option key={op} value={op}>{op}</option>)}
@@ -10964,20 +10908,36 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       {/* close preset tab */}
                       </>}
 
-                      {divider}
-
-                      {/* ── Notify on violation ── */}
-                      {secHead("Notify on Violation","Who gets notified when a rule fails?")}
-                      <div style={{marginBottom:4}}>
-                        <div style={{display:"flex",gap:8}}>
-                          {["Owner","Steward","Both","None"].map(v=>{
-                            const sel=(cq.notify||"Both")===v;
-                            return <button key={v} onClick={()=>setNewPol(p=>({...p,consequence:{...cq,notify:v}}))}
-                              style={{flex:1,padding:"8px 4px",borderRadius:8,border:`1.5px solid ${sel?T.accent:T.border}`,background:sel?T.accentDim:T.bgElevated,color:sel?T.accent:T.textSub,fontSize:12,fontWeight:sel?700:400,cursor:"pointer",transition:"all .1s"}}>{v}</button>;
-                          })}
-                        </div>
-                      </div>
-                      {divider}
+                      {/* ── Rule Evaluation Logic — how multiple rules combine (only shown with 2+ rules) ── */}
+                      {(()=>{
+                        const totalRules = wizardRules.length + wizardSqlRules.length;
+                        if(totalRules < 2) return null;
+                        const rl = newPol.ruleLogic||"independent";
+                        const OPTS=[
+                          {id:"independent", label:"Each rule independently"},
+                          {id:"and",         label:"All rules must pass (AND)"},
+                          {id:"or",          label:"At least one rule must pass (OR)"},
+                        ];
+                        const EXPLAIN={
+                          independent:"Each rule is checked and reported on its own — an asset can pass some and fail others.",
+                          and:`All ${totalRules} rules must pass — one failure flags the asset as non-compliant.`,
+                          or:`Any 1 of ${totalRules} rules passing is enough — all must fail to raise a violation.`,
+                        };
+                        const accent = rl==="and"?T.green:rl==="or"?T.violet:T.accent;
+                        return (
+                          <div style={{marginTop:20,paddingTop:20,borderTop:`1px solid ${T.border}`}}>
+                            <label style={lbl}>Evaluation logic</label>
+                            <select value={rl} onChange={e=>setNewPol(p=>({...p,ruleLogic:e.target.value}))}
+                              style={{...inp,cursor:"pointer",appearance:"auto",maxWidth:360}}>
+                              {OPTS.map(o=><option key={o.id} value={o.id}>{o.label}</option>)}
+                            </select>
+                            <div style={{display:"flex",alignItems:"center",gap:8,marginTop:8,padding:"8px 12px",borderRadius:7,background:accent+"14",color:accent,fontSize:11.5,lineHeight:1.5}}>
+                              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/><line x1="8" y1="5.5" x2="8" y2="8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="8" cy="10.5" r=".6" fill="currentColor" stroke="none"/></svg>
+                              {EXPLAIN[rl]}
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                     </div>
                   );
@@ -10994,9 +10954,10 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   );
                   return (
                     <div style={{display:"flex",flexDirection:"column",gap:18}}>
-                      {secHead("Ownership & Classification","Assign who is responsible for this policy and link it to regulations and tags.")}
+                      {secHead("Ownership & Compliance","Assign who's accountable for this policy, choose who's notified, and link it to regulations and tags.")}
                       <CatFieldDropdown label="Owner" placeholder="Search and select owners…" options={PMV_USERS} selected={newPol.owner||[]} onChange={v=>setNewPol(p=>({...p,owner:v}))} renderOpt={userRenderOpt}/>
                       <CatFieldDropdown label="Stewards" placeholder="Search and select stewards…" options={PMV_USERS} selected={newPol.stewards||[]} onChange={v=>setNewPol(p=>({...p,stewards:v}))} renderOpt={userRenderOpt}/>
+                      <CatFieldDropdown label="Notification" placeholder="Select who to notify on violation…" options={["Owner","Steward"]} selected={Array.isArray(newPol.consequence?.notify)?newPol.consequence.notify:[]} onChange={v=>setNewPol(p=>({...p,consequence:{...(p.consequence||{}),notify:v}}))}/>
                       {/* ── Regulatory Frameworks + Article picker ── */}
                       <div style={{display:"flex",flexDirection:"column",gap:10}}>
                         <CatFieldDropdown
@@ -11084,10 +11045,9 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                         {title:"Policy", rows:[
                           ["Name",         <span style={{fontWeight:700,color:T.text}}>{newPol.name||"—"}</span>],
                           ["Category",     newPol.category||"Not set"],
-                          ["Policy Types", (newPol.policyTypes||[]).join(", ")||"Not set"],
                           ["On Violation", cq.onViolation||"Warn"],
                           ["Severity",     <span style={{padding:"2px 9px",borderRadius:5,background:SEV_BG[cq.severity]||T.bgElevated,color:SEV_COLOR[cq.severity]||T.textMuted,fontWeight:700,fontSize:11}}>{cq.severity||"Medium"}</span>],
-                          ["Notify",       cq.notify||"Both"],
+                          ["Notify",       (Array.isArray(cq.notify)?cq.notify:(cq.notify?[cq.notify]:[])).join(", ")||"No one"],
                         ]},
                         {title:`Rules (${wizardRules.length}) — logic: ${(newPol.ruleLogic||"independent").toUpperCase()}`, rows: wizardRules.length===0
                           ? [["—","No rules defined"]]
