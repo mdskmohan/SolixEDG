@@ -33584,48 +33584,6 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                         </button>
                       </div>
 
-                      {/* (Category moved to top of sidebar) */}
-                      <div ref={catDropRef} style={{padding:'16px',position:'relative',display:'none'}}>
-                        <SideLabel ch="Category" onEdit={()=>{setCatDropOpen(o=>!o);setCatDropSearch('');}}/>
-                        {selTag.category
-                          ? (()=>{const cc=getCatStyle(selTag.category);return <span style={{display:'inline-flex',alignItems:'center',fontSize:12,fontWeight:600,padding:'3px 10px',borderRadius:5,background:cc.bg,color:cc.color,border:`1px solid ${cc.color}44`,textTransform:'capitalize'}}>{selTag.category}</span>;})()
-                          : <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>Uncategorized</span>}
-                        {catDropOpen&&(
-                          <div style={{position:'absolute',top:'calc(100% - 6px)',left:16,right:16,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',zIndex:200,overflow:'hidden'}}>
-                            <div style={{padding:'7px 9px',borderBottom:`1px solid ${T.border}`}}>
-                              <input autoFocus value={catDropSearch} onChange={e=>setCatDropSearch(e.target.value)} placeholder="Search or create category…"
-                                style={{width:'100%',padding:'5px 8px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:5,color:T.text,fontSize:11.5,outline:'none',boxSizing:'border-box'}}/>
-                            </div>
-                            <div style={{maxHeight:190,overflowY:'auto',padding:'4px 0'}}>
-                              {allCategories.filter(c=>!catDropSearch||c.toLowerCase().includes(catDropSearch.toLowerCase())).map(cat=>{
-                                const cc=getCatStyle(cat); const sel=selTag.category===cat;
-                                return (
-                                  <button key={cat} onClick={()=>{updateTagDef(selTag.id,{category:cat});setCatDropOpen(false);setCatDropSearch('');onToast(`Moved to ${cat}`,'success');}}
-                                    style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'7px 12px',background:sel?T.accentDim:'transparent',border:'none',cursor:'pointer',textAlign:'left'}}
-                                    onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background='transparent';}}>
-                                    <span style={{width:9,height:9,borderRadius:'50%',background:cc.color,flexShrink:0,display:'block'}}/>
-                                    <span style={{flex:1,fontSize:12,color:T.text,textTransform:'capitalize'}}>{cat}</span>
-                                    {sel&&<span style={{fontSize:11,color:T.accent}}>✓</span>}
-                                  </button>
-                                );
-                              })}
-                              {selTag.category&&<button onClick={()=>{updateTagDef(selTag.id,{category:''});setCatDropOpen(false);setCatDropSearch('');onToast('Moved to Uncategorized','success');}}
-                                style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'7px 12px',background:'transparent',border:'none',cursor:'pointer',textAlign:'left'}}
-                                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                                <span style={{width:9,height:9,borderRadius:'50%',background:T.textMuted,flexShrink:0,display:'block'}}/>
-                                <span style={{flex:1,fontSize:12,color:T.textMuted,fontStyle:'italic'}}>Uncategorized</span>
-                              </button>}
-                              {catDropSearch.trim()&&!allCategories.some(c=>c.toLowerCase()===catDropSearch.trim().toLowerCase())&&(
-                                <button onClick={()=>{const nc=catDropSearch.trim();updateTagDef(selTag.id,{category:nc});setCatDropOpen(false);setCatDropSearch('');onToast(`Created category "${nc}" and moved tag`,'success');}}
-                                  style={{width:'100%',display:'flex',alignItems:'center',gap:6,padding:'8px 12px',background:'transparent',border:'none',borderTop:`1px solid ${T.border}`,cursor:'pointer',textAlign:'left',color:T.accent,fontSize:12,fontWeight:600}}>
-                                  + Create "{catDropSearch.trim()}"
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
                     </div>
                       );
                     })()}
