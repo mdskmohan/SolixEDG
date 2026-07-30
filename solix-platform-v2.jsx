@@ -15739,13 +15739,13 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
                   </select>
                 </div>
 
-                {/* Test Definition — Preset / Custom SQL toggle */}
+                {/* Test Source — Test Definition / Custom SQL toggle */}
                 <div>
-                  <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Test Definition <span style={{color:T.rose}}>*</span></div>
+                  <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Test Source <span style={{color:T.rose}}>*</span></div>
                   <div style={{display:"inline-flex",borderRadius:8,overflow:"hidden",border:`1px solid ${T.border}`,marginBottom:10,background:T.bgElevated}}>
                     <button onClick={()=>{setAqTcCustomSQL(false);}}
                       style={{padding:"7px 16px",background:!aqTcCustomSQL?T.accent:"transparent",border:"none",color:!aqTcCustomSQL?"#fff":T.textSub,fontSize:11.5,fontWeight:!aqTcCustomSQL?700:400,cursor:"pointer",transition:"all .12s"}}>
-                      Preset Type
+                      Test Definition
                     </button>
                     <button onClick={()=>{setAqTcCustomSQL(true);setAqTcSelType(null);}}
                       style={{padding:"7px 16px",background:aqTcCustomSQL?T.accent:"transparent",border:"none",color:aqTcCustomSQL?"#fff":T.textSub,fontSize:11.5,fontWeight:aqTcCustomSQL?700:400,cursor:"pointer",transition:"all .12s"}}>
@@ -15755,7 +15755,7 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
                   {!aqTcCustomSQL&&(
                     <select value={aqTcSelType?.id||""} onChange={e=>{const def=DQ_TEST_DEFINITIONS.find(d=>d.id===e.target.value);setAqTcSelType(def||null);setAqTcParams({});}}
                       style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${aqTcSelType?T.accent:T.border}`,borderRadius:9,color:aqTcSelType?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
-                      <option value="">Select a test definition…</option>
+                      <option value="">Choose a definition…</option>
                       {DQ_TEST_DEFINITIONS.filter(d=>(aqTcLevel==="column"?d.entityType==="COLUMN":d.entityType==="TABLE")&&(!aqTcDim||d.dim===aqTcDim||d.dim?.toLowerCase()===aqTcDim.toLowerCase())).map(def=>(
                         <option key={def.id} value={def.id}>{def.name}</option>
                       ))}
