@@ -5704,25 +5704,25 @@ const QualityView = () => {
                 </div>
               )}
 
-              {/* Test Definition — always visible with toggle */}
+              {/* Test Source — pick a saved Test Definition or write a one-off Custom SQL */}
               <div>
-                <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Test Definition <span style={{color:T.rose}}>*</span></div>
+                <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Test Source <span style={{color:T.rose}}>*</span></div>
                 {/* Toggle switch */}
                 <div style={{display:"inline-flex",borderRadius:8,overflow:"hidden",border:`1px solid ${T.border}`,marginBottom:10,background:T.bgElevated}}>
                   <button onClick={()=>{setTcCustomSQL(false);}}
                     style={{padding:"7px 16px",background:!tcCustomSQL?T.accent:"transparent",border:"none",color:!tcCustomSQL?"#fff":T.textSub,fontSize:11.5,fontWeight:!tcCustomSQL?700:400,cursor:"pointer",transition:"all .12s"}}>
-                    Preset Type
+                    Test Definition
                   </button>
                   <button onClick={()=>{setTcCustomSQL(true);setTcSelType(null);}}
                     style={{padding:"7px 16px",background:tcCustomSQL?T.accent:"transparent",border:"none",color:tcCustomSQL?"#fff":T.textSub,fontSize:11.5,fontWeight:tcCustomSQL?700:400,cursor:"pointer",transition:"all .12s"}}>
                     Custom SQL
                   </button>
                 </div>
-                {/* Preset dropdown */}
+                {/* Definition dropdown */}
                 {!tcCustomSQL&&(
                   <select value={tcSelType?.id||""} onChange={e=>{const def=definitions.find(d=>d.id===e.target.value);setTcSelType(def||null);}}
                     style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${tcSelType?T.accent:T.border}`,borderRadius:9,color:tcSelType?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
-                    <option value="">Select a test definition…</option>
+                    <option value="">Choose a definition…</option>
                     {definitions.filter(d=>(tcLevel==="column"?d.entityType==="COLUMN":d.entityType==="TABLE")&&(!tcDim||d.dim===tcDim||d.dim?.toLowerCase()===tcDim.toLowerCase())).map(def=>(
                       <option key={def.id} value={def.id}>{def.name}</option>
                     ))}
@@ -14145,13 +14145,10 @@ const CONTRACT_BY_ASSET = {
   orders:{
     name:"orders_contract", version:"2.1.0", status:"Active", owners:["maya.chen","dev.patel"],
     description:"Governance agreement for the commerce.orders fact table between the Commerce data team (producer) and Finance/BI consumers.",
-    // parties to the agreement — the producing pipeline/team and the registered downstream consumers
-    producer:{name:"etl_orders_pipeline", team:"Commerce Data Engineering"},
-    consumers:[
-      {name:"revenue_dashboard", team:"Finance BI", contact:"sarah.kim", notify:true},
-      {name:"ml_churn_model", team:"Data Science", contact:"priya.nair", notify:true},
-      {name:"exec_reporting", team:"Finance", contact:"sarah.kim", notify:false},
-    ],
+    // Registered consumers (users who depend on this data; notified on change).
+    // Owners are the producing party. Future: link each consumer to a downstream
+    // catalog asset (assetId) once cross-source lineage exists.
+    consumers:["sarah.kim","priya.nair"],
     updated:"2d ago", lastRun:"Today, 05:30 AM", schedule:{freq:"daily",time:"05:00",tz:"UTC",enabled:true},
     schema:[
       {name:"order_id",type:"BIGINT",constraint:"NOT NULL · UNIQUE",required:true},
@@ -14210,11 +14207,7 @@ const CONTRACT_BY_ASSET = {
   customers:{
     name:"customers_contract", version:"1.3.0", status:"Active", owners:["dev.patel","maya.chen"], stewards:["dev.patel"],
     description:"Contract for the commerce.customers master dimension between the CRM integration team (producer) and analytics/ML consumers.",
-    producer:{name:"crm_sync", team:"Salesforce Integration"},
-    consumers:[
-      {name:"ml_churn_model", team:"Data Science", contact:"priya.nair", notify:true},
-      {name:"revenue_dashboard", team:"Finance BI", contact:"sarah.kim", notify:true},
-    ],
+    consumers:["priya.nair","sarah.kim"],
     updated:"4d ago", lastRun:"Today, 05:30 AM", schedule:{freq:"daily",time:"05:00",tz:"UTC",enabled:true},
     schema:[
       {name:"customer_id",type:"BIGINT",constraint:"NOT NULL · UNIQUE",required:true},
@@ -14253,11 +14246,7 @@ const CONTRACT_BY_ASSET = {
   transactions:{
     name:"transactions_contract", version:"1.0.0", status:"Active", owners:["sarah.kim"], stewards:["sarah.kim"],
     description:"Contract for the finance.transactions ledger — the source of truth for monetary movements — between Finance Data Engineering and reporting consumers.",
-    producer:{name:"finance_ledger_sync", team:"Finance Data Engineering"},
-    consumers:[
-      {name:"exec_reporting", team:"Finance", contact:"sarah.kim", notify:true},
-      {name:"regulatory_reporting", team:"Compliance", contact:"james.oh", notify:true},
-    ],
+    consumers:["james.oh","lisa.ray"],
     updated:"6h ago", lastRun:"Today, 06:00 AM", schedule:{freq:"hourly",tz:"UTC",enabled:true},
     schema:[
       {name:"transaction_id",type:"BIGINT",constraint:"NOT NULL · UNIQUE",required:true},
@@ -14289,11 +14278,7 @@ const CONTRACT_BY_ASSET = {
   product_events:{
     name:"product_events_contract", version:"2.0.0", status:"Active", owners:["alex.wu"], stewards:["alex.wu"],
     description:"Streaming contract for raw product analytics events between the Kafka events pipeline (producer) and product/growth consumers.",
-    producer:{name:"kafka_events", team:"Product Analytics"},
-    consumers:[
-      {name:"product_dashboard", team:"Product", contact:"alex.wu", notify:true},
-      {name:"growth_experiments", team:"Growth", contact:"alex.wu", notify:true},
-    ],
+    consumers:["priya.nair","lisa.ray"],
     updated:"1w ago", lastRun:"3h ago", schedule:{freq:"hourly",tz:"UTC",enabled:true},
     schema:[
       {name:"event_id",type:"BIGINT",constraint:"NOT NULL · UNIQUE",required:true},
@@ -14369,7 +14354,6 @@ function computeContractEdit(prev,built,newStatus,editor){
   const structural=diffContracts(prev,built);
   const otherChanged= (prev.description||"")!==(built.description||"")
     || JSON.stringify(prev.terms||{})!==JSON.stringify(built.terms||{})
-    || (prev.producer?.name||"")!==(built.producer?.name||"")
     || JSON.stringify(prev.consumers||[])!==JSON.stringify(built.consumers||[]);
   const changed=structural.length>0||otherChanged;
   const base={...built,status:newStatus,schedule:built.schedule??prev.schedule,updated:"Just now"};
@@ -14559,7 +14543,7 @@ const AssetContractTab = ({asset,onToast})=>{
     },1500);
   };
   // How many registered consumers get notified when the contract changes
-  const notifyCount=(c)=>(c&&c.consumers?c.consumers.filter(x=>x.notify).length:0);
+  const notifyCount=(c)=>(c&&c.consumers?c.consumers.length:0);
   const notifySuffix=(c)=>{const n=notifyCount(c);return n?` · ${n} consumer${n>1?"s":""} notified`:"";};
   const saveEdit=(updated)=>{
     // Steward/admin edits → stay Active. Connection admin edits → drop to Draft for re-approval.
@@ -14759,34 +14743,21 @@ const AssetContractTab = ({asset,onToast})=>{
         </div>
       </div>
 
-      {/* ── Parties: producer → consumers (the two sides of the agreement) ── */}
-      {(contract.producer||(contract.consumers&&contract.consumers.length))&&(
-        <div style={{display:"flex",gap:32,flexWrap:"wrap",alignItems:"flex-start",marginTop:16,paddingTop:16,borderTop:`1px solid ${T.border}`}}>
-          <div style={{minWidth:150}}>
-            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.6,marginBottom:8}}>Producer</div>
-            {contract.producer
-              ? <span style={{display:"inline-flex",alignItems:"center",gap:7,padding:"4px 12px 4px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,fontSize:12,color:T.textSub}}>
-                  <span style={{width:7,height:7,borderRadius:2,background:T.blue,flexShrink:0}}/>
-                  <span style={{...mono,color:T.text,fontWeight:600}}>{contract.producer.name}</span>
-                  {contract.producer.team&&<span style={{color:T.textMuted}}>· {contract.producer.team}</span>}
-                </span>
-              : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>Not set</span>}
-          </div>
-          <div style={{minWidth:0,flex:1}}>
-            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.6,marginBottom:8}}>Consumers <span style={{color:T.textMuted,fontWeight:600}}>({(contract.consumers||[]).length})</span></div>
-            <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
-              {(contract.consumers||[]).length
-                ? contract.consumers.map((c,i)=>(
-                  <span key={i} title={c.notify?"Notified on contract change":"Not notified"} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 11px 4px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,fontSize:12,color:T.textSub}}>
-                    <span style={{...mono,color:T.text,fontWeight:600}}>{c.name}</span>
-                    {c.team&&<span style={{color:T.textMuted}}>· {c.team}</span>}
-                    {c.notify&&<svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor" style={{color:T.accent,flexShrink:0}}><path d="M8 2a3.5 3.5 0 00-3.5 3.5c0 3-1.5 4-1.5 4h10s-1.5-1-1.5-4A3.5 3.5 0 008 2zM6.5 13a1.5 1.5 0 003 0"/></svg>}
-                  </span>))
-                : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>None registered</span>}
-            </div>
-          </div>
+      {/* ── Consumers — registered users who depend on this data. Owners are the producing party. ── */}
+      <div style={{marginTop:16,paddingTop:16,borderTop:`1px solid ${T.border}`}}>
+        <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:8,flexWrap:"wrap"}}>
+          <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.6}}>Consumers <span style={{fontWeight:600}}>({(contract.consumers||[]).length})</span></span>
+          <span style={{fontSize:10.5,color:T.textMuted}}>notified when this contract changes · owners are the producing team</span>
         </div>
-      )}
+        <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+          {(contract.consumers||[]).length
+            ? contract.consumers.map((u,i)=>(
+              <span key={i} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"3px 11px 3px 4px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:99,color:T.textSub,fontSize:12}}>
+                <span style={{width:20,height:20,borderRadius:6,background:`${T.blue}15`,border:`1px solid ${T.blue}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:T.blue,flexShrink:0}}>{(u||"").split(".").map(x=>x[0]?.toUpperCase()||"").join("").slice(0,2)}</span>{u}
+              </span>))
+            : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>None registered</span>}
+        </div>
+      </div>
 
     </div></Card2>
 
@@ -15253,6 +15224,8 @@ const CONTRACT_SECTIONS=[
   {key:"sla",label:"SLA"},
   {key:"terms",label:"Terms of Use"},
 ];
+// Directory used for the consumer picker (same handles used as owners/stewards).
+const CONTRACT_USERS=["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh","arjun.sharma"];
 // ── Validation schedule — same vocabulary & cron builder as the Connectors "Sync Schedule" ──
 const CONTRACT_SCHED_FREQS=[{k:"hourly",l:"Hourly"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"custom",l:"Custom"}];
 const CONTRACT_TZ_OPTS=["UTC","US/Eastern","US/Central","US/Pacific","Europe/London","Asia/Kolkata","Asia/Singapore"];
@@ -15340,9 +15313,9 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
   const [retentionPeriod,setRetentionPeriod]=useState(existing?.sla?.retentionPeriod??365);
   const [retentionUnit,setRetentionUnit]=useState(existing?.sla?.retentionUnit||"Days");
   const [refreshColumn,setRefreshColumn]=useState(existing?.sla?.refreshColumn||"");
-  const [producer,setProducer]=useState(existing?.producer?.name||asset.service||"");
-  const [consumers,setConsumers]=useState(existing?.consumers||[]);
-  const addConsumer=(nm)=>{const v=(nm||"").trim(); if(!v||consumers.some(c=>c.name===v))return; setConsumers(cs=>[...cs,{name:v,notify:true}]);};
+  // Consumers = users who depend on this data (owners are the producing party).
+  // Normalize any legacy {name,...} shape to plain handles.
+  const [consumers,setConsumers]=useState(()=>(existing?.consumers||[]).map(c=>typeof c==="string"?c:c.name).filter(Boolean));
   const toggle=(arr,set,v)=>set(arr.includes(v)?arr.filter(x=>x!==v):[...arr,v]);
   const Lbl=({children,sub})=><div style={{marginBottom:8}}><div style={{fontSize:11.5,fontWeight:700,color:T.text}}>{children}</div>{sub&&<div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{sub}</div>}</div>;
   const Pill=({active,onClick,children})=><button onClick={onClick} style={{padding:"6px 13px",borderRadius:99,fontSize:12,fontWeight:active?600:400,cursor:"pointer",background:active?T.accent:T.bgElevated,color:active?"#fff":T.textSub,border:`1px solid ${active?T.accent:T.border}`}}>{children}</button>;
@@ -15372,7 +15345,6 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
       owners:existing?.owners||asset.owners||[asset.owner].filter(Boolean),
       stewards:existing?.stewards||asset.stewards||[asset.steward].filter(Boolean),
       description:desc.trim()||`Data contract for ${asset.name}.`,updated:"Just now",lastRun:existing?.lastRun||"Not yet run",
-      producer: producer.trim() ? {name:producer.trim(),team:existing?.producer?.team} : (existing?.producer||null),
       consumers: consumers,
       validationMode: existing?.schedule ? "scheduled" : "ondemand",
       schedule: existing?.schedule||null,
@@ -15428,28 +15400,10 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
                   <div><Lbl>Stewards</Lbl><div style={{display:"flex",gap:7,flexWrap:"wrap"}}>{stewards.length?stewards.map(personChip):<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>None</span>}</div></div>
                 </div>;
               })()}
-              {/* ── Parties: producer + consumers (the two sides of the agreement) ── */}
+              {/* ── Consumers: the users who depend on this data. Owners are the producing party. ── */}
               <div style={{paddingTop:16,borderTop:`1px solid ${T.border}`}}>
-                <Lbl sub="Who produces this data, and who depends on it. Consumers are notified when the contract changes.">Parties</Lbl>
-                <div style={{marginBottom:14}}>
-                  <div style={{fontSize:11.5,fontWeight:700,color:T.text,marginBottom:4}}>Producer</div>
-                  <input value={producer} onChange={e=>setProducer(e.target.value)} placeholder="e.g. etl_orders_pipeline" style={inp}/>
-                </div>
-                <div>
-                  <div style={{fontSize:11.5,fontWeight:700,color:T.text,marginBottom:4}}>Consumers</div>
-                  <div style={{fontSize:11,color:T.textMuted,marginBottom:8,lineHeight:1.5}}>Downstream systems or teams that rely on this data. Toggle the bell to notify on change.</div>
-                  {consumers.map((c,i)=>(
-                    <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6}}>
-                      <span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.text,flex:1}}>{c.name}</span>
-                      <button onClick={()=>setConsumers(cs=>cs.map((x,k)=>k===i?{...x,notify:!x.notify}:x))} title={c.notify?"Notified on change":"Not notified"}
-                        style={{background:"none",border:"none",cursor:"pointer",color:c.notify?T.accent:T.textMuted,display:"flex"}}>
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill={c.notify?"currentColor":"none"} stroke="currentColor" strokeWidth="1.3"><path d="M8 2a3.5 3.5 0 00-3.5 3.5c0 3-1.5 4-1.5 4h10s-1.5-1-1.5-4A3.5 3.5 0 008 2zM6.5 13a1.5 1.5 0 003 0" strokeLinejoin="round"/></svg>
-                      </button>
-                      <button onClick={()=>setConsumers(cs=>cs.filter((_,k)=>k!==i))} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex"}}>{Ic.x(10)}</button>
-                    </div>
-                  ))}
-                  <input placeholder="Add consumer + Enter" onKeyDown={e=>{if(e.key==="Enter"&&e.target.value.trim()){addConsumer(e.target.value);e.target.value="";}}} style={inp}/>
-                </div>
+                <Lbl sub="Users who depend on this data — they are notified when the contract changes. The owners above are the producing team.">Consumers</Lbl>
+                <RuleMultiSelect flat={CONTRACT_USERS} selected={consumers} onChange={setConsumers} placeholder="Select users who consume this data…" mono/>
               </div>
             </div>}
 
