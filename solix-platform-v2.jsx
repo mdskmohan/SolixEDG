@@ -10271,11 +10271,21 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                     || (newPol.scope?.assetType==="table"?["Table"]:newPol.scope?.assetType==="view"?["View"]:["Table","View"]);
                   const SRC_SVC2    = {"CDP":["cdp"],"ECS":["ecs"],"Snowflake":["snowflake"],"Databricks":["databricks"],"PostgreSQL":["postgres","postgresql"],"Oracle":["oracle"],"BigQuery":["bigquery"],"Redshift":["redshift"],"Amazon S3":["s3"],"ADLS":["adls","azureblob"]};
                   const SRC_ICON2   = {"cdp":"🗄️","ecs":"📁","snowflake":"❄️","databricks":"🧱","postgres":"🐘","postgresql":"🐘","oracle":"🔴","bigquery":"🔷","redshift":"🌀","s3":"🪣","adls":"🔷","azureblob":"🔷"};
+                  // Scope object types (Table/View/Object) → concrete catalog asset types.
+                  // "Object" covers S3 objects (type "Object") and ADLS blobs (type "Blob").
+                  const OBJTYPE_ASSET_TYPES = {"Table":["Table"],"View":["View"],"Object":["Object","Blob"]};
+                  const isObjAssetType = t => t==="Object"||t==="Blob";
+                  const allowedTypes = new Set(assetTypes2.flatMap(t=>OBJTYPE_ASSET_TYPES[t]||[t]));
+                  // Assets in scope for rule-level targeting. Tables/views need a column fixture (for the column
+                  // picker); objects have no columns, so they're pickable on source + type match alone.
                   const availTables = ASSETS.filter(a=>{
                     const svcMatch = scopeSrcs2.length===0 || scopeSrcs2.some(s=>(SRC_SVC2[s]||[]).includes((a.service||"").toLowerCase()));
-                    const typeOk   = assetTypes2.length===0 || assetTypes2.includes(a.type);
-                    return svcMatch && typeOk && !!ASSET_COLUMNS[a.name];
+                    const typeOk   = allowedTypes.size===0 || allowedTypes.has(a.type);
+                    return svcMatch && typeOk && (isObjAssetType(a.type) || !!ASSET_COLUMNS[a.name]);
                   });
+                  // Scope-level flags for labelling the picker (Table vs Object) and hiding column inputs.
+                  const scopeIsObjectOnly = assetTypes2.length>0 && assetTypes2.every(t=>t==="Object");
+                  const pickerNoun = scopeIsObjectOnly ? "Object" : "Table";
 
                   // ── Reusable searchable dropdown factory ──
                   const makeDropdown = ({placeholder, value, onChange, items, renderItem, renderSelected, emptyMsg, zIndex=400, dropWidth="100%"}) => {
@@ -10330,11 +10340,11 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                     const items = availTables.map(a=>({key:a.name, label:a.name, type:a.type, service:a.service, domain:a.domain}));
                     const svcIcon = svc => SRC_ICON2[(svc||"").toLowerCase()]||"🗄️";
                     return makeDropdown({
-                      placeholder: availTables.length>0 ? "Select table or view…" : "Select a source in Step 1 first",
+                      placeholder: availTables.length>0 ? (scopeIsObjectOnly?"Select object…":"Select table or view…") : "Select a source in the Scope step first",
                       value,
                       onChange: v=>{ updRule(ruleId,"table",v); updRule(ruleId,"column",""); },
                       items,
-                      emptyMsg: "No tables match",
+                      emptyMsg: scopeIsObjectOnly?"No objects match":"No tables match",
                       renderItem:(it,sel)=>(
                         <>
                           <span style={{fontSize:14,flexShrink:0}}>{svcIcon(it.service)}</span>
@@ -10600,9 +10610,12 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                 const needsNum  = fd.type==="number";
                                 const sev       = r.severity||"Medium";
                                 const ruleLogic = newPol.ruleLogic||"independent";
+                                // Is the asset this rule targets an unstructured object? (no columns → object-level only)
+                                const selAsset  = availTables.find(x=>x.name===r.table);
+                                const ruleIsObject = selAsset ? isObjAssetType(selAsset.type) : scopeIsObjectOnly;
                                 // Scope display
-                                const scopeLabel = fd.scope==="column"?"COLUMN":fd.scope==="both"?"TABLE · COL":"TABLE";
-                                const scopeColor = fd.scope==="column"?T.violet:fd.scope==="both"?T.amber:T.textMuted;
+                                const scopeLabel = ruleIsObject?"OBJECT":fd.scope==="column"?"COLUMN":fd.scope==="both"?"TABLE · COL":"TABLE";
+                                const scopeColor = ruleIsObject?T.green:fd.scope==="column"?T.violet:fd.scope==="both"?T.amber:T.textMuted;
                                 // Connector badge between rules
                                 const connectorLabel = ruleLogic==="and"?"AND":ruleLogic==="or"?"OR":null;
                                 // Masking / Legal Hold / Retention are approved by the target table's owner —
@@ -10615,14 +10628,15 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                                       <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0,minWidth:60}}>
                                         <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/><line x1="1" y1="5" x2="13" y2="5" stroke="currentColor" strokeWidth="1"/><line x1="5" y1="5" x2="5" y2="13" stroke="currentColor" strokeWidth="1"/></svg>
-                                        <span style={{fontSize:11,fontWeight:600,color:T.textSub}}>Table <span style={{color:T.rose}}>*</span></span>
+                                        <span style={{fontSize:11,fontWeight:600,color:T.textSub}}>{pickerNoun} <span style={{color:T.rose}}>*</span></span>
                                       </div>
                                       <TablePicker ruleId={r.id} value={r.table||""}/>
                                     </div>
                                     {/* Column row — for Masking/Legal Hold/Retention, column selection now lives inside
                                         "Enforce in place" (multi-select columns for Masking, hold criteria for Legal
-                                        Hold) since a single optional column here was redundant with that. */}
-                                    {(fd.scope==="column"||fd.scope==="both")&&!isEnfField&&(
+                                        Hold) since a single optional column here was redundant with that. Objects have
+                                        no columns, so the column row is suppressed entirely for object-scoped rules. */}
+                                    {(fd.scope==="column"||fd.scope==="both")&&!isEnfField&&!ruleIsObject&&(
                                       <div style={{display:"flex",alignItems:"center",gap:8}}>
                                         <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0,minWidth:60}}>
                                           <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/><line x1="1" y1="5" x2="13" y2="5" stroke="currentColor" strokeWidth="1"/><line x1="5" y1="1" x2="5" y2="13" stroke="currentColor" strokeWidth="1"/></svg>
@@ -10665,8 +10679,9 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                       <div style={{padding:"6px 11px 0",display:"flex",alignItems:"center",gap:6}}>
                                         <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Rule {ri+1}</span>
                                         <span style={{fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:10,background:`${scopeColor}18`,color:scopeColor,letterSpacing:"0.04em"}}>{scopeLabel}</span>
-                                        {fd.scope==="column"&&<span style={{fontSize:10,color:T.rose,marginLeft:2}}>column required</span>}
-                                        {fd.scope==="both"&&<span style={{fontSize:10,color:T.textMuted,marginLeft:2}}>column optional</span>}
+                                        {!ruleIsObject&&fd.scope==="column"&&<span style={{fontSize:10,color:T.rose,marginLeft:2}}>column required</span>}
+                                        {!ruleIsObject&&fd.scope==="both"&&<span style={{fontSize:10,color:T.textMuted,marginLeft:2}}>column optional</span>}
+                                        {ruleIsObject&&<span style={{fontSize:10,color:T.textMuted,marginLeft:2}}>object-level</span>}
                                       </div>
                                       {/* Condition row — same shape for every field, including Masking/Legal Hold/
                                           Retention: field + operator + value is the "main rule" that decides whether
