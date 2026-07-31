@@ -8496,7 +8496,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                   {r.critText&&<span style={{fontSize:11,color:T.textSub}}>{r.critText}</span>}
                                 </div>
                               )}
-                              {/* Object-store scope (S3 / ADLS) — Datewise / Patternwise at the bucket level. */}
+                              {/* Object-store scope (S3 / ADLS) — Datewise / Criteriawise at the bucket level. */}
                               {r.enforce&&(r.field==="legal_hold"||r.field==="retention_class")&&(r.objPattern||r.objDateBasis||r.objDateVal)&&(()=>{
                                 const ct=r.critType||"date"; const isHold=r.field==="legal_hold";
                                 return (
@@ -10298,8 +10298,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   // Unstructured / no-column asset types — pickable on source+type alone, drive the object rule editor.
                   const isObjAssetType = t => t==="Bucket"||t==="Container"||t==="Object"||t==="Blob";
                   // ── Object-store governance metadata — retention & legal hold on unstructured (S3 / ADLS).
-                  //    Buckets/containers have no columns, so the rule uses the same Datewise / Patternwise / Both
-                  //    control as structured retention: Datewise = a date (creation/event) basis, Patternwise = a
+                  //    Buckets/containers have no columns, so the rule uses the same Datewise / Criteriawise / Both
+                  //    control as structured retention: Datewise = a date (creation/event) basis, Criteriawise = a
                   //    prefix path. Naming and the underlying API differ per cloud; these drive the rule editor.
                   // dateBasis uses two standard values — "Creation Time" / "Last Modified Time" — shown only where
                   // the cloud actually supports them: S3 exposes one immutable write time → Creation Time only;
@@ -10392,11 +10392,11 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       ? grpKeys.flatMap(t=>[{key:`__h_${t}`, header:true, label:GRP_LABEL[t]||t}, ...byType[t]])
                       : raw;
                     return makeDropdown({
-                      placeholder: availTables.length>0 ? (isMixedScope?"Select target…":scopeIsObjectOnly?`Select ${pickerNoun.toLowerCase()}…`:"Select table or view…") : "Select a source in the Scope step first",
+                      placeholder: availTables.length>0 ? "Select target…" : "Select a source in the Scope step first",
                       value,
                       onChange: v=>{ updRule(ruleId,"table",v); updRule(ruleId,"column",""); },
                       items,
-                      emptyMsg: isMixedScope?"No assets match":scopeIsObjectOnly?`No ${pickerNoun.toLowerCase()}s match`:"No tables match",
+                      emptyMsg: "No targets match",
                       renderItem:(it,sel)=>(
                         <>
                           <span style={{fontSize:14,flexShrink:0}}>{svcIcon(it.service)}</span>
@@ -10673,11 +10673,10 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                   : ruleSvc==="s3" ? "s3"
                                   : (scopeSrcs2.includes("ADLS")&&!scopeSrcs2.includes("Amazon S3")&&!scopeSrcs2.includes("Google Cloud Storage")) ? "azure"
                                   : (scopeSrcs2.includes("Google Cloud Storage")&&!scopeSrcs2.includes("Amazon S3")&&!scopeSrcs2.includes("ADLS")) ? "gcs" : "s3";
-                                // Picker label: reflect the picked asset's real type; before a pick, use the scope
-                                // noun when uniform, else neutral "Target" (mixed structured + object scope).
-                                const rulePickerNoun = selAsset
-                                  ? (selAsset.type==="Bucket"?"Bucket":selAsset.type==="Container"?"Container":isObjAssetType(selAsset.type)?"Object":"Table")
-                                  : (isMixedScope ? "Target" : pickerNoun);
+                                // Picker label is always the neutral "Target" — consistent across every source and
+                                // asset type. The picked asset's actual type (Table / Bucket / Container) still shows
+                                // as a badge on the selected chip, so no specificity is lost.
+                                const rulePickerNoun = "Target";
                                 // Scope display
                                 const scopeLabel = ruleIsObject?"OBJECT":fd.scope==="column"?"COLUMN":fd.scope==="both"?"TABLE · COL":"TABLE";
                                 const scopeColor = ruleIsObject?T.green:fd.scope==="column"?T.violet:fd.scope==="both"?T.amber:T.textMuted;
@@ -10803,10 +10802,10 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                           // cloud's lifecycle rule, not a CDP disposition flag. Keep it for structured tables.
                                           .filter(f => !(ruleIsObject && fd.action.verb==="Set disposition" && f[0]==="Auto Purge"));
                                         // ── Object-store levers (S3 / ADLS) — Legal hold & Retention on a bucket/container
-                                        //    reuse the same Datewise / Patternwise / Both control as structured retention.
+                                        //    reuse the same Datewise / Criteriawise / Both control as structured retention.
                                         //    Datewise: retention = a date basis (creation/event) the clock counts from;
                                         //              legal hold = a date-range filter (before/after/between), no clock.
-                                        //    Patternwise: a prefix path that narrows which objects inside the bucket. ──
+                                        //    Criteriawise: a prefix path that narrows which objects inside the bucket. ──
                                         const objMeta = OBJ_CLOUD_META[ruleCloud]||OBJ_CLOUD_META.s3;
                                         const setObjF = (k,v)=>updRule(r.id,k,v);
                                         const objLbl = {fontSize:10.5,color:T.textMuted,width:120,flexShrink:0};
@@ -10817,7 +10816,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                           <div style={{marginBottom:8}}>
                                             <div style={{fontSize:10.5,color:T.textMuted,marginBottom:5}}>Criteria type — which objects in the {objMeta.store.toLowerCase()}</div>
                                             <div style={{display:"flex",gap:6,marginBottom:6}}>
-                                              {[["date","Datewise"],["pattern","Patternwise"],["both","Both"]].map(([v,l])=>{
+                                              {[["date","Datewise"],["pattern","Criteriawise"],["both","Both"]].map(([v,l])=>{
                                                 const sel=ct===v;
                                                 return <button key={v} onClick={()=>setObjF("critType",v)}
                                                   style={{flex:1,padding:"6px 4px",borderRadius:7,border:`1.5px solid ${sel?T.accent:T.border}`,background:sel?T.accentDim:T.bgElevated,color:sel?T.accent:T.textSub,fontSize:11,fontWeight:sel?700:400,cursor:"pointer",transition:"all .1s"}}>{l}</button>;
@@ -10852,10 +10851,9 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                           </div>
                                           );
                                         };
-                                        // Object retention: the disposition duration (Years/Months/…/Auto Purge) is the
-                                        // "how long from the date" half — it belongs to Datewise, so hide it on
-                                        // Patternwise-only (a pure prefix scope has no retention period of its own).
-                                        const hideObjDur = ruleIsObject && fd.action.verb==="Set disposition" && (r.critType||"date")==="pattern";
+                                        // Retention always needs a period (Years/Months/…), regardless of Datewise /
+                                        // Criteriawise / Both — only the "Retain from" date basis is Datewise-specific
+                                        // (gated inside renderObjCritType). So the duration fields show on every tab.
                                         return (
                                         <div style={{borderTop:`1px solid ${T.border}`,padding:"8px 11px",background:`${T.accent}06`}}>
                                           <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
@@ -10952,8 +10950,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                               )}
                                               {/* ── Retention: Criteria Type — CDP's real "Datewise / Criteriawise / Both"
                                                   from the Retention Policy Assignment screen. ── */}
-                                              {/* Object-store retention — bucket-level; same Datewise / Patternwise / Both
-                                                  control. Datewise = date basis the clock counts from; Patternwise = prefix.
+                                              {/* Object-store retention — bucket-level; same Datewise / Criteriawise / Both
+                                                  control. Datewise = date basis the clock counts from; Criteriawise = prefix.
                                                   Duration (Years/Months/Days) & Auto Purge come from the disposition fields below. */}
                                               {fd.action.verb==="Set disposition"&&ruleIsObject&&renderObjCritType(false)}
                                               {fd.action.verb==="Set disposition"&&!ruleIsObject&&(()=>{
@@ -10987,7 +10985,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                                   </div>
                                                 );
                                               })()}
-                                              {!hideObjDur&&fields.map((ff,fi)=>{
+                                              {fields.map((ff,fi)=>{
                                                 const cur=(r.enf&&r.enf[ff[0]]!==undefined)?r.enf[ff[0]]:(ff[2]!==undefined?ff[2]:"");
                                                 const setv=(v)=>updRule(r.id,"enf",{...(r.enf||{}),[ff[0]]:v});
                                                 return (
