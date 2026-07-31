@@ -7074,7 +7074,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
 
   // ─── computed ────────────────────────────────────────────────────────
   const POLICY_CATS = policyCategories.map(c=>c.name);
-  const catColor = cat => policyCategories.find(c=>c.name===cat)?.color || T.blue;
+  const catColor = cat => cat ? (policyCategories.find(c=>c.name===cat)?.color || T.blue) : T.textMuted;
 
   const getGovAssets = (pol) => {
     if (!pol) return [];
@@ -7794,14 +7794,19 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   <button onClick={()=>setCreateOpen(true)} style={{fontSize:11,padding:"5px 14px",borderRadius:7,background:T.accent,border:"none",color:"#fff",cursor:"pointer",fontWeight:600}}>+ New Policy</button>
                 </div>
               )}
-              {POLICY_CATS.map(cat=>{
-                const catPols = filteredPols.filter(p=>p.category===cat);
+              {[...POLICY_CATS, ""].map(cat=>{
+                // "" is the pinned-last Uncategorized bucket — policies with no category,
+                // or one that no longer exists as a category. Shown only when non-empty.
+                const isUncat = !cat;
+                const catPols = isUncat
+                  ? filteredPols.filter(p=>!p.category||!POLICY_CATS.includes(p.category))
+                  : filteredPols.filter(p=>p.category===cat);
                 if (!catPols.length) return null;
                 const expanded = expCat[cat]!==false;
                 const isCatHov = hovCatId===cat;
                 const isCatSel = !selPolicyId && false; // categories aren't "selected"
                 return (
-                  <div key={cat}>
+                  <div key={cat||"__uncat"}>
                     {/* Category row — matches Tag Management exactly */}
                     <div style={{display:"flex",alignItems:"center",paddingRight:6,background:isCatHov?T.bgHover:"transparent",transition:"background .1s"}}
                       onMouseEnter={()=>setHovCatId(cat)} onMouseLeave={()=>setHovCatId(null)}>
@@ -7828,12 +7833,12 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                               }}
                               onBlur={()=>setCatEditId(null)}
                               style={{fontSize:12,fontWeight:500,background:T.bgElevated,border:`1px solid ${T.accent}`,borderRadius:4,color:T.text,padding:"1px 6px",outline:"none",width:100}}/>
-                          : <span style={{flex:1,fontSize:12,fontWeight:500,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textTransform:"capitalize"}}>{cat}</span>
+                          : <span style={{flex:1,fontSize:12,fontWeight:500,color:isUncat?T.textMuted:T.textSub,fontStyle:isUncat?"italic":"normal",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textTransform:"capitalize"}}>{cat||"Uncategorized"}</span>
                         }
                         <span style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace",flexShrink:0,marginRight:2}}>{catPols.length}</span>
                       </button>
-                      {/* Horizontal ··· menu — matches Tags */}
-                      <div ref={dotMenuOpen===`cat:${cat}`?dotMenuRef:null} style={{position:"relative",flexShrink:0}}>
+                      {/* Horizontal ··· menu — matches Tags (real categories only) */}
+                      {!isUncat && <div ref={dotMenuOpen===`cat:${cat}`?dotMenuRef:null} style={{position:"relative",flexShrink:0}}>
                         <button onClick={e=>{e.stopPropagation();setDotMenuOpen(dotMenuOpen===`cat:${cat}`?null:`cat:${cat}`);}}
                           style={{width:20,height:20,borderRadius:4,background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:isCatHov||dotMenuOpen===`cat:${cat}`?1:0,transition:"opacity .12s",fontSize:14,fontWeight:700,lineHeight:1}}>
                           ···
@@ -7857,7 +7862,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                             </button>
                           </div>
                         )}
-                      </div>
+                      </div>}
                     </div>
 
                     {/* Policy rows — indented, shown when expanded, matches tag rows */}
@@ -8283,10 +8288,12 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                             </div>
                           </SB>
 
-                          <SB ch="Policy Type" onEdit={()=>setPolEditModal("category")}>
-                            <div style={{display:"inline-flex",alignItems:"center",padding:"4px 12px 4px 9px",borderRadius:5,background:`${catColor(p.category)}0f`,borderTop:`1px solid ${catColor(p.category)}20`,borderRight:`1px solid ${catColor(p.category)}20`,borderBottom:`1px solid ${catColor(p.category)}20`,borderLeft:`3px solid ${catColor(p.category)}`}}>
-                              <span style={{fontSize:12,color:catColor(p.category),fontWeight:600}}>{p.category}</span>
-                            </div>
+                          <SB ch="Category" onEdit={()=>setPolEditModal("category")}>
+                            {p.category
+                              ? <div style={{display:"inline-flex",alignItems:"center",padding:"4px 12px 4px 9px",borderRadius:5,background:`${catColor(p.category)}0f`,borderTop:`1px solid ${catColor(p.category)}20`,borderRight:`1px solid ${catColor(p.category)}20`,borderBottom:`1px solid ${catColor(p.category)}20`,borderLeft:`3px solid ${catColor(p.category)}`}}>
+                                  <span style={{fontSize:12,color:catColor(p.category),fontWeight:600}}>{p.category}</span>
+                                </div>
+                              : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>Uncategorized</span>}
                           </SB>
 
                           <SB ch="Frameworks" onEdit={()=>setPolEditModal("frameworks")}>
@@ -10089,8 +10096,9 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                         <select value={newPol.category||""} onChange={e=>setNewPol(p=>({...p,category:e.target.value}))}
                           style={{...inp,cursor:"pointer",appearance:"auto"}}>
                           {POLICY_CATS.map(c=><option key={c} value={c}>{c}</option>)}
+                          <option value="">Uncategorized</option>
                         </select>
-                        <div style={{fontSize:11,color:T.textMuted,marginTop:6,lineHeight:1.6}}>Groups this policy under a category in the Policy Manager.</div>
+                        <div style={{fontSize:11,color:T.textMuted,marginTop:6,lineHeight:1.6}}>Groups this policy under a category in the Policy Manager. Leave Uncategorized to file it later.</div>
                       </div>
                     </div>
                   );
@@ -11390,10 +11398,11 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
 
         if(polEditModal==="category") return (
           <CenteredModal onClose={close}>
-            {mHead("Edit Policy Type")}
+            {mHead("Edit Category")}
             <div style={{padding:"20px 24px",display:"flex",flexDirection:"column",gap:12}}>
               <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
                 {POLICY_CATS.map(c=>{const sel=polDraftCategory===c;return <button key={c} onClick={()=>setPolDraftCategory(c)} style={tBtn(sel,{borderColor:sel?catColor(c):T.border,background:sel?`${catColor(c)}18`:"transparent",color:sel?catColor(c):T.textSub})}>{c}</button>;})}
+                {(()=>{const sel=!polDraftCategory;return <button onClick={()=>setPolDraftCategory("")} style={tBtn(sel,{borderColor:sel?T.textMuted:T.border,background:sel?`${T.textMuted}18`:"transparent",color:sel?T.textSub:T.textMuted,fontStyle:"italic"})}>Uncategorized</button>;})()}
               </div>
             </div>
             {mFoot(()=>{applyPolField("category",polDraftCategory,"Updated category");close();})}
