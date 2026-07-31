@@ -23990,11 +23990,11 @@ const TagSyncTab = ({connectorId, connectorName}) => {
       {/* Name mapping table */}
       <div>
         <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:2}}>Tag name mappings</div>
-        <div style={{fontSize:11.5,color:T.textSub,marginBottom:12}}>Map source aliases to EDG tags. Reverse sync alias controls the name used when pushing back.</div>
+        <div style={{fontSize:11.5,color:T.textSub,marginBottom:12}}>Map same-named source tags to EDG tags. Mapping is by exact name — no aliasing.</div>
         <table style={{width:'100%',borderCollapse:'collapse',border:`1px solid ${T.border}`,borderRadius:8,overflow:'hidden'}}>
           <thead>
             <tr style={{background:T.bgElevated}}>
-              {['Source alias','EDG tag','Reverse sync alias','Status','Actions'].map(h=>(
+              {['Source tag','EDG tag','Reverse sync alias','Status','Actions'].map(h=>(
                 <th key={h} style={{padding:'7px 10px',textAlign:'left',fontSize:10,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.06em'}}>{h}</th>
               ))}
             </tr>
@@ -24048,7 +24048,7 @@ const TagSyncTab = ({connectorId, connectorName}) => {
             {/* Add mapping row */}
             <tr style={{borderTop:`1px solid ${T.border}`,background:T.bgElevated}}>
               <td style={{padding:'8px 10px'}}>
-                <input value={newSrcName} onChange={e=>setNewSrcName(e.target.value)} placeholder="Source alias…" style={{fontFamily:"'Geist Mono',monospace",fontSize:11,padding:'4px 7px',borderRadius:4,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,outline:'none',width:130}}/>
+                <input value={newSrcName} onChange={e=>setNewSrcName(e.target.value)} placeholder="Source tag name…" style={{fontFamily:"'Geist Mono',monospace",fontSize:11,padding:'4px 7px',borderRadius:4,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,outline:'none',width:130}}/>
               </td>
               <td style={{padding:'8px 10px'}}>
                 <select value={newEdgTag} onChange={e=>setNewEdgTag(e.target.value)} style={{padding:'4px 7px',borderRadius:4,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,fontSize:11,outline:'none'}}>
@@ -33514,7 +33514,7 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
 
                       {/* Source tags — compact summary that deep-links to the Sources & Sync tab */}
                       <div>
-                        <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:10}}>Source aliases</div>
+                        <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:10}}>Source tags</div>
                         {(()=>{
                           const rsDefault = selTag.category==='sensitivity'||selTag.category==='regulatory';
                           const tagDefault = selTag.reverseSyncEnabled ?? rsDefault;
@@ -33524,8 +33524,8 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                               onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent+'66'} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
                               <span style={{color:T.accent,display:'flex',flexShrink:0}}>{Ic.tag(15)}</span>
                               <div style={{flex:1,minWidth:0}}>
-                                <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{tagSyncRows.length===0?'No source aliases mapped':`Mapped in ${tagConnIds.length} source${tagConnIds.length!==1?'s':''}`}</div>
-                                <div style={{fontSize:11.5,color:T.textMuted}}>{tagSyncRows.length===0?'This tag is not yet named in any connected source.':`${tagSyncRows.length} source alias${tagSyncRows.length!==1?'es':''} · ${onCount} syncing back to source`}</div>
+                                <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{tagSyncRows.length===0?'No source tags mapped':`Mapped in ${tagConnIds.length} source${tagConnIds.length!==1?'s':''}`}</div>
+                                <div style={{fontSize:11.5,color:T.textMuted}}>{tagSyncRows.length===0?'This tag is not yet named in any connected source.':`${tagSyncRows.length} source tag${tagSyncRows.length!==1?'s':''} · ${onCount} syncing back to source`}</div>
                               </div>
                               <span style={{fontSize:11,fontWeight:600,color:T.accent,display:'inline-flex',alignItems:'center',gap:4,flexShrink:0}}>Sources &amp; Sync
                                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -33721,15 +33721,15 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                     return (
                     <div style={{maxWidth:680}}>
                       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
-                        <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Source aliases</div>
+                        <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Source tags</div>
                         {tagSyncRows.length>0&&<span style={{fontSize:10.5,fontWeight:700,padding:'1px 8px',borderRadius:99,background:onCount>0?'rgba(22,163,74,.12)':T.bgElevated,color:onCount>0?'#16a34a':T.textMuted}}>{onCount} of {tagSyncRows.length} syncing back</span>}
                       </div>
                       <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>How this tag is named in each source system — toggle reverse sync to mirror it back to that source. Push is gated by each connection's Tag sync settings.</div>
                       {tagSyncRows.length===0
                         ? <div style={{padding:'40px 24px',textAlign:'center',border:`1px solid ${T.border}`,borderRadius:10,background:T.bgSurface}}>
                             <div style={{fontSize:26,marginBottom:10,opacity:.25}}>⇄</div>
-                            <div style={{fontSize:13,fontWeight:500,color:T.textSub,marginBottom:4}}>No source aliases mapped</div>
-                            <div style={{fontSize:12,color:T.textMuted}}>Map source aliases to this tag from a connector's Tag sync tab.</div>
+                            <div style={{fontSize:13,fontWeight:500,color:T.textSub,marginBottom:4}}>No source tags mapped</div>
+                            <div style={{fontSize:12,color:T.textMuted}}>Map same-named source tags to this tag from a connector's Tag sync tab.</div>
                           </div>
                         : <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden',background:T.bgSurface}}>
                             {tagSyncRows.map(({connId,m},i)=>{ const canPush=canPushOf(connId); const on=isOn(connId,m); const ps=pushSummaryForTag(selTag.id,connId); return (
