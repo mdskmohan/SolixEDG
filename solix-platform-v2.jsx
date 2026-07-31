@@ -7175,6 +7175,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
       return {id:`r${i+1}-${Date.now()}`,type:"preset",field:r.field,operator:r.operator,value:r.value||"",table:r.table||"",column:r.column||"",severity:r.severity||"Medium",name,enforce:!!r.enforce,enf:r.enf||null,
         critType:r.critType||null, dateCol:r.dateCol||"", critText:r.critText||"",
         holdCriteria:r.holdCriteria||[], maskColumns:r.maskColumns||[],
+        objScope:r.objScope||null, objPattern:r.objPattern||"", objTagKey:r.objTagKey||"", objTagVal:r.objTagVal||"", objDateBasis:r.objDateBasis||"", objLockMode:r.objLockMode||"",
         releasedKeys:r.releasedKeys||[],
         pendingUnhold:!!r.pendingUnhold};
     });
@@ -7332,7 +7333,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
         name=`${fl} ${rpPreset.operator}${rpPreset.value?" "+rpPreset.value:""}${tblStr}${colStr}`;
       }
       const newRule={id:rulePanel?.mode==="edit"?rulePanel.ruleId:`r${Date.now()}`,type:"preset",field:rpPreset.field,operator:rpPreset.operator,value:rpPreset.value||"",table:rpPreset.table||"",column:rpPreset.column||"",severity:rpPreset.severity||"Medium",name,
-        ...(keepEnf?{enforce:!!orig.enforce,enf:orig.enf||null,holdCriteria:orig.holdCriteria||[],maskColumns:orig.maskColumns||[],critType:orig.critType||null,dateCol:orig.dateCol||"",critText:orig.critText||"",releasedKeys:orig.releasedKeys||[],pendingUnhold:!!orig.pendingUnhold}:{})};
+        ...(keepEnf?{enforce:!!orig.enforce,enf:orig.enf||null,holdCriteria:orig.holdCriteria||[],maskColumns:orig.maskColumns||[],critType:orig.critType||null,dateCol:orig.dateCol||"",critText:orig.critText||"",objScope:orig.objScope||null,objPattern:orig.objPattern||"",objTagKey:orig.objTagKey||"",objTagVal:orig.objTagVal||"",objDateBasis:orig.objDateBasis||"",objLockMode:orig.objLockMode||"",releasedKeys:orig.releasedKeys||[],pendingUnhold:!!orig.pendingUnhold}:{})};
       setPolicies(prev=>prev.map(p=>{
         if(p.id!==selPol.id) return p;
         const rules=rulePanel?.mode==="edit"?(p.rules||[]).map(r=>r.id===rulePanel.ruleId?newRule:r):[...(p.rules||[]),newRule];
@@ -7365,6 +7366,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
     const presetBack = (pol.rules||[]).filter(r=>r.type==="preset"||(!r.type&&!r.sql)).map(r=>({id:r.id||`wr-${Date.now()}`,field:r.field||"certification",operator:r.operator||"is",value:r.value||"",table:r.table||"",column:r.column||"",severity:r.severity||"Medium",enforce:!!r.enforce,enf:r.enf||null,
       critType:r.critType||null, dateCol:r.dateCol||"", critText:r.critText||"",
       holdCriteria:r.holdCriteria||[], maskColumns:r.maskColumns||[],
+      objScope:r.objScope||null, objPattern:r.objPattern||"", objTagKey:r.objTagKey||"", objTagVal:r.objTagVal||"", objDateBasis:r.objDateBasis||"", objLockMode:r.objLockMode||"",
       releasedKeys:r.releasedKeys||[],
       pendingUnhold:!!r.pendingUnhold}));
     const sqlBack    = (pol.rules||[]).filter(r=>r.type==="sql"||r.sql).map(r=>({id:r.id||`wsql-${Date.now()}`,label:r.label||r.name||"",table:r.table||"",sql:r.sql||"",strategy:r.strategy||"BINARY",operator:r.operator||"",threshold:r.threshold||"",partitionExpr:r.partitionExpr||"",severity:r.severity||"Medium"}));
@@ -8488,6 +8490,16 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                   <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>Criteria:</span>
                                   {r.dateCol&&<span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",padding:"2px 8px",borderRadius:5,background:`${T.violet}12`,color:T.violet,border:`1px solid ${T.violet}28`,fontWeight:500}}>by .{r.dateCol}</span>}
                                   {r.critText&&<span style={{fontSize:11,color:T.textSub}}>{r.critText}</span>}
+                                </div>
+                              )}
+                              {/* Object-store scope (S3 / ADLS) — bucket / prefix / tag instead of columns. */}
+                              {r.enforce&&(r.field==="legal_hold"||r.field==="retention_class")&&r.objScope&&(
+                                <div style={{marginTop:6,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                                  <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>Applies to:</span>
+                                  {r.objScope==="store"&&<span style={{fontSize:11,color:T.textSub,fontWeight:500}}>whole bucket / container</span>}
+                                  {(r.objScope==="pattern"||r.objScope==="object")&&r.objPattern&&<span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",padding:"2px 8px",borderRadius:5,background:`${T.green}12`,color:T.green,border:`1px solid ${T.green}28`,fontWeight:500}}>{r.objPattern}</span>}
+                                  {r.objScope==="criteria"&&(r.objTagKey||r.objTagVal)&&<span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",padding:"2px 8px",borderRadius:5,background:`${T.green}12`,color:T.green,border:`1px solid ${T.green}28`,fontWeight:500}}>tag: {r.objTagKey||"?"}={r.objTagVal||"?"}</span>}
+                                  {r.field==="retention_class"&&r.objLockMode&&<span style={{fontSize:11,color:T.textSub}}>· {String(r.objLockMode).split(" — ")[0]}</span>}
                                 </div>
                               )}
                             </div>
@@ -10275,6 +10287,22 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   // "Object" covers S3 objects (type "Object") and ADLS blobs (type "Blob").
                   const OBJTYPE_ASSET_TYPES = {"Table":["Table"],"View":["View"],"Object":["Object","Blob"]};
                   const isObjAssetType = t => t==="Object"||t==="Blob";
+                  // ── Object-store governance metadata — retention & legal hold on unstructured (S3 / ADLS).
+                  //    Objects have no columns, so hold/retention criteria use the object-store levers:
+                  //    Date (creation/event), Pattern (prefix path) and Criteria (object/index tag) — not columns.
+                  //    Naming, lock modes and the underlying API differ per cloud; these drive the rule editor.
+                  const OBJ_CLOUD_META = {
+                    s3:{ name:"Amazon S3", store:"Bucket", pathLabel:"Prefix path", pathPh:"s3://finance-lake/pii/",
+                         tagLabel:"Object Tag", dateBasis:["Object creation date (LastModified)"],
+                         lockModes:["Governance — overridable with permission","Compliance — locked, irreversible"],
+                         holdApi:"PutObjectLegalHold  (ON/OFF flag on the object version)",
+                         retApi:"PutObjectLockConfiguration / PutObjectRetention  +  lifecycle rule (prefix + tag)" },
+                    azure:{ name:"Azure ADLS Gen2", store:"Container", pathLabel:"Directory / prefix", pathPh:"finance-lake/pii/",
+                         tagLabel:"Blob Index Tag", dateBasis:["Creation time","Last-modified time"],
+                         lockModes:["Unlocked — editable","Locked — immutable, irreversible"],
+                         holdApi:"Set Legal Hold  (container tag / blob-version flag)",
+                         retApi:"ImmutabilityPolicy (container / blob version)  +  management policy (prefix + index tag)" },
+                  };
                   const allowedTypes = new Set(assetTypes2.flatMap(t=>OBJTYPE_ASSET_TYPES[t]||[t]));
                   // Assets in scope for rule-level targeting. Tables/views need a column fixture (for the column
                   // picker); objects have no columns, so they're pickable on source + type match alone.
@@ -10613,6 +10641,12 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                 // Is the asset this rule targets an unstructured object? (no columns → object-level only)
                                 const selAsset  = availTables.find(x=>x.name===r.table);
                                 const ruleIsObject = selAsset ? isObjAssetType(selAsset.type) : scopeIsObjectOnly;
+                                // Which object-store cloud this rule targets → drives naming, lock modes & API in the
+                                // enforcement editor. Derived from the picked asset's service, else from scope sources.
+                                const ruleSvc = (selAsset?.service||"").toLowerCase();
+                                const ruleCloud = (ruleSvc==="adls"||ruleSvc==="azureblob") ? "azure"
+                                  : ruleSvc==="s3" ? "s3"
+                                  : (scopeSrcs2.includes("ADLS")&&!scopeSrcs2.includes("Amazon S3")) ? "azure" : "s3";
                                 // Scope display
                                 const scopeLabel = ruleIsObject?"OBJECT":fd.scope==="column"?"COLUMN":fd.scope==="both"?"TABLE · COL":"TABLE";
                                 const scopeColor = ruleIsObject?T.green:fd.scope==="column"?T.violet:fd.scope==="both"?T.amber:T.textMuted;
@@ -10734,6 +10768,51 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                         // here — the real approver is shown as read-only chips in the table/column block below.
                                         const FS = {"Mask":[["Algorithm",["EMAIL","SSN","CREDIT_CARD","REDACT","HASHMASKING","CONSISTENT_HASH","NULLOUT"],"REDACT"]],"Legal hold":[["Legal Case Number",null,""]],"Set disposition":[["Retention — Years",null,"","number"],["Retention — Months",null,"","number"],["Retention — Weeks",null,"","number"],["Retention — Days",null,"","number"],["Notification Value (In Days)",null,"","number"],["Auto Purge",["On","Off"],"On"]],"Restrict access":[["Mechanism",["RBAC entity","Row-level security"],"RBAC entity"],["Entity name",null,"edg_restricted"],["User privilege",["Read","Write"],"Read"],["Approver",["Security","M. Chen"],"Security"]],"Restrict (row-level)":[["Filter column",null,""],["Operator",["=","in","!="],"="],["Value",null,""],["Approver",["Security","M. Chen"],"Security"]],"Encrypt":[["Algorithm",["CHAR_ENCRYPT","NUMERIC_ENCRYPT","SENSITIVE_DATA_ENCRYPT"],"SENSITIVE_DATA_ENCRYPT"],["Key holder / role",null,"kms_key"],["Approver",["Security"],"Security"]],"Erase / redact":[["Action",["Purge","Obfuscate","Redact"],"Redact"],["Regulation",["GDPR","CCPA","HIPAA"],"GDPR"],["Identity scope",null,"data-subject id"],["Approver",["Records / Legal","Privacy Office"],"Records / Legal"]],"Classify":[["Label to write",["PII","PHI","PCI","Confidential"],"PII"],["Apply to",["Column","Table"],"Column"]],"Set sensitivity":[["Sensitivity",["Low","Medium","High","Critical"],"High"],["Apply to",["Column","Table"],"Column"]]};
                                         const fields = FS[fd.action.verb] || [["Approver",["Records / Legal"],"Records / Legal"]];
+                                        // ── Object-store levers (S3 / ADLS) — reused by Legal hold & Retention when the
+                                        //    rule targets an object. Whole-bucket / prefix pattern / tag criteria + basis. ──
+                                        const objMeta = OBJ_CLOUD_META[ruleCloud]||OBJ_CLOUD_META.s3;
+                                        const objScopeVal = r.objScope||"store";
+                                        const setObjF = (k,v)=>updRule(r.id,k,v);
+                                        const renderObjScope = (withSingle)=>(
+                                          <div style={{marginBottom:8}}>
+                                            <div style={{fontSize:10.5,color:T.textMuted,marginBottom:5}}>Applies to — which {objMeta.store.toLowerCase()} objects</div>
+                                            <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
+                                              {[["store","Whole "+objMeta.store.toLowerCase()],["pattern","Pattern"],["criteria","Criteria"],...(withSingle?[["object","Single object"]]:[])].map(([v,l])=>{
+                                                const sel=objScopeVal===v;
+                                                return <button key={v} onClick={()=>setObjF("objScope",v)}
+                                                  style={{flex:"1 1 auto",padding:"6px 8px",borderRadius:7,border:`1.5px solid ${sel?T.accent:T.border}`,background:sel?T.accentDim:T.bgElevated,color:sel?T.accent:T.textSub,fontSize:10.5,fontWeight:sel?700:400,cursor:"pointer",transition:"all .1s"}}>{l}</button>;
+                                              })}
+                                            </div>
+                                            {objScopeVal==="pattern"&&(
+                                              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                                                <span style={{fontSize:10.5,color:T.textMuted,width:120,flexShrink:0}}>{objMeta.pathLabel} <span style={{color:T.textMuted}}>(where)</span></span>
+                                                <input type="text" value={r.objPattern||""} onChange={e=>setObjF("objPattern",e.target.value)} placeholder={objMeta.pathPh} style={{...sel_s,flex:1,cursor:"text",fontFamily:"'Geist Mono',monospace"}}/>
+                                              </div>
+                                            )}
+                                            {objScopeVal==="criteria"&&(
+                                              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"wrap"}}>
+                                                <span style={{fontSize:10.5,color:T.textMuted,width:120,flexShrink:0}}>{objMeta.tagLabel} <span style={{color:T.textMuted}}>(what)</span></span>
+                                                <input type="text" value={r.objTagKey||""} onChange={e=>setObjF("objTagKey",e.target.value)} placeholder="key" style={{...sel_s,flex:"1 1 80px",cursor:"text"}}/>
+                                                <input type="text" value={r.objTagVal||""} onChange={e=>setObjF("objTagVal",e.target.value)} placeholder="value" style={{...sel_s,flex:"1 1 80px",cursor:"text"}}/>
+                                              </div>
+                                            )}
+                                            {objScopeVal==="object"&&(
+                                              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                                                <span style={{fontSize:10.5,color:T.textMuted,width:120,flexShrink:0}}>Object path</span>
+                                                <input type="text" value={r.objPattern||""} onChange={e=>setObjF("objPattern",e.target.value)} placeholder={objMeta.pathPh+"invoice_10231.pdf"} style={{...sel_s,flex:1,cursor:"text",fontFamily:"'Geist Mono',monospace"}}/>
+                                              </div>
+                                            )}
+                                            {objScopeVal==="store"&&(
+                                              <div style={{fontSize:10.5,color:T.textSub,marginBottom:2,lineHeight:1.5}}>Applies to the entire {objMeta.store.toLowerCase()} as the native default — new objects inherit it automatically.</div>
+                                            )}
+                                          </div>
+                                        );
+                                        const objApiHint = (which)=>(
+                                          <div style={{display:"flex",alignItems:"flex-start",gap:7,marginTop:2,marginBottom:2,padding:"6px 9px",borderRadius:6,background:`${T.bgBase}88`,border:`1px solid ${T.border}`}}>
+                                            <span style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".04em",flexShrink:0,marginTop:1}}>Enforced via</span>
+                                            <span style={{fontSize:10,fontFamily:"'Geist Mono',monospace",color:T.textSub,lineHeight:1.5}}>{objMeta.name} · {which==="hold"?objMeta.holdApi:objMeta.retApi}</span>
+                                          </div>
+                                        );
                                         return (
                                         <div style={{borderTop:`1px solid ${T.border}`,padding:"8px 11px",background:`${T.accent}06`}}>
                                           <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
@@ -10775,7 +10854,9 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                                   Operator + Data Type + Value). Multiple sub-rules since a hold can key
                                                   off several columns at once (e.g. custodian AND case_status). No
                                                   Search-based / Progressive Hold — rule-based only. ── */}
-                                              {fd.action.verb==="Legal hold"&&(()=>{
+                                              {/* Object-store legal hold — no columns; freeze by whole bucket / prefix / tag. */}
+                                              {fd.action.verb==="Legal hold"&&ruleIsObject&&(<>{renderObjScope(true)}{objApiHint("hold")}</>)}
+                                              {fd.action.verb==="Legal hold"&&!ruleIsObject&&(()=>{
                                                 const cols = r.table ? (ASSET_COLUMNS[r.table]||[]) : [];
                                                 const crit = r.holdCriteria&&r.holdCriteria.length ? r.holdCriteria : [{id:"hc0",column:"",operator:"=",dataType:"Text",value:""}];
                                                 const setCrit = (list)=>updRule(r.id,"holdCriteria",list);
@@ -10828,7 +10909,30 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                               )}
                                               {/* ── Retention: Criteria Type — CDP's real "Datewise / Criteriawise / Both"
                                                   from the Retention Policy Assignment screen. ── */}
-                                              {fd.action.verb==="Set disposition"&&(()=>{
+                                              {/* Object-store retention — no columns; scope by bucket / prefix / tag, then
+                                                  a retain-from basis and the cloud's WORM lock mode. Duration (Years/Months/
+                                                  Days) & Auto Purge come from the generic disposition fields below. */}
+                                              {fd.action.verb==="Set disposition"&&ruleIsObject&&(()=>{
+                                                return (
+                                                  <div style={{marginBottom:8}}>
+                                                    {renderObjScope(false)}
+                                                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                                                      <span style={{fontSize:10.5,color:T.textMuted,width:120,flexShrink:0}}>Retain from <span style={{color:T.textMuted}}>(when)</span></span>
+                                                      <select value={r.objDateBasis||objMeta.dateBasis[0]} onChange={e=>setObjF("objDateBasis",e.target.value)} style={{...sel_s,flex:1}}>
+                                                        {objMeta.dateBasis.map(d=><option key={d} value={d}>{d}</option>)}
+                                                      </select>
+                                                    </div>
+                                                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                                                      <span style={{fontSize:10.5,color:T.textMuted,width:120,flexShrink:0}}>Retention lock mode</span>
+                                                      <select value={r.objLockMode||objMeta.lockModes[0]} onChange={e=>setObjF("objLockMode",e.target.value)} style={{...sel_s,flex:1}}>
+                                                        {objMeta.lockModes.map(m=><option key={m} value={m}>{m}</option>)}
+                                                      </select>
+                                                    </div>
+                                                    {objApiHint("ret")}
+                                                  </div>
+                                                );
+                                              })()}
+                                              {fd.action.verb==="Set disposition"&&!ruleIsObject&&(()=>{
                                                 const critType = r.critType||"date";
                                                 const cols = r.table ? (ASSET_COLUMNS[r.table]||[]) : [];
                                                 return (
