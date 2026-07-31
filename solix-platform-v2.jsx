@@ -183,6 +183,10 @@ const HIERARCHY_ASSETS = [
   {id:162,name:"revenue_report_apr.csv",type:"Blob",  domain:"Finance",  owner:"sarah.kim",  owners:["sarah.kim"],            steward:"sarah.kim",  stewards:["sarah.kim"],              cert:"Approved",  quality:0, usage:"Med", updated:"2h ago",  service:"azureblob",  connectionLabel:"Azure Blob Storage",db:"analytics-exports / revenue_report_apr.csv",  tier:2,rows:"—",    size:"42 MB",  tags:["finance","Board reporting"],description:"April 2026 revenue report. CSV export from Tableau.",                             slaFreshness:"24h", path:["analytics-exports"],       parentId:160,assetLevel:"blob",   fileFormat:"CSV",  lastModified:"2026-04-24T06:00:00Z",accessTier:"Hot"},
   {id:163,name:"product_events_raw.json",type:"Blob", domain:"Product",  owner:"james.oh",   owners:["james.oh"],             steward:"alex.wu",    stewards:["alex.wu"],                cert:"Draft",     quality:0, usage:"High",updated:"30m ago", service:"azureblob",  connectionLabel:"Azure Blob Storage",db:"raw-ingestion / product_events_raw.json",     tier:2,rows:"—",    size:"1.8 GB", tags:["events"],   description:"Streaming product events landing blob. JSON lines format.",                       slaFreshness:"15m", path:["raw-ingestion"],           parentId:161,assetLevel:"blob",   fileFormat:"JSON", lastModified:"2026-04-24T09:45:00Z",accessTier:"Hot"},
   {id:164,name:"finance_summary_q1.parquet",type:"Blob",domain:"Finance",owner:"sarah.kim",  owners:["sarah.kim"],            steward:"sarah.kim",  stewards:["sarah.kim"],              cert:"Approved",  quality:0, usage:"Low", updated:"3w ago",  service:"azureblob",  connectionLabel:"Azure Blob Storage",db:"analytics-exports / finance_summary_q1.parquet",tier:1,rows:"—",  size:"180 MB", tags:["finance"],  description:"Q1 2026 finance summary in Parquet. Input to executive dashboards.",              slaFreshness:"7d",  path:["analytics-exports"],       parentId:160,assetLevel:"blob",   fileFormat:"Parquet",lastModified:"2026-04-01T00:00:00Z",accessTier:"Cool"},
+  // ── Google Cloud Storage: Bucket → Object ──
+  {id:170,name:"gcs-finance-lake",   type:"Bucket", domain:"Finance",  owner:"sarah.kim",  owners:["sarah.kim"],             steward:"sarah.kim",  stewards:["sarah.kim"],              cert:"Approved",  quality:0, usage:"Med", updated:"1h ago",  service:"gcs",        connectionLabel:"Google Cloud Storage",db:"gcs-finance-lake",                        tier:2,rows:"—",    size:"96 GB",  tags:[],          description:"GCS finance data lake bucket. Region: us-central1. Object versioning on.",          slaFreshness:"4h",  path:[],                          parentId:null,assetLevel:"bucket",  childCount:2},
+  {id:171,name:"gcs-raw-events",     type:"Bucket", domain:"Product",  owner:"james.oh",   owners:["james.oh"],              steward:"alex.wu",    stewards:["alex.wu"],                cert:"Approved",  quality:0, usage:"High",updated:"20m ago", service:"gcs",        connectionLabel:"Google Cloud Storage",db:"gcs-raw-events",                          tier:1,rows:"—",    size:"310 GB", tags:[],          description:"GCS raw event landing bucket for GCP-native pipelines.",                            slaFreshness:"1h",  path:[],                          parentId:null,assetLevel:"bucket",  childCount:30},
+  {id:172,name:"invoices_2026.parquet",type:"Object",domain:"Finance", owner:"sarah.kim",  owners:["sarah.kim"],             steward:"sarah.kim",  stewards:["sarah.kim"],              cert:"Approved",  quality:0, usage:"Med", updated:"1h ago",  service:"gcs",        connectionLabel:"Google Cloud Storage",db:"gcs-finance-lake / invoices_2026.parquet",tier:2,rows:"—",  size:"3.1 GB", tags:["finance","PII"],description:"2026 invoice archive. Parquet, partitioned by month.",                          slaFreshness:"4h",  path:["gcs-finance-lake"],        parentId:170,assetLevel:"object",  fileFormat:"Parquet",lastModified:"2026-04-20T10:00:00Z",storageClass:"STANDARD"},
 ];
 // Merge into main ASSETS array so all existing filters work
 ASSETS.push(...HIERARCHY_ASSETS);
@@ -10098,13 +10102,13 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   const scopeSrcs  = newPol.scope?.sources||[];
                   const SOLIX_SOURCES    = ["CDP","ECS"];
                   const EXTERNAL_SOURCES = ["Snowflake","Databricks","PostgreSQL","Oracle","BigQuery","Redshift"];
-                  const UNSTRUCT_SOURCES = ["Amazon S3","ADLS"];
+                  const UNSTRUCT_SOURCES = ["Amazon S3","ADLS","Google Cloud Storage"];
                   const ALL_SOURCES      = [...SOLIX_SOURCES, ...EXTERNAL_SOURCES, ...UNSTRUCT_SOURCES];
-                  const SRC_ICON = {"CDP":"🗄️","ECS":"📁","Snowflake":"❄️","Databricks":"🧱","PostgreSQL":"🐘","Oracle":"🔴","BigQuery":"🔷","Redshift":"🌀","Amazon S3":"🪣","ADLS":"🟦"};
+                  const SRC_ICON = {"CDP":"🗄️","ECS":"📁","Snowflake":"❄️","Databricks":"🧱","PostgreSQL":"🐘","Oracle":"🔴","BigQuery":"🔷","Redshift":"🌀","Amazon S3":"🪣","ADLS":"🟦","Google Cloud Storage":"🟨"};
                   // Object types EDG can enforce policies on, per source. Structured sources → Table/View.
                   // Unstructured governs at the bucket/container level (retention & legal hold attach there):
-                  // S3 → Bucket, ADLS → Container.
-                  const SOURCE_OBJECT_TYPES = {"CDP":["Table","View"],"ECS":["Table","View"],"Snowflake":["Table","View"],"Databricks":["Table","View"],"PostgreSQL":["Table","View"],"Oracle":["Table","View"],"BigQuery":["Table","View"],"Redshift":["Table","View"],"Amazon S3":["Bucket"],"ADLS":["Container"]};
+                  // S3 → Bucket, ADLS → Container, GCS → Bucket.
+                  const SOURCE_OBJECT_TYPES = {"CDP":["Table","View"],"ECS":["Table","View"],"Snowflake":["Table","View"],"Databricks":["Table","View"],"PostgreSQL":["Table","View"],"Oracle":["Table","View"],"BigQuery":["Table","View"],"Redshift":["Table","View"],"Amazon S3":["Bucket"],"ADLS":["Container"],"Google Cloud Storage":["Bucket"]};
                   const UNSTRUCT_SET = new Set(UNSTRUCT_SOURCES);
                   const OBJ_ORDER = ["Table","View","Bucket","Container","Object"];
                   const OBJ_ICON  = {"Table":"📋","View":"👁️","Bucket":"🪣","Container":"🗂️","Object":"📦"};
@@ -10286,8 +10290,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   const scopeSrcs2  = newPol.scope?.sources||[];
                   const assetTypes2 = newPol.scope?.assetTypes
                     || (newPol.scope?.assetType==="table"?["Table"]:newPol.scope?.assetType==="view"?["View"]:["Table","View"]);
-                  const SRC_SVC2    = {"CDP":["cdp"],"ECS":["ecs"],"Snowflake":["snowflake"],"Databricks":["databricks"],"PostgreSQL":["postgres","postgresql"],"Oracle":["oracle"],"BigQuery":["bigquery"],"Redshift":["redshift"],"Amazon S3":["s3"],"ADLS":["adls","azureblob"]};
-                  const SRC_ICON2   = {"cdp":"🗄️","ecs":"📁","snowflake":"❄️","databricks":"🧱","postgres":"🐘","postgresql":"🐘","oracle":"🔴","bigquery":"🔷","redshift":"🌀","s3":"🪣","adls":"🔷","azureblob":"🔷"};
+                  const SRC_SVC2    = {"CDP":["cdp"],"ECS":["ecs"],"Snowflake":["snowflake"],"Databricks":["databricks"],"PostgreSQL":["postgres","postgresql"],"Oracle":["oracle"],"BigQuery":["bigquery"],"Redshift":["redshift"],"Amazon S3":["s3"],"ADLS":["adls","azureblob"],"Google Cloud Storage":["gcs","gcp"]};
+                  const SRC_ICON2   = {"cdp":"🗄️","ecs":"📁","snowflake":"❄️","databricks":"🧱","postgres":"🐘","postgresql":"🐘","oracle":"🔴","bigquery":"🔷","redshift":"🌀","s3":"🪣","adls":"🟦","azureblob":"🟦","gcs":"🟨","gcp":"🟨"};
                   // Scope object types → concrete catalog asset types. Unstructured governs at bucket level:
                   // S3 "Bucket" → Bucket assets, ADLS "Container" → Container assets. ("Object" kept for back-compat.)
                   const OBJTYPE_ASSET_TYPES = {"Table":["Table"],"View":["View"],"Bucket":["Bucket"],"Container":["Container"],"Object":["Object","Blob"]};
@@ -10297,15 +10301,15 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   //    Buckets/containers have no columns, so the rule uses the same Datewise / Patternwise / Both
                   //    control as structured retention: Datewise = a date (creation/event) basis, Patternwise = a
                   //    prefix path. Naming and the underlying API differ per cloud; these drive the rule editor.
+                  // dateBasis differs per cloud — each surfaces only the timestamps its objects actually carry:
+                  // S3 → LastModified only; Azure → Creation + Last-modified; GCS → Created + customTime (event date).
                   const OBJ_CLOUD_META = {
                     s3:{ name:"Amazon S3", store:"Bucket", pathLabel:"Prefix path", pathPh:"s3://finance-lake/pii/",
-                         dateBasis:["Object creation date (LastModified)"],
-                         holdApi:"PutObjectLegalHold  (flag on object versions matching the scope)",
-                         retApi:"PutObjectRetention  +  lifecycle rule (prefix / age)" },
+                         dateBasis:["Object creation date (LastModified)"] },
                     azure:{ name:"Azure ADLS Gen2", store:"Container", pathLabel:"Directory / prefix", pathPh:"finance-lake/pii/",
-                         dateBasis:["Creation time","Last-modified time"],
-                         holdApi:"Set Legal Hold  (container / blob-version)",
-                         retApi:"ImmutabilityPolicy  +  management policy (prefix / age)" },
+                         dateBasis:["Creation time","Last-modified time"] },
+                    gcs:{ name:"Google Cloud Storage", store:"Bucket", pathLabel:"Prefix path", pathPh:"gs://finance-lake/pii/",
+                         dateBasis:["Object creation date (timeCreated)","Custom time (event date)"] },
                   };
                   const allowedTypes = new Set(assetTypes2.flatMap(t=>OBJTYPE_ASSET_TYPES[t]||[t]));
                   // Assets in scope for rule-level targeting. Tables/views need a column fixture (for the column
@@ -10319,6 +10323,10 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   const OBJ_SCOPE_TYPES = new Set(["Bucket","Container","Object","Blob"]);
                   const scopeIsObjectOnly = assetTypes2.length>0 && assetTypes2.every(t=>OBJ_SCOPE_TYPES.has(t));
                   const pickerNoun = assetTypes2.includes("Container") ? "Container" : scopeIsObjectOnly ? "Bucket" : "Table";
+                  // Mixed scope = structured (Table/View) AND object (Bucket/Container) types together. A single fixed
+                  // noun can't describe the picker then, so the label falls back to neutral "Target" until an asset is
+                  // picked, after which it resolves to that asset's real type (see rulePickerNoun below).
+                  const isMixedScope = assetTypes2.some(t=>OBJ_SCOPE_TYPES.has(t)) && assetTypes2.some(t=>!OBJ_SCOPE_TYPES.has(t));
 
                   // ── Reusable searchable dropdown factory ──
                   const makeDropdown = ({placeholder, value, onChange, items, renderItem, renderSelected, emptyMsg, zIndex=400, dropWidth="100%"}) => {
@@ -10331,7 +10339,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       const fn=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};
                       document.addEventListener("mousedown",fn); return()=>document.removeEventListener("mousedown",fn);
                     },[open]);
-                    const filtered = q.trim() ? items.filter(it=>it.label.toLowerCase().includes(q.toLowerCase())) : items;
+                    const filtered = q.trim() ? items.filter(it=>!it.header && it.label.toLowerCase().includes(q.toLowerCase())) : items;
                     return (
                       <div ref={ref} style={{position:"relative",flex:1}}>
                         <button type="button" onClick={()=>setOpen(o=>!o)}
@@ -10351,6 +10359,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                               {filtered.length===0
                                 ? <div style={{padding:"18px 12px",fontSize:11.5,color:T.textMuted,textAlign:"center"}}>{emptyMsg||"No results"}</div>
                                 : filtered.map(it=>{
+                                    if(it.header) return <div key={it.key} style={{padding:"7px 12px 3px",fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".05em",background:T.bgBase,position:"sticky",top:0}}>{it.label}</div>;
                                     const sel=value===it.key;
                                     return (
                                       <div key={it.key} onClick={()=>{onChange(it.key);setOpen(false);setQ("");}}
@@ -10370,14 +10379,23 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
 
                   // ── TablePicker: searchable dropdown of available tables/views ──
                   const TablePicker = ({ruleId, value}) => {
-                    const items = availTables.map(a=>({key:a.name, label:a.name, type:a.type, service:a.service, domain:a.domain}));
                     const svcIcon = svc => SRC_ICON2[(svc||"").toLowerCase()]||"🗄️";
+                    // Group items by asset type with section headers when the scope mixes kinds (e.g. Snowflake tables
+                    // + S3 buckets) — a flat list of heterogeneous assets is hard to read otherwise.
+                    const raw = availTables.map(a=>({key:a.name, label:a.name, type:a.type, service:a.service, domain:a.domain}));
+                    const GRP_LABEL = {Table:"Tables",View:"Views",Bucket:"Buckets",Container:"Containers",Object:"Objects",Blob:"Blobs"};
+                    const GRP_ORDER = ["Table","View","Bucket","Container","Object","Blob"];
+                    const byType = {}; raw.forEach(it=>{(byType[it.type]=byType[it.type]||[]).push(it);});
+                    const grpKeys = GRP_ORDER.filter(t=>byType[t]);
+                    const items = grpKeys.length>1
+                      ? grpKeys.flatMap(t=>[{key:`__h_${t}`, header:true, label:GRP_LABEL[t]||t}, ...byType[t]])
+                      : raw;
                     return makeDropdown({
-                      placeholder: availTables.length>0 ? (scopeIsObjectOnly?`Select ${pickerNoun.toLowerCase()}…`:"Select table or view…") : "Select a source in the Scope step first",
+                      placeholder: availTables.length>0 ? (isMixedScope?"Select target…":scopeIsObjectOnly?`Select ${pickerNoun.toLowerCase()}…`:"Select table or view…") : "Select a source in the Scope step first",
                       value,
                       onChange: v=>{ updRule(ruleId,"table",v); updRule(ruleId,"column",""); },
                       items,
-                      emptyMsg: scopeIsObjectOnly?`No ${pickerNoun.toLowerCase()}s match`:"No tables match",
+                      emptyMsg: isMixedScope?"No assets match":scopeIsObjectOnly?`No ${pickerNoun.toLowerCase()}s match`:"No tables match",
                       renderItem:(it,sel)=>(
                         <>
                           <span style={{fontSize:14,flexShrink:0}}>{svcIcon(it.service)}</span>
@@ -10646,12 +10664,19 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                 // Is the asset this rule targets an unstructured object? (no columns → object-level only)
                                 const selAsset  = availTables.find(x=>x.name===r.table);
                                 const ruleIsObject = selAsset ? isObjAssetType(selAsset.type) : scopeIsObjectOnly;
-                                // Which object-store cloud this rule targets → drives naming, lock modes & API in the
-                                // enforcement editor. Derived from the picked asset's service, else from scope sources.
+                                // Which object-store cloud this rule targets → drives naming + the Datewise basis
+                                // options in the enforcement editor. From the picked asset's service, else scope sources.
                                 const ruleSvc = (selAsset?.service||"").toLowerCase();
                                 const ruleCloud = (ruleSvc==="adls"||ruleSvc==="azureblob") ? "azure"
+                                  : (ruleSvc==="gcs"||ruleSvc==="gcp") ? "gcs"
                                   : ruleSvc==="s3" ? "s3"
-                                  : (scopeSrcs2.includes("ADLS")&&!scopeSrcs2.includes("Amazon S3")) ? "azure" : "s3";
+                                  : (scopeSrcs2.includes("ADLS")&&!scopeSrcs2.includes("Amazon S3")&&!scopeSrcs2.includes("Google Cloud Storage")) ? "azure"
+                                  : (scopeSrcs2.includes("Google Cloud Storage")&&!scopeSrcs2.includes("Amazon S3")&&!scopeSrcs2.includes("ADLS")) ? "gcs" : "s3";
+                                // Picker label: reflect the picked asset's real type; before a pick, use the scope
+                                // noun when uniform, else neutral "Target" (mixed structured + object scope).
+                                const rulePickerNoun = selAsset
+                                  ? (selAsset.type==="Bucket"?"Bucket":selAsset.type==="Container"?"Container":isObjAssetType(selAsset.type)?"Object":"Table")
+                                  : (isMixedScope ? "Target" : pickerNoun);
                                 // Scope display
                                 const scopeLabel = ruleIsObject?"OBJECT":fd.scope==="column"?"COLUMN":fd.scope==="both"?"TABLE · COL":"TABLE";
                                 const scopeColor = ruleIsObject?T.green:fd.scope==="column"?T.violet:fd.scope==="both"?T.amber:T.textMuted;
@@ -10667,7 +10692,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                                       <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0,minWidth:60}}>
                                         <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/><line x1="1" y1="5" x2="13" y2="5" stroke="currentColor" strokeWidth="1"/><line x1="5" y1="5" x2="5" y2="13" stroke="currentColor" strokeWidth="1"/></svg>
-                                        <span style={{fontSize:11,fontWeight:600,color:T.textSub}}>{pickerNoun} <span style={{color:T.rose}}>*</span></span>
+                                        <span style={{fontSize:11,fontWeight:600,color:T.textSub}}>{rulePickerNoun} <span style={{color:T.rose}}>*</span></span>
                                       </div>
                                       <TablePicker ruleId={r.id} value={r.table||""}/>
                                     </div>
@@ -10796,7 +10821,11 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                             </div>
                                             {(ct==="date"||ct==="both")&&(isHold
                                               ? <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,flexWrap:"wrap"}}>
-                                                  <span style={objLbl}>Hold objects</span>
+                                                  <span style={objLbl}>Hold objects whose</span>
+                                                  <select value={r.objDateBasis||objMeta.dateBasis[0]} onChange={e=>setObjF("objDateBasis",e.target.value)} style={{...sel_s,flex:"1 1 150px",minWidth:120}}>
+                                                    {objMeta.dateBasis.map(d=><option key={d} value={d}>{d}</option>)}
+                                                  </select>
+                                                  <span style={{fontSize:10.5,color:T.textMuted}}>is</span>
                                                   <select value={dateOp} onChange={e=>setObjF("objDateOp",e.target.value)} style={{...sel_s,flex:"0 0 auto",minWidth:90}}>
                                                     {["before","after","between"].map(o=><option key={o} value={o}>{o}</option>)}
                                                   </select>
@@ -10819,12 +10848,10 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                           </div>
                                           );
                                         };
-                                        const objApiHint = (which)=>(
-                                          <div style={{display:"flex",alignItems:"flex-start",gap:7,marginTop:2,marginBottom:2,padding:"6px 9px",borderRadius:6,background:`${T.bgBase}88`,border:`1px solid ${T.border}`}}>
-                                            <span style={{fontSize:9,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".04em",flexShrink:0,marginTop:1}}>Enforced via</span>
-                                            <span style={{fontSize:10,fontFamily:"'Geist Mono',monospace",color:T.textSub,lineHeight:1.5}}>{objMeta.name} · {which==="hold"?objMeta.holdApi:objMeta.retApi}</span>
-                                          </div>
-                                        );
+                                        // Object retention: the disposition duration (Years/Months/…/Auto Purge) is the
+                                        // "how long from the date" half — it belongs to Datewise, so hide it on
+                                        // Patternwise-only (a pure prefix scope has no retention period of its own).
+                                        const hideObjDur = ruleIsObject && fd.action.verb==="Set disposition" && (r.critType||"date")==="pattern";
                                         return (
                                         <div style={{borderTop:`1px solid ${T.border}`,padding:"8px 11px",background:`${T.accent}06`}}>
                                           <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
@@ -10867,7 +10894,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                                   off several columns at once (e.g. custodian AND case_status). No
                                                   Search-based / Progressive Hold — rule-based only. ── */}
                                               {/* Object-store legal hold — bucket-level; freeze objects by date range / prefix. */}
-                                              {fd.action.verb==="Legal hold"&&ruleIsObject&&(<>{renderObjCritType(true)}{objApiHint("hold")}</>)}
+                                              {fd.action.verb==="Legal hold"&&ruleIsObject&&renderObjCritType(true)}
                                               {fd.action.verb==="Legal hold"&&!ruleIsObject&&(()=>{
                                                 const cols = r.table ? (ASSET_COLUMNS[r.table]||[]) : [];
                                                 const crit = r.holdCriteria&&r.holdCriteria.length ? r.holdCriteria : [{id:"hc0",column:"",operator:"=",dataType:"Text",value:""}];
@@ -10924,7 +10951,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                               {/* Object-store retention — bucket-level; same Datewise / Patternwise / Both
                                                   control. Datewise = date basis the clock counts from; Patternwise = prefix.
                                                   Duration (Years/Months/Days) & Auto Purge come from the disposition fields below. */}
-                                              {fd.action.verb==="Set disposition"&&ruleIsObject&&(<>{renderObjCritType(false)}{objApiHint("ret")}</>)}
+                                              {fd.action.verb==="Set disposition"&&ruleIsObject&&renderObjCritType(false)}
                                               {fd.action.verb==="Set disposition"&&!ruleIsObject&&(()=>{
                                                 const critType = r.critType||"date";
                                                 const cols = r.table ? (ASSET_COLUMNS[r.table]||[]) : [];
@@ -10956,7 +10983,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                                   </div>
                                                 );
                                               })()}
-                                              {fields.map((ff,fi)=>{
+                                              {!hideObjDur&&fields.map((ff,fi)=>{
                                                 const cur=(r.enf&&r.enf[ff[0]]!==undefined)?r.enf[ff[0]]:(ff[2]!==undefined?ff[2]:"");
                                                 const setv=(v)=>updRule(r.id,"enf",{...(r.enf||{}),[ff[0]]:v});
                                                 return (
@@ -11015,7 +11042,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                           <div style={{marginTop:20,paddingTop:20,borderTop:`1px solid ${T.border}`}}>
                             <label style={lbl}>Evaluation logic</label>
                             <select value={rl} onChange={e=>setNewPol(p=>({...p,ruleLogic:e.target.value}))}
-                              style={{...inp,cursor:"pointer",appearance:"auto",maxWidth:360}}>
+                              style={{...inp,cursor:"pointer",appearance:"auto",width:"100%"}}>
                               {OPTS.map(o=><option key={o.id} value={o.id}>{o.label}</option>)}
                             </select>
                             <div style={{display:"flex",alignItems:"center",gap:8,marginTop:8,padding:"8px 12px",borderRadius:7,background:accent+"14",color:accent,fontSize:11.5,lineHeight:1.5}}>
