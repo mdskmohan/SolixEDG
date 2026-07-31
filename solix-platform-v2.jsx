@@ -10301,15 +10301,16 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   //    Buckets/containers have no columns, so the rule uses the same Datewise / Patternwise / Both
                   //    control as structured retention: Datewise = a date (creation/event) basis, Patternwise = a
                   //    prefix path. Naming and the underlying API differ per cloud; these drive the rule editor.
-                  // dateBasis differs per cloud — each surfaces only the timestamps its objects actually carry:
-                  // S3 → LastModified only; Azure → Creation + Last-modified; GCS → Created + customTime (event date).
+                  // dateBasis uses two standard values — "Creation Time" / "Last Modified Time" — shown only where
+                  // the cloud actually supports them: S3 exposes one immutable write time → Creation Time only;
+                  // ADLS & GCS track both. (GCS customTime is intentionally omitted to keep the two-value standard.)
                   const OBJ_CLOUD_META = {
                     s3:{ name:"Amazon S3", store:"Bucket", pathLabel:"Prefix path", pathPh:"s3://finance-lake/pii/",
-                         dateBasis:["Object creation date (LastModified)"] },
+                         dateBasis:["Creation Time"] },
                     azure:{ name:"Azure ADLS Gen2", store:"Container", pathLabel:"Directory / prefix", pathPh:"finance-lake/pii/",
-                         dateBasis:["Creation time","Last-modified time"] },
+                         dateBasis:["Creation Time","Last Modified Time"] },
                     gcs:{ name:"Google Cloud Storage", store:"Bucket", pathLabel:"Prefix path", pathPh:"gs://finance-lake/pii/",
-                         dateBasis:["Object creation date (timeCreated)","Custom time (event date)"] },
+                         dateBasis:["Creation Time","Last Modified Time"] },
                   };
                   const allowedTypes = new Set(assetTypes2.flatMap(t=>OBJTYPE_ASSET_TYPES[t]||[t]));
                   // Assets in scope for rule-level targeting. Tables/views need a column fixture (for the column
