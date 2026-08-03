@@ -8028,7 +8028,6 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       {k:"rules",      l:"Rules",            badge:(p.rules||[]).length},
                       {k:"violations", l:"Violations",       badge:openViolsForPol(p.id).length||null, danger:openViolsForPol(p.id).length>0},
                       {k:"runs",       l:"Runs",             badge:(p.runs||[]).length||null},
-                      {k:"enforcement",l:"Enforcement",      badge:p.enforcement&&p.enforcement.enabled?1:null},
                       {k:"assets",     l:"Assets",           badge:(p.governedAssets||[]).length||[...new Set((p.rules||[]).filter(r=>r.table).map(r=>r.table))].length||null},
                       {k:"activity",   l:"Audit Logs",       badge:(p.history||[]).length},
                     ].map(({k,l,badge,danger})=>(
@@ -8601,7 +8600,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       };
 
                       return (
-                        <div style={{padding:"20px 22px",overflowY:"auto",height:"100%",boxSizing:"border-box"}}>
+                        <div style={{padding:"20px 22px",boxSizing:"border-box"}}>
                             {/* Header + Add Rule */}
                             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
                               <div>
@@ -8880,7 +8879,11 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                     })()}
 
                     {/* ── Governed Assets ── */}
-                    {pdTab==="enforcement"&&(()=>{
+                    {pdTab==="rules"&&p.enforcement&&p.enforcement.enabled&&(()=>{
+                      // Enforcement dispatch — folded in from the former standalone Enforcement tab so
+                      // everything (external sources, CDP, ECS) lives under Rules. Renders directly below
+                      // the rule list whenever the policy has an active enforcement action (same
+                      // visibility as the old Enforcement-tab badge).
                       // Solix's own platform — enforcement here is native/in-house by construction, no capability question to ask.
                       const NATIVE_SVCS = {cdp:"Solix CDP", ecs:"ECS"};
                       // External SQL sources — capability EDG has confirmed for masking / legal hold / retention on each.
@@ -8923,7 +8926,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                         return {st,runId,stColor,key};
                       };
                       return (
-                        <div style={{padding:"16px 18px"}}>
+                        <div style={{margin:"22px 22px 0",paddingTop:18,borderTop:`1px solid ${T.border}`}}>
+                          <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:12}}>Enforcement</div>
                           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
                             <span style={{fontSize:14,fontWeight:600,color:T.text}}>{enf.action}</span>
                             {chip(enf.maturity,matColor)}
@@ -9016,7 +9020,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                           )}
 
                           <div style={{marginTop:18,padding:"10px 14px",borderRadius:8,background:T.bgElevated,fontSize:11,color:T.textMuted,lineHeight:1.6}}>
-                            Row security, exposure, and access-level rules for this policy are evaluated under the <b style={{fontWeight:600,color:T.textSub||T.text}}>Rules</b> tab — they're not shown here since there's no enforcement action to dispatch for them yet.
+                            Row security, exposure, and access-level rules for this policy are evaluated as <b style={{fontWeight:600,color:T.textSub||T.text}}>rules above</b> — they're not shown here since there's no enforcement action to dispatch for them yet.
                           </div>
                         </div>
                       );
@@ -11019,7 +11023,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                           </div>
                                           {r.enforce&&(
                                             <div style={{marginTop:8,paddingTop:8,borderTop:`1px dashed ${T.border}`}}>
-                                              <div style={{fontSize:9.5,color:T.textMuted,marginBottom:6,letterSpacing:".3px"}}>Enforcement settings — pre-filled, editable. Which engine actually applies this is resolved per-asset in the policy's Enforcement tab.</div>
+                                              <div style={{fontSize:9.5,color:T.textMuted,marginBottom:6,letterSpacing:".3px"}}>Enforcement settings — pre-filled, editable. Which engine actually applies this is resolved per-asset in the Enforcement section below the rules.</div>
                                               {!isEnfField&&(
                                                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}><span style={{fontSize:10.5,color:T.textMuted,width:120,flexShrink:0}}>Target</span><span style={{fontSize:11,color:T.text}}>{(r.table||"per policy scope")}{r.column?(" · "+r.column):""}</span></div>
                                               )}
