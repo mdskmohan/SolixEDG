@@ -6867,7 +6867,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   const [assetSearchQ,  setAssetSearchQ]= useState("");
   const [selAssetIds,   setSelAssetIds] = useState(new Set());
   const [assetRel,      setAssetRel]    = useState("governs");
-  const EMPTY_POL = {name:"",category:"Data",description:"",owner:[],stewards:[],tags:[],regulations:[],regulationArticles:{},scope:{domains:[],sources:[],assetTypes:[]},criteria:[],rules:[],links:[],history:[],fqn:"",version:1,severity:"Medium",policyTypes:[],consequence:{severity:"Medium",onViolation:"Warn",notify:["Owner","Steward"]},ruleLogic:"independent",runMode:"draft",wizardSchedFreq:"daily",wizardSchedTime:"08:00",wizardSchedDay:"monday",wizardSchedCron:""};
+  const EMPTY_POL = {name:"",category:"",description:"",owner:[],stewards:[],tags:[],regulations:[],regulationArticles:{},scope:{domains:[],sources:[],assetTypes:[]},criteria:[],rules:[],links:[],history:[],fqn:"",version:1,severity:"Medium",policyTypes:[],consequence:{severity:"Medium",onViolation:"Warn",notify:["Owner","Steward"]},ruleLogic:"independent",runMode:"draft",wizardSchedFreq:"daily",wizardSchedTime:"08:00",wizardSchedDay:"monday",wizardSchedCron:""};
   const [newPol,         setNewPol]        = useState(EMPTY_POL);
   const [catFilter,      setCatFilter]     = useState([]);
   const [filterDropOpen, setFilterDropOpen]= useState(false);
@@ -7157,7 +7157,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
 
   const handleCreate = (runMode="draft") => {
     if (!newPol.name.trim()) return;
-    const cat = newPol.category.toLowerCase().replace(/[^a-z0-9]+/g,"_");
+    const cat = (newPol.category||"uncategorized").toLowerCase().replace(/[^a-z0-9]+/g,"_");
     const nm  = newPol.name.toLowerCase().replace(/[^a-z0-9]+/g,"_").slice(0,32);
     const convertedRules = wizardRules.map((r,i)=>{
       const fl=W_FIELD_LABELS[r.field]||r.field;
@@ -8268,10 +8268,11 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                           <div ref={polCatDropRef} style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
                             <SideLabel label="Category" onEdit={()=>{setPolCatDropOpen(o=>!o);setPolCatDropSearch("");}}/>
                             {p.category
-                              ? <div style={{display:"inline-flex",alignItems:"center",padding:"4px 12px 4px 9px",borderRadius:5,background:`${catColor(p.category)}0f`,borderTop:`1px solid ${catColor(p.category)}20`,borderRight:`1px solid ${catColor(p.category)}20`,borderBottom:`1px solid ${catColor(p.category)}20`,borderLeft:`3px solid ${catColor(p.category)}`}}>
+                              ? <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 8px 4px 9px",borderRadius:5,background:`${catColor(p.category)}0f`,borderTop:`1px solid ${catColor(p.category)}20`,borderRight:`1px solid ${catColor(p.category)}20`,borderBottom:`1px solid ${catColor(p.category)}20`,borderLeft:`3px solid ${catColor(p.category)}`}}>
                                   <span style={{fontSize:12,color:catColor(p.category),fontWeight:600}}>{p.category}</span>
+                                  <button title="Clear category" onClick={()=>{applyPolField("category","","Category cleared");onToast("Category cleared","success");}} style={{background:"none",border:"none",cursor:"pointer",color:catColor(p.category),padding:0,lineHeight:1,display:"flex",opacity:.55}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".55"}>{Ic.x(8)}</button>
                                 </div>
-                              : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>Uncategorized</span>}
+                              : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>Not set</span>}
                             {polCatDropOpen&&(
                               <div style={{position:"absolute",top:"calc(100% - 6px)",left:16,right:16,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 8px 24px rgba(0,0,0,.18)",zIndex:200,overflow:"hidden"}}>
                                 <div style={{padding:"7px 9px",borderBottom:`1px solid ${T.border}`}}>
@@ -8291,12 +8292,9 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                       </button>
                                     );
                                   })}
-                                  {p.category&&<button onClick={()=>{applyPolField("category","","Moved to Uncategorized");setPolCatDropOpen(false);setPolCatDropSearch("");onToast("Moved to Uncategorized","success");}}
-                                    style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"7px 12px",background:"transparent",border:"none",cursor:"pointer",textAlign:"left"}}
-                                    onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                                    <span style={{width:9,height:9,borderRadius:"50%",background:T.textMuted,flexShrink:0,display:"block"}}/>
-                                    <span style={{flex:1,fontSize:12,color:T.textMuted,fontStyle:"italic"}}>Uncategorized</span>
-                                  </button>}
+                                  {POLICY_CATS.filter(c=>!polCatDropSearch||c.toLowerCase().includes(polCatDropSearch.toLowerCase())).length===0&&!polCatDropSearch.trim()&&(
+                                    <div style={{padding:"14px 12px",fontSize:11.5,color:T.textMuted,textAlign:"center",fontStyle:"italic"}}>No categories yet — type to create one</div>
+                                  )}
                                   {polCatDropSearch.trim()&&!POLICY_CATS.some(c=>c.toLowerCase()===polCatDropSearch.trim().toLowerCase())&&(
                                     <button onClick={()=>{const nc=polCatDropSearch.trim();const palette=[T.violet,T.rose,T.amber,T.blue,T.green,"#0ea5e9","#0891b2","#7c3aed"];setPolicyCategories(prev=>prev.some(c=>c.name.toLowerCase()===nc.toLowerCase())?prev:[...prev,{id:nc.toLowerCase().replace(/\s+/g,"-"),name:nc,color:palette[prev.length%palette.length]}]);applyPolField("category",nc,`Created category "${nc}" and moved policy`);setPolCatDropOpen(false);setPolCatDropSearch("");onToast(`Created category "${nc}" and moved policy`,"success");}}
                                       style={{width:"100%",display:"flex",alignItems:"center",gap:6,padding:"8px 12px",background:"transparent",border:"none",borderTop:`1px solid ${T.border}`,cursor:"pointer",textAlign:"left",color:T.accent,fontSize:12,fontWeight:600}}>
@@ -10140,13 +10138,13 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       </div>
                       {/* Category */}
                       <div>
-                        <label style={lbl}>Category</label>
+                        <label style={lbl}>Category <span style={{fontSize:10,fontWeight:400,color:T.textMuted}}>— optional</span></label>
                         <select value={newPol.category||""} onChange={e=>setNewPol(p=>({...p,category:e.target.value}))}
-                          style={{...inp,cursor:"pointer",appearance:"auto"}}>
+                          style={{...inp,cursor:"pointer",appearance:"auto",color:newPol.category?T.text:T.textMuted}}>
+                          <option value="">Select a category…</option>
                           {POLICY_CATS.map(c=><option key={c} value={c}>{c}</option>)}
-                          <option value="">Uncategorized</option>
                         </select>
-                        <div style={{fontSize:11,color:T.textMuted,marginTop:6,lineHeight:1.6}}>Groups this policy under a category in the Policy Manager. Leave Uncategorized to file it later.</div>
+                        <div style={{fontSize:11,color:T.textMuted,marginTop:6,lineHeight:1.6}}>Optional — leave it empty and assign a category later, or pick one to group this policy in the Policy Manager.</div>
                       </div>
                     </div>
                   );
