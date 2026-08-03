@@ -10937,11 +10937,10 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                                 <span style={objLbl}>{objMeta.pathLabel}</span>
                                                 <input type="text" value={r.objPattern||""} onChange={e=>setObjF("objPattern",e.target.value)} placeholder={objMeta.pathPh+"*"} style={{...sel_s,flex:1,cursor:"text",fontFamily:"'Geist Mono',monospace"}}/>
                                               </div>
-                                              <div style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:8}}>
-                                                <span style={{...objLbl,marginTop:6}}>File types</span>
-                                                <div style={{flex:1,display:"flex",flexWrap:"wrap",gap:5}}>
-                                                  {FT_OPTS.map(ft=>{const sel=fileTypes.includes(ft);return <button key={ft} onClick={()=>setObjF("maskFileTypes",sel?fileTypes.filter(x=>x!==ft):[...fileTypes,ft])} style={{padding:"3px 9px",borderRadius:6,border:`1.5px solid ${sel?T.accent:T.border}`,background:sel?T.accentDim:T.bgElevated,color:sel?T.accent:T.textSub,fontSize:10.5,fontWeight:sel?600:400,cursor:"pointer",fontFamily:"'Geist Mono',monospace"}}>{ft}</button>;})}
-                                                </div>
+                                              <div style={{marginBottom:8}}>
+                                                <RuleMultiSelect label="File types" flat={FT_OPTS} selected={fileTypes}
+                                                  onChange={v=>setObjF("maskFileTypes",v)}
+                                                  placeholder="Select file types to scan…" mono/>
                                               </div>
                                               {/* Redaction patterns (repeatable, custom regex) */}
                                               <div style={{fontSize:10.5,color:T.textMuted,marginBottom:5}}>Redaction patterns — content matching any pattern is redacted</div>
