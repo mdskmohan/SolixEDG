@@ -10360,11 +10360,11 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   // ADLS & GCS track both. (GCS customTime is intentionally omitted to keep the two-value standard.)
                   const OBJ_CLOUD_META = {
                     s3:{ name:"Amazon S3", store:"Bucket", pathLabel:"Prefix path", pathPh:"s3://finance-lake/pii/",
-                         dateBasis:["Creation Time"] },
+                         dateBasis:["Creation Time"], maskEngine:"Runs via Amazon Macie classification + S3 Object Lambda redaction." },
                     azure:{ name:"Azure ADLS Gen2", store:"Container", pathLabel:"Directory / prefix", pathPh:"finance-lake/pii/",
-                         dateBasis:["Creation Time","Last Modified Time"] },
+                         dateBasis:["Creation Time","Last Modified Time"], maskEngine:"Runs via Microsoft Purview scan + Function-based redaction." },
                     gcs:{ name:"Google Cloud Storage", store:"Bucket", pathLabel:"Prefix path", pathPh:"gs://finance-lake/pii/",
-                         dateBasis:["Creation Time","Last Modified Time"] },
+                         dateBasis:["Creation Time","Last Modified Time"], maskEngine:"Runs via Cloud DLP inspection + Cloud Function redaction." },
                   };
                   const allowedTypes = new Set(assetTypes2.flatMap(t=>OBJTYPE_ASSET_TYPES[t]||[t]));
                   // Assets in scope for rule-level targeting. Tables/views need a column fixture (for the column
@@ -10854,7 +10854,10 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                         const fields = (FS[fd.action.verb] || [["Approver",["Records / Legal"],"Records / Legal"]])
                                           // Object-store retention has no "Auto Purge" toggle — expiry is handled by the
                                           // cloud's lifecycle rule, not a CDP disposition flag. Keep it for structured tables.
-                                          .filter(f => !(ruleIsObject && fd.action.verb==="Set disposition" && f[0]==="Auto Purge"));
+                                          .filter(f => !(ruleIsObject && fd.action.verb==="Set disposition" && f[0]==="Auto Purge"))
+                                          // Object-store masking uses pattern-based content redaction with its own
+                                          // "Redaction style" control, so the structured column Algorithm dropdown is dropped.
+                                          .filter(f => !(ruleIsObject && fd.action.verb==="Mask" && f[0]==="Algorithm"));
                                         // ── Object-store levers (S3 / ADLS) — Legal hold & Retention on a bucket/container
                                         //    reuse the same Datewise / Criteriawise / Both control as structured retention.
                                         //    Datewise: retention = a date basis (creation/event) the clock counts from;
@@ -10905,6 +10908,89 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                           </div>
                                           );
                                         };
+                                        // ── Object-store masking (S3 / ADLS) — pattern-based content redaction on
+                                        //    unstructured objects. Instead of columns, the user supplies one or more
+                                        //    regex patterns; matching content is redacted. "Scan" previews match counts
+                                        //    without changing anything; enforcing writes a redacted copy or overwrites. ──
+                                        const renderObjMaskEditor = () => {
+                                          const patterns = (r.maskPatterns&&r.maskPatterns.length) ? r.maskPatterns : [{id:"mp0",name:"",regex:"",ci:true}];
+                                          const setPats = list => setObjF("maskPatterns",list);
+                                          const updPat = (pid,k,v)=>setPats(patterns.map(p=>p.id===pid?{...p,[k]:v}:p));
+                                          const addPat = ()=>setPats([...patterns,{id:"mp"+Date.now(),name:"",regex:"",ci:true}]);
+                                          const rmPat  = pid=>setPats(patterns.length>1?patterns.filter(p=>p.id!==pid):patterns);
+                                          const fileTypes = r.maskFileTypes||[];
+                                          const FT_OPTS = [".txt",".csv",".json",".log",".xml",".pdf",".parquet"];
+                                          const method = r.maskMethod||"Full redaction";
+                                          const output = r.maskOutput||"copy";
+                                          const runScan = ()=>{
+                                            const valid = patterns.filter(p=>(p.regex||"").trim());
+                                            if(!valid.length){ onToast("Add at least one pattern (regex) before scanning","error"); return; }
+                                            const hits = 7*valid.length + (fileTypes.length||1)*3;
+                                            const objs = 3 + (fileTypes.length||1);
+                                            onToast(`Scan complete — found ${hits} match${hits===1?"":"es"} across ${objs} objects. Nothing was changed.`,"info");
+                                          };
+                                          return (
+                                            <div style={{marginBottom:8}}>
+                                              {/* Which objects — prefix + file types */}
+                                              <div style={{fontSize:10.5,color:T.textMuted,marginBottom:5}}>Which objects — scan for sensitive content inside matching files</div>
+                                              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                                                <span style={objLbl}>{objMeta.pathLabel}</span>
+                                                <input type="text" value={r.objPattern||""} onChange={e=>setObjF("objPattern",e.target.value)} placeholder={objMeta.pathPh+"*"} style={{...sel_s,flex:1,cursor:"text",fontFamily:"'Geist Mono',monospace"}}/>
+                                              </div>
+                                              <div style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:8}}>
+                                                <span style={{...objLbl,marginTop:6}}>File types</span>
+                                                <div style={{flex:1,display:"flex",flexWrap:"wrap",gap:5}}>
+                                                  {FT_OPTS.map(ft=>{const sel=fileTypes.includes(ft);return <button key={ft} onClick={()=>setObjF("maskFileTypes",sel?fileTypes.filter(x=>x!==ft):[...fileTypes,ft])} style={{padding:"3px 9px",borderRadius:6,border:`1.5px solid ${sel?T.accent:T.border}`,background:sel?T.accentDim:T.bgElevated,color:sel?T.accent:T.textSub,fontSize:10.5,fontWeight:sel?600:400,cursor:"pointer",fontFamily:"'Geist Mono',monospace"}}>{ft}</button>;})}
+                                                </div>
+                                              </div>
+                                              {/* Redaction patterns (repeatable, custom regex) */}
+                                              <div style={{fontSize:10.5,color:T.textMuted,marginBottom:5}}>Redaction patterns — content matching any pattern is redacted</div>
+                                              <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:6}}>
+                                                {patterns.map(p=>(
+                                                  <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                                                    <input type="text" value={p.name} onChange={e=>updPat(p.id,"name",e.target.value)} placeholder="Name (e.g. SSN)" style={{...sel_s,flex:"1 1 100px",minWidth:80}}/>
+                                                    <input type="text" value={p.regex} onChange={e=>updPat(p.id,"regex",e.target.value)} placeholder="regex — e.g. \\d{3}-\\d{2}-\\d{4}" style={{...sel_s,flex:"2 1 160px",minWidth:120,cursor:"text",fontFamily:"'Geist Mono',monospace"}}/>
+                                                    <label title="Case-insensitive" style={{display:"flex",alignItems:"center",gap:4,fontSize:10.5,color:T.textSub,cursor:"pointer",flexShrink:0}}>
+                                                      <input type="checkbox" checked={p.ci!==false} onChange={e=>updPat(p.id,"ci",e.target.checked)} style={{cursor:"pointer"}}/>Aa
+                                                    </label>
+                                                    <button onClick={()=>rmPat(p.id)} title="Remove pattern" disabled={patterns.length<=1}
+                                                      style={{width:22,height:22,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:patterns.length<=1?T.border:T.textMuted,cursor:patterns.length<=1?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:14,lineHeight:1}}>×</button>
+                                                  </div>
+                                                ))}
+                                                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                                                  <button onClick={addPat} style={{fontSize:10.5,padding:"5px 10px",borderRadius:6,border:`1.5px dashed ${T.border}`,background:"none",color:T.textSub,cursor:"pointer",fontWeight:500}}>+ Add pattern</button>
+                                                  <button onClick={runScan} style={{fontSize:10.5,padding:"5px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:"none",color:T.text,cursor:"pointer"}}>Scan for matches (dry-run)</button>
+                                                </div>
+                                              </div>
+                                              {/* Redaction style (single, rule-level) */}
+                                              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                                                <span style={objLbl}>Redaction style</span>
+                                                <select value={method} onChange={e=>setObjF("maskMethod",e.target.value)} style={{...sel_s,flex:1}}>
+                                                  {["Full redaction","Partial mask (keep last 4)","Label replace","Hash / tokenize","Remove match"].map(m=><option key={m} value={m}>{m}</option>)}
+                                                </select>
+                                              </div>
+                                              {/* Apply as — output mode */}
+                                              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                                                <span style={objLbl}>Apply as</span>
+                                                <select value={output} onChange={e=>setObjF("maskOutput",e.target.value)} style={{...sel_s,flex:1}}>
+                                                  <option value="copy">Redacted copy — original untouched</option>
+                                                  <option value="inplace">In-place overwrite — approval required</option>
+                                                  <option value="onread" disabled>On-read / dynamic — coming soon</option>
+                                                </select>
+                                              </div>
+                                              {output==="copy"&&(
+                                                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                                                  <span style={objLbl}>Destination</span>
+                                                  <input type="text" value={r.maskDest||""} onChange={e=>setObjF("maskDest",e.target.value)} placeholder={objMeta.pathPh+"redacted/"} style={{...sel_s,flex:1,cursor:"text",fontFamily:"'Geist Mono',monospace"}}/>
+                                                </div>
+                                              )}
+                                              {output==="inplace"&&(
+                                                <div style={{fontSize:10,color:T.amber,marginBottom:6,lineHeight:1.5}}>⚠ Overwrites the original objects. A prior version is kept where {objMeta.store.toLowerCase()} versioning is enabled; this action requires approval.</div>
+                                              )}
+                                              <div style={{fontSize:10,color:T.textMuted,fontStyle:"italic"}}>{objMeta.maskEngine}</div>
+                                            </div>
+                                          );
+                                        };
                                         // Retention always needs a period (Years/Months/…), regardless of Datewise /
                                         // Criteriawise / Both — only the "Retain from" date basis is Datewise-specific
                                         // (gated inside renderObjCritType). So the duration fields show on every tab.
@@ -10933,9 +11019,10 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                               {!isEnfField&&(
                                                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}><span style={{fontSize:10.5,color:T.textMuted,width:120,flexShrink:0}}>Target</span><span style={{fontSize:11,color:T.text}}>{(r.table||"per policy scope")}{r.column?(" · "+r.column):""}</span></div>
                                               )}
-                                              {/* ── Mask: multi-select dropdown for which columns this rule masks — a
-                                                  masking run commonly touches several sensitive columns at once. ── */}
-                                              {fd.action.verb==="Mask"&&(()=>{
+                                              {/* ── Mask: structured tables use a "columns to mask" picker; unstructured
+                                                  objects (S3 / ADLS) use the pattern-based content redaction editor. ── */}
+                                              {fd.action.verb==="Mask"&&ruleIsObject&&renderObjMaskEditor()}
+                                              {fd.action.verb==="Mask"&&!ruleIsObject&&(()=>{
                                                 const cols = r.table ? (ASSET_COLUMNS[r.table]||[]) : [];
                                                 return (
                                                   <div style={{marginBottom:8}}>
