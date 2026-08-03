@@ -8600,7 +8600,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       };
 
                       return (
-                        <div style={{padding:"20px 22px",boxSizing:"border-box"}}>
+                        <div style={{padding:"20px 22px",overflowY:"auto",height:"100%",boxSizing:"border-box"}}>
                             {/* Header + Add Rule */}
                             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
                               <div>
@@ -8879,152 +8879,6 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                     })()}
 
                     {/* ── Governed Assets ── */}
-                    {pdTab==="rules"&&p.enforcement&&p.enforcement.enabled&&(()=>{
-                      // Enforcement dispatch — folded in from the former standalone Enforcement tab so
-                      // everything (external sources, CDP, ECS) lives under Rules. Renders directly below
-                      // the rule list whenever the policy has an active enforcement action (same
-                      // visibility as the old Enforcement-tab badge).
-                      // Solix's own platform — enforcement here is native/in-house by construction, no capability question to ask.
-                      const NATIVE_SVCS = {cdp:"Solix CDP", ecs:"ECS"};
-                      // External SQL sources — capability EDG has confirmed for masking / legal hold / retention on each.
-                      // "native" = the source enforces it itself; "edg" = EDG applies and manages it directly since the source has no equivalent.
-                      const ENGINE_CAPS = {
-                        snowflake:  {label:"Snowflake",  masking:"native", legalHold:"edg",    retention:"edg"},
-                        bigquery:   {label:"BigQuery",   masking:"native", legalHold:"edg",    retention:"native"},
-                        databricks: {label:"Databricks", masking:"native", legalHold:"edg",    retention:"edg"},
-                        oracle:     {label:"Oracle",     masking:"native", legalHold:"native", retention:"native"},
-                        redshift:   {label:"Redshift",   masking:"native", legalHold:"edg",    retention:"edg"},
-                        postgres:   {label:"PostgreSQL", masking:"edg",    legalHold:"edg",    retention:"edg"},
-                        postgresql: {label:"PostgreSQL", masking:"edg",    legalHold:"edg",    retention:"edg"},
-                        mysql:      {label:"MySQL",      masking:"edg",    legalHold:"edg",    retention:"edg"},
-                      };
-                      const enf = p.enforcement || {action:"Mask",ptype:"Security",field:"maskingStatus",maturity:"MVP",inPlace:false,approvalRequired:true,dryRun:true,status:"Not dispatched",prefilled:{object:"kb."+((p.governedAssets&&p.governedAssets[0]&&p.governedAssets[0].name)||"asset"),scope:"—",period:"—",approver:"—"}};
-                      const dim = enf.field==="maskingStatus" ? "masking" : enf.field==="legalHold" ? "legalHold" : (enf.ptype==="Retention" ? "retention" : null);
-                      // Rules created before this approval flow existed (seed/demo data) have no ruleId to gate on — treat as already approved.
-                      const gateStatus = enf.ruleId ? ((enfApprovalFor(p.id,enf.ruleId)||{}).status||"pending") : "approved";
-                      const assets = p.governedAssets||[];
-                      const nativeSvcs = Array.from(new Set(assets.map(a=>a.service).filter(svc=>NATIVE_SVCS[svc])));
-                      const fedSvcSet  = Array.from(new Set(assets.map(a=>a.service).filter(svc=>ENGINE_CAPS[svc])));
-                      const fedSvcs = fedSvcSet.length>0 ? fedSvcSet : (nativeSvcs.length>0 ? [] : Object.keys(ENGINE_CAPS).slice(0,1));
-                      const matColor = enf.maturity==="GA"?T.green:enf.maturity==="MVP"?T.amber:T.textMuted;
-                      const chip=(txt,c)=>(<span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:10,background:c+"18",color:c}}>{txt}</span>);
-                      const capChip=(cap)=> cap==="native" ? chip("Native",T.green) : chip("EDG-managed",T.blue);
-                      const zoneLabel=(txt)=>(<div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",marginBottom:8}}>{txt}</div>);
-                      const dispatch=(svc,label)=>{
-                        const key=p.id+"::"+svc;
-                        setEnfRun(prev=>({...prev,[key]:{status:"Pending approval"}}));
-                        onToast("Sent to "+label+" approver — pending approval","info");
-                        setTimeout(()=>{ setEnfRun(prev=>({...prev,[key]:{status:"Applied",runId:"EDG-"+Math.floor(40000+Math.random()*9000)}})); onToast("EDG applied "+enf.action.toLowerCase()+" directly in "+label,"success"); },1300);
-                      };
-                      const isPrimarySvc = svc => svc === ((assets[0]&&assets[0].service)||fedSvcs[0]||nativeSvcs[0]);
-                      const statusRow=(svc,label)=>{
-                        const key = p.id+"::"+svc;
-                        const primary = isPrimarySvc(svc);
-                        const st = (enfRun[key]&&enfRun[key].status) || (primary?enf.status:"Not dispatched");
-                        const runId = (enfRun[key]&&enfRun[key].runId) || ((primary&&st===enf.status)?enf.runId:null);
-                        const stColor = st==="Applied"?T.green:st==="Pending approval"?T.amber:st==="Failed"?T.rose:T.textMuted;
-                        return {st,runId,stColor,key};
-                      };
-                      return (
-                        <div style={{margin:"22px 22px 0",paddingTop:18,borderTop:`1px solid ${T.border}`}}>
-                          <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:12}}>Enforcement</div>
-                          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
-                            <span style={{fontSize:14,fontWeight:600,color:T.text}}>{enf.action}</span>
-                            {chip(enf.maturity,matColor)}
-                            {nativeSvcs.length>0&&chip(`Solix · ${nativeSvcs.length}`,T.accent)}
-                            {fedSvcs.length>0&&chip(`Federated · ${fedSvcs.length}`,T.green)}
-                          </div>
-                          <div style={{fontSize:11,color:T.textMuted,marginBottom:14}}>Write-twin of <code>{enf.field||"—"}</code>. This policy's assets are enforced differently depending on where they live — see below.</div>
-
-                          {gateStatus!=="approved"&&(
-                            <div style={{padding:"10px 14px",borderRadius:8,marginBottom:14,background:`${gateStatus==="rejected"?T.rose:T.amber}12`,border:`1px solid ${gateStatus==="rejected"?T.rose:T.amber}30`,fontSize:12,color:gateStatus==="rejected"?T.rose:T.amber,fontWeight:600}}>
-                              {gateStatus==="rejected"
-                                ? `Rejected by ${(enf.prefilled&&enf.prefilled.approver)||"the table owner"} — edit this rule and resubmit to request approval again.`
-                                : `Awaiting approval from ${(enf.prefilled&&enf.prefilled.approver)||"the table owner"} — this rule won't run or dispatch until approved.`}
-                            </div>
-                          )}
-
-                          <div style={{border:"1px solid "+T.border,borderRadius:8,padding:"12px 14px",marginBottom:18,background:T.bgElevated}}>
-                            <div style={{fontSize:10,color:T.textMuted,letterSpacing:".06em",marginBottom:8}}>POLICY FIELDS · PRE-FILLED FROM CATALOG</div>
-                            {[["Object",enf.prefilled&&enf.prefilled.object],["Scope",enf.prefilled&&enf.prefilled.scope],["Retention / basis",(enf.prefilled&&(enf.prefilled.period||enf.prefilled.basis))||"—"],["Approver",enf.prefilled&&enf.prefilled.approver]].map((kv,i)=>(
-                              <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:12}}>
-                                <span style={{color:T.textMuted}}>{kv[0]}</span><span style={{color:T.text}}>{kv[1]||"—"}</span>
-                              </div>
-                            ))}
-                          </div>
-
-                          {nativeSvcs.length>0&&(
-                            <>
-                              {zoneLabel("ENFORCED NATIVELY IN SOLIX")}
-                              <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:18}}>
-                                {nativeSvcs.map(svc=>{
-                                  const label = NATIVE_SVCS[svc];
-                                  const svcAssets = assets.filter(a=>a.service===svc);
-                                  const {st,runId,stColor} = statusRow(svc,label);
-                                  return (
-                                    <div key={svc} style={{border:"1px solid "+T.border,borderRadius:8,padding:"10px 14px",background:T.bgSurface}}>
-                                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
-                                        {chip(label,T.accent)}
-                                        <span style={{fontSize:11,color:T.textMuted}}>{svcAssets.length} asset{svcAssets.length!==1?"s":""}{svcAssets.length>0?" · "+svcAssets.map(a=>a.name).slice(0,2).join(", "):""}</span>
-                                        <span style={{fontSize:12,fontWeight:600,color:stColor,marginLeft:"auto"}}>{st}</span>
-                                        {runId&&<span style={{fontSize:11,color:T.textMuted}}>· Run {runId}</span>}
-                                      </div>
-                                      <div style={{display:"flex",gap:8}}>
-                                        <button onClick={()=>onToast("Dry-run in "+label+": changes previewed, nothing applied","info")}
-                                          style={{fontSize:11.5,padding:"6px 12px",borderRadius:7,border:"1px solid "+T.border,background:"none",color:T.text,cursor:"pointer"}}>Preview (dry-run)</button>
-                                        {st!=="Applied"&&gateStatus==="approved"&&<button onClick={()=>dispatch(svc,label)}
-                                          style={{fontSize:11.5,padding:"6px 12px",borderRadius:7,border:"none",background:T.accent,color:"#fff",cursor:"pointer",fontWeight:600}}>Apply in {label}</button>}
-                                        {st!=="Applied"&&gateStatus!=="approved"&&<span style={{fontSize:11.5,padding:"6px 12px",color:T.textMuted,fontWeight:600}}>{gateStatus==="rejected"?"Rejected — cannot dispatch":"Awaiting approval"}</span>}
-                                        {st==="Applied"&&<span style={{fontSize:11.5,padding:"6px 12px",color:T.green,fontWeight:600}}>✓ Enforced in {label}</span>}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </>
-                          )}
-
-                          {fedSvcs.length>0&&(
-                            <>
-                              {zoneLabel("FEDERATED — EXTERNAL SOURCES")}
-                              <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                                {fedSvcs.map(svc=>{
-                                  const caps = ENGINE_CAPS[svc];
-                                  const cap = dim ? caps[dim] : "native";
-                                  const label = caps.label;
-                                  const {st,runId,stColor} = statusRow(svc,label);
-                                  return (
-                                    <div key={svc} style={{border:"1px solid "+T.border,borderRadius:8,padding:"10px 14px",background:T.bgSurface}}>
-                                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
-                                        {chip(label,T.blue)}
-                                        {capChip(cap)}
-                                        <span style={{fontSize:12,fontWeight:600,color:stColor,marginLeft:"auto"}}>{st}</span>
-                                        {runId&&<span style={{fontSize:11,color:T.textMuted}}>· Run {runId}</span>}
-                                      </div>
-                                      {dim&&cap==="edg"&&(
-                                        <div style={{fontSize:11,color:T.textMuted,marginBottom:8,lineHeight:1.5}}>No native {dim==="legalHold"?"legal hold":dim} support in {label} — EDG applies and manages this directly.</div>
-                                      )}
-                                      <div style={{display:"flex",gap:8}}>
-                                        <button onClick={()=>onToast("Dry-run in "+label+": changes previewed, nothing applied","info")}
-                                          style={{fontSize:11.5,padding:"6px 12px",borderRadius:7,border:"1px solid "+T.border,background:"none",color:T.text,cursor:"pointer"}}>Preview (dry-run)</button>
-                                        {st!=="Applied"&&gateStatus==="approved"&&<button onClick={()=>dispatch(svc,label)}
-                                          style={{fontSize:11.5,padding:"6px 12px",borderRadius:7,border:"none",background:T.accent,color:"#fff",cursor:"pointer",fontWeight:600}}>Apply in {label}</button>}
-                                        {st!=="Applied"&&gateStatus!=="approved"&&<span style={{fontSize:11.5,padding:"6px 12px",color:T.textMuted,fontWeight:600}}>{gateStatus==="rejected"?"Rejected — cannot dispatch":"Awaiting approval"}</span>}
-                                        {st==="Applied"&&<span style={{fontSize:11.5,padding:"6px 12px",color:T.green,fontWeight:600}}>✓ Enforced in {label}</span>}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </>
-                          )}
-
-                          <div style={{marginTop:18,padding:"10px 14px",borderRadius:8,background:T.bgElevated,fontSize:11,color:T.textMuted,lineHeight:1.6}}>
-                            Row security, exposure, and access-level rules for this policy are evaluated as <b style={{fontWeight:600,color:T.textSub||T.text}}>rules above</b> — they're not shown here since there's no enforcement action to dispatch for them yet.
-                          </div>
-                        </div>
-                      );
-                    })()}
                     {pdTab==="assets"&&(()=>{
                       const SVC_ICON_MAP = {"cdp":"🗄️","ecs":"📁","snowflake":"❄️","databricks":"🧱","postgres":"🐘","postgresql":"🐘","oracle":"🔴","bigquery":"🔷","redshift":"🌀"};
                       // Use enriched governedAssets if available, else fall back to rule targets
@@ -11023,7 +10877,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                           </div>
                                           {r.enforce&&(
                                             <div style={{marginTop:8,paddingTop:8,borderTop:`1px dashed ${T.border}`}}>
-                                              <div style={{fontSize:9.5,color:T.textMuted,marginBottom:6,letterSpacing:".3px"}}>Enforcement settings — pre-filled, editable. Which engine actually applies this is resolved per-asset in the Enforcement section below the rules.</div>
+                                              <div style={{fontSize:9.5,color:T.textMuted,marginBottom:6,letterSpacing:".3px"}}>Enforcement settings — pre-filled, editable. Which engine actually applies this is resolved per-asset when the policy runs.</div>
                                               {!isEnfField&&(
                                                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}><span style={{fontSize:10.5,color:T.textMuted,width:120,flexShrink:0}}>Target</span><span style={{fontSize:11,color:T.text}}>{(r.table||"per policy scope")}{r.column?(" · "+r.column):""}</span></div>
                                               )}
