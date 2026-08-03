@@ -6894,6 +6894,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   const [topViolSearch,        setTopViolSearch]        = useState("");
   const [createStep,     setCreateStep]     = useState(1);
   const [wizardRules,    setWizardRules]    = useState([]);
+  const [soloRuleId,     setSoloRuleId]     = useState(null); // when set, the wizard renders as a focused single-rule "Edit Rule" drawer
   const [wizardRuleTab,  setWizardRuleTab]  = useState("preset");
   const [wizardSqlRules, setWizardSqlRules] = useState([]);
   const [sevOpen,        setSevOpen]        = useState(null);
@@ -7051,7 +7052,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
     const isObj = a.type==="Bucket"||a.type==="Container"||a.type==="Object"||a.type==="Blob";
     return isObj ? ["Admin"] : [];
   };
-  const closeWizard = () => { setCreateOpen(false); setNewPol(EMPTY_POL); setCreateStep(1); setWizardRules([]); setWizardRuleTab("preset"); setWizardSqlRules([]); setIsEditMode(false); };
+  const closeWizard = () => { setCreateOpen(false); setNewPol(EMPTY_POL); setCreateStep(1); setWizardRules([]); setWizardRuleTab("preset"); setWizardSqlRules([]); setSoloRuleId(null); setIsEditMode(false); };
 
   // Masking / Legal Hold / Retention are the only fields whose enforcement action actually
   // writes to the source — under combined (AND/OR) logic, silently dropping one of these from
@@ -7394,6 +7395,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
     setWizardSqlRules(sqlBack);
     setWizardRuleTab("preset");
     setCreateStep(opts.step||1);
+    setSoloRuleId(opts.solo||null);
     setIsEditMode(true);
     setCreateOpen(true);
   };
@@ -8466,23 +8468,16 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       // Open rule panel for editing a specific rule
                       const openEditRule = (rule) => {
                         if (rule.type==="sql"||rule.sql) {
+                          // SQL rules already have a complete focused editor in the quick side panel.
                           setRpTab("sql");
                           setRpSql({label:rule.label||rule.name||"",table:rule.table||"",sql:rule.sql||"",strategy:rule.strategy||"BINARY",operator:rule.operator||"",threshold:rule.threshold||"",partitionExpr:rule.partitionExpr||"",severity:rule.severity||"Medium"});
                           setRulePanel({mode:"edit",ruleId:rule.id});
                           return;
                         }
-                        // Enforced rules (Masking / Legal Hold / Retention with "Enforce in place") carry
-                        // criteria the quick panel can't edit — columns/patterns to mask, hold rows,
-                        // retention terms, object-store scope. Open the full policy editor at the Rules
-                        // step so every field of the rule is editable, not just field/operator/value/severity.
-                        const isEnfRule = ["masking_status","legal_hold","retention_class"].includes(rule.field) && rule.enforce;
-                        if (isEnfRule) {
-                          openEditWizard(p, {step:3});
-                          return;
-                        }
-                        setRpTab("preset");
-                        setRpPreset({field:rule.field||"certification",operator:rule.operator||"is",value:rule.value||"",table:rule.table||"",column:rule.column||"",severity:rule.severity||"Medium"});
-                        setRulePanel({mode:"edit",ruleId:rule.id});
+                        // Every preset rule opens the full single-rule editor — the same rich editor the
+                        // wizard uses, shown in "solo" mode (just this one rule, no wizard chrome) so every
+                        // field is editable, including the enforcement settings when "Enforce in place" is on.
+                        openEditWizard(p, {step:3, solo:rule.id});
                       };
 
                       // Rule card rendering — shared for both preset and sql
@@ -9945,15 +9940,15 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
       {createOpen&&(
         <>
           <div onClick={closeWizard} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1200}}/>
-          <div className="slideInRight" style={{position:"fixed",right:0,top:0,height:"100vh",width:860,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:1201,display:"flex",flexDirection:"column",boxShadow:"-16px 0 48px rgba(0,0,0,.28)"}}>
+          <div className="slideInRight" style={{position:"fixed",right:0,top:0,height:"100vh",width:soloRuleId?540:860,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:1201,display:"flex",flexDirection:"column",boxShadow:"-16px 0 48px rgba(0,0,0,.28)"}}>
 
             {/* Header */}
             <div style={{padding:"14px 22px",borderBottom:`1px solid ${T.border}`,flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center",background:T.bgElevated}}>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
                 <div style={{width:30,height:30,borderRadius:7,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent}}>{Ic.shield(14)}</div>
                 <div>
-                  <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{isEditMode?"Edit Policy":"New Policy"}</div>
-                  <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Define what this policy governs and how it's enforced.</div>
+                  <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{soloRuleId?"Edit Rule":isEditMode?"Edit Policy":"New Policy"}</div>
+                  <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{soloRuleId?"Edit this rule's fields and enforcement settings.":"Define what this policy governs and how it's enforced."}</div>
                 </div>
               </div>
               <button onClick={closeWizard} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.x(12)}</button>
@@ -9961,7 +9956,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
 
             {/* body: section rail + content */}
             <div style={{flex:1,display:"flex",minHeight:0}}>
-              {/* section rail */}
+              {/* section rail — hidden in single-rule (solo) mode */}
+              {!soloRuleId && (
               <div style={{width:212,flexShrink:0,borderRight:`1px solid ${T.border}`,overflowY:"auto",padding:"14px 10px",display:"flex",flexDirection:"column",gap:3,background:T.bg}}>
                 {W_STEPS.map((s,i)=>{
                   const n=i+1, on=createStep===n;
@@ -9979,6 +9975,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   );
                 })}
               </div>
+              )}
 
             {/* Step content */}
             <div style={{flex:1,overflowY:"auto",minHeight:0,padding:"22px 26px"}}>
@@ -10421,9 +10418,10 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                     <div style={{display:"flex",flexDirection:"column",gap:0}}>
 
                       {/* ── Rules ── */}
-                      {secHead("Rules","Define the conditions evaluated against each in-scope asset.")}
+                      {!soloRuleId && secHead("Rules","Define the conditions evaluated against each in-scope asset.")}
 
-                      {/* ── Rule Type tabs: Preset Rules / Custom ── */}
+                      {/* ── Rule Type tabs: Preset Rules / Custom — hidden in solo mode ── */}
+                      {!soloRuleId && (
                       <div style={{display:"flex",borderBottom:`2px solid ${T.border}`,marginBottom:16}}>
                         {[{id:"preset",label:"Preset Rules",count:wizardRules.length},{id:"sql",label:"Custom",count:wizardSqlRules.length}].map(tab=>{
                           const sel=wizardRuleTab===tab.id;
@@ -10436,6 +10434,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                           );
                         })}
                       </div>
+                      )}
 
                       {/* ── Custom tab content ── */}
                       {wizardRuleTab==="sql"&&(()=>{
@@ -10585,7 +10584,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                               <button onClick={addPresetRule} style={{padding:"7px 18px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>+ Add Rule</button>
                             </div>
                           : <>
-                              {wizardRules.map((r,ri)=>{
+                              {(soloRuleId?wizardRules.filter(x=>x.id===soloRuleId):wizardRules).map((r,ri)=>{
                                 const fd        = W_RULE_FIELDS.find(f=>f.id===r.field)||filteredRuleFields[0]||W_RULE_FIELDS[0];
                                 const isPresence= fd.type==="presence";
                                 const needsVal  = fd.type==="enum"||fd.type==="enum_multi"||fd.type==="list";
@@ -11029,11 +11028,13 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                   </div>
                                 );
                               })}
+                              {!soloRuleId && (
                               <button onClick={addPresetRule} style={{padding:"9px",borderRadius:8,background:"transparent",border:`1.5px dashed ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",fontWeight:500,display:"flex",alignItems:"center",gap:6,justifyContent:"center",transition:"all .1s"}}
                                 onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
                                 onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;e.currentTarget.style.background="transparent";}}>
                                 {Ic.plus(11)} Add Rule
                               </button>
+                              )}
                             </>
                         }
                       </div>
@@ -11041,8 +11042,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       {/* close preset tab */}
                       </>}
 
-                      {/* ── Rule Evaluation Logic — how multiple rules combine (always shown) ── */}
-                      {(()=>{
+                      {/* ── Rule Evaluation Logic — how multiple rules combine (hidden in solo mode) ── */}
+                      {!soloRuleId && (()=>{
                         const rl = newPol.ruleLogic||"independent";
                         const OPTS=[
                           {id:"independent", label:"Each rule independently"},
@@ -11237,6 +11238,12 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
 
             {/* Footer */}
             <div style={{padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:T.bgBase}}>
+              {soloRuleId ? (
+                <div style={{display:"flex",gap:8,marginLeft:"auto"}}>
+                  <button onClick={closeWizard} style={{padding:"7px 16px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+                  <button onClick={()=>handleCreate("draft")} style={{padding:"7px 22px",borderRadius:7,background:T.accent,border:`1px solid ${T.accent}`,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Save changes</button>
+                </div>
+              ) : (<>
               <button onClick={()=>setCreateStep(s=>Math.max(1,s-1))} disabled={createStep===1}
                 style={{padding:"7px 18px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:createStep===1?T.textMuted:T.textSub,fontSize:12,fontWeight:500,cursor:createStep===1?"not-allowed":"pointer",opacity:createStep===1?.4:1}}>
                 ← Back
@@ -11289,6 +11296,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                     })()
                 }
               </div>
+              </>)}
             </div>
           </div>
         </>
