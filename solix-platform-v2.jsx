@@ -10966,7 +10966,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
                                                 <span style={objLbl}>Redaction style</span>
                                                 <select value={method} onChange={e=>setObjF("maskMethod",e.target.value)} style={{...sel_s,flex:1}}>
-                                                  {["Full redaction","Partial mask (keep last 4)","Label replace","Hash / tokenize","Remove match"].map(m=><option key={m} value={m}>{m}</option>)}
+                                                  {["Full redaction","Label replace","Hash","Remove match"].map(m=><option key={m} value={m}>{m}</option>)}
                                                 </select>
                                               </div>
                                               {/* Apply as — output mode */}
@@ -10975,7 +10975,6 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                                 <select value={output} onChange={e=>setObjF("maskOutput",e.target.value)} style={{...sel_s,flex:1}}>
                                                   <option value="copy">Redacted copy — original untouched</option>
                                                   <option value="inplace">In-place overwrite — approval required</option>
-                                                  <option value="onread" disabled>On-read / dynamic — coming soon</option>
                                                 </select>
                                               </div>
                                               {output==="copy"&&(
