@@ -7034,7 +7034,11 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   };
   const resolveTableOwner = (tableName) => {
     const a = ASSETS.find(x=>x.name===tableName);
-    return (a && (a.owner || (Array.isArray(a.owners)&&a.owners[0]))) || "the domain owner";
+    const owner = a && (a.owner || (Array.isArray(a.owners)&&a.owners[0]));
+    if(owner) return owner;
+    // Object stores (Bucket/Container/Object/Blob) have no domain-owner fallback — route to Admin.
+    const isObj = a && (a.type==="Bucket"||a.type==="Container"||a.type==="Object"||a.type==="Blob");
+    return isObj ? "Admin" : "the domain owner";
   };
   // Plural form — an asset can carry more than one owner; used to render approver chips
   // instead of a fake pickable "Approver" dropdown, since the real approver isn't a choice.
@@ -7043,7 +7047,9 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
     if(!a) return [];
     if(Array.isArray(a.owners)&&a.owners.length) return a.owners;
     if(a.owner) return [a.owner];
-    return [];
+    // Object stores fall back to Admin (no domain-owner fallback), matching resolveTableOwner.
+    const isObj = a.type==="Bucket"||a.type==="Container"||a.type==="Object"||a.type==="Blob";
+    return isObj ? ["Admin"] : [];
   };
   const closeWizard = () => { setCreateOpen(false); setNewPol(EMPTY_POL); setCreateStep(1); setWizardRules([]); setWizardRuleTab("preset"); setWizardSqlRules([]); setIsEditMode(false); };
 
