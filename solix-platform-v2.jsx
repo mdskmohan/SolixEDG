@@ -7194,6 +7194,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
         critType:r.critType||null, dateCol:r.dateCol||"", critText:r.critText||"",
         holdCriteria:r.holdCriteria||[], maskColumns:r.maskColumns||[],
         objPattern:r.objPattern||"", objDateBasis:r.objDateBasis||"", objDateOp:r.objDateOp||"", objDateVal:r.objDateVal||"", objDateVal2:r.objDateVal2||"",
+        maskPatterns:r.maskPatterns||[], maskFileTypes:r.maskFileTypes||[], maskMethod:r.maskMethod||"", maskOutput:r.maskOutput||"", maskDest:r.maskDest||"",
         releasedKeys:r.releasedKeys||[],
         pendingUnhold:!!r.pendingUnhold};
     });
@@ -7351,7 +7352,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
         name=`${fl} ${rpPreset.operator}${rpPreset.value?" "+rpPreset.value:""}${tblStr}${colStr}`;
       }
       const newRule={id:rulePanel?.mode==="edit"?rulePanel.ruleId:`r${Date.now()}`,type:"preset",field:rpPreset.field,operator:rpPreset.operator,value:rpPreset.value||"",table:rpPreset.table||"",column:rpPreset.column||"",severity:rpPreset.severity||"Medium",name,
-        ...(keepEnf?{enforce:!!orig.enforce,enf:orig.enf||null,holdCriteria:orig.holdCriteria||[],maskColumns:orig.maskColumns||[],critType:orig.critType||null,dateCol:orig.dateCol||"",critText:orig.critText||"",objPattern:orig.objPattern||"",objDateBasis:orig.objDateBasis||"",objDateOp:orig.objDateOp||"",objDateVal:orig.objDateVal||"",objDateVal2:orig.objDateVal2||"",releasedKeys:orig.releasedKeys||[],pendingUnhold:!!orig.pendingUnhold}:{})};
+        ...(keepEnf?{enforce:!!orig.enforce,enf:orig.enf||null,holdCriteria:orig.holdCriteria||[],maskColumns:orig.maskColumns||[],critType:orig.critType||null,dateCol:orig.dateCol||"",critText:orig.critText||"",objPattern:orig.objPattern||"",objDateBasis:orig.objDateBasis||"",objDateOp:orig.objDateOp||"",objDateVal:orig.objDateVal||"",objDateVal2:orig.objDateVal2||"",maskPatterns:orig.maskPatterns||[],maskFileTypes:orig.maskFileTypes||[],maskMethod:orig.maskMethod||"",maskOutput:orig.maskOutput||"",maskDest:orig.maskDest||"",releasedKeys:orig.releasedKeys||[],pendingUnhold:!!orig.pendingUnhold}:{})};
       setPolicies(prev=>prev.map(p=>{
         if(p.id!==selPol.id) return p;
         const rules=rulePanel?.mode==="edit"?(p.rules||[]).map(r=>r.id===rulePanel.ruleId?newRule:r):[...(p.rules||[]),newRule];
@@ -7368,7 +7369,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
     setRulePanel(null);
     onToast(rulePanel?.mode==="edit"?"Rule updated":"Rule added","success");
   };
-  const openEditWizard = (pol) => {
+  const openEditWizard = (pol, opts={}) => {
     // Normalize scope so Step 1 dropdowns show correct values and validation passes
     const normalizedScope = {
       domains:    pol.scope?.domains  || [],
@@ -7385,13 +7386,14 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
       critType:r.critType||null, dateCol:r.dateCol||"", critText:r.critText||"",
       holdCriteria:r.holdCriteria||[], maskColumns:r.maskColumns||[],
       objPattern:r.objPattern||"", objDateBasis:r.objDateBasis||"", objDateOp:r.objDateOp||"", objDateVal:r.objDateVal||"", objDateVal2:r.objDateVal2||"",
+      maskPatterns:r.maskPatterns||[], maskFileTypes:r.maskFileTypes||[], maskMethod:r.maskMethod||"", maskOutput:r.maskOutput||"", maskDest:r.maskDest||"",
       releasedKeys:r.releasedKeys||[],
       pendingUnhold:!!r.pendingUnhold}));
     const sqlBack    = (pol.rules||[]).filter(r=>r.type==="sql"||r.sql).map(r=>({id:r.id||`wsql-${Date.now()}`,label:r.label||r.name||"",table:r.table||"",sql:r.sql||"",strategy:r.strategy||"BINARY",operator:r.operator||"",threshold:r.threshold||"",partitionExpr:r.partitionExpr||"",severity:r.severity||"Medium"}));
     setWizardRules(presetBack);
     setWizardSqlRules(sqlBack);
     setWizardRuleTab("preset");
-    setCreateStep(1);
+    setCreateStep(opts.step||1);
     setIsEditMode(true);
     setCreateOpen(true);
   };
@@ -8466,10 +8468,20 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                         if (rule.type==="sql"||rule.sql) {
                           setRpTab("sql");
                           setRpSql({label:rule.label||rule.name||"",table:rule.table||"",sql:rule.sql||"",strategy:rule.strategy||"BINARY",operator:rule.operator||"",threshold:rule.threshold||"",partitionExpr:rule.partitionExpr||"",severity:rule.severity||"Medium"});
-                        } else {
-                          setRpTab("preset");
-                          setRpPreset({field:rule.field||"certification",operator:rule.operator||"is",value:rule.value||"",table:rule.table||"",column:rule.column||"",severity:rule.severity||"Medium"});
+                          setRulePanel({mode:"edit",ruleId:rule.id});
+                          return;
                         }
+                        // Enforced rules (Masking / Legal Hold / Retention with "Enforce in place") carry
+                        // criteria the quick panel can't edit — columns/patterns to mask, hold rows,
+                        // retention terms, object-store scope. Open the full policy editor at the Rules
+                        // step so every field of the rule is editable, not just field/operator/value/severity.
+                        const isEnfRule = ["masking_status","legal_hold","retention_class"].includes(rule.field) && rule.enforce;
+                        if (isEnfRule) {
+                          openEditWizard(p, {step:3});
+                          return;
+                        }
+                        setRpTab("preset");
+                        setRpPreset({field:rule.field||"certification",operator:rule.operator||"is",value:rule.value||"",table:rule.table||"",column:rule.column||"",severity:rule.severity||"Medium"});
                         setRulePanel({mode:"edit",ruleId:rule.id});
                       };
 
