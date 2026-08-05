@@ -17295,7 +17295,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
           </div>
         </div>
         <div style={{display:"flex",marginBottom:-1}}>
-          {[{k:"overview",l:"Overview"},{k:"assets",l:`Assets (${children.length})`}].map(t=>(
+          {[{k:"overview",l:"Overview"},{k:"assets",l:`Assets (${children.length})`},{k:"customprops",l:"Custom Properties"}].map(t=>(
             <button key={t.k} onClick={()=>setTab(t.k)}
               style={{padding:"9px 16px",background:"transparent",border:"none",borderBottom:`2px solid ${tab===t.k?T.accent:"transparent"}`,color:tab===t.k?T.text:T.textMuted,fontSize:13,fontWeight:tab===t.k?600:400,cursor:"pointer",transition:"all .12s",whiteSpace:"nowrap"}}>
               {t.l}
@@ -17309,6 +17309,10 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
 
         {/* Main content */}
         <div style={{flex:1,overflowY:"auto",padding:24,minWidth:0}}>
+
+          {tab==="customprops"&&(
+            <CustomPropsPanel entity={data.type} objectId={data.name} objectName={data.name} owners={data.owners||[]} stewards={data.stewards||[]} onToast={onToast}/>
+          )}
 
           {tab==="overview"&&(
             <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:900}}>
@@ -17770,6 +17774,9 @@ const FileAssetDetail = ({asset, onBack, onToast}) => {
   const [tab,       setTab]       = useState("overview");
   const FILE_FORMAT_COLORS = {CSV:"#16a34a",Parquet:"#0891b2",JSON:"#d97706",JSON_LINES:"#d97706",ORC:"#7c3aed",Avro:"#0891b2",Delta:"#ff3621"};
   const fc = FILE_FORMAT_COLORS[asset.fileFormat]||"#6b7280";
+  // tag-color helper (this component previously referenced `tc` without defining it → crash on tagged files)
+  const TAG_C = {PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},finance:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},KPI:{bg:"rgba(22,163,74,.08)",color:"#16a34a",border:"rgba(22,163,74,.2)"},sensitive:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"},events:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"}};
+  const tc = tag => TAG_C[tag]||{bg:T.bgElevated,color:T.textSub,border:T.border};
 
   const SLabel = ({children})=>(
     <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:7}}>{children}</div>
@@ -17785,7 +17792,7 @@ const FileAssetDetail = ({asset, onBack, onToast}) => {
     return <div style={{width:size,height:size,borderRadius:Math.floor(size/3),background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*0.32,fontWeight:700,color:T.accent,flexShrink:0}}>{initials}</div>;
   };
 
-  const TABS = [{id:"overview",label:"Overview"},{id:"properties",label:"Properties"},{id:"lineage",label:"Lineage"}];
+  const TABS = [{id:"overview",label:"Overview"},{id:"properties",label:"Properties"},{id:"customprops",label:"Custom Properties"},{id:"lineage",label:"Lineage"}];
 
   const formatDate = (iso) => {
     if(!iso) return "—";
@@ -17847,6 +17854,13 @@ const FileAssetDetail = ({asset, onBack, onToast}) => {
 
       {/* ── Body ── */}
       <div style={{flex:1,overflow:"auto",padding:"24px 28px",display:"flex",gap:22,alignItems:"flex-start"}}>
+
+        {/* ── CUSTOM PROPERTIES TAB ── */}
+        {tab==="customprops"&&(
+          <div style={{flex:1,minWidth:0}}>
+            <CustomPropsPanel entity={asset.type} objectId={asset.name} objectName={asset.name} owners={asset.owners||(asset.owner?[asset.owner]:[])} stewards={asset.stewards||(asset.steward?[asset.steward]:[])} onToast={onToast}/>
+          </div>
+        )}
 
         {/* ── OVERVIEW TAB ── */}
         {tab==="overview"&&<>
@@ -18214,7 +18228,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
         {tab==="contract"      && <AssetContractTab asset={data} onToast={onToast}/>}
         {tab==="usage"     && <AssetUsageTab/>}
         {tab==="lineage"   && <AssetLineageFull asset={data}/>}
-        {tab==="customprops" && <CustomPropsPanel entity="Asset" objectId={data.name} objectName={data.name} owners={owners} stewards={stewards} onToast={onToast}/>}
+        {tab==="customprops" && <CustomPropsPanel entity={data.type||"Table"} objectId={data.name} objectName={data.name} owners={owners} stewards={stewards} onToast={onToast}/>}
         {tab==="activity"  && <AuditLogTable entries={ASSET_AUDIT_ENTRIES}/>}
       </div>
 
@@ -29543,16 +29557,28 @@ const CP_TYPES = [
   {t:"user",      label:"User / Team",  hint:"reference"},
 ];
 const CP_TYPE_LABEL = Object.fromEntries(CP_TYPES.map(x=>[x.t,x.label]));
-const CP_ENTITIES = ["Asset","Tag","Domain"];
+// Every object type a custom property can attach to, grouped for the "Applies to" picker.
+// Each maps to a detail surface that renders the value panel: Tables/Views/Pipelines →
+// AssetDetailFull; Databases/Schemas/Containers/Buckets/Folders → ContainerAssetDetail;
+// Objects/Blobs → FileAssetDetail; plus Tag & Domain.
+const CP_ENTITY_GROUPS = [
+  {group:"Tables & views",       items:["Table","View","Pipeline"]},
+  {group:"Databases & schemas",  items:["Database","Schema"]},
+  {group:"Object storage",       items:["Container","Bucket","Folder","Object"]},
+  {group:"Governance",           items:["Tag","Domain"]},
+];
+const CP_ENTITIES = CP_ENTITY_GROUPS.flatMap(g=>g.items);
 const cpSlug = s => (s||"").toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
 
 let _cpDefs = [
-  {id:"cp1", name:"Data Classification",  machine:"data_classification",  type:"enum",      entity:"Asset",  required:false, vals:["Public","Internal","Confidential","Restricted"], refTarget:"", desc:"Sensitivity tier that drives masking & access rules."},
-  {id:"cp2", name:"Retention Days",        machine:"retention_days",       type:"integer",   entity:"Asset",  required:true,  vals:[], refTarget:"", desc:"How long records are kept before archival."},
-  {id:"cp3", name:"PII Reviewed By",       machine:"pii_reviewed_by",      type:"user",      entity:"Asset",  required:false, vals:[], refTarget:"Steward", desc:"Who signed off on the PII review."},
-  {id:"cp4", name:"Cost Center",           machine:"cost_center",          type:"string",    entity:"Asset",  required:false, vals:[], refTarget:"", desc:"Chargeback code for this asset."},
-  {id:"cp5", name:"Regulatory Scope",      machine:"regulatory_scope",     type:"enumMulti", entity:"Tag",    required:false, vals:["GDPR","HIPAA","CCPA","SOX"], refTarget:"", desc:"Regulations this classification maps to."},
-  {id:"cp6", name:"Business Criticality",  machine:"business_criticality", type:"enum",      entity:"Domain", required:false, vals:["Low","Medium","High","Critical"], refTarget:"", desc:"How critical this domain is to the business."},
+  {id:"cp1", name:"Data Classification",  machine:"data_classification",  type:"enum",      entity:"Table",     required:false, vals:["Public","Internal","Confidential","Restricted"], refTarget:"", desc:"Sensitivity tier that drives masking & access rules."},
+  {id:"cp2", name:"Retention Days",        machine:"retention_days",       type:"integer",   entity:"Table",     required:true,  vals:[], refTarget:"", desc:"How long records are kept before archival."},
+  {id:"cp3", name:"PII Reviewed By",       machine:"pii_reviewed_by",      type:"user",      entity:"Table",     required:false, vals:[], refTarget:"Steward", desc:"Who signed off on the PII review."},
+  {id:"cp4", name:"Cost Center",           machine:"cost_center",          type:"string",    entity:"Table",     required:false, vals:[], refTarget:"", desc:"Chargeback code for this asset."},
+  {id:"cp5", name:"Regulatory Scope",      machine:"regulatory_scope",     type:"enumMulti", entity:"Tag",       required:false, vals:["GDPR","HIPAA","CCPA","SOX"], refTarget:"", desc:"Regulations this classification maps to."},
+  {id:"cp6", name:"Business Criticality",  machine:"business_criticality", type:"enum",      entity:"Domain",    required:false, vals:["Low","Medium","High","Critical"], refTarget:"", desc:"How critical this domain is to the business."},
+  {id:"cp7", name:"Encryption",            machine:"encryption",           type:"enum",      entity:"Bucket",    required:false, vals:["SSE-S3","SSE-KMS","None"], refTarget:"", desc:"At-rest encryption applied to this bucket."},
+  {id:"cp8", name:"Environment",           machine:"environment",          type:"enum",      entity:"Database",  required:false, vals:["Prod","Staging","Dev"], refTarget:"", desc:"Deployment environment for this database."},
 ];
 const _cpDefSubs = new Set();
 const cpDefsSet = (u)=>{ _cpDefs = typeof u==="function"?u(_cpDefs):u; _cpDefSubs.forEach(f=>f()); };
@@ -29562,8 +29588,7 @@ const useCustomPropDefs = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=
 
 // values keyed by `${entity}::${objectId}` → { [defId]: value }
 let _cpVals = {
-  "Asset::customers": {cp1:"Confidential", cp4:"CC-4471"},
-  "Asset::orders":    {cp1:"Internal",     cp2:"365"},
+  "Table::customers": {cp1:"Confidential", cp4:"CC-4471"},
 };
 const _cpValSubs = new Set();
 const setPropValue = (entity,objId,defId,val)=>{ const k=entity+"::"+objId; _cpVals={..._cpVals,[k]:{...(_cpVals[k]||{}),[defId]:val}}; _cpValSubs.forEach(f=>f()); };
@@ -29684,7 +29709,7 @@ const CustomPropsPanel = ({entity,objectId,objectName,owners=[],stewards=[],onTo
 };
 
 // Admin editor (Settings) for a single custom-property DEFINITION — right-side drawer.
-const newCPDraft = ()=>({id:"",name:"",machine:"",type:"string",entity:"Asset",required:false,vals:[],refTarget:"Steward",desc:""});
+const newCPDraft = ()=>({id:"",name:"",machine:"",type:"string",entity:"Table",required:false,vals:[],refTarget:"Steward",desc:""});
 const CustomPropDefEditor = ({editing,onClose,onToast})=>{
   const [d,setD]=useState(editing?{...editing,vals:editing.vals||[]}:newCPDraft());
   useEffect(()=>{ setD(editing?{...editing,vals:editing.vals||[]}:newCPDraft()); },[editing]);
@@ -29725,7 +29750,7 @@ const CustomPropDefEditor = ({editing,onClose,onToast})=>{
         </div>
         <div style={{marginBottom:16}}>
           <label style={lbl}>Applies to</label>
-          <select value={d.entity} onChange={e=>set("entity",e.target.value)} style={selS}>{CP_ENTITIES.map(en=><option key={en} value={en}>{en}</option>)}</select>
+          <select value={d.entity} onChange={e=>set("entity",e.target.value)} style={selS}>{CP_ENTITY_GROUPS.map(g=><optgroup key={g.group} label={g.group}>{g.items.map(en=><option key={en} value={en}>{en}</option>)}</optgroup>)}</select>
         </div>
         <div style={{marginBottom:16}}>
           <label style={lbl}>Data type</label>
@@ -29753,7 +29778,7 @@ const CustomPropDefEditor = ({editing,onClose,onToast})=>{
       {/* Footer */}
       <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgElevated,display:"flex",gap:8,justifyContent:"flex-end"}}>
         <Btn ghost onClick={onClose}>Cancel</Btn>
-        <Btn variant="primary" onClick={save}>{editing?"Save changes":"Add property"}</Btn>
+        <Btn variant="primary" onClick={save}>{editing?"Save":"Add"}</Btn>
       </div>
     </div>
   </>;
@@ -32591,7 +32616,7 @@ const SettingsView = ({onToast})=>{
             {/* ══ CUSTOM PROPERTIES ══ */}
             {section==="custom_props"&&<>
               <SettSH icon={Ic.props(16)} title="Custom Properties" desc="Define typed fields once on an object type — they appear on every asset, tag, or domain of that type for stewards & owners to fill in."
-                action={<AddBtn label="Add Property" onClick={()=>setPropEditor("new")}/>}/>
+                action={<AddBtn label="Add" onClick={()=>setPropEditor("new")}/>}/>
               <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
                 <table style={{width:"100%",borderCollapse:"collapse"}}>
                   <thead><tr style={{borderBottom:`1px solid ${T.border}`,background:T.bgElevated}}>{["Property","Type","Applies to","Required","Allowed Values",""].map(h=><th key={h} style={{padding:"9px 14px",textAlign:"left",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</th>)}</tr></thead>
