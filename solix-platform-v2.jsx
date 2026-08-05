@@ -29687,8 +29687,7 @@ const CustomPropsPanel = ({entity,objectId,objectName,owners=[],stewards=[],onTo
 const newCPDraft = ()=>({id:"",name:"",machine:"",type:"string",entity:"Asset",required:false,vals:[],refTarget:"Steward",desc:""});
 const CustomPropDefEditor = ({editing,onClose,onToast})=>{
   const [d,setD]=useState(editing?{...editing,vals:editing.vals||[]}:newCPDraft());
-  const [cpPreviewVal,setCpPreviewVal]=useState(undefined);
-  useEffect(()=>{ setD(editing?{...editing,vals:editing.vals||[]}:newCPDraft()); setCpPreviewVal(undefined); },[editing]);
+  useEffect(()=>{ setD(editing?{...editing,vals:editing.vals||[]}:newCPDraft()); },[editing]);
   const set=(k,v)=>setD(p=>({...p,[k]:v}));
   const setName=v=>setD(p=>({...p,name:v,machine:(editing?p.machine:cpSlug(v))}));
   const isEnum=d.type==="enum"||d.type==="enumMulti";
@@ -29724,15 +29723,14 @@ const CustomPropDefEditor = ({editing,onClose,onToast})=>{
           <label style={lbl}>Machine name <span style={opt}>· used in API &amp; storage</span></label>
           <input value={d.machine} onChange={e=>set("machine",cpSlug(e.target.value))} placeholder="data_retention_class" style={{...inp,fontFamily:"'Geist Mono',monospace"}} onFocus={onF} onBlur={onB}/>
         </div>
-        <div style={{display:"flex",gap:12,marginBottom:16}}>
-          <div style={{flex:1}}>
-            <label style={lbl}>Applies to</label>
-            <select value={d.entity} onChange={e=>set("entity",e.target.value)} style={selS}>{CP_ENTITIES.map(en=><option key={en} value={en}>{en}</option>)}</select>
-          </div>
-          <div style={{flex:1}}>
-            <label style={lbl}>Type</label>
-            <select value={d.type} onChange={e=>set("type",e.target.value)} style={selS}>{CP_TYPES.map(ty=><option key={ty.t} value={ty.t}>{ty.label} — {ty.hint}</option>)}</select>
-          </div>
+        <div style={{marginBottom:16}}>
+          <label style={lbl}>Applies to</label>
+          <select value={d.entity} onChange={e=>set("entity",e.target.value)} style={selS}>{CP_ENTITIES.map(en=><option key={en} value={en}>{en}</option>)}</select>
+        </div>
+        <div style={{marginBottom:16}}>
+          <label style={lbl}>Data type</label>
+          <select value={d.type} onChange={e=>set("type",e.target.value)} style={selS}>{CP_TYPES.map(ty=><option key={ty.t} value={ty.t}>{ty.label} — {ty.hint}</option>)}</select>
+          <div style={{fontSize:11,color:T.textMuted,marginTop:5}}>Controls how the value is entered and validated on every {d.entity.toLowerCase()}.</div>
         </div>
         {isEnum&&<div style={{marginBottom:16}}>
           <label style={lbl}>Allowed values <span style={opt}>· comma separated</span></label>
@@ -29746,20 +29744,9 @@ const CustomPropDefEditor = ({editing,onClose,onToast})=>{
           <label style={lbl}>Description <span style={opt}>· optional</span></label>
           <textarea value={d.desc} onChange={e=>set("desc",e.target.value)} rows={2} placeholder="Explain what this property captures." style={{...inp,resize:"vertical"}} onFocus={onF} onBlur={onB}/>
         </div>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 13px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:20}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 13px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
           <div><div style={{fontSize:12.5,fontWeight:600,color:T.text}}>Required</div><div style={{fontSize:11,color:T.textMuted}}>Flag instances that leave this empty.</div></div>
           <Toggle on={d.required} onChange={()=>set("required",!d.required)}/>
-        </div>
-
-        {/* Live preview */}
-        <div style={{padding:"12px 14px",background:T.bg,border:`1px dashed ${T.border}`,borderRadius:9}}>
-          <div style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",color:T.textMuted,marginBottom:9}}>Preview · on a {d.entity.toLowerCase()} page</div>
-          <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:7}}>
-            <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{d.name||"Property name"}</span>
-            {d.required&&<span style={{color:T.rose,fontSize:13,lineHeight:1}}>*</span>}
-            <span style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.04em",color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:4,padding:"2px 6px"}}>{CP_TYPE_LABEL[d.type]}</span>
-          </div>
-          <CPValueInput def={previewDef} value={cpPreviewVal} onChange={setCpPreviewVal}/>
         </div>
       </div>
 
