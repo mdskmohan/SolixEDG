@@ -29576,21 +29576,37 @@ const requestPropChange = (req)=>cpReqSet(prev=>[{id:"cp-"+Date.now(), status:"p
 const resolvePropRequest = (id,status)=>cpReqSet(prev=>prev.map(r=>r.id===id?{...r,status}:r));
 const useCustomPropReqs = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_cpReqSubs.add(fn);return()=>{_cpReqSubs.delete(fn);};},[]); return _cpReqs; };
 
-// Typed value input for one custom property.
-const CPValueInput = ({def,value,onChange,disabled})=>{
-  const baseS={width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",opacity:disabled?0.6:1,fontFamily:"inherit"};
+// ── Shared bits for Custom Property value rendering ──
+const cpIsEmpty = (v)=> v==null || v==="" || (Array.isArray(v)&&v.length===0);
+const cpInitials = (h)=> String(h||"").split(/[.\s_@]/).filter(Boolean).map(x=>x[0]).slice(0,2).join("").toUpperCase();
+
+// Read-only, formatted display of a value (chips / avatar / text) — no form controls.
+const CPValueDisplay = ({def,value})=>{
+  if(cpIsEmpty(value)) return <span style={{fontSize:12.5,color:T.textMuted,fontStyle:"italic"}}>Not set</span>;
+  const chip=(txt)=><span style={{display:"inline-block",background:T.accentDim,color:T.accent,borderRadius:6,padding:"3px 9px",fontSize:12,fontWeight:600}}>{txt}</span>;
+  if(def.type==="enum") return chip(value);
+  if(def.type==="enumMulti"){ const arr=Array.isArray(value)?value:String(value).split(",").map(s=>s.trim()).filter(Boolean); return <span style={{display:"flex",flexWrap:"wrap",gap:6}}>{arr.map(v=><span key={v}>{chip(v)}</span>)}</span>; }
+  if(def.type==="user") return <span style={{display:"inline-flex",alignItems:"center",gap:7,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:20,padding:"3px 11px 3px 4px",fontSize:12,fontWeight:600,color:T.text}}><span style={{width:18,height:18,borderRadius:"50%",background:T.accent,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9}}>{cpInitials(value)}</span>{value}</span>;
+  if(def.type==="markdown") return <span style={{fontSize:12.5,color:T.text,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{value}</span>;
+  return <span style={{fontSize:13,color:T.text,fontWeight:500}}>{value}</span>;
+};
+
+// Editable, typed control for one value.
+const CPValueInput = ({def,value,onChange})=>{
+  const baseS={width:"100%",maxWidth:340,padding:"8px 11px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
+  const onF=e=>e.target.style.borderColor=T.accent, onB=e=>e.target.style.borderColor=T.border;
   if(def.type==="enum")
-    return <select disabled={disabled} value={value||""} onChange={e=>onChange(e.target.value)} style={baseS}><option value="">— Not set —</option>{(def.vals||[]).map(v=><option key={v} value={v}>{v}</option>)}</select>;
+    return <select value={value||""} onChange={e=>onChange(e.target.value)} style={{...baseS,cursor:"pointer",appearance:"auto",color:value?T.text:T.textMuted}} onFocus={onF} onBlur={onB}><option value="">Select…</option>{(def.vals||[]).map(v=><option key={v} value={v}>{v}</option>)}</select>;
   if(def.type==="enumMulti"){
     const arr=Array.isArray(value)?value:(value?String(value).split(",").map(s=>s.trim()).filter(Boolean):[]);
-    return <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{(def.vals||[]).map(v=>{ const on=arr.includes(v); return <button key={v} type="button" disabled={disabled} onClick={()=>onChange(on?arr.filter(x=>x!==v):[...arr,v])} style={{padding:"5px 11px",borderRadius:20,fontSize:11.5,fontWeight:600,cursor:disabled?"default":"pointer",border:`1px solid ${on?T.accent:T.border}`,background:on?T.accentDim:T.bgElevated,color:on?T.accent:T.textSub}}>{v}</button>; })}</div>;
+    return <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{(def.vals||[]).map(v=>{ const on=arr.includes(v); return <button key={v} type="button" onClick={()=>onChange(on?arr.filter(x=>x!==v):[...arr,v])} style={{padding:"5px 11px",borderRadius:20,fontSize:11.5,fontWeight:600,cursor:"pointer",border:`1px solid ${on?T.accent:T.border}`,background:on?T.accentDim:T.bgElevated,color:on?T.accent:T.textSub}}>{on?"✓ ":""}{v}</button>; })}</div>;
   }
   if(def.type==="user")
-    return <select disabled={disabled} value={value||""} onChange={e=>onChange(e.target.value)} style={baseS}><option value="">— Not set —</option>{STEWARD_POOL.map(u=><option key={u} value={u}>{u}</option>)}</select>;
+    return <select value={value||""} onChange={e=>onChange(e.target.value)} style={{...baseS,cursor:"pointer",appearance:"auto",color:value?T.text:T.textMuted}} onFocus={onF} onBlur={onB}><option value="">Select…</option>{STEWARD_POOL.map(u=><option key={u} value={u}>{u}</option>)}</select>;
   if(def.type==="markdown")
-    return <textarea disabled={disabled} value={value||""} onChange={e=>onChange(e.target.value)} rows={3} placeholder="Not set" style={{...baseS,resize:"vertical",lineHeight:1.5}}/>;
+    return <textarea value={value||""} onChange={e=>onChange(e.target.value)} rows={3} placeholder="Add a value…" style={{...baseS,maxWidth:"100%",resize:"vertical",lineHeight:1.5}} onFocus={onF} onBlur={onB}/>;
   const inputType=(def.type==="integer"||def.type==="number")?"number":def.type==="date"?"date":def.type==="email"?"email":"text";
-  return <input disabled={disabled} type={inputType} value={value==null?"":value} onChange={e=>onChange(e.target.value)} placeholder="Not set" style={baseS}/>;
+  return <input type={inputType} value={value==null?"":value} onChange={e=>onChange(e.target.value)} placeholder="Add a value…" style={baseS} onFocus={onF} onBlur={onB}/>;
 };
 
 // The Custom Properties value panel shown on an asset/tag/domain detail page.
@@ -29606,102 +29622,154 @@ const CustomPropsPanel = ({entity,objectId,objectName,owners=[],stewards=[],onTo
   const isOwner  = cpRole==="admin" || owners.includes(me) || owners[0]===me;
   const isSteward= stewards.includes(me);
   const readOnly = !isOwner && !isSteward;
-  const canRequest = !isOwner && isSteward;
   const [draft,setDraft]=useState(stored);
   const storedKey=JSON.stringify(stored);
   useEffect(()=>{ setDraft(vals[key]||{}); },[key,storedKey]); // resync when object changes or a value is approved
   const setField=(id,v)=>setDraft(d=>({...d,[id]:v}));
   const same=(a,b)=>JSON.stringify(a??"")===JSON.stringify(b??"");
-  const changed=defs.filter(d=>!same(draft[d.id],stored[d.id]));
   const pendingFor=(id)=>reqs.find(r=>r.status==="pending"&&r.entity===entity&&r.targetId===objectId&&r.propId===id);
+  const changed=defs.filter(d=>!pendingFor(d.id)&&!same(draft[d.id],stored[d.id]));
   const saveDirect=()=>{ changed.forEach(d=>setPropValue(entity,objectId,d.id,draft[d.id])); onToast&&onToast(`Saved ${changed.length} propert${changed.length===1?"y":"ies"}`,"success"); };
   const sendRequests=()=>{ changed.forEach(d=>{ requestPropChange({entity,targetId:objectId,name:objectName,propId:d.id,propName:d.name,requestedValue:draft[d.id],requestedBy:me,note:"Requested via detail page",owner:owners[0]||null}); pushNotif({category:"Property",type:"field_updated",title:`Property change requested · ${objectName}`,body:`${me} requested ${d.name} → ${Array.isArray(draft[d.id])?draft[d.id].join(", "):draft[d.id]}`,nav:entity==="Tag"?"tags":entity==="Domain"?"domains":"catalog"}); }); onToast&&onToast(`Sent ${changed.length} change${changed.length===1?"":"s"} to the owner's Inbox`,"success"); setDraft(stored); };
   const gate = readOnly
-    ? {c:T.textMuted, bg:T.bgElevated, txt:"Read-only — you're neither an owner nor a steward of this "+entity.toLowerCase()+". Custom-property values can't be edited."}
+    ? {c:T.textMuted, ic:Ic.lock?Ic.lock(13):"🔒", txt:`Read-only — you're neither an owner nor a steward of this ${entity.toLowerCase()}.`}
     : isOwner
-    ? {c:T.green, bg:`${T.green}12`, txt:"You own this "+entity.toLowerCase()+" — changes save directly and post to the activity feed."}
-    : {c:T.amber, bg:`${T.amber}12`, txt:"As a steward, your changes are sent to the owner's Inbox for approval — they apply once approved."};
+    ? {c:T.green, ic:"✓", txt:`You own this ${entity.toLowerCase()} — changes save directly.`}
+    : {c:T.amber, ic:"✎", txt:"You're a steward — changes are sent to the owner's Inbox for approval."};
 
   if(defs.length===0)
-    return <div style={{padding:"40px 20px",textAlign:"center",color:T.textMuted,fontSize:13,background:T.bgSurface,border:`1px dashed ${T.border}`,borderRadius:10}}>
+    return <div style={{padding:"44px 20px",textAlign:"center",color:T.textMuted,fontSize:13,background:T.bgSurface,border:`1px dashed ${T.border}`,borderRadius:10,maxWidth:720}}>
       No custom properties defined for <b style={{color:T.textSub}}>{entity}</b> yet.<br/>An admin can add them in <b style={{color:T.textSub}}>Settings › Custom Properties</b>.
     </div>;
 
   return <div style={{maxWidth:720}}>
-    <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"11px 13px",borderRadius:9,background:gate.bg,border:`1px solid ${gate.c}33`,marginBottom:18}}>
-      <span style={{color:gate.c,flexShrink:0,marginTop:1,fontSize:13}}>{readOnly?"🔒":isOwner?"✓":"✎"}</span>
-      <span style={{fontSize:12.5,color:T.textSub,lineHeight:1.5}}>{gate.txt}</span>
+    <div style={{display:"flex",alignItems:"center",gap:9,padding:"10px 13px",borderRadius:9,background:`${gate.c}12`,border:`1px solid ${gate.c}33`,marginBottom:20}}>
+      <span style={{color:gate.c,flexShrink:0,fontSize:13,display:"flex"}}>{gate.ic}</span>
+      <span style={{fontSize:12.5,color:T.textSub}}>{gate.txt}</span>
     </div>
-    <div style={{display:"flex",flexDirection:"column",gap:16}}>
-      {defs.map(d=>{ const pend=pendingFor(d.id); return (
-        <div key={d.id}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-            <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{d.name}</span>
-            <span style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.04em",color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:4,padding:"2px 5px"}}>{CP_TYPE_LABEL[d.type]||d.type}</span>
-            {d.required&&<span style={{fontSize:10,fontWeight:700,color:T.accent}}>REQUIRED</span>}
-            {pend&&<span style={{fontSize:10,fontWeight:700,color:T.amber,background:`${T.amber}14`,border:`1px solid ${T.amber}33`,borderRadius:20,padding:"2px 8px"}}>PENDING APPROVAL</span>}
+    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,overflow:"hidden"}}>
+      {defs.map((d,idx)=>{ const pend=pendingFor(d.id); const editable=!readOnly&&!pend; const empty=cpIsEmpty(draft[d.id]); return (
+        <div key={d.id} style={{display:"grid",gridTemplateColumns:"220px 1fr",gap:20,padding:"15px 18px",borderBottom:idx<defs.length-1?`1px solid ${T.border}`:"none",alignItems:"start"}}>
+          <div>
+            <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
+              <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{d.name}</span>
+              {d.required&&<span title="Required" style={{color:T.rose,fontSize:13,lineHeight:1}}>*</span>}
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginTop:5}}>
+              <span style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.04em",color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:4,padding:"2px 6px"}}>{CP_TYPE_LABEL[d.type]||d.type}</span>
+              {pend&&<span style={{fontSize:9,fontWeight:700,color:T.amber,background:`${T.amber}14`,border:`1px solid ${T.amber}33`,borderRadius:20,padding:"2px 7px"}}>PENDING</span>}
+            </div>
+            {d.desc&&<div style={{fontSize:11,color:T.textMuted,marginTop:6,lineHeight:1.5}}>{d.desc}</div>}
           </div>
-          <CPValueInput def={d} value={draft[d.id]} onChange={v=>setField(d.id,v)} disabled={readOnly||!!pend}/>
-          {d.desc&&<div style={{fontSize:11,color:T.textMuted,marginTop:5}}>{d.desc}</div>}
+          <div style={{minWidth:0,paddingTop:1}}>
+            {editable
+              ? <CPValueInput def={d} value={draft[d.id]} onChange={v=>setField(d.id,v)}/>
+              : <CPValueDisplay def={d} value={stored[d.id]}/>}
+            {editable&&d.required&&empty&&<div style={{fontSize:10.5,color:T.rose,marginTop:5}}>This field is required.</div>}
+            {pend&&<div style={{fontSize:10.5,color:T.amber,marginTop:5}}>A change to “{Array.isArray(pend.requestedValue)?pend.requestedValue.join(", "):pend.requestedValue}” is awaiting owner approval.</div>}
+          </div>
         </div>
       );})}
     </div>
     {!readOnly&&changed.length>0&&(
-      <div style={{display:"flex",gap:9,marginTop:20,paddingTop:16,borderTop:`1px solid ${T.border}`}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginTop:16,padding:"12px 16px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10}}>
+        <span style={{fontSize:12.5,color:T.textSub,flex:1}}><b style={{color:T.text}}>{changed.length}</b> unsaved change{changed.length===1?"":"s"}{!isOwner&&" — will be sent for approval"}</span>
+        <Btn ghost small onClick={()=>setDraft(stored)}>Discard</Btn>
         {isOwner
-          ? <Btn variant="primary" onClick={saveDirect}>Save {changed.length} change{changed.length===1?"":"s"}</Btn>
-          : <Btn variant="primary" onClick={sendRequests}>Send {changed.length} change{changed.length===1?"":"s"} for approval</Btn>}
-        <Btn ghost onClick={()=>setDraft(stored)}>Discard</Btn>
+          ? <Btn variant="primary" small onClick={saveDirect}>Save change{changed.length===1?"":"s"}</Btn>
+          : <Btn variant="primary" small onClick={sendRequests}>Send for approval</Btn>}
       </div>
     )}
   </div>;
 };
 
-// Admin editor (Settings) for a single custom-property DEFINITION.
+// Admin editor (Settings) for a single custom-property DEFINITION — right-side drawer.
 const newCPDraft = ()=>({id:"",name:"",machine:"",type:"string",entity:"Asset",required:false,vals:[],refTarget:"Steward",desc:""});
 const CustomPropDefEditor = ({editing,onClose,onToast})=>{
   const [d,setD]=useState(editing?{...editing,vals:editing.vals||[]}:newCPDraft());
-  useEffect(()=>{ setD(editing?{...editing,vals:editing.vals||[]}:newCPDraft()); },[editing]);
+  const [cpPreviewVal,setCpPreviewVal]=useState(undefined);
+  useEffect(()=>{ setD(editing?{...editing,vals:editing.vals||[]}:newCPDraft()); setCpPreviewVal(undefined); },[editing]);
   const set=(k,v)=>setD(p=>({...p,[k]:v}));
   const setName=v=>setD(p=>({...p,name:v,machine:(editing?p.machine:cpSlug(v))}));
   const isEnum=d.type==="enum"||d.type==="enumMulti";
-  const lbl={display:"block",fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.05em",margin:"14px 0 6px"};
-  const sel={width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"};
-  const save=()=>{ if(!d.name.trim()){onToast&&onToast("Give the property a name","error");return;} const def={...d,id:d.id||("cp"+Date.now()),machine:d.machine||cpSlug(d.name),vals:isEnum?(Array.isArray(d.vals)?d.vals:String(d.vals).split(",").map(s=>s.trim()).filter(Boolean)):[]}; upsertPropDef(def); onToast&&onToast(editing?"Property updated":"Property added","success"); onClose(); };
-  return <Modal open={true} onClose={onClose} title={editing?"Edit Custom Property":"Add Custom Property"} width={560}>
-    <label style={{...lbl,marginTop:0}}>Display name</label>
-    <Input2 value={d.name} onChange={e=>setName(e.target.value)} placeholder="e.g. Data Retention Class"/>
-    <label style={lbl}>Machine name <span style={{textTransform:"none",fontWeight:400,color:T.textMuted}}>· used in API & storage</span></label>
-    <Input2 value={d.machine} onChange={e=>set("machine",cpSlug(e.target.value))} placeholder="data_retention_class" style={{fontFamily:"'Geist Mono',monospace"}}/>
-    <label style={lbl}>Applies to</label>
-    <select value={d.entity} onChange={e=>set("entity",e.target.value)} style={sel}>{CP_ENTITIES.map(en=><option key={en} value={en}>{en}</option>)}</select>
-    <label style={lbl}>Type</label>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:7}}>
-      {CP_TYPES.map(ty=>{ const on=d.type===ty.t; return (
-        <button key={ty.t} type="button" onClick={()=>set("type",ty.t)} style={{padding:"8px 6px",borderRadius:8,border:`1.5px solid ${on?T.accent:T.border}`,background:on?T.accentDim:T.bgElevated,color:on?T.accent:T.textSub,cursor:"pointer",fontSize:12,fontWeight:600,textAlign:"center"}}>
-          {ty.label}<span style={{display:"block",fontWeight:400,fontSize:10,color:T.textMuted,marginTop:1}}>{ty.hint}</span>
-        </button>
-      );})}
+  const inp={width:"100%",padding:"8px 11px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
+  const selS={...inp,cursor:"pointer",appearance:"auto"};
+  const lbl={display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5};
+  const opt={fontWeight:400,textTransform:"none",color:T.textMuted,fontSize:10.5};
+  const onF=e=>e.target.style.borderColor=T.accent, onB=e=>e.target.style.borderColor=T.border;
+  const previewDef={...d,vals:isEnum?(Array.isArray(d.vals)?d.vals:String(d.vals).split(",").map(s=>s.trim()).filter(Boolean)):[]};
+  const save=()=>{ if(!d.name.trim()){onToast&&onToast("Give the property a name","error");return;} const def={...previewDef,id:d.id||("cp"+Date.now()),machine:d.machine||cpSlug(d.name)}; upsertPropDef(def); onToast&&onToast(editing?"Property updated":"Property added","success"); onClose(); };
+  return <>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1200}}/>
+    <div className="slideInRight" style={{position:"fixed",right:0,top:0,height:"100vh",width:460,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:1201,display:"flex",flexDirection:"column",boxShadow:"-16px 0 48px rgba(0,0,0,.28)"}}>
+      {/* Header */}
+      <div style={{padding:"14px 22px",borderBottom:`1px solid ${T.border}`,flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center",background:T.bgElevated}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:30,height:30,borderRadius:7,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent}}>{Ic.props(15)}</div>
+          <div>
+            <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{editing?"Edit Custom Property":"New Custom Property"}</div>
+            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{editing?`Applies to every ${d.entity.toLowerCase()}.`:"A typed field that appears on every object of a type."}</div>
+          </div>
+        </div>
+        <button onClick={onClose} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.x(12)}</button>
+      </div>
+
+      {/* Body */}
+      <div style={{flex:1,overflowY:"auto",minHeight:0,padding:"20px 22px"}}>
+        <div style={{marginBottom:16}}>
+          <label style={lbl}>Display name <span style={{color:T.rose}}>*</span></label>
+          <input value={d.name} onChange={e=>setName(e.target.value)} autoFocus placeholder="e.g. Data Retention Class" style={inp} onFocus={onF} onBlur={onB}/>
+        </div>
+        <div style={{marginBottom:16}}>
+          <label style={lbl}>Machine name <span style={opt}>· used in API &amp; storage</span></label>
+          <input value={d.machine} onChange={e=>set("machine",cpSlug(e.target.value))} placeholder="data_retention_class" style={{...inp,fontFamily:"'Geist Mono',monospace"}} onFocus={onF} onBlur={onB}/>
+        </div>
+        <div style={{display:"flex",gap:12,marginBottom:16}}>
+          <div style={{flex:1}}>
+            <label style={lbl}>Applies to</label>
+            <select value={d.entity} onChange={e=>set("entity",e.target.value)} style={selS}>{CP_ENTITIES.map(en=><option key={en} value={en}>{en}</option>)}</select>
+          </div>
+          <div style={{flex:1}}>
+            <label style={lbl}>Type</label>
+            <select value={d.type} onChange={e=>set("type",e.target.value)} style={selS}>{CP_TYPES.map(ty=><option key={ty.t} value={ty.t}>{ty.label} — {ty.hint}</option>)}</select>
+          </div>
+        </div>
+        {isEnum&&<div style={{marginBottom:16}}>
+          <label style={lbl}>Allowed values <span style={opt}>· comma separated</span></label>
+          <input value={Array.isArray(d.vals)?d.vals.join(", "):d.vals} onChange={e=>set("vals",e.target.value.split(",").map(s=>s.trimStart()))} placeholder="Public, Internal, Confidential, Restricted" style={inp} onFocus={onF} onBlur={onB}/>
+        </div>}
+        {d.type==="user"&&<div style={{marginBottom:16}}>
+          <label style={lbl}>Reference target</label>
+          <select value={d.refTarget} onChange={e=>set("refTarget",e.target.value)} style={selS}><option>User</option><option>Team</option><option>Steward</option></select>
+        </div>}
+        <div style={{marginBottom:16}}>
+          <label style={lbl}>Description <span style={opt}>· optional</span></label>
+          <textarea value={d.desc} onChange={e=>set("desc",e.target.value)} rows={2} placeholder="Explain what this property captures." style={{...inp,resize:"vertical"}} onFocus={onF} onBlur={onB}/>
+        </div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 13px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:20}}>
+          <div><div style={{fontSize:12.5,fontWeight:600,color:T.text}}>Required</div><div style={{fontSize:11,color:T.textMuted}}>Flag instances that leave this empty.</div></div>
+          <Toggle on={d.required} onChange={()=>set("required",!d.required)}/>
+        </div>
+
+        {/* Live preview */}
+        <div style={{padding:"12px 14px",background:T.bg,border:`1px dashed ${T.border}`,borderRadius:9}}>
+          <div style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em",color:T.textMuted,marginBottom:9}}>Preview · on a {d.entity.toLowerCase()} page</div>
+          <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:7}}>
+            <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{d.name||"Property name"}</span>
+            {d.required&&<span style={{color:T.rose,fontSize:13,lineHeight:1}}>*</span>}
+            <span style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.04em",color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:4,padding:"2px 6px"}}>{CP_TYPE_LABEL[d.type]}</span>
+          </div>
+          <CPValueInput def={previewDef} value={cpPreviewVal} onChange={setCpPreviewVal}/>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgElevated,display:"flex",gap:8,justifyContent:"flex-end"}}>
+        <Btn ghost onClick={onClose}>Cancel</Btn>
+        <Btn variant="primary" onClick={save}>{editing?"Save changes":"Add property"}</Btn>
+      </div>
     </div>
-    {isEnum&&<>
-      <label style={lbl}>Allowed values <span style={{textTransform:"none",fontWeight:400,color:T.textMuted}}>· comma separated</span></label>
-      <Input2 value={Array.isArray(d.vals)?d.vals.join(", "):d.vals} onChange={e=>set("vals",e.target.value.split(",").map(s=>s.trimStart()))} placeholder="Public, Internal, Confidential, Restricted"/>
-    </>}
-    {d.type==="user"&&<>
-      <label style={lbl}>Reference target</label>
-      <select value={d.refTarget} onChange={e=>set("refTarget",e.target.value)} style={sel}><option>User</option><option>Team</option><option>Steward</option></select>
-    </>}
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:16,padding:"11px 13px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
-      <div><div style={{fontSize:12.5,fontWeight:600,color:T.text}}>Required</div><div style={{fontSize:11,color:T.textMuted}}>Flag instances that leave this empty.</div></div>
-      <Toggle on={d.required} onChange={()=>set("required",!d.required)}/>
-    </div>
-    <label style={lbl}>Description <span style={{textTransform:"none",fontWeight:400,color:T.textMuted}}>· optional</span></label>
-    <Input2 value={d.desc} onChange={e=>set("desc",e.target.value)} placeholder="Explain what this property captures." multiline rows={2}/>
-    <div style={{display:"flex",gap:9,marginTop:20}}>
-      <Btn variant="primary" onClick={save}>{editing?"Save changes":"Add property"}</Btn>
-      <Btn ghost onClick={onClose}>Cancel</Btn>
-    </div>
-  </Modal>;
+  </>;
 };
 
 const InboxView = ({onToast}) => {
