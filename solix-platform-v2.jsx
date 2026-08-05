@@ -18125,7 +18125,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
   const tabs=[
     {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},{key:"lineage",label:"Lineage"},
     {key:"observability",label:"Data Quality"},{key:"contract",label:"Contract"},{key:"usage",label:"Usage"},
-    {key:"activity",label:"Audit Logs"},
+    {key:"customprops",label:"Custom Properties"},{key:"activity",label:"Audit Logs"},
   ];
 
   const handleCertify=()=>{
@@ -18214,6 +18214,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
         {tab==="contract"      && <AssetContractTab asset={data} onToast={onToast}/>}
         {tab==="usage"     && <AssetUsageTab/>}
         {tab==="lineage"   && <AssetLineageFull asset={data}/>}
+        {tab==="customprops" && <CustomPropsPanel entity="Asset" objectId={data.name} objectName={data.name} owners={owners} stewards={stewards} onToast={onToast}/>}
         {tab==="activity"  && <AuditLogTable entries={ASSET_AUDIT_ENTRIES}/>}
       </div>
 
@@ -20990,11 +20991,16 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
               {key:"documentation",label:"Overview"},
               {key:"dataproducts",label:`Data Products (${domainProducts.length})`},
               {key:"assets",label:`Assets (${domainAssets.length})`},
+              {key:"customprops",label:"Custom Properties"},
               {key:"activity",label:"Audit Logs"},
             ]} active={domainTab} onChange={setDomainTab}/>
           </div>
 
           <div style={{padding:28}}>
+            {/* CUSTOM PROPERTIES TAB */}
+            {domainTab==="customprops"&&(
+              <CustomPropsPanel entity="Domain" objectId={dm.id} objectName={dm.displayName} owners={dm.owners||[]} stewards={dm.stewards||[]} onToast={onToast}/>
+            )}
             {/* DOCUMENTATION TAB */}
             {domainTab==="documentation"&&(
               <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,280px)",gap:24}}>
@@ -29408,7 +29414,7 @@ const TASK_TYPES = ["field_updated","stewardship_request","needs_attention","tag
 // Phase 3 — work-item categories (color-coded grouping by kind of work)
 const TYPE_CATEGORY = {
   policy_violation:"violation", dq_alert:"violation",
-  tag_review:"approval", certification_review:"approval", term_review:"approval", contract_approval:"approval",
+  tag_review:"approval", certification_review:"approval", term_review:"approval", contract_approval:"approval", property_change:"approval",
   assigned:"ownership", stewardship_request:"ownership", needs_attention:"ownership", orphan_assignment:"ownership", rbac_request:"ownership", delete_request:"ownership",
   field_updated:"curation",
 };
@@ -29425,7 +29431,7 @@ const ITEM_ROLE = {
   tag_review:"steward", dq_alert:"steward", policy_violation:"steward", term_review:"steward", contract_approval:"steward",
   certification_review:"steward",  // status-change requests are approved by the STEWARD
   stewardship_request:"owner", orphan_assignment:"owner", needs_attention:"owner", rbac_request:"owner", delete_request:"owner",
-  enforcement_approval:"owner",
+  enforcement_approval:"owner", property_change:"owner",  // steward proposes a value; the OWNER decides
   field_updated:"fyi", assigned:"fyi",
 };
 const ROLE_META = {
@@ -29441,7 +29447,7 @@ const TYPE_ACTION = {
   tag_review:"Review tag", certification_review:"Review status change",
   orphan_assignment:"Assign owner", needs_attention:"Assign steward",
   stewardship_request:"Review role request", term_review:"Approve term", rbac_request:"Review platform role",
-  delete_request:"Approve deletion", enforcement_approval:"Approve enforcement",
+  delete_request:"Approve deletion", enforcement_approval:"Approve enforcement", property_change:"Approve property change",
   field_updated:"Field updated", assigned:"Assigned to you",
 };
 const itemTitle = (item) => {
@@ -29519,6 +29525,185 @@ const resolveEnfApproval = (id,status)=>erSet(prev=>prev.map(r=>r.id===id?{...r,
 const useEnfApprovals = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_erSubs.add(fn);return()=>{_erSubs.delete(fn);};},[]); return _enfReqs; };
 const enfApprovalFor = (policyId,ruleId) => _enfReqs.filter(r=>r.policyId===policyId&&r.ruleId===ruleId).slice(-1)[0]||null;
 
+// ── Custom Properties (two-layer) ──
+// Layer 1: DEFINITIONS — an admin adds a typed field to an object TYPE (Asset/Tag/Domain) once,
+//          in Settings › Custom Properties. It then appears on every instance of that type.
+// Layer 2: VALUES — stewards/owners fill the value per instance on the object's detail page.
+//          Owner/admin write directly; a steward on an object they don't own REQUESTS instead,
+//          which lands in the owner's Inbox (property_change work item) for approval.
+const CP_TYPES = [
+  {t:"string",    label:"String",       hint:"short text"},
+  {t:"markdown",  label:"Markdown",     hint:"rich text"},
+  {t:"integer",   label:"Integer",      hint:"whole #"},
+  {t:"number",    label:"Number",       hint:"decimal"},
+  {t:"date",      label:"Date",         hint:"calendar"},
+  {t:"email",     label:"Email",        hint:"address"},
+  {t:"enum",      label:"Enum",         hint:"single pick"},
+  {t:"enumMulti", label:"Enum (multi)", hint:"multi pick"},
+  {t:"user",      label:"User / Team",  hint:"reference"},
+];
+const CP_TYPE_LABEL = Object.fromEntries(CP_TYPES.map(x=>[x.t,x.label]));
+const CP_ENTITIES = ["Asset","Tag","Domain"];
+const cpSlug = s => (s||"").toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
+
+let _cpDefs = [
+  {id:"cp1", name:"Data Classification",  machine:"data_classification",  type:"enum",      entity:"Asset",  required:false, vals:["Public","Internal","Confidential","Restricted"], refTarget:"", desc:"Sensitivity tier that drives masking & access rules."},
+  {id:"cp2", name:"Retention Days",        machine:"retention_days",       type:"integer",   entity:"Asset",  required:true,  vals:[], refTarget:"", desc:"How long records are kept before archival."},
+  {id:"cp3", name:"PII Reviewed By",       machine:"pii_reviewed_by",      type:"user",      entity:"Asset",  required:false, vals:[], refTarget:"Steward", desc:"Who signed off on the PII review."},
+  {id:"cp4", name:"Cost Center",           machine:"cost_center",          type:"string",    entity:"Asset",  required:false, vals:[], refTarget:"", desc:"Chargeback code for this asset."},
+  {id:"cp5", name:"Regulatory Scope",      machine:"regulatory_scope",     type:"enumMulti", entity:"Tag",    required:false, vals:["GDPR","HIPAA","CCPA","SOX"], refTarget:"", desc:"Regulations this classification maps to."},
+  {id:"cp6", name:"Business Criticality",  machine:"business_criticality", type:"enum",      entity:"Domain", required:false, vals:["Low","Medium","High","Critical"], refTarget:"", desc:"How critical this domain is to the business."},
+];
+const _cpDefSubs = new Set();
+const cpDefsSet = (u)=>{ _cpDefs = typeof u==="function"?u(_cpDefs):u; _cpDefSubs.forEach(f=>f()); };
+const upsertPropDef = (def)=>cpDefsSet(prev=>{ const i=prev.findIndex(d=>d.id===def.id); if(i<0) return [...prev,{...def,id:def.id||("cp"+Date.now())}]; const n=[...prev]; n[i]={...def}; return n; });
+const deletePropDef = (id)=>cpDefsSet(prev=>prev.filter(d=>d.id!==id));
+const useCustomPropDefs = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_cpDefSubs.add(fn);return()=>{_cpDefSubs.delete(fn);};},[]); return _cpDefs; };
+
+// values keyed by `${entity}::${objectId}` → { [defId]: value }
+let _cpVals = {
+  "Asset::customers": {cp1:"Confidential", cp4:"CC-4471"},
+  "Asset::orders":    {cp1:"Internal",     cp2:"365"},
+};
+const _cpValSubs = new Set();
+const setPropValue = (entity,objId,defId,val)=>{ const k=entity+"::"+objId; _cpVals={..._cpVals,[k]:{...(_cpVals[k]||{}),[defId]:val}}; _cpValSubs.forEach(f=>f()); };
+const useCustomPropVals = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_cpValSubs.add(fn);return()=>{_cpValSubs.delete(fn);};},[]); return _cpVals; };
+
+let _cpReqs = [];
+const _cpReqSubs = new Set();
+const cpReqSet = (u)=>{ _cpReqs = typeof u==="function"?u(_cpReqs):u; _cpReqSubs.forEach(f=>f()); };
+const requestPropChange = (req)=>cpReqSet(prev=>[{id:"cp-"+Date.now(), status:"pending", at:"just now", ...req}, ...prev]);
+const resolvePropRequest = (id,status)=>cpReqSet(prev=>prev.map(r=>r.id===id?{...r,status}:r));
+const useCustomPropReqs = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_cpReqSubs.add(fn);return()=>{_cpReqSubs.delete(fn);};},[]); return _cpReqs; };
+
+// Typed value input for one custom property.
+const CPValueInput = ({def,value,onChange,disabled})=>{
+  const baseS={width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",opacity:disabled?0.6:1,fontFamily:"inherit"};
+  if(def.type==="enum")
+    return <select disabled={disabled} value={value||""} onChange={e=>onChange(e.target.value)} style={baseS}><option value="">— Not set —</option>{(def.vals||[]).map(v=><option key={v} value={v}>{v}</option>)}</select>;
+  if(def.type==="enumMulti"){
+    const arr=Array.isArray(value)?value:(value?String(value).split(",").map(s=>s.trim()).filter(Boolean):[]);
+    return <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{(def.vals||[]).map(v=>{ const on=arr.includes(v); return <button key={v} type="button" disabled={disabled} onClick={()=>onChange(on?arr.filter(x=>x!==v):[...arr,v])} style={{padding:"5px 11px",borderRadius:20,fontSize:11.5,fontWeight:600,cursor:disabled?"default":"pointer",border:`1px solid ${on?T.accent:T.border}`,background:on?T.accentDim:T.bgElevated,color:on?T.accent:T.textSub}}>{v}</button>; })}</div>;
+  }
+  if(def.type==="user")
+    return <select disabled={disabled} value={value||""} onChange={e=>onChange(e.target.value)} style={baseS}><option value="">— Not set —</option>{STEWARD_POOL.map(u=><option key={u} value={u}>{u}</option>)}</select>;
+  if(def.type==="markdown")
+    return <textarea disabled={disabled} value={value||""} onChange={e=>onChange(e.target.value)} rows={3} placeholder="Not set" style={{...baseS,resize:"vertical",lineHeight:1.5}}/>;
+  const inputType=(def.type==="integer"||def.type==="number")?"number":def.type==="date"?"date":def.type==="email"?"email":"text";
+  return <input disabled={disabled} type={inputType} value={value==null?"":value} onChange={e=>onChange(e.target.value)} placeholder="Not set" style={baseS}/>;
+};
+
+// The Custom Properties value panel shown on an asset/tag/domain detail page.
+const CustomPropsPanel = ({entity,objectId,objectName,owners=[],stewards=[],onToast})=>{
+  const allDefs=useCustomPropDefs();
+  const vals=useCustomPropVals();
+  const reqs=useCustomPropReqs();
+  const {role:cpRole,roleCfg:cpCfg}=useRole();
+  const me=((cpCfg&&cpCfg.email)||"you@jnj").split("@")[0];
+  const defs=allDefs.filter(d=>d.entity===entity);
+  const key=entity+"::"+objectId;
+  const stored=vals[key]||{};
+  const isOwner  = cpRole==="admin" || owners.includes(me) || owners[0]===me;
+  const isSteward= stewards.includes(me);
+  const readOnly = !isOwner && !isSteward;
+  const canRequest = !isOwner && isSteward;
+  const [draft,setDraft]=useState(stored);
+  const storedKey=JSON.stringify(stored);
+  useEffect(()=>{ setDraft(vals[key]||{}); },[key,storedKey]); // resync when object changes or a value is approved
+  const setField=(id,v)=>setDraft(d=>({...d,[id]:v}));
+  const same=(a,b)=>JSON.stringify(a??"")===JSON.stringify(b??"");
+  const changed=defs.filter(d=>!same(draft[d.id],stored[d.id]));
+  const pendingFor=(id)=>reqs.find(r=>r.status==="pending"&&r.entity===entity&&r.targetId===objectId&&r.propId===id);
+  const saveDirect=()=>{ changed.forEach(d=>setPropValue(entity,objectId,d.id,draft[d.id])); onToast&&onToast(`Saved ${changed.length} propert${changed.length===1?"y":"ies"}`,"success"); };
+  const sendRequests=()=>{ changed.forEach(d=>{ requestPropChange({entity,targetId:objectId,name:objectName,propId:d.id,propName:d.name,requestedValue:draft[d.id],requestedBy:me,note:"Requested via detail page",owner:owners[0]||null}); pushNotif({category:"Property",type:"field_updated",title:`Property change requested · ${objectName}`,body:`${me} requested ${d.name} → ${Array.isArray(draft[d.id])?draft[d.id].join(", "):draft[d.id]}`,nav:entity==="Tag"?"tags":entity==="Domain"?"domains":"catalog"}); }); onToast&&onToast(`Sent ${changed.length} change${changed.length===1?"":"s"} to the owner's Inbox`,"success"); setDraft(stored); };
+  const gate = readOnly
+    ? {c:T.textMuted, bg:T.bgElevated, txt:"Read-only — you're neither an owner nor a steward of this "+entity.toLowerCase()+". Custom-property values can't be edited."}
+    : isOwner
+    ? {c:T.green, bg:`${T.green}12`, txt:"You own this "+entity.toLowerCase()+" — changes save directly and post to the activity feed."}
+    : {c:T.amber, bg:`${T.amber}12`, txt:"As a steward, your changes are sent to the owner's Inbox for approval — they apply once approved."};
+
+  if(defs.length===0)
+    return <div style={{padding:"40px 20px",textAlign:"center",color:T.textMuted,fontSize:13,background:T.bgSurface,border:`1px dashed ${T.border}`,borderRadius:10}}>
+      No custom properties defined for <b style={{color:T.textSub}}>{entity}</b> yet.<br/>An admin can add them in <b style={{color:T.textSub}}>Settings › Custom Properties</b>.
+    </div>;
+
+  return <div style={{maxWidth:720}}>
+    <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"11px 13px",borderRadius:9,background:gate.bg,border:`1px solid ${gate.c}33`,marginBottom:18}}>
+      <span style={{color:gate.c,flexShrink:0,marginTop:1,fontSize:13}}>{readOnly?"🔒":isOwner?"✓":"✎"}</span>
+      <span style={{fontSize:12.5,color:T.textSub,lineHeight:1.5}}>{gate.txt}</span>
+    </div>
+    <div style={{display:"flex",flexDirection:"column",gap:16}}>
+      {defs.map(d=>{ const pend=pendingFor(d.id); return (
+        <div key={d.id}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+            <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{d.name}</span>
+            <span style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.04em",color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:4,padding:"2px 5px"}}>{CP_TYPE_LABEL[d.type]||d.type}</span>
+            {d.required&&<span style={{fontSize:10,fontWeight:700,color:T.accent}}>REQUIRED</span>}
+            {pend&&<span style={{fontSize:10,fontWeight:700,color:T.amber,background:`${T.amber}14`,border:`1px solid ${T.amber}33`,borderRadius:20,padding:"2px 8px"}}>PENDING APPROVAL</span>}
+          </div>
+          <CPValueInput def={d} value={draft[d.id]} onChange={v=>setField(d.id,v)} disabled={readOnly||!!pend}/>
+          {d.desc&&<div style={{fontSize:11,color:T.textMuted,marginTop:5}}>{d.desc}</div>}
+        </div>
+      );})}
+    </div>
+    {!readOnly&&changed.length>0&&(
+      <div style={{display:"flex",gap:9,marginTop:20,paddingTop:16,borderTop:`1px solid ${T.border}`}}>
+        {isOwner
+          ? <Btn variant="primary" onClick={saveDirect}>Save {changed.length} change{changed.length===1?"":"s"}</Btn>
+          : <Btn variant="primary" onClick={sendRequests}>Send {changed.length} change{changed.length===1?"":"s"} for approval</Btn>}
+        <Btn ghost onClick={()=>setDraft(stored)}>Discard</Btn>
+      </div>
+    )}
+  </div>;
+};
+
+// Admin editor (Settings) for a single custom-property DEFINITION.
+const newCPDraft = ()=>({id:"",name:"",machine:"",type:"string",entity:"Asset",required:false,vals:[],refTarget:"Steward",desc:""});
+const CustomPropDefEditor = ({editing,onClose,onToast})=>{
+  const [d,setD]=useState(editing?{...editing,vals:editing.vals||[]}:newCPDraft());
+  useEffect(()=>{ setD(editing?{...editing,vals:editing.vals||[]}:newCPDraft()); },[editing]);
+  const set=(k,v)=>setD(p=>({...p,[k]:v}));
+  const setName=v=>setD(p=>({...p,name:v,machine:(editing?p.machine:cpSlug(v))}));
+  const isEnum=d.type==="enum"||d.type==="enumMulti";
+  const lbl={display:"block",fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.05em",margin:"14px 0 6px"};
+  const sel={width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"};
+  const save=()=>{ if(!d.name.trim()){onToast&&onToast("Give the property a name","error");return;} const def={...d,id:d.id||("cp"+Date.now()),machine:d.machine||cpSlug(d.name),vals:isEnum?(Array.isArray(d.vals)?d.vals:String(d.vals).split(",").map(s=>s.trim()).filter(Boolean)):[]}; upsertPropDef(def); onToast&&onToast(editing?"Property updated":"Property added","success"); onClose(); };
+  return <Modal open={true} onClose={onClose} title={editing?"Edit Custom Property":"Add Custom Property"} width={560}>
+    <label style={{...lbl,marginTop:0}}>Display name</label>
+    <Input2 value={d.name} onChange={e=>setName(e.target.value)} placeholder="e.g. Data Retention Class"/>
+    <label style={lbl}>Machine name <span style={{textTransform:"none",fontWeight:400,color:T.textMuted}}>· used in API & storage</span></label>
+    <Input2 value={d.machine} onChange={e=>set("machine",cpSlug(e.target.value))} placeholder="data_retention_class" style={{fontFamily:"'Geist Mono',monospace"}}/>
+    <label style={lbl}>Applies to</label>
+    <select value={d.entity} onChange={e=>set("entity",e.target.value)} style={sel}>{CP_ENTITIES.map(en=><option key={en} value={en}>{en}</option>)}</select>
+    <label style={lbl}>Type</label>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:7}}>
+      {CP_TYPES.map(ty=>{ const on=d.type===ty.t; return (
+        <button key={ty.t} type="button" onClick={()=>set("type",ty.t)} style={{padding:"8px 6px",borderRadius:8,border:`1.5px solid ${on?T.accent:T.border}`,background:on?T.accentDim:T.bgElevated,color:on?T.accent:T.textSub,cursor:"pointer",fontSize:12,fontWeight:600,textAlign:"center"}}>
+          {ty.label}<span style={{display:"block",fontWeight:400,fontSize:10,color:T.textMuted,marginTop:1}}>{ty.hint}</span>
+        </button>
+      );})}
+    </div>
+    {isEnum&&<>
+      <label style={lbl}>Allowed values <span style={{textTransform:"none",fontWeight:400,color:T.textMuted}}>· comma separated</span></label>
+      <Input2 value={Array.isArray(d.vals)?d.vals.join(", "):d.vals} onChange={e=>set("vals",e.target.value.split(",").map(s=>s.trimStart()))} placeholder="Public, Internal, Confidential, Restricted"/>
+    </>}
+    {d.type==="user"&&<>
+      <label style={lbl}>Reference target</label>
+      <select value={d.refTarget} onChange={e=>set("refTarget",e.target.value)} style={sel}><option>User</option><option>Team</option><option>Steward</option></select>
+    </>}
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:16,padding:"11px 13px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+      <div><div style={{fontSize:12.5,fontWeight:600,color:T.text}}>Required</div><div style={{fontSize:11,color:T.textMuted}}>Flag instances that leave this empty.</div></div>
+      <Toggle on={d.required} onChange={()=>set("required",!d.required)}/>
+    </div>
+    <label style={lbl}>Description <span style={{textTransform:"none",fontWeight:400,color:T.textMuted}}>· optional</span></label>
+    <Input2 value={d.desc} onChange={e=>set("desc",e.target.value)} placeholder="Explain what this property captures." multiline rows={2}/>
+    <div style={{display:"flex",gap:9,marginTop:20}}>
+      <Btn variant="primary" onClick={save}>{editing?"Save changes":"Add property"}</Btn>
+      <Btn ghost onClick={onClose}>Cancel</Btn>
+    </div>
+  </Modal>;
+};
+
 const InboxView = ({onToast}) => {
   const onNav = useNav();
   const { roleCfg: ibxRoleCfg } = useRole();
@@ -29589,7 +29774,15 @@ const InboxView = ({onToast}) => {
       : `${r.policyName} wants to ${(r.action||"enforce").toLowerCase()} on ${r.table}. Requested by ${r.requestedBy}.`,
     requestedBy:r.requestedBy, action:r.action, policyId:r.policyId, ruleId:r.ruleId, baseRuleId:r.baseRuleId, keys:r.keys, reason:r.reason, count:r.count, reqId:r.id, readAt:null,
   }));
-  const allItems = [...contractApprovals.filter(ca=>!items.some(i=>i.id===ca.id)), ...ROLE_REQ_ITEMS, ...STATUS_REQ_ITEMS, ...DELETE_REQ_ITEMS, ...ENF_APPROVAL_ITEMS, ...items];
+  // custom-property value-change requests (steward → owner approval)
+  const propReqs = useCustomPropReqs();
+  const PROP_REQ_ITEMS = propReqs.filter(r=>r.status==="pending").map(r=>({
+    id:"cpq-"+r.id, type:"property_change", severity:"medium", section:r.entity==="Tag"?"tags":r.entity==="Domain"?"domains":"catalog", timeAgo:r.at||"just now",
+    asset:{name:r.name, path:`${r.propName} · Custom Property`, type:r.entity},
+    body:`${r.requestedBy} set ${r.propName} → "${Array.isArray(r.requestedValue)?r.requestedValue.join(", "):r.requestedValue}" — "${r.note||""}"`,
+    requestedBy:r.requestedBy, entity:r.entity, reqTargetId:r.targetId, propId:r.propId, propName:r.propName, requestedValue:r.requestedValue, reqId:r.id, readAt:null,
+  }));
+  const allItems = [...contractApprovals.filter(ca=>!items.some(i=>i.id===ca.id)), ...ROLE_REQ_ITEMS, ...STATUS_REQ_ITEMS, ...DELETE_REQ_ITEMS, ...ENF_APPROVAL_ITEMS, ...PROP_REQ_ITEMS, ...items];
   const isActionItem   = i => itemRole(i)!=="fyi" && !i.readAt;
   const isActivityItem = i => itemRole(i)==="fyi";
   const isDoneItem     = i => itemRole(i)!=="fyi" && !!i.readAt;
@@ -29653,6 +29846,7 @@ const InboxView = ({onToast}) => {
     contract_approval:   {icon:sz=>Ic.contracts(sz||12),label:"Contract Approval",shortLabel:"Contract"},
     delete_request:      {icon:sz=>Ic.trash(sz||12),    label:"Deletion Request", shortLabel:"Delete"},
     enforcement_approval:{icon:sz=>Ic.policies(sz||12), label:"Enforcement Approval", shortLabel:"Enforce"},
+    property_change:     {icon:sz=>Ic.props(sz||12),    label:"Property Change",  shortLabel:"Property"},
   };
 
   /* ── Action row — only inside detail panel ── */
@@ -29733,6 +29927,21 @@ const InboxView = ({onToast}) => {
       if(item.reqKind==="term")
         return <>{btn("Approve deletion",()=>{gtSet(prev=>prev.filter(t=>t.id!==item.reqTargetId));if(item.reqId)resolveDeleteRequest(item.reqId,"approved");pushNotif({category:"Ownership",type:"alert",title:`${item.asset.name} deleted (term)`,body:`Deletion approved by ${meHandle||"owner"}`,nav:"glossary"});ack(item.id,`${item.asset.name} deleted — requester notified`);},true)}{btn("Reject",()=>{if(item.reqId)resolveDeleteRequest(item.reqId,"rejected");pushNotif({category:"Ownership",type:"field_updated",title:`Deletion request rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request to delete this term was declined`,nav:"glossary",navArg:{termId:item.reqTargetId}});ack(item.id,"Deletion request rejected — requester notified");},false,true)}{openIn("Open in Glossary","glossary")}</>;
       return null;
+    }
+    if(item.type==="property_change"){
+      const navTo = item.entity==="Tag"?"tags":item.entity==="Domain"?"domains":"catalog";
+      const openLabel = item.entity==="Tag"?"Open in Classifications":item.entity==="Domain"?"Open in Domains":"Open in Catalog";
+      const valTxt = Array.isArray(item.requestedValue)?item.requestedValue.join(", "):item.requestedValue;
+      return <>{btn("Approve",()=>{
+        setPropValue(item.entity,item.reqTargetId,item.propId,item.requestedValue);
+        if(item.reqId)resolvePropRequest(item.reqId,"approved");
+        pushNotif({category:"Property",type:"cert",title:`${item.propName} updated · ${item.asset.name}`,body:`Approved by ${meHandle||"owner"} — set to ${valTxt}`,nav:navTo});
+        ack(item.id,`${item.propName} → ${valTxt} — requester notified`);
+      },true)}{btn("Reject",()=>{
+        if(item.reqId)resolvePropRequest(item.reqId,"rejected");
+        pushNotif({category:"Property",type:"field_updated",title:`Property change rejected · ${item.asset.name}`,body:`${item.requestedBy}'s change to ${item.propName} was declined`,nav:navTo});
+        ack(item.id,"Property change rejected — requester notified");
+      },false,true)}{openIn(openLabel,navTo)}</>;
     }
     if(item.type==="enforcement_approval"){
       if(item.action==="Unhold"){
@@ -30653,6 +30862,8 @@ const TagPoliciesSection = ({onToast}) => {
 const SettingsView = ({onToast})=>{
   const {isDark, toggleTheme:onThemeToggle} = useTheme();
   const tagCtx = useTagCtx();
+  const propDefs = useCustomPropDefs();               // Custom Properties — definition store (Layer 1)
+  const [propEditor, setPropEditor] = useState(null); // null (closed) | "new" | <def to edit>
   const [rsJobOpen, setRsJobOpen] = useState(null);   // selected run id (detail view inside drawer)
   const [rsPanelOpen, setRsPanelOpen] = useState(false); // reverse-sync job drawer open
   const [rsSearch, setRsSearch] = useState("");        // run-list search (tag / object)
@@ -32324,23 +32535,26 @@ const SettingsView = ({onToast})=>{
 
             {/* ══ CUSTOM PROPERTIES ══ */}
             {section==="custom_props"&&<>
-              <SettSH icon={Ic.props(16)} title="Custom Properties" desc="Extend asset attributes with custom metadata fields to capture organization-specific information."
-                action={<AddBtn label="Add Property" onClick={()=>onToast("Property editor opened","success")}/>}/>
+              <SettSH icon={Ic.props(16)} title="Custom Properties" desc="Define typed fields once on an object type — they appear on every asset, tag, or domain of that type for stewards & owners to fill in."
+                action={<AddBtn label="Add Property" onClick={()=>setPropEditor("new")}/>}/>
               <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
                 <table style={{width:"100%",borderCollapse:"collapse"}}>
-                  <thead><tr style={{borderBottom:`1px solid ${T.border}`,background:T.bgElevated}}>{["Property Name","Type","Entity","Required","Allowed Values",""].map(h=><th key={h} style={{padding:"9px 14px",textAlign:"left",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</th>)}</tr></thead>
-                  <tbody>{CUSTOM_PROPS.map((p,i)=>(
-                    <tr key={i} className="row-hover" style={{borderBottom:i<CUSTOM_PROPS.length-1?`1px solid ${T.border}`:"none"}}>
-                      <td style={{padding:"11px 14px"}}><span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.blue}}>{p.name}</span></td>
-                      <td style={{padding:"11px 14px"}}><Badge>{p.type}</Badge></td>
+                  <thead><tr style={{borderBottom:`1px solid ${T.border}`,background:T.bgElevated}}>{["Property","Type","Applies to","Required","Allowed Values",""].map(h=><th key={h} style={{padding:"9px 14px",textAlign:"left",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</th>)}</tr></thead>
+                  <tbody>{propDefs.map((p,i)=>(
+                    <tr key={p.id} className="row-hover" style={{borderBottom:i<propDefs.length-1?`1px solid ${T.border}`:"none"}}>
+                      <td style={{padding:"11px 14px"}}><div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{p.name}</div><div style={{fontFamily:"'Geist Mono',monospace",fontSize:11,color:T.textMuted}}>{p.machine}</div></td>
+                      <td style={{padding:"11px 14px"}}><Badge>{CP_TYPE_LABEL[p.type]||p.type}</Badge></td>
                       <td style={{padding:"11px 14px"}}><span style={{fontSize:12,color:T.textSub}}>{p.entity}</span></td>
                       <td style={{padding:"11px 14px"}}>{p.required?<span style={{fontSize:11,color:T.accent,fontWeight:600}}>Yes</span>:<span style={{fontSize:11,color:T.textMuted}}>No</span>}</td>
-                      <td style={{padding:"11px 14px"}}><span style={{fontSize:11,color:T.textMuted}}>{p.vals||"—"}</span></td>
-                      <td style={{padding:"11px 14px",textAlign:"right"}}><div style={{display:"flex",gap:5,justifyContent:"flex-end"}}><Btn small ghost>Edit</Btn><Btn small variant="danger">Delete</Btn></div></td>
+                      <td style={{padding:"11px 14px"}}><span style={{fontSize:11,color:T.textMuted}}>{(p.vals&&p.vals.length)?p.vals.join(", "):"—"}</span></td>
+                      <td style={{padding:"11px 14px",textAlign:"right"}}><div style={{display:"flex",gap:5,justifyContent:"flex-end"}}><Btn small ghost onClick={()=>setPropEditor(p)}>Edit</Btn><Btn small variant="danger" onClick={()=>{deletePropDef(p.id);onToast(`${p.name} deleted`,"success");}}>Delete</Btn></div></td>
                     </tr>
-                  ))}</tbody>
+                  ))}
+                  {propDefs.length===0&&<tr><td colSpan={6} style={{padding:"34px 14px",textAlign:"center",color:T.textMuted,fontSize:12.5}}>No custom properties yet. Click <b style={{color:T.textSub}}>Add Property</b> to define one.</td></tr>}
+                  </tbody>
                 </table>
               </div>
+              {propEditor!==null&&<CustomPropDefEditor editing={propEditor==="new"?null:propEditor} onClose={()=>setPropEditor(null)} onToast={onToast}/>}
             </>}
 
             {/* ══ TAG POLICIES ══ */}
@@ -33486,6 +33700,7 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                       {key:'overview',   label:'Overview'},
                       {key:'assets',     label:'Linked Assets', count:affectedAssets.length},
                       {key:'sources',    label:'Sources & Sync', count:tagConnIds.length},
+                      {key:'customprops',label:'Custom Properties'},
                       {key:'activity',   label:'Audit Logs',   count:tagActivity.length},
                     ].map(({key:t,label,count})=>(
                       <button key={t} onClick={()=>setDetailTab(t)}
@@ -33501,6 +33716,12 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                 </div>
 
                 {/* ── Tab content ── */}
+
+                {detailTab==='customprops'&&(
+                  <div style={{flex:1,overflowY:'auto',padding:'24px 28px'}}>
+                    <CustomPropsPanel entity="Tag" objectId={selTag.id} objectName={selTag.name} owners={tagOwners} stewards={tagStewards} onToast={onToast}/>
+                  </div>
+                )}
 
                 {/* Overview — two-column layout like Business Glossary */}
                 {detailTab==='overview'&&(

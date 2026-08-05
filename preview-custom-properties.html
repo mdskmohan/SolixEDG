@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>EDG — Custom Properties (Definition + Value)</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --ink:#1c2430; --muted:#64707d; --line:#e4e8ee;
+    --brand:#2f5bea; --brand-soft:#eef2fe; --ok:#1c9d63; --ok-bg:#e9f6ee; --warn:#b8791b; --warn-bg:#fdf5e8;
+    --danger:#c23b3b; --danger-bg:#fdeeee; --code:#0e1726; --chip:#eef1f5;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.45}
+  .wrap{max-width:1220px;margin:0 auto;padding:22px 20px 70px}
+  .crumb{color:var(--muted);font-size:12.5px;margin-bottom:6px}
+  h1{font-size:20px;margin:0 0 2px}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:18px;max-width:820px}
+
+  /* entity-type picker */
+  .typebar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px}
+  .ety{border:1.5px solid var(--line);background:#fff;border-radius:10px;padding:9px 13px;cursor:pointer;display:flex;gap:9px;align-items:center;min-width:150px;transition:.15s}
+  .ety:hover{border-color:#c4ccd8}
+  .ety.active{border-color:var(--brand);background:var(--brand-soft);box-shadow:0 0 0 3px rgba(47,91,234,.08)}
+  .ety .ic{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;flex:none;background:var(--chip)}
+  .ety .t{font-weight:600;font-size:13px}
+  .ety .c{font-size:11px;color:var(--muted)}
+
+  .grid{display:grid;grid-template-columns:1.05fr 1fr;gap:18px;align-items:start}
+  @media(max-width:960px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}
+  .card h2{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:0 0 4px}
+  .card .h2sub{font-size:12px;color:var(--muted);margin:0 0 14px}
+  .roletag{float:right;font-size:10.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:3px 8px;border-radius:20px}
+  .roletag.admin{background:#efe9fb;color:#6b3fc0}
+  .roletag.steward{background:var(--ok-bg);color:var(--ok)}
+
+  /* definitions list */
+  .defrow{display:flex;gap:10px;align-items:center;padding:10px 11px;border:1px solid var(--line);border-radius:9px;margin-bottom:8px;background:#fcfcfd}
+  .defrow .tp{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--brand);background:var(--brand-soft);border-radius:5px;padding:3px 6px;flex:none}
+  .defrow .nm{font-weight:600}
+  .defrow .mc{font-size:11.5px;color:var(--muted);font-family:Consolas,monospace}
+  .defrow .sp{flex:1}
+  .defrow .x{color:var(--muted);cursor:pointer;font-size:15px;padding:0 4px}
+  .defrow .x:hover{color:var(--danger)}
+
+  .addbtn{width:100%;border:1.5px dashed var(--line);background:#fff;border-radius:9px;padding:11px;cursor:pointer;font-weight:600;color:var(--brand);margin-top:4px}
+  .addbtn:hover{border-color:var(--brand);background:var(--brand-soft)}
+
+  /* form */
+  .form{border-top:1px solid var(--line);margin-top:16px;padding-top:16px;display:none}
+  .form.open{display:block}
+  label.f{display:block;font-weight:600;font-size:12.5px;margin:14px 0 5px}
+  label.f:first-child{margin-top:0}
+  label.f .hint{font-weight:400;color:var(--muted);font-size:11.5px}
+  input[type=text],select,textarea{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;font-family:inherit;background:#fff}
+  textarea{resize:vertical;min-height:52px}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px rgba(47,91,234,.1)}
+  .row{display:flex;gap:10px}.row>*{flex:1}
+
+  .typegrid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+  @media(max-width:520px){.typegrid{grid-template-columns:repeat(2,1fr)}}
+  .tpo{border:1.5px solid var(--line);border-radius:8px;padding:8px 9px;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);text-align:center}
+  .tpo:hover{border-color:#c4ccd8}
+  .tpo.active{border-color:var(--brand);color:var(--brand);background:var(--brand-soft)}
+  .tpo small{display:block;font-weight:400;font-size:10px;color:var(--muted);margin-top:1px}
+
+  .cond{display:none;margin-top:12px;padding:11px 12px;background:#f8f9fb;border:1px solid var(--line);border-radius:9px}
+  .cond.show{display:block}
+  .cond label.f{margin-top:0}
+
+  .btnrow{margin-top:18px;display:flex;gap:10px}
+  .btn{padding:9px 15px;border-radius:9px;font-weight:600;font-size:13px;cursor:pointer;border:1px solid var(--line);background:#fff}
+  .btn.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .btn.ghost{color:var(--muted)}
+
+  /* value panel */
+  .vhead{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+  .vhead .oico{width:30px;height:30px;border-radius:8px;background:var(--chip);display:flex;align-items:center;justify-content:center;font-size:15px;flex:none}
+  .vhead .on{font-weight:700;font-size:15px}
+  .vhead .op{font-size:11.5px;color:var(--muted);font-family:Consolas,monospace}
+
+  .vprop{padding:11px 0;border-bottom:1px dashed var(--line)}
+  .vprop:last-child{border:none}
+  .vprop .lbl{font-weight:600;font-size:12.5px;margin-bottom:5px;display:flex;gap:8px;align-items:center}
+  .vprop .lbl .t{font-size:9.5px;font-weight:700;text-transform:uppercase;color:var(--muted);background:var(--chip);border-radius:4px;padding:2px 5px}
+  .vprop .notset{color:var(--muted);font-style:italic;font-size:12.5px}
+  .vprop .val{font-weight:600}
+  .vprop .refchip{display:inline-flex;gap:6px;align-items:center;background:var(--chip);border-radius:20px;padding:3px 10px 3px 4px;font-size:12px;font-weight:600}
+  .vprop .refchip .av{width:18px;height:18px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:9px}
+  .enumchip{display:inline-block;background:var(--brand-soft);color:var(--brand);border-radius:6px;padding:3px 9px;font-size:12px;font-weight:600}
+
+  .gate{background:var(--warn-bg);border:1px solid #f0dcb6;border-radius:9px;padding:11px 12px;font-size:12.5px;margin-top:14px;color:#7a5410}
+  .gate b{color:var(--warn)}
+  .obs{background:var(--ok-bg);border:1px solid #cfe9d9;color:#1c6f49;border-radius:9px;padding:11px 12px;font-size:12.5px;margin-top:10px}
+
+  .lens{display:flex;gap:0;border:1.5px solid var(--line);border-radius:9px;overflow:hidden;margin:6px 0 16px}
+  .lens div{flex:1;text-align:center;padding:9px;cursor:pointer;font-weight:700;font-size:12.5px;color:var(--muted)}
+  .lens .a.active{background:#efe9fb;color:#6b3fc0}
+  .lens .b.active{background:var(--ok-bg);color:var(--ok)}
+  .lens div small{display:block;font-weight:400;color:var(--muted);font-size:10.5px}
+
+  .storage{margin-top:20px}
+  .code{background:var(--code);color:#d7e2f2;border-radius:9px;padding:13px 14px;font-family:"SF Mono",Consolas,monospace;font-size:11.5px;line-height:1.65;overflow-x:auto;white-space:pre;margin-top:6px}
+  .code .c{color:#6f86ab}.code .g{color:#8fd6a0}.code .y{color:#e6c07b}.code .b{color:#7fb2ff}
+
+  .note{font-size:11.5px;color:var(--muted);margin-top:8px}
+  .foot{margin-top:24px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px}
+  .foot b{color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="crumb">Settings › <b>Custom Properties</b></div>
+  <h1>Custom Properties</h1>
+  <div class="sub">Extend any governed object with your own typed fields — no code change. <b>Admins define</b> a property once on an object <i>type</i>; it then appears on <b>every instance</b> of that type, where stewards and owners fill in the <b>value</b>. Pick a type to manage its properties.</div>
+
+  <!-- ENTITY TYPE PICKER -->
+  <div class="typebar" id="typebar">
+    <div class="ety active" data-e="table"><div class="ic">▦</div><div><div class="t">Table / Asset</div><div class="c">4 properties</div></div></div>
+    <div class="ety" data-e="tag"><div class="ic">◆</div><div><div class="t">Tag</div><div class="c">2 properties</div></div></div>
+    <div class="ety" data-e="domain"><div class="ic">◇</div><div><div class="t">Domain</div><div class="c">1 property</div></div></div>
+    <div class="ety" data-e="contract"><div class="ic">▤</div><div><div class="t">Data Contract</div><div class="c">0 properties</div></div></div>
+    <div class="ety" data-e="conn"><div class="ic">⚯</div><div><div class="t">Connection</div><div class="c">0 properties</div></div></div>
+  </div>
+
+  <div class="grid">
+
+    <!-- LEFT: DEFINITION LAYER -->
+    <div class="card">
+      <span class="roletag admin">Admin only</span>
+      <h2>Definition — <span id="defTypeName">Table / Asset</span></h2>
+      <div class="h2sub">These fields are added to <b>every</b> <span id="defTypeName2">table</span> in the catalog.</div>
+
+      <div id="deflist"></div>
+
+      <button class="addbtn" id="addBtn">+ Add custom property</button>
+
+      <!-- ADD/EDIT FORM -->
+      <div class="form" id="form">
+        <label class="f">Display name <span class="hint">— what stewards see</span></label>
+        <input type="text" id="dispName" placeholder="e.g. Data Retention Class" />
+
+        <label class="f">Machine name <span class="hint">— auto-suggested, used in API / storage</span></label>
+        <input type="text" id="machName" placeholder="dataRetentionClass" />
+
+        <label class="f">Type</label>
+        <div class="typegrid" id="typegrid">
+          <div class="tpo active" data-t="string">String<small>short text</small></div>
+          <div class="tpo" data-t="markdown">Markdown<small>rich text</small></div>
+          <div class="tpo" data-t="integer">Integer<small>whole #</small></div>
+          <div class="tpo" data-t="number">Number<small>decimal</small></div>
+          <div class="tpo" data-t="date">Date<small>calendar</small></div>
+          <div class="tpo" data-t="email">Email<small>address</small></div>
+          <div class="tpo" data-t="enum">Enum<small>pick list</small></div>
+          <div class="tpo" data-t="entityRef">User / Team<small>reference</small></div>
+          <div class="tpo" data-t="enumMulti">Enum (multi)<small>multi-pick</small></div>
+        </div>
+
+        <!-- conditional: enum values -->
+        <div class="cond" id="condEnum">
+          <label class="f">Allowed values <span class="hint">— comma separated</span></label>
+          <input type="text" id="enumVals" placeholder="Public, Internal, Confidential, Restricted" />
+        </div>
+        <!-- conditional: entity ref target -->
+        <div class="cond" id="condRef">
+          <label class="f">Reference target</label>
+          <select id="refTarget">
+            <option>User</option><option>Team</option><option>Steward</option>
+          </select>
+        </div>
+
+        <label class="f">Description <span class="hint">— optional</span></label>
+        <textarea id="descBox" placeholder="Explain what this property captures and how to fill it."></textarea>
+
+        <div class="btnrow">
+          <button class="btn primary" id="saveDef">Save property</button>
+          <button class="btn ghost" id="cancelDef">Cancel</button>
+        </div>
+      </div>
+
+      <!-- storage explainer -->
+      <div class="storage">
+        <div class="note"><b>Where the value lives —</b> validated against the definition's type, stored on the object's <code>extension</code> map:</div>
+        <div class="code" id="codeBox"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: VALUE LAYER -->
+    <div class="card">
+      <span class="roletag steward" id="valRoleTag">You: Steward</span>
+      <h2>Value — on one instance</h2>
+      <div class="h2sub">The Custom Properties panel as it appears on an object's detail page.</div>
+
+      <div class="vhead">
+        <div class="oico">▦</div>
+        <div><div class="on">customers</div><div class="op">snowflake.SALES.PUBLIC.customers</div></div>
+      </div>
+
+      <!-- who is editing -->
+      <div class="lens" id="lens">
+        <div class="a" data-l="steward"><b>As Steward</b><small>proposes changes</small></div>
+        <div class="b active" data-l="owner"><b>As Owner</b><small>sets directly</small></div>
+      </div>
+
+      <div id="valpanel"></div>
+
+      <div id="gateBox"></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <b>What's copied from OpenMetadata:</b> the two-layer model (type-level definition → instance-level value), the typed property catalog, and the admin-defines / user-fills RBAC split. &nbsp; <b>What's EDG's own:</b> scope limited to governed objects, the section-rail definition editor, and the <b>Status / Inbox approval round-trip</b> — a steward <i>proposes</i> a value, the owner <i>approves</i>. OpenMetadata has no such gate.
+  </div>
+</div>
+
+<script>
+(function(){
+  // ---- seed definitions per entity type ----
+  const store = {
+    table: [
+      {disp:"Data Retention Class", mach:"dataRetentionClass", t:"enum", vals:["Public","Internal","Confidential","Restricted"], val:"Confidential"},
+      {disp:"PII Reviewed By", mach:"piiReviewedBy", t:"entityRef", target:"Steward", val:{name:"Jane Doe", init:"JD"}},
+      {disp:"Cost Center", mach:"costCenter", t:"string", val:"CC-4471"},
+      {disp:"Last Certified", mach:"lastCertified", t:"date", val:""},
+    ],
+    tag: [
+      {disp:"Regulatory Scope", mach:"regulatoryScope", t:"enumMulti", vals:["GDPR","HIPAA","CCPA","SOX"], val:"GDPR"},
+      {disp:"Owner Email", mach:"ownerEmail", t:"email", val:""},
+    ],
+    domain: [
+      {disp:"Business Criticality", mach:"businessCriticality", t:"enum", vals:["Low","Medium","High"], val:"High"},
+    ],
+    contract: [],
+    conn: [],
+  };
+  const typeNames = {table:"Table / Asset", tag:"Tag", domain:"Domain", contract:"Data Contract", conn:"Connection"};
+  const typeSingular = {table:"table", tag:"tag", domain:"domain", contract:"data contract", conn:"connection"};
+  const typeLabels = {string:"String",markdown:"Markdown",integer:"Integer",number:"Number",date:"Date",email:"Email",enum:"Enum",enumMulti:"Enum·multi",entityRef:"Reference"};
+
+  let curType = "table";
+  let curFormType = "string";
+  let lens = "owner";
+
+  const $ = s=>document.querySelector(s);
+  const deflist = $("#deflist");
+  const valpanel = $("#valpanel");
+
+  // ---- render definition list ----
+  function renderDefs(){
+    const defs = store[curType];
+    deflist.innerHTML = defs.length ? "" : '<div style="color:var(--muted);font-size:12.5px;padding:8px 2px 14px">No custom properties yet for this type. Add one below.</div>';
+    defs.forEach((d,i)=>{
+      const row = document.createElement("div");
+      row.className="defrow";
+      row.innerHTML = `<span class="tp">${typeLabels[d.t]||d.t}</span>
+        <div><div class="nm">${d.disp}</div><div class="mc">${d.mach}</div></div>
+        <div class="sp"></div><div class="x" data-i="${i}" title="Delete definition">×</div>`;
+      row.querySelector(".x").onclick = ()=>{ store[curType].splice(i,1); renderDefs(); renderVals(); renderCode(); updateCounts(); };
+      deflist.appendChild(row);
+    });
+  }
+
+  // ---- render value panel ----
+  function renderVals(){
+    const defs = store[curType];
+    valpanel.innerHTML = defs.length ? "" : '<div style="color:var(--muted);font-size:12.5px;padding:8px 2px">No custom properties defined for this type yet.</div>';
+    defs.forEach(d=>{
+      const el = document.createElement("div");
+      el.className="vprop";
+      let valHtml;
+      if(!d.val){ valHtml = '<span class="notset">Not set</span>'; }
+      else if(d.t==="entityRef"){ valHtml = `<span class="refchip"><span class="av">${d.val.init}</span>${d.val.name}</span>`; }
+      else if(d.t==="enum"||d.t==="enumMulti"){ valHtml = `<span class="enumchip">${d.val}</span>`; }
+      else { valHtml = `<span class="val">${d.val}</span>`; }
+      el.innerHTML = `<div class="lbl"><span class="t">${typeLabels[d.t]||d.t}</span>${d.disp}</div>${valHtml}`;
+      valpanel.appendChild(el);
+    });
+    renderGate();
+  }
+
+  function renderGate(){
+    const g = $("#gateBox");
+    if(lens==="steward"){
+      g.innerHTML = '<div class="gate">✎ <b>Steward edit → request.</b> On an object you don\'t own, changing a value opens an approval request that lands in the <b>owner\'s Inbox</b> — the same round-trip used for Status changes. Values apply only after the owner approves.</div>';
+      $("#valRoleTag").textContent = "You: Steward";
+      $("#valRoleTag").className = "roletag steward";
+    } else {
+      g.innerHTML = '<div class="obs">✔ <b>Owner edit → direct.</b> As the object owner you set values inline; changes save immediately and post to the activity feed.</div>';
+      $("#valRoleTag").textContent = "You: Owner";
+      $("#valRoleTag").className = "roletag steward";
+    }
+  }
+
+  // ---- storage code sample ----
+  function renderCode(){
+    const defs = store[curType];
+    const lines = defs.filter(d=>d.val).map(d=>{
+      let v;
+      if(d.t==="entityRef") v = `{ <span class="y">"type"</span>: <span class="g">"${d.target||'user'}"</span>, <span class="y">"name"</span>: <span class="g">"${d.val.name}"</span> }`;
+      else if(d.t==="integer"||d.t==="number") v = `<span class="b">${d.val}</span>`;
+      else v = `<span class="g">"${d.val}"</span>`;
+      return `    <span class="y">"${d.mach}"</span>: ${v}`;
+    });
+    $("#codeBox").innerHTML =
+`<span class="c">// ${typeSingular[curType]} → extension</span>
+{
+  <span class="y">"name"</span>: <span class="g">"customers"</span>,
+  <span class="y">"extension"</span>: {
+${lines.join(",\n") || '    <span class="c">// no values set</span>'}
+  }
+}`;
+  }
+
+  function updateCounts(){
+    document.querySelectorAll(".ety").forEach(e=>{
+      const k = e.dataset.e; const n = store[k].length;
+      e.querySelector(".c").textContent = n+" propert"+(n===1?"y":"ies");
+    });
+  }
+
+  // ---- form logic ----
+  function slug(s){ return s.replace(/[^a-zA-Z0-9 ]/g,"").split(" ").map((w,i)=> i===0?w.toLowerCase():w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(""); }
+  $("#dispName").addEventListener("input", e=>{ $("#machName").value = slug(e.target.value); });
+
+  function setFormType(t){
+    curFormType = t;
+    document.querySelectorAll("#typegrid .tpo").forEach(o=>o.classList.toggle("active", o.dataset.t===t));
+    $("#condEnum").classList.toggle("show", t==="enum"||t==="enumMulti");
+    $("#condRef").classList.toggle("show", t==="entityRef");
+  }
+  document.querySelectorAll("#typegrid .tpo").forEach(o=> o.onclick = ()=> setFormType(o.dataset.t));
+
+  function openForm(){ $("#form").classList.add("open"); $("#addBtn").style.display="none"; }
+  function closeForm(){ $("#form").classList.remove("open"); $("#addBtn").style.display="block";
+    $("#dispName").value=""; $("#machName").value=""; $("#enumVals").value=""; $("#descBox").value=""; setFormType("string"); }
+  $("#addBtn").onclick = openForm;
+  $("#cancelDef").onclick = closeForm;
+
+  $("#saveDef").onclick = ()=>{
+    const disp = $("#dispName").value.trim(); if(!disp) return;
+    const d = { disp, mach:$("#machName").value.trim()||slug(disp), t:curFormType, val:"" };
+    if(curFormType==="enum"||curFormType==="enumMulti") d.vals = $("#enumVals").value.split(",").map(s=>s.trim()).filter(Boolean);
+    if(curFormType==="entityRef") d.target = $("#refTarget").value;
+    store[curType].push(d);
+    closeForm(); renderDefs(); renderVals(); renderCode(); updateCounts();
+  };
+
+  // ---- entity type switch ----
+  document.querySelectorAll(".ety").forEach(e=> e.onclick = ()=>{
+    document.querySelectorAll(".ety").forEach(x=>x.classList.remove("active"));
+    e.classList.add("active"); curType = e.dataset.e;
+    $("#defTypeName").textContent = typeNames[curType];
+    $("#defTypeName2").textContent = typeSingular[curType];
+    // update instance header
+    const heads = {table:["▦","customers","snowflake.SALES.PUBLIC.customers"],
+      tag:["◆","PII","classification.Sensitivity.PII"],
+      domain:["◇","Finance","domain.Finance"],
+      contract:["▤","Orders Contract","contract.orders.v3"],
+      conn:["⚯","Prod Snowflake","connection.snowflake-prod"]};
+    const h = heads[curType];
+    $(".vhead .oico").textContent=h[0]; $(".vhead .on").textContent=h[1]; $(".vhead .op").textContent=h[2];
+    closeForm(); renderDefs(); renderVals(); renderCode();
+  });
+
+  // ---- lens switch ----
+  document.querySelectorAll("#lens div").forEach(d=> d.onclick = ()=>{
+    document.querySelectorAll("#lens div").forEach(x=>x.classList.remove("active"));
+    d.classList.add("active"); lens = d.dataset.l; renderGate();
+  });
+
+  // init
+  renderDefs(); renderVals(); renderCode(); updateCounts();
+})();
+</script>
+</body>
+</html>
