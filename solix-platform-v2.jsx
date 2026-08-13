@@ -3139,45 +3139,132 @@ const SegTabs = ({tabs,active,onChange})=>(
 // ─────────────────────────────────────────────
 // Notifications = awareness feed. Standard template per category: "{what happened} · {subject}".
 const NOTIFS = [
-  {id:1, type:"alert",         category:"Quality",       asset:"orders",              unread:true, title:"Quality check failed · orders",               body:"Rule 'orders.amount_not_null' failed on 847 rows (1.8%)",                  time:"2m ago",  nav:"quality"},
-  {id:2, type:"policy",        category:"Policy",        asset:"transactions",        unread:true, title:"Policy violation detected · transactions",     body:"Status gate — transactions is queryable without an Approved status", time:"6m ago",  nav:"policymanager"},
-  {id:3, type:"term_submitted",category:"Glossary",      asset:null,                  unread:true, title:"Term submitted for review · Churn Rate",       body:"dev.patel submitted it — awaiting your approval as steward",               time:"18m ago", nav:"glossary"},
-  {id:4, type:"cert",          category:"Status",        asset:"customers",           unread:true, title:"Status changed to Approved · customers",       body:"Approved by dev.patel (steward)",                                          time:"1h ago",  nav:"catalog"},
-  {id:5, type:"access",        category:"Access",        asset:"payments",            unread:true, title:"Access request pending · payments",            body:"john.doe requested access to the payments table",                          time:"2h ago",  nav:"stewardship"},
-  {id:6, type:"escalation",    category:"Escalation",    asset:"user_sessions",       unread:true, forMe:true, title:"Task escalated to you · user_sessions",  body:"PII Audit escalated — due in 24h",                                         time:"3h ago",  nav:"stewardship"},
-  {id:7, type:"term_approved", category:"Glossary",      asset:null,                  unread:false,title:"Term approved · Customer Lifetime Value",      body:"Approved by maya.chen",                                                    time:"4h ago",  nav:"glossary"},
-  {id:8, type:"policy",        category:"Policy",        asset:null,                  unread:false,title:"Policy published · PII Masking",               body:"Applied to user_events",                                                   time:"8h ago",  nav:"policymanager"},
-  {id:9, type:"schema",        category:"Catalog",       asset:"product_events",      unread:false,title:"Schema drift detected · product_events",       body:"Column 'user_id' type changed",                                            time:"12h ago", nav:"catalog"},
-  {id:10,type:"contract",      category:"Catalog",       asset:"orders",              unread:false,title:"Contract updated · orders",                    body:"orders_contract v2.1.0 published",                                         time:"1d ago",  nav:"catalog"},
-  {id:11,type:"new_dataset",   category:"Ownership",     asset:null,                  unread:false,title:"Unowned asset detected · ml_feature_store_v3", body:"No owner or steward assigned",                                             time:"2d ago",  nav:"stewardship"},
-  {id:12,type:"field_updated", category:"Catalog",       asset:"orders",              unread:true, title:"Description updated · orders",                 body:"priya.nair updated the description",                                       time:"2h ago",  nav:"catalog"},
-  {id:13,type:"assigned",      category:"Ownership",     asset:"dim_customer",        unread:true, forMe:true, title:"Assigned as steward · dim_customer",     body:"james.oh assigned you",                                                    time:"1d ago",  nav:"catalog"},
-  {id:14,type:"schema",        category:"Catalog",       asset:"dim_customer",        unread:false,title:"New column detected · dim_customer",           body:"'referral_source' added",                                                  time:"2d ago",  nav:"catalog"},
+  {id:1, type:"alert",         event:"dq_failed",           category:"Quality",       asset:"orders",              unread:true, title:"Quality check failed · orders",               body:"Rule 'orders.amount_not_null' failed on 847 rows (1.8%)",                  time:"2m ago",  nav:"quality"},
+  {id:2, type:"policy",        event:"policy_violation",    category:"Policy",        asset:"transactions",        unread:true, title:"Policy violation detected · transactions",     body:"Status gate — transactions is queryable without an Approved status", time:"6m ago",  nav:"policymanager"},
+  {id:3, type:"term_submitted",event:"term_submitted",      category:"Glossary",      asset:null,                  unread:true, title:"Term submitted for review · Churn Rate",       body:"dev.patel submitted it — awaiting your approval as steward",               time:"18m ago", nav:"glossary"},
+  {id:4, type:"cert",          event:"status_changed",      category:"Status",        asset:"customers",           unread:true, title:"Status changed to Approved · customers",       body:"Approved by dev.patel (steward)",                                          time:"1h ago",  nav:"catalog"},
+  {id:5, type:"access",        event:"access_requested",    category:"Access",        asset:"payments",            unread:true, title:"Access request pending · payments",            body:"john.doe requested access to the payments table",                          time:"2h ago",  nav:"stewardship"},
+  {id:6, type:"escalation",    event:"task_escalated",      category:"Escalation",    asset:"user_sessions",       unread:true, forMe:true, title:"Task escalated to you · user_sessions",  body:"PII Audit escalated — due in 24h",                                         time:"3h ago",  nav:"stewardship"},
+  {id:7, type:"term_approved", event:"term_approved",       category:"Glossary",      asset:null,                  unread:false,title:"Term approved · Customer Lifetime Value",      body:"Approved by maya.chen",                                                    time:"4h ago",  nav:"glossary"},
+  {id:8, type:"policy",        event:"policy_published",    category:"Policy",        asset:null,                  unread:false,title:"Policy published · PII Masking",               body:"Applied to user_events",                                                   time:"8h ago",  nav:"policymanager"},
+  {id:9, type:"schema",        event:"schema_changed",      category:"Catalog",       asset:"product_events",      unread:false,title:"Schema drift detected · product_events",       body:"Column 'user_id' type changed",                                            time:"12h ago", nav:"catalog"},
+  {id:10,type:"contract",      event:"contract_updated",    category:"Catalog",       asset:"orders",              unread:false,title:"Contract updated · orders",                    body:"orders_contract v2.1.0 published",                                         time:"1d ago",  nav:"catalog"},
+  {id:11,type:"new_dataset",   event:"asset_unowned",       category:"Ownership",     asset:null,                  unread:false,title:"Unowned asset detected · ml_feature_store_v3", body:"No owner or steward assigned",                                             time:"2d ago",  nav:"stewardship"},
+  {id:12,type:"field_updated", event:"field_edited",        category:"Catalog",       asset:"orders",              unread:true, title:"Description updated · orders",                 body:"priya.nair updated the description",                                       time:"2h ago",  nav:"catalog"},
+  {id:13,type:"assigned",      event:"owner_assigned",      category:"Ownership",     asset:"dim_customer",        unread:true, forMe:true, title:"Assigned as steward · dim_customer",     body:"james.oh assigned you",                                                    time:"1d ago",  nav:"catalog"},
+  {id:14,type:"schema",        event:"schema_changed",      category:"Catalog",       asset:"dim_customer",        unread:false,title:"New column detected · dim_customer",           body:"'referral_source' added",                                                  time:"2d ago",  nav:"catalog"},
   // ── Status lifecycle — any governed object; requests route to the steward, outcomes to requester+owner ──
-  {id:15,type:"field_updated", category:"Status",        asset:"dim_customer",        unread:true, forMe:true, title:"Status change requested · dim_customer", body:"priya.nair requested Approved — awaiting your review as steward",          time:"12m ago", nav:"catalog"},
-  {id:16,type:"cert",          category:"Status",        asset:"legacy_orders",       unread:false,title:"Status changed to Deprecated · legacy_orders", body:"Approved by maya.chen (steward)",                                          time:"6h ago",  nav:"catalog"},
+  {id:15,type:"field_updated", event:"status_requested",    category:"Status",        asset:"dim_customer",        unread:true, forMe:true, title:"Status change requested · dim_customer", body:"priya.nair requested Approved — awaiting your review as steward",          time:"12m ago", nav:"catalog"},
+  {id:16,type:"cert",          event:"status_changed",      category:"Status",        asset:"legacy_orders",       unread:false,title:"Status changed to Deprecated · legacy_orders", body:"Approved by maya.chen (steward)",                                          time:"6h ago",  nav:"catalog"},
   // ── Deletion — owner-gated; requests route to the owner ──
-  {id:17,type:"alert",         category:"Ownership",     asset:null,                  unread:true, forMe:true, title:"Deletion requested · Tier 1 (tag)",     body:"alex.wu requested to delete the 'Tier 1' tag — 42 assets affected",        time:"20m ago", nav:"tags"},
+  {id:17,type:"alert",         event:"tag_delete_requested",category:"Ownership",     asset:null,                  unread:true, forMe:true, title:"Deletion requested · Tier 1 (tag)",     body:"alex.wu requested to delete the 'Tier 1' tag — 42 assets affected",        time:"20m ago", nav:"tags"},
   // ── Attachments & changes on your assets — tag / quality test / policy attached ──
-  {id:18,type:"tag",           category:"Classification",asset:"orders",              unread:false,title:"Tag attached · orders",                       body:"'Tier 1' attached by maya.chen",                                           time:"5h ago",  nav:"catalog"},
-  {id:19,type:"field_updated", category:"Catalog",       asset:"orders",              unread:true, title:"Quality test attached · orders",              body:"'row count range' test attached by dev.patel",                             time:"1h ago",  nav:"catalog"},
-  {id:20,type:"policy",        category:"Catalog",       asset:"orders",              unread:false,title:"Policy attached · orders",                    body:"'PII Masking' policy now applies to orders",                               time:"7h ago",  nav:"catalog"},
+  {id:18,type:"tag",           event:"tag_attached",        category:"Classification",asset:"orders",              unread:false,title:"Tag attached · orders",                       body:"'Tier 1' attached by maya.chen",                                           time:"5h ago",  nav:"catalog"},
+  {id:19,type:"field_updated", event:"attachment_added",    category:"Catalog",       asset:"orders",              unread:true, title:"Quality test attached · orders",              body:"'row count range' test attached by dev.patel",                             time:"1h ago",  nav:"catalog"},
+  {id:20,type:"policy",        event:"policy_attached",     category:"Catalog",       asset:"orders",              unread:false,title:"Policy attached · orders",                    body:"'PII Masking' policy now applies to orders",                               time:"7h ago",  nav:"catalog"},
   // ── Data Contract validation failure (we support contracts + validation runs) ──
-  {id:21,type:"alert",         category:"Quality",       asset:"orders",              unread:true, title:"Contract validation failed · orders",          body:"orders_contract — Quality check failing (status not in allowed set)",      time:"14m ago", nav:"catalog"},
+  {id:21,type:"alert",         event:"contract_failed",     category:"Quality",       asset:"orders",              unread:true, title:"Contract validation failed · orders",          body:"orders_contract — Quality check failing (status not in allowed set)",      time:"14m ago", nav:"catalog"},
   // ── Ingestion failure (we support connections + sync/run) ──
-  {id:22,type:"alert",         category:"Pipelines",     asset:null,                  unread:true, title:"Ingestion failed · Snowflake DWH",             body:"Sync aborted — source unreachable (connection timed out)",                 time:"9m ago",  nav:"integrations"},
+  {id:22,type:"alert",         event:"ingest_failed",       category:"Pipelines",     asset:null,                  unread:true, title:"Ingestion failed · Snowflake DWH",             body:"Sync aborted — source unreachable (connection timed out)",                 time:"9m ago",  nav:"integrations"},
+  // ── Newly wired menus — Domains · Data Products · Connections · Access & Roles · Admin ──
+  {id:23,type:"cert",          event:"domain_status",       category:"Status",        asset:null,                  unread:true, title:"Domain status changed · Commerce",            body:"Commerce set to Approved by maya.chen",                                    time:"25m ago", nav:"domains"},
+  {id:24,type:"assigned",      event:"domain_owner",        category:"Ownership",     asset:null,                  unread:false,forMe:true, title:"Assigned as domain steward · Product",   body:"james.oh assigned you to the Product domain",                             time:"3h ago",  nav:"domains"},
+  {id:25,type:"new_dataset",   event:"dp_published",        category:"Catalog",       asset:null,                  unread:true, title:"Data product published · Customer 360",       body:"v1.0 published by priya.nair",                                             time:"40m ago", nav:"dataproducts"},
+  {id:26,type:"alert",         event:"credential_expiring", category:"Pipelines",     asset:null,                  unread:true, title:"Credential expiring · Snowflake DWH",          body:"Service account key expires in 5 days",                                    time:"1h ago",  nav:"integrations"},
+  {id:27,type:"pipeline",      event:"ingest_recovered",    category:"Pipelines",     asset:null,                  unread:false,title:"Ingestion recovered · Postgres CRM",          body:"Sync succeeded after 2 failed runs",                                       time:"5h ago",  nav:"integrations"},
+  {id:28,type:"cert",          event:"role_decided",        category:"Access",        asset:null,                  unread:true, forMe:true, title:"Role granted · Steward",                 body:"Admin approved your request for the Steward role",                        time:"2h ago",  nav:"access"},
+  {id:29,type:"cert",          event:"enforcement_decided", category:"Policy",        asset:"orders",              unread:false,title:"Enforcement approved · orders",               body:"maya.chen approved the Masking rule — now active",                         time:"6h ago",  nav:"policymanager"},
+  {id:30,type:"alert",         event:"sla_breach",          category:"Quality",       asset:"orders",              unread:true, title:"Freshness SLA breached · orders",             body:"orders is 4h stale — SLA is 1h",                                           time:"30m ago", nav:"quality"},
+  {id:31,type:"policy",        event:"sso_sync",            category:"Access",        asset:null,                  unread:false,title:"SSO sync completed · Okta",                   body:"12 users, 3 groups synced — 1 role change applied",                        time:"12h ago", nav:"settings"},
 ];
 // Scope: you only get a notification if it's a personal one, has no asset (platform-wide),
 // you own/steward the asset — or you're an admin (oversight). ASSETS defined above.
 const _respFor = (assetName, me) => { const a=(typeof ASSETS!=="undefined"?ASSETS:[]).find(x=>x.name===assetName); if(!a) return false; const own=(Array.isArray(a.owners)?a.owners:[a.owner]).filter(Boolean); const stw=(Array.isArray(a.stewards)?a.stewards:[a.steward]).filter(Boolean); return own.includes(me)||stw.includes(me); };
-// Per-category in-app notification preferences (today in-app is the only channel; email/slack are future).
-const NOTIF_CATEGORIES = ["Status","Quality","Policy","Glossary","Classification","Catalog","Ownership","Access","Pipelines","Escalation"];
-let _notifPrefs = NOTIF_CATEGORIES.reduce((o,c)=>{o[c]=true;return o;},{});
+// ── Notification event catalog ──────────────────────────────────────────────
+// Two-level preference model: preferences are stored per EVENT TYPE (the leaf).
+// The menu is ONLY a display grouping with a master toggle that fans out to its
+// events — it is never a stored setting of its own. The event is the single
+// source of truth; both the settings UI and notifVisible key off n.event, never
+// the menu. (In-app is the only channel today; email/Slack are a later step.)
+const NOTIF_CATALOG = [
+  {menu:"Catalog",         key:"catalog",      events:[
+    {ev:"schema_changed",   label:"Schema changed (drift / new column / type)"},
+    {ev:"field_edited",     label:"Description / field edited"},
+    {ev:"status_changed",   label:"Status changed"},
+    {ev:"status_requested", label:"Status change requested"},
+    {ev:"owner_assigned",   label:"Owner / steward assigned"},
+    {ev:"asset_unowned",    label:"New / unowned asset detected"},
+    {ev:"attachment_added", label:"Tag / test / policy attached"},
+    {ev:"contract_updated", label:"Contract updated"},
+    {ev:"asset_archived",   label:"Asset archived / deleted from source"},
+  ]},
+  {menu:"Data Quality",    key:"quality",      events:[
+    {ev:"dq_failed",          label:"Quality check failed"},
+    {ev:"contract_failed",    label:"Contract validation failed"},
+    {ev:"sla_breach",         label:"SLA / freshness breach"},
+    {ev:"incident_recovered", label:"Incident resolved / recovered"},
+  ]},
+  {menu:"Policies",        key:"policy",       events:[
+    {ev:"policy_violation",      label:"Policy violation detected"},
+    {ev:"policy_published",      label:"Policy published"},
+    {ev:"policy_attached",       label:"Policy attached to your asset"},
+    {ev:"enforcement_requested", label:"Enforcement approval requested"},
+    {ev:"enforcement_decided",   label:"Approval granted / rejected"},
+    {ev:"run_blocked",           label:"Run blocked (pending approval)"},
+  ]},
+  {menu:"Classifications", key:"tags",         events:[
+    {ev:"tag_attached",         label:"Tag attached"},
+    {ev:"tag_delete_requested", label:"Tag deletion requested"},
+    {ev:"tag_proposed",         label:"New source tag proposed"},
+    {ev:"tag_decided",          label:"Tag proposal approved / rejected"},
+  ]},
+  {menu:"Glossary",        key:"glossary",     events:[
+    {ev:"term_submitted", label:"Term submitted for review"},
+    {ev:"term_approved",  label:"Term approved"},
+    {ev:"term_rejected",  label:"Term rejected"},
+  ]},
+  {menu:"Domains",         key:"domains",      events:[
+    {ev:"domain_status",        label:"Domain status changed"},
+    {ev:"domain_owner",         label:"Owner / steward assigned"},
+    {ev:"domain_product_added", label:"Data product added to domain"},
+  ]},
+  {menu:"Data Products",   key:"dataproducts", events:[
+    {ev:"dp_published", label:"Data product published"},
+    {ev:"dp_status",    label:"Status changed"},
+    {ev:"dp_owner",     label:"Owner assigned"},
+  ]},
+  {menu:"Connections",     key:"integrations", events:[
+    {ev:"ingest_failed",       label:"Ingestion failed"},
+    {ev:"ingest_recovered",    label:"Ingestion recovered"},
+    {ev:"connection_changed",  label:"Connection added / removed"},
+    {ev:"schedule_paused",     label:"Schedule paused / disabled"},
+    {ev:"credential_expiring", label:"Credential expiring / auth failed"},
+  ]},
+  {menu:"Access & Roles",  key:"access",       events:[
+    {ev:"access_requested", label:"Access request pending"},
+    {ev:"role_requested",   label:"Platform role requested"},
+    {ev:"role_decided",     label:"Role granted / rejected"},
+    {ev:"sso_sync",         label:"SSO sync completed / failed"},
+  ]},
+  {menu:"Admin",           key:"admin",        events:[
+    {ev:"user_provisioned",   label:"User provisioned / deactivated"},
+    {ev:"definition_changed", label:"Role / policy definition changed"},
+  ]},
+  {menu:"My Tasks",        key:"tasks",        events:[
+    {ev:"task_assigned",  label:"Task assigned to me"},
+    {ev:"task_escalated", label:"Task escalated to me"},
+    {ev:"task_due",       label:"Task due / overdue"},
+  ]},
+];
+const NOTIF_EV_MENU = {}; NOTIF_CATALOG.forEach(g=>g.events.forEach(e=>{NOTIF_EV_MENU[e.ev]=g.key;}));
+let _notifPrefs = NOTIF_CATALOG.reduce((o,g)=>{g.events.forEach(e=>{o[e.ev]=true;});return o;},{});
 const _npSubs = new Set();
-const npSet = (cat,on)=>{ _notifPrefs={..._notifPrefs,[cat]:on}; _npSubs.forEach(f=>f()); };
+const _npNotify = ()=>_npSubs.forEach(f=>f());
+const npSet = (ev,on)=>{ _notifPrefs={..._notifPrefs,[ev]:on}; _npNotify(); };
+const npSetMenu = (menuKey,on)=>{ const g=NOTIF_CATALOG.find(x=>x.key===menuKey); if(!g)return; const next={..._notifPrefs}; g.events.forEach(e=>{next[e.ev]=on;}); _notifPrefs=next; _npNotify(); };
 const useNotifPrefs = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_npSubs.add(fn);return()=>{_npSubs.delete(fn);};},[]); return _notifPrefs; };
-// Visible = category not muted AND (admin, personal, platform-wide, or you own/steward the asset).
-const notifVisible = (n, me, isAdmin) => (_notifPrefs[n.category]!==false) && (isAdmin || n.forMe || !n.asset || _respFor(n.asset, me));
+// Visible = this event type not muted AND (admin, personal, platform-wide, or you own/steward the asset).
+const notifVisible = (n, me, isAdmin) => (!n.event || _notifPrefs[n.event]!==false) && (isAdmin || n.forMe || !n.asset || _respFor(n.asset, me));
 
 // ── Shared reactive store for the notification bell ──
 // NOTIFS was static seed data duplicated into local state by both NotificationsPanel
@@ -3200,21 +3287,46 @@ const pushNotif = (entry) => { _notifIdSeq += 1; notifSet(prev=>[{id:_notifIdSeq
 // Per-category in-app mute toggles + honest channel status. Wired to the shared _notifPrefs store.
 const NotifPrefsSettings = ()=>{
   const prefs = useNotifPrefs();
+  const [open,setOpen] = useState({});
+  const toggleOpen = (k)=>setOpen(o=>({...o,[k]:!o[k]}));
   return (
     <div style={{display:"flex",flexDirection:"column",gap:22}}>
-      {/* In-app by category */}
+      {/* In-app alerts — menu groups (collapsed) with a master toggle; expand to tune individual events */}
       <div>
-        <div style={{fontSize:12,fontWeight:600,color:T.textSub,marginBottom:4}}>In-app alerts — by category</div>
-        <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>Turn off the categories you don't want in the notification bell. You only receive alerts for assets you own or steward; these toggles mute categories on top of that.</div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:8}}>
-          {NOTIF_CATEGORIES.map(cat=>{const on=prefs[cat]!==false;return(
-            <div key={cat} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
-              <span style={{fontSize:12.5,color:T.text,fontWeight:500}}>{cat}</span>
-              <div onClick={()=>npSet(cat,!on)} style={{width:34,height:19,borderRadius:10,background:on?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
-                <div style={{position:"absolute",top:2,left:on?17:2,width:15,height:15,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 2px rgba(0,0,0,.2)"}}/>
+        <div style={{fontSize:12,fontWeight:600,color:T.textSub,marginBottom:4}}>In-app alerts</div>
+        <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>Toggle a whole menu, or expand it to tune individual events. You only receive alerts for assets you own or steward; these switches mute event types on top of that. In-app is the only channel today — email &amp; Slack are coming.</div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {NOTIF_CATALOG.map(g=>{
+            const total = g.events.length;
+            const onCount = g.events.filter(e=>prefs[e.ev]!==false).length;
+            const anyOn = onCount>0; const allOn = onCount===total; const isOpen = !!open[g.key];
+            return (
+              <div key={g.key} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                {/* Group header — menu-level master control */}
+                <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px"}}>
+                  <button onClick={()=>toggleOpen(g.key)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex",alignItems:"center",padding:0,width:14,flexShrink:0}}>
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{transform:isOpen?"rotate(90deg)":"none",transition:"transform .15s"}}><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </button>
+                  <span onClick={()=>toggleOpen(g.key)} style={{flex:1,fontSize:13,fontWeight:600,color:T.text,cursor:"pointer"}}>{g.menu}</span>
+                  <span style={{fontSize:10.5,color:T.textMuted,fontWeight:500}}>{allOn?`All ${total}`:!anyOn?"Off":`${onCount} of ${total}`}</span>
+                  <div onClick={()=>npSetMenu(g.key,!anyOn)} title={anyOn?"Turn all off":"Turn all on"} style={{width:34,height:19,borderRadius:10,background:anyOn?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0,opacity:allOn||!anyOn?1:0.8}}>
+                    <div style={{position:"absolute",top:2,left:anyOn?17:2,width:15,height:15,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 2px rgba(0,0,0,.2)"}}/>
+                  </div>
+                </div>
+                {/* Per-event toggles (progressive disclosure — the attribute level) */}
+                {isOpen&&<div style={{borderTop:`1px solid ${T.border}`,padding:"3px 14px 8px 38px"}}>
+                  {g.events.map(e=>{const on=prefs[e.ev]!==false;return(
+                    <div key={e.ev} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0"}}>
+                      <span style={{fontSize:12,color:on?T.textSub:T.textMuted}}>{e.label}</span>
+                      <div onClick={()=>npSet(e.ev,!on)} style={{width:30,height:17,borderRadius:9,background:on?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
+                        <div style={{position:"absolute",top:2,left:on?15:2,width:13,height:13,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 2px rgba(0,0,0,.2)"}}/>
+                      </div>
+                    </div>
+                  );})}
+                </div>}
               </div>
-            </div>
-          );})}
+            );
+          })}
         </div>
       </div>
       {/* Channels — honest about what's live today */}
