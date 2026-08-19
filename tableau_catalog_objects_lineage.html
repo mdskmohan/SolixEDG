@@ -1,0 +1,405 @@
+<title>Tableau in the Catalog</title>
+<style>
+  :root{
+    --red:#ee2424; --ink:#0f172a; --muted:#64748b; --muted2:#94a3b8;
+    --line:#e6e9ef; --line2:#f0f4f8; --bg:#f6f7f9; --surface:#ffffff;
+    --blue:#2563eb; --violet:#8b5cf6; --sky:#38bdf8; --amber:#f59e0b;
+    --green:#16a34a; --teal:#0ea5e9;
+    --mono:'Geist Mono',ui-monospace,'SF Mono',Menlo,monospace;
+    --sans:'Geist Sans','Inter',-apple-system,system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:34px 26px 80px}
+
+  /* Header */
+  .head{display:flex;align-items:flex-start;gap:16px;margin-bottom:8px}
+  .logo{width:46px;height:46px;border-radius:11px;background:linear-gradient(135deg,#1e40af,#0ea5e9);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 4px 14px rgba(14,165,233,.28)}
+  .logo svg{width:26px;height:26px}
+  h1{font-size:23px;margin:0 0 3px;letter-spacing:-.02em}
+  .sub{color:var(--muted);font-size:13.5px;max-width:760px}
+  .kicker{font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--red);margin-bottom:4px}
+  .ref{font-size:11.5px;color:var(--muted2);margin-top:10px}
+  .ref a{color:var(--teal);text-decoration:none}
+
+  /* Section */
+  .sec{margin-top:40px}
+  .sec-h{display:flex;align-items:center;gap:10px;margin-bottom:5px}
+  .sec-n{width:22px;height:22px;border-radius:6px;background:var(--red);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .sec-h h2{font-size:16.5px;margin:0;letter-spacing:-.01em}
+  .sec-d{color:var(--muted);font-size:13px;margin:0 0 18px 32px}
+
+  /* Hierarchy tree */
+  .tree{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px 22px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+  .tnode{position:relative;padding-left:26px;margin:2px 0}
+  .tnode::before{content:"";position:absolute;left:9px;top:0;bottom:0;width:1.5px;background:var(--line)}
+  .tnode:last-child::before{bottom:auto;height:14px}
+  .trow{display:flex;align-items:center;gap:9px;padding:5px 0;position:relative}
+  .trow::before{content:"";position:absolute;left:-17px;top:14px;width:14px;height:1.5px;background:var(--line)}
+  .lvl0>.trow::before{display:none}
+  .lvl0{padding-left:0}
+  .lvl0::before{display:none}
+  .chip{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.05em;padding:2px 7px;border-radius:5px;text-transform:uppercase;flex-shrink:0}
+  .tname{font-family:var(--mono);font-size:12.5px;font-weight:600;color:var(--ink)}
+  .tmeta{font-size:11.5px;color:var(--muted2)}
+  .tag-container{background:rgba(37,99,235,.09);color:var(--blue)}
+  .tag-asset{background:rgba(139,92,246,.11);color:var(--violet)}
+  .tag-data{background:rgba(16,163,74,.11);color:var(--green)}
+  .tag-field{background:rgba(245,158,11,.13);color:#b45309}
+
+  /* Object-type cards */
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+  .card-h{display:flex;align-items:center;gap:9px;padding:12px 15px;border-bottom:1px solid var(--line2);background:#fafbfc}
+  .dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+  .card-t{font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .card-name{font-size:14px;font-weight:650;margin-left:auto;color:var(--ink)}
+  .card-b{padding:13px 15px 15px}
+  .card-desc{font-size:12.5px;color:var(--muted);margin:0 0 11px}
+  .flds{display:flex;flex-wrap:wrap;gap:5px}
+  .fld{font-family:var(--mono);font-size:10.5px;padding:3px 8px;border-radius:6px;background:var(--bg);border:1px solid var(--line);color:#475569}
+  .note{margin-top:11px;font-size:11.5px;color:#92400e;background:rgba(245,158,11,.09);border:1px solid rgba(245,158,11,.25);border-radius:7px;padding:7px 10px;display:flex;gap:7px}
+  .note svg{flex-shrink:0;margin-top:1px}
+
+  /* Lineage canvas */
+  .lin{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:26px 20px 20px;box-shadow:0 1px 3px rgba(0,0,0,.04);overflow-x:auto}
+  .flow{display:flex;align-items:flex-start;gap:0;min-width:940px}
+  .lnode{min-width:186px;flex-shrink:0}
+  .lncard{background:#fff;border:1.5px solid var(--nc);border-radius:9px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.09)}
+  .lncard.cur{border-color:var(--red);box-shadow:0 0 0 3px rgba(238,36,36,.12);background:rgba(238,36,36,.03)}
+  .lnhead{padding:7px 10px 5px;border-bottom:1px solid var(--nc);background:#fafafa;display:flex;align-items:center;gap:6px}
+  .lnhead .d{width:7px;height:7px;border-radius:2px;background:var(--nc);flex-shrink:0}
+  .lntype{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--nc);flex:1}
+  .cur .lntype{color:var(--red)}
+  .badge-cur{font-size:7.5px;background:rgba(238,36,36,.12);color:var(--red);border-radius:4px;padding:1px 5px;font-weight:700;letter-spacing:.05em}
+  .lnname{padding:6px 10px;font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink)}
+  .cur .lnname{color:var(--red)}
+  .lncols{border-top:1px solid var(--line2)}
+  .lncol{height:26px;display:flex;align-items:center;gap:6px;padding:0 10px;font-family:var(--mono);font-size:10px;color:#475569;border-bottom:1px solid #f8fafc}
+  .lncol:last-child{border-bottom:none}
+  .lncol .cd{width:4px;height:4px;border-radius:50%;background:#cbd5e1;flex-shrink:0}
+  .lncol .ct{margin-left:auto;font-size:9px;color:var(--muted2)}
+  .lncol.hl{color:var(--blue);background:rgba(37,99,235,.06)}
+  .lncol.hl .cd{background:var(--blue)}
+  .lncol.hl .ct{color:var(--blue)}
+  .arrow{flex-shrink:0;align-self:center;display:flex;flex-direction:column;align-items:center;gap:3px;padding:0 4px;width:56px}
+  .arrow .lbl{font-family:var(--mono);font-size:8px;font-weight:700;letter-spacing:.05em;color:var(--muted2);text-transform:uppercase}
+  .arrow svg{width:100%}
+  .legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:18px;padding-top:15px;border-top:1px solid var(--line2)}
+  .lg{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted)}
+  .lg .sw{width:11px;height:11px;border-radius:3px}
+
+  .callout{margin-top:16px;background:#fff;border:1px solid var(--line);border-left:3px solid var(--red);border-radius:9px;padding:13px 16px;font-size:12.5px;color:#334155}
+  .callout b{color:var(--ink)}
+  .cols2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media(max-width:820px){.grid,.cols2{grid-template-columns:1fr}}
+
+  table.map{width:100%;border-collapse:collapse;margin-top:6px;font-size:12px}
+  table.map th{text-align:left;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted2);font-weight:700;padding:6px 10px;border-bottom:1px solid var(--line)}
+  table.map td{padding:7px 10px;border-bottom:1px solid var(--line2);font-family:var(--mono);font-size:11.5px;color:#334155}
+  table.map tr:last-child td{border-bottom:none}
+  .pill{font-size:9.5px;font-family:var(--mono);padding:2px 6px;border-radius:5px;font-weight:600}
+  .pill-a{background:rgba(37,99,235,.1);color:var(--blue)}
+  .pill-c{background:rgba(139,92,246,.12);color:var(--violet)}
+</style>
+
+<div class="wrap">
+
+  <div class="head">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 2v6M12 16v6M2 12h6M16 12h6M12 8a4 4 0 100 8 4 4 0 000-8z" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="12" r="1.6" fill="#fff"/></svg>
+    </div>
+    <div>
+      <div class="kicker">Solix EDG · Connector Reference · Developer Guide</div>
+      <h1>Tableau in the Data Catalog — Objects &amp; Lineage</h1>
+      <div class="sub">What the EDG Tableau connector crawls into the catalog and how it stitches lineage, mapped to our catalog's object model and lineage view. Modelled on Atlan's Tableau crawl reference so engineering has a concrete target for the connector.</div>
+      <div class="ref">Reference: Atlan — <a href="https://docs.atlan.com/apps/connectors/business-intelligence/tableau/references/what-does-atlan-crawl-from-tableau">What does Atlan crawl from Tableau</a></div>
+    </div>
+  </div>
+
+  <!-- ─────────────────────────── SECTION 1 — OBJECT HIERARCHY ─────────────────────────── -->
+  <div class="sec">
+    <div class="sec-h"><div class="sec-n">1</div><h2>Object model — the Tableau containment hierarchy</h2></div>
+    <p class="sec-d">Every crawled object lands under the connection as a catalog asset. Containers nest; leaf assets carry the governance surface (owners, tags, certification, quality).</p>
+
+    <div class="tree">
+      <div class="tnode lvl0">
+        <div class="trow"><span class="chip tag-container">Connection</span><span class="tname">tableau_prod</span><span class="tmeta">Tableau Server / Cloud · 1 site</span></div>
+
+        <div class="tnode">
+          <div class="trow"><span class="chip tag-container">Site</span><span class="tname">Analytics</span><span class="tmeta">tenant boundary</span></div>
+
+          <div class="tnode">
+            <div class="trow"><span class="chip tag-container">Project</span><span class="tname">Finance</span><span class="tmeta">folder · nests recursively</span></div>
+
+            <div class="tnode">
+              <div class="trow"><span class="chip tag-asset">Workbook</span><span class="tname">Revenue_Analytics</span><span class="tmeta">published container</span></div>
+              <div class="tnode">
+                <div class="trow"><span class="chip tag-asset">Dashboard</span><span class="tname">Revenue_Dashboard</span><span class="tmeta">consumes worksheets</span></div>
+              </div>
+              <div class="tnode">
+                <div class="trow"><span class="chip tag-asset">Worksheet</span><span class="tname">Revenue_by_Region</span><span class="tmeta">a.k.a. View</span></div>
+              </div>
+              <div class="tnode">
+                <div class="trow"><span class="chip tag-data">Embedded Data Source</span><span class="tname">Revenue_Extract</span><span class="tmeta">lives inside workbook</span></div>
+                <div class="tnode">
+                  <div class="trow"><span class="chip tag-field">Datasource Field</span><span class="tname">revenue</span><span class="tmeta">→ maps to DB column</span></div>
+                </div>
+                <div class="tnode">
+                  <div class="trow"><span class="chip tag-field">Calculated Field</span><span class="tname">yoy_growth_pct</span><span class="tmeta">formula-derived</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="tnode">
+              <div class="trow"><span class="chip tag-data">Published Data Source</span><span class="tname">Orders_Certified</span><span class="tmeta">reusable · owned · certifiable</span></div>
+              <div class="tnode">
+                <div class="trow"><span class="chip tag-field">Datasource Field</span><span class="tname">order_amount</span><span class="tmeta"></span></div>
+              </div>
+            </div>
+
+            <div class="tnode">
+              <div class="trow"><span class="chip tag-asset">Flow</span><span class="tname">Orders_Prep_Flow</span><span class="tmeta">Tableau Prep · ETL</span></div>
+            </div>
+            <div class="tnode">
+              <div class="trow"><span class="chip tag-asset">Metric</span><span class="tname">Daily_Revenue</span><span class="tmeta">legacy · see note</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────────────────── SECTION 2 — OBJECT TYPES + METADATA ─────────────────────────── -->
+  <div class="sec">
+    <div class="sec-h"><div class="sec-n">2</div><h2>Asset types crawled &amp; the metadata captured</h2></div>
+    <p class="sec-d">Each Tableau object type maps to a distinct catalog asset type. These are the properties the connector should populate on ingest.</p>
+
+    <div class="grid">
+
+      <div class="card">
+        <div class="card-h"><span class="dot" style="background:#2563eb"></span><span class="card-t">Container</span><span class="card-name">Site</span></div>
+        <div class="card-b">
+          <p class="card-desc">Top-level Tableau tenant. One connection may span one site.</p>
+          <div class="flds"><span class="fld">name</span><span class="fld">connection_qualified_name</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><span class="dot" style="background:#2563eb"></span><span class="card-t">Container</span><span class="card-name">Project</span></div>
+        <div class="card-b">
+          <p class="card-desc">Folder that groups workbooks &amp; data sources. Nests recursively.</p>
+          <div class="flds"><span class="fld">name</span><span class="fld">description</span><span class="fld">owner</span><span class="fld">is_top_level</span><span class="fld">project_hierarchy</span><span class="fld">created / updated_at</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><span class="dot" style="background:#8b5cf6"></span><span class="card-t">Asset · Container</span><span class="card-name">Workbook</span></div>
+        <div class="card-b">
+          <p class="card-desc">Published unit holding dashboards, worksheets &amp; embedded sources.</p>
+          <div class="flds"><span class="fld">name</span><span class="fld">description</span><span class="fld">source_url</span><span class="fld">owner</span><span class="fld">project_hierarchy</span><span class="fld">popularity (hits)</span><span class="fld">created / updated_at</span></div>
+          <div class="note"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 1l7 12H1L8 1z" stroke="#b45309" stroke-width="1.3" stroke-linejoin="round"/><path d="M8 6v3.5M8 11.3v.2" stroke="#b45309" stroke-width="1.3" stroke-linecap="round"/></svg><span>Excluded from lineage traversal — it's a container, not a data-flow node.</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><span class="dot" style="background:#8b5cf6"></span><span class="card-t">Asset</span><span class="card-name">Dashboard</span></div>
+        <div class="card-b">
+          <p class="card-desc">Assembled view of one or more worksheets — the consumer end of lineage.</p>
+          <div class="flds"><span class="fld">name</span><span class="fld">source_url</span><span class="fld">project_hierarchy</span><span class="fld">popularity (hits)</span><span class="fld">created / updated_at</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><span class="dot" style="background:#8b5cf6"></span><span class="card-t">Asset</span><span class="card-name">Worksheet <span style="color:var(--muted2);font-weight:400">(View)</span></span></div>
+        <div class="card-b">
+          <p class="card-desc">A single sheet/viz. The middle hop between data source and dashboard.</p>
+          <div class="flds"><span class="fld">name</span><span class="fld">source_url</span><span class="fld">project_hierarchy</span><span class="fld">popularity (hits)</span><span class="fld">created / updated_at</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><span class="dot" style="background:#16a34a"></span><span class="card-t">Data · Published</span><span class="card-name">Published Data Source</span></div>
+        <div class="card-b">
+          <p class="card-desc">Reusable, shareable source. Owned &amp; certifiable — the governed data surface.</p>
+          <div class="flds"><span class="fld">name</span><span class="fld">description</span><span class="fld">owner</span><span class="fld">is_published</span><span class="fld">has_extract</span><span class="fld">certification</span><span class="fld">upstream_tables</span><span class="fld">popularity</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><span class="dot" style="background:#16a34a"></span><span class="card-t">Data · Embedded</span><span class="card-name">Embedded Data Source</span></div>
+        <div class="card-b">
+          <p class="card-desc">Source baked into a single workbook. Same shape as published, minus ownership &amp; popularity.</p>
+          <div class="flds"><span class="fld">name</span><span class="fld">description</span><span class="fld">has_extract</span><span class="fld">upstream_tables</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><span class="dot" style="background:#f59e0b"></span><span class="card-t">Field</span><span class="card-name">Datasource Field</span></div>
+        <div class="card-b">
+          <p class="card-desc">A column exposed by a data source. Carries the mapping back to the DB column.</p>
+          <div class="flds"><span class="fld">name</span><span class="fld">description</span><span class="fld">datatype</span><span class="fld">role</span><span class="fld">data_category</span><span class="fld">bin_size</span><span class="fld">upstream_column</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><span class="dot" style="background:#f59e0b"></span><span class="card-t">Field · Derived</span><span class="card-name">Calculated Field</span></div>
+        <div class="card-b">
+          <p class="card-desc">Formula-derived field. Its <code>formula</code> is what drives column-level lineage.</p>
+          <div class="flds"><span class="fld">name</span><span class="fld">description</span><span class="fld">datatype</span><span class="fld">role</span><span class="fld">data_category</span><span class="fld">formula</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><span class="dot" style="background:#0ea5e9"></span><span class="card-t">Asset · ETL</span><span class="card-name">Flow</span></div>
+        <div class="card-b">
+          <p class="card-desc">Tableau Prep pipeline that shapes data before it reaches a source.</p>
+          <div class="flds"><span class="fld">name</span><span class="fld">description</span><span class="fld">owner</span><span class="fld">project_hierarchy</span><span class="fld">popularity</span></div>
+          <div class="note"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 1l7 12H1L8 1z" stroke="#b45309" stroke-width="1.3" stroke-linejoin="round"/><path d="M8 6v3.5M8 11.3v.2" stroke="#b45309" stroke-width="1.3" stroke-linecap="round"/></svg><span>No lineage yet. Unavailable under JWT bearer auth.</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><span class="dot" style="background:#8b5cf6"></span><span class="card-t">Asset · Legacy</span><span class="card-name">Metric</span></div>
+        <div class="card-b">
+          <p class="card-desc">Standalone KPI object.</p>
+          <div class="flds"><span class="fld">name</span><span class="fld">description</span><span class="fld">project_hierarchy</span><span class="fld">created / updated_at</span></div>
+          <div class="note"><svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 1l7 12H1L8 1z" stroke="#b45309" stroke-width="1.3" stroke-linejoin="round"/><path d="M8 6v3.5M8 11.3v.2" stroke="#b45309" stroke-width="1.3" stroke-linecap="round"/></svg><span>Retired by Tableau in API 3.22+. Crawl only on older servers.</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><span class="dot" style="background:#64748b"></span><span class="card-t">Extracted</span><span class="card-name">Custom SQL</span></div>
+        <div class="card-b">
+          <p class="card-desc">Not a standalone asset — the query text is parsed to resolve which DB tables a data source pulls from.</p>
+          <div class="flds"><span class="fld">query_text</span><span class="fld">→ downstream_datasources</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ─────────────────────────── SECTION 3 — LINEAGE ─────────────────────────── -->
+  <div class="sec">
+    <div class="sec-h"><div class="sec-n">3</div><h2>Lineage — how it stitches into the catalog graph</h2></div>
+    <p class="sec-d">The connector resolves the flow from upstream database tables through the data source, into worksheets, and out to dashboards — the same left-to-right graph the catalog's Lineage tab renders. Column-level mappings ride on top.</p>
+
+    <div class="lin">
+      <div class="flow">
+
+        <!-- DB Table (upstream, from a DB connector) -->
+        <div class="lnode" style="--nc:#ee2424">
+          <div class="lncard">
+            <div class="lnhead"><span class="d"></span><span class="lntype">Table · Snowflake</span></div>
+            <div class="lnname">ORDERS_FACT</div>
+            <div class="lncols">
+              <div class="lncol hl"><span class="cd"></span>order_amount<span class="ct">decimal</span></div>
+              <div class="lncol hl"><span class="cd"></span>order_date<span class="ct">date</span></div>
+              <div class="lncol"><span class="cd"></span>region<span class="ct">varchar</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="arrow"><span class="lbl">custom SQL</span>
+          <svg height="14" viewBox="0 0 56 14"><path d="M0 7h48M42 3l6 4-6 4" stroke="#94a3b8" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+
+        <!-- Published Data Source (current / focus) -->
+        <div class="lnode" style="--nc:#16a34a">
+          <div class="lncard cur">
+            <div class="lnhead"><span class="d"></span><span class="lntype">Data Source</span><span class="badge-cur">CURRENT</span></div>
+            <div class="lnname">Orders_Certified</div>
+            <div class="lncols">
+              <div class="lncol hl"><span class="cd"></span>revenue<span class="ct">field</span></div>
+              <div class="lncol hl"><span class="cd"></span>yoy_growth_pct<span class="ct">calc</span></div>
+              <div class="lncol"><span class="cd"></span>region<span class="ct">field</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="arrow"><span class="lbl">asset + col</span>
+          <svg height="14" viewBox="0 0 56 14"><path d="M0 7h48M42 3l6 4-6 4" stroke="#94a3b8" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+
+        <!-- Worksheet -->
+        <div class="lnode" style="--nc:#8b5cf6">
+          <div class="lncard">
+            <div class="lnhead"><span class="d"></span><span class="lntype">Worksheet</span></div>
+            <div class="lnname">Revenue_by_Region</div>
+            <div class="lncols">
+              <div class="lncol hl"><span class="cd"></span>revenue<span class="ct">measure</span></div>
+              <div class="lncol"><span class="cd"></span>region<span class="ct">dim</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="arrow"><span class="lbl">asset + col</span>
+          <svg height="14" viewBox="0 0 56 14"><path d="M0 7h48M42 3l6 4-6 4" stroke="#94a3b8" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+
+        <!-- Dashboard -->
+        <div class="lnode" style="--nc:#8b5cf6">
+          <div class="lncard">
+            <div class="lnhead"><span class="d"></span><span class="lntype">Dashboard</span></div>
+            <div class="lnname">Revenue_Dashboard</div>
+            <div class="lncols">
+              <div class="lncol hl"><span class="cd"></span>total_revenue<span class="ct">decimal</span></div>
+              <div class="lncol"><span class="cd"></span>region<span class="ct">dim</span></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="legend">
+        <div class="lg"><span class="sw" style="background:#ee2424"></span>Database Table (upstream connector)</div>
+        <div class="lg"><span class="sw" style="background:#16a34a"></span>Data Source</div>
+        <div class="lg"><span class="sw" style="background:#8b5cf6"></span>Worksheet / Dashboard</div>
+        <div class="lg"><span class="sw" style="background:#2563eb"></span>Highlighted column path</div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <b>Lineage path:</b> Database Table → Data Source → Worksheet → Dashboard. Both <b>asset-level</b> (box-to-box) and <b>column-level</b> (field-to-field) edges are produced. Custom SQL parsing is what links a data source back to physical DB tables — that's the join between the Tableau graph and the rest of the catalog.
+    </div>
+
+    <div class="cols2" style="margin-top:16px">
+      <div class="card">
+        <div class="card-h"><span class="dot" style="background:#16a34a"></span><span class="card-t">Supported</span></div>
+        <div class="card-b" style="font-size:12.5px;color:#334155">
+          ✓ Data Source → Worksheet (asset + column)<br>
+          ✓ Data Source → Dashboard (asset-level)<br>
+          ✓ Worksheet → Dashboard (asset + column)<br>
+          ✓ DB Table → Data Source via Custom SQL parse
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-h"><span class="dot" style="background:#f59e0b"></span><span class="card-t">Gaps / caveats</span></div>
+        <div class="card-b" style="font-size:12.5px;color:#334155">
+          ✗ No lineage for Flows, Metrics, embedded dashboards<br>
+          ✗ Workbook nodes excluded from traversal<br>
+          ⚠ Column-level needs assets refreshed recently<br>
+          ⚠ Flows unavailable under JWT bearer auth
+        </div>
+      </div>
+    </div>
+
+    <!-- Column mapping detail -->
+    <div class="card" style="margin-top:16px">
+      <div class="card-h"><span class="dot" style="background:#2563eb"></span><span class="card-t">Column-level mapping — worked example</span></div>
+      <div class="card-b">
+        <table class="map">
+          <thead><tr><th>Source column</th><th></th><th>Target column</th><th>Edge</th></tr></thead>
+          <tbody>
+            <tr><td>ORDERS_FACT.order_amount</td><td>→</td><td>Orders_Certified.revenue</td><td><span class="pill pill-c">custom SQL</span></td></tr>
+            <tr><td>Orders_Certified.revenue</td><td>→</td><td>Revenue_by_Region.revenue</td><td><span class="pill pill-a">direct</span></td></tr>
+            <tr><td>Revenue_by_Region.revenue</td><td>→</td><td>Revenue_Dashboard.total_revenue</td><td><span class="pill pill-a">direct</span></td></tr>
+            <tr><td>ORDERS_FACT.order_amount + order_date</td><td>→</td><td>Orders_Certified.yoy_growth_pct</td><td><span class="pill pill-c">calc formula</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+</div>

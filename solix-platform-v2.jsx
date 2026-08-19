@@ -191,6 +191,25 @@ const HIERARCHY_ASSETS = [
 // Merge into main ASSETS array so all existing filters work
 ASSETS.push(...HIERARCHY_ASSETS);
 
+// ── Tableau (BI) assets — the object types the Tableau connector crawls into the catalog.
+//    Mirrors Atlan's Tableau crawl model: Site › Project › Workbook › Dashboard/Worksheet,
+//    plus Published/Embedded Data Sources, their Fields & Calculated Fields, Flows and Metrics.
+//    Presented as flat catalog assets so every object type is visible with its own detail + lineage. ──
+const TABLEAU_ASSETS = [
+  {id:6001,name:"Analytics",          type:"Site",             domain:"Platform", owner:"james.oh",  owners:["james.oh"],  steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:0,  usage:"High", updated:"20m ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics", tier:1, rows:"—", size:"—", tags:[],                   description:"Tableau site (tenant boundary). Root container for all projects, workbooks and data sources.", slaFreshness:"20m"},
+  {id:6002,name:"Finance",            type:"Project",          domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",   stewards:["alex.wu"],   cert:"Approved",  quality:0,  usage:"High", updated:"1h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance", tier:1, rows:"—", size:"—", tags:[],           description:"Top-level Tableau project grouping Finance workbooks and published data sources. Nests recursively.", slaFreshness:"1h"},
+  {id:6003,name:"Revenue_Analytics",  type:"Workbook",         domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:0,  usage:"High", updated:"1h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics", tier:1, rows:"—", size:"—", tags:["KPI"], description:"Published workbook containing the revenue dashboard, its worksheets and an embedded data source. Excluded from lineage traversal (container).", slaFreshness:"1h"},
+  {id:6004,name:"Revenue_Dashboard",  type:"Dashboard",        domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:88, usage:"High", updated:"1h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics / Revenue_Dashboard", tier:1, rows:"—", size:"—", tags:["KPI","Board reporting"], description:"Executive revenue dashboard assembled from the Revenue_by_Region worksheet. Consumer end of Tableau lineage.", slaFreshness:"1h"},
+  {id:6005,name:"Revenue_by_Region",  type:"Worksheet",        domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:86, usage:"High", updated:"1h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics / Revenue_by_Region", tier:2, rows:"—", size:"—", tags:["KPI"], description:"Worksheet (view) plotting revenue by region. The middle hop between data source and dashboard.", slaFreshness:"1h"},
+  {id:6006,name:"Orders_Certified",   type:"Data Source",      domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:90, usage:"High", updated:"2h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Orders_Certified", tier:1, rows:"—", size:"—", tags:["revenue","KPI"], description:"Published data source (reusable, owned, certified). Pulls from Snowflake ORDERS_FACT via custom SQL — the governed data surface.", slaFreshness:"2h"},
+  {id:6007,name:"Revenue_Extract",    type:"Data Source",      domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Draft",     quality:72, usage:"Med",  updated:"1h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics / Revenue_Extract", tier:2, rows:"—", size:"420 MB", tags:[], description:"Embedded data source (lives inside the Revenue_Analytics workbook). Same shape as a published source, minus ownership & popularity. Has a materialized extract.", slaFreshness:"1h"},
+  {id:6008,name:"order_amount",       type:"Datasource Field", domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:0,  usage:"High", updated:"2h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Orders_Certified / order_amount", tier:2, rows:"—", size:"—", tags:["revenue"], description:"Datasource field exposed by Orders_Certified. Maps back to Snowflake ORDERS_FACT.order_amount (decimal, measure).", slaFreshness:"2h"},
+  {id:6009,name:"yoy_growth_pct",     type:"Calculated Field", domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:0,  usage:"Med",  updated:"2h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Orders_Certified / yoy_growth_pct", tier:2, rows:"—", size:"—", tags:["KPI"], description:"Calculated field. Formula: (SUM([order_amount]) - LOOKUP(SUM([order_amount]),-1)) / ABS(LOOKUP(SUM([order_amount]),-1)). Drives column-level lineage.", slaFreshness:"2h"},
+  {id:6010,name:"Orders_Prep_Flow",   type:"Flow",             domain:"Commerce", owner:"james.oh",  owners:["james.oh"],  steward:"maya.chen", stewards:["maya.chen"], cert:"Approved",  quality:0,  usage:"Med",  updated:"6h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Orders_Prep_Flow", tier:2, rows:"—", size:"—", tags:["etl"], description:"Tableau Prep flow shaping order data before it reaches the data source. No lineage yet; unavailable under JWT bearer auth.", slaFreshness:"6h"},
+  {id:6011,name:"Daily_Revenue",      type:"Metric",           domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",   stewards:["alex.wu"],   cert:"Deprecated",quality:0,  usage:"Low",  updated:"3w ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Daily_Revenue", tier:3, rows:"—", size:"—", tags:[], description:"Legacy standalone KPI metric. Retired by Tableau in API 3.22+ — crawled only from older servers.", slaFreshness:"—"},
+];
+ASSETS.push(...TABLEAU_ASSETS);
+
 // ─────────────────────────────────────────────
 // COLUMN METADATA (keyed by asset name)
 // ─────────────────────────────────────────────
@@ -2943,6 +2962,16 @@ const TYPE_META = {
   Folder:     {c:"#d97706", bg:"rgba(217,119,6,.1)",    icon:"▤"},
   Object:     {c:"#6b7280", bg:"rgba(107,114,128,.1)",  icon:"▪"},
   Blob:       {c:"#6b7280", bg:"rgba(107,114,128,.1)",  icon:"▪"},
+  // ── Tableau (BI) object types ──
+  Site:                {c:"#1f77b4", bg:"rgba(31,119,180,.1)",  icon:"◉"},
+  Project:             {c:"#1f77b4", bg:"rgba(31,119,180,.08)", icon:"▤"},
+  Workbook:            {c:"#7c3aed", bg:"rgba(124,58,237,.1)",  icon:"▥"},
+  Worksheet:           {c:"#8b5cf6", bg:"rgba(139,92,246,.1)",  icon:"▨"},
+  "Data Source":       {c:"#16a34a", bg:"rgba(22,163,74,.1)",   icon:"◱"},
+  "Datasource Field":  {c:"#d97706", bg:"rgba(217,119,6,.1)",   icon:"▸"},
+  "Calculated Field":  {c:"#d97706", bg:"rgba(217,119,6,.08)",  icon:"ƒ"},
+  Flow:                {c:"#0ea5e9", bg:"rgba(14,165,233,.1)",  icon:"⇄"},
+  Metric:              {c:"#a78bfa", bg:"rgba(167,139,250,.1)", icon:"◎"},
 };
 const TypeBadge = ({type})=>{
   const s = TYPE_META[type]||{c:T.textMuted,bg:T.bgHover,icon:"▪"};
@@ -12811,6 +12840,7 @@ const AssetSchema = ({asset,selCol,onColClick,onToast})=>{
 // ─── Lineage colour map ───────────────────────────────────────────────────────
 const LINEAGE_TYPE_COLOR={
   Database:"#7dd3fc", Table:"#ee2424", Dashboard:"#c4b5fd",
+  "Data Source":"#16a34a", Worksheet:"#a78bfa",
 };
 
 // ─── Per-node metadata (for info panel) ──────────────────────────────────────
@@ -12843,23 +12873,23 @@ const LINEAGE_COL_MAPS=[
 ];
 
 // Recursively trace all col-level edges upstream + downstream from a start column
-function colPathEdges(startNodeId,startColName){
+function colPathEdges(startNodeId,startColName,colMaps=LINEAGE_COL_MAPS){
   const result=[];const visited=new Set();
-  const traceDown=(nodeId,colName)=>{const key=`d.${nodeId}.${colName}`;if(visited.has(key))return;visited.add(key);LINEAGE_COL_MAPS.forEach(m=>{if(m.s===nodeId)m.cols.forEach(c=>{if(c.sc===colName){result.push({s:nodeId,t:m.t,sc:c.sc,tc:c.tc});traceDown(m.t,c.tc);}});});};
-  const traceUp=(nodeId,colName)=>{const key=`u.${nodeId}.${colName}`;if(visited.has(key))return;visited.add(key);LINEAGE_COL_MAPS.forEach(m=>{if(m.t===nodeId)m.cols.forEach(c=>{if(c.tc===colName){result.push({s:m.s,t:nodeId,sc:c.sc,tc:c.tc});traceUp(m.s,c.sc);}});});};
+  const traceDown=(nodeId,colName)=>{const key=`d.${nodeId}.${colName}`;if(visited.has(key))return;visited.add(key);colMaps.forEach(m=>{if(m.s===nodeId)m.cols.forEach(c=>{if(c.sc===colName){result.push({s:nodeId,t:m.t,sc:c.sc,tc:c.tc});traceDown(m.t,c.tc);}});});};
+  const traceUp=(nodeId,colName)=>{const key=`u.${nodeId}.${colName}`;if(visited.has(key))return;visited.add(key);colMaps.forEach(m=>{if(m.t===nodeId)m.cols.forEach(c=>{if(c.tc===colName){result.push({s:m.s,t:nodeId,sc:c.sc,tc:c.tc});traceUp(m.s,c.sc);}});});};
   traceDown(startNodeId,startColName);traceUp(startNodeId,startColName);
   const seen=new Set();return result.filter(e=>{const k=`${e.s}.${e.sc}->${e.t}.${e.tc}`;if(seen.has(k))return false;seen.add(k);return true;});
 }
 
 // ─── Helper: get all ancestors / descendants recursively ──────────────────────
-function linAncestors(nodeId){
+function linAncestors(nodeId,topo=LINEAGE_TOPO){
   const out=new Set();
-  const visit=id=>{LINEAGE_TOPO[id].upstream.forEach(u=>{out.add(u);visit(u);});};
+  const visit=id=>{(topo[id]?.upstream||[]).forEach(u=>{out.add(u);visit(u);});};
   visit(nodeId); return out;
 }
-function linDescendants(nodeId){
+function linDescendants(nodeId,topo=LINEAGE_TOPO){
   const out=new Set();
-  const visit=id=>{LINEAGE_TOPO[id].downstream.forEach(d=>{out.add(d);visit(d);});};
+  const visit=id=>{(topo[id]?.downstream||[]).forEach(d=>{out.add(d);visit(d);});};
   visit(nodeId); return out;
 }
 
@@ -12971,11 +13001,11 @@ const LineageAssetNode=({data})=>{
 const LIN_NODE_TYPES={assetNode:LineageAssetNode};
 
 // ─── Build RF nodes + edges from visible set ──────────────────────────────────
-function buildLinNodes(aName,hiddenNodes,expandedCols,colHighlights,callbacks){
-  return Object.entries(LINEAGE_TOPO)
+function buildLinNodes(aName,hiddenNodes,expandedCols,colHighlights,callbacks,topoMap=LINEAGE_TOPO,metaMap=LINEAGE_NODE_META){
+  return Object.entries(topoMap)
     .filter(([id])=>!hiddenNodes.has(id))
     .map(([id,topo])=>{
-      const meta=LINEAGE_NODE_META[id];
+      const meta=metaMap[id];
       const label=topo.active?aName:topo.label;
       const expanded=expandedCols.has(id);
       const upParents=topo.upstream;
@@ -12999,8 +13029,8 @@ function buildLinNodes(aName,hiddenNodes,expandedCols,colHighlights,callbacks){
       };
     });
 }
-function buildLinEdges(hiddenNodes){
-  return LINEAGE_EDGES_DEF
+function buildLinEdges(hiddenNodes,edgesDef=LINEAGE_EDGES_DEF){
+  return edgesDef
     .filter(e=>!hiddenNodes.has(e.s)&&!hiddenNodes.has(e.t))
     .map(e=>{
       const c="#94a3b8";
@@ -13012,8 +13042,57 @@ function buildLinEdges(hiddenNodes){
     });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// TABLEAU LINEAGE GRAPH — the BI-connector path the catalog stitches:
+//   Snowflake Table → Published Data Source → Worksheet → Dashboard
+//   (asset-level + column-level). Custom-SQL parsing links the data source
+//   back to the physical Snowflake table.
+// ═══════════════════════════════════════════════════════════════════════════
+const TABLEAU_NODE_META={
+  tb_tbl:{assetType:"Table",       service:"snowflake",db:"SNOWFLAKE_PROD / COMMERCE / orders_fact", domain:"Commerce",owner:"maya.chen",steward:"dev.patel",quality:94,cert:"Approved",tags:["PII","revenue"],description:"Snowflake fact table. Physical source the Tableau data source pulls from via custom SQL.", cols:[{n:"order_amount",t:"decimal"},{n:"order_date",t:"date"},{n:"region",t:"varchar"},{n:"customer_id",t:"bigint"}]},
+  tb_ds: {assetType:"Data Source", service:"tableau",  db:"Analytics / Finance / Orders_Certified",  domain:"Finance", owner:"alex.wu",  steward:"james.oh", quality:90,cert:"Approved",tags:["revenue","KPI"],description:"Published, certified Tableau data source. Reusable governed surface consumed by worksheets.", cols:[{n:"revenue",t:"field"},{n:"yoy_growth_pct",t:"calc"},{n:"region",t:"field"},{n:"order_date",t:"field"}]},
+  tb_ws: {assetType:"Worksheet",   service:"tableau",  db:"Analytics / Finance / Revenue_by_Region", domain:"Finance", owner:"alex.wu",  steward:"james.oh", quality:86,cert:"Approved",tags:["KPI"],          description:"Worksheet (view) plotting revenue by region. Middle hop between data source and dashboard.", cols:[{n:"revenue",t:"measure"},{n:"region",t:"dim"}]},
+  tb_db: {assetType:"Dashboard",   service:"tableau",  db:"Analytics / Finance / Revenue_Dashboard", domain:"Finance", owner:"alex.wu",  steward:"james.oh", quality:88,cert:"Approved",tags:["KPI","Board reporting"],description:"Executive revenue dashboard. Consumer end of the Tableau lineage path.", cols:[{n:"total_revenue",t:"decimal"},{n:"region",t:"dim"}]},
+};
+const TABLEAU_TOPO={
+  tb_tbl:{x:0,  y:160,label:"orders_fact",       upstream:[],        downstream:["tb_ds"]},
+  tb_ds: {x:310,y:160,label:"Orders_Certified",  upstream:["tb_tbl"],downstream:["tb_ws"]},
+  tb_ws: {x:620,y:160,label:"Revenue_by_Region", upstream:["tb_ds"], downstream:["tb_db"]},
+  tb_db: {x:930,y:160,label:"Revenue_Dashboard", upstream:["tb_ws"], downstream:[]},
+};
+const TABLEAU_EDGES_DEF=[
+  {id:"tle1",s:"tb_tbl",t:"tb_ds",tk:"Custom SQL"},
+  {id:"tle2",s:"tb_ds", t:"tb_ws",tk:"Direct"},
+  {id:"tle3",s:"tb_ws", t:"tb_db",tk:"Direct"},
+];
+const TABLEAU_COL_MAPS=[
+  {s:"tb_tbl",t:"tb_ds",cols:[{sc:"order_amount",tc:"revenue"},{sc:"order_amount",tc:"yoy_growth_pct"},{sc:"order_date",tc:"yoy_growth_pct"},{sc:"order_date",tc:"order_date"},{sc:"region",tc:"region"}]},
+  {s:"tb_ds", t:"tb_ws",cols:[{sc:"revenue",tc:"revenue"},{sc:"region",tc:"region"}]},
+  {s:"tb_ws", t:"tb_db",cols:[{sc:"revenue",tc:"total_revenue"},{sc:"region",tc:"region"}]},
+];
+// Which Tableau node is "CURRENT" when a given Tableau object type is viewed.
+const TABLEAU_ACTIVE_BY_TYPE={
+  "Data Source":"tb_ds","Datasource Field":"tb_ds","Calculated Field":"tb_ds",
+  "Worksheet":"tb_ws","Dashboard":"tb_db","Workbook":"tb_db",
+  "Project":"tb_ds","Site":"tb_ds","Metric":"tb_db","Flow":"tb_tbl",
+};
+// Resolve which lineage graph an asset's Lineage tab renders. Tableau assets get the
+// BI path (with the matching node marked CURRENT); everything else keeps the default graph.
+function pickLineageGraph(asset){
+  if(asset&&asset.service==="tableau"){
+    const activeId=TABLEAU_ACTIVE_BY_TYPE[asset.type]||"tb_ds";
+    const topo={};
+    Object.entries(TABLEAU_TOPO).forEach(([id,t])=>{ topo[id]={...t,active:id===activeId}; });
+    return {topo,meta:TABLEAU_NODE_META,colMaps:TABLEAU_COL_MAPS,edges:TABLEAU_EDGES_DEF};
+  }
+  return {topo:LINEAGE_TOPO,meta:LINEAGE_NODE_META,colMaps:LINEAGE_COL_MAPS,edges:LINEAGE_EDGES_DEF};
+}
+
 // ─── AssetLineageFull ─────────────────────────────────────────────────────────
 const AssetLineageFull=({asset})=>{
+  // Asset-aware lineage graph (Tableau BI path vs. default). Stable per asset.
+  const _G=useMemo(()=>pickLineageGraph(asset),[asset]);
+  const LINEAGE_TOPO=_G.topo, LINEAGE_NODE_META=_G.meta, LINEAGE_COL_MAPS=_G.colMaps, LINEAGE_EDGES_DEF=_G.edges;
   const aName=asset?.name||"orders_fact";
   const [hiddenNodes,  setHiddenNodes] =useState(new Set());
   const [expandedCols, setExpandedCols]=useState(new Set());
@@ -13026,6 +13105,9 @@ const AssetLineageFull=({asset})=>{
   // Reset tabs when selection changes
   useEffect(()=>{ setNodeInfoTab("overview"); },[selectedId]);
   useEffect(()=>{ setColInfoTab("overview"); },[selectedCol]);
+  // Clear any node/column selection when the asset (and thus its lineage graph) changes,
+  // so a node id from the previous graph can never linger in the info panel.
+  useEffect(()=>{ setSelectedId(null); setSelectedCol(null); setHiddenNodes(new Set()); setExpandedCols(new Set()); },[aName]);
 
   const callbacks=useMemo(()=>({
     toggleExpand:(id)=>{
@@ -13035,8 +13117,8 @@ const AssetLineageFull=({asset})=>{
     toggleUpstream:(id,parents,open)=>{
       setHiddenNodes(p=>{
         const n=new Set(p);
-        if(open){linAncestors(id).forEach(a=>n.add(a));}
-        else{linAncestors(id).forEach(a=>n.delete(a));}
+        if(open){linAncestors(id,LINEAGE_TOPO).forEach(a=>n.add(a));}
+        else{linAncestors(id,LINEAGE_TOPO).forEach(a=>n.delete(a));}
         return n;
       });
       setTimeout(()=>rf?.fitView({padding:0.15,duration:350}),60);
@@ -13044,8 +13126,8 @@ const AssetLineageFull=({asset})=>{
     toggleDownstream:(id,children,open)=>{
       setHiddenNodes(p=>{
         const n=new Set(p);
-        if(open){linDescendants(id).forEach(d=>n.add(d));}
-        else{linDescendants(id).forEach(d=>n.delete(d));}
+        if(open){linDescendants(id,LINEAGE_TOPO).forEach(d=>n.add(d));}
+        else{linDescendants(id,LINEAGE_TOPO).forEach(d=>n.delete(d));}
         return n;
       });
       setTimeout(()=>rf?.fitView({padding:0.15,duration:350}),60);
@@ -13054,12 +13136,12 @@ const AssetLineageFull=({asset})=>{
       setSelectedId(null);
       setSelectedCol(p=>p?.nodeId===nodeId&&p?.colName===colName?null:{nodeId,colName});
     },
-  }),[rf]);
+  }),[rf,LINEAGE_TOPO]);
 
   // Compute which columns to highlight across all nodes when a column is selected
   const colHighlights=useMemo(()=>{
     if(!selectedCol)return{};
-    const paths=colPathEdges(selectedCol.nodeId,selectedCol.colName);
+    const paths=colPathEdges(selectedCol.nodeId,selectedCol.colName,LINEAGE_COL_MAPS);
     const r={};
     r[selectedCol.nodeId]=new Set([selectedCol.colName]);
     paths.forEach(p=>{
@@ -13067,19 +13149,19 @@ const AssetLineageFull=({asset})=>{
       if(!r[p.t])r[p.t]=new Set();r[p.t].add(p.tc);
     });
     return r;
-  },[selectedCol]);
+  },[selectedCol,LINEAGE_COL_MAPS]);
 
-  const nodes=useMemo(()=>buildLinNodes(aName,hiddenNodes,expandedCols,colHighlights,callbacks),[aName,hiddenNodes,expandedCols,colHighlights,callbacks]);
+  const nodes=useMemo(()=>buildLinNodes(aName,hiddenNodes,expandedCols,colHighlights,callbacks,LINEAGE_TOPO,LINEAGE_NODE_META),[aName,hiddenNodes,expandedCols,colHighlights,callbacks,LINEAGE_TOPO,LINEAGE_NODE_META]);
 
   // When a column is selected: show dimmed node-edges + animated column-level edges
   const edges=useMemo(()=>{
     if(selectedCol){
-      const base=buildLinEdges(hiddenNodes).map(e=>({...e,
+      const base=buildLinEdges(hiddenNodes,LINEAGE_EDGES_DEF).map(e=>({...e,
         style:{stroke:"#e2e8f0",strokeWidth:1.2,strokeDasharray:"5 4"},
         markerEnd:{type:MarkerType.ArrowClosed,color:"#e2e8f0",width:10,height:10},
         animated:false,
       }));
-      const colPaths=colPathEdges(selectedCol.nodeId,selectedCol.colName);
+      const colPaths=colPathEdges(selectedCol.nodeId,selectedCol.colName,LINEAGE_COL_MAPS);
       const colEdges=colPaths
         .filter(p=>!hiddenNodes.has(p.s)&&!hiddenNodes.has(p.t))
         .map(p=>({
@@ -13092,8 +13174,8 @@ const AssetLineageFull=({asset})=>{
         }));
       return[...base,...colEdges];
     }
-    return buildLinEdges(hiddenNodes);
-  },[hiddenNodes,selectedCol]);
+    return buildLinEdges(hiddenNodes,LINEAGE_EDGES_DEF);
+  },[hiddenNodes,selectedCol,LINEAGE_EDGES_DEF,LINEAGE_COL_MAPS]);
 
   const [rfNodes,setRfNodes,onNodesChange]=useNodesState(nodes);
   const [rfEdges,setRfEdges,onEdgesChange]=useEdgesState(edges);
@@ -13104,15 +13186,15 @@ const AssetLineageFull=({asset})=>{
   // Auto-expand nodes that are part of the selected column's path
   useEffect(()=>{
     if(!selectedCol)return;
-    const paths=colPathEdges(selectedCol.nodeId,selectedCol.colName);
+    const paths=colPathEdges(selectedCol.nodeId,selectedCol.colName,LINEAGE_COL_MAPS);
     const toExpand=new Set([selectedCol.nodeId]);
     paths.forEach(p=>{toExpand.add(p.s);toExpand.add(p.t);});
     setExpandedCols(p=>{const n=new Set(p);toExpand.forEach(id=>n.add(id));return n;});
     setTimeout(()=>rf?.fitView({padding:0.15,duration:350}),80);
-  },[selectedCol]);
+  },[selectedCol,LINEAGE_COL_MAPS]);
 
   const selMeta=selectedId?LINEAGE_NODE_META[selectedId]:null;
-  const selLabel=selectedId?(LINEAGE_TOPO[selectedId].active?aName:LINEAGE_TOPO[selectedId].label):null;
+  const selLabel=selectedId?(LINEAGE_TOPO[selectedId]?.active?aName:LINEAGE_TOPO[selectedId]?.label):null;
 
   // cert colour helper (hardcoded, no T)
   const certC=(c)=>c==="Approved"?"#16a34a":c==="In Review"?"#d97706":"#6b7280";
@@ -13126,9 +13208,9 @@ const AssetLineageFull=({asset})=>{
         borderBottom:"none",flexShrink:0,flexWrap:"wrap"}}>
         {/* Legend */}
         <div style={{display:"flex",gap:10,flexWrap:"wrap",flex:1}}>
-          {Object.entries(LINEAGE_TYPE_COLOR).map(([type,color])=>(
+          {[...new Set(Object.values(LINEAGE_NODE_META).map(m=>m.assetType))].map(type=>(
             <span key={type} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:"#64748b"}}>
-              <span style={{width:8,height:8,borderRadius:2,background:color,display:"inline-block"}}/>
+              <span style={{width:8,height:8,borderRadius:2,background:LINEAGE_TYPE_COLOR[type]||"#94a3b8",display:"inline-block"}}/>
               {type}
             </span>
           ))}
@@ -13525,8 +13607,8 @@ const AssetLineageFull=({asset})=>{
           const tagC=t=>TAG_C_L[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};
           const directUp=LINEAGE_TOPO[selectedId]?.upstream||[];
           const directDown=LINEAGE_TOPO[selectedId]?.downstream||[];
-          const allUp=[...linAncestors(selectedId)];
-          const allDown=[...linDescendants(selectedId)];
+          const allUp=[...linAncestors(selectedId,LINEAGE_TOPO)];
+          const allDown=[...linDescendants(selectedId,LINEAGE_TOPO)];
           const upOrdered=[...directUp,...allUp.filter(id=>!directUp.includes(id))];
           const downOrdered=[...directDown,...allDown.filter(id=>!directDown.includes(id))];
 
@@ -19234,6 +19316,7 @@ const CatalogView = ({onAsset})=>{
     s3:         ["Bucket","Folder","Object"],
     azureblob:  ["Container","Blob"],
     airflow:    ["Pipeline"],
+    tableau:    ["Site","Project","Workbook","Dashboard","Worksheet","Data Source","Datasource Field","Calculated Field","Flow","Metric"],
   };
 
   const toggle = (setter, val) => setter(prev => { const next = new Set(prev); next.has(val)?next.delete(val):next.add(val); return next; });
@@ -19282,7 +19365,7 @@ const CatalogView = ({onAsset})=>{
 
   const CERT_COLORS = {"Approved":"#16a34a","In Review":"#d97706","Draft":"#6b7280","Rejected":"#e11d48","Deprecated":"#7c3aed"};
   const TIER_META   = {"1":{color:"#ee2424",label:"Critical"},"2":{color:"#d97706",label:"Important"},"3":{color:"#4b4b60",label:"Exploratory"}};
-  const CONN_TYPE_LABELS = {cdp:"Solix CDP",ecs:"Solix ECS",snowflake:"Snowflake",databricks:"Databricks",oracle:"Oracle",postgres:"PostgreSQL",mysql:"MySQL",s3:"Amazon S3",azureblob:"Azure Blob",airflow:"Airflow"};
+  const CONN_TYPE_LABELS = {cdp:"Solix CDP",ecs:"Solix ECS",snowflake:"Snowflake",databricks:"Databricks",oracle:"Oracle",postgres:"PostgreSQL",mysql:"MySQL",s3:"Amazon S3",azureblob:"Azure Blob",airflow:"Airflow",tableau:"Tableau"};
   const allConnTypes = [...new Set(ASSETS.map(a=>a.service))];
   const visibleConns = selConnTypes.size===0 ? [...new Set(ASSETS.map(a=>a.connectionLabel))] : [...new Set(ASSETS.filter(a=>selConnTypes.has(a.service)).map(a=>a.connectionLabel))];
   const ALL_ASSET_TYPES = selConnTypes.size===0
