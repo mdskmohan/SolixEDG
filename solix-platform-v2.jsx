@@ -18222,6 +18222,271 @@ const AssetDetail = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}) =>
   return <AssetDetailFull asset={asset} assetStack={assetStack} onBack={onBack} onToast={onToast} onNav={onNav}/>;
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+// TABLEAU (BI) ASSET PROFILE — object-appropriate detail. A dashboard is not a
+// table: no columns/row-counts/SLA, no DQ/Contract tabs. Instead: project path,
+// certification, popularity, source link, extract status, fields (data sources),
+// formula (calc fields), and clear upstream/downstream relationships.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Per-object profile content (keyed by asset name). props = labelled key/values;
+// rel = relationships surfaced in the overview (parent / contains / upstream / downstream).
+const TABLEAU_PROFILE = {
+  "Analytics":         {props:[["Object type","Site"],["Projects","1"],["Data sources","2"],["Source","Tableau Cloud"]],
+                        rel:{contains:[{name:"Finance",type:"Project"}]}},
+  "Finance":           {props:[["Object type","Project"],["Site","Analytics"],["Top-level","Yes"],["Contents","1 workbook · 1 data source · 1 flow"]],
+                        rel:{parent:{name:"Analytics",type:"Site"},contains:[{name:"Revenue_Analytics",type:"Workbook"},{name:"Orders_Certified",type:"Data Source"},{name:"Orders_Prep_Flow",type:"Flow"}]}},
+  "Revenue_Analytics": {props:[["Object type","Workbook"],["Project","Analytics / Finance"],["Contents","1 dashboard · 1 worksheet · 1 embedded source"],["Popularity","1,240 views (30d)"],["Source","Open in Tableau ↗"]],
+                        rel:{parent:{name:"Finance",type:"Project"},contains:[{name:"Revenue_Dashboard",type:"Dashboard"},{name:"Revenue_by_Region",type:"Worksheet"},{name:"Revenue_Extract",type:"Data Source"}]}},
+  "Revenue_Dashboard": {props:[["Object type","Dashboard"],["Project","Analytics / Finance"],["Workbook","Revenue_Analytics"],["Popularity","980 views (30d)"],["Last refresh","1h ago"],["Source","Open in Tableau ↗"]],
+                        rel:{contains:[{name:"Revenue_by_Region",type:"Worksheet"}],upstream:[{name:"Orders_Certified",type:"Data Source"}]}},
+  "Revenue_by_Region": {props:[["Object type","Worksheet (view)"],["Workbook","Revenue_Analytics"],["Fields used","revenue, region"],["Popularity","640 views (30d)"],["Source","Open in Tableau ↗"]],
+                        rel:{upstream:[{name:"Orders_Certified",type:"Data Source"}],downstream:[{name:"Revenue_Dashboard",type:"Dashboard"}]}},
+  "Orders_Certified":  {props:[["Object type","Published data source"],["Project","Analytics / Finance"],["Certified","Yes"],["Connection","Live extract"],["Fields","4 (1 calculated)"],["Upstream","SNOWFLAKE_PROD / COMMERCE / orders_fact"]],
+                        rel:{upstream:[{name:"orders_fact",type:"Table"}],downstream:[{name:"Revenue_by_Region",type:"Worksheet"},{name:"Revenue_Dashboard",type:"Dashboard"}]}},
+  "Revenue_Extract":   {props:[["Object type","Embedded data source"],["Workbook","Revenue_Analytics"],["Connection","Extract (420 MB)"],["Fields","2"],["Upstream","SNOWFLAKE_PROD / COMMERCE / orders_fact"]],
+                        rel:{parent:{name:"Revenue_Analytics",type:"Workbook"},upstream:[{name:"orders_fact",type:"Table"}]}},
+  "order_amount":      {props:[["Object type","Datasource field"],["Data source","Orders_Certified"],["Data type","decimal"],["Role","Measure"],["Upstream column","orders_fact.order_amount"]],
+                        rel:{parent:{name:"Orders_Certified",type:"Data Source"}}},
+  "yoy_growth_pct":    {formula:"(SUM([order_amount]) - LOOKUP(SUM([order_amount]), -1))\n/ ABS(LOOKUP(SUM([order_amount]), -1))",
+                        props:[["Object type","Calculated field"],["Data source","Orders_Certified"],["Data type","percentage"],["Role","Measure"]],
+                        rel:{parent:{name:"Orders_Certified",type:"Data Source"}}},
+  "Orders_Prep_Flow":  {props:[["Object type","Prep flow"],["Project","Analytics / Finance"],["Inputs","app_orders (MySQL)"],["Outputs","orders_fact (Snowflake)"],["Schedule","Daily 02:00 UTC"]],
+                        rel:{downstream:[{name:"orders_fact",type:"Table"}]}},
+  "Daily_Revenue":     {legacy:true,props:[["Object type","Metric (legacy)"],["Project","Analytics / Finance"],["Status","Retired — unavailable in Tableau API 3.22+"]],
+                        rel:{}},
+};
+
+// Fields exposed by each Tableau data source (the "schema" equivalent for a BI source).
+const TABLEAU_FIELDS = {
+  "Orders_Certified":[
+    {name:"revenue",        dataType:"decimal",    role:"Measure",   calc:false, upstream:"orders_fact.order_amount"},
+    {name:"yoy_growth_pct", dataType:"percentage", role:"Measure",   calc:true,  formula:"(SUM([order_amount]) − LOOKUP(SUM([order_amount]),−1)) / ABS(LOOKUP(SUM([order_amount]),−1))"},
+    {name:"region",         dataType:"string",     role:"Dimension", calc:false, upstream:"orders_fact.region"},
+    {name:"order_date",     dataType:"date",       role:"Dimension", calc:false, upstream:"orders_fact.order_date"},
+  ],
+  "Revenue_Extract":[
+    {name:"order_amount",   dataType:"decimal",    role:"Measure",   calc:false, upstream:"orders_fact.order_amount"},
+    {name:"region",         dataType:"string",     role:"Dimension", calc:false, upstream:"orders_fact.region"},
+  ],
+};
+
+// Relationship row — a labelled reference to a related Tableau/DB object (read-only, honest: no dead links).
+const TbRelRow = ({name,type,rel})=>(
+  <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6}}>
+    <TypeBadge type={type}/>
+    <span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</span>
+    <span style={{fontSize:11,color:T.textMuted,whiteSpace:"nowrap"}}>{rel}</span>
+  </div>
+);
+
+const TableauAssetOverview = ({asset,data,setData,onToast})=>{
+  const navFn = useNav();
+  const P = TABLEAU_PROFILE[asset.name] || {props:[["Object type",asset.type],["Path",asset.db]],rel:{}};
+  const rel = P.rel||{};
+  const [editingDesc,setEditingDesc]=useState(false);
+  const [descVal,setDescVal]=useState(data.description||asset.description||"");
+  const fields = TABLEAU_FIELDS[asset.name];
+
+  return (
+  <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:900}}>
+
+    {/* Description */}
+    <Card2>
+      <div style={{padding:"14px 16px"}}>
+        <SH title="Description" action={
+          editingDesc
+            ? <div style={{display:"flex",gap:6}}>
+                <Btn small ghost onClick={()=>{setData(d=>({...d,description:descVal}));setEditingDesc(false);onToast&&onToast("Description saved","success");}}>Save</Btn>
+                <Btn small ghost onClick={()=>{setDescVal(data.description||asset.description||"");setEditingDesc(false);}}>Cancel</Btn>
+              </div>
+            : <Btn small ghost icon={Ic.edit(11)} onClick={()=>setEditingDesc(true)}>Edit</Btn>
+        }/>
+        {editingDesc
+          ? <textarea value={descVal} onChange={e=>setDescVal(e.target.value)} rows={3}
+              style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",resize:"vertical",lineHeight:1.7,fontFamily:"inherit",boxSizing:"border-box"}}/>
+          : <p style={{fontSize:13,color:T.textSub,lineHeight:1.8,margin:0}}>{descVal}</p>
+        }
+      </div>
+    </Card2>
+
+    {/* Tableau properties */}
+    <Card2>
+      <div style={{padding:"14px 16px"}}>
+        <SH title="Properties"/>
+        <div style={{background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden"}}>
+          {P.props.map((row,i)=>{
+            const isSource = /open in tableau/i.test(String(row[1]));
+            return (
+              <div key={row[0]} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"9px 12px",borderBottom:i<P.props.length-1?`1px solid ${T.border}`:"none"}}>
+                <span style={{fontSize:11.5,color:T.textMuted}}>{row[0]}</span>
+                {isSource
+                  ? <button onClick={()=>onToast&&onToast("Opens in Tableau (mock)","success")} style={{background:"none",border:"none",cursor:"pointer",color:T.blue,fontSize:12,fontWeight:600,fontFamily:"'Geist Mono',monospace",padding:0}}>{row[1]}</button>
+                  : <span style={{fontSize:12,color:T.textSub,fontFamily:"'Geist Mono',monospace",textAlign:"right",wordBreak:"break-word"}}>{row[1]}</span>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </Card2>
+
+    {/* Calculation (calculated field only) */}
+    {P.formula&&(
+      <Card2>
+        <div style={{padding:"14px 16px"}}>
+          <SH title="Calculation"/>
+          <pre style={{margin:0,padding:"12px 14px",background:"#0f172a",color:"#e2e8f0",borderRadius:8,fontSize:12,fontFamily:"'Geist Mono',monospace",lineHeight:1.7,overflowX:"auto",whiteSpace:"pre-wrap"}}>{P.formula}</pre>
+        </div>
+      </Card2>
+    )}
+
+    {/* Relationships — parent / contains / upstream / downstream */}
+    {(rel.parent||rel.contains||rel.upstream||rel.downstream)&&(
+      <Card2>
+        <div style={{padding:"14px 16px"}}>
+          <SH title="Relationships"/>
+          {rel.parent&&<>
+            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"2px 0 8px"}}>Parent</div>
+            <TbRelRow name={rel.parent.name} type={rel.parent.type} rel="Contained in"/>
+          </>}
+          {rel.upstream&&<>
+            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"10px 0 8px"}}>Upstream — feeds this object</div>
+            {rel.upstream.map(r=><TbRelRow key={r.name} name={r.name} type={r.type} rel="Source"/>)}
+          </>}
+          {rel.contains&&<>
+            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"10px 0 8px"}}>Contains</div>
+            {rel.contains.map(r=><TbRelRow key={r.name} name={r.name} type={r.type} rel="Child"/>)}
+          </>}
+          {rel.downstream&&<>
+            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"10px 0 8px"}}>Downstream — consumes this object</div>
+            {rel.downstream.map(r=><TbRelRow key={r.name} name={r.name} type={r.type} rel="Consumer"/>)}
+          </>}
+          <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>See the <b style={{color:T.textSub}}>Lineage</b> tab for the full column-level graph.</div>
+        </div>
+      </Card2>
+    )}
+
+    {/* Fields (data sources only) */}
+    {fields&&(
+      <Card2>
+        <div style={{padding:"14px 16px"}}>
+          <SH title={`Fields (${fields.length})`}/>
+          <div style={{background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden"}}>
+            {fields.map((f,i)=>(
+              <div key={f.name} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderBottom:i<fields.length-1?`1px solid ${T.border}`:"none"}}>
+                <span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.name}</span>
+                {f.calc&&<span style={{fontSize:9.5,fontWeight:700,color:"#d97706",background:"rgba(217,119,6,.1)",border:"1px solid rgba(217,119,6,.25)",borderRadius:4,padding:"1px 6px"}}>ƒ calc</span>}
+                <span style={{fontSize:10,fontWeight:600,color:f.role==="Measure"?"#16a34a":"#2563eb",background:f.role==="Measure"?"rgba(22,163,74,.1)":"rgba(37,99,235,.1)",borderRadius:4,padding:"1px 7px"}}>{f.role}</span>
+                <span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace",width:78,textAlign:"right"}}>{f.dataType}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Card2>
+    )}
+
+    {/* Governance — policies/regulations that apply via the object's domain */}
+    {(()=>{
+      const govPols = DEMO_POLICIES_GLOBAL.filter(p=>(p.scope?.domains||[]).includes(asset.domain)||(p.links||[]).some(l=>l.target===asset.name));
+      if(!govPols.length) return null;
+      const LC_COLOR = {Active:T.green,"In Review":T.amber,Draft:T.textMuted,Approved:T.blue,Deprecated:T.rose};
+      const govRegs = [...new Set(govPols.flatMap(p=>p.regulations||[]))];
+      return (
+        <Card2>
+          <div style={{padding:"14px 16px"}}>
+            <SH title="Governance"/>
+            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Governing Policies</div>
+            {govPols.map(p=>{
+              const lcc = LC_COLOR[p.lifecycle]||T.textMuted;
+              return (
+                <div key={p.id} onClick={()=>navFn("policymanager",{policyId:p.id})}
+                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=T.bgElevated}
+                  style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6,cursor:"pointer",transition:"background .1s"}}>
+                  <div style={{width:7,height:7,borderRadius:"50%",background:lcc,flexShrink:0}}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,fontWeight:600,color:T.text,lineHeight:1.4}}>{p.name}</div>
+                    <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{p.category} · {p.severity} severity</div>
+                  </div>
+                  <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:99,background:`${lcc}15`,color:lcc,border:`1px solid ${lcc}25`,flexShrink:0,whiteSpace:"nowrap"}}>{p.lifecycle}</span>
+                </div>
+              );
+            })}
+            {govRegs.length>0&&(
+              <div style={{marginTop:6}}>
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Applicable Regulations</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                  {govRegs.map(r=>(
+                    <span key={r} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"4px 10px",borderRadius:6,background:`${T.accent}12`,color:T.accent,border:`1px solid ${T.accent}25`,fontWeight:600}}>{r}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </Card2>
+      );
+    })()}
+
+    {/* Activity — Tableau-appropriate events */}
+    <Card2>
+      <div style={{padding:"14px 16px"}}>
+        <SH title="Activity"/>
+        <div style={{position:"relative",paddingLeft:18}}>
+          {[
+            {ts:"2026-08-18",who:"alex.wu",  action:`Certification set to ${data.cert||"Approved"}`, color:T.green},
+            {ts:"2026-08-18",who:"ai-bot",   action:`Refreshed from source (${asset.slaFreshness&&asset.slaFreshness!=="—"?asset.slaFreshness:"scheduled"})`, color:T.amber},
+            {ts:"2026-08-15",who:"james.oh", action:`Steward assigned`, color:T.blue},
+            {ts:"2026-08-12",who:"ai-bot",   action:`${asset.name} crawled from Tableau Cloud`, color:T.textMuted},
+          ].map((h,i,arr)=>(
+            <div key={i} style={{position:"relative",paddingBottom:14}}>
+              <div style={{position:"absolute",left:-14,top:4,width:8,height:8,borderRadius:"50%",background:h.color,border:`2px solid ${T.bgSurface}`}}/>
+              {i<arr.length-1&&<div style={{position:"absolute",left:-11,top:13,bottom:0,width:1,background:T.border}}/>}
+              <div style={{fontSize:12.5,color:T.text,marginBottom:2}}>{h.action}</div>
+              <div style={{fontSize:11,color:T.textMuted}}>{h.ts} · <span style={{fontFamily:"'Geist Mono',monospace"}}>{h.who}</span></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card2>
+  </div>
+  );
+};
+
+// Fields tab for a Tableau data source (the schema equivalent).
+const TableauFieldsPanel = ({asset})=>{
+  const fields = TABLEAU_FIELDS[asset.name]||[];
+  const [q,setQ]=useState("");
+  const filtered = fields.filter(f=>!q||f.name.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <div className="fadeIn">
+      <Card2 style={{overflow:"hidden",padding:0}}>
+        <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:12,alignItems:"center"}}>
+          <div style={{position:"relative",flex:1,minWidth:160}}>
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+            <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search fields…"
+              style={{width:"100%",padding:"6px 10px 6px 28px",background:T.bgElevated,border:`1.5px solid ${q?T.accent:T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+          </div>
+          <span style={{fontSize:11.5,color:T.textMuted}}>{fields.length} fields · {fields.filter(f=>f.calc).length} calculated</span>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1.4fr 0.7fr 0.8fr 1.6fr",padding:"9px 16px",borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>
+          <span>Field</span><span>Role</span><span>Data type</span><span>Upstream / formula</span>
+        </div>
+        {filtered.map((f,i)=>(
+          <div key={f.name} style={{display:"grid",gridTemplateColumns:"1.4fr 0.7fr 0.8fr 1.6fr",alignItems:"center",padding:"10px 16px",borderBottom:i<filtered.length-1?`1px solid ${T.border}`:"none"}}>
+            <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text,minWidth:0}}>
+              <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.name}</span>
+              {f.calc&&<span style={{fontSize:9,fontWeight:700,color:"#d97706",background:"rgba(217,119,6,.1)",border:"1px solid rgba(217,119,6,.25)",borderRadius:4,padding:"0 5px",flexShrink:0}}>ƒ</span>}
+            </span>
+            <span><span style={{fontSize:10.5,fontWeight:600,color:f.role==="Measure"?"#16a34a":"#2563eb",background:f.role==="Measure"?"rgba(22,163,74,.1)":"rgba(37,99,235,.1)",borderRadius:4,padding:"2px 8px"}}>{f.role}</span></span>
+            <span style={{fontSize:11.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{f.dataType}</span>
+            <span style={{fontSize:11,color:T.textSub,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={f.calc?f.formula:f.upstream}>{f.calc?f.formula:f.upstream}</span>
+          </div>
+        ))}
+        {filtered.length===0&&<div style={{padding:"28px",textAlign:"center",fontSize:12,color:T.textMuted}}>No fields match.</div>}
+      </Card2>
+    </div>
+  );
+};
+
 const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
   const [tab,        setTab]       = useState("overview");
   const [selCol,     setSelCol]    = useState(null);
@@ -18298,11 +18563,25 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
     return ()=>document.removeEventListener("mousedown",close);
   },[certOpen]);
 
-  const tabs=[
-    {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},{key:"lineage",label:"Lineage"},
-    {key:"observability",label:"Data Quality"},{key:"contract",label:"Contract"},{key:"usage",label:"Usage"},
-    {key:"customprops",label:"Custom Properties"},{key:"activity",label:"Audit Logs"},
-  ];
+  // ── Tableau (BI) objects get an object-appropriate profile (no columns / DQ / contract) ──
+  const isBI = asset.service==="tableau";
+  const biHasFields = isBI && !!TABLEAU_FIELDS[asset.name];   // data sources expose fields
+  const tabs = isBI
+    ? [
+        {key:"overview",label:"Overview"},
+        ...(biHasFields?[{key:"schema",label:"Fields"}]:[]),
+        {key:"lineage",label:"Lineage"},
+        {key:"usage",label:"Usage"},
+        {key:"customprops",label:"Custom Properties"},
+        {key:"activity",label:"Audit Logs"},
+      ]
+    : [
+        {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},{key:"lineage",label:"Lineage"},
+        {key:"observability",label:"Data Quality"},{key:"contract",label:"Contract"},{key:"usage",label:"Usage"},
+        {key:"customprops",label:"Custom Properties"},{key:"activity",label:"Audit Logs"},
+      ];
+  // If the active tab isn't available for this object type, fall back to Overview.
+  useEffect(()=>{ if(!tabs.some(t=>t.key===tab)) setTab("overview"); },[asset.name]);
 
   const handleCertify=()=>{
     setData(d=>({...d,cert:"Approved"}));
@@ -18384,10 +18663,14 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
 
       {/* Main content */}
       <div style={{flex:1,overflowY:"auto",padding:24,minWidth:0}}>
-        {tab==="overview"  && <AssetOverview asset={asset} data={data} setData={setData} onToast={onToast}/>}
-        {tab==="schema"    && <AssetSchema asset={asset} selCol={selCol} onColClick={c=>{ setSelCol(selCol?.name===c?.name?null:c); }} onToast={onToast}/>}
-        {tab==="observability" && <AssetObservabilityTab asset={data} onToast={onToast} onNav={onNav}/>}
-        {tab==="contract"      && <AssetContractTab asset={data} onToast={onToast}/>}
+        {tab==="overview"  && (isBI
+          ? <TableauAssetOverview asset={asset} data={data} setData={setData} onToast={onToast}/>
+          : <AssetOverview asset={asset} data={data} setData={setData} onToast={onToast}/>)}
+        {tab==="schema"    && (isBI
+          ? <TableauFieldsPanel asset={data}/>
+          : <AssetSchema asset={asset} selCol={selCol} onColClick={c=>{ setSelCol(selCol?.name===c?.name?null:c); }} onToast={onToast}/>)}
+        {tab==="observability" && !isBI && <AssetObservabilityTab asset={data} onToast={onToast} onNav={onNav}/>}
+        {tab==="contract"      && !isBI && <AssetContractTab asset={data} onToast={onToast}/>}
         {tab==="usage"     && <AssetUsageTab/>}
         {tab==="lineage"   && <AssetLineageFull asset={data}/>}
         {tab==="customprops" && <CustomPropsPanel entity={data.type||"Table"} objectId={data.name} objectName={data.name} owners={owners} stewards={stewards} onToast={onToast}/>}
@@ -18886,11 +19169,18 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
         {/* DETAILS */}
         <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
           <MetaLabel>Details</MetaLabel>
-          {[
-            {l:"Quality",   v:<QScore score={data.quality}/>},
-            {l:"Freshness", v:<span style={{fontSize:12,color:T.textSub}}>{data.slaFreshness}</span>},
-            {l:"Updated",   v:<span style={{fontSize:12,color:T.textMuted}}>{data.updated}</span>},
-          ].map(m=>(
+          {(isBI
+            ? [
+                ...(data.quality>0?[{l:"Quality",v:<QScore score={data.quality}/>}]:[]),
+                {l:"Last refresh", v:<span style={{fontSize:12,color:T.textSub}}>{data.slaFreshness&&data.slaFreshness!=="—"?data.slaFreshness:"—"}</span>},
+                {l:"Updated",      v:<span style={{fontSize:12,color:T.textMuted}}>{data.updated}</span>},
+              ]
+            : [
+                {l:"Quality",   v:<QScore score={data.quality}/>},
+                {l:"Freshness", v:<span style={{fontSize:12,color:T.textSub}}>{data.slaFreshness}</span>},
+                {l:"Updated",   v:<span style={{fontSize:12,color:T.textMuted}}>{data.updated}</span>},
+              ]
+          ).map(m=>(
             <div key={m.l} style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,fontSize:12}}>
               <span style={{color:T.textMuted}}>{m.l}</span>
               {m.v}
