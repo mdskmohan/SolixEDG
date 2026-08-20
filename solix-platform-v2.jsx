@@ -10725,6 +10725,12 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                 // shown as read-only chips once a table is picked, never an editable "pick your
                                 // approver" dropdown, since who approves isn't actually a choice.
                                 const isEnfField = r.field==="masking_status"||r.field==="legal_hold"||r.field==="retention_class";
+                                // A rule whose field carries a real enforcement action (Mask / Legal hold / Set
+                                // disposition / Encrypt / …). These get the Validation vs Enforcement mode toggle:
+                                //   Validation  → field · operator · value match condition, flags only, no action.
+                                //   Enforcement → drop the match condition, go straight to action + target + config.
+                                // r.enforce is the source of truth for which mode the rule is in.
+                                const isActionRule = !!fd.action;
                                 const tableColBlock = (showApprover)=>(
                                   <div style={{borderTop:`1px solid ${T.border}`,padding:"10px 11px 11px",display:"flex",flexDirection:"column",gap:8,background:`${T.bgBase}88`}}>
                                     {/* Table row */}
@@ -10785,12 +10791,33 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                         {!ruleIsObject&&fd.scope==="column"&&<span style={{fontSize:10,color:T.rose,marginLeft:2}}>column required</span>}
                                         {!ruleIsObject&&fd.scope==="both"&&<span style={{fontSize:10,color:T.textMuted,marginLeft:2}}>column optional</span>}
                                         {ruleIsObject&&<span style={{fontSize:10,color:T.textMuted,marginLeft:2}}>object-level</span>}
+                                        {/* ── Validation / Enforcement mode toggle — only for action-capable fields.
+                                            Switching to Enforcement drops the match condition and configures the action
+                                            directly. Multiple enforced rules on one target are allowed now: a conflict
+                                            is surfaced as an advisory (most-restrictive wins), never a hard block. ── */}
+                                        {isActionRule&&(
+                                          <div style={{marginLeft:"auto",display:"flex",border:`1px solid ${T.border}`,borderRadius:7,overflow:"hidden"}}>
+                                            {[["validate","Validation",false],["enforce","Enforcement",true]].map(([m,lbl,wantEnf])=>{
+                                              const active=!!r.enforce===wantEnf;
+                                              return (
+                                                <button key={m} onClick={()=>{
+                                                  if(wantEnf && !r.enforce && isEnfField){
+                                                    const conflict=findConflictingEnforcedPolicy(r.field,r.table);
+                                                    if(conflict){ onToast(`Note — '${conflict.name}' already enforces ${(ENF_LABEL[r.field]||"this action").toLowerCase()} on this target. Both will apply; the most-restrictive outcome wins.`,"info"); }
+                                                  }
+                                                  updRule(r.id,"enforce",wantEnf);
+                                                }}
+                                                style={{padding:"3px 11px",fontSize:10,fontWeight:active?700:500,letterSpacing:"0.03em",border:"none",cursor:"pointer",background:active?(wantEnf?T.accent:T.textMuted+"22"):"transparent",color:active?(wantEnf?"#fff":T.text):T.textMuted,transition:"all .1s"}}>{lbl}</button>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
                                       </div>
-                                      {/* Condition row — same shape for every field, including Masking/Legal Hold/
-                                          Retention: field + operator + value is the "main rule" that decides whether
-                                          this rule matches at all (e.g. "Legal Hold is false" / "Retention is Not Set").
-                                          Checking "Enforce in place" below adds the extra criteria that refine WHICH
-                                          rows/columns the enforcement action actually touches. */}
+                                      {/* Condition row. In Validation mode this is the match: field + operator + value
+                                          (e.g. "Retention Period less than 2555"). In Enforcement mode the operator +
+                                          value are dropped — the field alone names the action, and the target + config
+                                          below define what it does. This is what removes the old backwards
+                                          "Legal Hold is false → set it true" double-negative. */}
                                       {(()=>{
                                         return (
                                       <div style={{padding:"6px 11px 9px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
@@ -10809,17 +10836,18 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                             return order.map(g=><optgroup key={g} label={g}>{grouped[g].map(f=><option key={f.id} value={f.id}>{f.label}</option>)}</optgroup>);
                                           })()}
                                         </select>
-                                        <select value={r.operator} onChange={e=>updRule(r.id,"operator",e.target.value)} style={{...sel_s,flex:"0 0 auto",minWidth:isPresence?100:105}}>
+                                        {!r.enforce&&<select value={r.operator} onChange={e=>updRule(r.id,"operator",e.target.value)} style={{...sel_s,flex:"0 0 auto",minWidth:isPresence?100:105}}>
                                           {fd.ops.map(op=><option key={op} value={op}>{op}</option>)}
-                                        </select>
-                                        {needsVal&&(fd.vals||[]).length>0&&(
+                                        </select>}
+                                        {!r.enforce&&needsVal&&(fd.vals||[]).length>0&&(
                                           <select value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} style={{...sel_s,flex:"1 1 110px",minWidth:90}}>
                                             <option value="">— select —</option>
                                             {fd.vals.map(v=><option key={v} value={v}>{v}</option>)}
                                           </select>
                                         )}
-                                        {needsVal&&(fd.vals||[]).length===0&&<input type="text" value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} placeholder="value…" style={{...sel_s,flex:"1 1 110px"}}/>}
-                                        {needsNum&&<input type="number" value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} placeholder="value" style={{...sel_s,flex:"0 0 80px",width:80}}/>}
+                                        {!r.enforce&&needsVal&&(fd.vals||[]).length===0&&<input type="text" value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} placeholder="value…" style={{...sel_s,flex:"1 1 110px"}}/>}
+                                        {!r.enforce&&needsNum&&<input type="number" value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} placeholder="value" style={{...sel_s,flex:"0 0 80px",width:80}}/>}
+                                        {r.enforce&&<span style={{fontSize:10.5,color:T.accent,fontWeight:600,padding:"3px 9px",borderRadius:20,background:`${T.accent}14`,letterSpacing:"0.03em"}}>enforced action</span>}
                                         <SevBadge ruleId={r.id} sev={sev}/>
                                         {r.pendingUnhold
                                           ? <span style={{fontSize:9.5,fontWeight:700,padding:"3px 8px",borderRadius:10,background:`${T.amber}18`,color:T.amber,letterSpacing:"0.03em",flexShrink:0}}>PENDING UNHOLD</span>
@@ -10979,23 +11007,12 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                         // (gated inside renderObjCritType). So the duration fields show on every tab.
                                         return (
                                         <div style={{borderTop:`1px solid ${T.border}`,padding:"8px 11px",background:`${T.accent}06`}}>
-                                          <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
-                                            <span style={{fontSize:11,color:T.textSub}}>This rule will <b style={{fontWeight:600,color:T.text}}>{fd.action.verb.toLowerCase()}</b> when it matches.</span>
-                                            <label style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:5,fontSize:11,color:T.textSub,cursor:"pointer"}}>
-                                              <input type="checkbox" checked={!!r.enforce} onChange={e=>{
-                                                if(e.target.checked && isEnfField){
-                                                  const conflict = findConflictingEnforcedPolicy(r.field, r.table);
-                                                  if(conflict){
-                                                    const label = ENF_LABEL[r.field];
-                                                    onToast(`This table already has an active ${label} policy — '${conflict.name}'. A table can only have one enforced ${label.toLowerCase()} policy at a time.`,"error");
-                                                    return;
-                                                  }
-                                                }
-                                                updRule(r.id,"enforce",e.target.checked);
-                                              }} style={{cursor:"pointer"}}/>
-                                              Enforce in place
-                                            </label>
-                                          </div>
+                                          {/* Mode is driven by the Validation / Enforcement toggle in the header —
+                                              no separate "Enforce in place" checkbox. Validation mode shows a hint;
+                                              Enforcement mode shows the action config below. */}
+                                          {!r.enforce
+                                            ? <div style={{fontSize:11,color:T.textSub,lineHeight:1.5}}>This field can <b style={{fontWeight:600,color:T.text}}>{fd.action.verb.toLowerCase()}</b>. Switch to <b style={{fontWeight:600,color:T.accent}}>Enforcement</b> above to configure and apply it — in Validation mode the rule only flags matches.</div>
+                                            : <div style={{fontSize:11,color:T.textSub,lineHeight:1.5}}>This rule will <b style={{fontWeight:600,color:T.text}}>{fd.action.verb.toLowerCase()}</b> the target below when the policy runs.</div>}
                                           {r.enforce&&(
                                             <div style={{marginTop:8,paddingTop:8,borderTop:`1px dashed ${T.border}`}}>
                                               <div style={{fontSize:9.5,color:T.textMuted,marginBottom:6,letterSpacing:".3px"}}>Enforcement settings — pre-filled, editable. Which engine actually applies this is resolved per-asset when the policy runs.</div>
