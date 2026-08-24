@@ -2898,6 +2898,7 @@ const Ic = {
   arrowRight:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>,
   dataproducts:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5.5" height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.3"/><rect x="8.5" y="2" width="5.5" height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.3"/><rect x="2" y="8.5" width="5.5" height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.3"/><path d="M8.5 11.25h5.5M11.25 8.5v5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
   tableIc:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><rect x="1.5" y="1.5" width="13" height="2.5" rx=".7" fill="currentColor" opacity=".9"/><rect x="1.5" y="5.5" width="13" height="2.5" rx=".7" fill="currentColor" opacity=".5"/><rect x="1.5" y="9.5" width="13" height="2.5" rx=".7" fill="currentColor" opacity=".25"/><rect x="1.5" y="13" width="13" height="1.5" rx=".7" fill="currentColor" opacity=".15"/></svg>,
+  knowledge:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><circle cx="8" cy="3.4" r="2" stroke="currentColor" strokeWidth="1.3"/><circle cx="3.4" cy="12.2" r="2" stroke="currentColor" strokeWidth="1.3"/><circle cx="12.6" cy="12.2" r="2" stroke="currentColor" strokeWidth="1.3"/><path d="M6.6 5.1L4.7 10.4M9.4 5.1l1.9 5.3M5.4 12.2h5.2" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/></svg>,
 };
 
 // ─────────────────────────────────────────────
@@ -3994,6 +3995,7 @@ const GROUPS = [
     {key:"tags",           icon:"tag",           label:"Classifications"},
   ]},
   {section:"Knowledge",items:[
+    {key:"knowledgelayer", icon:"knowledge",     label:"Knowledge Layer"},
     {key:"glossary",       icon:"glossary",      label:"Glossary"},
     {key:"domains",        icon:"domains",       label:"Domains"},
     {key:"dataproducts",   icon:"dataproducts",  label:"Data Products"},
@@ -4003,7 +4005,7 @@ const GROUPS = [
 const Sidebar = ({active, onNav, exp, setExp, onHelp}) => {
   const {roleCfg} = useRole();
   const inboxBadgeCount = INBOX_DATA.filter(i=>!i.readAt).length;
-  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","settings","tags"];
+  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","settings","tags"];
   return (
     <div style={{position:"fixed",top:0,left:0,height:"100vh",width:exp?EXPANDED_W:COLLAPSED_W,background:T.bgSurface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:100,transition:"width .2s ease",overflow:"hidden"}}>
       {/* Logo */}
@@ -23996,6 +23998,863 @@ const DataProductsView = ({onAsset, onNav}) => {
 };
 
 // ─────────────────────────────────────────────
+// KNOWLEDGE LAYER — Source KGs + Cross-Source KGs
+// ─────────────────────────────────────────────
+// Doctrine: "match first, create second". AI proposes, but every proposal binds to an EDG
+// object that ALREADY exists (Classifications, Glossary, Domains, Owners, Lineage). Only a
+// genuine no-match creates something new, and that goes through the normal approval flow.
+// The AKG's own 10 steps are preserved as-is — only what feeds them changes.
+
+const KL_ENTITIES = ["Supplier","Customer","Material","Employee","Fixed Asset"];
+
+// Connections that exist in EDG but have no Source Knowledge Graph yet.
+const KL_UNMAPPED = ["Salesforce","Snowflake Prod","Workday","MongoDB Atlas"];
+
+const KL_SRC_SEED = [
+  {id:"sg1", name:"SAP ECC", tables:412, words:100, entities:["Supplier","Customer"],
+   drift:0, status:"Published", owner:"maya.chen", from:"Data Sense", step:10,
+   bind:{cols:3318, tags:38, termed:412, proposed:0, invented:0},
+   masters:[{table:"VENDOR_MASTER", entity:"Supplier", keys:["Tax ID","Legal Name","Vendor Code"], ready:true},
+            {table:"KNA1",          entity:"Customer", keys:["Tax ID","Name"],                    ready:true},
+            {table:"ASSET_REG",     entity:"Fixed Asset", keys:[],                                ready:false}]},
+  {id:"sg2", name:"Oracle EBS", tables:388, words:100, entities:["Supplier","Customer"],
+   drift:3, status:"Published", owner:"priya.nair", from:"Data Sense", step:10,
+   bind:{cols:2904, tags:31, termed:388, proposed:0, invented:0},
+   masters:[{table:"AP_SUPPLIERS", entity:"Supplier", keys:["Tax ID","Legal Name"], ready:true},
+            {table:"HZ_PARTIES",    entity:"Customer", keys:["Tax ID","Name"],       ready:true}]},
+  {id:"sg3", name:"Oracle Fusion", tables:292, words:88, entities:["Supplier"],
+   drift:0, status:"In review", owner:"maya.chen", from:"EDG", step:7,
+   bind:{cols:2140, tags:29, termed:280, proposed:12, invented:0},
+   masters:[{table:"POZ_SUPPLIERS", entity:"Supplier", keys:["Tax ID","Vendor Code"], ready:true}]},
+];
+
+const KL_X_SEED = [
+  {id:"xg1", name:"Supplier Master", entity:"Supplier", srcIds:["sg1","sg2","sg3"],
+   records:1204, review:6, owner:"maya.chen", status:"Published",
+   keys:["Tax ID","Legal Name","Vendor Code"],
+   beliefs:[{f:"Tax ID",s:"SAP ECC"},{f:"Legal Name",s:"Oracle EBS"},{f:"Address",s:"Most recently updated"}],
+   golden:[{n:"GAF Materials", conf:0.98, members:[{s:"SAP ECC",v:"GAF Corp · 4471"},{s:"Oracle EBS",v:"GAF · V10293"},{s:"Oracle Fusion",v:"G.A.F. · SUP-88"}]},
+           {n:"IKO Industries", conf:0.71, members:[{s:"SAP ECC",v:"IKO Ind. · 5120"},{s:"Oracle EBS",v:"IKO Inc · V20881"}]},
+           {n:"TAMKO Building", conf:0.64, members:[{s:"SAP ECC",v:"TAMKO · 27-919"},{s:"Oracle EBS",v:"TAMKO · 27-991"}]}]},
+  {id:"xg2", name:"Customer 360", entity:"Customer", srcIds:["sg1","sg2"],
+   records:3910, review:0, owner:"priya.nair", status:"Published",
+   keys:["Tax ID","Name"],
+   beliefs:[{f:"Tax ID",s:"SAP ECC"},{f:"Name",s:"Oracle EBS"}],
+   golden:[{n:"Baker Roofing", conf:0.97, members:[{s:"SAP ECC",v:"Baker Roofing Co · 8812"},{s:"Oracle EBS",v:"Baker Roofing · C4471"}]}]},
+];
+
+// ── The AKG's own 10 steps, unchanged. `uses` = the EDG object that now feeds the step. ──
+const KL_SRC_STEPS = [
+  {t:"Connect & Load", mode:"you", uses:"your existing Connections",
+   d:"Pick a system EDG already connects to. The connection, credentials and scan history are already here, so this is a pick-list rather than a setup form.",
+   note:["🔌","Because EDG owns the connection, there is nothing to configure twice."]},
+  {t:"Profile & Classify", mode:"auto", uses:"your Classifications & Tags",
+   d:"Profiling runs on its own. What needs you is confirming the labels — and every suggestion comes from the taxonomy you already govern.",
+   rows:[{nm:"VENDOR_TAX_NUM", chip:"Tax ID", kind:"exist", cf:"matched your tag · 98%", acts:"cc"},
+         {nm:"VENDOR_EMAIL",   chip:"PII · Email", kind:"exist", cf:"matched your tag · 97%", acts:"cc"},
+         {nm:"VNDR_NM_1",      chip:"Legal Name", kind:"exist", cf:"71% — please check", acts:"cc"}],
+   note:["🔒","Turn AI off and this becomes a dropdown of your existing tags. Either way you never type a new label."]},
+  {t:"Discover Relationships", mode:"auto", uses:"your existing Lineage",
+   d:"We do not build a second relationship picture. Anything found here is confirmed into the Lineage screen you already have.",
+   rows:[{nm:"VENDOR_ALL_V → PO_HEADER", chip:"already in Lineage", kind:"exist", cf:"confirm only", acts:"c"},
+         {nm:"PO_HEADER → PO_LINES",     chip:"already in Lineage", kind:"exist", cf:"confirm only", acts:"c"},
+         {nm:"VENDOR_SITES → VENDOR_ALL_V", chip:"new — AI found this", kind:"new", cf:"not yet in Lineage", acts:"lineage"}],
+   note:["⤳","One relationship picture in the product, not two."]},
+  {t:"Add Context", mode:"you", uses:"Glossary · Data Contracts · Custom Properties",
+   d:"Instead of uploading documents to teach the AI, we point it at the context EDG already holds.",
+   rows:[{nm:"Business glossary",  chip:"214 certified terms", kind:"exist", cf:"in use"},
+         {nm:"Data contracts",     chip:"8 contracts on these tables", kind:"exist", cf:"in use"},
+         {nm:"Custom properties",  chip:"12 defined fields", kind:"exist", cf:"in use"}],
+   note:["📚","Nothing to upload and nothing to maintain twice — the context is your governance."]},
+  {t:"AI Enrichment", mode:"auto", uses:"your Glossary",
+   d:"The AI proposes what each table means. Its job is to find the matching term you already certified.",
+   rows:[{nm:"VENDOR_ALL_V", chip:"Supplier", kind:"exist", cf:"certified term · 96%", acts:"cc"},
+         {nm:"PO_HEADER",    chip:"Purchase Order", kind:"exist", cf:"certified term · 94%", acts:"cc"},
+         {nm:"SPEND_AMT",    chip:"Vendor Spend (new term)", kind:"new", cf:"no match · needs approval", acts:"approve"}],
+   note:["✨","This is the step where “match first, create second” matters most."]},
+  {t:"Synonyms", mode:"auto", uses:"Glossary synonyms",
+   d:"No separate synonym list. Alternative names are stored as synonyms on the glossary term itself.",
+   rows:[{nm:"vendor, payee, creditor", chip:"synonyms of Supplier", kind:"exist", cf:"written to your glossary", acts:"cc"},
+         {nm:"PO, order",               chip:"synonyms of Purchase Order", kind:"exist", cf:"written to your glossary", acts:"cc"}],
+   note:["🔗","The old tool kept its own synonym list separate from the glossary, so the two could disagree. Now there is one."]},
+  {t:"Curate & Review", mode:"you", uses:"your Inbox and approval flow",
+   d:"The human quality gate. Confident items are already done — only the unclear ones arrive, ranked by importance.",
+   rows:[{nm:"Confirmed automatically", chip:"198 of 214 tables", kind:"exist", cf:"above your threshold"},
+         {nm:"Waiting on you",          chip:"16 items in your Inbox", kind:"new", cf:"ranked by importance", acts:"inbox"},
+         {nm:"New terms proposed",      chip:"12 awaiting approval", kind:"new", cf:"normal glossary flow", acts:"review"}],
+   note:["📥","This replaces the separate curation workspace — it is the same Inbox you already use everywhere else."]},
+  {t:"Build Index", mode:"auto", uses:null,
+   d:"Pure computer work. It runs in the background and reports itself; there is no decision to make here.",
+   rows:[{nm:"Indexing",          chip:"running — 68%", kind:"plain", cf:"started 4 min ago"},
+         {nm:"Full run history",  chip:"Settings → Background Jobs", kind:"plain", cf:"pass / fail / retry"}],
+   note:["⏱","Nothing for a person to do. Progress shows here; the history lives in Settings."]},
+  {t:"Validate", mode:"auto", uses:null,
+   d:"A quick confidence check: ask a plain-English question and see whether the graph answers it correctly.",
+   rows:[{nm:"“Top 10 suppliers by spend”",   chip:"answered correctly", kind:"exist", cf:"checked by steward"},
+         {nm:"“Suppliers missing a tax ID”",  chip:"answered correctly", kind:"exist", cf:"checked by steward"}],
+   note:["✅","Kept exactly as it is today — it is genuinely useful before publishing."]},
+  {t:"Publish", mode:"you", uses:"your owners and approval flow",
+   d:"Publishing is a governed act: the owner signs off, and only then can this source join a Cross-Source Knowledge Graph.",
+   note:["🚀","Published graphs feed Data Ask and the AI copilot, and become eligible for cross-source matching."]},
+];
+
+const KL_X_STEPS = [
+  {t:"Business Entity", mode:"you", uses:"your Business Entities",
+   d:"Pick the real-world thing this graph is about. This list is governed in EDG like a glossary term — it is what makes matching possible at all.",
+   note:["🧩","Without an agreed entity there is nothing to match two systems on."]},
+  {t:"Sources", mode:"you", uses:"your published Source Knowledge Graphs",
+   d:"Which systems should this join? EDG says up front whether each one is actually ready, so you never build a graph that silently returns nothing.",
+   note:["⭐","Previously a source could look fine and quietly produce zero records. Now it is stated before you build."]},
+  {t:"Match Keys", mode:"auto", uses:"your Classifications & Tags",
+   d:"Which columns tell us it is the same thing. Because those columns are already tagged in EDG, we can propose the answer instead of asking someone to write it by hand.",
+   note:["🔑","This is the piece that had to be hand-written in the old tool — the reason unprepared entities produced nothing."]},
+  {t:"If they disagree", mode:"you", uses:"your owners",
+   d:"Systems will disagree. Someone has to decide which one to believe, for each piece of information. This is the one genuinely new decision in the flow.",
+   note:["🧭","Vendors call this survivorship. On screen we just ask which system we believe."]},
+  {t:"Review", mode:"you", uses:"your Inbox",
+   d:"Confident matches are already joined. Only the genuinely unclear ones reach a person, most important first.",
+   note:["📥","A high auto-join ratio is what makes this workable on thousands of tables."]},
+  {t:"Govern & Publish", mode:"you", uses:"Policies · Glossary · Domains · Owners",
+   d:"The trusted records become governed objects like anything else in EDG — owner, policy, term, domain.",
+   note:["🚀","Published trusted records feed Data Ask and the AI copilot: one governed answer across every system."]},
+];
+
+// Which published source graphs can actually be matched on a given entity — i.e. they carry a
+// master table with identifying columns. Drives the "Ready / Not ready" call-out in the wizard.
+const KL_READY_FOR = (graphs, entity) =>
+  graphs.filter(g => g.status==="Published" && g.masters.some(m => m.entity===entity && m.ready))
+        .map(g => g.id);
+
+// Open the cross-source wizard on an entity that can actually be built (2+ ready sources),
+// so the happy path is the default and "not ready" is something the user opts into seeing.
+const KL_DEFAULT_ENTITY = KL_ENTITIES.find(e => KL_READY_FOR(KL_SRC_SEED,e).length>=2) || KL_ENTITIES[0];
+
+// ── small presentational helpers, local to the Knowledge Layer ──
+const KLChip = ({kind,children})=>{
+  const map = {
+    exist:{bg:T.green+"1a", c:T.green,     b:T.green+"55",     pre:"✓ "},
+    new:  {bg:T.amber+"1a", c:T.amber,     b:T.amber+"55",     pre:"＋ "},
+    plain:{bg:T.bgElevated, c:T.textSub,   b:T.border,         pre:""},
+  };
+  const s = map[kind]||map.plain;
+  return <span style={{display:"inline-flex",alignItems:"center",padding:"2px 8px",borderRadius:5,fontSize:11.5,fontWeight:600,background:s.bg,color:s.c,border:`1px solid ${s.b}`,whiteSpace:"nowrap"}}>{s.pre}{children}</span>;
+};
+
+const KLNote = ({icon,children,tone})=>(
+  <div style={{display:"flex",gap:9,padding:"10px 13px",borderRadius:9,marginTop:14,fontSize:12,lineHeight:1.6,
+    background:tone==="quiet"?T.bgElevated:T.accentDim, border:`1px solid ${tone==="quiet"?T.border:T.accent+"33"}`,
+    color:tone==="quiet"?T.textSub:T.text}}>
+    <span style={{flexShrink:0}}>{icon}</span><div>{children}</div>
+  </div>
+);
+
+const KLModeTag = ({mode})=>(
+  <span style={{fontSize:9.5,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",padding:"3px 8px",borderRadius:99,whiteSpace:"nowrap",
+    background:mode==="auto"?T.blueDim:T.accentDim, color:mode==="auto"?T.blue:T.accent, border:`1px solid ${(mode==="auto"?T.blue:T.accent)}33`}}>
+    {mode==="auto"?"runs itself":"needs you"}
+  </span>
+);
+
+const KLRow = ({nm,chip,kind,cf,acts,dim,onAct})=>(
+  <div style={{display:"flex",alignItems:"center",gap:11,flexWrap:"wrap",padding:"10px 12px",marginBottom:8,
+    background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,opacity:dim?.65:1}}>
+    <span style={{fontSize:12,fontWeight:600,color:T.text,minWidth:170,fontFamily:"'Geist Mono',monospace"}}>{nm}</span>
+    <span style={{color:T.textMuted,fontSize:13}}>→</span>
+    <KLChip kind={kind}>{chip}</KLChip>
+    <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto",whiteSpace:"nowrap"}}>{cf}</span>
+    {acts==="cc"      && <div style={{display:"flex",gap:5}}><Btn small ghost onClick={onAct}>Change</Btn><Btn small variant="primary" onClick={onAct}>Confirm</Btn></div>}
+    {acts==="c"       && <Btn small variant="primary" onClick={onAct}>Confirm</Btn>}
+    {acts==="lineage" && <div style={{display:"flex",gap:5}}><Btn small ghost onClick={onAct}>Reject</Btn><Btn small variant="primary" onClick={onAct}>Add to Lineage</Btn></div>}
+    {acts==="approve" && <div style={{display:"flex",gap:5}}><Btn small ghost onClick={onAct}>Skip</Btn><Btn small variant="primary" onClick={onAct}>Send for approval</Btn></div>}
+    {acts==="inbox"   && <Btn small variant="primary" onClick={onAct}>Open Inbox</Btn>}
+    {acts==="review"  && <Btn small variant="primary" onClick={onAct}>Review</Btn>}
+  </div>
+);
+
+// Left step rail — same shape as the Data Contract / Policy / Add-Connection section rails
+// (width 212, T.bg background, 8px dot = done). The mode sub-label is this wizard's addition,
+// mirroring the `sub` line the Policy wizard's W_STEPS already carries.
+const KLStepRail = ({steps,cur,onPick,doneSet}) => (
+  <div style={{width:212,flexShrink:0,borderRight:`1px solid ${T.border}`,overflowY:"auto",padding:"14px 10px",display:"flex",flexDirection:"column",gap:3,background:T.bg}}>
+    {steps.map((s,i)=>{
+      const on = i===cur, done = doneSet.has(i);
+      return (
+        <button key={s.t} onClick={()=>onPick(i)} style={{display:"flex",alignItems:"flex-start",gap:9,width:"100%",padding:"9px 11px",borderRadius:8,
+          background:on?T.bgSurface:"transparent",border:`1px solid ${on?T.border:"transparent"}`,color:on?T.text:T.textMuted,
+          fontSize:12.5,fontWeight:on?700:500,cursor:"pointer",textAlign:"left",fontFamily:"inherit",
+          boxShadow:on?"0 1px 2px rgba(0,0,0,.06)":"none"}}>
+          <span style={{width:8,height:8,borderRadius:"50%",flexShrink:0,marginTop:5,background:done?T.accent:T.borderLight}}/>
+          <span style={{flex:1,minWidth:0}}>
+            <span style={{display:"block"}}>{s.t}</span>
+            <span style={{display:"block",fontSize:9.5,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase",marginTop:3,
+              color:s.mode==="auto"?T.blue:T.textMuted}}>{s.mode==="auto"?"runs itself":"needs you"}</span>
+          </span>
+        </button>
+      );
+    })}
+  </div>
+);
+
+const KnowledgeLayerView = ({onToast, onNav}) => {
+  const [srcGraphs, setSrcGraphs] = useState(KL_SRC_SEED);
+  const [xGraphs,   setXGraphs]   = useState(KL_X_SEED);
+  const [tab,       setTab]       = useState("overview");   // overview | sources | cross
+  const [selSrc,    setSelSrc]    = useState(null);         // source graph id
+  const [selX,      setSelX]      = useState(null);         // cross graph id
+  const [wiz,       setWiz]       = useState(null);          // null | "src" | "cross"
+  const [step,      setStep]      = useState(0);
+  const [doneSet,   setDoneSet]   = useState(()=>new Set()); // rail dots light up once a step is passed
+  const [ai,        setAi]        = useState({});            // per-step AI toggle, keyed "src-2"
+  const [srcTab,    setSrcTab]    = useState("bindings");
+  const [xTab,      setXTab]      = useState("records");
+  // wizard choices that actually drive the created object
+  const [wConn,     setWConn]     = useState(KL_UNMAPPED[0]);
+  const [wEntity,   setWEntity]   = useState(KL_DEFAULT_ENTITY);
+  const [wSrcIds,   setWSrcIds]   = useState(()=>KL_READY_FOR(KL_SRC_SEED, KL_DEFAULT_ENTITY));
+  const [wKeys,     setWKeys]     = useState([]);            // confirmed match keys (step 3)
+  const [wBeliefs,  setWBeliefs]  = useState({});            // field -> source we believe (step 4)
+
+  const srcById = id => srcGraphs.find(s=>s.id===id);
+  // connections that still have no source graph — recomputed so the list shrinks as you build
+  const unmapped = KL_UNMAPPED.filter(c => !srcGraphs.some(g=>g.name===c));
+
+  // Candidate match keys are DERIVED from the identifying columns the chosen sources actually
+  // carry for this entity — the whole point of "EDG already knows what identifies a supplier".
+  const keyCounts = (ids, entity) => {
+    const c = {};
+    ids.forEach(id=>{
+      const m = srcGraphs.find(g=>g.id===id)?.masters.find(x=>x.entity===entity && x.ready);
+      (m?.keys||[]).forEach(k=>{ c[k] = (c[k]||0)+1; });
+    });
+    return c;
+  };
+  // default selection = keys present in EVERY chosen source (strongest), else everything on offer
+  const defaultKeys = (ids, entity) => {
+    const c = keyCounts(ids, entity);
+    const all = Object.keys(c).filter(k=>c[k]===ids.length);
+    return all.length ? all : Object.keys(c);
+  };
+  // keep the wizard's choices consistent whenever the entity or source set changes
+  const reseed = (ids, entity) => { setWSrcIds(ids); setWKeys(defaultKeys(ids, entity)); setWBeliefs({}); };
+  const steps   = wiz==="src" ? KL_SRC_STEPS : KL_X_STEPS;
+  const aiKey   = `${wiz}-${step}`;
+  const aiOn    = ai[aiKey] !== false;                        // default on
+  const toast   = m => onToast && onToast(m);
+
+  const totals = {
+    mapped:   srcGraphs.filter(s=>s.status==="Published").length,
+    records:  xGraphs.reduce((n,x)=>n+x.records,0),
+    review:   xGraphs.reduce((n,x)=>n+x.review,0),
+    drift:    srcGraphs.reduce((n,s)=>n+(s.drift>0?1:0),0),
+    proposed: srcGraphs.reduce((n,s)=>n+s.bind.proposed,0),
+    invented: srcGraphs.reduce((n,s)=>n+s.bind.invented,0),
+  };
+
+  const openWizard = kind => {
+    setWiz(kind); setStep(0); setAi({}); setDoneSet(new Set()); setSelSrc(null); setSelX(null);
+    if(kind==="cross"){
+      const e = KL_ENTITIES.find(x=>KL_READY_FOR(srcGraphs,x).length>=2) || KL_ENTITIES[0];
+      setWEntity(e); reseed(KL_READY_FOR(srcGraphs,e), e);
+    } else {
+      const free = KL_UNMAPPED.filter(c => !srcGraphs.some(g=>g.name===c));
+      setWConn(free[0] || "");
+    }
+  };
+  const closeWizard = () => { setWiz(null); setStep(0); setDoneSet(new Set()); };
+
+  const finishSrc = () => {
+    // Numbers match what the wizard showed in step 1 (214 tables scoped, Supplier + Customer),
+    // so the graph you land on is the one you just described.
+    const id = "sg_"+wConn.toLowerCase().replace(/[^a-z0-9]+/g,"_");
+    if(srcGraphs.some(g=>g.id===id)){ closeWizard(); setTab("sources"); setSelSrc(id); return; }
+    setSrcGraphs(g=>[...g,{id, name:wConn, tables:214, words:100, entities:["Supplier","Customer"],
+      drift:0, status:"Published", owner:"alex.rivera", from:"EDG", step:10,
+      bind:{cols:1642, tags:38, termed:214, proposed:0, invented:0},
+      masters:[{table:"SUPPLIER_MASTER", entity:"Supplier", keys:["Tax ID","Legal Name"], ready:true},
+               {table:"CUSTOMER_MASTER", entity:"Customer", keys:["Tax ID","Name"],       ready:true}]}]);
+    closeWizard(); setTab("sources"); setSelSrc(id); setSrcTab("bindings");
+    toast(`Source Knowledge Graph published — ${wConn}`);
+  };
+
+  const finishCross = () => {
+    const id = "xg_"+wEntity.toLowerCase().replace(/[^a-z0-9]+/g,"_")+"_"+xGraphs.length;
+    const base = `${wEntity} Master`;
+    const dupes = xGraphs.filter(x=>x.name===base||x.name.startsWith(base+" (")).length;
+    const name = dupes ? `${base} (${dupes+1})` : base;
+    // carry through exactly what the steward confirmed in steps 3 and 4
+    const fallback = srcById(wSrcIds[0])?.name || "—";
+    setXGraphs(g=>[...g,{id, name, entity:wEntity, srcIds:[...wSrcIds],
+      records:0, review:0, owner:"alex.rivera", status:"Published",
+      keys:[...wKeys],
+      beliefs:[...wKeys,"Address"].map(f=>({f, s:wBeliefs[f] ?? fallback})),
+      golden:[]}]);
+    closeWizard(); setTab("cross"); setSelX(id); setXTab("records");
+    toast(`Cross-Source Knowledge Graph published — ${name}`);
+  };
+
+  // ══════════════ CREATE WIZARD (right-side drawer + section rail) ══════════════
+  const renderWizard = () => {
+    const s = steps[step];
+    const last = step===steps.length-1;
+    const canAI = !!s.uses;   // AI only where there is something to propose
+    const readySrc = srcGraphs.filter(g=>g.status==="Published");
+
+    return createPortal(
+      <div onClick={closeWizard} className="fadeIn" style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}>
+        <div onClick={e=>e.stopPropagation()} className="slideInRight" style={{position:"absolute",top:0,right:0,bottom:0,width:880,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,boxShadow:"-12px 0 48px rgba(0,0,0,.32)",display:"flex",flexDirection:"column"}}>
+          {/* header */}
+          <div style={{padding:"14px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexShrink:0,background:T.bgElevated}}>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>
+                {wiz==="src"?"New Source Knowledge Graph":"New Cross-Source Knowledge Graph"}
+              </div>
+              <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>
+                {wiz==="src"
+                  ? <>The same 10 steps Data Sense runs — every one drawing on words you already govern</>
+                  : <>Joins finished source graphs into one trusted record per <span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{wEntity}</span></>}
+              </div>
+            </div>
+            <button onClick={closeWizard} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.x(12)}</button>
+          </div>
+          {/* body: section rail + content */}
+          <div style={{flex:1,display:"flex",minHeight:0}}>
+            <KLStepRail steps={steps} cur={step} onPick={setStep} doneSet={doneSet}/>
+            <div style={{flex:1,overflowY:"auto",padding:"22px 26px"}}>
+            {/* header */}
+            <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:6}}>
+              <div style={{fontSize:16,fontWeight:700,color:T.text}}>Step {step+1} · {s.t}</div>
+              <KLModeTag mode={s.mode}/>
+              <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:9}}>
+                {canAI ? (
+                  <>
+                    <span style={{fontSize:11.5,fontWeight:700,color:T.violet}}>✨ Use AI</span>
+                    <Toggle on={aiOn} onChange={()=>setAi(a=>({...a,[aiKey]:!aiOn}))}/>
+                    <span style={{fontSize:11.5,color:T.textSub,fontWeight:600,width:22}}>{aiOn?"On":"Off"}</span>
+                  </>
+                ) : <span style={{fontSize:11.5,color:T.textMuted}}>no AI needed here</span>}
+              </div>
+            </div>
+            <div style={{fontSize:11,fontWeight:700,color:s.uses?T.green:T.textMuted,marginBottom:10}}>
+              {s.uses ? `✓ Uses ${s.uses}` : "— nothing from EDG needed —"}
+            </div>
+            <div style={{fontSize:12.8,color:T.textSub,lineHeight:1.65,maxWidth:760,marginBottom:16}}>{s.d}</div>
+
+            {/* ── step-specific interactive bodies ── */}
+            {wiz==="src" && step===0 && (
+              <div style={{maxWidth:560}}>
+                {unmapped.length===0 ? (
+                  <div style={{padding:"18px 16px",borderRadius:9,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:12.5,color:T.textSub}}>
+                    Every connected system already has a Source Knowledge Graph. Add a connection in
+                    <b style={{color:T.text}}> Catalog › Connections</b> first, then come back here to map it.
+                  </div>
+                ) : (<>
+                <div style={{fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Connection (from your catalog)</div>
+                <select value={wConn} onChange={e=>setWConn(e.target.value)}
+                  style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,cursor:"pointer",marginBottom:14}}>
+                  {unmapped.map(c=><option key={c} value={c}>{c}</option>)}
+                </select>
+                <KLRow nm="Scope"     chip="3 schemas · 214 tables" kind="exist" cf={aiOn?"AI suggested what matters":"you choose the scope"} acts="cc" onAct={()=>toast("Scope confirmed")}/>
+                <KLRow nm="Look for"  chip="Supplier · Customer"    kind="exist" cf="from your Business Entities" acts="cc" onAct={()=>toast("Entities confirmed")}/>
+                </>)}
+              </div>
+            )}
+
+            {wiz==="cross" && step===0 && (
+              <div style={{maxWidth:560}}>
+                <div style={{fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Business Entity</div>
+                {/* changing the entity re-selects the sources that are actually matchable on it,
+                    so step 2 can never show a checked-but-not-ready source */}
+                <select value={wEntity} onChange={e=>{const v=e.target.value; setWEntity(v); reseed(KL_READY_FOR(srcGraphs,v), v);}}
+                  style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,cursor:"pointer",marginBottom:14}}>
+                  {KL_ENTITIES.map(c=>{
+                    const n = KL_READY_FOR(srcGraphs,c).length;
+                    return <option key={c} value={c}>{c}{n>=2?` — ${n} sources ready`:n===1?" — only 1 source ready":" — no sources ready"}</option>;
+                  })}
+                </select>
+                {KL_READY_FOR(srcGraphs,wEntity).length>=2
+                  ? <div style={{fontSize:12,color:T.green}}>✓ Matchable in {KL_READY_FOR(srcGraphs,wEntity).length} of {srcGraphs.length} source graphs.</div>
+                  : <div style={{fontSize:12,color:T.amber}}>Needs at least two sources with identifying columns tagged. Tag a Tax ID or name column on this entity&rsquo;s master table to make it matchable.</div>}
+              </div>
+            )}
+
+            {wiz==="cross" && step===1 && (
+              <div style={{maxWidth:760}}>
+                {readySrc.map(g=>{
+                  const on = wSrcIds.includes(g.id);
+                  const m  = g.masters.find(x=>x.entity===wEntity && x.ready);
+                  const ok = !!m;
+                  return (
+                    <div key={g.id} onClick={()=>ok&&reseed(on?wSrcIds.filter(i=>i!==g.id):[...wSrcIds,g.id], wEntity)}
+                      style={{display:"flex",alignItems:"center",gap:11,flexWrap:"wrap",padding:"11px 12px",marginBottom:8,cursor:ok?"pointer":"default",
+                        background:T.bgSurface,border:`1px solid ${on?T.accent+"66":T.border}`,borderRadius:9,opacity:ok?1:.6}}>
+                      <span style={{width:17,height:17,borderRadius:5,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#fff",
+                        background:on?T.accent:"transparent",border:`1.5px solid ${on?T.accent:T.borderLight}`}}>{on?"✓":""}</span>
+                      <span style={{fontSize:12.5,fontWeight:600,color:T.text,minWidth:130}}>{g.name}</span>
+                      <KLChip kind={ok?"exist":"new"}>{ok?`Ready — ${m.table}`:`Not ready — nothing tagged as ${wEntity}`}</KLChip>
+                      <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>{ok?`keys: ${m.keys.join(", ")}`:"cannot be joined yet"}</span>
+                    </div>
+                  );
+                })}
+                <div style={{fontSize:11.5,color:T.textMuted,marginTop:4}}>{wSrcIds.length} source{wSrcIds.length===1?"":"s"} selected</div>
+              </div>
+            )}
+
+            {wiz==="cross" && step===2 && (()=>{
+              const counts = keyCounts(wSrcIds, wEntity);
+              const cands  = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+              return (
+                <div style={{maxWidth:760}}>
+                  {cands.length===0 && <div style={{fontSize:12.5,color:T.amber}}>No identifying columns are tagged on the chosen sources yet.</div>}
+                  {cands.map(([k,n])=>{
+                    const on = wKeys.includes(k);
+                    return (
+                      <div key={k} style={{display:"flex",alignItems:"center",gap:11,flexWrap:"wrap",padding:"10px 12px",marginBottom:8,
+                        background:T.bgSurface,border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:9}}>
+                        <span style={{fontSize:12,fontWeight:600,color:T.text,minWidth:150,fontFamily:"'Geist Mono',monospace"}}>{k}</span>
+                        <span style={{color:T.textMuted,fontSize:13}}>→</span>
+                        <KLChip kind="exist">{n===wSrcIds.length?`in all ${n} systems`:`in ${n} of ${wSrcIds.length}`}</KLChip>
+                        <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>
+                          {n===wSrcIds.length?"strongest match key":"helps when the others are blank"}
+                        </span>
+                        <Btn small variant={on?"primary":undefined} ghost={!on}
+                          onClick={()=>setWKeys(ks=>on?ks.filter(x=>x!==k):[...ks,k])}>{on?"Using":"Use"}</Btn>
+                      </div>
+                    );
+                  })}
+                  <div style={{fontSize:11.5,color:wKeys.length?T.textMuted:T.amber,marginTop:4}}>
+                    {wKeys.length?`${wKeys.length} match key${wKeys.length===1?"":"s"} selected`:"Select at least one match key to continue"}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {wiz==="cross" && step===3 && (
+              <div style={{maxWidth:760}}>
+                {[...wKeys,"Address"].map(f=>{
+                  const val = wBeliefs[f] ?? (srcById(wSrcIds[0])?.name||"");
+                  return (
+                    <div key={f} style={{display:"flex",alignItems:"center",gap:11,flexWrap:"wrap",padding:"10px 12px",marginBottom:8,
+                      background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
+                      <span style={{fontSize:12,fontWeight:600,color:T.text,minWidth:120}}>{f}</span>
+                      <span style={{fontSize:11.5,color:T.textMuted}}>we believe</span>
+                      <select value={val} onChange={e=>setWBeliefs(b=>({...b,[f]:e.target.value}))}
+                        style={{padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,cursor:"pointer"}}>
+                        {wSrcIds.map(id=><option key={id} value={srcById(id)?.name}>{srcById(id)?.name}</option>)}
+                        <option value="Most recently updated">Most recently updated</option>
+                      </select>
+                      <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>
+                        {f==="Address"?"often a rule rather than a system":"steward decision"}
+                      </span>
+                    </div>
+                  );
+                })}
+                {wKeys.length===0 && <div style={{fontSize:12,color:T.textMuted}}>Confirm some match keys first — those are the fields that can disagree.</div>}
+              </div>
+            )}
+
+            {wiz==="cross" && step===4 && (
+              <div style={{maxWidth:760}}>
+                <KLRow nm="GAF Materials"  chip="joined automatically" kind="exist" cf="3 systems · very confident"/>
+                <KLRow nm="IKO Industries" chip="two possible matches" kind="new" cf="needs your decision" acts="cc" onAct={()=>toast("Decision recorded")}/>
+                <KLRow nm="TAMKO Building" chip="tax IDs differ by one digit" kind="new" cf="needs your decision" acts="cc" onAct={()=>toast("Decision recorded")}/>
+                <div style={{marginTop:10,padding:"10px 13px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,fontSize:12,color:T.textSub}}>
+                  <b style={{color:T.text}}>1,198 joined automatically · 6 waiting on you.</b> That ratio is what makes this workable at real scale.
+                </div>
+              </div>
+            )}
+
+            {wiz==="cross" && step===5 && (
+              <div style={{maxWidth:760}}>
+                <KLRow nm="Owner"         chip="Alex Rivera"              kind="exist" cf="sign-off to publish"/>
+                <KLRow nm="Policy"        chip="Vendor Data Protection"   kind="exist" cf="from Policy Manager"/>
+                <KLRow nm="Business term" chip={wEntity}                  kind="exist" cf="certified in your glossary"/>
+                <KLRow nm="Domain"        chip="Procurement"              kind="exist" cf="from your Domains"/>
+              </div>
+            )}
+
+            {wiz==="src" && step===9 && (
+              <div style={{maxWidth:760}}>
+                <KLRow nm="Owner"    chip="Alex Rivera"  kind="exist" cf="sign-off required to publish"/>
+                <KLRow nm="Domain"   chip="Procurement"  kind="exist" cf="from your Domains" acts="cc" onAct={()=>toast("Domain confirmed")}/>
+                <KLRow nm="Then feeds" chip="Data Ask · AI copilot · Cross-Source" kind="plain" cf="once published"/>
+              </div>
+            )}
+
+            {/* generic confirm rows for the remaining steps */}
+            {s.rows && (
+              <div style={{maxWidth:860}}>
+                {s.rows.map(r=>(
+                  <KLRow key={r.nm} {...r} cf={aiOn?r.cf:"you choose from your EDG list"} onAct={()=>toast("Recorded")}/>
+                ))}
+              </div>
+            )}
+
+            {canAI && !aiOn && (
+              <KLNote icon="🖐" tone="quiet">
+                <b style={{color:T.text}}>AI is off for this step.</b> You now choose from your EDG lists yourself.
+                Slower, same outcome — and still nothing typed from scratch.
+              </KLNote>
+            )}
+            <KLNote icon={s.note[0]}>{s.note[1]}</KLNote>
+            </div>
+          </div>
+          {/* footer: Back / Next / Publish */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgSurface}}>
+            <Btn small ghost onClick={()=>step>0?setStep(step-1):closeWizard()}>{step>0?"← Back":"Cancel"}</Btn>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              {wiz==="cross" && step===1 && wSrcIds.length<2 &&
+                <span style={{fontSize:11,color:T.textMuted}}>Pick at least two sources to join</span>}
+              {wiz==="src" && !wConn &&
+                <span style={{fontSize:11,color:T.textMuted}}>No unmapped connection available</span>}
+              {wiz==="cross" && step===2 && wKeys.length===0 &&
+                <span style={{fontSize:11,color:T.textMuted}}>Select at least one match key</span>}
+              <span style={{fontSize:11,color:T.textMuted}}>Step {step+1} of {steps.length}</span>
+              <Btn small variant="primary"
+                disabled={(wiz==="cross" && step===1 && wSrcIds.length<2)
+                       || (wiz==="cross" && step===2 && wKeys.length===0)
+                       || (wiz==="src" && !wConn)}
+                onClick={()=>{
+                  setDoneSet(d=>new Set([...d,step]));
+                  if(!last) { setStep(step+1); return; }
+                  wiz==="src" ? finishSrc() : finishCross();
+                }}>{last?"Publish":"Next →"}</Btn>
+            </div>
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
+  };
+
+  // ══════════════ SOURCE GRAPH DETAIL ══════════════
+  const sg = selSrc && srcById(selSrc);
+  if(sg){
+    const usedBy = xGraphs.filter(x=>x.srcIds.includes(sg.id));
+    return (
+      <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+        <Topbar breadcrumb={[
+          {label:"Knowledge Layer",onClick:()=>{setSelSrc(null);setTab("sources");}},
+          {label:"Source Knowledge Graphs",onClick:()=>{setSelSrc(null);setTab("sources");}},
+          {label:sg.name},
+        ]}/>
+        <div style={{flex:1,overflowY:"auto",padding:26}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:6}}>
+            <div style={{fontSize:19,fontWeight:700,color:T.text}}>{sg.name}</div>
+            <Badge bg={sg.status==="Published"?T.green+"1a":T.amber+"1a"} color={sg.status==="Published"?T.green:T.amber} border={(sg.status==="Published"?T.green:T.amber)+"55"}>{sg.status}</Badge>
+            <span style={{fontSize:11.5,color:T.textMuted}}>started in {sg.from} · owner {sg.owner}</span>
+            <div style={{marginLeft:"auto",display:"flex",gap:7}}>
+              <Btn ghost small icon={Ic.lineage(12)} onClick={()=>onNav&&onNav("catalog")}>Open in Lineage</Btn>
+              <Btn ghost small onClick={()=>toast("Re-scan queued — see Settings › Background Jobs")}>Re-scan</Btn>
+            </div>
+          </div>
+
+          {sg.drift>0 && (
+            <div style={{display:"flex",gap:9,alignItems:"center",padding:"11px 14px",marginBottom:16,borderRadius:9,
+              background:T.amberDim,border:`1px solid ${T.amber}44`,fontSize:12.5,color:T.text}}>
+              <span>⚠️</span>
+              <div><b>This source changed.</b> {sg.drift} new column{sg.drift===1?"":"s"} added since this graph was last built.</div>
+              <Btn small variant="primary" onClick={()=>toast("Drift review opened in your Inbox")}>Review changes</Btn>
+            </div>
+          )}
+
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12,marginBottom:20}}>
+            <Metric label="Tables described" value={sg.tables}/>
+            <Metric label="Using EDG words"  value={sg.words+"%"} color={sg.words===100?T.green:T.amber}/>
+            <Metric label="Labels invented"  value={sg.bind.invented} color={T.green} sub="must stay zero"/>
+            <Metric label="Awaiting approval" value={sg.bind.proposed} color={sg.bind.proposed?T.amber:T.text}/>
+          </div>
+
+          <Tabs2 tabs={[
+            {key:"bindings", label:"Is it using our words?"},
+            {key:"match",    label:`What it can match on (${sg.masters.length})`},
+            {key:"feeds",    label:`What it feeds (${usedBy.length})`},
+          ]} active={srcTab} onChange={setSrcTab}/>
+
+          {srcTab==="bindings" && (
+            <Card2 style={{padding:18,maxWidth:900}}>
+              <SH title="Every label traced back to a governed EDG object" sub="This is the whole point — the graph borrows your vocabulary instead of inventing one."/>
+              <KLRow nm="Columns classified" chip={`${sg.bind.cols} — all from your ${sg.bind.tags} tags`} kind="exist" cf="Classifications & Tags"/>
+              <KLRow nm="Tables given meaning" chip={`${sg.bind.termed} of ${sg.tables} linked to a term`} kind="exist" cf="Business Glossary"/>
+              <KLRow nm="New terms proposed" chip={sg.bind.proposed?`${sg.bind.proposed} awaiting approval`:"none pending"} kind={sg.bind.proposed?"new":"exist"} cf="normal glossary approval"/>
+              <div style={{marginTop:16,paddingTop:14,borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"baseline",gap:12}}>
+                <div style={{fontSize:30,fontWeight:800,color:T.green,fontFamily:"'Geist Mono',monospace"}}>{sg.bind.invented}</div>
+                <div style={{fontSize:12,color:T.textSub}}>labels invented outside EDG — the number that must always stay zero.<br/>
+                  <span style={{color:T.textMuted}}>If it ever rises, the two systems have started to drift apart.</span></div>
+              </div>
+            </Card2>
+          )}
+
+          {srcTab==="match" && (
+            <Card2 style={{padding:18,maxWidth:900}}>
+              <SH title="What this source can be matched on" sub="Derived from the tags you already govern — not written by hand."/>
+              {sg.masters.map(m=>(
+                <KLRow key={m.table} nm={m.table} kind={m.ready?"exist":"new"}
+                  chip={m.ready?`Master table for ${m.entity}`:`${m.entity} — no match keys found`}
+                  cf={m.ready?`keys: ${m.keys.join(", ")}`:"cannot be matched yet"}
+                  acts={m.ready?null:"review"} onAct={()=>toast("Tag an identifying column to make this matchable")}/>
+              ))}
+              <KLNote icon="💡">Because <b>Tax ID</b> and <b>Legal Name</b> are tagged in EDG, we know what identifies a
+                supplier. Where nothing is tagged we say so plainly, instead of quietly returning no records.</KLNote>
+            </Card2>
+          )}
+
+          {srcTab==="feeds" && (
+            <Card2 style={{padding:18,maxWidth:900}}>
+              <SH title="Cross-Source Knowledge Graphs built on this source"/>
+              {usedBy.length===0
+                ? <div style={{padding:"28px 0",textAlign:"center",color:T.textMuted,fontSize:12.5}}>Not yet used by any cross-source graph.</div>
+                : usedBy.map(x=>(
+                    <div key={x.id} className="row-hover" onClick={()=>{setSelSrc(null);setSelX(x.id);setTab("cross");}}
+                      style={{display:"flex",alignItems:"center",gap:11,padding:"11px 12px",marginBottom:8,cursor:"pointer",
+                        background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
+                      <span style={{fontSize:12.5,fontWeight:600,color:T.text,minWidth:150}}>{x.name}</span>
+                      <KLChip kind="exist">{x.entity}</KLChip>
+                      <span style={{fontSize:11.5,color:T.textSub}}>{x.records.toLocaleString()} trusted records</span>
+                      <span style={{marginLeft:"auto",color:T.textMuted}}>{Ic.chevRight(13)}</span>
+                    </div>
+                  ))}
+            </Card2>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ══════════════ CROSS-SOURCE DETAIL ══════════════
+  const xg = selX && xGraphs.find(x=>x.id===selX);
+  if(xg){
+    return (
+      <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+        <Topbar breadcrumb={[
+          {label:"Knowledge Layer",onClick:()=>{setSelX(null);setTab("cross");}},
+          {label:"Cross-Source Knowledge Graphs",onClick:()=>{setSelX(null);setTab("cross");}},
+          {label:xg.name},
+        ]}/>
+        <div style={{flex:1,overflowY:"auto",padding:26}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:16}}>
+            <div style={{fontSize:19,fontWeight:700,color:T.text}}>{xg.name}</div>
+            <Badge bg={T.green+"1a"} color={T.green} border={T.green+"55"}>{xg.status}</Badge>
+            <span style={{fontSize:11.5,color:T.textMuted}}>entity {xg.entity} · owner {xg.owner}</span>
+            {xg.review>0 && <Badge bg={T.amber+"1a"} color={T.amber} border={T.amber+"55"}>{xg.review} to review</Badge>}
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12,marginBottom:20}}>
+            <Metric label="Trusted records" value={xg.records.toLocaleString()}/>
+            <Metric label="Sources joined"  value={xg.srcIds.length}/>
+            <Metric label="Waiting on you"  value={xg.review} color={xg.review?T.amber:T.green}/>
+            <Metric label="Match keys"      value={xg.keys.length} sub={xg.keys.join(", ")}/>
+          </div>
+
+          <Tabs2 tabs={[
+            {key:"records", label:`Trusted records (${xg.golden.length})`},
+            {key:"sources", label:`Sources joined (${xg.srcIds.length})`},
+            {key:"rules",   label:"If they disagree"},
+          ]} active={xTab} onChange={setXTab}/>
+
+          {xTab==="records" && (
+            <Card2 style={{padding:18,maxWidth:940}}>
+              <SH title="One record per real-world thing" sub="Each row is the same entity recognised across several systems."/>
+              {xg.golden.length===0
+                ? <div style={{padding:"28px 0",textAlign:"center",color:T.textMuted,fontSize:12.5}}>No records resolved yet — run a resolve from Settings › Background Jobs.</div>
+                : xg.golden.map(g=>(
+                  <div key={g.n} style={{padding:"13px 14px",marginBottom:9,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:8}}>
+                      <span style={{width:40,height:40,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+                        fontSize:11.5,fontWeight:800,fontFamily:"'Geist Mono',monospace",
+                        background:g.conf>=.9?T.green+"1a":T.amber+"1a", color:g.conf>=.9?T.green:T.amber,
+                        border:`1px solid ${(g.conf>=.9?T.green:T.amber)}44`}}>{g.conf.toFixed(2)}</span>
+                      <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>★ {g.n}</span>
+                      {g.conf>=.9
+                        ? <Badge bg={T.green+"1a"} color={T.green} border={T.green+"55"}>joined automatically</Badge>
+                        : <Badge bg={T.amber+"1a"} color={T.amber} border={T.amber+"55"}>needs your decision</Badge>}
+                      {g.conf<.9 && <div style={{marginLeft:"auto",display:"flex",gap:5}}>
+                        <Btn small ghost onClick={()=>toast("Kept as separate records")}>Keep apart</Btn>
+                        <Btn small variant="primary" onClick={()=>toast("Merged into one trusted record")}>Same {xg.entity.toLowerCase()}</Btn>
+                      </div>}
+                    </div>
+                    <div style={{display:"flex",gap:7,flexWrap:"wrap",paddingLeft:50}}>
+                      {g.members.map(m=>(
+                        <span key={m.s} style={{fontSize:11,padding:"3px 9px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>
+                          <b style={{color:T.text}}>{m.s}</b> · {m.v}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+            </Card2>
+          )}
+
+          {xTab==="sources" && (
+            <Card2 style={{padding:18,maxWidth:940}}>
+              <SH title="Source Knowledge Graphs feeding this graph"/>
+              {xg.srcIds.map(id=>{
+                const g = srcById(id);
+                if(!g) return null;
+                const m = g.masters.find(x=>x.entity===xg.entity);
+                return (
+                  <div key={id} className="row-hover" onClick={()=>{setSelX(null);setSelSrc(id);setTab("sources");}}
+                    style={{display:"flex",alignItems:"center",gap:11,flexWrap:"wrap",padding:"11px 12px",marginBottom:8,cursor:"pointer",
+                      background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
+                    <span style={{fontSize:12.5,fontWeight:600,color:T.text,minWidth:130}}>{g.name}</span>
+                    <KLChip kind="exist">{m?m.table:"—"}</KLChip>
+                    <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>{m?`keys: ${m.keys.join(", ")}`:""}</span>
+                    <span style={{color:T.textMuted}}>{Ic.chevRight(13)}</span>
+                  </div>
+                );
+              })}
+            </Card2>
+          )}
+
+          {xTab==="rules" && (
+            <Card2 style={{padding:18,maxWidth:940}}>
+              <SH title="When systems disagree, which one do we believe?" sub="Decided per field by the steward. Vendors call this survivorship."/>
+              {xg.beliefs.map(b=>(
+                <KLRow key={b.f} nm={b.f} chip={b.s} kind="exist" cf="steward decision" acts="cc" onAct={()=>toast("Rule updated")}/>
+              ))}
+            </Card2>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ══════════════ MAIN SCREEN (3 surfaces) ══════════════
+  return (
+    <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+      <Topbar breadcrumb={[{label:"Knowledge Layer"}]} actions={
+        <Btn variant="primary" small icon={Ic.plus(11)} onClick={()=>openWizard(tab==="cross"?"cross":"src")}>
+          {tab==="cross"?"New Cross-Source Graph":"New Source Graph"}
+        </Btn>
+      }/>
+      <div style={{flex:1,overflowY:"auto",padding:26}}>
+        <Tabs2 tabs={[
+          {key:"overview", label:"Overview"},
+          {key:"sources",  label:`Source Knowledge Graphs (${srcGraphs.length})`},
+          {key:"cross",    label:`Cross-Source Knowledge Graphs (${xGraphs.length})`},
+        ]} active={tab} onChange={setTab}/>
+
+        {/* ───────── OVERVIEW ───────── */}
+        {tab==="overview" && (
+          <>
+            <div style={{display:"flex",gap:10,padding:"13px 16px",marginBottom:20,borderRadius:10,
+              background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.accent}`,fontSize:13,lineHeight:1.7,maxWidth:1000}}>
+              <div><b style={{color:T.text}}>Read this left to right.</b> EDG already holds the agreed words — tags, business
+                terms, owners, policies. A <b>Source Knowledge Graph</b> maps one system using those words instead of inventing
+                its own. A <b>Cross-Source Knowledge Graph</b> then joins several systems so the same supplier becomes
+                <b> one trusted record</b>.</div>
+            </div>
+
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:14,marginBottom:22}}>
+              {[
+                {who:"Already yours", c:T.green, h:"EDG governed words", p:"The single vocabulary everything else must use.",
+                 rows:[["Classifications & tags","38"],["Business terms","214"],["Business entities",String(KL_ENTITIES.length)]]},
+                {who:"Same engine · startable in EDG", c:T.blue, h:"Source Knowledge Graphs", p:"One per connection. The same 10 steps as today — they just draw on the words on the left.",
+                 rows:[["Sources mapped",`${totals.mapped} of ${srcGraphs.length}`],["Tables described",String(srcGraphs.reduce((n,s)=>n+s.tables,0))],["Labels invented",String(totals.invented)]]},
+                {who:"New · built in EDG", c:T.accent, h:"Cross-Source Knowledge Graphs", p:"Joins two or more sources into one trusted record per real-world thing.",
+                 rows:[["Cross-source graphs",String(xGraphs.length)],["Trusted records",totals.records.toLocaleString()],["Waiting on a person",String(totals.review)]]},
+              ].map(col=>(
+                <div key={col.h} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderTop:`3px solid ${col.c}`,borderRadius:10,padding:15}}>
+                  <div style={{fontSize:9.8,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",color:col.c,marginBottom:7}}>{col.who}</div>
+                  <div style={{fontSize:13.5,fontWeight:700,color:T.text,marginBottom:4}}>{col.h}</div>
+                  <div style={{fontSize:12,color:T.textMuted,lineHeight:1.55,marginBottom:10}}>{col.p}</div>
+                  {col.rows.map(([k,v])=>(
+                    <div key={k} style={{display:"flex",justifyContent:"space-between",fontSize:11.5,padding:"4px 0",borderTop:`1px solid ${T.border}`}}>
+                      <span style={{color:T.textSub}}>{k}</span>
+                      <b style={{color:k==="Labels invented"?T.green:T.text,fontFamily:"'Geist Mono',monospace"}}>{v}</b>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+
+            <SH title="Needs your attention" sub="Everything confident was handled automatically — these are the exceptions."/>
+            <Card2 style={{padding:14,marginBottom:22,maxWidth:1000}}>
+              {totals.review===0 && totals.drift===0 && totals.proposed===0
+                ? <div style={{padding:"22px 0",textAlign:"center",color:T.textMuted,fontSize:12.5}}>Nothing waiting — the knowledge layer is up to date.</div>
+                : <>
+                    {xGraphs.filter(x=>x.review>0).map(x=>(
+                      <KLRow key={x.id} nm={x.name} chip={`${x.review} matches need a decision`} kind="new" cf="cross-source review"
+                        acts="review" onAct={()=>{setSelX(x.id);setXTab("records");}}/>
+                    ))}
+                    {srcGraphs.filter(s=>s.drift>0).map(s=>(
+                      <KLRow key={s.id} nm={s.name} chip={`${s.drift} new columns in the source`} kind="new" cf="graph may be stale"
+                        acts="review" onAct={()=>{setSelSrc(s.id);setSrcTab("bindings");}}/>
+                    ))}
+                    {srcGraphs.filter(s=>s.bind.proposed>0).map(s=>(
+                      <KLRow key={s.id+"p"} nm={s.name} chip={`${s.bind.proposed} new terms proposed`} kind="new" cf="glossary approval"
+                        acts="review" onAct={()=>{setSelSrc(s.id);setSrcTab("bindings");}}/>
+                    ))}
+                  </>}
+            </Card2>
+
+            <KLNote icon="⚙️">
+              <b>Deliberately not on this screen.</b> Model choice, confidence thresholds and refresh schedules live in
+              <b> Settings › Knowledge Layer</b>. Every run and its pass/fail history lives in <b>Settings › Background Jobs</b>.
+              Relationships are not redrawn here — they stay in your existing <b>Lineage</b> screen.
+            </KLNote>
+          </>
+        )}
+
+        {/* ───────── SOURCE GRAPHS ───────── */}
+        {tab==="sources" && (
+          <>
+            <SH title="One graph per connection" sub="Built by the same engine as Data Sense — and startable from here."
+              action={<Btn variant="primary" small icon={Ic.plus(11)} onClick={()=>openWizard("src")}>New Source Graph</Btn>}/>
+            <DataTable
+              cols={[
+                {key:"name",   label:"Source", render:(v,r)=><span style={{fontWeight:600}}>{v}</span>},
+                {key:"tables", label:"Described", render:v=><span style={{color:T.textSub}}>{v?`${v} tables`:"—"}</span>},
+                {key:"words",  label:"Using EDG words", render:v=><Badge bg={(v===100?T.green:T.amber)+"1a"} color={v===100?T.green:T.amber} border={(v===100?T.green:T.amber)+"55"}>{v}%</Badge>},
+                {key:"entities", label:"Can match", render:v=>v.length?<span style={{fontSize:11.5,color:T.textSub}}>{v.join(" · ")}</span>:<span style={{color:T.textMuted}}>none yet</span>},
+                {key:"drift",  label:"Freshness", render:v=>v>0
+                  ? <span style={{color:T.amber,fontSize:11.5,fontWeight:600}}>{v} new columns</span>
+                  : <span style={{color:T.green,fontSize:11.5}}>current</span>},
+                {key:"from",   label:"Started from", render:v=><span style={{fontSize:11.5,fontWeight:v==="EDG"?700:400,color:v==="EDG"?T.accent:T.textSub}}>{v}</span>},
+                {key:"status", label:"Status", render:(v,r)=>v==="Published"
+                  ? <Badge bg={T.green+"1a"} color={T.green} border={T.green+"55"}>Published</Badge>
+                  : <Badge bg={T.amber+"1a"} color={T.amber} border={T.amber+"55"}>{`Step ${r.step} of 10`}</Badge>},
+              ]}
+              rows={srcGraphs}
+              onRowClick={r=>{setSelSrc(r.id);setSrcTab("bindings");}}
+              emptyMsg="No source knowledge graphs yet."/>
+            {unmapped.length>0 && (
+              <div style={{marginTop:12,fontSize:11.5,color:T.textMuted}}>
+                {unmapped.length} connected system{unmapped.length===1?"":"s"} not yet mapped: {unmapped.join(", ")}.
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ───────── CROSS-SOURCE GRAPHS ───────── */}
+        {tab==="cross" && (
+          <>
+            <SH title="Joins finished source graphs into one trusted record" sub="This is the part EDG builds."
+              action={<Btn variant="primary" small icon={Ic.plus(11)} onClick={()=>openWizard("cross")}>New Cross-Source Graph</Btn>}/>
+            <DataTable
+              cols={[
+                {key:"name",   label:"Graph", render:v=><span style={{fontWeight:600}}>{v}</span>},
+                {key:"entity", label:"Entity", render:v=><KLChip kind="exist">{v}</KLChip>},
+                {key:"srcIds", label:"Sources joined", render:v=><span style={{fontSize:11.5,color:T.textSub}}>{v.map(id=>srcById(id)?.name||"—").join(" · ")}</span>},
+                {key:"records",label:"Trusted records", render:(v,r)=>(
+                  <span style={{display:"inline-flex",alignItems:"center",gap:7}}>
+                    <b style={{fontFamily:"'Geist Mono',monospace"}}>{v.toLocaleString()}</b>
+                    {r.review>0&&<Badge bg={T.amber+"1a"} color={T.amber} border={T.amber+"55"}>{r.review} to review</Badge>}
+                  </span>)},
+                {key:"owner",  label:"Owner", render:v=><span style={{fontSize:11.5,color:T.textSub}}>{v}</span>},
+                {key:"status", label:"Status", render:v=><Badge bg={T.green+"1a"} color={T.green} border={T.green+"55"}>{v}</Badge>},
+              ]}
+              rows={xGraphs}
+              onRowClick={r=>{setSelX(r.id);setXTab("records");}}
+              emptyMsg="No cross-source knowledge graphs yet."/>
+          </>
+        )}
+      </div>
+      {wiz && renderWizard()}
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────
 // SEARCH
 // ─────────────────────────────────────────────
 const SearchView = ({onAsset})=>{
@@ -25446,7 +26305,7 @@ const ROLES_CONFIG = {
     badge: "rgba(238,36,36,0.15)",
     desc:  "Full platform access including settings, user management, and all configurations.",
     rbacRole: "admin",
-    nav: ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","settings","tags"],
+    nav: ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","settings","tags"],
     homeWidgets: ["metrics","tasks","quality","recentAssets","services","activity"],
   },
   steward: {
@@ -25459,7 +26318,7 @@ const ROLES_CONFIG = {
     desc:  "Govern assets in your domain: certify data, manage glossary terms, resolve conflicts.",
     rbacRole: "steward",
     domain: "Commerce",
-    nav: ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","tags"],
+    nav: ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","tags"],
     homeWidgets: ["tasks","certQueue","qualityAlerts","recentAssets","activity"],
   },
   analyst: {
@@ -25471,7 +26330,7 @@ const ROLES_CONFIG = {
     badge: "rgba(2,132,199,0.12)",
     desc:  "Browse the catalog, explore lineage, run quality checks, and access approved datasets.",
     rbacRole: "analyst",
-    nav: ["home","search","catalog","quality","glossary","domains","dataproducts"],
+    nav: ["home","search","catalog","quality","glossary","domains","dataproducts","knowledgelayer"],
     homeWidgets: ["metrics","recentAssets","quality","lineageSnippet","activity"],
   },
   engineer: {
@@ -25483,7 +26342,7 @@ const ROLES_CONFIG = {
     badge: "rgba(124,58,237,0.12)",
     desc:  "Manage pipelines, monitor ingestion health, trace lineage, and maintain data contracts.",
     rbacRole: "engineer",
-    nav: ["home","search","catalog","quality","settings"],
+    nav: ["home","search","catalog","quality","knowledgelayer","settings"],
     homeWidgets: ["services","metrics","quality","lineageSnippet","recentAssets","activity"],
   },
   viewer: {
@@ -25495,7 +26354,7 @@ const ROLES_CONFIG = {
     badge: "rgba(75,75,96,0.12)",
     desc:  "Read-only access to approved domains, certified assets and published dashboards.",
     rbacRole: "viewer",
-    nav: ["home","search","catalog","glossary","domains","dataproducts"],
+    nav: ["home","search","catalog","glossary","domains","dataproducts","knowledgelayer"],
     homeWidgets: ["recentAssets","certifiedAssets","activity"],
   },
 };
@@ -35144,6 +36003,7 @@ export default function App(){
       case "glossary":      return <GlossaryView onToast={showToast} deepLinkTermId={deepLinkTermId}/>;
       case "domains":       return <DomainsView onAsset={handleAsset} onNav={handleNav} onToast={showToast} deepLinkDomainId={deepLinkDomainId}/>;
       case "dataproducts":  return <DataProductsView onAsset={handleAsset} onNav={handleNav}/>;
+      case "knowledgelayer":return <KnowledgeLayerView onToast={showToast} onNav={handleNav}/>;
       case "observability": return <QualityView/>;
       case "analytics":     return <AnalyticsView/>;
       case "teams":         return <TeamsView onToast={showToast}/>;
