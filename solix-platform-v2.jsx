@@ -24222,7 +24222,8 @@ const KLGraphNode = ({data}) => {
       <div style={{
         background: focused ? "rgba(238,36,36,0.05)" : "#ffffff",
         border:`${isGolden?2:1.5}px solid ${focused?"#ee2424":c+"55"}`,
-        borderRadius:9, minWidth:isGolden?208:186, maxWidth:230,
+        borderRadius:9, boxSizing:"border-box",
+        width:data.w||(isGolden?218:200), height:data.h||undefined,
         boxShadow: focused ? "0 0 0 3px rgba(238,36,36,0.12)"
                  : isGolden ? "0 3px 14px rgba(238,36,36,0.16)"
                  : "0 2px 10px rgba(0,0,0,0.09)",
@@ -24264,6 +24265,14 @@ const KLGraphNode = ({data}) => {
 const KL_NODE_TYPES = {klNode: KLGraphNode};
 
 // Lay out nodes by rank (column) — same manual x/y approach the Lineage topo map uses.
+// Node card sizes are FIXED and declared to ReactFlow up front (width/height +
+// initialWidth/initialHeight). ReactFlow keeps a node hidden — and draws none of its
+// edges — until a ResizeObserver has measured it; declaring the box means the graph
+// renders (and edges anchor) without waiting on, or depending on, measurement.
+// KL_NODE_W/H must stay in sync with KLGraphNode's card styles.
+const KL_NODE_W = 200, KL_NODE_W_GOLD = 218;
+const klNodeH = n => 55 + (n.sub?14:0) + (n.chips&&n.chips.length?26:0) + (n.kind==="golden"?4:0);
+
 const klLayout = (nodes) => {
   const byRank = {};
   nodes.forEach(n=>{ (byRank[n.rank] = byRank[n.rank]||[]).push(n); });
@@ -24274,10 +24283,13 @@ const klLayout = (nodes) => {
     const i   = col.indexOf(n);
     // vertically centre each column against the tallest one
     const y = (tallest - col.length) * ROW / 2 + i * ROW;
+    const w = n.kind==="golden" ? KL_NODE_W_GOLD : KL_NODE_W;
+    const h = klNodeH(n);
     return {
       id:n.id, type:"klNode", position:{x:n.rank*COL, y},
+      width:w, height:h, initialWidth:w, initialHeight:h,
       data:{kind:n.kind, kindLabel:n.kindLabel, label:n.label, sub:n.sub, chips:n.chips,
-            conf:n.conf, focused:n.focused, meta:n.meta||null},
+            conf:n.conf, focused:n.focused, meta:n.meta||null, w, h},
     };
   });
 };
