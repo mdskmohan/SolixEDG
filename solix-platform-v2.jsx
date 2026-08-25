@@ -24111,68 +24111,68 @@ const KL_X_SEED = [
 // ── The AKG's own 10 steps, unchanged. `uses` = the EDG object that now feeds the step. ──
 const KL_SRC_STEPS = [
   {t:"Connect & Load", mode:"you", uses:"your existing Connections",
-   d:"Pick a system EDG already connects to. The connection, credentials and scan history are already here, so this is a pick-list rather than a setup form.",
-   note:["🔌","Because EDG owns the connection, there is nothing to configure twice."]},
+   d:"Select a connected system and the scope to map. Connection details, credentials and scan history are inherited from the catalog.",
+   note:["Connections are managed in Catalog \u203a Connections."]},
   {t:"Profile & Classify", mode:"auto", uses:"your Classifications & Tags",
-   d:"Profiling runs on its own. What needs you is confirming the labels — and every suggestion comes from the taxonomy you already govern.",
-   rows:[{nm:"VENDOR_TAX_NUM", chip:"Tax ID", kind:"exist", cf:"matched your tag · 98%", acts:"cc"},
-         {nm:"VENDOR_EMAIL",   chip:"PII · Email", kind:"exist", cf:"matched your tag · 97%", acts:"cc"},
-         {nm:"VNDR_NM_1",      chip:"Legal Name", kind:"exist", cf:"71% — please check", acts:"cc"}],
-   note:["🔒","Turn AI off and this becomes a dropdown of your existing tags. Either way you never type a new label."]},
+   d:"Profiling runs automatically. Review the suggested classification for each column. Suggestions are drawn only from your existing taxonomy.",
+   rows:[{nm:"VENDOR_TAX_NUM", chip:"Tax ID", kind:"exist", cf:"Matched to existing tag · 98%", acts:"cc"},
+         {nm:"VENDOR_EMAIL",   chip:"PII · Email", kind:"exist", cf:"Matched to existing tag · 97%", acts:"cc"},
+         {nm:"VNDR_NM_1",      chip:"Legal Name", kind:"exist", cf:"71% — review recommended", acts:"cc"}],
+   note:["Classifications come from your taxonomy. New values are never created here."]},
   {t:"Discover Relationships", mode:"auto", uses:"your existing Lineage",
-   d:"We do not build a second relationship picture. Anything found here is confirmed into the Lineage screen you already have.",
-   rows:[{nm:"VENDOR_ALL_V → PO_HEADER", chip:"already in Lineage", kind:"exist", cf:"confirm only", acts:"c"},
-         {nm:"PO_HEADER → PO_LINES",     chip:"already in Lineage", kind:"exist", cf:"confirm only", acts:"c"},
-         {nm:"VENDOR_SITES → VENDOR_ALL_V", chip:"new — AI found this", kind:"new", cf:"not yet in Lineage", acts:"lineage"}],
-   note:["⤳","One relationship picture in the product, not two."]},
+   d:"Relationships are read from Lineage. Confirm the existing ones, and add any newly detected relationship to Lineage.",
+   rows:[{nm:"VENDOR_ALL_V → PO_HEADER", chip:"Already in Lineage", kind:"exist", cf:"Confirm to keep", acts:"c"},
+         {nm:"PO_HEADER → PO_LINES",     chip:"Already in Lineage", kind:"exist", cf:"Confirm to keep", acts:"c"},
+         {nm:"VENDOR_SITES → VENDOR_ALL_V", chip:"Newly detected", kind:"new", cf:"Not yet in Lineage", acts:"lineage"}],
+   note:["Confirmed relationships are written back to Lineage."]},
   {t:"Add Context", mode:"you", uses:"Glossary · Data Contracts · Custom Properties",
-   d:"Instead of uploading documents to teach the AI, we point it at the context EDG already holds.",
-   rows:[{nm:"Business glossary",  chip:"214 certified terms", kind:"exist", cf:"in use"},
-         {nm:"Data contracts",     chip:"8 contracts on these tables", kind:"exist", cf:"in use"},
-         {nm:"Custom properties",  chip:"12 defined fields", kind:"exist", cf:"in use"}],
-   note:["📚","Nothing to upload and nothing to maintain twice — the context is your governance."]},
+   d:"Business context is taken from governed objects that already exist. There are no documents to upload.",
+   rows:[{nm:"Business glossary",  chip:"214 certified terms", kind:"exist", cf:"In use"},
+         {nm:"Data contracts",     chip:"8 contracts on these tables", kind:"exist", cf:"In use"},
+         {nm:"Custom properties",  chip:"12 defined fields", kind:"exist", cf:"In use"}],
+   note:["Updating the glossary or a data contract updates this graph."]},
   {t:"AI Enrichment", mode:"auto", uses:"your Glossary",
-   d:"The AI proposes what each table means. Its job is to find the matching term you already certified.",
-   rows:[{nm:"VENDOR_ALL_V", chip:"Supplier", kind:"exist", cf:"certified term · 96%", acts:"cc"},
-         {nm:"PO_HEADER",    chip:"Purchase Order", kind:"exist", cf:"certified term · 94%", acts:"cc"},
-         {nm:"SPEND_AMT",    chip:"Vendor Spend (new term)", kind:"new", cf:"no match · needs approval", acts:"approve"}],
-   note:["✨","This is the step where “match first, create second” matters most."]},
+   d:"Each table is matched to a certified business term. Where no term matches, propose a new one for glossary approval.",
+   rows:[{nm:"VENDOR_ALL_V", chip:"Supplier", kind:"exist", cf:"Certified term · 96%", acts:"cc"},
+         {nm:"PO_HEADER",    chip:"Purchase Order", kind:"exist", cf:"Certified term · 94%", acts:"cc"},
+         {nm:"SPEND_AMT",    chip:"Vendor Spend (new term)", kind:"new", cf:"No match — approval required", acts:"approve"}],
+   note:["Existing terms are reused wherever possible. New terms follow the standard approval flow."]},
   {t:"Synonyms", mode:"auto", uses:"Glossary synonyms",
-   d:"No separate synonym list. Alternative names are stored as synonyms on the glossary term itself.",
-   rows:[{nm:"vendor, payee, creditor", chip:"synonyms of Supplier", kind:"exist", cf:"written to your glossary", acts:"cc"},
-         {nm:"PO, order",               chip:"synonyms of Purchase Order", kind:"exist", cf:"written to your glossary", acts:"cc"}],
-   note:["🔗","The old tool kept its own synonym list separate from the glossary, so the two could disagree. Now there is one."]},
+   d:"Alternative names are stored as synonyms on the glossary term.",
+   rows:[{nm:"vendor, payee, creditor", chip:"synonyms of Supplier", kind:"exist", cf:"Stored on the glossary term", acts:"cc"},
+         {nm:"PO, order",               chip:"synonyms of Purchase Order", kind:"exist", cf:"Stored on the glossary term", acts:"cc"}],
+   note:["Synonyms are held on the term, so search and this graph stay consistent."]},
   {t:"Curate & Review", mode:"you", uses:"your Inbox and approval flow",
-   d:"The human quality gate. Confident items are already done — only the unclear ones arrive, ranked by importance.",
-   rows:[{nm:"Confirmed automatically", chip:"198 of 214 tables", kind:"exist", cf:"above your threshold"},
-         {nm:"Waiting on you",          chip:"16 items in your Inbox", kind:"new", cf:"ranked by importance", acts:"inbox"},
-         {nm:"New terms proposed",      chip:"12 awaiting approval", kind:"new", cf:"normal glossary flow", acts:"review"}],
-   note:["📥","This replaces the separate curation workspace — it is the same Inbox you already use everywhere else."]},
+   d:"Items above your confidence threshold are accepted automatically. The remainder are queued for review, ranked by impact.",
+   rows:[{nm:"Confirmed automatically", chip:"198 of 214 tables", kind:"exist", cf:"Above confidence threshold"},
+         {nm:"Waiting on you",          chip:"16 items in your Inbox", kind:"new", cf:"Ranked by impact", acts:"inbox"},
+         {nm:"New terms proposed",      chip:"12 awaiting approval", kind:"new", cf:"Standard glossary approval", acts:"review"}],
+   note:["Review items appear in your Inbox alongside other governance tasks."]},
   {t:"Build Index", mode:"auto", uses:null,
-   d:"Pure computer work. It runs in the background and reports itself; there is no decision to make here.",
-   rows:[{nm:"Indexing",          chip:"running — 68%", kind:"plain", cf:"started 4 min ago"},
-         {nm:"Full run history",  chip:"Settings → Background Jobs", kind:"plain", cf:"pass / fail / retry"}],
-   note:["⏱","Nothing for a person to do. Progress shows here; the history lives in Settings."]},
+   d:"The search index is rebuilt in the background. No input is required.",
+   rows:[{nm:"Search index",      chip:"Rebuilding — 68%", kind:"plain", cf:"Started 4 minutes ago"},
+         {nm:"Run history",       chip:"Settings › Background Jobs", kind:"plain", cf:"Status and retries"}],
+   note:["Full run history is available in Settings \u203a Background Jobs."]},
   {t:"Validate", mode:"auto", uses:null,
-   d:"A quick confidence check: ask a plain-English question and see whether the graph answers it correctly.",
-   rows:[{nm:"“Top 10 suppliers by spend”",   chip:"answered correctly", kind:"exist", cf:"checked by steward"},
-         {nm:"“Suppliers missing a tax ID”",  chip:"answered correctly", kind:"exist", cf:"checked by steward"}],
-   note:["✅","Kept exactly as it is today — it is genuinely useful before publishing."]},
+   d:"Confirm the graph answers representative questions correctly before publishing.",
+   rows:[{nm:"“Top 10 suppliers by spend”",   chip:"Answered correctly", kind:"exist", cf:"Verified by steward"},
+         {nm:"“Suppliers missing a tax ID”",  chip:"Answered correctly", kind:"exist", cf:"Verified by steward"}],
+   note:["Validation results are recorded against this version of the graph."]},
   {t:"Publish", mode:"you", uses:"your owners and approval flow",
-   d:"Publishing is a governed act: the owner signs off, and only then can this source join a Cross-Source Knowledge Graph.",
-   note:["🚀","Published graphs feed Data Ask and the AI copilot, and become eligible for cross-source matching."]},
+   d:"Publishing requires owner sign-off. Once published, this graph can be joined into a Cross-Source Knowledge Graph.",
+   note:["Published graphs are available to Data Ask and eligible for cross-source matching."]},
 ];
 
 const KL_X_STEPS = [
-  {t:"What to master", mode:"you", uses:"your Business Entities and published Source Graphs",
-   d:"Pick the thing you want one trusted version of, and which source graphs to join. Everything that is ready is already selected — a source that is not ready says why.",
-   note:["🧱","A cross-source graph is always built on top of source graphs. It never reads a system directly, so if something is missing here, the fix belongs in that source graph."]},
-  {t:"How we match", mode:"auto", uses:"your Classifications, and your judgement on conflicts",
-   d:"The match keys below were worked out from the columns you already classified — check them rather than write them. Underneath is the one question nothing can answer for you: when two systems disagree, which one do we believe?",
-   note:["🔑","If a key looks wrong or missing, that means a column is not classified in the source graph. Fix it there and it corrects everywhere."]},
-  {t:"Publish", mode:"you", uses:"your Domains, Policies, Owners and audit log",
-   d:"Ownership and policy come from the entity's domain. The last choice is whether to stop at the governed model or also read data to resolve records.",
-   note:["🚀","Publishing metadata-only still gives you a working graph. Records can be resolved later, whenever that access is approved."]},
+  {t:"Entity & sources", mode:"you", uses:"Business Entities, published Source Graphs",
+   d:"Select the business entity to master and the published source graphs to join. Source graphs that are not ready show the reason.",
+   note:["A cross-source graph reads only from source graphs. If a source is missing something, correct it in that source graph."]},
+  {t:"Matching rules", mode:"you", uses:"Classifications & Tags, your precedence decisions",
+   d:"Match keys are derived from the columns you have already classified — review them rather than author them. Below, set which source takes precedence when values disagree.",
+   note:["A missing match key means the column is not yet classified in that source graph."]},
+  {t:"Publish", mode:"you", uses:"Domains, Policies, Owners, audit log",
+   d:"Ownership and policy are inherited from the entity's domain. Choose whether to publish the model only, or also scan data to resolve records.",
+   note:["Publishing without a scan still produces a complete entity-level graph. Records can be resolved later."]},
 ];
 
 const KL_READY_FOR = (graphs, entity) =>
@@ -24521,18 +24521,18 @@ const KLChip = ({kind,children})=>{
   return <span style={{display:"inline-flex",alignItems:"center",padding:"2px 8px",borderRadius:5,fontSize:11.5,fontWeight:600,background:s.bg,color:s.c,border:`1px solid ${s.b}`,whiteSpace:"nowrap"}}>{s.pre}{children}</span>;
 };
 
-const KLNote = ({icon,children,tone})=>(
+const KLNote = ({children,tone})=>(
   <div style={{display:"flex",gap:9,padding:"10px 13px",borderRadius:9,marginTop:14,fontSize:12,lineHeight:1.6,
     background:tone==="quiet"?T.bgElevated:T.accentDim, border:`1px solid ${tone==="quiet"?T.border:T.accent+"33"}`,
     color:tone==="quiet"?T.textSub:T.text}}>
-    <span style={{flexShrink:0}}>{icon}</span><div>{children}</div>
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,marginTop:1}}><circle cx="8" cy="8" r="6.2" stroke="currentColor" strokeWidth="1.3"/><path d="M8 7.2v4M8 4.9v.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg><div>{children}</div>
   </div>
 );
 
 const KLModeTag = ({mode})=>(
   <span style={{fontSize:9.5,fontWeight:700,letterSpacing:"0.06em",textTransform:"uppercase",padding:"3px 8px",borderRadius:99,whiteSpace:"nowrap",
     background:mode==="auto"?T.blueDim:T.accentDim, color:mode==="auto"?T.blue:T.accent, border:`1px solid ${(mode==="auto"?T.blue:T.accent)}33`}}>
-    {mode==="auto"?"runs itself":"needs you"}
+    {mode==="auto"?"Automatic":"Requires input"}
   </span>
 );
 
@@ -24638,7 +24638,7 @@ const KLStepRail = ({steps,cur,onPick,doneSet}) => (
           <span style={{flex:1,minWidth:0}}>
             <span style={{display:"block"}}>{s.t}</span>
             <span style={{display:"block",fontSize:9.5,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase",marginTop:3,
-              color:s.mode==="auto"?T.blue:T.textMuted}}>{s.mode==="auto"?"runs itself":"needs you"}</span>
+              color:s.mode==="auto"?T.blue:T.textMuted}}>{s.mode==="auto"?"Automatic":"Requires input"}</span>
           </span>
         </button>
       );
@@ -24801,7 +24801,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               </div>
               <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>
                 {wiz==="src"
-                  ? "The same 10 steps Data Sense runs — each drawing on words you already govern"
+                  ? "Ten steps. Each one draws on vocabulary already governed in EDG"
                   : <>Built on top of {wSrcIds.length} published source graph{wSrcIds.length===1?"":"s"} · entity <span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{wEntity}</span></>}
               </div>
             </div>
@@ -24815,14 +24815,14 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 <KLModeTag mode={s.mode}/>
                 <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:9}}>
                   {canAI ? (<>
-                    <span style={{fontSize:11.5,fontWeight:700,color:T.violet}}>✨ Use AI</span>
+                    <span style={{fontSize:11.5,fontWeight:700,color:T.violet}}>AI assist</span>
                     <Toggle on={aiOn} onChange={()=>setAi(a=>({...a,[aiKey]:!aiOn}))}/>
                     <span style={{fontSize:11.5,color:T.textSub,fontWeight:600,width:22}}>{aiOn?"On":"Off"}</span>
-                  </>) : <span style={{fontSize:11.5,color:T.textMuted}}>no AI needed here</span>}
+                  </>) : <span style={{fontSize:11.5,color:T.textMuted}}>Not applicable</span>}
                 </div>
               </div>
               <div style={{fontSize:11,fontWeight:700,color:s.uses?T.green:T.textMuted,marginBottom:10}}>
-                {s.uses ? `✓ Uses ${s.uses}` : "— nothing from EDG needed —"}
+                {s.uses ? `Governed inputs: ${s.uses}` : "No governed inputs required"}
               </div>
               <div style={{fontSize:12.8,color:T.textSub,lineHeight:1.65,maxWidth:760,marginBottom:16}}>{s.d}</div>
 
@@ -24834,13 +24834,13 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                       <b style={{color:T.text}}> Catalog › Connections</b> first, then come back here to map it.
                     </div>
                   ) : (<>
-                    <div style={{fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Connection (from your catalog)</div>
+                    <div style={{fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Connection</div>
                     <select value={wConn} onChange={e=>setWConn(e.target.value)}
                       style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,cursor:"pointer",marginBottom:14}}>
                       {unmapped.map(c=><option key={c} value={c}>{c}</option>)}
                     </select>
-                    <KLRow nm="Scope"    chip="3 schemas · 214 tables" kind="exist" cf={aiOn?"AI suggested what matters":"you choose the scope"} acts="cc" onAct={()=>toast("Scope confirmed")}/>
-                    <KLRow nm="Look for" chip="Supplier · Customer"    kind="exist" cf="from your Business Entities" acts="cc" onAct={()=>toast("Entities confirmed")}/>
+                    <KLRow nm="Scope"    chip="3 schemas · 214 tables" kind="exist" cf={aiOn?"Suggested by AI":"Selected manually"} acts="cc" onAct={()=>toast("Scope confirmed")}/>
+                    <KLRow nm="Look for" chip="Supplier · Customer"    kind="exist" cf="From Business Entities" acts="cc" onAct={()=>toast("Entities confirmed")}/>
                   </>)}
                 </div>
               )}
@@ -24852,7 +24852,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                     style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,cursor:"pointer",marginBottom:14}}>
                     {KL_ENTITIES.map(c=>{
                       const n = KL_READY_FOR(srcGraphs,c).length;
-                      return <option key={c} value={c}>{c}{n>=2?` — ${n} source graphs ready`:n===1?" — only 1 source graph ready":" — no source graphs ready"}</option>;
+                      return <option key={c} value={c}>{c}{n>=2?` · ${n} source graphs ready`:n===1?" · only 1 source graph ready":" · no source graphs ready"}</option>;
                     })}
                   </select>
                   <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"16px 0 7px"}}>
@@ -24870,8 +24870,8 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                           background:on?T.accent:"transparent",border:`1.5px solid ${on?T.accent:T.borderLight}`}}>{on?"✓":""}</span>
                         <ServiceIcon service={g.service} size={16}/>
                         <span style={{fontSize:12.5,fontWeight:600,color:T.text,minWidth:120}}>{g.name}</span>
-                        <KLChip kind={ok?"exist":"new"}>{ok?`Ready — ${m.table}`:`Not ready — nothing tagged as ${wEntity}`}</KLChip>
-                        <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>{ok?`keys: ${m.keys.join(", ")}`:"fix this in that source graph"}</span>
+                        <KLChip kind={ok?"exist":"new"}>{ok?`Ready · ${m.table}`:`Not ready · no ${wEntity} columns classified`}</KLChip>
+                        <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>{ok?`Match keys: ${m.keys.join(", ")}`:"Resolve in that source graph"}</span>
                       </div>
                     );
                   })}
@@ -24881,14 +24881,14 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                       <span style={{width:17,flexShrink:0}}/>
                       <ServiceIcon service={g.service} size={16}/>
                       <span style={{fontSize:12.5,fontWeight:600,color:T.text,minWidth:120}}>{g.name}</span>
-                      <KLChip kind="plain">Not published yet — step {g.step} of 10</KLChip>
-                      <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>publish it first to join it</span>
+                      <KLChip kind="plain">In progress · step {g.step} of 10</KLChip>
+                      <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>Publish to make available</span>
                     </div>
                   ))}
                   <div style={{fontSize:11.5,color:wSrcIds.length>=2?T.textMuted:T.amber,marginTop:4}}>
                     {wSrcIds.length>=2
                       ? `${wSrcIds.length} source graphs selected`
-                      : "Pick at least two — one source cannot be cross-referenced against anything."}
+                      : "Select at least two. A single source cannot be cross-referenced."}
                   </div>
                 </div>
               )}
@@ -24906,15 +24906,15 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                           background:T.bgSurface,border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:9}}>
                           <span style={{fontSize:12,fontWeight:600,color:T.text,minWidth:150,fontFamily:"'Geist Mono',monospace"}}>{k}</span>
                           <span style={{color:T.textMuted,fontSize:13}}>→</span>
-                          <KLChip kind="exist">{n===wSrcIds.length?`in all ${n} sources`:`in ${n} of ${wSrcIds.length}`}</KLChip>
-                          <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>{n===wSrcIds.length?"strongest match key":"helps when the others are blank"}</span>
+                          <KLChip kind="exist">{n===wSrcIds.length?`In all ${n} sources`:`In ${n} of ${wSrcIds.length} sources`}</KLChip>
+                          <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>{n===wSrcIds.length?"Strongest key":"Fallback when others are blank"}</span>
                           <Btn small variant={on?"primary":undefined} ghost={!on}
                             onClick={()=>setWKeys(ks=>on?ks.filter(x=>x!==k):[...ks,k])}>{on?"Using":"Use"}</Btn>
                         </div>
                       );
                     })}
                     <div style={{fontSize:11.5,color:wKeys.length?T.textMuted:T.amber,marginTop:4}}>
-                      {wKeys.length?`${wKeys.length} match key${wKeys.length===1?"":"s"} selected`:"Select at least one match key to continue"}
+                      {wKeys.length?`${wKeys.length} match key${wKeys.length===1?"":"s"} selected`:"Select at least one match key"}
                     </div>
                   </div>
                 );
@@ -24923,10 +24923,10 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               {wiz==="cross" && step===1 && (
                 <div style={{maxWidth:820,marginTop:22}}>
                   <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>
-                    When they disagree, which system do we believe?
+                    Precedence when values disagree
                   </div>
                   <div style={{fontSize:12,color:T.textMuted,marginBottom:10}}>
-                    The one thing here that is a judgement call, not a derivation.
+                    Set per field. This cannot be derived from metadata.
                   </div>
                   {[...wKeys,"Address"].map(f=>{
                     const val = wBeliefs[f] ?? (srcById(wSrcIds[0])?.name||"");
@@ -24934,28 +24934,28 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                       <div key={f} style={{display:"flex",alignItems:"center",gap:11,flexWrap:"wrap",padding:"10px 12px",marginBottom:8,
                         background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
                         <span style={{fontSize:12,fontWeight:600,color:T.text,minWidth:120}}>{f}</span>
-                        <span style={{fontSize:11.5,color:T.textMuted}}>we believe</span>
+                        <span style={{fontSize:11.5,color:T.textMuted}}>Preferred source</span>
                         <select value={val} onChange={e=>setWBeliefs(b=>({...b,[f]:e.target.value}))}
                           style={{padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,cursor:"pointer"}}>
                           {wSrcIds.map(id=><option key={id} value={srcById(id)?.name}>{srcById(id)?.name}</option>)}
                           <option value="Most recently updated">Most recently updated</option>
                         </select>
-                        <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>{f==="Address"?"often a rule rather than a system":"steward decision"}</span>
+                        <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>{f==="Address"?"Rule-based rather than a fixed source":"Steward decision"}</span>
                       </div>
                     );
                   })}
-                  {wKeys.length===0 && <div style={{fontSize:12,color:T.textMuted}}>Confirm some match keys first — those are the fields that can disagree.</div>}
+                  {wKeys.length===0 && <div style={{fontSize:12,color:T.textMuted}}>Select match keys first. Those are the fields that can disagree.</div>}
                 </div>
               )}
 
               {wiz==="cross" && step===2 && (
                 <div style={{maxWidth:800}}>
-                  <KLRow nm="Owner"         chip="Alex Rivera"            kind="exist" cf="sign-off to publish"/>
-                  <KLRow nm="Policy"        chip="Vendor Data Protection" kind="exist" cf="from Policy Manager"/>
-                  <KLRow nm="Business term" chip={wEntity}                kind="exist" cf="certified in your glossary"/>
-                  <KLRow nm="Domain"        chip="Procurement"            kind="exist" cf="from your Domains"/>
+                  <KLRow nm="Owner"         chip="Alex Rivera"            kind="exist" cf="Sign-off required"/>
+                  <KLRow nm="Policy"        chip="Vendor Data Protection" kind="exist" cf="From Policy Manager"/>
+                  <KLRow nm="Business term" chip={wEntity}                kind="exist" cf="Certified in your glossary"/>
+                  <KLRow nm="Domain"        chip="Procurement"            kind="exist" cf="From Domains"/>
                   <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"18px 0 7px"}}>
-                    Rows a scan would read
+                    Data in scope for a scan
                   </div>
                   {wSrcIds.map(id=>{
                     const g=srcById(id); if(!g) return null;
@@ -24974,12 +24974,12 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                     );
                   })}
                   <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"15px 0 7px"}}>
-                    What should happen on publish
+                    On publish
                   </div>
                   {[
-                    {v:"later",  l:"Publish the entity-level graph only",  d:"Recommended. You get the governed model now; resolve records later when the access is approved."},
-                    {v:"sample", l:"Scan a sample — 5,000 rows per source", d:"Proves the matching works with the least data exposure."},
-                    {v:"full",   l:"Scan everything",                      d:"Complete golden records. Longer job, and reads every row including PII."},
+                    {v:"later",  l:"Publish the model only (recommended)", d:"Produces the governed entity-level graph. No data is read. Records can be resolved later."},
+                    {v:"sample", l:"Scan a sample (5,000 rows per source)", d:"Validates matching with minimal data exposure."},
+                    {v:"full",   l:"Scan all rows",                         d:"Produces complete records. Longer runtime, and reads all rows including PII."},
                   ].map(o=>(
                     <div key={o.v} onClick={()=>setWScan(o.v)}
                       style={{display:"flex",gap:10,padding:"10px 12px",marginBottom:6,cursor:"pointer",borderRadius:9,
@@ -24998,8 +24998,8 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                   {wScan!=="later" && (
                     <div style={{display:"flex",gap:9,alignItems:"center",padding:"10px 13px",marginTop:8,borderRadius:9,
                       background:T.amberDim,border:`1px solid ${T.amber}44`,fontSize:12,color:T.text,lineHeight:1.6}}>
-                      <span>⚠️</span>
-                      <div>Approved as <b>alex.rivera</b>. Runs as a background job and is written to the audit log.</div>
+                      <span style={{color:T.amber,display:"flex"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,marginTop:1}}><path d="M8 2.2l6 11.6H2L8 2.2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M8 6.6v3.2M8 11.6v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg></span>
+                      <div>Approved as <b>alex.rivera</b>. Runs as a background job and is recorded in the audit log.</div>
                     </div>
                   )}
                 </div>
@@ -25007,27 +25007,27 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
 
               {wiz==="src" && step===9 && (
                 <div style={{maxWidth:780}}>
-                  <KLRow nm="Owner"      chip="Alex Rivera" kind="exist" cf="sign-off required to publish"/>
-                  <KLRow nm="Domain"     chip="Procurement" kind="exist" cf="from your Domains" acts="cc" onAct={()=>toast("Domain confirmed")}/>
-                  <KLRow nm="Then feeds" chip="Data Ask · AI copilot · Cross-Source" kind="plain" cf="once published"/>
+                  <KLRow nm="Owner"      chip="Alex Rivera" kind="exist" cf="Sign-off required"/>
+                  <KLRow nm="Domain"     chip="Procurement" kind="exist" cf="From Domains" acts="cc" onAct={()=>toast("Domain confirmed")}/>
+                  <KLRow nm="Available to" chip="Data Ask · AI copilot · Cross-source graphs" kind="plain" cf="After publishing"/>
                 </div>
               )}
 
               {s.rows && (
                 <div style={{maxWidth:860}}>
                   {s.rows.map(r=>(
-                    <KLRow key={r.nm} {...r} cf={aiOn?r.cf:"you choose from your EDG list"} onAct={()=>toast("Recorded")}/>
+                    <KLRow key={r.nm} {...r} cf={aiOn?r.cf:"Selected manually"} onAct={()=>toast("Confirmed")}/>
                   ))}
                 </div>
               )}
 
               {canAI && !aiOn && (
-                <KLNote icon="🖐" tone="quiet">
-                  <b style={{color:T.text}}>AI is off for this step.</b> You now choose from your EDG lists yourself.
-                  Slower, same outcome — and still nothing typed from scratch.
+                <KLNote tone="quiet">
+                  <b style={{color:T.text}}>AI assist is off.</b> Select from your governed lists manually.
+                  The available options are unchanged.
                 </KLNote>
               )}
-              <KLNote icon={s.note[0]}>{s.note[1]}</KLNote>
+              <KLNote>{s.note[0]}</KLNote>
             </div>
           </div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgSurface}}>
@@ -25090,8 +25090,8 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
           {sg.drift>0 && (
             <div style={{display:"flex",gap:9,alignItems:"center",padding:"11px 14px",marginBottom:16,borderRadius:9,
               background:T.amberDim,border:`1px solid ${T.amber}44`,fontSize:12.5,color:T.text}}>
-              <span>⚠️</span>
-              <div><b>This source changed.</b> {sg.drift} new column{sg.drift===1?"":"s"} added since this graph was last built — anything depending on it may be stale.</div>
+              <span style={{color:T.amber,display:"flex"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,marginTop:1}}><path d="M8 2.2l6 11.6H2L8 2.2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M8 6.6v3.2M8 11.6v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg></span>
+              <div><b>Source schema has changed.</b> {sg.drift} column{sg.drift===1?"":"s"} added since this graph was last built. Dependent graphs may be out of date.</div>
               <Btn small variant="primary" onClick={()=>toast("Drift review opened in your Inbox")}>Review changes</Btn>
             </div>
           )}
@@ -25114,25 +25114,25 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr",gap:14}}>
                 <Card2 style={{padding:16}}>
-                  <SH title="What this graph understands" sub="A snapshot of the source, in your vocabulary."/>
-                  <KLRow nm="Business entities" chip={sg.entities.join(" · ")||"none"} kind={sg.entities.length?"exist":"plain"} cf="matchable across sources"/>
-                  <KLRow nm="Columns classified" chip={`${sg.cols} from your ${sg.bind.tags} tags`} kind="exist" cf="Classifications & Tags"/>
+                  <SH title="Coverage" sub="What this graph describes, and how much of it is governed."/>
+                  <KLRow nm="Business entities" chip={sg.entities.join(" · ")||"None"} kind={sg.entities.length?"exist":"plain"} cf="Available for cross-source matching"/>
+                  <KLRow nm="Columns classified" chip={`${sg.cols} columns · ${sg.bind.tags} classifications`} kind="exist" cf="Classifications & Tags"/>
                   <KLRow nm="Tables given meaning" chip={`${sg.bind.termed} of ${sg.tables}`} kind="exist" cf="Business Glossary"/>
-                  <KLRow nm="New terms proposed" chip={sg.bind.proposed?`${sg.bind.proposed} awaiting approval`:"none pending"} kind={sg.bind.proposed?"new":"exist"} cf="normal glossary approval"/>
+                  <KLRow nm="New terms proposed" chip={sg.bind.proposed?`${sg.bind.proposed} awaiting approval`:"None pending"} kind={sg.bind.proposed?"new":"exist"} cf="Standard glossary approval"/>
                   <div style={{marginTop:14,paddingTop:13,borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"baseline",gap:12}}>
                     <div style={{fontSize:28,fontWeight:800,color:T.green,fontFamily:"'Geist Mono',monospace"}}>{sg.bind.invented}</div>
-                    <div style={{fontSize:12,color:T.textSub}}>labels invented outside EDG — the number that must always stay zero.<br/>
-                      <span style={{color:T.textMuted}}>If it ever rises, the two systems have started to drift apart.</span></div>
+                    <div style={{fontSize:12,color:T.textSub}}>labels created outside EDG governance. Target: 0.<br/>
+                      <span style={{color:T.textMuted}}>A non-zero value means this graph has introduced vocabulary EDG does not govern.</span></div>
                   </div>
-                  <Btn ghost small style={{marginTop:12}} onClick={()=>setSrcTab("graph")}>See the graph →</Btn>
+                  <Btn ghost small style={{marginTop:12}} onClick={()=>setSrcTab("graph")}>Open knowledge graph</Btn>
                 </Card2>
                 <Card2 style={{padding:16}}>
                   <SH title="Ownership"/>
                   <div style={{fontSize:12.5,color:T.textSub,lineHeight:2}}>
                     <div><b style={{color:T.text}}>Owner</b> · {sg.owner}</div>
-                    <div><b style={{color:T.text}}>Stewards</b> · {sg.stewards.length?sg.stewards.join(", "):"none assigned"}</div>
+                    <div><b style={{color:T.text}}>Stewards</b> · {sg.stewards.length?sg.stewards.join(", "):"None assigned"}</div>
                     <div><b style={{color:T.text}}>Domain</b> · {sg.domain}</div>
-                    <div><b style={{color:T.text}}>Built by</b> · {sg.from}</div>
+                    <div><b style={{color:T.text}}>Created in</b> · {sg.from}</div>
                   </div>
                 </Card2>
               </div>
@@ -25154,12 +25154,12 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 {key:"term",  label:"Business term", render:v=>v?<span style={{fontSize:11.5,color:T.green,fontWeight:600}}>{v}</span>:<span style={{color:T.textMuted}}>—</span>},
                 {key:"cols",  label:"Columns", render:v=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5}}>{v}</span>},
                 {key:"tags",  label:"Classifications", render:v=>v.length?<span style={{display:"flex",gap:4,flexWrap:"wrap"}}>{v.map(t=><Badge key={t} bg={T.amber+"1a"} color={T.amber} border={T.amber+"44"}>{t}</Badge>)}</span>:<span style={{color:T.textMuted}}>—</span>},
-                {key:"n2",    label:"Matchable on", render:(v,r)=>{
+                {key:"n2",    label:"Match keys", render:(v,r)=>{
                   const m = sg.masters.find(x=>x.table===r.n);
                   if(!m) return <span style={{color:T.textMuted}}>—</span>;
                   return m.ready
                     ? <span style={{fontSize:11,color:T.green,fontWeight:600}}>{m.keys.join(", ")}</span>
-                    : <span style={{fontSize:11,color:T.amber,fontWeight:600}}>no match keys</span>;
+                    : <span style={{fontSize:11,color:T.amber,fontWeight:600}}>None classified</span>;
                 }},
               ]}
               rows={sg.assets||[]} emptyMsg="No tables mapped yet."/>
@@ -25167,9 +25167,9 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
 
           {srcTab==="feeds" && (
             usedBy.length===0
-              ? <KLEmpty icon={Ic.knowledge(34)} title="Not used by any cross-source graph yet"
-                  sub={`Publish this graph, then join it with another source on a shared entity.`}
-                  action={<Btn small variant="primary" onClick={()=>{setSelSrc(null);setTab("cross");openWizard("cross");}}>Build a cross-source graph</Btn>}/>
+              ? <KLEmpty icon={Ic.knowledge(34)} title="Not joined into a cross-source graph"
+                  sub={`Join this graph with another published source that shares a business entity.`}
+                  action={<Btn small variant="primary" onClick={()=>{setSelSrc(null);setTab("cross");openWizard("cross");}}>Create cross-source graph</Btn>}/>
               : <DataTable
                   cols={[
                     {key:"name",   label:"Cross-Source Graph", render:v=><span style={{fontWeight:600}}>{v}</span>},
@@ -25205,13 +25205,13 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
             badges={<>
               <Badge bg={T.green+"1a"} color={T.green} border={T.green+"55"}>{xg.status}</Badge>
               <Badge bg={T.bgElevated} color={T.textSub} border={T.border}>{xg.version}</Badge>
-              {klOpen(xg)>0 && <Badge bg={T.amber+"1a"} color={T.amber} border={T.amber+"55"}>{klOpen(xg)} need a look</Badge>}
+              {klOpen(xg)>0 && <Badge bg={T.amber+"1a"} color={T.amber} border={T.amber+"55"}>{klOpen(xg)} require review</Badge>}
             </>}
             props={[
               {l:"Entity",          v:xg.entity},
               {l:"Built on",        v:`${xg.srcIds.length} source graphs`},
               {l:"Match keys",      v:xg.keys.length?xg.keys.join(", "):"—"},
-              {l:"Data scan",       v:xScanned?(xg.scan.stale?"stale":`${xg.scan.mode} · ${xg.scan.at}`):"not scanned",
+              {l:"Data scan",       v:xScanned?(xg.scan.stale?"Out of date":`${xg.scan.mode==="full"?"All rows":"Sample"} · ${xg.scan.at}`):"Not run",
                                     c:xScanned?(xg.scan.stale?T.amber:T.green):T.textMuted},
               {l:"Trusted records", v:xScanned?xg.records.toLocaleString():"—",
                                     c:xScanned?T.text:T.textMuted},
@@ -25233,9 +25233,9 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 <Metric label="Source graphs joined" value={String(xg.srcIds.length)}/>
                 <Metric label="Match keys" value={String(xg.keys.length)} sub={xg.keys.join(", ")}/>
                 <Metric label="Trusted records" value={xScanned?xg.records.toLocaleString():"—"}
-                  sub={xScanned?undefined:"needs a data scan"} color={xScanned?T.text:T.textMuted}/>
-                <Metric label="Need a look" value={xScanned?String(klOpen(xg)):"—"}
-                  sub={xScanned?`${(xg.clean||0).toLocaleString()} resolved cleanly`:undefined}
+                  sub={xScanned?undefined:"Requires a data scan"} color={xScanned?T.text:T.textMuted}/>
+                <Metric label="Requires review" value={xScanned?String(klOpen(xg)):"—"}
+                  sub={xScanned?`${(xg.clean||0).toLocaleString()} resolved without conflict`:undefined}
                   color={xScanned&&klOpen(xg)?T.amber:xScanned?T.green:T.textMuted}/>
               </div>
 
@@ -25243,20 +25243,20 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               <div style={{display:"flex",gap:10,alignItems:"center",padding:"12px 14px",marginBottom:14,borderRadius:10,
                 background:xScanned?(xg.scan.stale?T.amberDim:T.bgSurface):T.bgElevated,
                 border:`1px solid ${xScanned?(xg.scan.stale?T.amber+"44":T.border):T.border}`}}>
-                <span style={{fontSize:15}}>{xScanned?(xg.scan.stale?"⚠️":"✓"):"🔒"}</span>
+                <span style={{fontSize:15}}>{xScanned?(xg.scan.stale?"!":"✓"):"·"}</span>
                 <div style={{fontSize:12.4,color:T.textSub,lineHeight:1.6}}>
                   {!xScanned && <>
-                    <b style={{color:T.text}}>Entity level only.</b> This graph knows how {xg.entity} is represented as an
-                    object in each source — that is all metadata. Resolving the actual records means reading rows, so it
-                    needs a scan you approve.
+                    <b style={{color:T.text}}>Model only.</b> This graph describes how {xg.entity} is represented in each
+                    source, using metadata alone. Resolving individual records requires reading data, which needs an
+                    approved data scan.
                   </>}
                   {xScanned && !xg.scan.stale && <>
-                    <b style={{color:T.text}}>Records resolved.</b> {xg.scan.mode==="full"?"Full":"Sample"} scan of{" "}
+                    <b style={{color:T.text}}>Records resolved.</b> {xg.scan.mode==="full"?"All rows":"Sample"} scan of{" "}
                     {xg.scan.rows.toLocaleString()} rows on {xg.scan.at}, approved by <b>{xg.scan.approvedBy}</b>.
                   </>}
                   {xScanned && xg.scan.stale && <>
-                    <b style={{color:T.text}}>Records may be stale.</b> A source has changed since the{" "}
-                    {xg.scan.mode} scan on {xg.scan.at}. Re-scan to bring the records back in line.
+                    <b style={{color:T.text}}>Records may be out of date.</b> A source has changed since the{" "}
+                    {xg.scan.mode==="full"?"all rows":"sample"} scan on {xg.scan.at}. Re-scan to refresh them.
                   </>}
                 </div>
                 <div style={{marginLeft:"auto"}}>
@@ -25265,7 +25265,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 </div>
               </div>
               <Card2 style={{padding:16,marginBottom:14}}>
-                <SH title="Built on top of these source graphs" sub="A cross-source graph never reads a system directly — it joins what each source graph already understands."/>
+                <SH title="Source graphs" sub="This graph reads only from the source graphs below."/>
                 <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
                   {xg.srcIds.map(id=>{
                     const g=srcById(id); if(!g) return null;
@@ -25284,16 +25284,16 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               </Card2>
               {xScanned && klOpen(xg)>0 && (
                 <Card2 style={{padding:16}}>
-                  <SH title={`Needs a decision (${klOpen(xg)})`}
-                    sub="Everything else resolved cleanly. These are the only rows asking for a person."
+                  <SH title={`Requires a decision (${klOpen(xg)})`}
+                    sub="Records accepted automatically are not listed."
                     action={<Btn small ghost onClick={()=>setXTab("records")}>Open Trusted records</Btn>}/>
                   {(xg.conflicts||[]).map(c=>(
-                    <KLRow key={c.id} nm={c.n} chip={c.issue} kind="new" cf={`sources disagree · ${c.conf.toFixed(2)}`}
+                    <KLRow key={c.id} nm={c.n} chip={c.issue} kind="new" cf={`Conflicting values · confidence ${c.conf.toFixed(2)}`}
                       acts="review" onAct={()=>setXTab("records")}/>
                   ))}
                   {(xg.unmatched||[]).map(u=>(
-                    <KLRow key={u.id} nm={u.label} chip={`only in ${srcById(u.srcId)?.name||u.srcId}`} kind="new"
-                      cf="matched nothing" acts="review" onAct={()=>setXTab("records")}/>
+                    <KLRow key={u.id} nm={u.label} chip={`Only in ${srcById(u.srcId)?.name||u.srcId}`} kind="new"
+                      cf="No counterpart found" acts="review" onAct={()=>setXTab("records")}/>
                   ))}
                 </Card2>
               )}
@@ -25304,10 +25304,9 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
             <>
               <div style={{display:"flex",gap:9,alignItems:"center",padding:"10px 13px",marginBottom:10,borderRadius:9,
                 background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:12.3,color:T.textSub}}>
-                <span>🗺️</span>
-                <div>This shows <b style={{color:T.text}}>how {xg.entity} is represented as an object</b> in each source, and the
-                  match key that ties them together. Individual records are not drawn here — they live in{" "}
-                  <b style={{color:T.text}}>Trusted records</b>, where only the ones needing a decision are listed.</div>
+                <span style={{color:T.textMuted,display:"flex"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,marginTop:1}}><circle cx="8" cy="8" r="6.2" stroke="currentColor" strokeWidth="1.3"/><path d="M8 7.2v4M8 4.9v.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg></span>
+                <div>Shows how <b style={{color:T.text}}>{xg.entity}</b> is represented in each source and the match keys that
+                  link them. Individual records are listed under <b style={{color:T.text}}>Trusted records</b>.</div>
                 <Btn small ghost onClick={()=>setXTab("records")}>Trusted records →</Btn>
               </div>
               <KLGraphCanvas build={buildXGraph} height={560}
@@ -25316,8 +25315,8 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
           )}
 
           {xTab==="records" && !xScanned && (
-            <KLEmpty icon={Ic.shield(34)} title="Records are not scanned yet"
-              sub={`The graph already knows how ${xg.entity} maps across ${xg.srcIds.length} sources — that is metadata. Resolving the actual records means reading rows.`}
+            <KLEmpty icon={Ic.shield(34)} title="No data scan has been run"
+              sub={`This graph describes how ${xg.entity} maps across ${xg.srcIds.length} sources. Resolving individual records requires reading data.`}
               action={<Btn small variant="primary" onClick={()=>setScanFor(xg.id)}>Run data scan</Btn>}/>
           )}
 
@@ -25330,27 +25329,27 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                   background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10}}>
                   <span style={{fontSize:12.8,color:T.textSub}}>
                     <b style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{xg.records.toLocaleString()}</b> records resolved ·{" "}
-                    <b style={{color:T.green,fontFamily:"'Geist Mono',monospace"}}>{(xg.clean||0).toLocaleString()}</b> cleanly
+                    <b style={{color:T.green,fontFamily:"'Geist Mono',monospace"}}>{(xg.clean||0).toLocaleString()}</b> without conflict
                   </span>
                   <span style={{width:1,height:16,background:T.border}}/>
                   <span style={{fontSize:12.8,color:klOpen(xg)?T.amber:T.green,fontWeight:600}}>
-                    {klOpen(xg)?`${klOpen(xg)} need a look`:"nothing needs a look"}
+                    {klOpen(xg)?`${klOpen(xg)} require review`:"No exceptions"}
                   </span>
                   <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>
-                    {xg.scan.mode} scan · {xg.scan.at}{xg.scan.stale?" · may be stale":""}
+                    {xg.scan.mode==="full"?"All rows":"Sample"} scan · {xg.scan.at}{xg.scan.stale?" · may be out of date":""}
                   </span>
                   <Btn small ghost onClick={()=>setScanFor(xg.id)}>Re-scan</Btn>
                 </div>
 
                 {klOpen(xg)===0 && (
-                  <KLEmpty icon={Ic.check(34)} title="Every record resolved cleanly"
-                    sub="No conflicts, nothing left unmatched — there is nothing here for you to decide."/>
+                  <KLEmpty icon={Ic.check(34)} title="No exceptions"
+                    sub="All records resolved without conflict, and none were left unmatched."/>
                 )}
 
                 {conflicts.length>0 && (
                   <>
-                    <SH title={`Sources disagree (${conflicts.length})`}
-                      sub="These matched to one thing, but the systems hold different values. Only the differing values are highlighted."/>
+                    <SH title={`Conflicting values (${conflicts.length})`}
+                      sub="Records matched, but the sources hold different values. Differences are highlighted."/>
                     {conflicts.map(c=>{
                       const fields = [...new Set(c.members.flatMap(m=>Object.keys(m.vals||{})))];
                       const differs = fl => new Set(c.members.map(m=>m.vals?.[fl])).size>1;
@@ -25367,8 +25366,8 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                               <span style={{display:"block",fontSize:11.5,color:T.amber}}>{c.issue}</span>
                             </span>
                             <div style={{marginLeft:"auto",display:"flex",gap:6}}>
-                              <Btn small ghost onClick={()=>toast("Kept as separate records")}>Not the same</Btn>
-                              <Btn small variant="primary" onClick={()=>toast("Merged into one trusted record")}>Same {xg.entity.toLowerCase()}</Btn>
+                              <Btn small ghost onClick={()=>toast("Kept as separate records")}>Keep separate</Btn>
+                              <Btn small variant="primary" onClick={()=>toast("Merged into one trusted record")}>Confirm as one</Btn>
                             </div>
                           </div>
                           <div style={{overflowX:"auto"}}>
@@ -25377,7 +25376,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                                 <tr style={{background:T.bgElevated}}>
                                   <th style={th}>Field</th>
                                   {c.members.map(m=><th key={m.srcId} style={th}>{srcById(m.srcId)?.name||m.srcId}</th>)}
-                                  <th style={th}>We believe</th>
+                                  <th style={th}>Preferred source</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -25422,8 +25421,8 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
 
                 {unmatched.length>0 && (
                   <>
-                    <SH title={`Matched nothing (${unmatched.length})`}
-                      sub="Present in one source, with no counterpart found in the others. Either genuinely single-system, or a match key is missing."
+                    <SH title={`Unmatched (${unmatched.length})`}
+                      sub="Present in one source with no counterpart found. Either single-source by nature, or a match key is missing."
                       action={<Btn small ghost onClick={()=>setXTab("rules")}>Review match keys</Btn>}/>
                     <DataTable
                       cols={[
@@ -25433,10 +25432,10 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                             <ServiceIcon service={srcById(v)?.service} size={14}/>{srcById(v)?.name||v}
                           </span>)},
                         {key:"pk", label:"Record", render:(v,r)=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:11,color:T.textMuted}}>{r.table} · {v}</span>},
-                        {key:"reason", label:"Why it did not match", render:v=><span style={{fontSize:11.5,color:T.textSub}}>{v}</span>},
+                        {key:"reason", label:"Reason", render:v=><span style={{fontSize:11.5,color:T.textSub}}>{v}</span>},
                         {key:"act", label:"", render:(v,r)=>(
                           <span style={{display:"flex",gap:5}}>
-                            <Btn small ghost onClick={()=>toast("Accepted as single-system")}>Expected</Btn>
+                            <Btn small ghost onClick={()=>toast("Accepted as single-source")}>Accept as single-source</Btn>
                             <Btn small variant="primary" onClick={()=>openSrc(r.srcId,"match")}>Investigate</Btn>
                           </span>)},
                       ]}
@@ -25450,11 +25449,11 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
           {scanFor===xg.id && (
             <Modal open onClose={()=>setScanFor(null)} title={`Run a data scan — ${xg.name}`} width={580}>
               <p style={{fontSize:13,color:T.textSub,lineHeight:1.75,marginBottom:14}}>
-                Everything so far has used <b style={{color:T.text}}>metadata only</b>. To resolve actual
-                {" "}{xg.entity.toLowerCase()} records the scan has to <b style={{color:T.text}}>read rows</b> from the
-                tables below. That is a different level of access, so it is recorded against you and audited.
+                Everything so far has used <b style={{color:T.text}}>metadata only</b>. Resolving
+                {" "}{xg.entity.toLowerCase()} records requires <b style={{color:T.text}}>reading rows</b> from the tables
+                below. This access is attributed to you and recorded in the audit log.
               </p>
-              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:7}}>What will be read</div>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:7}}>Data in scope</div>
               {xg.srcIds.map(id=>{
                 const g=srcById(id); if(!g) return null;
                 const m=g.masters.find(x=>x.entity===xg.entity);
@@ -25471,10 +25470,10 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                   </div>
                 );
               })}
-              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"14px 0 7px"}}>How much to read</div>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"14px 0 7px"}}>Scan scope</div>
               {[
-                {v:"sample", l:"Sample — 5,000 rows per source", d:"Enough to prove the matching works. Least exposure. Recommended first."},
-                {v:"full",   l:"Full — every row",               d:"Complete golden records. Longer job, and reads all rows including PII."},
+                {v:"sample", l:"Sample — 5,000 rows per source", d:"Validates matching with minimal data exposure. Recommended."},
+                {v:"full",   l:"All rows",                       d:"Produces complete records. Longer runtime, and reads all rows including PII."},
               ].map(o=>(
                 <div key={o.v} onClick={()=>setScanMode(o.v)}
                   style={{display:"flex",gap:10,padding:"10px 12px",marginBottom:6,cursor:"pointer",borderRadius:9,
@@ -25492,13 +25491,13 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               ))}
               <div style={{display:"flex",gap:9,alignItems:"center",padding:"10px 13px",marginTop:12,borderRadius:9,
                 background:T.amberDim,border:`1px solid ${T.amber}44`,fontSize:12,color:T.text,lineHeight:1.6}}>
-                <span>⚠️</span>
-                <div>Approved as <b>alex.rivera</b>. The scan runs as a background job, is written to the audit log, and
-                  the resolved records stay governed by <b>{xg.policy||"this graph's policy"}</b>.</div>
+                <span style={{color:T.amber,display:"flex"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,marginTop:1}}><path d="M8 2.2l6 11.6H2L8 2.2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M8 6.6v3.2M8 11.6v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg></span>
+                <div>Approved as <b>alex.rivera</b>. Runs as a background job and is recorded in the audit log. Resolved
+                  records remain governed by <b>{xg.policy||"this graph's policy"}</b>.</div>
               </div>
               <div style={{display:"flex",gap:8,marginTop:18,justifyContent:"flex-end"}}>
                 <Btn onClick={()=>setScanFor(null)}>Cancel</Btn>
-                <Btn variant="primary" onClick={()=>runScan(xg.id,scanMode)}>Approve &amp; run scan</Btn>
+                <Btn variant="primary" onClick={()=>runScan(xg.id,scanMode)}>Approve and run scan</Btn>
               </div>
             </Modal>
           )}
@@ -25506,14 +25505,14 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
           {xTab==="rules" && (
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
               <Card2 style={{padding:18}}>
-                <SH title="Match keys" sub="Which columns tell us it is the same thing."/>
+                <SH title="Match keys" sub="Columns used to identify the same entity across sources."/>
                 {xg.keys.length===0
-                  ? <div style={{fontSize:12.5,color:T.textMuted}}>No match keys recorded.</div>
-                  : xg.keys.map(k=><KLRow key={k} nm={k} chip="in use" kind="exist" cf="from your classifications"/>)}
+                  ? <div style={{fontSize:12.5,color:T.textMuted}}>No match keys recorded for this graph.</div>
+                  : xg.keys.map(k=><KLRow key={k} nm={k} chip="In use" kind="exist" cf="From your classifications"/>)}
               </Card2>
               <Card2 style={{padding:18}}>
-                <SH title="When systems disagree" sub="Which one do we believe, per field. Vendors call this survivorship."/>
-                {xg.beliefs.map(b=><KLRow key={b.f} nm={b.f} chip={b.s} kind="exist" cf="steward decision" acts="cc" onAct={()=>toast("Rule updated")}/>)}
+                <SH title="Precedence" sub="Which source takes precedence per field when values disagree."/>
+                {xg.beliefs.map(b=><KLRow key={b.f} nm={b.f} chip={b.s} kind="exist" cf="Steward decision" acts="cc" onAct={()=>toast("Rule updated")}/>)}
               </Card2>
             </div>
           )}
@@ -25567,18 +25566,18 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               <Metric label="Source graphs published" value={`${totals.published} of ${srcGraphs.length}`}/>
               <Metric label="Tables described" value={totals.tables.toLocaleString()}/>
               <Metric label="Trusted records" value={totals.records.toLocaleString()}/>
-              <Metric label="Waiting on a person" value={String(totals.review+totals.drift+totals.proposed)} color={(totals.review+totals.drift+totals.proposed)?T.amber:T.green}/>
-              <Metric label="Labels invented" value={String(totals.invented)} color={T.green} sub="must stay zero"/>
+              <Metric label="Requires review" value={String(totals.review+totals.drift+totals.proposed)} color={(totals.review+totals.drift+totals.proposed)?T.amber:T.green}/>
+              <Metric label="Ungoverned labels" value={String(totals.invented)} color={T.green} sub="Target: 0"/>
             </div>
 
             <div style={{display:"grid",gridTemplateColumns:"1.25fr 1fr",gap:14,marginBottom:20}}>
               {/* how the layer is built */}
               <Card2 style={{padding:16}}>
-                <SH title="How the Knowledge Layer is built" sub="Each stage borrows from the one before it."/>
+                <SH title="How the Knowledge Layer is built" sub="Each layer builds on the one before it."/>
                 {[
-                  {n:"1", c:T.green,  h:"Your governed words",  s:"Classifications, glossary terms, domains, owners — already in EDG.", v:"38 tags · 214 terms"},
-                  {n:"2", c:T.blue,   h:"Source Knowledge Graphs", s:"One per connection. The same 10 steps Data Sense runs, drawing on those words.", v:`${totals.published} published`},
-                  {n:"3", c:T.accent, h:"Cross-Source Knowledge Graphs", s:"Built on top of two or more source graphs — one trusted record per real-world thing.", v:`${xGraphs.length} graphs`},
+                  {n:"1", c:T.green,  h:"Governed vocabulary",  s:"Classifications, glossary terms, domains and owners already defined in EDG.", v:"38 tags · 214 terms"},
+                  {n:"2", c:T.blue,   h:"Source Knowledge Graphs", s:"One per connection. Maps a single system using the governed vocabulary.", v:`${totals.published} published`},
+                  {n:"3", c:T.accent, h:"Cross-Source Knowledge Graphs", s:"Joins two or more source graphs into one trusted record per real-world entity.", v:`${xGraphs.length} graphs`},
                 ].map((r,i)=>(
                   <div key={r.n} style={{display:"flex",gap:11,padding:"10px 0",borderTop:i?`1px solid ${T.border}`:"none"}}>
                     <span style={{width:22,height:22,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
@@ -25594,7 +25593,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
 
               {/* entity coverage matrix */}
               <Card2 style={{padding:16}}>
-                <SH title="What can be mastered" sub="An entity needs two or more source graphs with identifying columns tagged."/>
+                <SH title="Entity coverage" sub="An entity requires two or more published source graphs with classified identifying columns."/>
                 {entityMatrix.map(e=>(
                   <div key={e.entity} style={{display:"flex",alignItems:"center",gap:9,padding:"8px 0",borderBottom:`1px solid ${T.border}`}}>
                     <span style={{fontSize:12.3,fontWeight:600,color:T.text,minWidth:88}}>{e.entity}</span>
@@ -25606,23 +25605,23 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                       ))}
                     </div>
                     {e.mastered
-                      ? <Badge bg={T.green+"1a"} color={T.green} border={T.green+"55"}>mastered</Badge>
+                      ? <Badge bg={T.green+"1a"} color={T.green} border={T.green+"55"}>Mastered</Badge>
                       : e.ready.length>=2
-                        ? <Btn small ghost onClick={()=>{setWEntity(e.entity);openWizard("cross");}}>Master it</Btn>
-                        : <span style={{fontSize:10.5,color:T.textMuted}}>{e.ready.length} of 2 sources</span>}
+                        ? <Btn small ghost onClick={()=>{setWEntity(e.entity);openWizard("cross");}}>Create graph</Btn>
+                        : <span style={{fontSize:10.5,color:T.textMuted}}>{e.ready.length} of 2 required</span>}
                   </div>
                 ))}
               </Card2>
             </div>
 
-            <SH title="Needs your attention" sub="Everything confident was handled automatically — these are the exceptions."/>
+            <SH title="Requires attention" sub="Items accepted automatically are not listed."/>
             {(totals.review+totals.drift+totals.proposed)===0
-              ? <KLEmpty icon={Ic.check(34)} title="Nothing waiting" sub="The knowledge layer is up to date."/>
+              ? <KLEmpty icon={Ic.check(34)} title="Nothing requires attention" sub="The Knowledge Layer is up to date."/>
               : <DataTable
                   cols={[
                     {key:"kind",  label:"Type", render:v=><Badge bg={T.amber+"1a"} color={T.amber} border={T.amber+"44"}>{v}</Badge>},
                     {key:"obj",   label:"Object", render:v=><span style={{fontWeight:600}}>{v}</span>},
-                    {key:"detail",label:"What needs deciding"},
+                    {key:"detail",label:"Detail"},
                     {key:"where", label:"Where", render:v=><span style={{fontSize:11.5,color:T.textMuted}}>{v}</span>},
                     {key:"act",   label:"", render:(v,r)=><Btn small variant="primary" onClick={r.go}>Review</Btn>},
                   ]}
@@ -25631,15 +25630,14 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                       detail:`${(x.conflicts||[]).length} conflicting · ${(x.unmatched||[]).length} unmatched`,
                       where:"Cross-source", go:()=>openX(x.id,"records")})),
                     ...srcGraphs.filter(s=>s.drift>0).map(s=>({kind:"Source drift", obj:s.name,
-                      detail:`${s.drift} new columns since last build`, where:"Source graph", go:()=>openSrc(s.id)})),
+                      detail:`${s.drift} columns added since last build`, where:"Source graph", go:()=>openSrc(s.id)})),
                     ...srcGraphs.filter(s=>s.bind.proposed>0).map(s=>({kind:"Term approval", obj:s.name,
                       detail:`${s.bind.proposed} new terms proposed`, where:"Glossary", go:()=>openSrc(s.id,"bindings")})),
                   ]}/>}
 
-            <KLNote icon="⚙️">
-              <b>Deliberately not on this screen.</b> Model choice, confidence thresholds and refresh schedules live in
-              <b> Settings › Knowledge Layer</b>. Every run and its pass/fail history lives in <b>Settings › Background Jobs</b>.
-              Relationships are not redrawn here — they stay in your existing <b>Lineage</b> screen.
+            <KLNote tone="quiet">
+              Model configuration, confidence thresholds and refresh schedules are managed in
+              <b> Settings › Knowledge Layer</b>. Run history is available in <b>Settings › Background Jobs</b>.
             </KLNote>
           </>
         )}
@@ -25672,13 +25670,13 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                           <span style={{display:"block",fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{r.key} · {r.connection}</span>
                         </span>
                       </span>)},
-                    {key:"tables", label:"Described", render:(v,r)=><span style={{fontSize:11.5,color:T.textSub}}>{v} tables · {r.cols} cols</span>},
-                    {key:"words",  label:"EDG words", render:v=><Badge bg={(v===100?T.green:T.amber)+"1a"} color={v===100?T.green:T.amber} border={(v===100?T.green:T.amber)+"55"}>{v}%</Badge>},
-                    {key:"entities", label:"Can match", render:v=>v.length?<span style={{fontSize:11.5,color:T.textSub}}>{v.join(" · ")}</span>:<span style={{color:T.textMuted}}>none yet</span>},
+                    {key:"tables", label:"Scope", render:(v,r)=><span style={{fontSize:11.5,color:T.textSub}}>{v} tables · {r.cols} columns</span>},
+                    {key:"words",  label:"Governed", render:v=><Badge bg={(v===100?T.green:T.amber)+"1a"} color={v===100?T.green:T.amber} border={(v===100?T.green:T.amber)+"55"}>{v}%</Badge>},
+                    {key:"entities", label:"Entities", render:v=>v.length?<span style={{fontSize:11.5,color:T.textSub}}>{v.join(" · ")}</span>:<span style={{color:T.textMuted}}>none yet</span>},
                     {key:"drift",  label:"Freshness", render:v=>v>0
-                      ? <span style={{color:T.amber,fontSize:11.5,fontWeight:600}}>{v} new columns</span>
-                      : <span style={{color:T.green,fontSize:11.5}}>current</span>},
-                    {key:"from",   label:"Built in", render:v=><span style={{fontSize:11.5,fontWeight:v==="EDG"?700:400,color:v==="EDG"?T.accent:T.textSub}}>{v}</span>},
+                      ? <span style={{color:T.amber,fontSize:11.5,fontWeight:600}}>{v} columns added</span>
+                      : <span style={{color:T.green,fontSize:11.5}}>Current</span>},
+                    {key:"from",   label:"Created in", render:v=><span style={{fontSize:11.5,fontWeight:v==="EDG"?700:400,color:v==="EDG"?T.accent:T.textSub}}>{v}</span>},
                     {key:"status", label:"Status", render:(v,r)=>v==="Published"
                       ? <Badge bg={T.green+"1a"} color={T.green} border={T.green+"55"}>Published</Badge>
                       : <Badge bg={T.amber+"1a"} color={T.amber} border={T.amber+"55"}>{`Step ${r.step} of 10`}</Badge>},
@@ -25686,7 +25684,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                   rows={srcFiltered} onRowClick={r=>openSrc(r.id)}/>}
             {unmapped.length>0 && (
               <div style={{marginTop:12,fontSize:11.5,color:T.textMuted}}>
-                {unmapped.length} connected system{unmapped.length===1?"":"s"} not yet mapped: {unmapped.join(", ")}.
+                {unmapped.length} connected system{unmapped.length===1?" has":"s have"} no source graph: {unmapped.join(", ")}.
               </div>
             )}
           </>
