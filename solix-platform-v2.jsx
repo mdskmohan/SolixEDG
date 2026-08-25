@@ -24062,44 +24062,50 @@ const KL_SRC_SEED = [
 
 // A Cross-Source Knowledge Graph sits ON TOP of two or more published Source graphs: each golden
 // record's `members` point back at a source graph id and the exact master row that fed it.
+// A Cross-Source Knowledge Graph sits ON TOP of two or more published Source graphs.
+// After a data scan, most records resolve cleanly and need nobody. Only two kinds of row
+// are worth a steward's time, and those are the only ones the Trusted records tab shows:
+//   conflicts  — matched, but the sources disagree on a value (`vals` per member, diffed)
+//   unmatched  — present in one source, nothing matched it in the others
 const KL_X_SEED = [
   {id:"xg1", key:"XKG-2001", name:"Supplier Master", entity:"Supplier", srcIds:["sg1","sg2","sg3"],
-   records:1204, review:6, owner:"maya.chen", stewards:["priya.nair"], status:"Published",
+   records:1204, clean:1198, owner:"maya.chen", stewards:["priya.nair"], status:"Published",
    domain:"Procurement", built:"2026-08-19", version:"v2", policy:"Vendor Data Protection",
-   // reading rows is a separate, consented act — record level stays locked until this says done
+   // reading rows is a separate, consented act — records stay hidden until this says done
    scan:{state:"done", mode:"full", at:"2026-08-19", rows:184200, approvedBy:"maya.chen", stale:false},
    keys:["Tax ID","Legal Name","Vendor Code"],
    beliefs:[{f:"Tax ID",s:"SAP ECC"},{f:"Legal Name",s:"Oracle EBS"},{f:"Vendor Code",s:"SAP ECC"},{f:"Address",s:"Most recently updated"}],
-   golden:[
-     {id:"g1", n:"GAF Materials", conf:0.98, state:"auto", taxId:"04-1181920", spend:"$9.27M",
-      members:[{srcId:"sg1", table:"VENDOR_MASTER",  pk:"4471",    label:"GAF Corp"},
-               {srcId:"sg2", table:"AP_SUPPLIERS",   pk:"V10293",  label:"GAF"},
-               {srcId:"sg3", table:"POZ_SUPPLIERS",  pk:"SUP-88",  label:"G.A.F."}]},
-     {id:"g2", n:"IKO Industries", conf:0.71, state:"review", taxId:"22-7781004", spend:"$16.8M",
-      members:[{srcId:"sg1", table:"VENDOR_MASTER", pk:"5120",   label:"IKO Ind."},
-               {srcId:"sg2", table:"AP_SUPPLIERS",  pk:"V20881", label:"IKO Inc"}],
-      issue:"Two candidate matches in SAP ECC"},
-     {id:"g3", n:"TAMKO Building", conf:0.64, state:"review", taxId:"27-919?", spend:"$14.0M",
-      members:[{srcId:"sg1", table:"VENDOR_MASTER", pk:"27-919", label:"TAMKO"},
-               {srcId:"sg2", table:"AP_SUPPLIERS",  pk:"27-991", label:"TAMKO"}],
-      issue:"Tax IDs differ by one digit"},
-     {id:"g4", n:"Owens Corning", conf:0.96, state:"auto", taxId:"31-1010000", spend:"$7.4M",
-      members:[{srcId:"sg1", table:"VENDOR_MASTER", pk:"6620",   label:"Owens Corning"},
-               {srcId:"sg2", table:"AP_SUPPLIERS",  pk:"V31188", label:"Owens-Corning"}]}]},
+   conflicts:[
+     {id:"c1", n:"TAMKO Building", conf:0.64, issue:"Tax IDs differ by one digit",
+      members:[{srcId:"sg1", table:"VENDOR_MASTER", pk:"27-919",
+                vals:{"Tax ID":"27-9190001","Legal Name":"TAMKO Building Products","Address":"220 W 4th St, Joplin MO"}},
+               {srcId:"sg2", table:"AP_SUPPLIERS",  pk:"27-991",
+                vals:{"Tax ID":"27-9910001","Legal Name":"TAMKO Building Products Inc","Address":"220 W 4th St, Joplin MO"}}]},
+     {id:"c2", n:"IKO Industries", conf:0.71, issue:"Two candidate matches in SAP ECC",
+      members:[{srcId:"sg1", table:"VENDOR_MASTER", pk:"5120",
+                vals:{"Tax ID":"22-7781004","Legal Name":"IKO Industries Ltd","Address":"1 Yorkdale Rd, Toronto"}},
+               {srcId:"sg2", table:"AP_SUPPLIERS",  pk:"V20881",
+                vals:{"Tax ID":"22-7781004","Legal Name":"IKO Inc","Address":"120 Hay Rd, Wilmington DE"}}]},
+     {id:"c3", n:"Owens Corning", conf:0.88, issue:"Legal name differs across sources",
+      members:[{srcId:"sg1", table:"VENDOR_MASTER", pk:"6620",
+                vals:{"Tax ID":"31-1010000","Legal Name":"Owens Corning","Address":"1 Owens Corning Pkwy, Toledo OH"}},
+               {srcId:"sg2", table:"AP_SUPPLIERS",  pk:"V31188",
+                vals:{"Tax ID":"31-1010000","Legal Name":"Owens-Corning Sales LLC","Address":"1 Owens Corning Pkwy, Toledo OH"}}]}],
+   unmatched:[
+     {id:"u1", srcId:"sg1", table:"VENDOR_MASTER", pk:"7781", label:"Malarkey Roofing",
+      reason:"No tax ID recorded, and the name matched nothing in Oracle EBS or Fusion"},
+     {id:"u2", srcId:"sg3", table:"POZ_SUPPLIERS", pk:"SUP-402", label:"Atlas Roofing",
+      reason:"Only present in Oracle Fusion — may be a genuinely single-system supplier"},
+     {id:"u3", srcId:"sg2", table:"AP_SUPPLIERS",  pk:"V44120", label:"CertainTeed",
+      reason:"Tax ID is blank in Oracle EBS, so the strongest match key could not be used"}]},
 
   {id:"xg2", key:"XKG-2002", name:"Customer 360", entity:"Customer", srcIds:["sg1","sg2"],
-   records:3910, review:0, owner:"priya.nair", stewards:[], status:"Published",
+   records:3910, clean:3910, owner:"priya.nair", stewards:[], status:"Published",
    domain:"Sales", built:"2026-08-14", version:"v1", policy:"Customer PII",
    scan:{state:"done", mode:"sample", at:"2026-08-14", rows:5000, approvedBy:"priya.nair", stale:true},
    keys:["Tax ID","Name"],
    beliefs:[{f:"Tax ID",s:"SAP ECC"},{f:"Name",s:"Oracle EBS"}],
-   golden:[
-     {id:"g5", n:"Baker Roofing", conf:0.97, state:"auto", taxId:"56-0552200", spend:"$3.08M",
-      members:[{srcId:"sg1", table:"KNA1",       pk:"8812",  label:"Baker Roofing Co"},
-               {srcId:"sg2", table:"HZ_PARTIES", pk:"C4471", label:"Baker Roofing"}]},
-     {id:"g6", n:"Cronin Contracting", conf:0.94, state:"auto", taxId:"14-2277881", spend:"$1.12M",
-      members:[{srcId:"sg1", table:"KNA1",       pk:"9014",  label:"Cronin Contracting"},
-               {srcId:"sg2", table:"HZ_PARTIES", pk:"C5520", label:"Cronin Contr."}]}]},
+   conflicts:[], unmatched:[]},
 ];
 
 // ── The AKG's own 10 steps, unchanged. `uses` = the EDG object that now feeds the step. ──
@@ -24158,34 +24164,27 @@ const KL_SRC_STEPS = [
 ];
 
 const KL_X_STEPS = [
-  {t:"Business Entity", mode:"you", uses:"your Business Entities",
-   d:"Pick the real-world thing this graph is about. This list is governed in EDG like a glossary term — it is what makes matching possible at all.",
-   note:["🧩","Without an agreed entity there is nothing to match two systems on."]},
-  {t:"Sources", mode:"you", uses:"your published Source Knowledge Graphs",
-   d:"Which systems should this join? EDG says up front whether each one is actually ready, so you never build a graph that silently returns nothing.",
-   note:["⭐","Previously a source could look fine and quietly produce zero records. Now it is stated before you build."]},
-  {t:"Match Keys", mode:"auto", uses:"your Classifications & Tags",
-   d:"Which columns tell us it is the same thing. Because those columns are already tagged in EDG, we can propose the answer instead of asking someone to write it by hand.",
-   note:["🔑","This is the piece that had to be hand-written in the old tool — the reason unprepared entities produced nothing."]},
-  {t:"If they disagree", mode:"you", uses:"your owners",
-   d:"Systems will disagree. Someone has to decide which one to believe, for each piece of information. This is the one genuinely new decision in the flow.",
-   note:["🧭","Vendors call this survivorship. On screen we just ask which system we believe."]},
-  {t:"Data scan", mode:"you", uses:"your owners and audit log",
-   d:"Everything so far is metadata. Actually resolving records means reading rows out of each source, which is a different level of access — so it is a decision you make explicitly, not a side effect of publishing.",
-   note:["🔒","Publish without scanning and you still get a working entity-level graph. Records can be resolved later, whenever the access is approved."]},
-  {t:"Govern & Publish", mode:"you", uses:"Policies · Glossary · Domains · Owners",
-   d:"The trusted records become governed objects like anything else in EDG — owner, policy, term, domain.",
-   note:["🚀","Published trusted records feed Data Ask and the AI copilot: one governed answer across every system."]},
+  {t:"What to master", mode:"you", uses:"your Business Entities and published Source Graphs",
+   d:"Pick the thing you want one trusted version of, and which source graphs to join. Everything that is ready is already selected — a source that is not ready says why.",
+   note:["🧱","A cross-source graph is always built on top of source graphs. It never reads a system directly, so if something is missing here, the fix belongs in that source graph."]},
+  {t:"How we match", mode:"auto", uses:"your Classifications, and your judgement on conflicts",
+   d:"The match keys below were worked out from the columns you already classified — check them rather than write them. Underneath is the one question nothing can answer for you: when two systems disagree, which one do we believe?",
+   note:["🔑","If a key looks wrong or missing, that means a column is not classified in the source graph. Fix it there and it corrects everywhere."]},
+  {t:"Publish", mode:"you", uses:"your Domains, Policies, Owners and audit log",
+   d:"Ownership and policy come from the entity's domain. The last choice is whether to stop at the governed model or also read data to resolve records.",
+   note:["🚀","Publishing metadata-only still gives you a working graph. Records can be resolved later, whenever that access is approved."]},
 ];
 
-// Which published source graphs can actually be matched on a given entity — i.e. they carry a
-// master table with identifying columns. Drives the "Ready / Not ready" call-out in the wizard.
 const KL_READY_FOR = (graphs, entity) =>
   graphs.filter(g => g.status==="Published" && g.masters.some(m => m.entity===entity && m.ready))
         .map(g => g.id);
 
 // Open the cross-source wizard on an entity that can actually be built (2+ ready sources),
 // so the happy path is the default and "not ready" is something the user opts into seeing.
+// How many rows in a cross-source graph actually need a person: the ones that matched but
+// disagree, plus the ones that matched nothing. Everything else resolved cleanly.
+const klOpen = x => (x.conflicts||[]).length + (x.unmatched||[]).length;
+
 const KL_DEFAULT_ENTITY = KL_ENTITIES.find(e => KL_READY_FOR(KL_SRC_SEED,e).length>=2) || KL_ENTITIES[0];
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -24356,100 +24355,62 @@ function klBuildSourceGraph(sg, {showGov=true, focus=null}={}){
   return {nodes:klLayout(N), edges:E};
 }
 
-// ── Cross-source graph: THIS is the "sits on top of the AKGs" picture.
-// rank0 source systems → rank1 their master tables → rank2 the matched source
-// records → rank3 the golden record → rank4 governance bound to it.
-// ── Cross-source graph. TWO LEVELS, and the distinction is a governance one:
-//
-//   "entity"  (default) — pure METADATA. How the business entity is represented as an
-//                         object in each source graph: system -> master table -> entity.
-//                         Mirrors the object level an AKG works at. Reads no data, so it
-//                         is always available.
-//   "record"  (opt-in)  — INSTANCES. The resolved golden record and the source rows behind
-//                         it. This can only exist after a data scan, because producing it
-//                         means reading actual rows (often PII). Gated on xg.scan.
-//
-function klBuildCrossGraph(xg, srcGraphs, {showGov=true, goldenId=null, focus=null, level="entity"}={}){
+// ── Cross-source graph — ENTITY LEVEL ONLY, deliberately.
+// A graph is good at structure and bad at 1,204 rows, so it answers one question:
+// how is this business entity represented as an object in each source?
+//   system -> its master table -> the entity they all resolve to
+// The edge into the entity carries the match key that justifies the mapping, so the picture
+// shows not just that the objects are the same thing but WHY we believe it.
+// Individual records live in the Trusted records tab, as exceptions, not on a canvas.
+function klBuildCrossGraph(xg, srcGraphs, {showGov=true, focus=null}={}){
   const N=[], E=[];
   const entId = "ent:"+xg.entity;
 
-  // ── governance tail, shared by both levels; hangs off `anchor` ──
-  const addGov = (anchor, rank) => {
-    if(!showGov) return;
-    N.push({id:"term:"+xg.entity, rank, kind:"term", label:xg.entity, sub:"certified term", focused:focus==="term:"+xg.entity});
-    E.push(klEdge(anchor, "term:"+xg.entity, "means"));
-    if(xg.policy){
-      N.push({id:"pol:"+xg.policy, rank, kind:"policy", label:xg.policy, sub:"enforced", focused:focus==="pol:"+xg.policy});
-      E.push(klEdge(anchor, "pol:"+xg.policy, "governed by"));
-    }
-    N.push({id:"own:"+xg.owner, rank, kind:"owner", label:xg.owner, sub:`owner · ${xg.domain}`, focused:focus==="own:"+xg.owner});
-    E.push(klEdge(anchor, "own:"+xg.owner, "owned by"));
-  };
-
-  if(level==="entity"){
-    // system -> its master table -> the business entity they all resolve to
-    xg.srcIds.forEach(id=>{
-      const src = srcGraphs.find(x=>x.id===id);
-      if(!src) return;
-      const m = src.masters.find(x=>x.entity===xg.entity);
-      const sysId="sys:"+src.id, tblId="tbl:"+src.id;
-      N.push({id:sysId, rank:0, kind:"system", label:src.name, sub:src.connection,
-              chips:[src.status], focused:focus===sysId, meta:{srcId:src.id}});
-      N.push({id:tblId, rank:1, kind:"master", kindLabel:`Master · ${xg.entity}`,
-              label:m?m.table:"—", sub:m?`${m.keys.length} match keys`:"not matchable",
-              chips:m?m.keys:[], focused:focus===tblId, meta:{srcId:src.id}});
-      E.push(klEdge(sysId, tblId, "contains"));
-      // the match keys ARE the reason this object maps to the entity — say so on the edge
-      E.push(klEdge(tblId, entId, m&&m.keys.length?`matched on ${m.keys[0]}${m.keys.length>1?` +${m.keys.length-1}`:""}`:"represents"));
-    });
-    N.push({id:entId, rank:2, kind:"entity", label:xg.entity, sub:"business entity",
-            chips:[`${xg.srcIds.length} sources`, xg.scan?.state==="done"?`${xg.records.toLocaleString()} records`:"not scanned"].filter(Boolean),
-            focused:focus===entId || !focus});
-    addGov(entId, 3);
-    return {nodes:klLayout(N), edges:E};
-  }
-
-  // ── record level ──
-  const g = (xg.golden||[]).find(x=>x.id===goldenId) || (xg.golden||[])[0];
-  if(!g) return {nodes:[],edges:[]};
-  const gid = "gold:"+g.id;
-  (g.members||[]).forEach(m=>{
-    const src = srcGraphs.find(x=>x.id===m.srcId);
+  xg.srcIds.forEach(id=>{
+    const src = srcGraphs.find(x=>x.id===id);
     if(!src) return;
-    const sysId="sys:"+src.id, tblId="tbl:"+src.id, recId="rec:"+src.id;
-    if(!N.some(n=>n.id===sysId))
-      N.push({id:sysId, rank:0, kind:"system", label:src.name, sub:src.connection,
-              chips:[src.status], focused:focus===sysId, meta:{srcId:src.id}});
+    const m = src.masters.find(x=>x.entity===xg.entity);
+    const sysId="sys:"+src.id, tblId="tbl:"+src.id;
+    N.push({id:sysId, rank:0, kind:"system", label:src.name, sub:src.connection,
+            chips:[src.status], focused:focus===sysId, meta:{srcId:src.id}});
     N.push({id:tblId, rank:1, kind:"master", kindLabel:`Master · ${xg.entity}`,
-            label:m.table, sub:`${xg.entity} master table`, focused:focus===tblId, meta:{srcId:src.id}});
-    N.push({id:recId, rank:2, kind:"record", label:m.label, sub:`${m.table} · ${m.pk}`,
-            chips:[src.name], focused:focus===recId, meta:{srcId:src.id}});
+            label:m?m.table:"—", sub:m?`${m.keys.length} match keys`:"not matchable",
+            chips:m?m.keys:[], focused:focus===tblId, meta:{srcId:src.id}});
     E.push(klEdge(sysId, tblId, "contains"));
-    E.push(klEdge(tblId, recId, "row"));
-    E.push(klEdge(recId, gid, "resolves to"));
+    E.push(klEdge(tblId, entId, m&&m.keys.length
+      ? `matched on ${m.keys[0]}${m.keys.length>1?` +${m.keys.length-1}`:""}`
+      : "represents"));
   });
-  N.push({id:gid, rank:3, kind:"golden", label:g.n,
-          sub:`${xg.entity} · tax ${g.taxId}`, conf:g.conf,
-          chips:[`${(g.members||[]).length} sources`, g.spend].filter(Boolean),
-          focused:focus===gid || !focus});
-  N.push({id:entId, rank:4, kind:"entity", label:xg.entity, sub:"business entity", focused:focus===entId});
-  E.push(klEdge(gid, entId, "is a"));
-  addGov(gid, 4);
+
+  N.push({id:entId, rank:2, kind:"entity", label:xg.entity, sub:"business entity",
+          chips:[`${xg.srcIds.length} sources`,
+                 xg.scan?.state==="done" ? `${xg.records.toLocaleString()} records` : "not scanned"].filter(Boolean),
+          focused:focus===entId || !focus});
+
+  if(showGov){
+    N.push({id:"term:"+xg.entity, rank:3, kind:"term", label:xg.entity, sub:"certified term", focused:focus==="term:"+xg.entity});
+    E.push(klEdge(entId, "term:"+xg.entity, "means"));
+    if(xg.policy){
+      N.push({id:"pol:"+xg.policy, rank:3, kind:"policy", label:xg.policy, sub:"enforced", focused:focus==="pol:"+xg.policy});
+      E.push(klEdge(entId, "pol:"+xg.policy, "governed by"));
+    }
+    N.push({id:"own:"+xg.owner, rank:3, kind:"owner", label:xg.owner, sub:`owner · ${xg.domain}`, focused:focus==="own:"+xg.owner});
+    E.push(klEdge(entId, "own:"+xg.owner, "owned by"));
+  }
   return {nodes:klLayout(N), edges:E};
 }
 
 // The canvas shell: toolbar (layout mode · depth · governance toggle · search ·
 // fit) + ReactFlow + a legend. Mirrors the controls OpenMetadata exposes on its
 // knowledge-graph tab, in EDG's visual language.
-const KLGraphCanvas = ({build, height=520, emptyMsg="Nothing to draw yet.", extraControls, onNodeClick,
-                        levels=null, level, onLevel}) => {
+const KLGraphCanvas = ({build, height=520, emptyMsg="Nothing to draw yet.", extraControls, onNodeClick}) => {
   const [rf,setRf]        = useState(null);
   const [showGov,setGov]  = useState(true);
   const [depth,setDepth]  = useState(3);
   const [q,setQ]          = useState("");
   const [focus,setFocus]  = useState(null);
 
-  const {nodes,edges} = useMemo(()=>build({showGov, focus, level}),[build,showGov,focus,level]);
+  const {nodes,edges} = useMemo(()=>build({showGov, focus}),[build,showGov,focus]);
   // depth = how many ranks out from the left-most column to reveal
   const visible = useMemo(()=>{
     const keep = new Set(nodes.filter(n=>Math.round(n.position.x/310)<=depth).map(n=>n.id));
@@ -24478,27 +24439,6 @@ const KLGraphCanvas = ({build, height=520, emptyMsg="Nothing to draw yet.", extr
       {/* toolbar */}
       <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",flexWrap:"wrap",
         background:"#f8fafc",border:"1px solid #e2e8f0",borderBottom:"none",borderRadius:"10px 10px 0 0",flexShrink:0}}>
-        {levels && (
-          <>
-            <div style={{display:"flex",gap:2,padding:2,background:"#eef2f6",borderRadius:7,border:"1px solid #e2e8f0"}}>
-              {levels.map(l=>{
-                const on = level===l.v;
-                return (
-                  <button key={l.v} onClick={()=>!l.locked&&onLevel(l.v)} disabled={l.locked} title={l.locked?l.lockedHint:l.hint}
-                    style={{padding:"3px 11px",borderRadius:5,fontSize:11,fontWeight:on?700:500,fontFamily:"inherit",
-                      cursor:l.locked?"not-allowed":"pointer",
-                      background:on?"#fff":"transparent", border:on?"1px solid #e2e8f0":"1px solid transparent",
-                      color:l.locked?"#b6bcc6":on?"#0f172a":"#64748b",
-                      display:"inline-flex",alignItems:"center",gap:5}}>
-                    {l.locked&&<svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M3.2 5.2V3.8a2.8 2.8 0 015.6 0v1.4" stroke="currentColor" strokeWidth="1.3"/><rect x="2.4" y="5.2" width="7.2" height="5.2" rx="1.2" stroke="currentColor" strokeWidth="1.3"/></svg>}
-                    {l.l}
-                  </button>
-                );
-              })}
-            </div>
-            <span style={{width:1,height:18,background:"#e2e8f0"}}/>
-          </>
-        )}
         <span style={{fontSize:10.5,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.06em"}}>Depth</span>
         <div style={{display:"flex",gap:2,padding:2,background:"#eef2f6",borderRadius:7,border:"1px solid #e2e8f0"}}>
           {[1,2,3,4].map(d=>(
@@ -24718,8 +24658,6 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
   const [ai,        setAi]        = useState({});
   const [srcTab,    setSrcTab]    = useState("overview");
   const [xTab,      setXTab]      = useState("overview");
-  const [goldenSel, setGoldenSel] = useState(null);          // which golden record the graph draws
-  const [xLevel,    setXLevel]    = useState("entity");      // cross graph: entity (metadata) | record (needs a scan)
   const [scanFor,   setScanFor]   = useState(null);          // cross graph id awaiting scan consent
   const [scanMode,  setScanMode]  = useState("sample");
   // list controls
@@ -24758,7 +24696,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
   const totals = {
     published: srcGraphs.filter(s=>s.status==="Published").length,
     records:   xGraphs.reduce((n,x)=>n+x.records,0),
-    review:    xGraphs.reduce((n,x)=>n+x.review,0),
+    review:    xGraphs.reduce((n,x)=>n+klOpen(x),0),
     drift:     srcGraphs.filter(s=>s.drift>0).length,
     proposed:  srcGraphs.reduce((n,s)=>n+s.bind.proposed,0),
     invented:  srcGraphs.reduce((n,s)=>n+s.bind.invented,0),
@@ -24783,19 +24721,18 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
   const closeWizard = () => { setWiz(null); setStep(0); setDoneSet(new Set()); };
 
   const openSrc = (id,t="overview") => { setSelSrc(id); setSelX(null); setSrcTab(t); };
-  const openX   = (id,t="overview") => { setSelX(id); setSelSrc(null); setXTab(t); setGoldenSel(null); setXLevel("entity"); };
+  const openX   = (id,t="overview") => { setSelX(id); setSelSrc(null); setXTab(t); };
 
   // Graph builders live here, unconditionally — the profiles below return early, so a hook
   // declared inside one of those branches would change hook order between list and profile.
   // Stable identities also stop the canvas from rebuilding its node array every render.
   const sgSel  = selSrc ? srcById(selSrc) : null;
   const xgSel  = selX ? xGraphs.find(x=>x.id===selX) : null;
-  const gselId = goldenSel || (xgSel?.golden?.[0]?.id ?? null);
   const buildSrcGraph = useCallback(
     o => sgSel ? klBuildSourceGraph(sgSel,o) : {nodes:[],edges:[]}, [sgSel]);
   const buildXGraph = useCallback(
-    o => xgSel ? klBuildCrossGraph(xgSel,srcGraphs,{...o,goldenId:gselId}) : {nodes:[],edges:[]},
-    [xgSel,srcGraphs,gselId]);
+    o => xgSel ? klBuildCrossGraph(xgSel,srcGraphs,o) : {nodes:[],edges:[]},
+    [xgSel,srcGraphs]);
   // A cross graph always opens at entity level; record level needs a completed data scan.
   const xScanned = xgSel?.scan?.state==="done";
   const runScan = (id,mode) => {
@@ -24851,8 +24788,8 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
     const last = step===steps.length-1;
     const canAI = !!s.uses;
     const readySrc = srcGraphs.filter(g=>g.status==="Published");
-    const blocked = (wiz==="cross" && step===1 && wSrcIds.length<2)
-                 || (wiz==="cross" && step===2 && wKeys.length===0)
+    const blocked = (wiz==="cross" && step===0 && wSrcIds.length<2)
+                 || (wiz==="cross" && step===1 && wKeys.length===0)
                  || (wiz==="src" && !wConn);
     return createPortal(
       <div onClick={closeWizard} className="fadeIn" style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}>
@@ -24909,7 +24846,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               )}
 
               {wiz==="cross" && step===0 && (
-                <div style={{maxWidth:600}}>
+                <div style={{maxWidth:800}}>
                   <div style={{fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Business Entity</div>
                   <select value={wEntity} onChange={e=>{const v=e.target.value; setWEntity(v); reseed(KL_READY_FOR(srcGraphs,v), v);}}
                     style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,cursor:"pointer",marginBottom:14}}>
@@ -24918,16 +24855,9 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                       return <option key={c} value={c}>{c}{n>=2?` — ${n} source graphs ready`:n===1?" — only 1 source graph ready":" — no source graphs ready"}</option>;
                     })}
                   </select>
-                  {KL_READY_FOR(srcGraphs,wEntity).length>=2
-                    ? <div style={{fontSize:12,color:T.green}}>✓ Matchable in {KL_READY_FOR(srcGraphs,wEntity).length} of {srcGraphs.length} source graphs.</div>
-                    : <div style={{fontSize:12,color:T.amber}}>Needs at least two <b>published</b> source graphs with identifying columns tagged for this entity.</div>}
-                  <KLNote icon="🧱" tone="quiet">A cross-source graph is always built <b>on top of source graphs</b>. It never reads a
-                    system directly — it joins what each source graph already understands.</KLNote>
-                </div>
-              )}
-
-              {wiz==="cross" && step===1 && (
-                <div style={{maxWidth:780}}>
+                  <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"16px 0 7px"}}>
+                    Source graphs to join
+                  </div>
                   {readySrc.map(g=>{
                     const on = wSrcIds.includes(g.id);
                     const m  = g.masters.find(x=>x.entity===wEntity && x.ready);
@@ -24941,7 +24871,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                         <ServiceIcon service={g.service} size={16}/>
                         <span style={{fontSize:12.5,fontWeight:600,color:T.text,minWidth:120}}>{g.name}</span>
                         <KLChip kind={ok?"exist":"new"}>{ok?`Ready — ${m.table}`:`Not ready — nothing tagged as ${wEntity}`}</KLChip>
-                        <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>{ok?`keys: ${m.keys.join(", ")}`:"cannot be joined yet"}</span>
+                        <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>{ok?`keys: ${m.keys.join(", ")}`:"fix this in that source graph"}</span>
                       </div>
                     );
                   })}
@@ -24955,11 +24885,15 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                       <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>publish it first to join it</span>
                     </div>
                   ))}
-                  <div style={{fontSize:11.5,color:T.textMuted,marginTop:4}}>{wSrcIds.length} source graph{wSrcIds.length===1?"":"s"} selected</div>
+                  <div style={{fontSize:11.5,color:wSrcIds.length>=2?T.textMuted:T.amber,marginTop:4}}>
+                    {wSrcIds.length>=2
+                      ? `${wSrcIds.length} source graphs selected`
+                      : "Pick at least two — one source cannot be cross-referenced against anything."}
+                  </div>
                 </div>
               )}
 
-              {wiz==="cross" && step===2 && (()=>{
+              {wiz==="cross" && step===1 && (()=>{
                 const counts = keyCounts(wSrcIds, wEntity);
                 const cands  = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
                 return (
@@ -24986,8 +24920,14 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 );
               })()}
 
-              {wiz==="cross" && step===3 && (
-                <div style={{maxWidth:780}}>
+              {wiz==="cross" && step===1 && (
+                <div style={{maxWidth:820,marginTop:22}}>
+                  <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>
+                    When they disagree, which system do we believe?
+                  </div>
+                  <div style={{fontSize:12,color:T.textMuted,marginBottom:10}}>
+                    The one thing here that is a judgement call, not a derivation.
+                  </div>
                   {[...wKeys,"Address"].map(f=>{
                     const val = wBeliefs[f] ?? (srcById(wSrcIds[0])?.name||"");
                     return (
@@ -25008,10 +24948,14 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 </div>
               )}
 
-              {wiz==="cross" && step===4 && (
-                <div style={{maxWidth:780}}>
-                  <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:7}}>
-                    Rows this scan would read
+              {wiz==="cross" && step===2 && (
+                <div style={{maxWidth:800}}>
+                  <KLRow nm="Owner"         chip="Alex Rivera"            kind="exist" cf="sign-off to publish"/>
+                  <KLRow nm="Policy"        chip="Vendor Data Protection" kind="exist" cf="from Policy Manager"/>
+                  <KLRow nm="Business term" chip={wEntity}                kind="exist" cf="certified in your glossary"/>
+                  <KLRow nm="Domain"        chip="Procurement"            kind="exist" cf="from your Domains"/>
+                  <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"18px 0 7px"}}>
+                    Rows a scan would read
                   </div>
                   {wSrcIds.map(id=>{
                     const g=srcById(id); if(!g) return null;
@@ -25061,15 +25005,6 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 </div>
               )}
 
-              {wiz==="cross" && step===5 && (
-                <div style={{maxWidth:780}}>
-                  <KLRow nm="Owner"         chip="Alex Rivera"            kind="exist" cf="sign-off to publish"/>
-                  <KLRow nm="Policy"        chip="Vendor Data Protection" kind="exist" cf="from Policy Manager"/>
-                  <KLRow nm="Business term" chip={wEntity}                kind="exist" cf="certified in your glossary"/>
-                  <KLRow nm="Domain"        chip="Procurement"            kind="exist" cf="from your Domains"/>
-                </div>
-              )}
-
               {wiz==="src" && step===9 && (
                 <div style={{maxWidth:780}}>
                   <KLRow nm="Owner"      chip="Alex Rivera" kind="exist" cf="sign-off required to publish"/>
@@ -25098,8 +25033,8 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgSurface}}>
             <Btn small ghost onClick={()=>step>0?setStep(step-1):closeWizard()}>{step>0?"← Back":"Cancel"}</Btn>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
-              {wiz==="cross" && step===1 && wSrcIds.length<2 && <span style={{fontSize:11,color:T.textMuted}}>Pick at least two source graphs</span>}
-              {wiz==="cross" && step===2 && wKeys.length===0 && <span style={{fontSize:11,color:T.textMuted}}>Select at least one match key</span>}
+              {wiz==="cross" && step===0 && wSrcIds.length<2 && <span style={{fontSize:11,color:T.textMuted}}>Pick at least two source graphs</span>}
+              {wiz==="cross" && step===1 && wKeys.length===0 && <span style={{fontSize:11,color:T.textMuted}}>Select at least one match key</span>}
               {wiz==="src" && !wConn && <span style={{fontSize:11,color:T.textMuted}}>No unmapped connection available</span>}
               <span style={{fontSize:11,color:T.textMuted}}>Step {step+1} of {steps.length}</span>
               <Btn small variant="primary" disabled={blocked}
@@ -25165,8 +25100,6 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
             {key:"overview", label:"Overview"},
             {key:"graph",    label:"Knowledge Graph"},
             {key:"assets",   label:`Tables (${(sg.assets||[]).length})`},
-            {key:"match",    label:`Matchability (${sg.masters.length})`},
-            {key:"bindings", label:"Governance"},
             {key:"feeds",    label:`Used by (${usedBy.length})`},
           ]} active={srcTab} onChange={setSrcTab}/>
 
@@ -25185,7 +25118,13 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                   <KLRow nm="Business entities" chip={sg.entities.join(" · ")||"none"} kind={sg.entities.length?"exist":"plain"} cf="matchable across sources"/>
                   <KLRow nm="Columns classified" chip={`${sg.cols} from your ${sg.bind.tags} tags`} kind="exist" cf="Classifications & Tags"/>
                   <KLRow nm="Tables given meaning" chip={`${sg.bind.termed} of ${sg.tables}`} kind="exist" cf="Business Glossary"/>
-                  <Btn ghost small onClick={()=>setSrcTab("graph")}>See the graph →</Btn>
+                  <KLRow nm="New terms proposed" chip={sg.bind.proposed?`${sg.bind.proposed} awaiting approval`:"none pending"} kind={sg.bind.proposed?"new":"exist"} cf="normal glossary approval"/>
+                  <div style={{marginTop:14,paddingTop:13,borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"baseline",gap:12}}>
+                    <div style={{fontSize:28,fontWeight:800,color:T.green,fontFamily:"'Geist Mono',monospace"}}>{sg.bind.invented}</div>
+                    <div style={{fontSize:12,color:T.textSub}}>labels invented outside EDG — the number that must always stay zero.<br/>
+                      <span style={{color:T.textMuted}}>If it ever rises, the two systems have started to drift apart.</span></div>
+                  </div>
+                  <Btn ghost small style={{marginTop:12}} onClick={()=>setSrcTab("graph")}>See the graph →</Btn>
                 </Card2>
                 <Card2 style={{padding:16}}>
                   <SH title="Ownership"/>
@@ -25215,37 +25154,15 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 {key:"term",  label:"Business term", render:v=>v?<span style={{fontSize:11.5,color:T.green,fontWeight:600}}>{v}</span>:<span style={{color:T.textMuted}}>—</span>},
                 {key:"cols",  label:"Columns", render:v=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5}}>{v}</span>},
                 {key:"tags",  label:"Classifications", render:v=>v.length?<span style={{display:"flex",gap:4,flexWrap:"wrap"}}>{v.map(t=><Badge key={t} bg={T.amber+"1a"} color={T.amber} border={T.amber+"44"}>{t}</Badge>)}</span>:<span style={{color:T.textMuted}}>—</span>},
+                {key:"n2",    label:"Matchable on", render:(v,r)=>{
+                  const m = sg.masters.find(x=>x.table===r.n);
+                  if(!m) return <span style={{color:T.textMuted}}>—</span>;
+                  return m.ready
+                    ? <span style={{fontSize:11,color:T.green,fontWeight:600}}>{m.keys.join(", ")}</span>
+                    : <span style={{fontSize:11,color:T.amber,fontWeight:600}}>no match keys</span>;
+                }},
               ]}
               rows={sg.assets||[]} emptyMsg="No tables mapped yet."/>
-          )}
-
-          {srcTab==="match" && (
-            <Card2 style={{padding:18}}>
-              <SH title="What this source can be matched on" sub="Derived from the tags you already govern — not written by hand."/>
-              {sg.masters.map(m=>(
-                <KLRow key={m.table} nm={m.table} kind={m.ready?"exist":"new"}
-                  chip={m.ready?`Master table for ${m.entity}`:`${m.entity} — no match keys found`}
-                  cf={m.ready?`keys: ${m.keys.join(", ")}`:"cannot be matched yet"}
-                  acts={m.ready?null:"review"} onAct={()=>toast("Tag an identifying column to make this matchable")}/>
-              ))}
-              <KLNote icon="💡">Because <b>Tax ID</b> and <b>Legal Name</b> are tagged in EDG, we know what identifies a
-                supplier. Where nothing is tagged we say so plainly, instead of quietly returning no records.</KLNote>
-            </Card2>
-          )}
-
-          {srcTab==="bindings" && (
-            <Card2 style={{padding:18}}>
-              <SH title="Every label traced back to a governed EDG object"/>
-              <KLRow nm="Columns classified"    chip={`${sg.cols} — all from your ${sg.bind.tags} tags`} kind="exist" cf="Classifications & Tags"/>
-              <KLRow nm="Tables given meaning"  chip={`${sg.bind.termed} of ${sg.tables} linked to a term`} kind="exist" cf="Business Glossary"/>
-              <KLRow nm="New terms proposed"    chip={sg.bind.proposed?`${sg.bind.proposed} awaiting approval`:"none pending"} kind={sg.bind.proposed?"new":"exist"} cf="normal glossary approval"/>
-              <KLRow nm="Owner"                 chip={sg.owner} kind="exist" cf="from Stewardship"/>
-              <div style={{marginTop:16,paddingTop:14,borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"baseline",gap:12}}>
-                <div style={{fontSize:30,fontWeight:800,color:T.green,fontFamily:"'Geist Mono',monospace"}}>{sg.bind.invented}</div>
-                <div style={{fontSize:12,color:T.textSub}}>labels invented outside EDG — the number that must always stay zero.<br/>
-                  <span style={{color:T.textMuted}}>If it ever rises, the two systems have started to drift apart.</span></div>
-              </div>
-            </Card2>
           )}
 
           {srcTab==="feeds" && (
@@ -25271,8 +25188,6 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
   // ══════════════ CROSS-SOURCE PROFILE ══════════════
   const xg = selX && xGraphs.find(x=>x.id===selX);
   if(xg){
-    const gsel = gselId;
-    const reviewRows = xg.golden.filter(g=>g.state==="review");
     return (
       <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
         <Topbar breadcrumb={[
@@ -25290,7 +25205,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
             badges={<>
               <Badge bg={T.green+"1a"} color={T.green} border={T.green+"55"}>{xg.status}</Badge>
               <Badge bg={T.bgElevated} color={T.textSub} border={T.border}>{xg.version}</Badge>
-              {xg.review>0 && <Badge bg={T.amber+"1a"} color={T.amber} border={T.amber+"55"}>{xg.review} to review</Badge>}
+              {klOpen(xg)>0 && <Badge bg={T.amber+"1a"} color={T.amber} border={T.amber+"55"}>{klOpen(xg)} need a look</Badge>}
             </>}
             props={[
               {l:"Entity",          v:xg.entity},
@@ -25308,9 +25223,8 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
           <Tabs2 tabs={[
             {key:"overview", label:"Overview"},
             {key:"graph",    label:"Knowledge Graph"},
-            {key:"records",  label:`Trusted records (${xg.golden.length})`},
-            {key:"sources",  label:`Source graphs (${xg.srcIds.length})`},
-            {key:"rules",    label:"Match & survivorship"},
+            {key:"records",  label:klOpen(xg)?`Trusted records (${klOpen(xg)})`:"Trusted records"},
+            {key:"rules",    label:"Rules"},
           ]} active={xTab} onChange={setXTab}/>
 
           {xTab==="overview" && (
@@ -25320,8 +25234,9 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 <Metric label="Match keys" value={String(xg.keys.length)} sub={xg.keys.join(", ")}/>
                 <Metric label="Trusted records" value={xScanned?xg.records.toLocaleString():"—"}
                   sub={xScanned?undefined:"needs a data scan"} color={xScanned?T.text:T.textMuted}/>
-                <Metric label="Waiting on you" value={xScanned?String(xg.review):"—"}
-                  color={xScanned&&xg.review?T.amber:xScanned?T.green:T.textMuted}/>
+                <Metric label="Need a look" value={xScanned?String(klOpen(xg)):"—"}
+                  sub={xScanned?`${(xg.clean||0).toLocaleString()} resolved cleanly`:undefined}
+                  color={xScanned&&klOpen(xg)?T.amber:xScanned?T.green:T.textMuted}/>
               </div>
 
               {/* the metadata/data boundary, stated once, at the top of the profile */}
@@ -25367,12 +25282,18 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                   })}
                 </div>
               </Card2>
-              {reviewRows.length>0 && (
+              {xScanned && klOpen(xg)>0 && (
                 <Card2 style={{padding:16}}>
-                  <SH title="Needs a decision" sub="Only the genuinely unclear matches reach a person."/>
-                  {reviewRows.map(g=>(
-                    <KLRow key={g.id} nm={g.n} chip={g.issue||"needs review"} kind="new" cf={`confidence ${g.conf.toFixed(2)}`}
-                      acts="review" onAct={()=>{setXTab("records");setGoldenSel(g.id);}}/>
+                  <SH title={`Needs a decision (${klOpen(xg)})`}
+                    sub="Everything else resolved cleanly. These are the only rows asking for a person."
+                    action={<Btn small ghost onClick={()=>setXTab("records")}>Open Trusted records</Btn>}/>
+                  {(xg.conflicts||[]).map(c=>(
+                    <KLRow key={c.id} nm={c.n} chip={c.issue} kind="new" cf={`sources disagree · ${c.conf.toFixed(2)}`}
+                      acts="review" onAct={()=>setXTab("records")}/>
+                  ))}
+                  {(xg.unmatched||[]).map(u=>(
+                    <KLRow key={u.id} nm={u.label} chip={`only in ${srcById(u.srcId)?.name||u.srcId}`} kind="new"
+                      cf="matched nothing" acts="review" onAct={()=>setXTab("records")}/>
                   ))}
                 </Card2>
               )}
@@ -25381,108 +25302,150 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
 
           {xTab==="graph" && (
             <>
-              {!xScanned && (
-                <div style={{display:"flex",gap:9,alignItems:"center",padding:"10px 13px",marginBottom:10,borderRadius:9,
-                  background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:12.3,color:T.textSub}}>
-                  <span>🔒</span>
-                  <div>Showing the <b style={{color:T.text}}>entity level</b> — how {xg.entity} is represented as an object in
-                    each source. Seeing the actual resolved records means reading data, so it needs a scan you approve.</div>
-                  <Btn small variant="primary" onClick={()=>setScanFor(xg.id)}>Run data scan</Btn>
-                </div>
-              )}
+              <div style={{display:"flex",gap:9,alignItems:"center",padding:"10px 13px",marginBottom:10,borderRadius:9,
+                background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:12.3,color:T.textSub}}>
+                <span>🗺️</span>
+                <div>This shows <b style={{color:T.text}}>how {xg.entity} is represented as an object</b> in each source, and the
+                  match key that ties them together. Individual records are not drawn here — they live in{" "}
+                  <b style={{color:T.text}}>Trusted records</b>, where only the ones needing a decision are listed.</div>
+                <Btn small ghost onClick={()=>setXTab("records")}>Trusted records →</Btn>
+              </div>
               <KLGraphCanvas build={buildXGraph} height={560}
-                emptyMsg="No records resolved yet — run a data scan to resolve them."
-                level={xLevel} onLevel={setXLevel}
-                levels={[
-                  {v:"entity", l:"Entity level", hint:"Metadata only — how the entity maps to an object in each source"},
-                  {v:"record", l:"Record level", locked:!xScanned,
-                   hint:"The resolved golden record and the source rows behind it",
-                   lockedHint:"Run a data scan first — this level reads actual rows"},
-                ]}
-                extraControls={xLevel==="record" && xg.golden.length>0 && (
-                  <div style={{display:"flex",alignItems:"center",gap:7}}>
-                    <span style={{fontSize:10.5,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.06em"}}>Record</span>
-                    <select value={gsel||""} onChange={e=>setGoldenSel(e.target.value)}
-                      style={{padding:"4px 8px",borderRadius:7,border:"1px solid #e2e8f0",background:"#fff",fontSize:11.5,color:"#0f172a",cursor:"pointer",fontFamily:"inherit"}}>
-                      {xg.golden.map(g=><option key={g.id} value={g.id}>{g.n} · {g.conf.toFixed(2)}</option>)}
-                    </select>
-                  </div>
-                )}/>
+                emptyMsg="Nothing to draw — this graph has no source graphs joined yet."/>
             </>
           )}
 
           {xTab==="records" && !xScanned && (
             <KLEmpty icon={Ic.shield(34)} title="Records are not scanned yet"
-              sub={`The graph knows how ${xg.entity} maps across ${xg.srcIds.length} sources. Resolving actual records means reading data.`}
+              sub={`The graph already knows how ${xg.entity} maps across ${xg.srcIds.length} sources — that is metadata. Resolving the actual records means reading rows.`}
               action={<Btn small variant="primary" onClick={()=>setScanFor(xg.id)}>Run data scan</Btn>}/>
           )}
 
-          {xTab==="records" && xScanned && (
-            xg.golden.length===0
-              ? <KLEmpty icon={Ic.knowledge(34)} title="No records resolved yet"
-                  sub="Run a resolve to match records across the joined source graphs."
-                  action={<Btn small variant="primary" onClick={()=>toast("Resolve queued — see Settings › Background Jobs")}>Run resolve</Btn>}/>
-              : <div>
-                  {xg.golden.map(g=>(
-                    <Card2 key={g.id} style={{padding:14,marginBottom:10,
-                      border:`1px solid ${g.id===gsel?T.accent+"55":T.border}`}}>
-                      <div style={{display:"flex",alignItems:"center",gap:11,flexWrap:"wrap",marginBottom:9}}>
-                        <span style={{width:40,height:40,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
-                          fontSize:11.5,fontWeight:800,fontFamily:"'Geist Mono',monospace",
-                          background:g.conf>=.9?T.green+"1a":T.amber+"1a", color:g.conf>=.9?T.green:T.amber,
-                          border:`1px solid ${(g.conf>=.9?T.green:T.amber)}44`}}>{g.conf.toFixed(2)}</span>
-                        <span>
-                          <span style={{display:"block",fontSize:13.5,fontWeight:700,color:T.text}}>★ {g.n}</span>
-                          <span style={{display:"block",fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>tax {g.taxId} · {g.spend}</span>
-                        </span>
-                        {g.state==="auto"
-                          ? <Badge bg={T.green+"1a"} color={T.green} border={T.green+"55"}>joined automatically</Badge>
-                          : <Badge bg={T.amber+"1a"} color={T.amber} border={T.amber+"55"}>{g.issue||"needs your decision"}</Badge>}
-                        <div style={{marginLeft:"auto",display:"flex",gap:6}}>
-                          <Btn small ghost onClick={()=>{setGoldenSel(g.id);setXTab("graph");}}>View graph</Btn>
-                          {g.state==="review" && <>
-                            <Btn small ghost onClick={()=>toast("Kept as separate records")}>Keep apart</Btn>
-                            <Btn small variant="primary" onClick={()=>toast("Merged into one trusted record")}>Same {xg.entity.toLowerCase()}</Btn>
-                          </>}
-                        </div>
-                      </div>
-                      <div style={{display:"flex",gap:7,flexWrap:"wrap",paddingLeft:51}}>
-                        {g.members.map(m=>{
-                          const s=srcById(m.srcId);
-                          return (
-                            <button key={m.srcId+m.pk} onClick={()=>openSrc(m.srcId,"graph")}
-                              style={{display:"flex",alignItems:"center",gap:6,fontSize:11,padding:"4px 9px",borderRadius:6,cursor:"pointer",
-                                background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontFamily:"inherit"}}>
-                              <ServiceIcon service={s?.service} size={12}/>
-                              <b style={{color:T.text}}>{s?.name||m.srcId}</b>
-                              <span style={{fontFamily:"'Geist Mono',monospace"}}>{m.label} · {m.pk}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </Card2>
-                  ))}
+          {xTab==="records" && xScanned && (()=>{
+            const conflicts = xg.conflicts||[], unmatched = xg.unmatched||[];
+            return (
+              <>
+                {/* the point of this tab: almost everything is fine — here is what is not */}
+                <div style={{display:"flex",gap:14,flexWrap:"wrap",alignItems:"center",padding:"12px 15px",marginBottom:14,
+                  background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10}}>
+                  <span style={{fontSize:12.8,color:T.textSub}}>
+                    <b style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{xg.records.toLocaleString()}</b> records resolved ·{" "}
+                    <b style={{color:T.green,fontFamily:"'Geist Mono',monospace"}}>{(xg.clean||0).toLocaleString()}</b> cleanly
+                  </span>
+                  <span style={{width:1,height:16,background:T.border}}/>
+                  <span style={{fontSize:12.8,color:klOpen(xg)?T.amber:T.green,fontWeight:600}}>
+                    {klOpen(xg)?`${klOpen(xg)} need a look`:"nothing needs a look"}
+                  </span>
+                  <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>
+                    {xg.scan.mode} scan · {xg.scan.at}{xg.scan.stale?" · may be stale":""}
+                  </span>
+                  <Btn small ghost onClick={()=>setScanFor(xg.id)}>Re-scan</Btn>
                 </div>
-          )}
 
-          {xTab==="sources" && (
-            <DataTable
-              cols={[
-                {key:"name",  label:"Source graph", render:(v,r)=><span style={{display:"inline-flex",alignItems:"center",gap:8,fontWeight:600}}><ServiceIcon service={r.service} size={16}/>{v}</span>},
-                {key:"key",   label:"ID", render:v=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:11,color:T.textMuted}}>{v}</span>},
-                {key:"master",label:`${xg.entity} master table`, render:(v,r)=>{
-                  const m=r.masters.find(x=>x.entity===xg.entity);
-                  return m?<KLChip kind="exist">{m.table}</KLChip>:<span style={{color:T.textMuted}}>—</span>;
-                }},
-                {key:"keys",  label:"Match keys", render:(v,r)=>{
-                  const m=r.masters.find(x=>x.entity===xg.entity);
-                  return <span style={{fontSize:11.5,color:T.textSub}}>{m?m.keys.join(", "):"—"}</span>;
-                }},
-                {key:"status",label:"Status", render:v=><Badge bg={(v==="Published"?T.green:T.amber)+"1a"} color={v==="Published"?T.green:T.amber} border={(v==="Published"?T.green:T.amber)+"55"}>{v}</Badge>},
-              ]}
-              rows={xg.srcIds.map(id=>srcById(id)).filter(Boolean)}
-              onRowClick={r=>openSrc(r.id)}/>
-          )}
+                {klOpen(xg)===0 && (
+                  <KLEmpty icon={Ic.check(34)} title="Every record resolved cleanly"
+                    sub="No conflicts, nothing left unmatched — there is nothing here for you to decide."/>
+                )}
+
+                {conflicts.length>0 && (
+                  <>
+                    <SH title={`Sources disagree (${conflicts.length})`}
+                      sub="These matched to one thing, but the systems hold different values. Only the differing values are highlighted."/>
+                    {conflicts.map(c=>{
+                      const fields = [...new Set(c.members.flatMap(m=>Object.keys(m.vals||{})))];
+                      const differs = fl => new Set(c.members.map(m=>m.vals?.[fl])).size>1;
+                      const th = {padding:"7px 11px",fontSize:10,fontWeight:700,color:T.textMuted,textAlign:"left",
+                                  textTransform:"uppercase",letterSpacing:"0.06em",borderBottom:`1px solid ${T.border}`};
+                      return (
+                        <Card2 key={c.id} style={{padding:14,marginBottom:10}}>
+                          <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:10}}>
+                            <span style={{width:38,height:38,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+                              fontSize:11,fontWeight:800,fontFamily:"'Geist Mono',monospace",
+                              background:T.amber+"1a",color:T.amber,border:`1px solid ${T.amber}44`}}>{c.conf.toFixed(2)}</span>
+                            <span>
+                              <span style={{display:"block",fontSize:13.5,fontWeight:700,color:T.text}}>{c.n}</span>
+                              <span style={{display:"block",fontSize:11.5,color:T.amber}}>{c.issue}</span>
+                            </span>
+                            <div style={{marginLeft:"auto",display:"flex",gap:6}}>
+                              <Btn small ghost onClick={()=>toast("Kept as separate records")}>Not the same</Btn>
+                              <Btn small variant="primary" onClick={()=>toast("Merged into one trusted record")}>Same {xg.entity.toLowerCase()}</Btn>
+                            </div>
+                          </div>
+                          <div style={{overflowX:"auto"}}>
+                            <table style={{width:"100%",borderCollapse:"collapse"}}>
+                              <thead>
+                                <tr style={{background:T.bgElevated}}>
+                                  <th style={th}>Field</th>
+                                  {c.members.map(m=><th key={m.srcId} style={th}>{srcById(m.srcId)?.name||m.srcId}</th>)}
+                                  <th style={th}>We believe</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {fields.map(fl=>{
+                                  const bad = differs(fl);
+                                  const belief = (xg.beliefs||[]).find(b=>b.f===fl)?.s || "—";
+                                  return (
+                                    <tr key={fl}>
+                                      <td style={{padding:"8px 11px",fontSize:11.5,color:T.textSub,borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>{fl}</td>
+                                      {c.members.map(m=>(
+                                        <td key={m.srcId} style={{padding:"8px 11px",fontSize:11.5,borderBottom:`1px solid ${T.border}`,
+                                          fontFamily:"'Geist Mono',monospace",
+                                          background:bad?T.amber+"14":"transparent",
+                                          color:bad?T.amber:T.textSub,fontWeight:bad?700:400}}>
+                                          {m.vals?.[fl]||"—"}
+                                        </td>
+                                      ))}
+                                      <td style={{padding:"8px 11px",fontSize:11,color:T.textMuted,borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>
+                                        {bad?belief:""}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
+                            {c.members.map(m=>(
+                              <button key={m.srcId+m.pk} onClick={()=>openSrc(m.srcId)}
+                                style={{display:"flex",alignItems:"center",gap:6,fontSize:10.5,padding:"3px 8px",borderRadius:6,cursor:"pointer",
+                                  background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,fontFamily:"inherit"}}>
+                                <ServiceIcon service={srcById(m.srcId)?.service} size={11}/>
+                                {m.table} · {m.pk}
+                              </button>
+                            ))}
+                          </div>
+                        </Card2>
+                      );
+                    })}
+                  </>
+                )}
+
+                {unmatched.length>0 && (
+                  <>
+                    <SH title={`Matched nothing (${unmatched.length})`}
+                      sub="Present in one source, with no counterpart found in the others. Either genuinely single-system, or a match key is missing."
+                      action={<Btn small ghost onClick={()=>setXTab("rules")}>Review match keys</Btn>}/>
+                    <DataTable
+                      cols={[
+                        {key:"label", label:xg.entity, render:v=><span style={{fontWeight:600}}>{v}</span>},
+                        {key:"srcId", label:"Only in", render:v=>(
+                          <span style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:11.5,color:T.textSub}}>
+                            <ServiceIcon service={srcById(v)?.service} size={14}/>{srcById(v)?.name||v}
+                          </span>)},
+                        {key:"pk", label:"Record", render:(v,r)=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:11,color:T.textMuted}}>{r.table} · {v}</span>},
+                        {key:"reason", label:"Why it did not match", render:v=><span style={{fontSize:11.5,color:T.textSub}}>{v}</span>},
+                        {key:"act", label:"", render:(v,r)=>(
+                          <span style={{display:"flex",gap:5}}>
+                            <Btn small ghost onClick={()=>toast("Accepted as single-system")}>Expected</Btn>
+                            <Btn small variant="primary" onClick={()=>openSrc(r.srcId,"match")}>Investigate</Btn>
+                          </span>)},
+                      ]}
+                      rows={unmatched}/>
+                  </>
+                )}
+              </>
+            );
+          })()}
 
           {scanFor===xg.id && (
             <Modal open onClose={()=>setScanFor(null)} title={`Run a data scan — ${xg.name}`} width={580}>
@@ -25576,7 +25539,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
     const names = x.srcIds.map(i=>srcById(i)?.name).filter(Boolean);
     const hitQ = !q || [x.name,x.key,x.entity,x.owner,x.domain,...names]
       .filter(Boolean).some(v=>String(v).toLowerCase().includes(q));
-    const hitS = xStatus==="all" || (xStatus==="review" ? x.review>0 : x.status===xStatus);
+    const hitS = xStatus==="all" || (xStatus==="review" ? klOpen(x)>0 : x.status===xStatus);
     return hitQ && hitS;
   }).sort((a,b)=> xSort==="name" ? a.name.localeCompare(b.name)
                 : xSort==="records" ? b.records-a.records
@@ -25664,8 +25627,9 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                     {key:"act",   label:"", render:(v,r)=><Btn small variant="primary" onClick={r.go}>Review</Btn>},
                   ]}
                   rows={[
-                    ...xGraphs.filter(x=>x.review>0).map(x=>({kind:"Match decision", obj:x.name,
-                      detail:`${x.review} matches need a person`, where:"Cross-source", go:()=>openX(x.id,"records")})),
+                    ...xGraphs.filter(x=>klOpen(x)>0).map(x=>({kind:"Match decision", obj:x.name,
+                      detail:`${(x.conflicts||[]).length} conflicting · ${(x.unmatched||[]).length} unmatched`,
+                      where:"Cross-source", go:()=>openX(x.id,"records")})),
                     ...srcGraphs.filter(s=>s.drift>0).map(s=>({kind:"Source drift", obj:s.name,
                       detail:`${s.drift} new columns since last build`, where:"Source graph", go:()=>openSrc(s.id)})),
                     ...srcGraphs.filter(s=>s.bind.proposed>0).map(s=>({kind:"Term approval", obj:s.name,
@@ -25735,7 +25699,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               statuses={[
                 {v:"all",       l:"All",           n:xGraphs.length},
                 {v:"Published", l:"Published",     n:xGraphs.filter(x=>x.status==="Published").length, c:T.green},
-                {v:"review",    l:"Needs decision",n:xGraphs.filter(x=>x.review>0).length, c:T.amber},
+                {v:"review",    l:"Needs decision",n:xGraphs.filter(x=>klOpen(x)>0).length, c:T.amber},
               ]}
               status={xStatus} setStatus={setXStatus}
               sort={xSort} setSort={setXSort}
@@ -25764,8 +25728,8 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                         </span>)},
                       {key:"records",label:"Trusted records", render:(v,r)=>(
                         <span style={{display:"inline-flex",alignItems:"center",gap:7}}>
-                          <b style={{fontFamily:"'Geist Mono',monospace"}}>{v.toLocaleString()}</b>
-                          {r.review>0&&<Badge bg={T.amber+"1a"} color={T.amber} border={T.amber+"55"}>{r.review} to review</Badge>}
+                          <b style={{fontFamily:"'Geist Mono',monospace"}}>{r.scan?.state==="done"?v.toLocaleString():"—"}</b>
+                          {klOpen(r)>0&&<Badge bg={T.amber+"1a"} color={T.amber} border={T.amber+"55"}>{klOpen(r)} need a look</Badge>}
                         </span>)},
                       {key:"owner",  label:"Owner", render:v=><span style={{fontSize:11.5,color:T.textSub}}>{v}</span>},
                       {key:"status", label:"Status", render:v=><Badge bg={T.green+"1a"} color={T.green} border={T.green+"55"}>{v}</Badge>},
