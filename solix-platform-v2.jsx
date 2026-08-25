@@ -2898,6 +2898,7 @@ const Ic = {
   arrowRight:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>,
   dataproducts:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5.5" height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.3"/><rect x="8.5" y="2" width="5.5" height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.3"/><rect x="2" y="8.5" width="5.5" height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.3"/><path d="M8.5 11.25h5.5M11.25 8.5v5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
   tableIc:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><rect x="1.5" y="1.5" width="13" height="2.5" rx=".7" fill="currentColor" opacity=".9"/><rect x="1.5" y="5.5" width="13" height="2.5" rx=".7" fill="currentColor" opacity=".5"/><rect x="1.5" y="9.5" width="13" height="2.5" rx=".7" fill="currentColor" opacity=".25"/><rect x="1.5" y="13" width="13" height="1.5" rx=".7" fill="currentColor" opacity=".15"/></svg>,
+  dataask:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><path d="M2 4.2c0-.9.7-1.6 1.6-1.6h8.8c.9 0 1.6.7 1.6 1.6v5.1c0 .9-.7 1.6-1.6 1.6H6.6L3.4 13.6v-2.7h-.2c-.7 0-1.2-.6-1.2-1.3V4.2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M6.3 6.1c0-.9.8-1.5 1.7-1.5s1.7.6 1.7 1.5c0 .8-.6 1.1-1.2 1.4-.4.2-.5.4-.5.8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><circle cx="8" cy="9.3" r=".65" fill="currentColor"/></svg>,
   knowledge:(s=15)=><svg width={s} height={s} viewBox="0 0 16 16" fill="none"><circle cx="8" cy="3.4" r="2" stroke="currentColor" strokeWidth="1.3"/><circle cx="3.4" cy="12.2" r="2" stroke="currentColor" strokeWidth="1.3"/><circle cx="12.6" cy="12.2" r="2" stroke="currentColor" strokeWidth="1.3"/><path d="M6.6 5.1L4.7 10.4M9.4 5.1l1.9 5.3M5.4 12.2h5.2" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round"/></svg>,
 };
 
@@ -3251,6 +3252,14 @@ const NOTIF_CATALOG = [
   {menu:"Data Products",   key:"dataproducts", events:[
     {ev:"dp_review",  label:"Submitted for review → steward"},
     {ev:"dp_deleted", label:"Deleted → owner"},
+  ]},
+  {menu:"Data Ask",        key:"dataask",      events:[
+    {ev:"da_answer_reported", label:"Answer reported as wrong → space steward"},
+    {ev:"da_space_review",    label:"Answer Space submitted for review → steward"},
+    {ev:"da_space_published", label:"Answer Space published / unpublished → owner"},
+    {ev:"da_access_denied",   label:"Question refused by the classification blocklist → Admin"},
+    {ev:"da_index_failed",    label:"Index build failed → space owner"},
+    {ev:"da_credit_threshold",label:"Credit cap threshold reached → Admin & space owner"},
   ]},
   {menu:"Connections",     key:"integrations", events:[
     {ev:"workflow_failed", label:"Workflow failed → Connection Admin"},
@@ -3988,6 +3997,9 @@ const GROUPS = [
     {key:"home",           icon:"home",          label:"Home"},
     {key:"stewardship",    icon:"inbox",         label:"Workspace"},
   ]},
+  {section:"Data Ask",items:[
+    {key:"dataask",        icon:"dataask",       label:"Data Ask"},
+  ]},
   {section:"Catalog",items:[
     {key:"catalog",        icon:"catalog",       label:"Catalog"},
     {key:"quality",        icon:"quality",       label:"Data Quality"},
@@ -4007,7 +4019,7 @@ const GROUPS = [
 const Sidebar = ({active, onNav, exp, setExp, onHelp}) => {
   const {roleCfg} = useRole();
   const inboxBadgeCount = INBOX_DATA.filter(i=>!i.readAt).length;
-  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","settings","tags"];
+  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","dataask","settings","tags"];
   return (
     <div style={{position:"fixed",top:0,left:0,height:"100vh",width:exp?EXPANDED_W:COLLAPSED_W,background:T.bgSurface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:100,transition:"width .2s ease",overflow:"hidden"}}>
       {/* Logo */}
@@ -4208,6 +4220,7 @@ const HomeView = ({onNav, onToast}) => {
             <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:14}}>Quick Actions</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
               {[
+                {l:"Ask your data",   icon:Ic.dataask(13), nav:"dataask"},
                 {l:"Browse Catalog",  icon:Ic.catalog(13), nav:"catalog"},
                 {l:"View Lineage",    icon:Ic.lineage(13), nav:"catalog"},
                 {l:"Quality Rules",  icon:Ic.quality(13), nav:"quality"},
@@ -27192,7 +27205,7 @@ const ROLES_CONFIG = {
     badge: "rgba(238,36,36,0.15)",
     desc:  "Full platform access including settings, user management, and all configurations.",
     rbacRole: "admin",
-    nav: ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","settings","tags"],
+    nav: ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","dataask","settings","tags"],
     homeWidgets: ["metrics","tasks","quality","recentAssets","services","activity"],
   },
   steward: {
@@ -27205,7 +27218,7 @@ const ROLES_CONFIG = {
     desc:  "Govern assets in your domain: certify data, manage glossary terms, resolve conflicts.",
     rbacRole: "steward",
     domain: "Commerce",
-    nav: ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","tags"],
+    nav: ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","dataask","tags"],
     homeWidgets: ["tasks","certQueue","qualityAlerts","recentAssets","activity"],
   },
   analyst: {
@@ -27217,7 +27230,7 @@ const ROLES_CONFIG = {
     badge: "rgba(2,132,199,0.12)",
     desc:  "Browse the catalog, explore lineage, run quality checks, and access approved datasets.",
     rbacRole: "analyst",
-    nav: ["home","search","catalog","quality","glossary","domains","dataproducts","knowledgelayer"],
+    nav: ["home","search","catalog","quality","glossary","domains","dataproducts","knowledgelayer","dataask"],
     homeWidgets: ["metrics","recentAssets","quality","lineageSnippet","activity"],
   },
   engineer: {
@@ -27229,7 +27242,7 @@ const ROLES_CONFIG = {
     badge: "rgba(124,58,237,0.12)",
     desc:  "Manage pipelines, monitor ingestion health, trace lineage, and maintain data contracts.",
     rbacRole: "engineer",
-    nav: ["home","search","catalog","quality","knowledgelayer","settings"],
+    nav: ["home","search","catalog","quality","knowledgelayer","dataask","settings"],
     homeWidgets: ["services","metrics","quality","lineageSnippet","recentAssets","activity"],
   },
   viewer: {
@@ -27241,7 +27254,7 @@ const ROLES_CONFIG = {
     badge: "rgba(75,75,96,0.12)",
     desc:  "Read-only access to approved domains, certified assets and published dashboards.",
     rbacRole: "viewer",
-    nav: ["home","search","catalog","glossary","domains","dataproducts","knowledgelayer"],
+    nav: ["home","search","catalog","glossary","domains","dataproducts","knowledgelayer","dataask"],
     homeWidgets: ["recentAssets","certifiedAssets","activity"],
   },
 };
@@ -31415,8 +31428,8 @@ const PersonasSection = ({onToast}) => {
   ]);
   const [editPersona,    setEditPersona]    = useState(null);
   const [editingNavFor,  setEditingNavFor]  = useState(null);
-  const NAV_ITEMS = ["home","search","catalog","lineage","quality","policymanager","access","certifications","stewardship","glossary","domains","observability","analytics","settings"];
-  const NAV_LABELS = {home:"Home",search:"Search",catalog:"Catalog",lineage:"Lineage",quality:"Data Quality",policymanager:"Policy Manager",access:"Access Gov.",certifications:"Status",stewardship:"Stewardship",glossary:"Glossary",domains:"Domains",observability:"Observability",analytics:"Analytics",settings:"Settings"};
+  const NAV_ITEMS = ["home","search","catalog","lineage","quality","policymanager","access","certifications","stewardship","glossary","domains","dataask","observability","analytics","settings"];
+  const NAV_LABELS = {home:"Home",search:"Search",catalog:"Catalog",lineage:"Lineage",quality:"Data Quality",policymanager:"Policy Manager",access:"Access Gov.",certifications:"Status",stewardship:"Stewardship",glossary:"Glossary",domains:"Domains",dataask:"Data Ask",observability:"Observability",analytics:"Analytics",settings:"Settings"};
   const WIDGET_LABELS = {metrics:"Platform Metrics",tasks:"My Tasks",certQueue:"Cert. Queue",qualityAlerts:"Quality Alerts",recentAssets:"Recently Viewed",certifiedAssets:"Approved Assets",services:"Service Health",lineageSnippet:"Status",activity:"Activity Feed"};
 
   const toggleNav = (personaId, navKey) => {
@@ -33156,6 +33169,3227 @@ const TagPoliciesSection = ({onToast}) => {
   );
 };
 
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DATA ASK — governed conversational access to governed data
+//
+// EAI ships Data Ask as a *builder*: you assemble a semantic layer from scratch
+// (profile → relationships → synonyms → enrich → index → publish) before anyone
+// can ask a question. EDG already holds that vocabulary — classifications,
+// glossary terms, domains, owners, policies, lineage, knowledge graphs. So the
+// EDG-native version inherits the semantics and spends its surface area on the
+// thing only EDG can do: prove that an answer was policy-enforced.
+//
+// Three ideas carry the whole section:
+//   1. Answer Space — a published, governed scope a question may be asked over.
+//   2. Governed answer — every answer carries its policy trace: what was masked,
+//      what was filtered, what it cited, how fresh it is, what it cost.
+//   3. Closed loop — a bad or blocked answer becomes a steward work item, and
+//      the fix lands back in the space that produced it.
+// ═════════════════════════════════════════════════════════════════════════════
+
+const DA_MODES = {
+  structured:   {label:"Structured",  sub:"Tables → SQL",          color:"blue"},
+  documents:    {label:"Documents",   sub:"Files → retrieval",     color:"violet"},
+  hybrid:       {label:"Hybrid",      sub:"Tables + files",        color:"amber"},
+};
+const DA_MODE_COLOR = m => ({structured:T.blue, documents:T.violet, hybrid:T.amber}[m]||T.textSub);
+
+const DA_RETRIEVAL = {
+  semantic: {label:"Semantic",  sub:"Embeddings — meaning-based, summarised with citations"},
+  keyword:  {label:"Keyword",   sub:"BM25 — exact term matching"},
+  hybrid:   {label:"Hybrid",    sub:"Both, then reranked — recommended"},
+};
+
+// ── Answer Spaces ───────────────────────────────────────────────────────────
+// A space is the unit of publication. Nobody asks questions against "the
+// catalog" — they ask against a scope somebody put their name on.
+const DA_SPACE_SEED = [
+  {
+    id:"sp_commerce", key:"AS-1001", name:"Commerce Revenue", mode:"structured",
+    status:"Published", version:"v4", owner:"maya.chen", stewards:["dev.patel"],
+    domain:"Commerce", published:"2026-08-18", indexed:"2026-08-24 02:10",
+    accuracy:94, questions30d:1842, credits30d:4210, avgLatency:"2.9s",
+    desc:"Orders, customers and product dimensions for revenue, fulfilment and margin questions.",
+    sources:[
+      {name:"orders",       type:"Table", role:"fact",      rows:"48.2M", tags:["PII","GDPR"], term:"Order"},
+      {name:"customers",    type:"Table", role:"dimension", rows:"2.1M",  tags:["PII","GDPR"], term:"Customer"},
+      {name:"dim_products", type:"Table", role:"dimension", rows:"84K",   tags:[],             term:"Product"},
+      {name:"transactions", type:"Table", role:"fact",      rows:"96.4M", tags:["PII"],        term:"Transaction"},
+      {name:"vw_order_summary", type:"View", role:"aggregate", rows:"1.2M", tags:[],           term:"Order"},
+    ],
+    joins:[
+      {from:"orders.customer_id", to:"customers.id",      how:"FK constraint",  conf:100, ok:true},
+      {from:"orders.product_id",  to:"dim_products.id",   how:"FK constraint",  conf:100, ok:true},
+      {from:"transactions.order_id", to:"orders.id",      how:"Lineage + name", conf:92,  ok:true},
+      {from:"orders.promo_code",  to:"legacy_promotions.code", how:"Name match", conf:61, ok:false},
+    ],
+    synonyms:[
+      {term:"revenue",   maps:"orders.net_amount",       src:"Glossary — Net Revenue", conf:98, status:"Approved"},
+      {term:"GMV",       maps:"orders.gross_amount",     src:"Glossary — Gross Merchandise Value", conf:96, status:"Approved"},
+      {term:"customer",  maps:"customers",               src:"Business Entity",        conf:99, status:"Approved"},
+      {term:"sales",     maps:"orders.net_amount",       src:"AI suggested",           conf:81, status:"Pending"},
+      {term:"basket",    maps:"orders.item_count",       src:"AI suggested",           conf:64, status:"Pending"},
+      {term:"churn",     maps:"—",                       src:"AI suggested",           conf:38, status:"Rejected"},
+    ],
+    samples:[
+      "What was net revenue by region last quarter?",
+      "Show me the top 10 customers by revenue with their contact emails",
+      "Which orders are still unfulfilled after 30 days?",
+      "Revenue from Antarctica this year",
+    ],
+    guards:{rowLimit:5000, timeout:60, refuse:"mask", editSql:"steward", blockedTags:["Restricted-HR"], requireCert:true},
+    history:[
+      {at:"2026-08-24 02:10", what:"Index rebuilt", who:"system", detail:"5 objects · 214 columns · 42s"},
+      {at:"2026-08-18 11:04", what:"Published v4",  who:"maya.chen", detail:"Approved by alex.rivera"},
+      {at:"2026-08-18 09:22", what:"Synonyms updated", who:"dev.patel", detail:"+3 approved, 1 rejected"},
+      {at:"2026-08-11 14:40", what:"Published v3",  who:"maya.chen", detail:"Added transactions"},
+    ],
+  },
+  {
+    id:"sp_finance", key:"AS-1002", name:"Finance & Contracts", mode:"documents",
+    status:"Published", version:"v2", owner:"sarah.kim", stewards:["sarah.kim"],
+    domain:"Finance", published:"2026-08-20", indexed:"2026-08-23 23:40",
+    accuracy:91, questions30d:604, credits30d:2980, avgLatency:"4.1s",
+    desc:"Executed contracts, invoices and quarterly exports held in ECS and the finance lake.",
+    retrieval:"hybrid", chunks:"18,402",
+    sources:[
+      {name:"contracts_2025.pdf",     type:"Object", role:"document", rows:"312 pages", tags:["confidential"], term:"Contract", hold:true},
+      {name:"invoices_2026.parquet",  type:"Object", role:"document", rows:"1.4M rows", tags:[],              term:"Invoice"},
+      {name:"exports_2025_q4.csv",    type:"Object", role:"document", rows:"820K rows", tags:["confidential"],term:"Export"},
+      {name:"finance_summary_q1.parquet", type:"Blob", role:"document", rows:"—",       tags:[],              term:"—"},
+    ],
+    joins:[],
+    synonyms:[
+      {term:"termination clause", maps:"contract §terms", src:"AI suggested", conf:93, status:"Approved"},
+      {term:"MSA",                maps:"Master Service Agreement", src:"Glossary", conf:99, status:"Approved"},
+      {term:"invoice",            maps:"Invoice",        src:"Glossary",     conf:99, status:"Approved"},
+      {term:"net 30",             maps:"payment_terms",  src:"AI suggested", conf:74, status:"Pending"},
+    ],
+    samples:[
+      "What are the termination clauses in our 2025 vendor contracts?",
+      "Which contracts renew automatically?",
+      "Total invoiced amount by vendor for 2026",
+    ],
+    guards:{rowLimit:2000, timeout:90, refuse:"refuse", editSql:"none", blockedTags:["Restricted-HR"], requireCert:true},
+    history:[
+      {at:"2026-08-23 23:40", what:"Index rebuilt", who:"system",     detail:"18,402 chunks · hybrid · 6m 11s"},
+      {at:"2026-08-20 16:15", what:"Published v2",  who:"sarah.kim",  detail:"Approved by alex.rivera"},
+      {at:"2026-08-20 15:02", what:"Retrieval changed", who:"sarah.kim", detail:"Semantic → Hybrid"},
+    ],
+  },
+  {
+    id:"sp_c360", key:"AS-1003", name:"Customer 360", mode:"hybrid",
+    status:"Published", version:"v1", owner:"alex.rivera", stewards:["maya.chen"],
+    domain:"Commerce", published:"2026-08-24", indexed:"2026-08-24 03:02",
+    accuracy:89, questions30d:311, credits30d:1640, avgLatency:"5.4s",
+    desc:"Trusted customer records from the cross-source knowledge graph, plus the contracts and support files attached to them.",
+    retrieval:"hybrid", chunks:"4,120", kg:"XKG — Customer (184,200 golden records)",
+    sources:[
+      {name:"XKG — Customer",    type:"Knowledge Graph", role:"golden record", rows:"184,200", tags:["PII","GDPR"], term:"Customer"},
+      {name:"customers",         type:"Table",  role:"dimension", rows:"2.1M", tags:["PII","GDPR"], term:"Customer"},
+      {name:"app_users",         type:"Table",  role:"dimension", rows:"640K", tags:["PII"],        term:"Customer"},
+      {name:"contracts_2025.pdf",type:"Object", role:"document",  rows:"312 pages", tags:["confidential"], term:"Contract", hold:true},
+    ],
+    joins:[
+      {from:"XKG.customer_id", to:"customers.id", how:"Golden record", conf:100, ok:true},
+      {from:"XKG.customer_id", to:"app_users.id", how:"Golden record", conf:100, ok:true},
+    ],
+    synonyms:[
+      {term:"golden record", maps:"XKG.customer", src:"Knowledge Layer", conf:100, status:"Approved"},
+      {term:"duplicate",     maps:"XKG.match_group", src:"Knowledge Layer", conf:97, status:"Approved"},
+      {term:"account",       maps:"XKG.customer", src:"AI suggested", conf:79, status:"Pending"},
+    ],
+    samples:[
+      "How many customers do we have across Salesforce and the warehouse, and which are duplicates?",
+      "Show me churn",
+    ],
+    guards:{rowLimit:5000, timeout:120, refuse:"mask", editSql:"steward", blockedTags:["Restricted-HR"], requireCert:true},
+    history:[
+      {at:"2026-08-24 03:02", what:"Index rebuilt", who:"system",      detail:"4,120 chunks + graph snapshot · 11m"},
+      {at:"2026-08-24 10:18", what:"Published v1",  who:"alex.rivera", detail:"Approved by maya.chen"},
+    ],
+  },
+  {
+    id:"sp_product", key:"AS-1004", name:"Product Analytics", mode:"structured",
+    status:"In review", version:"v1 draft", owner:"dev.patel", stewards:["maya.chen"],
+    domain:"Product", published:"—", indexed:"2026-08-22 04:00",
+    accuracy:76, questions30d:0, credits30d:180, avgLatency:"—",
+    desc:"Event and session tables for engagement, funnel and retention questions.",
+    sources:[
+      {name:"user_events",    type:"Table", role:"fact",      rows:"1.2B", tags:[],      term:"Event"},
+      {name:"user_sessions",  type:"Table", role:"fact",      rows:"340M", tags:["PII"], term:"Session", cert:"Deprecated"},
+      {name:"product_events", type:"Table", role:"fact",      rows:"890M", tags:[],      term:"Event"},
+    ],
+    joins:[
+      {from:"user_sessions.user_id", to:"app_users.id", how:"Name match", conf:68, ok:false},
+    ],
+    synonyms:[
+      {term:"DAU",       maps:"user_events.distinct_users", src:"Glossary — Daily Active Users", conf:97, status:"Approved"},
+      {term:"session",   maps:"user_sessions",              src:"AI suggested", conf:88, status:"Pending"},
+      {term:"funnel",    maps:"—",                          src:"AI suggested", conf:41, status:"Pending"},
+    ],
+    samples:["What is DAU trending at this month?"],
+    guards:{rowLimit:5000, timeout:60, refuse:"mask", editSql:"steward", blockedTags:["Restricted-HR"], requireCert:true},
+    history:[
+      {at:"2026-08-22 09:30", what:"Submitted for review", who:"dev.patel", detail:"→ maya.chen"},
+      {at:"2026-08-22 04:00", what:"Index built", who:"system", detail:"3 objects · 118 columns · 3m 40s"},
+    ],
+  },
+  {
+    id:"sp_hr", key:"AS-1005", name:"HR Records", mode:"structured",
+    status:"Blocked", version:"—", owner:"alex.rivera", stewards:[],
+    domain:"Platform", published:"—", indexed:"—",
+    accuracy:0, questions30d:0, credits30d:0, avgLatency:"—",
+    desc:"Attempted scope over employee records. Blocked by the platform classification blocklist.",
+    sources:[
+      {name:"hr_records", type:"Folder", role:"fact", rows:"—", tags:["Restricted-HR","PII"], term:"Employee"},
+      {name:"employees",  type:"Table",  role:"dimension", rows:"84K", tags:["Restricted-HR","PII"], term:"Employee"},
+    ],
+    joins:[], synonyms:[], samples:[],
+    guards:{rowLimit:5000, timeout:60, refuse:"refuse", editSql:"none", blockedTags:["Restricted-HR"], requireCert:true},
+    history:[
+      {at:"2026-08-19 11:20", what:"Index refused", who:"system", detail:"Blocked classification: Restricted-HR"},
+    ],
+  },
+];
+
+// ── The answer library ──────────────────────────────────────────────────────
+// Each entry is a governed answer, not just text. `unmask` names the roles
+// entitled to raw values; everyone else gets the masked projection. That is the
+// whole point of the section — the same question returns a different answer
+// depending on who is asking, and the answer says so.
+const DA_ANSWERS = [
+  {
+    id:"a1", space:"sp_commerce", mode:"structured",
+    match:["revenue","region"],
+    q:"What was net revenue by region last quarter?",
+    summary:"Net revenue for Q2 FY26 was **$41.7M** across four regions, up 4.8% on Q1. North America contributed 44% of the total; EMEA grew fastest at +11.3%.",
+    sql:`SELECT  c.region,
+        COUNT(DISTINCT o.id)          AS orders,
+        SUM(o.net_amount)             AS net_revenue,
+        ROUND(100.0 * (SUM(o.net_amount) / NULLIF(LAG(SUM(o.net_amount))
+              OVER (ORDER BY o.fiscal_quarter), 0) - 1), 1) AS qoq_pct
+FROM    commerce.orders o
+JOIN    commerce.customers c ON c.id = o.customer_id
+WHERE   o.fiscal_quarter = 'FY26-Q2'
+  AND   o.status = 'FULFILLED'
+GROUP BY c.region
+ORDER BY net_revenue DESC`,
+    cols:["Region","Orders","Net revenue","QoQ"],
+    rows:[
+      ["North America","412,908","$18,420,114","+3.1%"],
+      ["EMEA","286,441","$12,908,760","+11.3%"],
+      ["APAC","198,204","$7,644,290","+2.4%"],
+      ["LATAM","74,118","$2,741,880","-1.8%"],
+    ],
+    terms:[{t:"Net Revenue",d:"Gross merchandise value less discounts, returns and tax. Owner: maya.chen"}],
+    cites:[{n:"orders",type:"Table",dom:"Commerce",cert:"Approved",fresh:"2h ago"},
+           {n:"customers",type:"Table",dom:"Commerce",cert:"Approved",fresh:"2h ago"}],
+    conf:96, latency:"2.4s", credits:11,
+  },
+  {
+    id:"a2", space:"sp_commerce", mode:"structured",
+    match:["top","customers","email"],
+    q:"Show me the top 10 customers by revenue with their contact emails",
+    summary:"Top 10 customers by FY26 net revenue. Contact email is a **PII** column, so what you see below depends on your entitlement — the governance trace records which projection was served.",
+    sql:`SELECT  c.id, c.company_name, c.contact_email, c.region,
+        SUM(o.net_amount) AS net_revenue
+FROM    commerce.customers c
+JOIN    commerce.orders o ON o.customer_id = c.id
+WHERE   o.fiscal_year = 'FY26'
+GROUP BY c.id, c.company_name, c.contact_email, c.region
+ORDER BY net_revenue DESC
+LIMIT   10`,
+    cols:["Customer","Contact email","Region","Net revenue"],
+    rows:[
+      ["Meridian Health Group","procurement@meridianhealth.com","North America","$2,418,900"],
+      ["Nordwind Apotheken AG","einkauf@nordwind-apo.de","EMEA","$1,984,220"],
+      ["Pacific Care Partners","ap@pacificcare.com","North America","$1,740,118"],
+      ["Sakura Medical KK","chotatsu@sakura-med.jp","APAC","$1,502,640"],
+      ["Grupo Salud Andino","compras@gsandino.com","LATAM","$1,208,410"],
+      ["Beacon Hospital Network","invoices@beaconhn.org","North America","$1,144,900"],
+      ["Alpine Klinik Gruppe","finanz@alpineklinik.ch","EMEA","$1,020,760"],
+      ["Coral Bay Pharmacies","orders@coralbayrx.com","APAC","$948,330"],
+    ],
+    maskCol:1, maskAs:"p•••••••@•••••••.com",
+    masked:[{col:"contact_email", tag:"PII", rule:"Mask PII for non-data-owners", policy:"PII Data Handling"}],
+    unmask:["admin","steward"],
+    filters:[{n:1204, desc:"EU-resident customer rows withheld", rule:"EU data must remain in EU region", policy:"GDPR Compliance"}],
+    terms:[{t:"Net Revenue",d:"Gross merchandise value less discounts, returns and tax. Owner: maya.chen"}],
+    cites:[{n:"customers",type:"Table",dom:"Commerce",cert:"Approved",fresh:"2h ago"},
+           {n:"orders",type:"Table",dom:"Commerce",cert:"Approved",fresh:"2h ago"}],
+    conf:94, latency:"3.1s", credits:14,
+  },
+  {
+    id:"a3", space:"sp_commerce", mode:"structured",
+    match:["unfulfilled","orders"],
+    q:"Which orders are still unfulfilled after 30 days?",
+    summary:"**318 orders** have been open longer than 30 days, worth $1.42M. 214 of them sit in the EMEA fulfilment queue.",
+    sql:`SELECT  o.id, o.placed_at, c.region, o.net_amount, o.fulfilment_state
+FROM    commerce.orders o
+JOIN    commerce.customers c ON c.id = o.customer_id
+WHERE   o.status = 'OPEN'
+  AND   o.placed_at < CURRENT_DATE - INTERVAL '30 days'
+ORDER BY o.placed_at`,
+    cols:["Order","Placed","Region","Amount","State"],
+    rows:[
+      ["ORD-8841027","2026-07-09","EMEA","$41,880","AWAITING_STOCK"],
+      ["ORD-8839114","2026-07-11","EMEA","$38,204","AWAITING_STOCK"],
+      ["ORD-8836902","2026-07-14","APAC","$29,410","CUSTOMS_HOLD"],
+      ["ORD-8834771","2026-07-16","North America","$24,900","CREDIT_HOLD"],
+      ["ORD-8831208","2026-07-19","EMEA","$21,440","AWAITING_STOCK"],
+    ],
+    stale:{src:"orders_archive", age:"3 days", why:"Scheduled sync last succeeded 3 days ago — the CDP archive connection is behind schedule."},
+    cites:[{n:"orders",type:"Table",dom:"Commerce",cert:"Approved",fresh:"2h ago"},
+           {n:"etl_orders_pipeline",type:"Pipeline",dom:"Commerce",cert:"Approved",fresh:"3d ago"}],
+    conf:90, latency:"2.8s", credits:10,
+  },
+  {
+    id:"a4", space:"sp_commerce", mode:"structured",
+    match:["antarctica"],
+    q:"Revenue from Antarctica this year",
+    summary:"The query ran successfully and returned **no rows** — there is no Antarctica region in `customers.region`. The five values present are North America, EMEA, APAC, LATAM and Unassigned.",
+    sql:`SELECT  SUM(o.net_amount) AS net_revenue
+FROM    commerce.orders o
+JOIN    commerce.customers c ON c.id = o.customer_id
+WHERE   c.region = 'Antarctica'
+  AND   o.fiscal_year = 'FY26'`,
+    cols:["Net revenue"], rows:[],
+    empty:{hint:"Try one of the five regions that exist, or ask “what regions do we have?” to list them."},
+    cites:[{n:"customers",type:"Table",dom:"Commerce",cert:"Approved",fresh:"2h ago"}],
+    conf:88, latency:"1.6s", credits:6,
+  },
+  {
+    id:"a5", space:"sp_finance", mode:"documents",
+    match:["termination","clause","contract"],
+    q:"What are the termination clauses in our 2025 vendor contracts?",
+    summary:"Across the 2025 vendor set, termination language falls into three patterns:\n\n**1. Termination for convenience** — 18 of 24 contracts allow either party to exit on **90 days'** written notice, with pro-rated fees payable to the exit date [1].\n\n**2. Termination for cause** — every contract permits immediate termination on material breach uncured after **30 days'** notice; insolvency and change-of-control are treated as instant-cause events in 11 contracts [2].\n\n**3. Auto-renewal interaction** — 6 contracts renew for successive 12-month terms unless notice is served **60 days** before the anniversary, so the convenience window closes before the renewal window opens [3].",
+    retrieval:"hybrid",
+    cites:[
+      {n:"contracts_2025.pdf",type:"Object",dom:"Finance",cert:"Approved",fresh:"2d ago",loc:"§14.2, p.14",snip:"“Either party may terminate this Agreement for convenience upon ninety (90) days' prior written notice…”"},
+      {n:"contracts_2025.pdf",type:"Object",dom:"Finance",cert:"Approved",fresh:"2d ago",loc:"§14.4, p.15",snip:"“…material breach not cured within thirty (30) days of written notice thereof.”"},
+      {n:"contracts_2025.pdf",type:"Object",dom:"Finance",cert:"Approved",fresh:"2d ago",loc:"§3.1, p.22",snip:"“This Agreement shall renew for successive twelve (12) month terms unless either party gives notice not less than sixty (60) days prior…”"},
+    ],
+    hold:{asset:"contracts_2025.pdf", why:"Under legal hold — readable in place, export and download disabled by the retention policy."},
+    terms:[{t:"MSA",d:"Master Service Agreement — the governing contract for a vendor relationship. Owner: sarah.kim"}],
+    conf:92, latency:"4.4s", credits:22,
+  },
+  {
+    id:"a6", space:"sp_finance", mode:"documents",
+    match:["invoiced","vendor"],
+    q:"Total invoiced amount by vendor for 2026",
+    summary:"FY26 invoiced spend to date is **$28.4M** across 214 vendors. The top five account for 41% of the total.",
+    retrieval:"keyword",
+    cols:["Vendor","Invoices","Invoiced total"],
+    rows:[
+      ["Cardinal Logistics","1,204","$3,840,220"],
+      ["Merck Supply Div.","884","$2,918,400"],
+      ["Thermo Instruments","640","$2,104,880"],
+      ["Iron Mountain","412","$1,744,100"],
+      ["Veeva Systems","208","$1,088,600"],
+    ],
+    cites:[{n:"invoices_2026.parquet",type:"Object",dom:"Finance",cert:"Approved",fresh:"1d ago",loc:"1.4M rows scanned"}],
+    conf:89, latency:"3.6s", credits:18,
+  },
+  {
+    id:"a7", space:"sp_c360", mode:"hybrid",
+    match:["how many","customers","duplicate"],
+    q:"How many customers do we have across Salesforce and the warehouse, and which are duplicates?",
+    summary:"There are **184,200 distinct customers** once the two systems are resolved against each other — not the 2.74M you get by adding the raw row counts. **11,842** golden records draw from both systems; **1,204** match groups are still awaiting a steward decision.",
+    routed:"Cross-Source Knowledge Graph — Customer · matched on Tax ID + Legal Name",
+    cols:["Match state","Golden records","Salesforce","Warehouse"],
+    rows:[
+      ["Matched in both systems","11,842","11,842","11,842"],
+      ["Salesforce only","64,118","64,118","—"],
+      ["Warehouse only","107,036","—","107,036"],
+      ["Conflicting — needs review","1,204","1,204","1,204"],
+    ],
+    masked:[{col:"tax_id", tag:"PII", rule:"Mask PII for non-data-owners", policy:"PII Data Handling"}],
+    maskNote:"Identifying columns behind the match (tax_id, contact_email) were used to resolve records but are not returned in this answer for any role.",
+    unmask:[],
+    cites:[{n:"XKG — Customer",type:"Knowledge Graph",dom:"Commerce",cert:"Approved",fresh:"1d ago",loc:"184,200 golden records"},
+           {n:"customers",type:"Table",dom:"Commerce",cert:"Approved",fresh:"2h ago"},
+           {n:"app_users",type:"Table",dom:"Platform",cert:"Approved",fresh:"6h ago"}],
+    conf:91, latency:"5.8s", credits:26,
+    followUp:["Which 1,204 match groups need review?","Show me the duplicate rate by region"],
+  },
+  {
+    id:"a8", space:"sp_c360", mode:"hybrid",
+    match:["churn"],
+    q:"Show me churn",
+    ambiguous:{
+      why:"“Churn” resolves to two approved glossary terms in this space, and they are calculated differently. Pick the one you meant.",
+      opts:[
+        {label:"Customer Churn Rate", sub:"Customers with no order in 180 days ÷ active customers at period start · Owner maya.chen", ask:"What is the customer churn rate by region?"},
+        {label:"Revenue Churn",       sub:"Net revenue lost from churned customers ÷ opening ARR · Owner sarah.kim", ask:"What is revenue churn this year?"},
+      ],
+    },
+    conf:0, latency:"0.9s", credits:2,
+  },
+  {
+    id:"a9", space:"sp_c360", mode:"hybrid",
+    match:["customer churn","churn rate","region"],
+    q:"What is the customer churn rate by region?",
+    summary:"Trailing-180-day customer churn is **7.4%** overall. LATAM is the outlier at 12.1%, driven by the small-pharmacy segment.",
+    sql:`WITH active AS (
+  SELECT c.id, c.region, MAX(o.placed_at) AS last_order
+  FROM   commerce.customers c
+  JOIN   commerce.orders o ON o.customer_id = c.id
+  GROUP  BY c.id, c.region
+)
+SELECT region,
+       COUNT(*)                                                   AS customers,
+       SUM(CASE WHEN last_order < CURRENT_DATE - 180 THEN 1 END)  AS churned,
+       ROUND(100.0 * SUM(CASE WHEN last_order < CURRENT_DATE - 180
+             THEN 1 END) / COUNT(*), 1)                           AS churn_pct
+FROM   active GROUP BY region ORDER BY churn_pct DESC`,
+    cols:["Region","Customers","Churned","Churn rate"],
+    rows:[
+      ["LATAM","18,204","2,202","12.1%"],
+      ["APAC","41,118","3,412","8.3%"],
+      ["EMEA","62,440","4,180","6.7%"],
+      ["North America","62,438","3,908","6.3%"],
+    ],
+    terms:[{t:"Customer Churn Rate",d:"Customers with no order in 180 days ÷ active customers at period start. Owner: maya.chen"}],
+    cites:[{n:"XKG — Customer",type:"Knowledge Graph",dom:"Commerce",cert:"Approved",fresh:"1d ago"},
+           {n:"orders",type:"Table",dom:"Commerce",cert:"Approved",fresh:"2h ago"}],
+    conf:93, latency:"4.9s", credits:19,
+  },
+  {
+    id:"a10", space:null, mode:"structured",
+    match:["salary","salaries","employee","headcount by pay"],
+    q:"Show me employee salaries by department",
+    denied:{
+      headline:"This question needs data no Answer Space is allowed to reach.",
+      because:"`employees.base_salary` and `employees.national_id` carry the **Restricted-HR** classification, which is on the platform blocklist. Data Ask refuses blocklisted classifications before a query is planned — the SQL was never generated and no data was read.",
+      cls:"Restricted-HR",
+      policy:"SOC2 Access Controls",
+      cols:["employees.base_salary","employees.national_id","hr_records/*"],
+      where:"Settings › Data Ask › Guardrails",
+      requestable:true,
+    },
+    conf:0, latency:"0.4s", credits:0,
+  },
+  {
+    id:"a11", space:"sp_product", mode:"structured",
+    match:["dau","active users"],
+    q:"What is DAU trending at this month?",
+    summary:"August DAU is averaging **1.84M**, up 3.2% on July. The last three days dipped below 1.8M, tracking the release of 4.12.0.",
+    sql:`SELECT  date_trunc('day', e.occurred_at) AS day,
+        COUNT(DISTINCT e.user_id)          AS dau
+FROM    product.user_events e
+WHERE   e.occurred_at >= date_trunc('month', CURRENT_DATE)
+GROUP BY 1 ORDER BY 1`,
+    cols:["Day","DAU","Δ"],
+    rows:[["2026-08-21","1,862,040","+0.4%"],["2026-08-22","1,844,118","-1.0%"],["2026-08-23","1,798,204","-2.5%"],["2026-08-24","1,781,660","-0.9%"]],
+    terms:[{t:"Daily Active Users",d:"Distinct users with at least one qualifying event in a UTC day. Owner: dev.patel"}],
+    cites:[{n:"user_events",type:"Table",dom:"Product",cert:"Approved",fresh:"1h ago"}],
+    conf:82, latency:"3.4s", credits:12,
+  },
+];
+
+// Questions offered on the empty Ask canvas, per space.
+const DA_STARTERS = {
+  sp_commerce:["What was net revenue by region last quarter?","Show me the top 10 customers by revenue with their contact emails","Which orders are still unfulfilled after 30 days?","Show me employee salaries by department"],
+  sp_finance: ["What are the termination clauses in our 2025 vendor contracts?","Total invoiced amount by vendor for 2026"],
+  sp_c360:    ["How many customers do we have across Salesforce and the warehouse, and which are duplicates?","Show me churn"],
+  sp_product: ["What is DAU trending at this month?"],
+};
+
+// ── Verified Answers ────────────────────────────────────────────────────────
+const DA_VERIFIED_SEED = [
+  {id:"v1", q:"What was net revenue by region last quarter?", space:"sp_commerce", answerId:"a1",
+   owner:"maya.chen", verified:"2026-08-18", uses:412, status:"Verified",
+   note:"Canonical revenue-by-region query. Uses Net Revenue as defined in the Commerce glossary."},
+  {id:"v2", q:"Which orders are still unfulfilled after 30 days?", space:"sp_commerce", answerId:"a3",
+   owner:"dev.patel", verified:"2026-08-19", uses:188, status:"Verified",
+   note:"Fulfilment stand-up query. Note the 30-day boundary is exclusive."},
+  {id:"v3", q:"Total invoiced amount by vendor for 2026", space:"sp_finance", answerId:"a6",
+   owner:"sarah.kim", verified:"2026-08-21", uses:96, status:"Verified",
+   note:"Matches the AP ledger to the cent as of the last close."},
+  {id:"v4", q:"What is the customer churn rate by region?", space:"sp_c360", answerId:"a9",
+   owner:"maya.chen", verified:"2026-08-24", uses:41, status:"Verified",
+   note:"Uses the 180-day definition. Do not compare against the old 90-day dashboard."},
+  {id:"v5", q:"What was gross margin by product line last quarter?", space:"sp_commerce", answerId:null,
+   owner:"maya.chen", verified:"2026-06-02", uses:8, status:"Retired",
+   note:"Retired — product line hierarchy changed in FY26. Superseded by the margin data product."},
+];
+
+// ── Review Queue ────────────────────────────────────────────────────────────
+const DA_REVIEW_SEED = [
+  {id:"rv1", kind:"Wrong answer", q:"Which orders are still unfulfilled after 30 days?", space:"sp_commerce",
+   by:"lisa.ray", at:"2026-08-24 09:12", assignee:"maya.chen", status:"Open", sev:"High",
+   note:"Count looks low. I think credit holds are being excluded but they should count as unfulfilled.",
+   fixes:["addSynonym","reassign","dismiss"]},
+  {id:"rv2", kind:"Missing synonym", q:"What's our basket size?", space:"sp_commerce",
+   by:"dev.patel", at:"2026-08-23 16:40", assignee:"maya.chen", status:"Open", sev:"Low",
+   note:"“Basket size” wasn't understood. It should map to orders.item_count.",
+   suggest:{term:"basket size", maps:"orders.item_count"},
+   fixes:["addSynonym","dismiss"]},
+  {id:"rv3", kind:"Access denied", q:"Show me employee salaries by department", space:"—",
+   by:"sarah.kim", at:"2026-08-23 11:05", assignee:"alex.rivera", status:"Open", sev:"Med",
+   note:"I run comp benchmarking for Finance and need banded salary data, not individual records.",
+   fixes:["grant","dismiss"]},
+  {id:"rv4", kind:"Wrong join", q:"How many sessions per user last week?", space:"sp_product",
+   by:"james.oh", at:"2026-08-22 14:22", assignee:"maya.chen", status:"Open", sev:"High",
+   note:"user_sessions.user_id is joining to app_users.id but those are different ID spaces.",
+   fixes:["reassign","dismiss"]},
+  {id:"rv5", kind:"Wrong answer", q:"Revenue by region last quarter", space:"sp_commerce",
+   by:"tom.vance", at:"2026-08-14 10:00", assignee:"maya.chen", status:"Resolved", sev:"Med",
+   note:"Was returning gross, not net.", resolution:"Approved the `revenue → orders.net_amount` synonym and rebuilt the index. Published as v4."},
+];
+
+// ── Activity log ────────────────────────────────────────────────────────────
+const DA_ACTIVITY_SEED = [
+  {at:"2026-08-24 11:42", who:"lisa.ray",    space:"sp_commerce", q:"Which orders are still unfulfilled after 30 days?", mode:"structured", decision:"Answered", masked:0, filtered:0, credits:10, ms:2800},
+  {at:"2026-08-24 11:20", who:"dev.patel",   space:"sp_commerce", q:"Show me the top 10 customers by revenue with their contact emails", mode:"structured", decision:"Masked", masked:1, filtered:1204, credits:14, ms:3100},
+  {at:"2026-08-24 10:58", who:"sarah.kim",   space:"sp_finance",  q:"What are the termination clauses in our 2025 vendor contracts?", mode:"documents", decision:"Answered", masked:0, filtered:0, credits:22, ms:4400},
+  {at:"2026-08-24 10:31", who:"sarah.kim",   space:"—",           q:"Show me employee salaries by department", mode:"structured", decision:"Denied", masked:0, filtered:0, credits:0, ms:400},
+  {at:"2026-08-24 09:48", who:"alex.rivera", space:"sp_c360",     q:"How many customers do we have across Salesforce and the warehouse, and which are duplicates?", mode:"hybrid", decision:"Answered", masked:2, filtered:0, credits:26, ms:5800},
+  {at:"2026-08-24 09:12", who:"lisa.ray",    space:"sp_commerce", q:"Which orders are still unfulfilled after 30 days?", mode:"structured", decision:"Reported", masked:0, filtered:0, credits:10, ms:2900},
+  {at:"2026-08-23 17:04", who:"maya.chen",   space:"sp_commerce", q:"What was net revenue by region last quarter?", mode:"structured", decision:"Answered", masked:0, filtered:0, credits:11, ms:2400},
+  {at:"2026-08-23 16:40", who:"dev.patel",   space:"sp_commerce", q:"What's our basket size?", mode:"structured", decision:"Not understood", masked:0, filtered:0, credits:3, ms:1100},
+  {at:"2026-08-23 15:12", who:"james.oh",    space:"sp_product",  q:"How many sessions per user last week?", mode:"structured", decision:"Reported", masked:0, filtered:0, credits:9, ms:3300},
+  {at:"2026-08-23 11:05", who:"sarah.kim",   space:"—",           q:"Show me employee salaries by department", mode:"structured", decision:"Denied", masked:0, filtered:0, credits:0, ms:380},
+  {at:"2026-08-23 09:30", who:"lisa.ray",    space:"sp_finance",  q:"Which contracts renew automatically?", mode:"documents", decision:"Answered", masked:0, filtered:0, credits:20, ms:4100},
+  {at:"2026-08-22 16:18", who:"dev.patel",   space:"sp_c360",     q:"Show me churn", mode:"hybrid", decision:"Clarified", masked:0, filtered:0, credits:2, ms:900},
+];
+
+// ── Platform settings (Settings › Data Ask) ─────────────────────────────────
+const DA_SETTINGS_SEED = {
+  models:{
+    sql:      {provider:"anthropic", model:"claude-opus-5",  temp:0,   maxTok:4096, fallback:"gpt-4o"},
+    summary:  {provider:"anthropic", model:"claude-sonnet-5",temp:0.2, maxTok:2048, fallback:"gpt-4o-mini"},
+    embed:    {provider:"openai",    model:"text-embedding-3-large", temp:0, maxTok:8191, fallback:"none"},
+    semantics:{provider:"anthropic", model:"claude-sonnet-5",temp:0.3, maxTok:2048, fallback:"none"},
+  },
+  retrieval:{mode:"hybrid", topK:12, chunk:800, overlap:120, rerank:true, minScore:0.62},
+  guards:{maxRows:5000, timeout:60, blockedTags:["Restricted-HR"], onConflict:"mask",
+          requirePublished:true, editSql:"steward", showRaw:"owner", injectionDefense:true, groundedOnly:true},
+  privacy:{retainDays:90, redactPrompts:true, excludeTraining:true, region:"eu-west-1", logPrompts:true},
+  cost:{balance:38400, granted:50000, rollForward:true, capUser:500, capSpace:8000, alertAt:80,
+        rates:[
+          {act:"Prompt → SQL",            unit:"per query",     rate:"$0.014"},
+          {act:"Document retrieval",      unit:"per query",     rate:"$0.022"},
+          {act:"Hybrid (router + both)",  unit:"per query",     rate:"$0.031"},
+          {act:"Semantic index build",    unit:"per 1K chunks", rate:"$0.180"},
+          {act:"AI semantics generation", unit:"per 100 cols",  rate:"$0.240"},
+        ]},
+  access:{ask:["admin","steward","analyst","engineer","viewer"], editSql:["admin","steward","engineer"],
+          publish:["admin","steward"], seeRaw:["admin"], manage:["admin"]},
+};
+
+// ── Store ───────────────────────────────────────────────────────────────────
+// Module-level so a report filed on the Ask tab is visible on the Review tab,
+// and so a conversation survives navigating away and back.
+let _da = {
+  spaces:   DA_SPACE_SEED,
+  verified: DA_VERIFIED_SEED,
+  review:   DA_REVIEW_SEED,
+  activity: DA_ACTIVITY_SEED,
+  settings: DA_SETTINGS_SEED,
+  threads:  [],
+  activeThread: null,
+};
+const _daSubs = new Set();
+const _daNotify = ()=>_daSubs.forEach(f=>f());
+const daPatch = patch => { _da = {..._da, ...patch}; _daNotify(); };
+const useDA = () => {
+  const [,force] = useState(0);
+  useEffect(()=>{ const fn=()=>force(n=>n+1); _daSubs.add(fn); return()=>{_daSubs.delete(fn);}; },[]);
+  return _da;
+};
+const daSpace = id => _da.spaces.find(s=>s.id===id);
+const daUpdSpace = (id,patch) => daPatch({spaces:_da.spaces.map(s=>s.id===id?{...s,...(typeof patch==="function"?patch(s):patch)}:s)});
+const daLog = row => daPatch({activity:[{...row}, ..._da.activity]});
+const daAddReview = row => daPatch({review:[{...row}, ..._da.review]});
+
+// What stands between this space and a good answer — derived, never stored, so a
+// steward who fixes the cause sees the item disappear. `hard` means no override
+// exists: the platform blocklist outranks every owner and every entitlement.
+const daBlockers = sp => {
+  const S = _da.settings, out = [];
+  const bad = (sp.sources||[]).filter(x=>(x.tags||[]).some(t=>S.guards.blockedTags.includes(t)));
+  if(bad.length) out.push({hard:true,
+    t:`${bad.map(x=>x.name).join(", ")} carries a classification on the platform blocklist (${S.guards.blockedTags.join(", ")})`,
+    fix:"Settings › Data Ask › Guardrails — an Admin must allow the classification before this space can be indexed"});
+  const uncert = (sp.sources||[]).filter(x=>x.cert && x.cert!=="Approved");
+  if(uncert.length && sp.guards && sp.guards.requireCert) out.push({
+    t:`${uncert.map(x=>`${x.name} is marked ${x.cert}`).join(", ")} in the catalog`,
+    fix:"Remove it from scope, re-certify the asset, or turn off Require certified assets"});
+  const bj = (sp.joins||[]).filter(j=>!j.ok);
+  if(bj.length) out.push({
+    t:`${bj.length} join${bj.length===1?" is":"s are"} below the 80% confidence threshold`,
+    fix:`Confirm or drop ${bj.map(j=>`${j.from} → ${j.to}`).join(", ")} in Scope`});
+  const pend = (sp.synonyms||[]).filter(x=>x.status==="Pending");
+  if(pend.length) out.push({
+    t:`${pend.length} synonym${pend.length===1?"":"s"} awaiting steward approval`,
+    fix:"Approve or reject in Semantics, then rebuild the index"});
+  if(sp.indexed==="—" && !bad.length) out.push({
+    t:"Never indexed", fix:"Build the index before submitting this space for review"});
+  return out;
+};
+// A published space with open steward work is not "blocking" anything — the banner
+// is reserved for a hard stop, or for a space that cannot yet be published.
+const daIsBlocking = sp => { const b = daBlockers(sp);
+  return b.some(x=>x.hard) || (sp.status!=="Published" && b.length>0); };
+
+// Intent match. Deliberately simple and inspectable — a demo of routing, not a
+// claim to be a retriever. Scores keyword coverage and requires a real overlap
+// so an unrelated question falls through to the "not understood" path.
+const daResolve = (text, spaceId) => {
+  const t = " "+text.toLowerCase().replace(/[^a-z0-9 ]/g," ").replace(/\s+/g," ")+" ";
+  let best=null, bestScore=0;
+  DA_ANSWERS.forEach(a=>{
+    if(a.space && spaceId && a.space!==spaceId) return;
+    const hits = a.match.filter(k=>t.includes(" "+k) || t.includes(k+" ") || t.includes(k));
+    if(!hits.length) return;
+    const score = hits.length/a.match.length + (hits.length>1?0.15:0);
+    if(score>bestScore){ best=a; bestScore=score; }
+  });
+  return bestScore>=0.5 ? best : null;
+};
+
+// A space whose only hard blocker was the blocklist becomes an ordinary draft the
+// moment an Admin allows the classification. Status has to follow the setting.
+const daEffStatus = sp => (sp.status==="Blocked" && !daBlockers(sp).some(b=>b.hard))
+  ? "Draft" : sp.status;
+
+// Which projection does this role get? Returns the answer plus the decision.
+const daProject = (ans, role) => {
+  if(!ans) return null;
+  // A refusal is only valid while the classification is still on the blocklist.
+  if(ans.denied && !_da.settings.guards.blockedTags.includes(ans.denied.cls)){
+    const host = _da.spaces.find(sp=>(sp.sources||[]).some(x=>(x.tags||[]).includes(ans.denied.cls)));
+    ans = {...ans, denied:{
+      headline:"No Answer Space covers this data yet.",
+      because:`\`${ans.denied.cls}\` is no longer on the platform blocklist, so Data Ask may index it. But no **published** Answer Space has these columns in scope, and Data Ask never reaches outside a published scope.`,
+      cls:ans.denied.cls, policy:ans.denied.policy, cols:ans.denied.cols,
+      where: host ? `Data Ask \u203a Answer Spaces \u203a ${host.name}` : "Data Ask \u203a Answer Spaces",
+      publishHint: host ? host.name : null, requestable:false,
+    }};
+  }
+  const entitled = !!(ans.unmask && ans.unmask.includes(role));
+  const willMask = !!(ans.masked && ans.masked.length && !entitled);
+  const rows = (willMask && ans.maskCol!=null && ans.rows)
+    ? ans.rows.map(r=>r.map((c,i)=>i===ans.maskCol?ans.maskAs:c))
+    : ans.rows;
+  const decision = ans.denied ? "Denied"
+                 : ans.ambiguous ? "Clarified"
+                 : willMask ? "Masked" : "Answered";
+  return {...ans, rows, entitled, willMask, decision};
+};
+const DA_DECISION_COLOR = d => ({Answered:T.green, Masked:T.amber, Denied:T.rose,
+  Clarified:T.blue, Reported:T.violet, "Not understood":T.textMuted}[d]||T.textSub);
+
+
+// ── Small shared pieces ─────────────────────────────────────────────────────
+
+// Minimal inline formatter: **bold**, `mono`, blank-line paragraphs. Enough for
+// answer prose without pulling in a markdown dependency.
+const DAText = ({children,size=13,color}) => {
+  const paras = String(children||"").split("\n\n");
+  const inline = (s,kb) => {
+    const out=[]; let buf=""; let i=0;
+    const flush=()=>{ if(buf){out.push(buf);buf="";} };
+    while(i<s.length){
+      if(s.startsWith("**",i)){
+        const e=s.indexOf("**",i+2);
+        if(e>-1){ flush(); out.push(<b key={`${kb}b${i}`} style={{fontWeight:700,color:T.text}}>{s.slice(i+2,e)}</b>); i=e+2; continue; }
+      }
+      if(s[i]==="`"){
+        const e=s.indexOf("`",i+1);
+        if(e>-1){ flush(); out.push(<code key={`${kb}c${i}`} style={{fontFamily:"'Geist Mono',monospace",fontSize:size-1.3,padding:"1px 5px",borderRadius:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>{s.slice(i+1,e)}</code>); i=e+1; continue; }
+      }
+      buf+=s[i]; i++;
+    }
+    flush(); return out;
+  };
+  return <>{paras.map((p,i)=>(
+    <div key={i} style={{fontSize:size,lineHeight:1.68,color:color||T.textSub,marginTop:i?9:0}}>{inline(p,i)}</div>
+  ))}</>;
+};
+
+const DAPill = ({children,color,bg,mono,title}) => (
+  <span title={title} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2.5px 8px",borderRadius:99,whiteSpace:"nowrap",
+    fontSize:10.5,fontWeight:600,fontFamily:mono?"'Geist Mono',monospace":"inherit",
+    background:bg||(color?color+"1a":T.bgElevated), color:color||T.textSub, border:`1px solid ${color?color+"44":T.border}`}}>{children}</span>
+);
+
+const DAModeTag = ({mode}) => {
+  const c = DA_MODE_COLOR(mode);
+  return <DAPill color={c}>{(DA_MODES[mode]||{}).label||mode}</DAPill>;
+};
+
+const DAStatusTag = ({status}) => {
+  const c = {Published:T.green, "In review":T.amber, Draft:T.textSub, Blocked:T.rose, Retired:T.textMuted,
+             Verified:T.green, Open:T.amber, Resolved:T.green}[status]||T.textSub;
+  return <DAPill color={c}>{status}</DAPill>;
+};
+
+const DASectionLabel = ({children,style}) => (
+  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:7,...style}}>{children}</div>
+);
+
+// A result grid. Kept deliberately plain — the interesting part of an answer is
+// the trace around it, not chrome on the table.
+const DAResultTable = ({cols,rows,maskCol,masked}) => {
+  if(!cols) return null;
+  return (
+    <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",background:T.bgSurface}}>
+      <div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead><tr style={{background:T.bgElevated}}>
+            {cols.map((c,i)=>(
+              <th key={c} style={{padding:"8px 12px",textAlign:i?"right":"left",fontSize:10,fontWeight:700,color:T.textMuted,
+                textTransform:"uppercase",letterSpacing:"0.06em",whiteSpace:"nowrap",borderBottom:`1px solid ${T.border}`}}>
+                {c}
+                {masked && i===maskCol && <span style={{marginLeft:5,color:T.amber,fontWeight:700}} title="Masked by policy">◆</span>}
+              </th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {rows.length===0
+              ? <tr><td colSpan={cols.length} style={{padding:"26px 12px",textAlign:"center",fontSize:12,color:T.textMuted}}>0 rows</td></tr>
+              : rows.map((r,ri)=>(
+                <tr key={ri} style={{borderBottom:ri<rows.length-1?`1px solid ${T.border}`:"none"}}>
+                  {r.map((c,ci)=>(
+                    <td key={ci} style={{padding:"8px 12px",fontSize:12,textAlign:ci?"right":"left",whiteSpace:"nowrap",
+                      color:(masked&&ci===maskCol)?T.amber:T.text,
+                      fontFamily:ci?"'Geist Mono',monospace":"inherit",
+                      fontWeight:ci===0?600:400}}>{c}</td>
+                  ))}
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+// Collapsible SQL panel with an edit-and-rerun path. Who may edit is a platform
+// setting, so the affordance disappears rather than failing when disallowed.
+const DASqlPanel = ({sql,canEdit,onRun,edited}) => {
+  const [open,setOpen] = useState(false);
+  const [editing,setEditing] = useState(false);
+  const [draft,setDraft] = useState(sql);
+  useEffect(()=>{ setDraft(sql); },[sql]);
+  return (
+    <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",background:T.bgElevated}}>
+      <div onClick={()=>setOpen(o=>!o)} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 11px",cursor:"pointer"}}>
+        <span style={{color:T.textMuted,display:"flex",transform:open?"rotate(90deg)":"none",transition:"transform .15s"}}>{Ic.chevRight(11)}</span>
+        <span style={{fontSize:11.5,fontWeight:600,color:T.textSub}}>Generated SQL</span>
+        {edited && <DAPill color={T.violet}>Edited by you</DAPill>}
+        <span style={{marginLeft:"auto",fontSize:10.5,color:T.textMuted}}>{open?"Hide":"Show"}</span>
+      </div>
+      {open&&(
+        <div style={{borderTop:`1px solid ${T.border}`,padding:11}}>
+          {editing
+            ? <textarea value={draft} onChange={e=>setDraft(e.target.value)} rows={Math.min(18,(draft||"").split("\n").length+1)}
+                style={{width:"100%",background:T.bgSurface,border:`1px solid ${T.accent}66`,borderRadius:7,color:T.text,
+                  fontFamily:"'Geist Mono',monospace",fontSize:11.5,lineHeight:1.6,padding:10,outline:"none",resize:"vertical"}}/>
+            : <pre style={{margin:0,fontFamily:"'Geist Mono',monospace",fontSize:11.5,lineHeight:1.65,color:T.textSub,
+                whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{draft}</pre>}
+          <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
+            {editing ? (<>
+              <Btn small variant="primary" onClick={()=>{setEditing(false);onRun&&onRun(draft);}}>Run edited SQL</Btn>
+              <Btn small ghost onClick={()=>{setDraft(sql);setEditing(false);}}>Cancel</Btn>
+            </>) : (<>
+              {canEdit
+                ? <Btn small ghost icon={Ic.edit(10)} onClick={()=>setEditing(true)}>Edit SQL</Btn>
+                : <span style={{fontSize:10.5,color:T.textMuted,alignSelf:"center"}}>Editing SQL is restricted to stewards — Settings › Data Ask › Access</span>}
+              <Btn small ghost icon={Ic.copy(10)} onClick={()=>{navigator.clipboard&&navigator.clipboard.writeText(draft);}}>Copy</Btn>
+            </>)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// The governance strip — the one element that makes this Data Ask and not a
+// chatbot. Always present, always clickable through to the full trace.
+const DAGovStrip = ({ans,onOpen}) => {
+  const items = [];
+  if(ans.willMask)  items.push({c:T.amber, t:`${ans.masked.length} column${ans.masked.length===1?"":"s"} masked`});
+  else if(ans.masked&&ans.masked.length) items.push({c:T.blue, t:`${ans.masked.length} column${ans.masked.length===1?"":"s"} unmasked — you are entitled`});
+  if(ans.filters&&ans.filters.length) items.push({c:T.amber, t:`${ans.filters.reduce((n,f)=>n+f.n,0).toLocaleString()} rows withheld`});
+  if(ans.hold)      items.push({c:T.rose,  t:"Legal hold — export disabled"});
+  if(ans.stale)     items.push({c:T.amber, t:`Data as of ${ans.stale.age} ago`});
+  if(ans.cites)     items.push({c:T.textSub, t:`${ans.cites.length} source${ans.cites.length===1?"":"s"} cited`});
+  if(!items.some(i=>i.c===T.amber||i.c===T.rose)) items.unshift({c:T.green, t:"No policy restrictions applied"});
+  const worst = items.some(i=>i.c===T.rose) ? T.rose : items.some(i=>i.c===T.amber) ? T.amber : T.green;
+  return (
+    <button onClick={onOpen} style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",width:"100%",textAlign:"left",
+      padding:"8px 11px",borderRadius:8,cursor:"pointer",fontFamily:"inherit",
+      background:worst+"0e",border:`1px solid ${worst}44`}}>
+      <span style={{color:worst,display:"flex",flexShrink:0}}>{Ic.shield(12)}</span>
+      {items.map((it,i)=>(
+        <span key={i} style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,color:it.c===T.textSub?T.textMuted:it.c,fontWeight:it.c===T.textSub?400:600}}>
+          {i>0&&<span style={{color:T.border}}>·</span>}{it.t}
+        </span>
+      ))}
+      <span style={{marginLeft:"auto",fontSize:10.5,fontWeight:600,color:T.textMuted,whiteSpace:"nowrap"}}>Why this answer →</span>
+    </button>
+  );
+};
+
+// Full policy trace. Opened from the strip; this is what an auditor reads.
+const DATrustDrawer = ({ans,space,role,onClose,onNav}) => {
+  if(!ans) return null;
+  const Row = ({l,v,c}) => (
+    <div style={{display:"flex",gap:12,padding:"7px 0",borderBottom:`1px solid ${T.border}`}}>
+      <span style={{fontSize:11.5,color:T.textMuted,width:132,flexShrink:0}}>{l}</span>
+      <span style={{fontSize:11.5,color:c||T.text,fontWeight:500,minWidth:0,wordBreak:"break-word"}}>{v}</span>
+    </div>
+  );
+  return createPortal(
+    <div onClick={onClose} className="fadeIn" style={{position:"fixed",inset:0,zIndex:1200,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}>
+      <div onClick={e=>e.stopPropagation()} className="slideInRight" style={{position:"absolute",top:0,right:0,bottom:0,width:520,maxWidth:"96vw",
+        background:T.bgSurface,borderLeft:`1px solid ${T.border}`,boxShadow:"-12px 0 48px rgba(0,0,0,.32)",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"14px 20px",borderBottom:`1px solid ${T.border}`,background:T.bgElevated,display:"flex",alignItems:"center",gap:12}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:14,fontWeight:700,color:T.text}}>Why this answer</div>
+            <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>Everything applied between your question and the result</div>
+          </div>
+          <button onClick={onClose} style={{marginLeft:"auto",width:28,height:28,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,
+            color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.x(11)}</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"18px 20px"}}>
+
+          <DASectionLabel>Request</DASectionLabel>
+          <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",marginBottom:18}}>
+            <div style={{fontSize:12.5,color:T.text,lineHeight:1.55,marginBottom:8}}>{ans.q}</div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              <DAPill color={T.textSub}>{space?space.name:"No space"}</DAPill>
+              <DAModeTag mode={ans.mode}/>
+              <DAPill color={DA_DECISION_COLOR(ans.decision)}>{ans.decision}</DAPill>
+              <DAPill color={T.textSub} mono>{role}</DAPill>
+            </div>
+          </div>
+
+          <DASectionLabel>Pipeline</DASectionLabel>
+          <div style={{marginBottom:18}}>
+            {[
+              {n:"1", t:"Entitlement check", d:ans.denied
+                  ? `Refused — ${ans.denied.cls} is on the platform blocklist`
+                  : `Passed — role ${role} may ask in this space`, ok:!ans.denied},
+              {n:"2", t:"Intent resolution", d:ans.ambiguous
+                  ? "Ambiguous — two glossary terms matched, clarification requested"
+                  : ans.routed || `Resolved against ${space?space.name:"—"} semantics`, ok:!ans.ambiguous},
+              {n:"3", t:"Plan & retrieve", d:ans.mode==="documents"
+                  ? `${(DA_RETRIEVAL[ans.retrieval]||{}).label||"Hybrid"} retrieval over the space index`
+                  : ans.sql ? "SQL generated from the governed schema and joins" : "No plan generated", ok:!!(ans.sql||ans.cites)},
+              {n:"4", t:"Policy enforcement", d:ans.willMask
+                  ? `${ans.masked.length} column(s) masked, ${(ans.filters||[]).reduce((n,f)=>n+f.n,0).toLocaleString()} row(s) withheld`
+                  : ans.entitled ? "Entitled — raw values served and logged"
+                  : "No restrictions matched this result", ok:true},
+              {n:"5", t:"Compose & cite", d:`${(ans.cites||[]).length} source(s) cited · confidence ${ans.conf}%`, ok:true},
+            ].map((s,i)=>(
+              <div key={s.n} style={{display:"flex",gap:10,padding:"9px 0",borderTop:i?`1px solid ${T.border}`:"none"}}>
+                <span style={{width:20,height:20,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+                  fontSize:10,fontWeight:700,fontFamily:"'Geist Mono',monospace",
+                  background:(s.ok?T.green:T.rose)+"1a",color:s.ok?T.green:T.rose,border:`1px solid ${(s.ok?T.green:T.rose)}44`}}>{s.n}</span>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:600,color:T.text}}>{s.t}</div>
+                  <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.55,marginTop:1}}>{s.d}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {ans.masked&&ans.masked.length>0&&(<>
+            <DASectionLabel>Column-level enforcement</DASectionLabel>
+            <div style={{marginBottom:18}}>
+              {ans.masked.map(m=>(
+                <div key={m.col} style={{padding:"10px 12px",marginBottom:7,borderRadius:8,
+                  background:(ans.entitled?T.blue:T.amber)+"0e",border:`1px solid ${(ans.entitled?T.blue:T.amber)}44`}}>
+                  <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap",marginBottom:4}}>
+                    <span style={{fontSize:12,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{m.col}</span>
+                    <DAPill color={T.rose}>{m.tag}</DAPill>
+                    <DAPill color={ans.entitled?T.blue:T.amber}>{ans.entitled?"Served raw":"Masked"}</DAPill>
+                  </div>
+                  <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.55}}>
+                    Rule <b style={{color:T.textSub}}>{m.rule}</b> from policy <b style={{color:T.textSub}}>{m.policy}</b>.
+                    {ans.entitled
+                      ? " You are an owner of this policy, so raw values were served — this access is written to the audit log."
+                      : " Your role is not an owner of this policy, so the masked projection was served."}
+                  </div>
+                  <Btn small ghost onClick={()=>onNav&&onNav("policymanager")}>Open policy</Btn>
+                </div>
+              ))}
+              {ans.maskNote&&<div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6,padding:"2px 2px 0"}}>{ans.maskNote}</div>}
+            </div>
+          </>)}
+
+          {ans.filters&&ans.filters.length>0&&(<>
+            <DASectionLabel>Row-level enforcement</DASectionLabel>
+            <div style={{marginBottom:18}}>
+              {ans.filters.map((f,i)=>(
+                <div key={i} style={{padding:"10px 12px",marginBottom:7,borderRadius:8,background:T.amber+"0e",border:`1px solid ${T.amber}44`}}>
+                  <div style={{fontSize:12,fontWeight:700,color:T.text,marginBottom:3}}>{f.n.toLocaleString()} rows withheld</div>
+                  <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.55}}>
+                    {f.desc} — rule <b style={{color:T.textSub}}>{f.rule}</b> from policy <b style={{color:T.textSub}}>{f.policy}</b>.
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>)}
+
+          {ans.hold&&(<>
+            <DASectionLabel>Retention & legal hold</DASectionLabel>
+            <div style={{padding:"10px 12px",marginBottom:18,borderRadius:8,background:T.rose+"0e",border:`1px solid ${T.rose}44`}}>
+              <div style={{fontSize:12,fontWeight:700,color:T.text,marginBottom:3,fontFamily:"'Geist Mono',monospace"}}>{ans.hold.asset}</div>
+              <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.55}}>{ans.hold.why}</div>
+            </div>
+          </>)}
+
+          {ans.stale&&(<>
+            <DASectionLabel>Freshness</DASectionLabel>
+            <div style={{padding:"10px 12px",marginBottom:18,borderRadius:8,background:T.amber+"0e",border:`1px solid ${T.amber}44`}}>
+              <div style={{fontSize:12,fontWeight:700,color:T.text,marginBottom:3}}>Data as of {ans.stale.age} ago</div>
+              <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.55}}>{ans.stale.why}</div>
+            </div>
+          </>)}
+
+          {ans.cites&&ans.cites.length>0&&(<>
+            <DASectionLabel>Sources</DASectionLabel>
+            <div style={{marginBottom:18}}>
+              {ans.cites.map((c,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:9,padding:"9px 0",borderTop:i?`1px solid ${T.border}`:"none"}}>
+                  <div style={{minWidth:0,flex:1}}>
+                    <div style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis"}}>{c.n}</div>
+                    <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{c.type} · {c.dom} · {c.cert} · updated {c.fresh}{c.loc?` · ${c.loc}`:""}</div>
+                  </div>
+                  <Btn small ghost onClick={()=>onNav&&onNav("catalog")}>Open</Btn>
+                </div>
+              ))}
+            </div>
+          </>)}
+
+          <DASectionLabel>Accounting</DASectionLabel>
+          <div>
+            <Row l="Confidence" v={`${ans.conf}%`} c={ans.conf>=90?T.green:ans.conf>=75?T.amber:T.rose}/>
+            <Row l="Latency" v={ans.latency}/>
+            <Row l="Credits consumed" v={`${ans.credits} credits`}/>
+            <Row l="Model — planning" v={_da.settings.models.sql.model} />
+            <Row l="Model — summary" v={_da.settings.models.summary.model} />
+            <Row l="Prompt redaction" v={_da.settings.privacy.redactPrompts?"On — classified values stripped before the model call":"Off"}
+                 c={_da.settings.privacy.redactPrompts?T.green:T.amber}/>
+            <Row l="Audit record" v="Written to Data Ask › Activity and Settings › Audit Logs"/>
+          </div>
+        </div>
+      </div>
+    </div>, document.body);
+};
+
+
+// ── Ask ─────────────────────────────────────────────────────────────────────
+
+const DA_THINK_STEPS = [
+  "Checking your entitlement…",
+  "Resolving the question against governed semantics…",
+  "Planning and retrieving…",
+  "Applying policy to the result…",
+];
+
+const daNow = () => {
+  const d = new Date(), p = n=>String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
+const DAThinking = ({step}) => (
+  <div style={{display:"flex",flexDirection:"column",gap:7,padding:"12px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10}}>
+    {DA_THINK_STEPS.map((s,i)=>{
+      const done = i<step, now = i===step;
+      return (
+        <div key={s} style={{display:"flex",alignItems:"center",gap:9,opacity:i<=step?1:0.35}}>
+          <span style={{width:14,height:14,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+            background:done?T.green+"22":now?T.accentDim:"transparent",border:`1.5px solid ${done?T.green:now?T.accent:T.border}`}}>
+            {done&&<svg width="7" height="7" viewBox="0 0 10 10" fill="none"><path d="M1.5 5.4L3.7 7.6 8.4 2.6" stroke={T.green} strokeWidth="2" strokeLinecap="round"/></svg>}
+          </span>
+          <span className={now?"":""} style={{fontSize:12,color:done?T.textSub:now?T.text:T.textMuted,fontWeight:now?600:400,
+            animation:now?"pulse2 1.1s ease-in-out infinite":"none"}}>{s}</span>
+        </div>
+      );
+    })}
+  </div>
+);
+
+// Report-a-bad-answer drawer. Files a real work item into the Review Queue.
+const DAReportDrawer = ({msg,space,me,onClose,onDone}) => {
+  const [kind,setKind] = useState("Wrong answer");
+  const [note,setNote] = useState("");
+  const sel = {width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,cursor:"pointer",outline:"none"};
+  return createPortal(
+    <div onClick={onClose} className="fadeIn" style={{position:"fixed",inset:0,zIndex:1200,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}>
+      <div onClick={e=>e.stopPropagation()} className="slideInRight" style={{position:"absolute",top:0,right:0,bottom:0,width:460,maxWidth:"96vw",
+        background:T.bgSurface,borderLeft:`1px solid ${T.border}`,boxShadow:"-12px 0 48px rgba(0,0,0,.32)",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"14px 20px",borderBottom:`1px solid ${T.border}`,background:T.bgElevated,display:"flex",alignItems:"center",gap:12}}>
+          <div><div style={{fontSize:14,fontWeight:700,color:T.text}}>Report this answer</div>
+            <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>Goes to the steward who owns this Answer Space</div></div>
+          <button onClick={onClose} style={{marginLeft:"auto",width:28,height:28,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,
+            color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"18px 20px"}}>
+          <DASectionLabel>Question</DASectionLabel>
+          <div style={{fontSize:12.5,color:T.text,lineHeight:1.55,padding:"10px 12px",background:T.bgElevated,
+            border:`1px solid ${T.border}`,borderRadius:8,marginBottom:16}}>{msg.q}</div>
+
+          <DASectionLabel>What went wrong</DASectionLabel>
+          <select value={kind} onChange={e=>setKind(e.target.value)} style={{...sel,marginBottom:16}}>
+            <option>Wrong answer</option>
+            <option>Missing synonym</option>
+            <option>Wrong join</option>
+            <option>Access denied</option>
+            <option>Stale data</option>
+          </select>
+
+          <DASectionLabel>Details</DASectionLabel>
+          <textarea value={note} onChange={e=>setNote(e.target.value)} rows={5} placeholder="What did you expect instead? The more specific, the faster the steward can fix the space."
+            style={{width:"100%",padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,
+              fontSize:12.5,lineHeight:1.6,outline:"none",resize:"vertical",fontFamily:"inherit",marginBottom:8}}/>
+          <div style={{fontSize:11,color:T.textMuted,lineHeight:1.6}}>
+            The question, the generated plan, the policy decisions and the sources cited are attached automatically.
+          </div>
+        </div>
+        <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,background:T.bgElevated,display:"flex",gap:8,justifyContent:"flex-end"}}>
+          <Btn ghost small onClick={onClose}>Cancel</Btn>
+          <Btn variant="primary" small disabled={!note.trim()} onClick={()=>{
+            daAddReview({id:"rv"+Date.now(), kind, q:msg.q, space:space?space.id:"—", by:me, at:daNow(),
+              assignee:space?space.owner:"alex.rivera", status:"Open", sev:kind==="Wrong answer"?"High":"Med", note:note.trim(),
+              fixes:kind==="Missing synonym"?["addSynonym","dismiss"]:kind==="Access denied"?["grant","dismiss"]:["reassign","dismiss"]});
+            daLog({at:daNow(), who:me, space:space?space.id:"—", q:msg.q, mode:msg.ans?msg.ans.mode:"structured",
+              decision:"Reported", masked:0, filtered:0, credits:0, ms:0});
+            onDone(`Reported to ${space?space.owner:"alex.rivera"} — tracked in Review Queue`);
+          }}>Send report</Btn>
+        </div>
+      </div>
+    </div>, document.body);
+};
+
+// One assistant turn: the answer, or one of the six non-answer outcomes.
+const DAAnswerCard = ({msg,space,role,me,canEditSql,canPublish,onToast,onNav,onTrust,onReport,onAsk,onSaveVerified,onEditSql,onManage}) => {
+  const ans = msg.ans;
+  const [fb,setFb] = useState(msg.fb||null);
+
+  // ── denied ──
+  if(ans && ans.denied){
+    const d = ans.denied;
+    return (
+      <div style={{border:`1px solid ${T.rose}55`,borderRadius:10,overflow:"hidden",background:T.rose+"09"}}>
+        <div style={{padding:"13px 15px",borderBottom:`1px solid ${T.rose}33`,display:"flex",alignItems:"center",gap:9}}>
+          <span style={{color:T.rose,display:"flex"}}>{Ic.shield(15)}</span>
+          <span style={{fontSize:13,fontWeight:700,color:T.text}}>{d.headline}</span>
+          <DAPill color={T.rose}>Denied</DAPill>
+        </div>
+        <div style={{padding:"13px 15px"}}>
+          <DAText size={12.5}>{d.because}</DAText>
+          <div style={{marginTop:13,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:0,
+            background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+            {[{l:"Classification",v:d.cls,c:T.rose},{l:"Policy",v:d.policy},{l:"Configured in",v:d.where}].map((p,i)=>(
+              <div key={p.l} style={{padding:"9px 12px",borderLeft:i?`1px solid ${T.border}`:"none"}}>
+                <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>{p.l}</div>
+                <div style={{fontSize:11.5,fontWeight:600,color:p.c||T.text}}>{p.v}</div>
+              </div>
+            ))}
+          </div>
+          <DASectionLabel style={{marginTop:14}}>Columns refused</DASectionLabel>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {d.cols.map(c=><DAPill key={c} color={T.rose} mono>{c}</DAPill>)}
+          </div>
+          <div style={{display:"flex",gap:7,marginTop:15,flexWrap:"wrap"}}>
+            {d.publishHint&&<Btn small variant="primary" onClick={onManage}>Open {d.publishHint}</Btn>}
+            {d.requestable&&<Btn small variant="primary" onClick={()=>{
+              daAddReview({id:"rv"+Date.now(), kind:"Access denied", q:ans.q, space:"—", by:me, at:daNow(),
+                assignee:"alex.rivera", status:"Open", sev:"Med",
+                note:`Requested access to ${d.cls} data via Data Ask. Question: “${ans.q}”`, fixes:["grant","dismiss"]});
+              onToast("Access request sent to alex.rivera — tracked in Review Queue");
+            }}>Request access</Btn>}
+            <Btn small ghost onClick={()=>onNav&&onNav("policymanager")}>View policy</Btn>
+            <Btn small ghost onClick={onTrust}>Why this answer</Btn>
+          </div>
+          <div style={{fontSize:11,color:T.textMuted,marginTop:12,lineHeight:1.6}}>
+            No SQL was generated and no rows were read. The refusal itself is recorded in Activity.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── ambiguous ──
+  if(ans && ans.ambiguous){
+    return (
+      <div style={{border:`1px solid ${T.blue}55`,borderRadius:10,background:T.blue+"09",padding:"13px 15px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:9}}>
+          <span style={{color:T.blue,display:"flex"}}>{Ic.glossary(15)}</span>
+          <span style={{fontSize:13,fontWeight:700,color:T.text}}>Which definition do you mean?</span>
+          <DAPill color={T.blue}>Clarification</DAPill>
+        </div>
+        <DAText size={12.5}>{ans.ambiguous.why}</DAText>
+        <div style={{marginTop:12,display:"flex",flexDirection:"column",gap:8}}>
+          {ans.ambiguous.opts.map(o=>(
+            <button key={o.label} onClick={()=>onAsk(o.ask)} style={{textAlign:"left",padding:"11px 13px",borderRadius:9,cursor:"pointer",
+              background:T.bgSurface,border:`1px solid ${T.border}`,fontFamily:"inherit",transition:"border-color .12s"}}
+              onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent+"88"} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+              <div style={{fontSize:12.5,fontWeight:700,color:T.text,marginBottom:2}}>{o.label}</div>
+              <div style={{fontSize:11,color:T.textMuted,lineHeight:1.55}}>{o.sub}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ── not understood ──
+  if(!ans){
+    return (
+      <div style={{border:`1px solid ${T.border}`,borderRadius:10,background:T.bgSurface,padding:"13px 15px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:8}}>
+          <span style={{color:T.textMuted,display:"flex"}}>{Ic.info(15)}</span>
+          <span style={{fontSize:13,fontWeight:700,color:T.text}}>I couldn't answer that from this space</span>
+        </div>
+        <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65}}>
+          Nothing in <b style={{color:T.text}}>{space?space.name:"this space"}</b> maps to that question. Data Ask will not guess
+          across scopes — it answers only from what the space governs. Either the vocabulary is missing, or the data lives elsewhere.
+        </div>
+        {space&&(space.samples||[]).length>0&&(<>
+          <DASectionLabel style={{marginTop:14}}>Questions this space can answer</DASectionLabel>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {space.samples.slice(0,4).map(s=>(
+              <button key={s} onClick={()=>onAsk(s)} style={{textAlign:"left",padding:"8px 11px",borderRadius:8,cursor:"pointer",
+                background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:12,color:T.textSub,fontFamily:"inherit"}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent+"88"} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>{s}</button>
+            ))}
+          </div>
+        </>)}
+        <div style={{display:"flex",gap:7,marginTop:14,flexWrap:"wrap"}}>
+          <Btn small variant="primary" onClick={()=>{
+            daAddReview({id:"rv"+Date.now(), kind:"Missing synonym", q:msg.q, space:space?space.id:"—", by:me, at:daNow(),
+              assignee:space?space.owner:"alex.rivera", status:"Open", sev:"Low",
+              note:`Question was not understood in ${space?space.name:"—"}. Vocabulary may be missing.`, fixes:["addSynonym","dismiss"]});
+            onToast(`Sent to ${space?space.owner:"alex.rivera"} — tracked in Review Queue`);
+          }}>Ask a steward to teach this</Btn>
+          {space&&<Btn small ghost onClick={onManage}>See what's in scope</Btn>}
+        </div>
+      </div>
+    );
+  }
+
+  // ── answered ──
+  const exportBlocked = !!ans.hold;
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:11}}>
+      {ans.routed&&(
+        <div style={{display:"flex",alignItems:"center",gap:8,fontSize:11,color:T.textMuted}}>
+          <span style={{color:DA_MODE_COLOR(ans.mode),display:"flex"}}>{Ic.branches(11)}</span>
+          Routed to <b style={{color:T.textSub,fontWeight:600}}>{ans.routed}</b>
+        </div>
+      )}
+
+      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"13px 15px"}}>
+        <DAText size={13}>{ans.summary}</DAText>
+      </div>
+
+      {ans.cols&&(
+        ans.rows.length===0 && ans.empty
+          ? <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"18px 15px",textAlign:"center"}}>
+              <div style={{fontSize:12.5,fontWeight:700,color:T.textSub,marginBottom:4}}>0 rows returned</div>
+              <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6,maxWidth:420,margin:"0 auto"}}>{ans.empty.hint}</div>
+            </div>
+          : <DAResultTable cols={ans.cols} rows={msg.rows||ans.rows} maskCol={ans.maskCol} masked={ans.willMask}/>
+      )}
+
+      {ans.willMask&&ans.maskCol!=null&&(
+        <div style={{fontSize:11,color:T.amber,display:"flex",alignItems:"center",gap:6}}>
+          <span>◆</span> {ans.cols[ans.maskCol]} is masked for your role. An owner of the PII Data Handling policy sees raw values.
+        </div>
+      )}
+
+      {ans.terms&&ans.terms.length>0&&(
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {ans.terms.map(t=>(
+            <div key={t.t} style={{display:"flex",gap:9,padding:"8px 11px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+              <span style={{color:T.blue,display:"flex",flexShrink:0,marginTop:1}}>{Ic.glossary(12)}</span>
+              <div style={{minWidth:0}}>
+                <span style={{fontSize:11.5,fontWeight:700,color:T.text}}>{t.t}</span>
+                <span style={{fontSize:11.5,color:T.textMuted}}> — {t.d}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {ans.sql&&<DASqlPanel sql={ans.sql} canEdit={canEditSql} edited={!!msg.editedSql}
+        onRun={sql=>{ onEditSql&&onEditSql(sql); onToast("Edited SQL executed — this result is no longer a verified answer"); }}/>}
+
+      {ans.mode==="documents"&&ans.cites&&(
+        <div style={{display:"flex",flexDirection:"column",gap:7}}>
+          <DASectionLabel style={{marginBottom:0}}>Citations</DASectionLabel>
+          {ans.cites.map((c,i)=>(
+            <div key={i} style={{padding:"9px 11px",borderRadius:8,background:T.bgSurface,border:`1px solid ${T.border}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap",marginBottom:c.snip?5:0}}>
+                <span style={{width:16,height:16,borderRadius:4,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+                  fontSize:9.5,fontWeight:700,fontFamily:"'Geist Mono',monospace",background:T.violetDim,color:T.violet,border:`1px solid ${T.violet}44`}}>{i+1}</span>
+                <span style={{fontSize:11.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{c.n}</span>
+                {c.loc&&<DAPill color={T.textSub} mono>{c.loc}</DAPill>}
+                <span style={{marginLeft:"auto",fontSize:10.5,color:T.textMuted}}>{c.cert} · {c.fresh}</span>
+              </div>
+              {c.snip&&<div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6,fontStyle:"italic",paddingLeft:23}}>{c.snip}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <DAGovStrip ans={ans} onOpen={onTrust}/>
+
+      {ans.followUp&&(
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          {ans.followUp.map(f=>(
+            <button key={f} onClick={()=>onAsk(f)} style={{padding:"5px 11px",borderRadius:99,cursor:"pointer",fontFamily:"inherit",
+              background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textSub}}
+              onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent+"88"} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>{f}</button>
+          ))}
+        </div>
+      )}
+
+      <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",paddingTop:2}}>
+        <button onClick={()=>{setFb("up");onToast("Thanks — logged against this Answer Space");}}
+          title="Helpful"
+          style={{width:28,height:28,borderRadius:7,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
+            background:fb==="up"?T.green+"1a":"transparent",border:`1px solid ${fb==="up"?T.green:T.border}`,color:fb==="up"?T.green:T.textMuted}}>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4.5 14V6.8l3-4.3c.9.1 1.4.7 1.4 1.7 0 .6-.3 1.4-.5 2.2h3.3c.9 0 1.5.7 1.3 1.6l-.9 4.4c-.1.9-.9 1.6-1.8 1.6H4.5zM2 14h2.5V6.8H2V14z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
+        </button>
+        <button onClick={onReport} title="Report a problem"
+          style={{width:28,height:28,borderRadius:7,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
+            background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted}}>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M11.5 2v7.2l-3 4.3c-.9-.1-1.4-.7-1.4-1.7 0-.6.3-1.4.5-2.2H4.3c-.9 0-1.5-.7-1.3-1.6l.9-4.4C4 2.7 4.8 2 5.7 2h5.8zM14 2h-2.5v7.2H14V2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
+        </button>
+        <div style={{width:1,height:18,background:T.border,margin:"0 3px"}}/>
+        {exportBlocked
+          ? <Btn small ghost disabled>Export blocked — legal hold</Btn>
+          : <Btn small ghost onClick={()=>onToast("Result exported to CSV — download recorded in Activity")}>Export CSV</Btn>}
+        {canPublish&&ans.cols&&<Btn small ghost onClick={onSaveVerified}>Save as Verified Answer</Btn>}
+        {ans.cites&&ans.cites.length>0&&<Btn small ghost onClick={()=>onNav&&onNav("catalog")}>Open in Catalog</Btn>}
+        <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
+          <DAPill color={ans.conf>=90?T.green:ans.conf>=75?T.amber:T.rose}>{ans.conf}% confidence</DAPill>
+          <DAPill mono>{ans.latency}</DAPill>
+          <DAPill mono title="Solix credits consumed by this question">{ans.credits} cr</DAPill>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
+const DAAskTab = ({me,role,onToast,onNav,onManage}) => {
+  const st = useDA();
+  const S  = st.settings;
+  const usable = st.spaces.filter(s=>s.status==="Published" || (!S.guards.requirePublished && s.status==="In review"));
+  const [spaceId,setSpaceId] = useState(()=> (usable[0]||{}).id || "sp_commerce");
+  const [draft,setDraft]     = useState("");
+  const [trust,setTrust]     = useState(null);   // message being explained
+  const [report,setReport]   = useState(null);   // message being reported
+  const [retr,setRetr]       = useState("hybrid");
+  const scroller = useRef(null);
+
+  const space  = daSpace(spaceId);
+  const thread = st.threads.find(t=>t.id===st.activeThread) || null;
+  const canEditSql  = S.access.editSql.includes(role);
+  const canPublish  = S.access.publish.includes(role);
+  const canAsk      = S.access.ask.includes(role);
+
+  useEffect(()=>{ if(scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; },
+    [thread&&thread.msgs.length, thread&&thread.id, thread&&thread.msgs.map(m=>m.state).join()]);
+
+  const setMsg = (tid,mid,patch)=>daPatch({threads:_da.threads.map(t=>t.id!==tid?t:
+    {...t, msgs:t.msgs.map(m=>m.id===mid?{...m,...patch}:m)})});
+
+  const ask = (text) => {
+    const q = (text||"").trim(); if(!q || !canAsk) return;
+    let tid = st.activeThread, threads = _da.threads;
+    if(!tid || !threads.some(t=>t.id===tid)){
+      tid = "th"+Date.now();
+      threads = [{id:tid, title:q.length>46?q.slice(0,46)+"…":q, spaceId, at:daNow(), msgs:[]}, ...threads];
+    }
+    const uid = "m"+Date.now(), aid = uid+"a";
+    threads = threads.map(t=>t.id!==tid?t:{...t,
+      title: t.msgs.length?t.title:(q.length>46?q.slice(0,46)+"…":q),
+      msgs:[...t.msgs, {id:uid,role:"user",text:q}, {id:aid,role:"assistant",state:"thinking",step:0,q}]});
+    daPatch({threads, activeThread:tid});
+    setDraft("");
+
+    let i = 0;
+    const tick = () => {
+      i++;
+      if(i < DA_THINK_STEPS.length){ setMsg(tid,aid,{step:i}); setTimeout(tick,430); return; }
+      const raw = daResolve(q, spaceId);
+      const ans = raw ? daProject({...raw, q}, role) : null;
+      setMsg(tid,aid,{state:"done", ans});
+      daLog({at:daNow(), who:me, space:(raw&&raw.denied)?"—":spaceId, q, mode:raw?raw.mode:(space?space.mode:"structured"),
+        decision: ans?ans.decision:"Not understood",
+        masked: ans&&ans.willMask?ans.masked.length:0,
+        filtered: ans&&ans.filters?ans.filters.reduce((n,f)=>n+f.n,0):0,
+        credits: ans?ans.credits:3, ms: ans?Math.round(parseFloat(ans.latency)*1000):1100});
+    };
+    setTimeout(tick,430);
+  };
+
+  const newThread = () => daPatch({activeThread:null});
+  const starters = (space&&space.samples&&space.samples.length?space.samples:DA_STARTERS[spaceId])||[];
+  const sessionCredits = (thread?thread.msgs:[]).reduce((n,m)=>n+((m.ans&&m.ans.credits)||0),0);
+
+  const selStyle = {padding:"6px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,
+    color:T.text,fontSize:11.5,cursor:"pointer",outline:"none",fontFamily:"inherit"};
+
+  return (
+    <div style={{flex:1,display:"flex",minHeight:0,minWidth:0}}>
+
+      {/* ── conversations ── */}
+      <div style={{width:224,flexShrink:0,borderRight:`1px solid ${T.border}`,background:T.bgSurface,display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"12px 12px 10px",borderBottom:`1px solid ${T.border}`}}>
+          <button onClick={newThread} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:6,
+            padding:"7px 10px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+            {Ic.plus(11)} New conversation
+          </button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"8px 8px"}}>
+          <DASectionLabel style={{padding:"2px 5px",marginBottom:5}}>Recent</DASectionLabel>
+          {st.threads.length===0
+            ? <div style={{fontSize:11.5,color:T.textMuted,padding:"8px 6px",lineHeight:1.6}}>Your conversations appear here. History is retained for {S.privacy.retainDays} days.</div>
+            : st.threads.map(t=>{
+                const on = t.id===st.activeThread;
+                const sp = daSpace(t.spaceId);
+                return (
+                  <button key={t.id} onClick={()=>{daPatch({activeThread:t.id}); if(sp) setSpaceId(sp.id);}}
+                    style={{width:"100%",textAlign:"left",padding:"8px 9px",marginBottom:3,borderRadius:8,cursor:"pointer",fontFamily:"inherit",
+                      background:on?T.bgHover:"transparent",border:`1px solid ${on?T.border:"transparent"}`}}>
+                    <div style={{fontSize:11.8,fontWeight:on?600:500,color:on?T.text:T.textSub,lineHeight:1.4,
+                      overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</div>
+                    <div style={{fontSize:10,color:T.textMuted,marginTop:2}}>{sp?sp.name:"—"} · {t.msgs.filter(m=>m.role==="user").length} question{t.msgs.filter(m=>m.role==="user").length===1?"":"s"}</div>
+                  </button>
+                );
+              })}
+        </div>
+        <div style={{padding:"10px 12px",borderTop:`1px solid ${T.border}`}}>
+          <div style={{fontSize:10,color:T.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>Credit balance</div>
+          <div style={{fontSize:14,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{(S.cost.balance-sessionCredits).toLocaleString()}</div>
+          <div style={{height:4,borderRadius:2,background:T.bgHover,marginTop:6,overflow:"hidden"}}>
+            <div style={{height:"100%",width:`${Math.round((S.cost.balance-sessionCredits)/S.cost.granted*100)}%`,background:T.accent}}/>
+          </div>
+          <div style={{fontSize:10,color:T.textMuted,marginTop:5}}>of {S.cost.granted.toLocaleString()} granted{sessionCredits?` · ${sessionCredits} used here`:""}</div>
+        </div>
+      </div>
+
+      {/* ── thread ── */}
+      <div style={{flex:1,display:"flex",flexDirection:"column",minWidth:0,background:T.bg}}>
+
+        {/* space bar */}
+        <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",padding:"10px 20px",borderBottom:`1px solid ${T.border}`,background:T.bgSurface,flexShrink:0}}>
+          <span style={{fontSize:11,color:T.textMuted,fontWeight:600}}>Answer Space</span>
+          <select value={spaceId} onChange={e=>{setSpaceId(e.target.value);}} style={{...selStyle,minWidth:190,fontWeight:600,fontSize:12}}>
+            {st.spaces.map(s=>{
+              const ok = usable.some(u=>u.id===s.id);
+              return <option key={s.id} value={s.id} disabled={!ok}>
+                {s.name}{ok?"":s.status==="In review"?"  — in review, not askable":"  — "+daEffStatus(s).toLowerCase()+", not askable"}
+              </option>;
+            })}
+          </select>
+          {space&&<DAModeTag mode={space.mode}/>}
+          {space&&<DAStatusTag status={space.status}/>}
+          {space&&(space.mode==="documents"||space.mode==="hybrid")&&(<>
+            <span style={{fontSize:11,color:T.textMuted,fontWeight:600,marginLeft:4}}>Retrieval</span>
+            <select value={retr} onChange={e=>setRetr(e.target.value)} style={selStyle}
+              title={(DA_RETRIEVAL[retr]||{}).sub}>
+              {Object.keys(DA_RETRIEVAL).map(k=><option key={k} value={k}>{DA_RETRIEVAL[k].label}</option>)}
+            </select>
+          </>)}
+          <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
+            {space&&<span style={{fontSize:10.5,color:T.textMuted}}>{space.sources.length} objects · indexed {space.indexed}</span>}
+            <Btn small ghost onClick={onManage}>Manage spaces</Btn>
+          </div>
+        </div>
+
+        {/* messages */}
+        <div ref={scroller} style={{flex:1,overflowY:"auto",padding:"22px 24px"}}>
+          {!thread || thread.msgs.length===0 ? (
+            <div style={{maxWidth:660,margin:"6vh auto 0"}}>
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+                <div style={{width:40,height:40,borderRadius:11,background:T.accentDim,border:`1px solid ${T.accent}33`,
+                  display:"flex",alignItems:"center",justifyContent:"center",color:T.accent,flexShrink:0}}>{Ic.bot(20)}</div>
+                <div>
+                  <div style={{fontSize:19,fontWeight:700,color:T.text}}>Ask {space?space.name:"your data"}</div>
+                  <div style={{fontSize:12.5,color:T.textMuted,marginTop:2}}>
+                    {space?space.desc:"Pick an Answer Space to begin."}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{display:"flex",gap:9,padding:"11px 13px",borderRadius:9,background:T.bgElevated,
+                border:`1px solid ${T.border}`,marginBottom:20}}>
+                <span style={{color:T.green,display:"flex",flexShrink:0,marginTop:1}}>{Ic.shield(13)}</span>
+                <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.65}}>
+                  Answers are drawn only from what this space governs, and every one carries its policy trace: what was
+                  masked, what rows were withheld, which assets it cited and how fresh they are. You see what your role
+                  is entitled to see — no more, and never silently less.
+                </div>
+              </div>
+
+              {!canAsk&&(
+                <div style={{padding:"11px 13px",borderRadius:9,background:T.roseDim,border:`1px solid ${T.rose}44`,
+                  fontSize:12,color:T.text,marginBottom:20}}>
+                  Your role ({role}) is not permitted to ask questions. An Admin grants this in
+                  <b> Settings › Data Ask › Access</b>.
+                </div>
+              )}
+
+              <DASectionLabel>Try one of these</DASectionLabel>
+              <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                {starters.map(s=>(
+                  <button key={s} onClick={()=>ask(s)} disabled={!canAsk} style={{textAlign:"left",padding:"10px 13px",borderRadius:9,
+                    cursor:canAsk?"pointer":"not-allowed",opacity:canAsk?1:.5,background:T.bgSurface,border:`1px solid ${T.border}`,
+                    fontSize:12.5,color:T.text,fontFamily:"inherit",transition:"border-color .12s",display:"flex",alignItems:"center",gap:9}}
+                    onMouseEnter={e=>{if(canAsk)e.currentTarget.style.borderColor=T.accent+"88";}}
+                    onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                    <span style={{color:T.textMuted,display:"flex",flexShrink:0}}>{Ic.search(12)}</span>{s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div style={{maxWidth:820,margin:"0 auto",display:"flex",flexDirection:"column",gap:20}}>
+              {thread.msgs.map(m=>m.role==="user" ? (
+                <div key={m.id} style={{display:"flex",justifyContent:"flex-end"}}>
+                  <div style={{maxWidth:"78%",padding:"9px 13px",borderRadius:"11px 11px 3px 11px",background:T.accent,color:"#fff",
+                    fontSize:12.8,lineHeight:1.55,fontWeight:500}}>{m.text}</div>
+                </div>
+              ) : (
+                <div key={m.id} style={{display:"flex",gap:11}}>
+                  <div style={{width:26,height:26,borderRadius:8,flexShrink:0,background:T.accentDim,border:`1px solid ${T.accent}33`,
+                    display:"flex",alignItems:"center",justifyContent:"center",color:T.accent}}>{Ic.bot(13)}</div>
+                  <div style={{minWidth:0,flex:1}}>
+                    {m.state==="thinking"
+                      ? <DAThinking step={m.step}/>
+                      : <DAAnswerCard msg={m} space={space} role={role} me={me}
+                          canEditSql={canEditSql} canPublish={canPublish}
+                          onToast={onToast} onNav={onNav}
+                          onTrust={()=>setTrust(m)} onReport={()=>setReport(m)} onAsk={ask} onManage={onManage}
+                          onEditSql={sql=>setMsg(thread.id,m.id,{editedSql:sql})}
+                          onSaveVerified={()=>{
+                            daPatch({verified:[{id:"v"+Date.now(), q:m.q, space:spaceId, answerId:m.ans.id,
+                              owner:me, verified:daNow().slice(0,10), uses:0, status:"Verified",
+                              note:"Promoted from a Data Ask conversation."}, ..._da.verified]});
+                            onToast("Saved as a Verified Answer");
+                          }}/>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* composer */}
+        <div style={{padding:"12px 24px 16px",borderTop:`1px solid ${T.border}`,background:T.bgSurface,flexShrink:0}}>
+          <div style={{maxWidth:820,margin:"0 auto"}}>
+            <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
+              <textarea value={draft} onChange={e=>setDraft(e.target.value)} rows={1} disabled={!canAsk}
+                onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); ask(draft); } }}
+                placeholder={canAsk?`Ask ${space?space.name:"a space"} a question — Enter to send, Shift+Enter for a new line`:"Asking is not permitted for your role"}
+                style={{flex:1,minHeight:40,maxHeight:150,padding:"11px 13px",background:T.bgElevated,border:`1px solid ${T.border}`,
+                  borderRadius:10,color:T.text,fontSize:12.8,lineHeight:1.55,outline:"none",resize:"none",fontFamily:"inherit",
+                  opacity:canAsk?1:.55,cursor:canAsk?"text":"not-allowed"}}
+                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+              <button onClick={()=>ask(draft)} disabled={!draft.trim()||!canAsk}
+                style={{width:40,height:40,borderRadius:10,flexShrink:0,border:"none",cursor:(draft.trim()&&canAsk)?"pointer":"not-allowed",
+                  background:(draft.trim()&&canAsk)?T.accent:T.bgHover,color:(draft.trim()&&canAsk)?"#fff":T.textMuted,
+                  display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2.5 8h10M8.5 3.5L13 8l-4.5 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginTop:7,flexWrap:"wrap",fontSize:10.5,color:T.textMuted}}>
+              <span>Asking as <b style={{color:T.textSub}}>{me}</b> ({role})</span>
+              <span style={{color:T.border}}>·</span>
+              <span>{S.privacy.redactPrompts?"Classified values stripped from prompts":"Prompt redaction off"}</span>
+              <span style={{color:T.border}}>·</span>
+              <span>{S.guards.groundedOnly?"Grounded answers only":"Ungrounded answers allowed"}</span>
+              <span style={{color:T.border}}>·</span>
+              <span>Every question is audited</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {trust&&<DATrustDrawer ans={trust.ans} space={space} role={role} onClose={()=>setTrust(null)} onNav={onNav}/>}
+      {report&&<DAReportDrawer msg={report} space={space} me={me} onClose={()=>setReport(null)}
+        onDone={msg=>{setReport(null);onToast(msg);}}/>}
+    </div>
+  );
+};
+
+
+// ── Answer Spaces: builder ──────────────────────────────────────────────────
+// EAI's AKG builder is ten steps because it has to discover everything from
+// scratch. EDG inherits classifications, glossary terms, owners and lineage, so
+// the same journey collapses to seven — and three of them are review rather
+// than data entry. The step rail, AI-assist toggle and "requires input" tagging
+// match the Knowledge Layer builder so the two feel like one system.
+const DA_WIZ_STEPS = [
+  {t:"Scope & sources",   mode:"input", uses:"Catalog, Knowledge Layer",
+   d:"Choose what this space may reach. Only certified assets and published knowledge graphs are offered — an uncertified asset cannot be the basis of an answer somebody acts on."},
+  {t:"Inherited context", mode:"auto",  uses:"Classifications, Glossary, Domains, Owners",
+   d:"Everything EDG already knows about the scope is pulled in. This is the step EAI cannot skip and EDG never has to run: the vocabulary already exists and is already governed."},
+  {t:"Relationships",     mode:"auto",  uses:"Lineage, Source Knowledge Graphs",
+   d:"Joins are proposed from foreign keys, observed lineage and the source knowledge graph. Anything below the confidence threshold needs a human before it can be used in a plan."},
+  {t:"Semantics",         mode:"input", uses:"Glossary, AI assist",
+   d:"Synonyms and sample questions — how people actually talk about this data. Glossary terms are authoritative; AI proposals need approval before they influence an answer."},
+  {t:"Guardrails",        mode:"input", uses:"Policies, Classifications",
+   d:"The limits this space operates inside: row caps, timeouts, classifications it may never touch, and what happens when a policy conflicts with a question."},
+  {t:"Index & test",      mode:"auto",  uses:"—",
+   d:"Build the index, then prove it. The test console is the gate — a space with failing test questions should not be published."},
+  {t:"Review & publish",  mode:"input", uses:"Stewardship",
+   d:"Publishing sends the space to its steward for approval. Until then nobody can ask questions against it."},
+];
+
+const DA_WIZ_ASSETS = [
+  {n:"orders",             t:"Table",           dom:"Commerce", cert:"Approved",  tags:["PII","GDPR"]},
+  {n:"customers",          t:"Table",           dom:"Commerce", cert:"Approved",  tags:["PII","GDPR"]},
+  {n:"dim_products",       t:"Table",           dom:"Commerce", cert:"Approved",  tags:[]},
+  {n:"transactions",       t:"Table",           dom:"Finance",  cert:"Approved",  tags:["PII"]},
+  {n:"vw_order_summary",   t:"View",            dom:"Commerce", cert:"Approved",  tags:[]},
+  {n:"user_events",        t:"Table",           dom:"Product",  cert:"Approved",  tags:[]},
+  {n:"user_sessions",      t:"Table",           dom:"Product",  cert:"Deprecated",tags:["PII"]},
+  {n:"gl_accounts",        t:"Table",           dom:"Finance",  cert:"Approved",  tags:[]},
+  {n:"invoices_2026.parquet",t:"Object",        dom:"Finance",  cert:"Approved",  tags:[]},
+  {n:"contracts_2025.pdf", t:"Object",          dom:"Finance",  cert:"Approved",  tags:["confidential"]},
+  {n:"XKG — Customer",     t:"Knowledge Graph", dom:"Commerce", cert:"Approved",  tags:["PII","GDPR"]},
+  {n:"XKG — Supplier",     t:"Knowledge Graph", dom:"Procurement",cert:"Approved",tags:[]},
+  {n:"employees",          t:"Table",           dom:"Platform", cert:"Approved",  tags:["Restricted-HR","PII"]},
+];
+
+const DAWizard = ({me,onClose,onToast,onCreated}) => {
+  const S = _da.settings;
+  const [step,setStep]   = useState(0);
+  const [done,setDone]   = useState(()=>new Set());
+  const [ai,setAi]       = useState({});
+  const [name,setName]   = useState("");
+  const [mode,setMode]   = useState("structured");
+  const [domain,setDomain]=useState("Commerce");
+  const [picked,setPicked]=useState([]);
+  const [retr,setRetr]   = useState("hybrid");
+  const [joins,setJoins] = useState({});     // index → confirmed
+  const [syns,setSyns]   = useState([]);     // {term,maps,src,conf,status}
+  const [newSyn,setNewSyn]=useState({term:"",maps:""});
+  const [samples,setSamples]=useState([]);
+  const [newSample,setNewSample]=useState("");
+  const [guards,setGuards]=useState({rowLimit:S.guards.maxRows, timeout:S.guards.timeout,
+    refuse:S.guards.onConflict, editSql:S.guards.editSql, requireCert:true});
+  const [built,setBuilt] = useState(false);
+  const [building,setBuilding]=useState(false);
+  const [tq,setTq]       = useState("");
+  const [tRes,setTRes]   = useState(null);
+  const [tested,setTested]=useState([]);
+  const [steward,setSteward]=useState("maya.chen");
+
+  const s = DA_WIZ_STEPS[step];
+  const aiKey = "w"+step, aiOn = ai[aiKey]!==false;
+  const chosen = DA_WIZ_ASSETS.filter(a=>picked.includes(a.n));
+  const blockedPick = chosen.filter(a=>a.tags.some(t=>S.guards.blockedTags.includes(t)));
+  const uncertified = chosen.filter(a=>a.cert!=="Approved");
+
+  // What the scope inherits — computed, not typed. This is the whole argument
+  // for building Data Ask inside the governance catalogue.
+  const inherited = {
+    tags:   [...new Set(chosen.flatMap(a=>a.tags))],
+    terms:  chosen.length*8,
+    domains:[...new Set(chosen.map(a=>a.dom))],
+    owners: [...new Set(chosen.map(a=>({orders:"maya.chen",customers:"maya.chen",dim_products:"maya.chen",
+      transactions:"sarah.kim",vw_order_summary:"maya.chen",user_events:"dev.patel",user_sessions:"dev.patel",
+      gl_accounts:"sarah.kim","invoices_2026.parquet":"sarah.kim","contracts_2025.pdf":"sarah.kim",
+      "XKG — Customer":"alex.rivera","XKG — Supplier":"alex.rivera",employees:"alex.rivera"}[a.n]||"—")))],
+    policies:[...new Set(chosen.flatMap(a=>a.tags.map(t=>({PII:"PII Data Handling",GDPR:"GDPR Compliance",
+      confidential:"SOC2 Access Controls","Restricted-HR":"SOC2 Access Controls"}[t])).filter(Boolean)))],
+  };
+  const propJoins = [
+    {from:"orders.customer_id",     to:"customers.id",       how:"FK constraint",  conf:100, need:["orders","customers"]},
+    {from:"orders.product_id",      to:"dim_products.id",    how:"FK constraint",  conf:100, need:["orders","dim_products"]},
+    {from:"transactions.order_id",  to:"orders.id",          how:"Lineage + name", conf:92,  need:["transactions","orders"]},
+    {from:"user_sessions.user_id",  to:"user_events.user_id",how:"Name match",     conf:68,  need:["user_sessions","user_events"]},
+    {from:"XKG — Customer.id",      to:"customers.id",       how:"Golden record",  conf:100, need:["XKG — Customer","customers"]},
+  ].filter(j=>j.need.every(n=>picked.includes(n)));
+  const aiSyns = [
+    {term:"revenue", maps:"orders.net_amount", src:"Glossary — Net Revenue", conf:98, need:"orders"},
+    {term:"GMV",     maps:"orders.gross_amount",src:"Glossary — GMV",        conf:96, need:"orders"},
+    {term:"sales",   maps:"orders.net_amount", src:"AI suggested",           conf:81, need:"orders"},
+    {term:"basket",  maps:"orders.item_count", src:"AI suggested",           conf:64, need:"orders"},
+    {term:"invoice", maps:"Invoice",           src:"Glossary — Invoice",      conf:99, need:"invoices_2026.parquet"},
+    {term:"golden record", maps:"XKG.customer",src:"Knowledge Layer",         conf:100,need:"XKG — Customer"},
+    {term:"DAU",     maps:"user_events.distinct_users", src:"Glossary — DAU", conf:97, need:"user_events"},
+  ].filter(x=>picked.includes(x.need));
+
+  useEffect(()=>{ // seed the AI-generated semantics when the step is first opened with AI on
+    if(step===3 && aiOn && syns.length===0 && aiSyns.length) setSyns(aiSyns.map(x=>({...x,status:x.conf>=95?"Approved":"Pending"})));
+  },[step,aiOn,picked.join()]);
+
+  const blocked =
+      (step===0 && (!name.trim() || picked.length===0 || blockedPick.length>0))
+   || (step===2 && propJoins.some((j,i)=>j.conf<80 && !joins[i]))
+   || (step===3 && syns.some(x=>x.status==="Pending"))
+   || (step===5 && !built);
+
+  const blockReason =
+      step===0 ? (!name.trim() ? "Give the space a name"
+                 : picked.length===0 ? "Select at least one object"
+                 : `${blockedPick.map(a=>a.n).join(", ")} carries a blocklisted classification — remove it, or have an Admin allow the classification in Settings › Data Ask › Guardrails`)
+    : step===2 ? "Confirm or drop every join below the 80% confidence threshold"
+    : step===3 ? "Approve or reject every pending synonym"
+    : step===5 ? "Build the index before continuing"
+    : "";
+
+  const advance = () => { setDone(d=>new Set([...d,step])); setStep(n=>Math.min(DA_WIZ_STEPS.length-1,n+1)); };
+
+  const runIndex = () => {
+    setBuilding(true);
+    setTimeout(()=>{ setBuilding(false); setBuilt(true); onToast("Index built — run the test console before publishing"); }, 1500);
+  };
+  const runTest = () => {
+    const q = tq.trim(); if(!q) return;
+    const raw = daResolve(q, null);
+    setTRes(raw ? daProject({...raw,q},"admin") : {miss:true,q});
+  };
+
+  const finish = (publish) => {
+    const id = "sp_"+(name.trim().toLowerCase().replace(/[^a-z0-9]+/g,"_")||"new");
+    const sp = {
+      id, key:"AS-"+(1001+_da.spaces.length), name:name.trim(), mode,
+      status: publish?"In review":"Draft", version:"v1 draft", owner:me, stewards:[steward],
+      domain, published:"—", indexed:built?daNow():"—",
+      accuracy: tested.length?Math.round(tested.filter(t=>t.ok).length/tested.length*100):0,
+      questions30d:0, credits30d: built?Math.round(picked.length*38):0, avgLatency:"—",
+      desc: `${chosen.length} object${chosen.length===1?"":"s"} across ${inherited.domains.join(", ")}. Created in EDG by ${me}.`,
+      retrieval: mode==="structured"?undefined:retr,
+      sources: chosen.map(a=>({name:a.n, type:a.t, role:a.t==="Knowledge Graph"?"golden record":a.t==="Object"?"document":"fact",
+        rows:"—", tags:a.tags, term:"—"})),
+      joins: propJoins.map((j,i)=>({from:j.from,to:j.to,how:j.how,conf:j.conf,ok:j.conf>=80||!!joins[i]})),
+      synonyms: syns, samples,
+      guards:{...guards, blockedTags:S.guards.blockedTags},
+      history:[
+        publish?{at:daNow(), what:"Submitted for review", who:me, detail:`→ ${steward}`}:null,
+        built?{at:daNow(), what:"Index built", who:"system", detail:`${chosen.length} objects`}:null,
+        {at:daNow(), what:"Created", who:me, detail:"Built in EDG"},
+      ].filter(Boolean),
+    };
+    daPatch({spaces:[..._da.spaces, sp]});
+    onToast(publish?`${sp.name} submitted to ${steward} for approval`:`${sp.name} saved as a draft`);
+    onCreated(id);
+  };
+
+  const inp = {width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,
+    color:T.text,fontSize:12.5,outline:"none",fontFamily:"inherit"};
+
+  return createPortal(
+    <div onClick={onClose} className="fadeIn" style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}>
+      <div onClick={e=>e.stopPropagation()} className="slideInRight" style={{position:"absolute",top:0,right:0,bottom:0,width:940,maxWidth:"96vw",
+        background:T.bgSurface,borderLeft:`1px solid ${T.border}`,boxShadow:"-12px 0 48px rgba(0,0,0,.32)",display:"flex",flexDirection:"column"}}>
+
+        <div style={{padding:"14px 20px",borderBottom:`1px solid ${T.border}`,background:T.bgElevated,display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>New Answer Space</div>
+            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>
+              Seven steps — three of them are review, because EDG already governs the vocabulary
+            </div>
+          </div>
+          <button onClick={onClose} style={{marginLeft:"auto",width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,
+            color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.x(12)}</button>
+        </div>
+
+        <div style={{flex:1,display:"flex",minHeight:0}}>
+          <KLStepRail steps={DA_WIZ_STEPS} cur={step} onPick={setStep} doneSet={done}/>
+          <div style={{flex:1,overflowY:"auto",padding:"22px 26px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:6}}>
+              <div style={{fontSize:16,fontWeight:700,color:T.text}}>Step {step+1} · {s.t}</div>
+              <KLModeTag mode={s.mode==="auto"?"auto":"input"}/>
+              <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:9}}>
+                {[1,2,3].includes(step) ? (<>
+                  <span style={{fontSize:11.5,fontWeight:700,color:T.violet}}>AI assist</span>
+                  <Toggle on={aiOn} onChange={()=>setAi(a=>({...a,[aiKey]:!aiOn}))}/>
+                  <span style={{fontSize:11.5,color:T.textSub,fontWeight:600,width:22}}>{aiOn?"On":"Off"}</span>
+                </>) : <span style={{fontSize:11.5,color:T.textMuted}}>Not applicable</span>}
+              </div>
+            </div>
+            <div style={{fontSize:11,fontWeight:700,color:s.uses==="—"?T.textMuted:T.green,marginBottom:10}}>
+              {s.uses==="—" ? "No governed inputs required" : `Governed inputs: ${s.uses}`}
+            </div>
+            <div style={{fontSize:12.8,color:T.textSub,lineHeight:1.65,maxWidth:780,marginBottom:18}}>{s.d}</div>
+
+            {/* ── 1 · scope ── */}
+            {step===0&&(
+              <div style={{maxWidth:800}}>
+                <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr 1fr",gap:10,marginBottom:16}}>
+                  <div>
+                    <DASectionLabel>Name</DASectionLabel>
+                    <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Supplier Spend" style={inp}/>
+                  </div>
+                  <div>
+                    <DASectionLabel>Answer mode</DASectionLabel>
+                    <select value={mode} onChange={e=>setMode(e.target.value)} style={{...inp,cursor:"pointer"}}>
+                      {Object.keys(DA_MODES).map(k=><option key={k} value={k}>{DA_MODES[k].label} — {DA_MODES[k].sub}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <DASectionLabel>Domain</DASectionLabel>
+                    <select value={domain} onChange={e=>setDomain(e.target.value)} style={{...inp,cursor:"pointer"}}>
+                      {["Commerce","Finance","Product","Platform","ML","Procurement"].map(d=><option key={d}>{d}</option>)}
+                    </select>
+                  </div>
+                </div>
+                {mode!=="structured"&&(
+                  <div style={{marginBottom:16}}>
+                    <DASectionLabel>Retrieval strategy</DASectionLabel>
+                    <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                      {Object.keys(DA_RETRIEVAL).map(k=>(
+                        <label key={k} onClick={()=>setRetr(k)} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"9px 12px",borderRadius:8,cursor:"pointer",
+                          border:`1.5px solid ${retr===k?T.accent:T.border}`,background:retr===k?T.accentDim:"transparent"}}>
+                          <div style={{marginTop:2,width:13,height:13,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+                            border:`2px solid ${retr===k?T.accent:T.border}`,background:retr===k?T.accent:"transparent"}}>
+                            {retr===k&&<div style={{width:4,height:4,borderRadius:"50%",background:"#fff"}}/>}
+                          </div>
+                          <div><div style={{fontSize:12,fontWeight:600,color:retr===k?T.accent:T.text}}>{DA_RETRIEVAL[k].label}</div>
+                            <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{DA_RETRIEVAL[k].sub}</div></div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <DASectionLabel>Objects in scope · {picked.length} selected</DASectionLabel>
+                <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",marginBottom:12}}>
+                  {DA_WIZ_ASSETS.map((a,i)=>{
+                    const on = picked.includes(a.n);
+                    const bad = a.tags.some(t=>S.guards.blockedTags.includes(t));
+                    const uncert = a.cert!=="Approved";
+                    return (
+                      <div key={a.n} onClick={()=>setPicked(p=>on?p.filter(x=>x!==a.n):[...p,a.n])}
+                        style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",cursor:"pointer",
+                          borderTop:i?`1px solid ${T.border}`:"none",background:on?(bad?T.rose+"0e":T.accentDim):"transparent"}}>
+                        <span style={{width:16,height:16,borderRadius:4,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+                          fontSize:10,color:"#fff",background:on?(bad?T.rose:T.accent):"transparent",border:`1.5px solid ${on?(bad?T.rose:T.accent):T.borderLight}`}}>{on?"✓":""}</span>
+                        <span style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace",minWidth:172}}>{a.n}</span>
+                        <DAPill color={T.textSub}>{a.t}</DAPill>
+                        <span style={{fontSize:11,color:T.textMuted}}>{a.dom}</span>
+                        <div style={{marginLeft:"auto",display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
+                          {a.tags.map(t=><DAPill key={t} color={S.guards.blockedTags.includes(t)?T.rose:T.amber}>{t}</DAPill>)}
+                          {uncert&&<DAPill color={T.rose}>{a.cert}</DAPill>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {blockedPick.length>0&&(
+                  <div style={{padding:"10px 13px",borderRadius:8,background:T.roseDim,border:`1px solid ${T.rose}55`,fontSize:12,color:T.text,lineHeight:1.6}}>
+                    <b>{blockedPick.map(a=>a.n).join(", ")}</b> carries the <b>{S.guards.blockedTags.join(", ")}</b> classification, which is on
+                    the platform blocklist. Data Ask cannot index it. Remove it from scope, or ask an Admin to allow the
+                    classification in <b>Settings › Data Ask › Guardrails</b>.
+                  </div>
+                )}
+                {uncertified.length>0&&blockedPick.length===0&&(
+                  <div style={{padding:"10px 13px",borderRadius:8,background:T.amberDim,border:`1px solid ${T.amber}55`,fontSize:12,color:T.text,lineHeight:1.6}}>
+                    <b>{uncertified.map(a=>a.n).join(", ")}</b> is not certified. You can include it, but the space will not
+                    pass review while <b>Require certified assets</b> is on in Guardrails.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── 2 · inherited ── */}
+            {step===1&&(
+              <div style={{maxWidth:800}}>
+                {picked.length===0
+                  ? <KLEmpty icon={Ic.info(30)} title="Nothing in scope yet" sub="Go back to step 1 and pick objects."/>
+                  : (<>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:16}}>
+                      <Metric label="Classifications" value={String(inherited.tags.length)} sub={inherited.tags.join(" · ")||"none"}/>
+                      <Metric label="Glossary terms" value={String(inherited.terms)} sub="already bound to these columns"/>
+                      <Metric label="Domains" value={String(inherited.domains.length)} sub={inherited.domains.join(" · ")}/>
+                      <Metric label="Policies in force" value={String(inherited.policies.length)} sub={inherited.policies.join(" · ")||"none"}/>
+                    </div>
+                    <DASectionLabel>What this means at answer time</DASectionLabel>
+                    <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",marginBottom:14}}>
+                      {[
+                        inherited.tags.includes("PII")&&{c:T.amber,h:"PII columns will be masked",s:"Rule “Mask PII for non-data-owners” from PII Data Handling applies to every answer for non-owners."},
+                        inherited.tags.includes("GDPR")&&{c:T.amber,h:"EU rows will be filtered",s:"Rule “EU data must remain in EU region” from GDPR Compliance withholds EU-resident rows from unentitled askers."},
+                        inherited.tags.includes("confidential")&&{c:T.rose,h:"Legal hold respected",s:"Objects under hold stay readable in place, but export and download are refused."},
+                        {c:T.green,h:`${inherited.owners.filter(o=>o!=="—").length} owner(s) inherit accountability`,s:`Reported answers route to ${inherited.owners.filter(o=>o!=="—").join(", ")||"the space owner"} without anyone assigning them.`},
+                        {c:T.green,h:"Glossary definitions become the answer's definitions",s:"Ambiguous business terms trigger a clarification rather than a guess."},
+                      ].filter(Boolean).map((r,i)=>(
+                        <div key={r.h} style={{display:"flex",gap:10,padding:"10px 12px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+                          <span style={{width:6,height:6,borderRadius:"50%",background:r.c,flexShrink:0,marginTop:5}}/>
+                          <div><div style={{fontSize:12.3,fontWeight:700,color:T.text}}>{r.h}</div>
+                            <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.55,marginTop:1}}>{r.s}</div></div>
+                        </div>
+                      ))}
+                    </div>
+                    <KLNote tone="quiet">
+                      Nothing on this step is editable — it is a read-out of governance that already exists. To change it,
+                      change the classification, term or policy at its source and the space follows.
+                    </KLNote>
+                  </>)}
+              </div>
+            )}
+
+            {/* ── 3 · relationships ── */}
+            {step===2&&(
+              <div style={{maxWidth:800}}>
+                {propJoins.length===0
+                  ? <KLEmpty icon={Ic.branches(30)} title="No relationships to confirm"
+                      sub={mode==="documents"?"Document spaces do not join.":"Pick two or more related tables in step 1."}/>
+                  : propJoins.map((j,i)=>{
+                      const ok = j.conf>=80 || joins[i]==="confirm";
+                      const dropped = joins[i]==="drop";
+                      return (
+                        <div key={i} style={{display:"flex",alignItems:"center",gap:11,flexWrap:"wrap",padding:"11px 12px",marginBottom:8,
+                          background:T.bgSurface,borderRadius:9,opacity:dropped?.5:1,
+                          border:`1px solid ${dropped?T.border:ok?T.border:T.amber+"66"}`}}>
+                          <span style={{fontSize:11.8,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{j.from}</span>
+                          <span style={{color:T.textMuted}}>→</span>
+                          <span style={{fontSize:11.8,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{j.to}</span>
+                          <DAPill color={T.textSub}>{j.how}</DAPill>
+                          <DAPill color={j.conf>=80?T.green:T.amber}>{j.conf}%</DAPill>
+                          <div style={{marginLeft:"auto",display:"flex",gap:5}}>
+                            {j.conf>=80
+                              ? <span style={{fontSize:10.5,color:T.green,fontWeight:600}}>Accepted automatically</span>
+                              : dropped ? <Btn small ghost onClick={()=>setJoins(x=>({...x,[i]:null}))}>Undo</Btn>
+                              : joins[i]==="confirm" ? <span style={{fontSize:10.5,color:T.green,fontWeight:600}}>Confirmed by you</span>
+                              : (<>
+                                  <Btn small ghost onClick={()=>setJoins(x=>({...x,[i]:"drop"}))}>Drop</Btn>
+                                  <Btn small variant="primary" onClick={()=>setJoins(x=>({...x,[i]:"confirm"}))}>Confirm</Btn>
+                                </>)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                {propJoins.some(j=>j.conf<80)&&(
+                  <KLNote>
+                    A join below the confidence threshold is never used silently. Until you confirm or drop it, the planner
+                    refuses questions that would need it — which is why the space cannot be published yet.
+                  </KLNote>
+                )}
+              </div>
+            )}
+
+            {/* ── 4 · semantics ── */}
+            {step===3&&(
+              <div style={{maxWidth:820}}>
+                <DASectionLabel>Synonyms · {syns.filter(x=>x.status==="Approved").length} approved, {syns.filter(x=>x.status==="Pending").length} pending</DASectionLabel>
+                {syns.length===0
+                  ? <KLEmpty icon={Ic.glossary(30)} title={aiOn?"Nothing proposed for this scope":"AI assist is off"}
+                      sub={aiOn?"Add synonyms by hand below.":"Turn AI assist on to have synonyms proposed, or add them by hand."}/>
+                  : (
+                    <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",marginBottom:12}}>
+                      {syns.map((x,i)=>(
+                        <div key={x.term} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+                          <span style={{fontSize:12,fontWeight:700,color:T.text,minWidth:112}}>{x.term}</span>
+                          <span style={{color:T.textMuted}}>→</span>
+                          <span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace",minWidth:170}}>{x.maps}</span>
+                          <DAPill color={x.src.startsWith("Glossary")||x.src.startsWith("Knowledge")?T.green:T.violet}>{x.src}</DAPill>
+                          <DAPill color={x.conf>=90?T.green:x.conf>=70?T.amber:T.rose}>{x.conf}%</DAPill>
+                          <div style={{marginLeft:"auto",display:"flex",gap:5,alignItems:"center"}}>
+                            {x.status==="Pending"
+                              ? (<>
+                                  <Btn small ghost onClick={()=>setSyns(a=>a.map((y,j)=>j===i?{...y,status:"Rejected"}:y))}>Reject</Btn>
+                                  <Btn small variant="primary" onClick={()=>setSyns(a=>a.map((y,j)=>j===i?{...y,status:"Approved"}:y))}>Approve</Btn>
+                                </>)
+                              : <DAStatusTag status={x.status==="Approved"?"Verified":"Retired"}/>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                <div style={{display:"flex",gap:7,marginBottom:20,flexWrap:"wrap"}}>
+                  <input value={newSyn.term} onChange={e=>setNewSyn(v=>({...v,term:e.target.value}))} placeholder="Business word" style={{...inp,width:170}}/>
+                  <input value={newSyn.maps} onChange={e=>setNewSyn(v=>({...v,maps:e.target.value}))} placeholder="table.column" style={{...inp,width:220,fontFamily:"'Geist Mono',monospace"}}/>
+                  <Btn small disabled={!newSyn.term.trim()||!newSyn.maps.trim()} onClick={()=>{
+                    setSyns(a=>[...a,{term:newSyn.term.trim(),maps:newSyn.maps.trim(),src:"Added by "+me,conf:100,status:"Approved"}]);
+                    setNewSyn({term:"",maps:""});
+                  }}>Add synonym</Btn>
+                </div>
+
+                <DASectionLabel>Sample questions · used as the space's test set and shown to askers</DASectionLabel>
+                {samples.map((q,i)=>(
+                  <div key={q} style={{display:"flex",alignItems:"center",gap:9,padding:"8px 11px",marginBottom:6,
+                    background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8}}>
+                    <span style={{fontSize:12,color:T.text,flex:1,minWidth:0}}>{q}</span>
+                    <button onClick={()=>setSamples(a=>a.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex"}}>{Ic.x(11)}</button>
+                  </div>
+                ))}
+                <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                  <input value={newSample} onChange={e=>setNewSample(e.target.value)} placeholder="A question people will actually ask" style={{...inp,flex:1,minWidth:260}}
+                    onKeyDown={e=>{if(e.key==="Enter"&&newSample.trim()){setSamples(a=>[...a,newSample.trim()]);setNewSample("");}}}/>
+                  <Btn small disabled={!newSample.trim()} onClick={()=>{setSamples(a=>[...a,newSample.trim()]);setNewSample("");}}>Add</Btn>
+                </div>
+              </div>
+            )}
+
+            {/* ── 5 · guardrails ── */}
+            {step===4&&(
+              <div style={{maxWidth:700}}>
+                {[
+                  {k:"rowLimit", l:"Maximum rows returned", d:"A question that would return more is refused rather than truncated silently.", num:true, min:100, max:100000},
+                  {k:"timeout",  l:"Query timeout (seconds)", d:"Long-running plans are cancelled and reported, not left hanging.", num:true, min:5, max:600},
+                ].map(f=>(
+                  <div key={f.k} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 14px",marginBottom:9,
+                    background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12.3,fontWeight:600,color:T.text}}>{f.l}</div>
+                      <div style={{fontSize:11,color:T.textMuted,marginTop:1,lineHeight:1.5}}>{f.d}</div>
+                    </div>
+                    <input type="number" min={f.min} max={f.max} value={guards[f.k]} onChange={e=>setGuards(g=>({...g,[f.k]:Number(e.target.value)}))}
+                      style={{width:92,padding:"6px 9px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,
+                        fontSize:12.5,fontWeight:600,outline:"none",textAlign:"center",fontFamily:"'Geist Mono',monospace"}}/>
+                  </div>
+                ))}
+                <div style={{padding:"12px 14px",marginBottom:9,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
+                  <div style={{fontSize:12.3,fontWeight:600,color:T.text,marginBottom:2}}>When a policy conflicts with the question</div>
+                  <div style={{fontSize:11,color:T.textMuted,marginBottom:9,lineHeight:1.5}}>
+                    A question touches a restricted column. Mask keeps the answer useful; refuse keeps it clean. Either way the asker is told.
+                  </div>
+                  <select value={guards.refuse} onChange={e=>setGuards(g=>({...g,refuse:e.target.value}))} style={{...inp,cursor:"pointer"}}>
+                    <option value="mask">Mask the restricted values and answer</option>
+                    <option value="refuse">Refuse the whole question</option>
+                  </select>
+                </div>
+                <div style={{padding:"12px 14px",marginBottom:9,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
+                  <div style={{fontSize:12.3,fontWeight:600,color:T.text,marginBottom:2}}>Who may edit generated SQL</div>
+                  <div style={{fontSize:11,color:T.textMuted,marginBottom:9,lineHeight:1.5}}>
+                    Editing bypasses the planner but not policy — masking and row filters still apply to the result.
+                  </div>
+                  <select value={guards.editSql} onChange={e=>setGuards(g=>({...g,editSql:e.target.value}))} style={{...inp,cursor:"pointer"}}>
+                    <option value="none">Nobody</option>
+                    <option value="steward">Stewards and above</option>
+                    <option value="any">Anyone who can ask</option>
+                  </select>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:14,padding:"12px 14px",marginBottom:9,
+                  background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12.3,fontWeight:600,color:T.text}}>Require certified assets</div>
+                    <div style={{fontSize:11,color:T.textMuted,marginTop:1,lineHeight:1.5}}>Block publication while any object in scope is uncertified or deprecated.</div>
+                  </div>
+                  <Toggle on={guards.requireCert} onChange={()=>setGuards(g=>({...g,requireCert:!g.requireCert}))}/>
+                </div>
+                <div style={{padding:"11px 13px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textSub,lineHeight:1.6}}>
+                  <b style={{color:T.text}}>Blocked classifications:</b> {S.guards.blockedTags.join(", ")||"none"} — set platform-wide in
+                  Settings › Data Ask › Guardrails and not overridable per space.
+                </div>
+              </div>
+            )}
+
+            {/* ── 6 · index & test ── */}
+            {step===5&&(
+              <div style={{maxWidth:820}}>
+                <div style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",marginBottom:16,
+                  background:T.bgSurface,border:`1px solid ${built?T.green+"55":T.border}`,borderRadius:10}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12.8,fontWeight:700,color:T.text}}>
+                      {built?"Index built":building?"Building index…":"Index not built"}
+                    </div>
+                    <div style={{fontSize:11.5,color:T.textMuted,marginTop:2,lineHeight:1.5}}>
+                      {chosen.length} object{chosen.length===1?"":"s"} · {mode==="structured"?"schema + joins + semantics":`${DA_RETRIEVAL[retr].label} retrieval index`}
+                      {built?` · completed ${daNow()}`:""}
+                    </div>
+                  </div>
+                  {building
+                    ? <span style={{width:18,height:18,borderRadius:"50%",border:`2px solid ${T.border}`,borderTopColor:T.accent,animation:"spin .8s linear infinite"}}/>
+                    : <Btn small variant={built?undefined:"primary"} onClick={runIndex}>{built?"Rebuild":"Build index"}</Btn>}
+                </div>
+
+                <DASectionLabel>Test console</DASectionLabel>
+                <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6,marginBottom:10}}>
+                  Ask the space a question before anyone else can. Mark each result right or wrong — the pass rate becomes
+                  the space's accuracy figure, and a wrong result files itself as a review item.
+                </div>
+                <div style={{display:"flex",gap:7,marginBottom:12,flexWrap:"wrap"}}>
+                  <input value={tq} onChange={e=>setTq(e.target.value)} disabled={!built}
+                    placeholder={built?"e.g. What was net revenue by region last quarter?":"Build the index first"}
+                    onKeyDown={e=>{if(e.key==="Enter")runTest();}}
+                    style={{...inp,flex:1,minWidth:280,opacity:built?1:.5}}/>
+                  <Btn small variant="primary" disabled={!built||!tq.trim()} onClick={runTest}>Run</Btn>
+                </div>
+
+                {tRes&&(tRes.miss
+                  ? <div style={{padding:"12px 14px",borderRadius:9,background:T.bgSurface,border:`1px solid ${T.amber}55`,marginBottom:12}}>
+                      <div style={{fontSize:12.3,fontWeight:700,color:T.text,marginBottom:3}}>Not understood</div>
+                      <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>
+                        The space has no vocabulary for “{tRes.q}”. Add a synonym in step 4, or accept that this question is out of scope.
+                      </div>
+                    </div>
+                  : <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:12}}>
+                      <div style={{padding:"12px 14px",borderRadius:9,background:T.bgSurface,border:`1px solid ${T.border}`}}>
+                        <DAText size={12.5}>{tRes.summary}</DAText>
+                      </div>
+                      {tRes.sql&&<DASqlPanel sql={tRes.sql} canEdit={true} onRun={()=>onToast("Edited SQL executed in the test console")}/>}
+                      {tRes.cols&&<DAResultTable cols={tRes.cols} rows={tRes.rows} maskCol={tRes.maskCol} masked={false}/>}
+                      <div style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap"}}>
+                        <Btn small variant="primary" onClick={()=>{setTested(a=>[...a,{q:tq,ok:true}]);setTRes(null);setTq("");onToast("Marked correct — added to the test set");}}>Looks right</Btn>
+                        <Btn small ghost onClick={()=>{
+                          setTested(a=>[...a,{q:tq,ok:false}]);
+                          daAddReview({id:"rv"+Date.now(), kind:"Wrong answer", q:tq, space:name.trim()||"new space", by:me, at:daNow(),
+                            assignee:steward, status:"Open", sev:"High", note:"Failed during pre-publication testing.", fixes:["addSynonym","dismiss"]});
+                          setTRes(null);setTq("");onToast("Marked wrong — filed as a review item");
+                        }}>Wrong — send as feedback</Btn>
+                        <span style={{fontSize:11,color:T.textMuted,marginLeft:"auto"}}>Confidence {tRes.conf}% · {tRes.credits} credits</span>
+                      </div>
+                    </div>)}
+
+                {tested.length>0&&(
+                  <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>
+                    <div style={{padding:"8px 12px",background:T.bgElevated,fontSize:11,fontWeight:700,color:T.textSub}}>
+                      Test set · {tested.filter(t=>t.ok).length}/{tested.length} passing ({Math.round(tested.filter(t=>t.ok).length/tested.length*100)}%)
+                    </div>
+                    {tested.map((t,i)=>(
+                      <div key={i} style={{display:"flex",alignItems:"center",gap:9,padding:"8px 12px",borderTop:`1px solid ${T.border}`}}>
+                        <span style={{color:t.ok?T.green:T.rose,fontSize:12,fontWeight:700}}>{t.ok?"✓":"✕"}</span>
+                        <span style={{fontSize:11.8,color:T.textSub}}>{t.q}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── 7 · publish ── */}
+            {step===6&&(
+              <div style={{maxWidth:720}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:0,
+                  background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",marginBottom:18}}>
+                  {[{l:"Name",v:name||"—"},{l:"Mode",v:DA_MODES[mode].label},{l:"Objects",v:String(picked.length)},
+                    {l:"Synonyms",v:String(syns.filter(x=>x.status==="Approved").length)},
+                    {l:"Test pass rate",v:tested.length?`${Math.round(tested.filter(t=>t.ok).length/tested.length*100)}%`:"not tested"}].map((p,i)=>(
+                    <div key={p.l} style={{padding:"11px 14px",borderLeft:i?`1px solid ${T.border}`:"none"}}>
+                      <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{p.l}</div>
+                      <div style={{fontSize:12.3,fontWeight:600,color:T.text}}>{p.v}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <DASectionLabel>Pre-publication checks</DASectionLabel>
+                <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",marginBottom:18}}>
+                  {[
+                    {ok:picked.length>0, t:"Scope defined", f:"No objects selected"},
+                    {ok:blockedPick.length===0, t:"No blocklisted classifications in scope", f:"Blocklisted classification present"},
+                    {ok:!guards.requireCert||uncertified.length===0, t:"All objects certified", f:`${uncertified.length} uncertified object(s) — Require certified assets is on`},
+                    {ok:!propJoins.some((j,i)=>j.conf<80&&!joins[i]), t:"All low-confidence joins resolved", f:"Unresolved joins remain"},
+                    {ok:!syns.some(x=>x.status==="Pending"), t:"No pending synonyms", f:"Synonyms still awaiting approval"},
+                    {ok:built, t:"Index built", f:"Index not built"},
+                    {ok:tested.length>0&&tested.every(t=>t.ok), t:`Test set passing (${tested.filter(t=>t.ok).length}/${tested.length})`,
+                     f:tested.length===0?"No test questions run — publishing untested is allowed but not advised":"Failing test questions"},
+                  ].map((c,i)=>(
+                    <div key={c.t} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+                      <span style={{width:16,height:16,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+                        fontSize:9.5,fontWeight:700,background:(c.ok?T.green:T.amber)+"1a",color:c.ok?T.green:T.amber,
+                        border:`1px solid ${(c.ok?T.green:T.amber)}44`}}>{c.ok?"✓":"!"}</span>
+                      <span style={{fontSize:12,color:c.ok?T.textSub:T.text,fontWeight:c.ok?400:600}}>{c.ok?c.t:c.f}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <DASectionLabel>Approving steward</DASectionLabel>
+                <select value={steward} onChange={e=>setSteward(e.target.value)} style={{...inp,cursor:"pointer",marginBottom:8,maxWidth:280}}>
+                  {["maya.chen","dev.patel","sarah.kim","alex.rivera"].map(u=><option key={u}>{u}</option>)}
+                </select>
+                <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6,marginBottom:4}}>
+                  Submitting sends an approval work item to {steward}'s inbox. Until it is approved the space stays
+                  unaskable — the same review path every other governed object in EDG uses.
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,background:T.bgElevated,display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+          {blocked&&<span style={{fontSize:11.5,color:T.amber,fontWeight:500}}>{blockReason}</span>}
+          <div style={{marginLeft:"auto",display:"flex",gap:8}}>
+            <Btn ghost small onClick={onClose}>Cancel</Btn>
+            {step>0&&<Btn ghost small onClick={()=>setStep(n=>n-1)}>Back</Btn>}
+            {step<DA_WIZ_STEPS.length-1
+              ? <Btn variant="primary" small disabled={blocked} onClick={advance}>Continue</Btn>
+              : (<>
+                  <Btn small onClick={()=>finish(false)}>Save as draft</Btn>
+                  <Btn variant="primary" small disabled={!name.trim()||picked.length===0} onClick={()=>finish(true)}>Submit for approval</Btn>
+                </>)}
+          </div>
+        </div>
+      </div>
+    </div>, document.body);
+};
+
+
+// ── Answer Space profile ────────────────────────────────────────────────────
+const DASpaceProfile = ({sp,me,role,onBack,onToast,onNav,onAsk}) => {
+  const [tab,setTab]   = useState("overview");
+  const [g,setG]       = useState(sp.guards);
+  const [gSaved,setGSaved]=useState(false);
+  const [newSyn,setNewSyn]=useState({term:"",maps:""});
+  const [tq,setTq]     = useState("");
+  const [tRes,setTRes] = useState(null);
+  const [building,setBuilding]=useState(false);
+  const S = _da.settings;
+  const canManage = S.access.publish.includes(role) || sp.owner===me;
+
+  const inp = {width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,
+    color:T.text,fontSize:12.5,outline:"none",fontFamily:"inherit"};
+
+  const setSyn = (i,status)=>daUpdSpace(sp.id,s=>({synonyms:s.synonyms.map((x,j)=>j===i?{...x,status}:x)}));
+  const rebuild = ()=>{ setBuilding(true); setTimeout(()=>{ setBuilding(false);
+    daUpdSpace(sp.id,s=>({indexed:daNow(), history:[{at:daNow(),what:"Index rebuilt",who:me,detail:`${s.sources.length} objects`},...s.history]}));
+    onToast("Index rebuilt"); },1500); };
+  const runTest = ()=>{ const q=tq.trim(); if(!q) return; const raw=daResolve(q,sp.id);
+    setTRes(raw?daProject({...raw,q},role):{miss:true,q}); };
+
+  const pending  = (sp.synonyms||[]).filter(x=>x.status==="Pending").length;
+  const badJoins = (sp.joins||[]).filter(j=>!j.ok).length;
+  const blockers = daBlockers(sp);
+  const eff      = daEffStatus(sp);
+
+  return (
+    <>
+      <Topbar breadcrumb={[
+        {label:"Data Ask", onClick:onBack},
+        {label:"Answer Spaces", onClick:onBack},
+        {label:sp.name},
+      ]} actions={
+        <div style={{display:"flex",gap:7}}>
+          {sp.status==="Published"&&<Btn small ghost onClick={()=>onAsk(sp.id)}>Ask this space</Btn>}
+          {canManage&&<Btn small ghost disabled={building} onClick={rebuild}>{building?"Rebuilding…":"Rebuild index"}</Btn>}
+          {canManage&&sp.status==="In review"&&<Btn small variant="primary" onClick={()=>{
+            daUpdSpace(sp.id,s=>({status:"Published", version:"v1", published:daNow().slice(0,10),
+              history:[{at:daNow(),what:"Published v1",who:me,detail:"Approved in review"},...s.history]}));
+            onToast(`${sp.name} published — it is now askable`);
+          }}>Approve & publish</Btn>}
+          {canManage&&eff==="Draft"&&<Btn small variant="primary" onClick={()=>{
+            daUpdSpace(sp.id,s=>({status:"In review",
+              history:[{at:daNow(),what:"Submitted for review",who:me,detail:`→ ${s.stewards[0]||"steward"}`},...s.history]}));
+            onToast("Submitted for review");
+          }}>Submit for review</Btn>}
+          {canManage&&sp.status==="Published"&&<Btn small variant="danger" onClick={()=>{
+            daUpdSpace(sp.id,s=>({status:"Draft", published:"—",
+              history:[{at:daNow(),what:"Unpublished",who:me,detail:"Withdrawn from asking"},...s.history]}));
+            onToast(`${sp.name} unpublished — no longer askable`);
+          }}>Unpublish</Btn>}
+        </div>
+      }/>
+      <div style={{flex:1,overflowY:"auto",padding:24}}>
+        <KLProfileHead
+          icon={<div style={{width:38,height:38,borderRadius:9,background:T.accentDim,border:`1px solid ${T.accent}33`,
+            display:"flex",alignItems:"center",justifyContent:"center",color:T.accent,flexShrink:0}}>{Ic.bot(19)}</div>}
+          kicker="Answer Space"
+          title={sp.name}
+          badges={<><DAStatusTag status={eff}/><DAModeTag mode={sp.mode}/>
+            <span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{sp.key} · {sp.version}</span></>}
+          props={[
+            {l:"Owner", v:sp.owner},
+            {l:"Steward", v:(sp.stewards||[]).join(", ")||"—"},
+            {l:"Domain", v:sp.domain},
+            {l:"Objects", v:String(sp.sources.length)},
+            {l:"Accuracy", v:sp.accuracy?`${sp.accuracy}%`:"—", c:sp.accuracy>=90?T.green:sp.accuracy>=75?T.amber:sp.accuracy?T.rose:T.textMuted},
+            {l:"Indexed", v:sp.indexed},
+          ]}/>
+
+        {blockers.length>0&&(()=>{
+          const hard = blockers.some(b=>b.hard);
+          const c = hard ? T.rose : sp.status==="Published" ? T.blue : T.amber;
+          return (
+            <div style={{padding:"12px 14px",marginBottom:18,borderRadius:9,background:c+"0e",border:`1px solid ${c}55`}}>
+              <div style={{fontSize:12.3,fontWeight:700,color:T.text,marginBottom:7}}>
+                {hard ? "This space cannot be indexed"
+                      : eff==="Published" ? "Open steward work — the space still answers"
+                      : "Blocking publication"}
+              </div>
+              {blockers.map(b=>(
+                <div key={b.t} style={{display:"flex",gap:9,padding:"5px 0"}}>
+                  <span style={{color:b.hard?T.rose:c,flexShrink:0,marginTop:1}}>•</span>
+                  <div><div style={{fontSize:12,color:T.text}}>{b.t}</div>
+                    <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{b.fix}</div></div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
+        <Tabs2 tabs={[
+          {key:"overview",label:"Overview"},
+          {key:"scope",   label:`Scope (${sp.sources.length})`},
+          {key:"sem",     label:`Semantics${pending?` · ${pending} pending`:""}`},
+          {key:"guards",  label:"Guardrails"},
+          {key:"test",    label:"Test console"},
+          {key:"hist",    label:"Activity"},
+        ]} active={tab} onChange={setTab}/>
+
+        {tab==="overview"&&(<>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(158px,1fr))",gap:12,marginBottom:18}}>
+            <Metric label="Questions · 30d" value={sp.questions30d.toLocaleString()}/>
+            <Metric label="Accuracy" value={sp.accuracy?`${sp.accuracy}%`:"—"} color={sp.accuracy>=90?T.green:sp.accuracy>=75?T.amber:T.rose}/>
+            <Metric label="Avg latency" value={sp.avgLatency}/>
+            <Metric label="Credits · 30d" value={sp.credits30d.toLocaleString()}/>
+            <Metric label="Open reviews" value={String(_da.review.filter(r=>r.space===sp.id&&r.status==="Open").length)}
+              color={_da.review.filter(r=>r.space===sp.id&&r.status==="Open").length?T.amber:T.green}/>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1.2fr 1fr",gap:14}}>
+            <Card2 style={{padding:16}}>
+              <SH title="What this space is for" sub="Shown to everyone who selects it on the Ask screen."/>
+              <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65,marginBottom:14}}>{sp.desc}</div>
+              <DASectionLabel>Sample questions</DASectionLabel>
+              {(sp.samples||[]).length===0
+                ? <div style={{fontSize:11.5,color:T.textMuted}}>None defined — askers land on an empty canvas.</div>
+                : sp.samples.map(q=>(
+                    <div key={q} style={{fontSize:12,color:T.textSub,padding:"6px 0",borderBottom:`1px solid ${T.border}`}}>{q}</div>
+                  ))}
+            </Card2>
+            <Card2 style={{padding:16}}>
+              <SH title="Health" sub="What would stop this space answering well."/>
+              {[
+                {ok:sp.indexed!=="—", t:"Index present", f:"Never indexed"},
+                {ok:badJoins===0, t:"All joins confirmed", f:`${badJoins} unconfirmed join(s)`},
+                {ok:pending===0, t:"No pending synonyms", f:`${pending} synonym(s) awaiting approval`},
+                {ok:!sp.sources.some(x=>x.cert&&x.cert!=="Approved"), t:"All objects certified",
+                 f:`${sp.sources.filter(x=>x.cert&&x.cert!=="Approved").map(x=>x.name).join(", ")} not certified`},
+                {ok:!sp.sources.some(x=>x.hold), t:"No held objects", f:"Contains objects under legal hold — export disabled"},
+                {ok:sp.accuracy>=85, t:`Accuracy ${sp.accuracy}%`, f:`Accuracy ${sp.accuracy}% — below the 85% bar`},
+              ].map((c,i)=>(
+                <div key={c.t} style={{display:"flex",alignItems:"center",gap:9,padding:"8px 0",borderTop:i?`1px solid ${T.border}`:"none"}}>
+                  <span style={{width:15,height:15,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+                    fontSize:9,fontWeight:700,background:(c.ok?T.green:T.amber)+"1a",color:c.ok?T.green:T.amber,
+                    border:`1px solid ${(c.ok?T.green:T.amber)}44`}}>{c.ok?"✓":"!"}</span>
+                  <span style={{fontSize:12,color:c.ok?T.textSub:T.text,fontWeight:c.ok?400:600}}>{c.ok?c.t:c.f}</span>
+                </div>
+              ))}
+            </Card2>
+          </div>
+        </>)}
+
+        {tab==="scope"&&(<>
+          <SH title="Objects this space may reach" sub="Classifications and policies are inherited from the catalog — they are not configured here."/>
+          <DataTable
+            cols={[
+              {key:"name",label:"Object",render:(v,r)=>(
+                <span><span style={{display:"block",fontWeight:600,fontFamily:"'Geist Mono',monospace"}}>{v}</span>
+                <span style={{display:"block",fontSize:10.5,color:T.textMuted}}>{r.type} · {r.role}</span></span>)},
+              {key:"rows",label:"Volume",render:v=><span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{v}</span>},
+              {key:"term",label:"Glossary term",render:v=>v==="—"?<span style={{color:T.textMuted}}>not bound</span>:<span style={{fontSize:11.5,color:T.blue}}>{v}</span>},
+              {key:"tags",label:"Classifications",render:v=>v.length?<span style={{display:"flex",gap:4,flexWrap:"wrap"}}>{v.map(t=><DAPill key={t} color={_da.settings.guards.blockedTags.includes(t)?T.rose:T.amber}>{t}</DAPill>)}</span>:<span style={{color:T.textMuted,fontSize:11.5}}>none</span>},
+              {key:"hold",label:"Enforcement",render:(v,r)=>v?<DAPill color={T.rose}>Legal hold</DAPill>
+                :r.tags.includes("PII")?<DAPill color={T.amber}>Masked for non-owners</DAPill>
+                :<span style={{fontSize:11.5,color:T.green}}>Open</span>},
+            ]}
+            rows={sp.sources}
+            onRowClick={()=>onNav&&onNav("catalog")}/>
+          {(sp.joins||[]).length>0&&(<>
+            <SH title="Relationships" sub="Anything below 80% confidence must be confirmed before the planner will use it." action={null}/>
+            <DataTable
+              cols={[
+                {key:"from",label:"From",render:v=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,fontWeight:600}}>{v}</span>},
+                {key:"to",  label:"To",  render:v=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,fontWeight:600}}>{v}</span>},
+                {key:"how", label:"Detected by",render:v=><DAPill color={T.textSub}>{v}</DAPill>},
+                {key:"conf",label:"Confidence",render:v=><DAPill color={v>=80?T.green:T.amber}>{v}%</DAPill>},
+                {key:"ok",  label:"Status",render:(v,r)=>v?<span style={{fontSize:11.5,color:T.green,fontWeight:600}}>In use</span>
+                  :<Btn small variant="primary" onClick={()=>{daUpdSpace(sp.id,s=>({joins:s.joins.map(j=>j.from===r.from?{...j,ok:true}:j)}));onToast("Join confirmed");}}>Confirm</Btn>},
+              ]}
+              rows={sp.joins}/>
+          </>)}
+        </>)}
+
+        {tab==="sem"&&(<>
+          <SH title="Synonyms" sub="How people talk about this data. Glossary and Knowledge Layer entries are authoritative; AI proposals need a steward."/>
+          {(sp.synonyms||[]).length===0
+            ? <KLEmpty icon={Ic.glossary(30)} title="No synonyms yet" sub="Askers must use exact column names until you add some."/>
+            : <DataTable
+                cols={[
+                  {key:"term",label:"Business word",render:v=><span style={{fontWeight:600}}>{v}</span>},
+                  {key:"maps",label:"Maps to",render:v=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:T.textSub}}>{v}</span>},
+                  {key:"src", label:"Source",render:v=><DAPill color={/Glossary|Knowledge|Business/.test(v)?T.green:T.violet}>{v}</DAPill>},
+                  {key:"conf",label:"Confidence",render:v=><DAPill color={v>=90?T.green:v>=70?T.amber:T.rose}>{v}%</DAPill>},
+                  {key:"status",label:"Status",render:(v,r)=>v!=="Pending"
+                    ? <DAStatusTag status={v==="Approved"?"Verified":"Retired"}/>
+                    : <span style={{display:"flex",gap:5}}>
+                        <Btn small ghost onClick={()=>{setSyn(sp.synonyms.indexOf(r),"Rejected");onToast(`“${r.term}” rejected`);}}>Reject</Btn>
+                        <Btn small variant="primary" onClick={()=>{setSyn(sp.synonyms.indexOf(r),"Approved");onToast(`“${r.term}” approved — rebuild the index to use it`);}}>Approve</Btn>
+                      </span>},
+                ]}
+                rows={sp.synonyms}/>}
+          {canManage&&(
+            <div style={{display:"flex",gap:7,marginTop:12,flexWrap:"wrap"}}>
+              <input value={newSyn.term} onChange={e=>setNewSyn(v=>({...v,term:e.target.value}))} placeholder="Business word" style={{...inp,width:170}}/>
+              <input value={newSyn.maps} onChange={e=>setNewSyn(v=>({...v,maps:e.target.value}))} placeholder="table.column" style={{...inp,width:230,fontFamily:"'Geist Mono',monospace"}}/>
+              <Btn small disabled={!newSyn.term.trim()||!newSyn.maps.trim()} onClick={()=>{
+                daUpdSpace(sp.id,s=>({synonyms:[...s.synonyms,{term:newSyn.term.trim(),maps:newSyn.maps.trim(),src:"Added by "+me,conf:100,status:"Approved"}]}));
+                setNewSyn({term:"",maps:""}); onToast("Synonym added");
+              }}>Add synonym</Btn>
+            </div>
+          )}
+        </>)}
+
+        {tab==="guards"&&(
+          <div style={{maxWidth:680}}>
+            <SH title="Guardrails" sub="The limits this space operates inside. Platform-wide rules sit above these and cannot be loosened here."/>
+            {[{k:"rowLimit",l:"Maximum rows returned",d:"A question that would exceed this is refused, not truncated."},
+              {k:"timeout", l:"Query timeout (seconds)",d:"Cancelled and reported rather than left hanging."}].map(f=>(
+              <div key={f.k} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 14px",marginBottom:9,
+                background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
+                <div style={{flex:1}}><div style={{fontSize:12.3,fontWeight:600,color:T.text}}>{f.l}</div>
+                  <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{f.d}</div></div>
+                <input type="number" value={g[f.k]} disabled={!canManage} onChange={e=>setG(x=>({...x,[f.k]:Number(e.target.value)}))}
+                  style={{width:92,padding:"6px 9px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,
+                    fontSize:12.5,fontWeight:600,outline:"none",textAlign:"center",fontFamily:"'Geist Mono',monospace",opacity:canManage?1:.6}}/>
+              </div>
+            ))}
+            <div style={{padding:"12px 14px",marginBottom:9,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
+              <div style={{fontSize:12.3,fontWeight:600,color:T.text,marginBottom:8}}>When a policy conflicts with the question</div>
+              <select value={g.refuse} disabled={!canManage} onChange={e=>setG(x=>({...x,refuse:e.target.value}))} style={{...inp,cursor:canManage?"pointer":"default",opacity:canManage?1:.6}}>
+                <option value="mask">Mask the restricted values and answer</option>
+                <option value="refuse">Refuse the whole question</option>
+              </select>
+            </div>
+            <div style={{padding:"12px 14px",marginBottom:9,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
+              <div style={{fontSize:12.3,fontWeight:600,color:T.text,marginBottom:8}}>Who may edit generated SQL</div>
+              <select value={g.editSql} disabled={!canManage} onChange={e=>setG(x=>({...x,editSql:e.target.value}))} style={{...inp,cursor:canManage?"pointer":"default",opacity:canManage?1:.6}}>
+                <option value="none">Nobody</option><option value="steward">Stewards and above</option><option value="any">Anyone who can ask</option>
+              </select>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:14,padding:"12px 14px",marginBottom:14,
+              background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
+              <div style={{flex:1}}><div style={{fontSize:12.3,fontWeight:600,color:T.text}}>Require certified assets</div>
+                <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>Block publication while any object in scope is uncertified.</div></div>
+              <Toggle on={g.requireCert} disabled={!canManage} onChange={()=>setG(x=>({...x,requireCert:!x.requireCert}))}/>
+            </div>
+            <div style={{padding:"11px 13px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textSub,lineHeight:1.6,marginBottom:16}}>
+              <b style={{color:T.text}}>Blocked classifications:</b> {(g.blockedTags||[]).join(", ")||"none"} — platform-wide, set in Settings › Data Ask › Guardrails.
+            </div>
+            {canManage&&<div style={{display:"flex",alignItems:"center",gap:10}}>
+              <Btn variant="primary" small onClick={()=>{daUpdSpace(sp.id,{guards:g});setGSaved(true);onToast("Guardrails saved");setTimeout(()=>setGSaved(false),2200);}}>Save guardrails</Btn>
+              {gSaved&&<span style={{fontSize:12,color:T.green,fontWeight:500}}>✓ Saved</span>}
+            </div>}
+          </div>
+        )}
+
+        {tab==="test"&&(
+          <div style={{maxWidth:840}}>
+            <SH title="Test console" sub="Ask as any role and see exactly what that role would get back. This is the pre-flight check before a change is published."/>
+            <div style={{display:"flex",gap:7,marginBottom:14,flexWrap:"wrap"}}>
+              <input value={tq} onChange={e=>setTq(e.target.value)} placeholder={(sp.samples&&sp.samples[0])||"Ask this space a question"}
+                onKeyDown={e=>{if(e.key==="Enter")runTest();}} style={{...inp,flex:1,minWidth:300}}/>
+              <Btn small variant="primary" disabled={!tq.trim()} onClick={runTest}>Run as {role}</Btn>
+            </div>
+            {(sp.samples||[]).length>0&&(
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>
+                {sp.samples.map(q=>(
+                  <button key={q} onClick={()=>{setTq(q);const raw=daResolve(q,sp.id);setTRes(raw?daProject({...raw,q},role):{miss:true,q});}}
+                    style={{padding:"5px 11px",borderRadius:99,cursor:"pointer",fontFamily:"inherit",background:T.bgElevated,
+                      border:`1px solid ${T.border}`,fontSize:11.5,color:T.textSub}}>{q}</button>
+                ))}
+              </div>
+            )}
+            {!tRes
+              ? <KLEmpty icon={Ic.bot(30)} title="No test run yet" sub="Run a question to see the plan, the policy decisions and the result."/>
+              : tRes.miss
+                ? <div style={{padding:"13px 15px",borderRadius:9,background:T.bgSurface,border:`1px solid ${T.amber}55`}}>
+                    <div style={{fontSize:12.5,fontWeight:700,color:T.text,marginBottom:3}}>Not understood</div>
+                    <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>
+                      Nothing in this space maps to “{tRes.q}”. Add a synonym in Semantics, or accept the question as out of scope.
+                    </div>
+                  </div>
+                : <div style={{display:"flex",flexDirection:"column",gap:11}}>
+                    {tRes.denied
+                      ? <div style={{padding:"13px 15px",borderRadius:9,background:T.rose+"0e",border:`1px solid ${T.rose}55`}}>
+                          <div style={{fontSize:12.5,fontWeight:700,color:T.text,marginBottom:5}}>{tRes.denied.headline}</div>
+                          <DAText size={12}>{tRes.denied.because}</DAText>
+                        </div>
+                      : (<>
+                          <div style={{padding:"13px 15px",borderRadius:9,background:T.bgSurface,border:`1px solid ${T.border}`}}>
+                            <DAText size={12.5}>{tRes.summary}</DAText>
+                          </div>
+                          {tRes.sql&&<DASqlPanel sql={tRes.sql} canEdit={S.access.editSql.includes(role)} onRun={()=>onToast("Edited SQL executed in the test console")}/>}
+                          {tRes.cols&&<DAResultTable cols={tRes.cols} rows={tRes.rows} maskCol={tRes.maskCol} masked={tRes.willMask}/>}
+                          <DAGovStrip ans={tRes} onOpen={()=>onToast("Full trace is available from the Ask screen")}/>
+                        </>)}
+                    <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                      <Btn small variant="primary" onClick={()=>{
+                        daUpdSpace(sp.id,s=>({history:[{at:daNow(),what:"Test passed",who:me,detail:tq},...s.history]}));
+                        onToast("Marked correct");
+                      }}>Looks right</Btn>
+                      <Btn small ghost onClick={()=>{
+                        daAddReview({id:"rv"+Date.now(),kind:"Wrong answer",q:tq,space:sp.id,by:me,at:daNow(),
+                          assignee:sp.owner,status:"Open",sev:"High",note:"Failed in the test console.",fixes:["addSynonym","dismiss"]});
+                        onToast("Filed as a review item");
+                      }}>Wrong — send as feedback</Btn>
+                    </div>
+                  </div>}
+          </div>
+        )}
+
+        {tab==="hist"&&(<>
+          <SH title="Activity" sub="Index builds, publications and steward decisions for this space."/>
+          <DataTable
+            cols={[
+              {key:"at",   label:"When",  render:v=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:T.textMuted}}>{v}</span>},
+              {key:"what", label:"Event", render:v=><span style={{fontWeight:600}}>{v}</span>},
+              {key:"who",  label:"By",    render:v=><span style={{fontSize:11.5,color:T.textSub}}>{v}</span>},
+              {key:"detail",label:"Detail",render:v=><span style={{fontSize:11.5,color:T.textMuted}}>{v}</span>},
+            ]}
+            rows={sp.history||[]} emptyMsg="No activity yet"/>
+          <SH title="Questions asked here" sub="Drawn from the platform-wide Data Ask audit log." action={null}/>
+          <DataTable
+            cols={[
+              {key:"at",label:"When",render:v=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:T.textMuted}}>{v}</span>},
+              {key:"who",label:"Who"},
+              {key:"q",label:"Question",render:v=><span style={{fontSize:11.8}}>{v}</span>},
+              {key:"decision",label:"Decision",render:v=><DAPill color={DA_DECISION_COLOR(v)}>{v}</DAPill>},
+            ]}
+            rows={_da.activity.filter(a=>a.space===sp.id).slice(0,12)}
+            emptyMsg="No questions asked against this space yet"/>
+        </>)}
+      </div>
+    </>
+  );
+};
+
+
+// ── Verified answer drawer ──────────────────────────────────────────────────
+const DAVerifiedDrawer = ({v,me,role,onClose,onToast}) => {
+  const ans = DA_ANSWERS.find(a=>a.id===v.answerId);
+  const sp  = daSpace(v.space);
+  const canManage = _da.settings.access.publish.includes(role);
+  return createPortal(
+    <div onClick={onClose} className="fadeIn" style={{position:"fixed",inset:0,zIndex:1200,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}>
+      <div onClick={e=>e.stopPropagation()} className="slideInRight" style={{position:"absolute",top:0,right:0,bottom:0,width:560,maxWidth:"96vw",
+        background:T.bgSurface,borderLeft:`1px solid ${T.border}`,boxShadow:"-12px 0 48px rgba(0,0,0,.32)",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"14px 20px",borderBottom:`1px solid ${T.border}`,background:T.bgElevated,display:"flex",alignItems:"center",gap:12}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:14,fontWeight:700,color:T.text}}>Verified Answer</div>
+            <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{sp?sp.name:v.space} · verified by {v.owner} on {v.verified}</div>
+          </div>
+          <button onClick={onClose} style={{marginLeft:"auto",width:28,height:28,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,
+            color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"18px 20px"}}>
+          <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+            <DAStatusTag status={v.status}/>
+            <DAPill mono>{v.uses} uses</DAPill>
+            {ans&&<DAModeTag mode={ans.mode}/>}
+          </div>
+          <DASectionLabel>Question</DASectionLabel>
+          <div style={{fontSize:13,color:T.text,lineHeight:1.6,padding:"11px 13px",background:T.bgElevated,
+            border:`1px solid ${T.border}`,borderRadius:8,marginBottom:16}}>{v.q}</div>
+
+          <DASectionLabel>Why it is trusted</DASectionLabel>
+          <div style={{fontSize:12,color:T.textSub,lineHeight:1.65,marginBottom:16}}>{v.note}</div>
+
+          {ans&&ans.sql&&(<>
+            <DASectionLabel>Canonical plan</DASectionLabel>
+            <pre style={{margin:"0 0 16px",padding:11,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,
+              fontFamily:"'Geist Mono',monospace",fontSize:11.3,lineHeight:1.6,color:T.textSub,whiteSpace:"pre-wrap"}}>{ans.sql}</pre>
+          </>)}
+          {ans&&ans.terms&&(<>
+            <DASectionLabel>Definitions this answer relies on</DASectionLabel>
+            {ans.terms.map(t=>(
+              <div key={t.t} style={{padding:"9px 11px",marginBottom:7,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                <div style={{fontSize:12,fontWeight:700,color:T.text}}>{t.t}</div>
+                <div style={{fontSize:11.5,color:T.textMuted,marginTop:2,lineHeight:1.55}}>{t.d}</div>
+              </div>
+            ))}
+          </>)}
+          {!ans&&(
+            <div style={{padding:"11px 13px",borderRadius:8,background:T.amberDim,border:`1px solid ${T.amber}44`,
+              fontSize:12,color:T.text,lineHeight:1.6}}>
+              The plan behind this answer no longer resolves — the underlying scope changed after it was verified. That is
+              why it is retired rather than deleted: the definition stays discoverable, but nobody is served a stale plan.
+            </div>
+          )}
+        </div>
+        {canManage&&(
+          <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,background:T.bgElevated,display:"flex",gap:8,justifyContent:"flex-end"}}>
+            {v.status==="Verified"
+              ? <Btn small variant="danger" onClick={()=>{
+                  daPatch({verified:_da.verified.map(x=>x.id===v.id?{...x,status:"Retired"}:x)});
+                  onToast(`Retired — “${v.q.slice(0,36)}…” is no longer offered as verified`); onClose();
+                }}>Retire</Btn>
+              : <Btn small variant="primary" onClick={()=>{
+                  daPatch({verified:_da.verified.map(x=>x.id===v.id?{...x,status:"Verified",verified:daNow().slice(0,10),owner:me}:x)});
+                  onToast("Re-verified"); onClose();
+                }}>Re-verify</Btn>}
+          </div>
+        )}
+      </div>
+    </div>, document.body);
+};
+
+// ── Review item drawer ──────────────────────────────────────────────────────
+const DAReviewDrawer = ({it,me,onClose,onToast}) => {
+  const sp = daSpace(it.space);
+  const resolve = (how,msg) => {
+    daPatch({review:_da.review.map(x=>x.id===it.id?{...x,status:"Resolved",resolution:how}:x)});
+    onToast(msg); onClose();
+  };
+  return createPortal(
+    <div onClick={onClose} className="fadeIn" style={{position:"fixed",inset:0,zIndex:1200,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}>
+      <div onClick={e=>e.stopPropagation()} className="slideInRight" style={{position:"absolute",top:0,right:0,bottom:0,width:540,maxWidth:"96vw",
+        background:T.bgSurface,borderLeft:`1px solid ${T.border}`,boxShadow:"-12px 0 48px rgba(0,0,0,.32)",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"14px 20px",borderBottom:`1px solid ${T.border}`,background:T.bgElevated,display:"flex",alignItems:"center",gap:12}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:14,fontWeight:700,color:T.text}}>{it.kind}</div>
+            <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>Reported by {it.by} · {it.at} · assigned to {it.assignee}</div>
+          </div>
+          <button onClick={onClose} style={{marginLeft:"auto",width:28,height:28,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,
+            color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"18px 20px"}}>
+          <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+            <DAStatusTag status={it.status}/>
+            <DAPill color={it.sev==="High"?T.rose:it.sev==="Med"?T.amber:T.textSub}>{it.sev} severity</DAPill>
+            <DAPill color={T.textSub}>{sp?sp.name:it.space}</DAPill>
+          </div>
+          <DASectionLabel>Question that triggered this</DASectionLabel>
+          <div style={{fontSize:12.8,color:T.text,lineHeight:1.6,padding:"11px 13px",background:T.bgElevated,
+            border:`1px solid ${T.border}`,borderRadius:8,marginBottom:16}}>{it.q}</div>
+          <DASectionLabel>What the reporter said</DASectionLabel>
+          <div style={{fontSize:12.3,color:T.textSub,lineHeight:1.65,marginBottom:16}}>{it.note}</div>
+          {it.suggest&&(<>
+            <DASectionLabel>Proposed fix</DASectionLabel>
+            <div style={{display:"flex",alignItems:"center",gap:9,padding:"10px 12px",marginBottom:16,borderRadius:8,
+              background:T.bgElevated,border:`1px solid ${T.border}`}}>
+              <span style={{fontSize:12,fontWeight:700,color:T.text}}>{it.suggest.term}</span>
+              <span style={{color:T.textMuted}}>→</span>
+              <span style={{fontSize:11.8,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{it.suggest.maps}</span>
+            </div>
+          </>)}
+          {it.resolution&&(<>
+            <DASectionLabel>Resolution</DASectionLabel>
+            <div style={{padding:"10px 12px",borderRadius:8,background:T.green+"0e",border:`1px solid ${T.green}44`,
+              fontSize:12,color:T.textSub,lineHeight:1.6}}>{it.resolution}</div>
+          </>)}
+        </div>
+        {it.status==="Open"&&(
+          <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,background:T.bgElevated,display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}}>
+            <Btn small ghost onClick={()=>resolve("Dismissed — no change needed.","Dismissed")}>Dismiss</Btn>
+            {it.fixes.includes("reassign")&&<Btn small onClick={()=>{
+              daPatch({review:_da.review.map(x=>x.id===it.id?{...x,assignee:"alex.rivera"}:x)});
+              onToast("Reassigned to alex.rivera"); onClose();
+            }}>Reassign</Btn>}
+            {it.fixes.includes("grant")&&<Btn small variant="primary" onClick={()=>
+              resolve("Access request forwarded to the policy owner for a banded-data exception.",
+                      "Forwarded to the policy owner — the requester is notified")}>Forward to policy owner</Btn>}
+            {it.fixes.includes("addSynonym")&&sp&&<Btn small variant="primary" onClick={()=>{
+              if(it.suggest) daUpdSpace(sp.id,s=>({synonyms:[...s.synonyms,
+                {term:it.suggest.term,maps:it.suggest.maps,src:"Added by "+me,conf:100,status:"Approved"}]}));
+              daUpdSpace(sp.id,s=>({history:[{at:daNow(),what:"Review resolved",who:me,detail:it.kind},...s.history]}));
+              resolve(it.suggest?`Added synonym ${it.suggest.term} → ${it.suggest.maps} and queued an index rebuild.`
+                               :`Fixed in ${sp.name} and queued an index rebuild.`,
+                      it.suggest?`Synonym added to ${sp.name} — rebuild the index to use it`:`Resolved in ${sp.name}`);
+            }}>Fix in space</Btn>}
+          </div>
+        )}
+      </div>
+    </div>, document.body);
+};
+
+// ── Main view ───────────────────────────────────────────────────────────────
+const DataAskView = ({onToast, onNav}) => {
+  const st = useDA();
+  const {role, roleCfg} = useRole();
+  const me = roleCfg && roleCfg.email ? roleCfg.email.split("@")[0] : "alex.rivera";
+  const [tab,setTab]   = useState("ask");
+  const [sel,setSel]   = useState(null);     // open space id
+  const [wiz,setWiz]   = useState(false);
+  const [vOpen,setVOpen]=useState(null);
+  const [rOpen,setROpen]=useState(null);
+  // list controls
+  const [sq,setSq]=useState(""); const [sStatus,setSStatus]=useState("all"); const [sSort,setSSort]=useState("name");
+  const [vq,setVq]=useState(""); const [vStatus,setVStatus]=useState("all");
+  const [rStatus,setRStatus]=useState("Open");
+  const [aq,setAq]=useState(""); const [aDec,setADec]=useState("all"); const [aSpace,setASpace]=useState("all");
+
+  const canManage = st.settings.access.manage.includes(role) || st.settings.access.publish.includes(role);
+  const spName = id => (daSpace(id)||{}).name || id;
+
+  if(sel && daSpace(sel)) return (
+    <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+      <DASpaceProfile sp={daSpace(sel)} me={me} role={role} onBack={()=>setSel(null)}
+        onToast={onToast} onNav={onNav} onAsk={()=>{setSel(null);setTab("ask");}}/>
+    </div>
+  );
+
+  // ── spaces list ──
+  const spaces = st.spaces.filter(s=>{
+    const q = sq.trim().toLowerCase();
+    const mq = !q || s.name.toLowerCase().includes(q) || s.key.toLowerCase().includes(q)
+            || s.owner.includes(q) || s.domain.toLowerCase().includes(q)
+            || s.sources.some(x=>x.name.toLowerCase().includes(q));
+    const ms = sStatus==="all" || (sStatus==="attention" ? daIsBlocking(s) : s.status===sStatus);
+    return mq && ms;
+  }).slice().sort((a,b)=> sSort==="name" ? a.name.localeCompare(b.name)
+    : sSort==="use" ? b.questions30d-a.questions30d
+    : sSort==="acc" ? b.accuracy-a.accuracy : 0);
+
+  const verified = st.verified.filter(v=>{
+    const q = vq.trim().toLowerCase();
+    return (!q || v.q.toLowerCase().includes(q) || v.owner.includes(q))
+        && (vStatus==="all" || v.status===vStatus);
+  });
+  const review = st.review.filter(r=>rStatus==="all"||r.status===rStatus);
+  const activity = st.activity.filter(a=>{
+    const q = aq.trim().toLowerCase();
+    return (!q || a.q.toLowerCase().includes(q) || a.who.includes(q))
+        && (aDec==="all"||a.decision===aDec) && (aSpace==="all"||a.space===aSpace);
+  });
+
+  const openReviews = st.review.filter(r=>r.status==="Open").length;
+  const totals = {
+    published: st.spaces.filter(s=>s.status==="Published").length,
+    questions: st.spaces.reduce((n,s)=>n+s.questions30d,0),
+    denied:    st.activity.filter(a=>a.decision==="Denied").length,
+    masked:    st.activity.filter(a=>a.decision==="Masked").length,
+    credits:   st.spaces.reduce((n,s)=>n+s.credits30d,0),
+    accuracy:  Math.round(st.spaces.filter(s=>s.accuracy>0).reduce((n,s)=>n+s.accuracy,0)
+                / Math.max(1,st.spaces.filter(s=>s.accuracy>0).length)),
+  };
+
+  return (
+    <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column",minHeight:0}}>
+      <Topbar breadcrumb={[{label:"Data Ask"}]} actions={
+        <div style={{display:"flex",gap:7,alignItems:"center"}}>
+          <span style={{fontSize:11,color:T.textMuted}}>
+            {totals.published} published space{totals.published===1?"":"s"} · {openReviews} open review{openReviews===1?"":"s"}
+          </span>
+          {canManage&&<Btn variant="primary" small icon={Ic.plus(11)} onClick={()=>setWiz(true)}>New Answer Space</Btn>}
+        </div>
+      }/>
+
+      <div style={{padding:"14px 24px 0",flexShrink:0}}>
+        <Tabs2 tabs={[
+          {key:"ask",      label:"Ask"},
+          {key:"spaces",   label:`Answer Spaces (${st.spaces.length})`},
+          {key:"verified", label:`Verified Answers (${st.verified.filter(v=>v.status==="Verified").length})`},
+          {key:"review",   label:`Review Queue${openReviews?` (${openReviews})`:""}`},
+          {key:"activity", label:"Activity"},
+        ]} active={tab} onChange={setTab}/>
+      </div>
+
+      {tab==="ask"
+        ? <DAAskTab me={me} role={role} onToast={onToast} onNav={onNav} onManage={()=>setTab("spaces")}/>
+        : (
+        <div style={{flex:1,overflowY:"auto",padding:"0 24px 24px"}}>
+
+          {/* ── ANSWER SPACES ── */}
+          {tab==="spaces"&&(<>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(158px,1fr))",gap:12,marginBottom:18}}>
+              <Metric label="Published spaces" value={`${totals.published} of ${st.spaces.length}`}/>
+              <Metric label="Questions · 30d" value={totals.questions.toLocaleString()}/>
+              <Metric label="Mean accuracy" value={`${totals.accuracy}%`} color={totals.accuracy>=90?T.green:T.amber}/>
+              <Metric label="Answers masked" value={String(totals.masked)} color={T.amber} sub="policy applied, answer still served"/>
+              <Metric label="Questions refused" value={String(totals.denied)} color={T.rose} sub="blocklisted classification"/>
+            </div>
+
+            <KLToolbar q={sq} setQ={setSq} placeholder="Search by name, ID, owner, domain or object…"
+              statuses={[
+                {v:"all",        l:"All",           n:st.spaces.length},
+                {v:"Published",  l:"Published",     n:st.spaces.filter(s=>s.status==="Published").length, c:T.green},
+                {v:"In review",  l:"In review",     n:st.spaces.filter(s=>s.status==="In review").length, c:T.amber},
+                {v:"Draft",      l:"Draft",         n:st.spaces.filter(s=>s.status==="Draft").length},
+                {v:"attention",  l:"Needs attention",n:st.spaces.filter(daIsBlocking).length, c:T.rose},
+              ]}
+              status={sStatus} setStatus={setSStatus} sort={sSort} setSort={setSSort}
+              sortOpts={[{v:"name",l:"Sort: Name"},{v:"use",l:"Sort: Most asked"},{v:"acc",l:"Sort: Accuracy"}]}
+              shown={spaces.length} total={st.spaces.length} onClear={()=>{setSq("");setSStatus("all");}}/>
+
+            {spaces.length===0
+              ? <KLEmpty icon={Ic.bot(34)} title="No Answer Spaces match your search"
+                  action={<Btn small ghost onClick={()=>{setSq("");setSStatus("all");}}>Clear filters</Btn>}/>
+              : <DataTable
+                  cols={[
+                    {key:"name",label:"Answer Space",render:(v,r)=>(
+                      <span style={{display:"inline-flex",alignItems:"center",gap:9}}>
+                        <span style={{width:24,height:24,borderRadius:7,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+                          background:DA_MODE_COLOR(r.mode)+"1a",color:DA_MODE_COLOR(r.mode),border:`1px solid ${DA_MODE_COLOR(r.mode)}44`}}>{Ic.bot(12)}</span>
+                        <span><span style={{display:"block",fontWeight:600}}>{v}</span>
+                        <span style={{display:"block",fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{r.key} · {r.domain}</span></span>
+                      </span>)},
+                    {key:"mode",label:"Mode",render:v=><DAModeTag mode={v}/>},
+                    {key:"sources",label:"Scope",render:v=><span style={{fontSize:11.5,color:T.textSub}}>{v.length} object{v.length===1?"":"s"}</span>},
+                    {key:"accuracy",label:"Accuracy",render:v=>v?<DAPill color={v>=90?T.green:v>=75?T.amber:T.rose}>{v}%</DAPill>
+                      :<span style={{fontSize:11.5,color:T.textMuted}}>not tested</span>},
+                    {key:"questions30d",label:"Asked · 30d",render:v=><span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{v.toLocaleString()}</span>},
+                    {key:"owner",label:"Owner",render:v=><span style={{fontSize:11.5,color:T.textSub}}>{v}</span>},
+                    {key:"status",label:"Status",render:(v,r)=>{
+                      const bl = daBlockers(r), show = daIsBlocking(r);
+                      return <span style={{display:"inline-flex",gap:5,alignItems:"center"}}>
+                        <DAStatusTag status={daEffStatus(r)}/>
+                        {show&&<span title={bl.map(b=>b.t).join(" · ")}
+                          style={{fontSize:10.5,fontWeight:700,color:bl.some(b=>b.hard)?T.rose:T.amber}}>{bl.length}!</span>}
+                      </span>;}},
+                  ]}
+                  rows={spaces} onRowClick={r=>setSel(r.id)}/>}
+
+            <KLNote tone="quiet">
+              Models, retrieval defaults, the classification blocklist, credit caps and who may ask are platform-wide
+              settings in <b>Settings › Data Ask</b>. A space can tighten those limits but never loosen them.
+            </KLNote>
+          </>)}
+
+          {/* ── VERIFIED ANSWERS ── */}
+          {tab==="verified"&&(<>
+            <SH title="Verified Answers"
+              sub="Questions a steward has put their name to. When somebody asks one of these, they get the canonical plan rather than a fresh guess."/>
+            <div style={{display:"flex",gap:9,alignItems:"center",flexWrap:"wrap",marginBottom:14}}>
+              <div style={{flex:1,minWidth:220}}>
+                <Input2 value={vq} onChange={e=>setVq(e.target.value)} placeholder="Search verified answers…" icon={Ic.search(12)}/>
+              </div>
+              {[{v:"all",l:"All",n:st.verified.length},
+                {v:"Verified",l:"Verified",n:st.verified.filter(x=>x.status==="Verified").length,c:T.green},
+                {v:"Retired",l:"Retired",n:st.verified.filter(x=>x.status==="Retired").length}].map(s=>{
+                const on = vStatus===s.v;
+                return <button key={s.v} onClick={()=>setVStatus(s.v)} style={{display:"inline-flex",alignItems:"center",gap:6,
+                  padding:"5px 13px",borderRadius:99,fontSize:11.5,cursor:"pointer",fontFamily:"inherit",fontWeight:on?700:500,
+                  border:`1px solid ${on?(s.c||T.accent):T.border}`,background:on?(s.c?s.c+"1a":T.accentDim):"transparent",
+                  color:on?(s.c||T.accent):T.textSub}}>{s.l}<span style={{fontSize:10,opacity:.75,fontFamily:"'Geist Mono',monospace"}}>{s.n}</span></button>;
+              })}
+            </div>
+            {verified.length===0
+              ? <KLEmpty icon={Ic.check(34)} title="No verified answers yet"
+                  sub="Answer a question on the Ask tab, then choose “Save as Verified Answer”."/>
+              : <DataTable
+                  cols={[
+                    {key:"q",label:"Question",render:v=><span style={{fontWeight:600,fontSize:12.3}}>{v}</span>},
+                    {key:"space",label:"Space",render:v=><span style={{fontSize:11.5,color:T.textSub}}>{spName(v)}</span>},
+                    {key:"owner",label:"Verified by",render:v=><span style={{fontSize:11.5,color:T.textSub}}>{v}</span>},
+                    {key:"verified",label:"When",render:v=><span style={{fontSize:11.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{v}</span>},
+                    {key:"uses",label:"Uses",render:v=><span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{v}</span>},
+                    {key:"status",label:"Status",render:v=><DAStatusTag status={v}/>},
+                  ]}
+                  rows={verified} onRowClick={r=>setVOpen(r)}/>}
+          </>)}
+
+          {/* ── REVIEW QUEUE ── */}
+          {tab==="review"&&(<>
+            <SH title="Review Queue"
+              sub="Every thumbs-down, unanswered question and refusal lands here, routed to the steward who owns the space. Fixing an item changes the space that caused it."/>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+              {[{v:"Open",l:"Open",n:st.review.filter(r=>r.status==="Open").length,c:T.amber},
+                {v:"Resolved",l:"Resolved",n:st.review.filter(r=>r.status==="Resolved").length,c:T.green},
+                {v:"all",l:"All",n:st.review.length}].map(s=>{
+                const on = rStatus===s.v;
+                return <button key={s.v} onClick={()=>setRStatus(s.v)} style={{display:"inline-flex",alignItems:"center",gap:6,
+                  padding:"5px 13px",borderRadius:99,fontSize:11.5,cursor:"pointer",fontFamily:"inherit",fontWeight:on?700:500,
+                  border:`1px solid ${on?(s.c||T.accent):T.border}`,background:on?(s.c?s.c+"1a":T.accentDim):"transparent",
+                  color:on?(s.c||T.accent):T.textSub}}>{s.l}<span style={{fontSize:10,opacity:.75,fontFamily:"'Geist Mono',monospace"}}>{s.n}</span></button>;
+              })}
+            </div>
+            {review.length===0
+              ? <KLEmpty icon={Ic.check(34)} title={rStatus==="Open"?"Nothing waiting on a steward":"Nothing here"}
+                  sub={rStatus==="Open"?"Every reported answer has been dealt with.":undefined}/>
+              : <DataTable
+                  cols={[
+                    {key:"kind",label:"Type",render:(v,r)=><DAPill color={r.sev==="High"?T.rose:r.sev==="Med"?T.amber:T.textSub}>{v}</DAPill>},
+                    {key:"q",label:"Question",render:v=><span style={{fontSize:12.3,fontWeight:500}}>{v}</span>},
+                    {key:"space",label:"Space",render:v=><span style={{fontSize:11.5,color:T.textSub}}>{v==="—"?"—":spName(v)}</span>},
+                    {key:"by",label:"Reported by",render:v=><span style={{fontSize:11.5,color:T.textSub}}>{v}</span>},
+                    {key:"assignee",label:"Assigned to",render:v=><span style={{fontSize:11.5,color:T.textSub}}>{v}</span>},
+                    {key:"at",label:"When",render:v=><span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{v}</span>},
+                    {key:"status",label:"",render:(v,r)=>v==="Open"
+                      ? <Btn small variant="primary" onClick={()=>setROpen(r)}>Review</Btn>
+                      : <DAStatusTag status={v}/>},
+                  ]}
+                  rows={review} onRowClick={r=>setROpen(r)}/>}
+          </>)}
+
+          {/* ── ACTIVITY ── */}
+          {tab==="activity"&&(<>
+            <SH title="Activity"
+              sub="Every question asked, the decision taken and what it cost. This is the record an auditor asks for — refusals included."
+              action={<Btn small ghost onClick={()=>onToast("Activity exported — 30 days of questions")}>Export</Btn>}/>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12,marginBottom:16}}>
+              <Metric label="Questions logged" value={String(st.activity.length)}/>
+              <Metric label="Answered clean" value={String(st.activity.filter(a=>a.decision==="Answered").length)} color={T.green}/>
+              <Metric label="Policy applied" value={String(st.activity.filter(a=>a.decision==="Masked").length)} color={T.amber}/>
+              <Metric label="Refused" value={String(st.activity.filter(a=>a.decision==="Denied").length)} color={T.rose}/>
+              <Metric label="Credits consumed" value={st.activity.reduce((n,a)=>n+a.credits,0).toLocaleString()}/>
+            </div>
+            <div style={{display:"flex",gap:9,alignItems:"center",flexWrap:"wrap",marginBottom:14}}>
+              <div style={{flex:1,minWidth:220}}>
+                <Input2 value={aq} onChange={e=>setAq(e.target.value)} placeholder="Search question or user…" icon={Ic.search(12)}/>
+              </div>
+              <select value={aDec} onChange={e=>setADec(e.target.value)}
+                style={{padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,cursor:"pointer"}}>
+                <option value="all">All decisions</option>
+                {["Answered","Masked","Denied","Clarified","Reported","Not understood"].map(d=><option key={d} value={d}>{d}</option>)}
+              </select>
+              <select value={aSpace} onChange={e=>setASpace(e.target.value)}
+                style={{padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,cursor:"pointer"}}>
+                <option value="all">All spaces</option>
+                {st.spaces.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+                <option value="—">No space (refused)</option>
+              </select>
+              <span style={{fontSize:11.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{activity.length}/{st.activity.length}</span>
+            </div>
+            {activity.length===0
+              ? <KLEmpty icon={Ic.audit(34)} title="No activity matches these filters"
+                  action={<Btn small ghost onClick={()=>{setAq("");setADec("all");setASpace("all");}}>Clear filters</Btn>}/>
+              : <DataTable
+                  cols={[
+                    {key:"at",label:"When",render:v=><span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{v}</span>},
+                    {key:"who",label:"Who",render:v=><span style={{fontSize:11.5,color:T.textSub}}>{v}</span>},
+                    {key:"q",label:"Question",render:v=><span style={{fontSize:11.8}}>{v.length>62?v.slice(0,62)+"…":v}</span>},
+                    {key:"space",label:"Space",render:v=><span style={{fontSize:11.5,color:T.textSub}}>{v==="—"?"—":spName(v)}</span>},
+                    {key:"mode",label:"Mode",render:v=><DAModeTag mode={v}/>},
+                    {key:"decision",label:"Decision",render:v=><DAPill color={DA_DECISION_COLOR(v)}>{v}</DAPill>},
+                    {key:"masked",label:"Enforced",render:(v,r)=>(v||r.filtered)
+                      ? <span style={{fontSize:11,color:T.amber,whiteSpace:"nowrap"}}>{v?`${v} col`:""}{v&&r.filtered?" · ":""}{r.filtered?`${r.filtered.toLocaleString()} rows`:""}</span>
+                      : <span style={{fontSize:11,color:T.textMuted}}>—</span>},
+                    {key:"credits",label:"Cost",render:v=><span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{v} cr</span>},
+                  ]}
+                  rows={activity}/>}
+            <KLNote tone="quiet">
+              Retained for {st.settings.privacy.retainDays} days per <b>Settings › Data Ask › Privacy</b>. The same events are
+              mirrored into <b>Settings › Audit Logs</b> for long-term retention.
+            </KLNote>
+          </>)}
+        </div>
+      )}
+
+      {wiz&&<DAWizard me={me} onClose={()=>setWiz(false)} onToast={onToast}
+        onCreated={id=>{setWiz(false);setTab("spaces");setSel(id);}}/>}
+      {vOpen&&<DAVerifiedDrawer v={vOpen} me={me} role={role} onClose={()=>setVOpen(null)} onToast={onToast}/>}
+      {rOpen&&<DAReviewDrawer it={rOpen} me={me} onClose={()=>setROpen(null)} onToast={onToast}/>}
+    </div>
+  );
+};
+
+
+// ── Settings › Data Ask ─────────────────────────────────────────────────────
+// Platform-wide configuration. Everything here is a ceiling: an Answer Space
+// may tighten a limit but never loosen one, which is what makes the section
+// safe to delegate to space owners.
+const DA_PROVIDERS = {
+  anthropic:{label:"Anthropic",     models:["claude-opus-5","claude-sonnet-5","claude-haiku-4-5"]},
+  openai:   {label:"OpenAI",        models:["gpt-4o","gpt-4o-mini","text-embedding-3-large"]},
+  azure:    {label:"Azure OpenAI",  models:["gpt-4o (azure)","text-embedding-3-large (azure)"]},
+  bedrock:  {label:"AWS Bedrock",   models:["claude-opus-5 (bedrock)","titan-embed-v2"]},
+  selfhost: {label:"Self-hosted",   models:["llama-3.3-70b","mixtral-8x22b","bge-large-en"]},
+};
+const DA_CAPABILITIES = [
+  {k:"sql",       l:"Question → SQL",        d:"Turns a natural-language question into a query plan over the governed schema. The most accuracy-sensitive call — use your strongest model."},
+  {k:"summary",   l:"Answer composition",     d:"Writes the prose summary and grounds every claim in a citation. Never sees raw values for masked columns."},
+  {k:"embed",     l:"Embeddings",             d:"Vectorises documents and questions for semantic retrieval. Changing this invalidates every document index."},
+  {k:"semantics", l:"Semantics generation",   d:"Proposes synonyms and sample questions during a space build. Proposals always need steward approval."},
+];
+const DA_ROLE_LIST = [
+  {k:"admin",    l:"Admin"},
+  {k:"steward",  l:"Data Steward"},
+  {k:"analyst",  l:"Data Analyst"},
+  {k:"engineer", l:"Data Engineer"},
+  {k:"viewer",   l:"Viewer"},
+];
+const DA_ALL_TAGS = ["Restricted-HR","PII","GDPR","confidential","legal-hold","PCI"];
+
+const DASettingsSection = ({onToast}) => {
+  const st = useDA();
+  const [sub,setSub]   = useState("models");
+  const [d,setD]       = useState(()=>JSON.parse(JSON.stringify(st.settings)));
+  const [saved,setSaved]=useState(false);
+  const dirty = JSON.stringify(d)!==JSON.stringify(st.settings);
+
+  const save = () => { daPatch({settings:d}); setSaved(true); onToast("Data Ask settings saved","success"); setTimeout(()=>setSaved(false),2400); };
+  const reset= () => setD(JSON.parse(JSON.stringify(st.settings)));
+
+  const inp = {width:"100%",padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,
+    color:T.text,fontSize:12,outline:"none",fontFamily:"inherit"};
+  const num = {width:96,padding:"6px 9px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,
+    fontSize:12.5,fontWeight:600,outline:"none",textAlign:"center",fontFamily:"'Geist Mono',monospace"};
+
+  const Card = ({title,desc,children,tone}) => (
+    <div style={{background:T.bgSurface,border:`1px solid ${tone||T.border}`,borderRadius:10,padding:16,marginBottom:14}}>
+      <div style={{fontSize:12.5,fontWeight:700,color:T.text,marginBottom:desc?3:11}}>{title}</div>
+      {desc&&<div style={{fontSize:11,color:T.textMuted,lineHeight:1.6,marginBottom:12}}>{desc}</div>}
+      {children}
+    </div>
+  );
+  const RowToggle = ({l,d:dd,on,set}) => (
+    <div style={{display:"flex",alignItems:"center",gap:14,padding:"9px 0",borderTop:`1px solid ${T.border}`}}>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:12,fontWeight:600,color:T.text}}>{l}</div>
+        {dd&&<div style={{fontSize:11,color:T.textMuted,marginTop:1,lineHeight:1.55}}>{dd}</div>}
+      </div>
+      <Toggle on={on} onChange={set}/>
+    </div>
+  );
+  const RowNum = ({l,d:dd,val,set,suffix}) => (
+    <div style={{display:"flex",alignItems:"center",gap:14,padding:"9px 0",borderTop:`1px solid ${T.border}`}}>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:12,fontWeight:600,color:T.text}}>{l}</div>
+        {dd&&<div style={{fontSize:11,color:T.textMuted,marginTop:1,lineHeight:1.55}}>{dd}</div>}
+      </div>
+      <input type="number" value={val} onChange={e=>set(Number(e.target.value))} style={num}/>
+      {suffix&&<span style={{fontSize:11,color:T.textMuted,width:52}}>{suffix}</span>}
+    </div>
+  );
+
+  return (
+    <>
+      <SettSH icon={Ic.bot(16)} title="Data Ask"
+        desc="Models, retrieval, guardrails, privacy and cost for governed conversational access. Every value here is a ceiling — an Answer Space can tighten it but never loosen it."/>
+
+      <div style={{marginBottom:18}}>
+        <SegTabs tabs={[
+          {key:"models",   label:"Models"},
+          {key:"retrieval",label:"Retrieval"},
+          {key:"guards",   label:"Guardrails"},
+          {key:"privacy",  label:"Privacy"},
+          {key:"cost",     label:"Cost & Credits"},
+          {key:"access",   label:"Access"},
+        ]} active={sub} onChange={setSub}/>
+      </div>
+
+      {/* ── MODELS ── */}
+      {sub==="models"&&(<>
+        <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.65,marginBottom:14}}>
+          Data Ask routes each capability to its own model, so a cheap model can summarise while the strongest one plans
+          the query. Bring your own provider — nothing is hard-wired.
+        </div>
+        {DA_CAPABILITIES.map(c=>{
+          const m = d.models[c.k];
+          const prov = DA_PROVIDERS[m.provider]||DA_PROVIDERS.anthropic;
+          return (
+            <Card key={c.k} title={c.l} desc={c.d}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1.3fr",gap:9,marginBottom:9}}>
+                <div>
+                  <DASectionLabel>Provider</DASectionLabel>
+                  <select value={m.provider} style={{...inp,cursor:"pointer"}}
+                    onChange={e=>{const p=e.target.value;
+                      setD(x=>({...x,models:{...x.models,[c.k]:{...m,provider:p,model:DA_PROVIDERS[p].models[0]}}}));}}>
+                    {Object.keys(DA_PROVIDERS).map(k=><option key={k} value={k}>{DA_PROVIDERS[k].label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <DASectionLabel>Model</DASectionLabel>
+                  <select value={m.model} style={{...inp,cursor:"pointer",fontFamily:"'Geist Mono',monospace"}}
+                    onChange={e=>setD(x=>({...x,models:{...x.models,[c.k]:{...m,model:e.target.value}}}))}>
+                    {prov.models.map(k=><option key={k} value={k}>{k}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1.3fr",gap:9}}>
+                <div>
+                  <DASectionLabel>Temperature</DASectionLabel>
+                  <input type="number" step="0.1" min="0" max="1" value={m.temp} style={{...inp,textAlign:"center",fontFamily:"'Geist Mono',monospace"}}
+                    onChange={e=>setD(x=>({...x,models:{...x.models,[c.k]:{...m,temp:Number(e.target.value)}}}))}/>
+                </div>
+                <div>
+                  <DASectionLabel>Max tokens</DASectionLabel>
+                  <input type="number" value={m.maxTok} style={{...inp,textAlign:"center",fontFamily:"'Geist Mono',monospace"}}
+                    onChange={e=>setD(x=>({...x,models:{...x.models,[c.k]:{...m,maxTok:Number(e.target.value)}}}))}/>
+                </div>
+                <div>
+                  <DASectionLabel>Fallback on failure</DASectionLabel>
+                  <select value={m.fallback} style={{...inp,cursor:"pointer",fontFamily:"'Geist Mono',monospace"}}
+                    onChange={e=>setD(x=>({...x,models:{...x.models,[c.k]:{...m,fallback:e.target.value}}}))}>
+                    <option value="none">none — fail the question</option>
+                    {Object.keys(DA_PROVIDERS).flatMap(p=>DA_PROVIDERS[p].models).map(k=><option key={k} value={k}>{k}</option>)}
+                  </select>
+                </div>
+              </div>
+              {c.k==="sql"&&m.temp>0&&(
+                <div style={{marginTop:11,padding:"9px 11px",borderRadius:7,background:T.amberDim,border:`1px solid ${T.amber}44`,
+                  fontSize:11.5,color:T.text,lineHeight:1.55}}>
+                  Temperature above 0 makes query planning non-deterministic — the same question can produce a different
+                  plan on a second run. Keep this at 0 unless you are deliberately testing variance.
+                </div>
+              )}
+              {c.k==="embed"&&(
+                <div style={{marginTop:11,padding:"9px 11px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,
+                  fontSize:11.5,color:T.textMuted,lineHeight:1.55}}>
+                  Changing the embedding model invalidates every document index. Affected spaces are marked stale and must
+                  be rebuilt before they will answer again.
+                </div>
+              )}
+            </Card>
+          );
+        })}
+      </>)}
+
+      {/* ── RETRIEVAL ── */}
+      {sub==="retrieval"&&(<>
+        <Card title="Default retrieval strategy"
+          desc="Applied to new document and hybrid spaces. An existing space keeps whatever it was built with until it is rebuilt.">
+          <div style={{display:"flex",flexDirection:"column",gap:7}}>
+            {Object.keys(DA_RETRIEVAL).map(k=>(
+              <label key={k} onClick={()=>setD(x=>({...x,retrieval:{...x.retrieval,mode:k}}))}
+                style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 12px",borderRadius:8,cursor:"pointer",
+                  border:`1.5px solid ${d.retrieval.mode===k?T.accent:T.border}`,background:d.retrieval.mode===k?T.accentDim:"transparent"}}>
+                <div style={{marginTop:2,width:13,height:13,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+                  border:`2px solid ${d.retrieval.mode===k?T.accent:T.border}`,background:d.retrieval.mode===k?T.accent:"transparent"}}>
+                  {d.retrieval.mode===k&&<div style={{width:4,height:4,borderRadius:"50%",background:"#fff"}}/>}
+                </div>
+                <div><div style={{fontSize:12,fontWeight:600,color:d.retrieval.mode===k?T.accent:T.text}}>{DA_RETRIEVAL[k].label}</div>
+                  <div style={{fontSize:11,color:T.textMuted,marginTop:1,lineHeight:1.5}}>{DA_RETRIEVAL[k].sub}</div></div>
+              </label>
+            ))}
+          </div>
+        </Card>
+        <Card title="Index & retrieval tuning" desc="Applies to every document index built after these values change.">
+          <RowNum l="Passages retrieved per question (top-K)"
+            d="More passages means better recall and a longer, costlier prompt."
+            val={d.retrieval.topK} set={v=>setD(x=>({...x,retrieval:{...x.retrieval,topK:v}}))}/>
+          <RowNum l="Chunk size (tokens)" d="Smaller chunks are more precise; larger chunks keep context together."
+            val={d.retrieval.chunk} set={v=>setD(x=>({...x,retrieval:{...x.retrieval,chunk:v}}))}/>
+          <RowNum l="Chunk overlap (tokens)" d="Stops a sentence spanning a boundary from being lost."
+            val={d.retrieval.overlap} set={v=>setD(x=>({...x,retrieval:{...x.retrieval,overlap:v}}))}/>
+          <RowToggle l="Rerank retrieved passages"
+            d="A second pass reorders candidates by relevance before composing. Costs a little, reliably lifts accuracy."
+            on={d.retrieval.rerank} set={()=>setD(x=>({...x,retrieval:{...x.retrieval,rerank:!x.retrieval.rerank}}))}/>
+          <div style={{display:"flex",alignItems:"center",gap:14,padding:"9px 0",borderTop:`1px solid ${T.border}`}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:12,fontWeight:600,color:T.text}}>Minimum relevance score</div>
+              <div style={{fontSize:11,color:T.textMuted,marginTop:1,lineHeight:1.55}}>
+                Below this, Data Ask says it does not know rather than answering from weak evidence.
+              </div>
+            </div>
+            <input type="number" step="0.01" min="0" max="1" value={d.retrieval.minScore} style={num}
+              onChange={e=>setD(x=>({...x,retrieval:{...x.retrieval,minScore:Number(e.target.value)}}))}/>
+          </div>
+        </Card>
+      </>)}
+
+      {/* ── GUARDRAILS ── */}
+      {sub==="guards"&&(<>
+        <Card title="Classification blocklist" tone={T.rose+"55"}
+          desc="Data Ask refuses any question that would touch these classifications, before a plan is generated. This is the hardest stop in the product — no space, owner or entitlement overrides it.">
+          <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+            {DA_ALL_TAGS.map(t=>{
+              const on = d.guards.blockedTags.includes(t);
+              return (
+                <button key={t} onClick={()=>setD(x=>({...x,guards:{...x.guards,
+                  blockedTags: on ? x.guards.blockedTags.filter(y=>y!==t) : [...x.guards.blockedTags,t]}}))}
+                  style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:99,cursor:"pointer",
+                    fontSize:11.5,fontWeight:on?700:500,fontFamily:"inherit",
+                    border:`1px solid ${on?T.rose:T.border}`,background:on?T.roseDim:"transparent",color:on?T.rose:T.textSub}}>
+                  {on&&<span>✕</span>}{t}
+                </button>
+              );
+            })}
+          </div>
+          {d.guards.blockedTags.length===0&&(
+            <div style={{marginTop:11,padding:"9px 11px",borderRadius:7,background:T.amberDim,border:`1px solid ${T.amber}44`,
+              fontSize:11.5,color:T.text,lineHeight:1.55}}>
+              Nothing is blocked. Every classified column in every published space becomes reachable, subject only to
+              masking. Confirm this is intended before saving.
+            </div>
+          )}
+        </Card>
+        <Card title="Limits" desc="Ceilings every Answer Space inherits. A space may set a lower value, never a higher one.">
+          <RowNum l="Maximum rows returned" d="A question that would exceed this is refused rather than silently truncated."
+            val={d.guards.maxRows} set={v=>setD(x=>({...x,guards:{...x.guards,maxRows:v}}))}/>
+          <RowNum l="Query timeout" suffix="seconds" d="Long plans are cancelled and reported to the asker."
+            val={d.guards.timeout} set={v=>setD(x=>({...x,guards:{...x.guards,timeout:v}}))}/>
+        </Card>
+        <Card title="Behaviour" desc="What Data Ask does at the edges — where most trust is won or lost.">
+          <div style={{padding:"9px 0"}}>
+            <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:2}}>When a policy conflicts with a question</div>
+            <div style={{fontSize:11,color:T.textMuted,marginBottom:9,lineHeight:1.55}}>
+              Mask keeps the answer useful and tells the asker what was hidden. Refuse is the stricter reading. Either way
+              the asker is never left thinking they saw everything.
+            </div>
+            <select value={d.guards.onConflict} style={{...inp,cursor:"pointer",maxWidth:380}}
+              onChange={e=>setD(x=>({...x,guards:{...x.guards,onConflict:e.target.value}}))}>
+              <option value="mask">Mask the restricted values and answer</option>
+              <option value="refuse">Refuse the whole question</option>
+            </select>
+          </div>
+          <RowToggle l="Grounded answers only"
+            d="The model may only state what a cited source supports. With this off it can fill gaps from its own training — faster, occasionally wrong, and unciteable."
+            on={d.guards.groundedOnly} set={()=>setD(x=>({...x,guards:{...x.guards,groundedOnly:!x.guards.groundedOnly}}))}/>
+          <RowToggle l="Prompt-injection defence"
+            d="Strips instruction-like text found inside retrieved documents so a planted sentence in a PDF cannot redirect the answer."
+            on={d.guards.injectionDefense} set={()=>setD(x=>({...x,guards:{...x.guards,injectionDefense:!x.guards.injectionDefense}}))}/>
+          <RowToggle l="Only published spaces are askable"
+            d="Turn off to let owners and stewards ask against spaces still in review. Drafts remain unaskable either way."
+            on={d.guards.requirePublished} set={()=>setD(x=>({...x,guards:{...x.guards,requirePublished:!x.guards.requirePublished}}))}/>
+        </Card>
+      </>)}
+
+      {/* ── PRIVACY ── */}
+      {sub==="privacy"&&(<>
+        <Card title="What leaves your tenancy" desc="Every model call is a data-transfer decision. These controls are what a DPO reviews.">
+          <RowToggle l="Redact classified values from prompts"
+            d="Values from PII, confidential and restricted columns are replaced with typed placeholders before any model call. Structure is preserved so the plan is unaffected."
+            on={d.privacy.redactPrompts} set={()=>setD(x=>({...x,privacy:{...x.privacy,redactPrompts:!x.privacy.redactPrompts}}))}/>
+          <RowToggle l="Exclude prompts and answers from vendor training"
+            d="Sets the no-retention flag on every request. Required by most enterprise data-processing agreements."
+            on={d.privacy.excludeTraining} set={()=>setD(x=>({...x,privacy:{...x.privacy,excludeTraining:!x.privacy.excludeTraining}}))}/>
+          <RowToggle l="Log full prompt text"
+            d="Keeps the exact question in the audit record. Turn off to log only the resolved intent — weaker forensics, less exposure."
+            on={d.privacy.logPrompts} set={()=>setD(x=>({...x,privacy:{...x.privacy,logPrompts:!x.privacy.logPrompts}}))}/>
+          <div style={{display:"flex",alignItems:"center",gap:14,padding:"9px 0",borderTop:`1px solid ${T.border}`}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:12,fontWeight:600,color:T.text}}>Inference region</div>
+              <div style={{fontSize:11,color:T.textMuted,marginTop:1,lineHeight:1.55}}>
+                Model calls are pinned to this region. A space whose scope carries GDPR-classified data will refuse to
+                index if the region sits outside the EU.
+              </div>
+            </div>
+            <select value={d.privacy.region} style={{...inp,width:170,cursor:"pointer",fontFamily:"'Geist Mono',monospace"}}
+              onChange={e=>setD(x=>({...x,privacy:{...x.privacy,region:e.target.value}}))}>
+              {["eu-west-1","eu-central-1","us-east-1","us-west-2","ap-southeast-1"].map(r=><option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+        </Card>
+        {!/^eu-/.test(d.privacy.region)&&(
+          <div style={{padding:"11px 13px",borderRadius:9,background:T.amberDim,border:`1px solid ${T.amber}55`,marginBottom:14,
+            fontSize:12,color:T.text,lineHeight:1.6}}>
+            <b>{d.privacy.region}</b> is outside the EU. Spaces containing GDPR-classified objects — Commerce Revenue and
+            Customer 360 today — will refuse to rebuild until either the region or the classification changes.
+          </div>
+        )}
+        <Card title="Retention" desc="How long conversations and question logs are kept before they are purged.">
+          <RowNum l="Conversation history" suffix="days"
+            d="After this, threads are deleted. Audit records survive independently in Settings › Audit Logs."
+            val={d.privacy.retainDays} set={v=>setD(x=>({...x,privacy:{...x.privacy,retainDays:v}}))}/>
+          <div style={{paddingTop:11,fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>
+            Deleting a conversation removes the prose, never the audit record. Somebody asking a question they should not
+            have asked cannot make the evidence go away.
+          </div>
+        </Card>
+      </>)}
+
+      {/* ── COST ── */}
+      {sub==="cost"&&(<>
+        <div style={{padding:18,background:T.bgSurface,border:`1.5px solid ${T.accent}`,borderRadius:12,marginBottom:14}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14,gap:12}}>
+            <div>
+              <div style={{fontSize:11.5,color:T.textMuted,marginBottom:3}}>Solix Credits remaining</div>
+              <div style={{fontSize:26,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{d.cost.balance.toLocaleString()}</div>
+              <div style={{fontSize:11.5,color:T.textMuted,marginTop:3}}>
+                of {d.cost.granted.toLocaleString()} granted · {Math.round(d.cost.balance/d.cost.granted*100)}% left
+              </div>
+            </div>
+            <Badge color={d.cost.balance/d.cost.granted>0.2?T.accent:T.rose}
+              bg={d.cost.balance/d.cost.granted>0.2?T.accentDim:T.roseDim} border="transparent">
+              {d.cost.balance/d.cost.granted>0.2?"Healthy":"Low balance"}
+            </Badge>
+          </div>
+          <div style={{height:6,borderRadius:3,background:T.bgHover,overflow:"hidden"}}>
+            <div style={{height:"100%",width:`${Math.round(d.cost.balance/d.cost.granted*100)}%`,
+              background:d.cost.balance/d.cost.granted>0.2?T.accent:T.rose}}/>
+          </div>
+        </div>
+
+        <Card title="Rate book" desc="What each activity costs. Published to you by Solix — read-only here, and the same numbers your invoice is built from.">
+          <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+            {d.cost.rates.map((r,i)=>(
+              <div key={r.act} style={{display:"flex",alignItems:"center",gap:12,padding:"9px 12px",
+                borderTop:i?`1px solid ${T.border}`:"none",background:i%2?T.bgElevated:"transparent"}}>
+                <span style={{fontSize:12,color:T.text,flex:1,minWidth:0}}>{r.act}</span>
+                <span style={{fontSize:11,color:T.textMuted,width:110}}>{r.unit}</span>
+                <span style={{fontSize:12,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{r.rate}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card title="Caps & alerts" desc="Stops one runaway workload consuming a quarter's credit in an afternoon.">
+          <RowNum l="Per-user monthly cap" suffix="credits"
+            d="A user who hits their cap is told, and their questions are refused until the next period or an Admin raises it."
+            val={d.cost.capUser} set={v=>setD(x=>({...x,cost:{...x.cost,capUser:v}}))}/>
+          <RowNum l="Per-space monthly cap" suffix="credits"
+            d="Covers index rebuilds as well as questions — a large document space can spend heavily on a single rebuild."
+            val={d.cost.capSpace} set={v=>setD(x=>({...x,cost:{...x.cost,capSpace:v}}))}/>
+          <RowNum l="Alert at" suffix="% used"
+            d="Notifies Admins and the space owner. Delivered through Settings › Notifications."
+            val={d.cost.alertAt} set={v=>setD(x=>({...x,cost:{...x.cost,alertAt:v}}))}/>
+          <RowToggle l="Carry unused credit into the next term"
+            d="Unspent credit rolls forward on renewal instead of expiring."
+            on={d.cost.rollForward} set={()=>setD(x=>({...x,cost:{...x.cost,rollForward:!x.cost.rollForward}}))}/>
+        </Card>
+
+        <Card title="Where credits went · last 30 days" desc="Per Answer Space, so an expensive space can be justified or trimmed.">
+          {st.spaces.filter(s=>s.credits30d>0).sort((a,b)=>b.credits30d-a.credits30d).map(s=>{
+            const max = Math.max(...st.spaces.map(x=>x.credits30d),1);
+            return (
+              <div key={s.id} style={{padding:"8px 0",borderTop:`1px solid ${T.border}`}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:5}}>
+                  <span style={{fontSize:12,fontWeight:600,color:T.text,flex:1,minWidth:0}}>{s.name}</span>
+                  <span style={{fontSize:11,color:T.textMuted}}>{s.questions30d.toLocaleString()} questions</span>
+                  <span style={{fontSize:12,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",width:64,textAlign:"right"}}>{s.credits30d.toLocaleString()}</span>
+                </div>
+                <div style={{height:4,borderRadius:2,background:T.bgHover,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${Math.round(s.credits30d/max*100)}%`,background:DA_MODE_COLOR(s.mode)}}/>
+                </div>
+              </div>
+            );
+          })}
+        </Card>
+      </>)}
+
+      {/* ── ACCESS ── */}
+      {sub==="access"&&(<>
+        <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.65,marginBottom:14}}>
+          Who can do what in Data Ask. These sit on top of asset-level RBAC — granting somebody the right to ask does not
+          grant them data they could not already read, it only lets them ask about it in words.
+        </div>
+        {[
+          {k:"ask",     l:"Ask questions",        d:"Use the Ask screen against any published space. Masking and row filters still apply per role."},
+          {k:"editSql", l:"Edit generated SQL",   d:"Bypass the planner with hand-written SQL. Policy is still enforced on the result — editing cannot unmask a column."},
+          {k:"publish", l:"Publish Answer Spaces",d:"Approve a space and make it askable. Also permits saving Verified Answers."},
+          {k:"seeRaw",  l:"See unmasked values",  d:"Serves raw values for classified columns to this role. Every such access is written to the audit log with the column named."},
+          {k:"manage",  l:"Manage Data Ask settings",d:"Change models, guardrails, privacy and credit caps — everything on this page."},
+        ].map(cap=>(
+          <Card key={cap.k} title={cap.l} desc={cap.d} tone={cap.k==="seeRaw"?T.amber+"55":undefined}>
+            <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+              {DA_ROLE_LIST.map(r=>{
+                const on = d.access[cap.k].includes(r.k);
+                const locked = cap.k==="manage" && r.k==="admin";
+                return (
+                  <button key={r.k} disabled={locked}
+                    onClick={()=>setD(x=>({...x,access:{...x.access,
+                      [cap.k]: on ? x.access[cap.k].filter(y=>y!==r.k) : [...x.access[cap.k],r.k]}}))}
+                    title={locked?"Admins always retain this permission":undefined}
+                    style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:99,
+                      cursor:locked?"default":"pointer",fontSize:11.5,fontWeight:on?700:500,fontFamily:"inherit",opacity:locked?.75:1,
+                      border:`1px solid ${on?T.accent:T.border}`,background:on?T.accentDim:"transparent",color:on?T.accent:T.textSub}}>
+                    {on?"✓":""} {r.l}
+                  </button>
+                );
+              })}
+            </div>
+            {cap.k==="seeRaw"&&d.access.seeRaw.length>1&&(
+              <div style={{marginTop:11,padding:"9px 11px",borderRadius:7,background:T.amberDim,border:`1px solid ${T.amber}44`,
+                fontSize:11.5,color:T.text,lineHeight:1.55}}>
+                {d.access.seeRaw.length} roles can now read classified values through Data Ask. This widens the blast radius
+                of a single compromised account — keep it as narrow as the job allows.
+              </div>
+            )}
+            {cap.k==="ask"&&d.access.ask.length===0&&(
+              <div style={{marginTop:11,padding:"9px 11px",borderRadius:7,background:T.roseDim,border:`1px solid ${T.rose}44`,
+                fontSize:11.5,color:T.text}}>
+                Nobody can ask questions. Data Ask is effectively switched off.
+              </div>
+            )}
+          </Card>
+        ))}
+      </>)}
+
+      <div style={{display:"flex",alignItems:"center",gap:10,marginTop:4,paddingBottom:8}}>
+        <button onClick={save} disabled={!dirty}
+          style={{padding:"8px 20px",borderRadius:8,background:dirty?T.accent:T.bgElevated,border:`1px solid ${dirty?T.accent:T.border}`,
+            color:dirty?"#fff":T.textMuted,fontSize:12,fontWeight:600,cursor:dirty?"pointer":"default",fontFamily:"inherit"}}>
+          Save settings
+        </button>
+        {dirty&&<Btn ghost small onClick={reset}>Discard changes</Btn>}
+        {saved&&<span style={{fontSize:12,color:T.green,fontWeight:500}}>✓ Saved</span>}
+        {!dirty&&!saved&&<span style={{fontSize:11.5,color:T.textMuted}}>No unsaved changes</span>}
+      </div>
+    </>
+  );
+};
+
+
 const SettingsView = ({onToast})=>{
   const {isDark, toggleTheme:onThemeToggle} = useTheme();
   const tagCtx = useTagCtx();
@@ -33249,6 +36483,7 @@ const SettingsView = ({onToast})=>{
       {key:"frameworks",   icon:"shield",  label:"Regulations",           desc:"Enable applicable compliance frameworks"},
     ]},
     {label:"Platform", items:[
+      {key:"dataask",      icon:"dataask", label:"Data Ask",             desc:"Models, guardrails, privacy & credits"},
       {key:"notifications",icon:"notif",   label:"Notifications",        desc:"Alerts & channels"},
       {key:"preferences",  icon:"palette", label:"Preferences",          desc:"Theme & display"},
       {key:"custom_props", icon:"props",   label:"Custom Properties",    desc:"Extend asset metadata"},
@@ -34795,6 +38030,8 @@ const SettingsView = ({onToast})=>{
             </>}
 
             {/* ══ NOTIFICATIONS ══ */}
+            {section==="dataask"&&<DASettingsSection onToast={onToast}/>}
+
             {section==="notifications"&&<>
               <SettSH icon={Ic.notif(16)} title="Notifications" desc="Choose which in-app alerts reach you. Today notifications are delivered in-app; email & Slack are coming soon."/>
               <NotifPrefsSettings/>
@@ -36891,6 +40128,7 @@ export default function App(){
       case "domains":       return <DomainsView onAsset={handleAsset} onNav={handleNav} onToast={showToast} deepLinkDomainId={deepLinkDomainId}/>;
       case "dataproducts":  return <DataProductsView onAsset={handleAsset} onNav={handleNav}/>;
       case "knowledgelayer":return <KnowledgeLayerView onToast={showToast} onNav={handleNav}/>;
+      case "dataask":       return <DataAskView onToast={showToast} onNav={handleNav}/>;
       case "observability": return <QualityView/>;
       case "analytics":     return <AnalyticsView/>;
       case "teams":         return <TeamsView onToast={showToast}/>;
