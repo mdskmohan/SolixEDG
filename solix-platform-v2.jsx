@@ -24029,96 +24029,183 @@ const KL_UNMAPPED = ["Salesforce","Snowflake Prod","Workday","MongoDB Atlas"];
 // renders; `masters` carry the identity columns that make an entity matchable across sources.
 const KL_SRC_SEED = [
   {id:"sg1", key:"SKG-1001", name:"SAP ECC", service:"sap", connection:"sap-ecc-prod",
-   domain:"Procurement", tables:412, cols:3318, words:100, entities:["Supplier","Customer"],
+   domain:"Procurement", tables:412, cols:3318, words:100, entities:["Supplier","Customer","Material"],
    drift:0, status:"Published", owner:"maya.chen", stewards:["priya.nair"], from:"Data Sense",
    step:10, built:"2026-08-18", version:"v4",
+   opEntity:"Interiors Division",
+   env:{by:"ai", src:"Data Sense · AKG builder", conf:0.96, state:"published"},
    bind:{tags:38, termed:412, proposed:0, invented:0},
-   masters:[{table:"VENDOR_MASTER", entity:"Supplier",    keys:["Tax ID","Legal Name","Vendor Code"], ready:true},
-            {table:"KNA1",          entity:"Customer",    keys:["Tax ID","Name"],                     ready:true},
-            {table:"ASSET_REG",     entity:"Fixed Asset", keys:[],                                    ready:false}],
+   masters:[{table:"VENDOR_MASTER", entity:"Supplier",    keys:["Tax ID","Legal Name","Vendor Code"], ready:true,
+             rule:{pk:"LIFNR", name:"NAME1", tax:"STCD1", code:"LIFNR", cls:"party", by:"ai:heuristic-v1.1", conf:0.94}},
+            {table:"KNA1",          entity:"Customer",    keys:["Tax ID","Name"],                     ready:true,
+             rule:{pk:"KUNNR", name:"NAME1", tax:"STCD1", cls:"party", by:"ai:heuristic-v1.1", conf:0.93}},
+            {table:"MARA",          entity:"Material",    keys:["Material Number"],                   ready:true,
+             rule:{pk:"MATNR", name:"MAKTX", cls:"item", by:"ai:heuristic-v1.1", conf:0.88}},
+            {table:"ASSET_REG",     entity:"Fixed Asset", keys:["Asset Tag","Serial Number"],         ready:true,
+             rule:{pk:"ANLN1", name:"TXT50", serial:"SERNR", tag:"INVNR", cls:"asset", by:"ai:heuristic-v1.1", conf:0.81,
+                   guard:"MANDT rejected as PK — the client column is identical on every row, so the generator fell back to the natural key ANLN1"}}],
    assets:[{n:"VENDOR_MASTER", t:"Table", role:"master",      entity:"Supplier", term:"Supplier",       cols:64, tags:["Tax ID","PII"]},
            {n:"KNA1",          t:"Table", role:"master",      entity:"Customer", term:"Customer",       cols:71, tags:["Tax ID","PII"]},
+           {n:"MARA",          t:"Table", role:"master",      entity:"Material", term:"Material",       cols:46, tags:[]},
            {n:"EKKO",          t:"Table", role:"transaction", term:"Purchase Order",                    cols:58, tags:[]},
            {n:"EKPO",          t:"Table", role:"transaction", term:"Purchase Order Line",                cols:82, tags:[]},
            {n:"RBKP",          t:"Table", role:"transaction", term:"Vendor Invoice",                     cols:44, tags:[]},
-           {n:"ASSET_REG",     t:"Table", role:"master",      entity:"Fixed Asset",                     cols:39, tags:[]},
+           {n:"BSIK",          t:"Table", role:"transaction", term:"Vendor Open Item",                   cols:51, tags:[]},
+           {n:"ASSET_REG",     t:"Table", role:"master",      entity:"Fixed Asset",                     cols:39, tags:["Asset Tag"]},
            {n:"V_VENDOR_SPEND",t:"View",  role:"derived",     term:"Vendor Spend",                      cols:12, tags:[]}],
    rels:[["EKKO","VENDOR_MASTER","vendor"],["EKPO","EKKO","header"],["RBKP","VENDOR_MASTER","vendor"],
-         ["V_VENDOR_SPEND","EKPO","derived from"],["V_VENDOR_SPEND","VENDOR_MASTER","vendor"]]},
+         ["BSIK","VENDOR_MASTER","vendor"],["EKPO","MARA","material"],
+         ["V_VENDOR_SPEND","EKPO","derived from"],["V_VENDOR_SPEND","VENDOR_MASTER","vendor"]],
+   history:[
+     {at:"2026-08-18 09:12", by:"maya.chen",  kind:"human", action:"Published", detail:"Version v4 signed off by the owner"},
+     {at:"2026-08-18 08:41", by:"Data Sense", kind:"ai",    action:"Resolution rules generated", detail:"4 of 4 master tables — heuristic v1.1"},
+     {at:"2026-08-18 08:30", by:"priya.nair", kind:"human", action:"Classification confirmed", detail:"VNDR_NM_1 to Legal Name — steward overrode the AI suggestion at 0.71"},
+     {at:"2026-08-17 16:02", by:"Data Sense", kind:"ai",    action:"Profiled and classified", detail:"412 tables · 3,318 columns · 38 classifications matched"}]},
 
   {id:"sg2", key:"SKG-1002", name:"Oracle EBS", service:"oracle", connection:"ebs-prod",
    domain:"Procurement", tables:388, cols:2904, words:100, entities:["Supplier","Customer"],
    drift:3, status:"Published", owner:"priya.nair", stewards:["maya.chen"], from:"Data Sense",
    step:10, built:"2026-08-11", version:"v3",
+   opEntity:"US Operations",
+   env:{by:"ai", src:"Data Sense · AKG builder", conf:0.94, state:"published"},
    bind:{tags:31, termed:388, proposed:0, invented:0},
-   masters:[{table:"AP_SUPPLIERS", entity:"Supplier", keys:["Tax ID","Legal Name"], ready:true},
-            {table:"HZ_PARTIES",   entity:"Customer", keys:["Tax ID","Name"],       ready:true}],
-   assets:[{n:"AP_SUPPLIERS",     t:"Table", role:"master",      entity:"Supplier", term:"Supplier",       cols:52, tags:["Tax ID","PII"]},
-           {n:"HZ_PARTIES",       t:"Table", role:"master",      entity:"Customer", term:"Customer",       cols:66, tags:["Tax ID","PII"]},
-           {n:"PO_HEADERS_ALL",   t:"Table", role:"transaction", term:"Purchase Order",                    cols:61, tags:[]},
-           {n:"PO_LINES_ALL",     t:"Table", role:"transaction", term:"Purchase Order Line",                cols:74, tags:[]},
-           {n:"AP_INVOICES_ALL",  t:"Table", role:"transaction", term:"Vendor Invoice",                     cols:57, tags:[]}],
+   masters:[{table:"AP_SUPPLIERS", entity:"Supplier", keys:["Tax ID","Legal Name"], ready:true,
+             rule:{pk:"VENDOR_ID", name:"VENDOR_NAME", tax:"NUM_1099", cls:"party", by:"ai:heuristic-v1.1", conf:0.92}},
+            {table:"HZ_PARTIES",   entity:"Customer", keys:["Tax ID","Name"],       ready:true,
+             rule:{pk:"PARTY_ID", name:"PARTY_NAME", tax:"JGZZ_FISCAL_CODE", cls:"party", by:"ai:heuristic-v1.1", conf:0.90}},
+            {table:"MTL_SYSTEM_ITEMS_B", entity:"Material", keys:[], ready:false, rule:null,
+             blocked:"Composite primary key (INVENTORY_ITEM_ID + ORGANIZATION_ID). Composite-key masters are not generatable in this release — declare the identity attributes by hand, or wait for the next generator version."}],
+   assets:[{n:"AP_SUPPLIERS",      t:"Table", role:"master",      entity:"Supplier", term:"Supplier",       cols:52, tags:["Tax ID","PII"]},
+           {n:"HZ_PARTIES",        t:"Table", role:"master",      entity:"Customer", term:"Customer",       cols:66, tags:["Tax ID","PII"]},
+           {n:"MTL_SYSTEM_ITEMS_B",t:"Table", role:"master",      entity:"Material",                        cols:88, tags:[]},
+           {n:"PO_HEADERS_ALL",    t:"Table", role:"transaction", term:"Purchase Order",                    cols:61, tags:[]},
+           {n:"PO_LINES_ALL",      t:"Table", role:"transaction", term:"Purchase Order Line",                cols:74, tags:[]},
+           {n:"AP_INVOICES_ALL",   t:"Table", role:"transaction", term:"Vendor Invoice",                     cols:57, tags:[]}],
    rels:[["PO_HEADERS_ALL","AP_SUPPLIERS","vendor"],["PO_LINES_ALL","PO_HEADERS_ALL","header"],
-         ["AP_INVOICES_ALL","AP_SUPPLIERS","vendor"]]},
+         ["AP_INVOICES_ALL","AP_SUPPLIERS","vendor"]],
+   history:[
+     {at:"2026-08-22 07:15", by:"EDG scanner", kind:"ai",    action:"Source drift detected", detail:"3 columns added to AP_SUPPLIERS since v3 was built"},
+     {at:"2026-08-11 11:20", by:"priya.nair",  kind:"human", action:"Published", detail:"Version v3 signed off by the owner"},
+     {at:"2026-08-11 10:44", by:"Data Sense",  kind:"ai",    action:"Resolution rules generated", detail:"2 of 3 master tables — MTL_SYSTEM_ITEMS_B reported as not generatable"}]},
 
   {id:"sg3", key:"SKG-1003", name:"Oracle Fusion", service:"oracle", connection:"fusion-erp",
-   domain:"Procurement", tables:292, cols:2140, words:88, entities:["Supplier"],
+   domain:"Procurement", tables:292, cols:2140, words:88, entities:["Supplier","Fixed Asset"],
    drift:0, status:"In review", owner:"maya.chen", stewards:[], from:"EDG",
    step:7, built:"2026-08-22", version:"v1",
+   opEntity:"Canada Operations",
+   env:{by:"ai", src:"EDG · Knowledge Layer builder", conf:0.88, state:"needs_review"},
    bind:{tags:29, termed:280, proposed:12, invented:0},
-   masters:[{table:"POZ_SUPPLIERS", entity:"Supplier", keys:["Tax ID","Vendor Code"], ready:true}],
+   masters:[{table:"POZ_SUPPLIERS", entity:"Supplier", keys:["Tax ID","Vendor Code"], ready:true,
+             rule:{pk:"VENDOR_ID", name:"VENDOR_NAME", tax:"TAXPAYER_ID", code:"SEGMENT1", cls:"party", by:"ai:heuristic-v1.1", conf:0.91}},
+            {table:"FA_ADDITIONS",  entity:"Fixed Asset", keys:["Asset Tag","Serial Number"], ready:true,
+             rule:{pk:"ASSET_ID", name:"DESCRIPTION", serial:"SERIAL_NUMBER", tag:"TAG_NUMBER", cls:"asset", by:"ai:heuristic-v1.1", conf:0.79,
+                   guard:"DESCRIPTION demoted from identity — asset-class entities match on serial/tag-grade identifiers, never on a description"}}],
    assets:[{n:"POZ_SUPPLIERS",  t:"Table", role:"master",      entity:"Supplier", term:"Supplier", cols:48, tags:["Tax ID"]},
+           {n:"FA_ADDITIONS",   t:"Table", role:"master",      entity:"Fixed Asset",              cols:42, tags:["Asset Tag"]},
            {n:"PO_HEADERS",     t:"Table", role:"transaction", term:"Purchase Order",              cols:55, tags:[]},
            {n:"POZ_SUPPLIER_SITES", t:"Table", role:"dimension",                                   cols:31, tags:[]}],
-   rels:[["PO_HEADERS","POZ_SUPPLIERS","vendor"],["POZ_SUPPLIER_SITES","POZ_SUPPLIERS","site of"]]},
+   rels:[["PO_HEADERS","POZ_SUPPLIERS","vendor"],["POZ_SUPPLIER_SITES","POZ_SUPPLIERS","site of"]],
+   history:[
+     {at:"2026-08-22 14:31", by:"EDG",         kind:"ai",    action:"Resolution rules generated", detail:"2 of 2 master tables — heuristic v1.1"},
+     {at:"2026-08-22 14:03", by:"alex.rivera", kind:"human", action:"Graph created in EDG", detail:"Started from Catalog › Connections · fusion-erp"}]},
 ];
 
 // A Cross-Source Knowledge Graph sits ON TOP of two or more published Source graphs: each golden
 // record's `members` point back at a source graph id and the exact master row that fed it.
-// A Cross-Source Knowledge Graph sits ON TOP of two or more published Source graphs.
 // After a data scan, most records resolve cleanly and need nobody. Only two kinds of row
 // are worth a steward's time, and those are the only ones the Trusted records tab shows:
 //   conflicts  — matched, but the sources disagree on a value (`vals` per member, diffed)
 //   unmatched  — present in one source, nothing matched it in the others
+// Every exception carries `governs` (the money the decision controls) and `conf` (how sure the
+// matcher is), so the worklist can rank the most expensive doubt first.
 const KL_X_SEED = [
   {id:"xg1", key:"XKG-2001", name:"Supplier Master", entity:"Supplier", srcIds:["sg1","sg2","sg3"],
-   records:1204, clean:1198, owner:"maya.chen", stewards:["priya.nair"], status:"Published",
+   records:1204, clean:1198, autoApplied:1198, owner:"maya.chen", stewards:["priya.nair"], status:"Published",
    domain:"Procurement", built:"2026-08-19", version:"v2", policy:"Vendor Data Protection",
+   env:{by:"ai", src:"EDG resolver", conf:0.97, state:"published"},
    // reading rows is a separate, consented act — records stay hidden until this says done
    scan:{state:"done", mode:"full", at:"2026-08-19", rows:184200, approvedBy:"maya.chen", stale:false},
    keys:["Tax ID","Legal Name","Vendor Code"],
    beliefs:[{f:"Tax ID",s:"SAP ECC"},{f:"Legal Name",s:"Oracle EBS"},{f:"Vendor Code",s:"SAP ECC"},{f:"Address",s:"Most recently updated"}],
    conflicts:[
-     {id:"c1", n:"TAMKO Building", conf:0.64, issue:"Tax IDs differ by one digit",
+     {id:"c1", n:"TAMKO Building", conf:0.64, cls:"name-variant", governs:1840220.55, state:"open",
+      issue:"Tax IDs differ by one digit",
+      evidence:"Legal names agree at 0.97. Tax IDs 27-9190001 and 27-9910001 differ by a transposition — either a keying error in one system, or two genuinely different legal entities.",
       members:[{srcId:"sg1", table:"VENDOR_MASTER", pk:"27-919",
                 vals:{"Tax ID":"27-9190001","Legal Name":"TAMKO Building Products","Address":"220 W 4th St, Joplin MO"}},
                {srcId:"sg2", table:"AP_SUPPLIERS",  pk:"27-991",
                 vals:{"Tax ID":"27-9910001","Legal Name":"TAMKO Building Products Inc","Address":"220 W 4th St, Joplin MO"}}]},
-     {id:"c2", n:"IKO Industries", conf:0.71, issue:"Two candidate matches in SAP ECC",
+     {id:"c2", n:"IKO Industries", conf:0.71, cls:"ambiguous-match", governs:512880.00, state:"open",
+      issue:"Two candidate matches in SAP ECC",
+      evidence:"Tax IDs match exactly, but the addresses are 700km apart and the legal names differ. Either one supplier with two sites, or two subsidiaries sharing a filing ID.",
       members:[{srcId:"sg1", table:"VENDOR_MASTER", pk:"5120",
                 vals:{"Tax ID":"22-7781004","Legal Name":"IKO Industries Ltd","Address":"1 Yorkdale Rd, Toronto"}},
                {srcId:"sg2", table:"AP_SUPPLIERS",  pk:"V20881",
                 vals:{"Tax ID":"22-7781004","Legal Name":"IKO Inc","Address":"120 Hay Rd, Wilmington DE"}}]},
-     {id:"c3", n:"Owens Corning", conf:0.88, issue:"Legal name differs across sources",
+     {id:"c3", n:"Owens Corning", conf:0.88, cls:"name-variant", governs:9268961.10, state:"open",
+      issue:"Legal name differs across sources",
+      evidence:"Tax ID 31-1010000 is identical in both sources and the addresses match exactly. Only the legal-name suffix differs, which is a sales-subsidiary naming convention.",
       members:[{srcId:"sg1", table:"VENDOR_MASTER", pk:"6620",
                 vals:{"Tax ID":"31-1010000","Legal Name":"Owens Corning","Address":"1 Owens Corning Pkwy, Toledo OH"}},
                {srcId:"sg2", table:"AP_SUPPLIERS",  pk:"V31188",
                 vals:{"Tax ID":"31-1010000","Legal Name":"Owens-Corning Sales LLC","Address":"1 Owens Corning Pkwy, Toledo OH"}}]}],
    unmatched:[
-     {id:"u1", srcId:"sg1", table:"VENDOR_MASTER", pk:"7781", label:"Malarkey Roofing",
+     {id:"u1", srcId:"sg1", table:"VENDOR_MASTER", pk:"7781", label:"Malarkey Roofing", governs:288400.00, conf:0.40, state:"open",
       reason:"No tax ID recorded, and the name matched nothing in Oracle EBS or Fusion"},
-     {id:"u2", srcId:"sg3", table:"POZ_SUPPLIERS", pk:"SUP-402", label:"Atlas Roofing",
+     {id:"u2", srcId:"sg3", table:"POZ_SUPPLIERS", pk:"SUP-402", label:"Atlas Roofing", governs:94120.00, conf:0.55, state:"open",
       reason:"Only present in Oracle Fusion — may be a genuinely single-system supplier"},
-     {id:"u3", srcId:"sg2", table:"AP_SUPPLIERS",  pk:"V44120", label:"CertainTeed",
-      reason:"Tax ID is blank in Oracle EBS, so the strongest match key could not be used"}]},
+     {id:"u3", srcId:"sg2", table:"AP_SUPPLIERS",  pk:"V44120", label:"CertainTeed", governs:1402990.40, conf:0.48, state:"open",
+      reason:"Tax ID is blank in Oracle EBS, so the strongest match key could not be used"}],
+   history:[
+     {at:"2026-08-19 11:05", by:"maya.chen",    kind:"human", action:"Published", detail:"Version v2"},
+     {at:"2026-08-19 10:52", by:"EDG resolver", kind:"ai",    action:"Resolution complete", detail:"1,204 records resolved · 1,198 auto-confirmed above the 0.90 threshold · 6 held for a steward"},
+     {at:"2026-08-19 10:40", by:"maya.chen",    kind:"human", action:"Data scan approved", detail:"All rows · 184,200 rows read across 3 sources"}]},
 
   {id:"xg2", key:"XKG-2002", name:"Customer 360", entity:"Customer", srcIds:["sg1","sg2"],
-   records:3910, clean:3910, owner:"priya.nair", stewards:[], status:"Published",
+   records:3910, clean:3910, autoApplied:3910, owner:"priya.nair", stewards:[], status:"Published",
    domain:"Sales", built:"2026-08-14", version:"v1", policy:"Customer PII",
+   env:{by:"ai", src:"EDG resolver", conf:0.99, state:"published"},
    scan:{state:"done", mode:"sample", at:"2026-08-14", rows:5000, approvedBy:"priya.nair", stale:true},
    keys:["Tax ID","Name"],
    beliefs:[{f:"Tax ID",s:"SAP ECC"},{f:"Name",s:"Oracle EBS"}],
-   conflicts:[], unmatched:[]},
+   conflicts:[], unmatched:[],
+   history:[
+     {at:"2026-08-22 07:15", by:"EDG scanner",  kind:"ai",    action:"Marked out of date", detail:"Oracle EBS changed after this scan"},
+     {at:"2026-08-14 09:14", by:"EDG resolver", kind:"ai",    action:"Resolution complete", detail:"3,910 records resolved · all above threshold"},
+     {at:"2026-08-14 09:02", by:"priya.nair",   kind:"human", action:"Data scan approved", detail:"Sample · 5,000 rows per source"}]},
+
+  // The section-16 case, live: asset-class entities must NOT auto-merge on a shared description.
+  {id:"xg3", key:"XKG-2003", name:"Fixed Asset Register", entity:"Fixed Asset", srcIds:["sg1","sg3"],
+   records:842, clean:838, autoApplied:838, owner:"maya.chen", stewards:["priya.nair"], status:"Published",
+   domain:"Procurement", built:"2026-08-23", version:"v1", policy:null,
+   env:{by:"ai", src:"EDG resolver", conf:0.79, state:"published"},
+   scan:{state:"done", mode:"sample", at:"2026-08-23", rows:5000, approvedBy:"maya.chen", stale:false},
+   keys:["Asset Tag","Serial Number"],
+   beliefs:[{f:"Asset Tag",s:"SAP ECC"},{f:"Serial Number",s:"SAP ECC"},{f:"Description",s:"Most recently updated"}],
+   conflicts:[
+     {id:"c4", n:"Forklift — Warehouse 3", conf:0.52, cls:"tag-conflict", governs:184000.00, state:"open",
+      issue:"Same description, different asset tags",
+      evidence:"Descriptions are identical, but the asset tags and serial numbers differ entirely. Held rather than merged: hundreds of physical assets legitimately share a description, so a description match is not an identity match.",
+      members:[{srcId:"sg1", table:"ASSET_REG", pk:"ANL-40021",
+                vals:{"Asset Tag":"INV-40021","Serial Number":"HY-88213-A","Description":"Forklift — Warehouse 3"}},
+               {srcId:"sg3", table:"FA_ADDITIONS", pk:"FA-77310",
+                vals:{"Asset Tag":"CA-77310","Serial Number":"HY-90114-C","Description":"Forklift — Warehouse 3"}}]},
+     {id:"c5", n:"Packaging Line B", conf:0.58, cls:"tag-conflict", governs:962500.00, state:"open",
+      issue:"Serial numbers disagree on an otherwise strong match",
+      evidence:"Asset tags match after normalisation, but the serial numbers are unrelated. One record may have been re-tagged after a transfer between operating entities.",
+      members:[{srcId:"sg1", table:"ASSET_REG", pk:"ANL-51188",
+                vals:{"Asset Tag":"INV-51188","Serial Number":"PKG-2019-118","Description":"Packaging Line B"}},
+               {srcId:"sg3", table:"FA_ADDITIONS", pk:"FA-51188",
+                vals:{"Asset Tag":"INV-51188","Serial Number":"PKG-2021-044","Description":"Packaging Line B"}}]}],
+   unmatched:[
+     {id:"u4", srcId:"sg3", table:"FA_ADDITIONS", pk:"FA-90012", label:"Cold Store Compressor", governs:410000.00, conf:0.51, state:"open",
+      reason:"Only present in Oracle Fusion — Canada Operations may hold it exclusively"},
+     {id:"u5", srcId:"sg1", table:"ASSET_REG", pk:"ANL-11902", label:"CNC Router 4", governs:76500.00, conf:0.44, state:"open",
+      reason:"Serial number is blank in SAP ECC, so the strongest identity attribute could not be used"}],
+   history:[
+     {at:"2026-08-23 08:44", by:"EDG resolver", kind:"ai",    action:"Resolution complete", detail:"842 records · 4 held with tag-conflict evidence — descriptions matched but identities did not"},
+     {at:"2026-08-23 08:31", by:"maya.chen",    kind:"human", action:"Data scan approved", detail:"Sample · 5,000 rows per source"},
+     {at:"2026-08-23 08:20", by:"EDG",          kind:"ai",    action:"Resolution rules generated", detail:"ASSET_REG and FA_ADDITIONS — asset class, identity on serial/tag"}]},
 ];
 
 // ── The AKG's own 10 steps, unchanged. `uses` = the EDG object that now feeds the step. ──
@@ -24196,9 +24283,354 @@ const KL_READY_FOR = (graphs, entity) =>
 // so the happy path is the default and "not ready" is something the user opts into seeing.
 // How many rows in a cross-source graph actually need a person: the ones that matched but
 // disagree, plus the ones that matched nothing. Everything else resolved cleanly.
-const klOpen = x => (x.conflicts||[]).length + (x.unmatched||[]).length;
+const klOpen = x => [...(x.conflicts||[]),...(x.unmatched||[])].filter(r=>(r.state||"open")==="open").length;
 
 const KL_DEFAULT_ENTITY = KL_ENTITIES.find(e => KL_READY_FOR(KL_SRC_SEED,e).length>=2) || KL_ENTITIES[0];
+
+// ═══════════════════════════════════════════════════════════════════════════
+// THE GOVERNED-OBJECT FOUNDATION
+// Everything below is pure — no React, no side effects — so the numbers a
+// steward sees can be reasoned about (and tested) independently of the UI.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Operating entities: the business a source system serves. People ask about
+// "the Canada division", not about "fusion-erp", so every source graph maps to one.
+const KL_OP_ENTITIES = [
+  {id:"oe1", name:"US Operations",     region:"United States", owner:"priya.nair"},
+  {id:"oe2", name:"Interiors Division",region:"United States", owner:"maya.chen"},
+  {id:"oe3", name:"Canada Operations", region:"Canada",        owner:"maya.chen"},
+];
+
+// ── The trust dial (C5) ──
+// One threshold PER OBJECT TYPE, not one for the whole layer: a match decision and a
+// column classification are not equally expensive to get wrong. Above the threshold the
+// machine confirms and stamps itself as the decider; below it, the item waits in the Worklist.
+const KL_TRUST_TYPES = [
+  {k:"match",    l:"Entity match",        d:"Two source records resolved into one golden record."},
+  {k:"classify", l:"Column classification",d:"A column bound to an existing classification or tag."},
+  {k:"term",     l:"Business term binding",d:"A table bound to a certified glossary term."},
+];
+const KL_TRUST_DEFAULT = {match:0.90, classify:0.85, term:0.80, posture:"review"};
+
+// Confidence classes. Deterministic classes keep a fixed score on purpose — determinism
+// where it is warranted is a feature, not a missing model.
+const KL_CONF_CLASS = {
+  "exact-identity": {l:"Exact identity",   fixed:true,  d:"Identity attribute matched exactly in every source."},
+  "tax-corroborated":{l:"Tax corroborated",fixed:true,  d:"Tax ID matched and a second attribute agreed."},
+  "singleton":      {l:"Singleton",        fixed:true,  d:"Present in one source only, with nothing to contradict it."},
+  "name-variant":   {l:"Name variant",     fixed:false, d:"Continuous similarity score over normalised names."},
+  "ambiguous-match":{l:"Ambiguous match",  fixed:false, d:"More than one credible counterpart in a source."},
+  "tag-conflict":   {l:"Tag conflict",     fixed:false, d:"Descriptions agree but serial/tag identity does not."},
+  "unmatched":      {l:"Unmatched",        fixed:false, d:"No counterpart found in any other source."},
+};
+
+const klMoney = n => n==null ? "—"
+  : n>=1e9 ? "$"+(n/1e9).toFixed(2)+"B"
+  : n>=1e6 ? "$"+(n/1e6).toFixed(2)+"M"
+  : n>=1e3 ? "$"+Math.round(n/1e3)+"K"
+  : "$"+n.toFixed(0);
+const klMoneyFull = n => n==null ? "—" : "$"+n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+
+// Flatten a cross-source graph's exceptions into ONE uniform decision shape, so the
+// worklist never has to care whether a decision came from a conflict or an unmatched row.
+const klExceptions = xg => [
+  ...(xg.conflicts||[]).map(c=>({
+    id:c.id, xgId:xg.id, xgName:xg.name, entity:xg.entity, kind:"conflict",
+    name:c.n, issue:c.issue, evidence:c.evidence, conf:c.conf, cls:c.cls||"name-variant",
+    governs:c.governs||0, state:c.state||"open", decidedBy:c.decidedBy||null,
+    decidedAt:c.decidedAt||null, reason:c.reason||null, members:c.members||[],
+    apps:(c.members||[]).length, owner:xg.owner,
+  })),
+  ...(xg.unmatched||[]).map(u=>({
+    id:u.id, xgId:xg.id, xgName:xg.name, entity:xg.entity, kind:"unmatched",
+    name:u.label, issue:"No counterpart in any other source", evidence:u.reason,
+    conf:u.conf!=null?u.conf:0.5, cls:"unmatched",
+    governs:u.governs||0, state:u.state||"open", decidedBy:u.decidedBy||null,
+    decidedAt:u.decidedAt||null, reason:u.reason2||null,
+    members:[{srcId:u.srcId, table:u.table, pk:u.pk, vals:{}}],
+    apps:1, owner:xg.owner,
+  })),
+];
+
+// Rank = the money the decision governs x how unsure we are. A $9M doubt at 0.88 outranks
+// a $90K doubt at 0.40, which is the whole point: spend the steward's attention where it pays.
+const klScore = it => (it.governs||0) * (1 - (it.conf||0));
+
+// Derived over the WHOLE estate, never over a loaded page — so a count on a tile and the
+// rows underneath it can never disagree (the reconciliation rule from the scale spec).
+const klWorklist = xGraphs => xGraphs.flatMap(klExceptions).sort((a,b)=>klScore(b)-klScore(a));
+
+// What the trust dial WOULD do at a given threshold, without applying anything.
+const klDialPreview = (items, threshold) => {
+  const open = items.filter(i=>i.state==="open");
+  const auto = open.filter(i=>i.conf>=threshold);
+  return {auto:auto.length, wait:open.length-auto.length,
+          autoMoney:auto.reduce((n,i)=>n+(i.governs||0),0),
+          waitMoney:open.filter(i=>i.conf<threshold).reduce((n,i)=>n+(i.governs||0),0)};
+};
+
+// Readiness — the "what's done / what's pending / what's mine" answer, in one object.
+const klReadiness = xGraphs => {
+  const items = xGraphs.flatMap(klExceptions);
+  const decided = items.filter(i=>i.state!=="open");
+  const open    = items.filter(i=>i.state==="open");
+  return {
+    autoApplied: xGraphs.reduce((n,x)=>n+(x.autoApplied||0),0),
+    waiting:     open.length,
+    waitingMoney:open.reduce((n,i)=>n+(i.governs||0),0),
+    decided:     decided.length,
+    resolved:    xGraphs.reduce((n,x)=>n+(x.records||0),0),
+  };
+};
+
+// ── Certified measures (C7) ──
+// A measure is a governed object, not a glossary sentence: it names ONE canonical source per
+// application, an owner, an approval state, and an explicit currency policy. The worked example
+// is the real one — SAP "vendor spend" answers three different ways depending on phrasing.
+const KL_MEASURES = [
+  {id:"m1", name:"Vendor Spend", entity:"Supplier", state:"candidate", owner:"maya.chen", domain:"Procurement",
+   drafted:"ai", conf:0.74, currency:"Normalise to USD at the month-end ECB rate",
+   definition:"Total committed and invoiced value payable to a supplier in a period, net of tax, converted to USD.",
+   note:"Three candidate sources disagree today. Answers differ by phrasing until one is certified.",
+   bindings:[
+     {srcId:"sg1", label:"Purchase-order value", expr:"EKKO/EKPO · SUM(NETWR)", chosen:false,
+      why:"Committed value at PO time. Overstates spend when orders are cancelled."},
+     {srcId:"sg1", label:"MM invoice value", expr:"RBKP · SUM(RMWWR)", chosen:true,
+      why:"Invoiced value through materials management. Closest to cash out, and the AP team's own number."},
+     {srcId:"sg1", label:"FI vendor invoice", expr:"BSIK/BSAK · SUM(DMBTR) WHERE BLART='KR'", chosen:false,
+      why:"Financial-accounting view. Includes non-PO spend, excludes goods received not invoiced."},
+     {srcId:"sg2", label:"AP invoice value", expr:"AP_INVOICES_ALL · SUM(INVOICE_AMOUNT)", chosen:true,
+      why:"The only invoiced-value measure in EBS."},
+     {srcId:"sg3", label:"AP invoice value", expr:"AP_INVOICES · SUM(INVOICE_AMOUNT)", chosen:true,
+      why:"Matches the EBS definition. Amounts are CAD and must be converted."}]},
+
+  {id:"m2", name:"Active Supplier Count", entity:"Supplier", state:"candidate", owner:"maya.chen", domain:"Procurement",
+   drafted:"ai", conf:0.81, currency:"Not a monetary measure",
+   definition:"Distinct golden-record suppliers with at least one invoice in the trailing 12 months.",
+   note:"Counted on golden records, not on source rows — otherwise the same supplier is counted once per system.",
+   bindings:[
+     {srcId:"sg1", label:"Vendors with invoices", expr:"RBKP · COUNT(DISTINCT LIFNR)", chosen:true, why:"Invoiced, not merely registered."},
+     {srcId:"sg2", label:"Suppliers with invoices", expr:"AP_INVOICES_ALL · COUNT(DISTINCT VENDOR_ID)", chosen:true, why:"Same basis as SAP."}]},
+
+  {id:"m3", name:"Supplier", entity:"Supplier", state:"certified", owner:"maya.chen", domain:"Procurement",
+   drafted:"human", conf:1, currency:"Not a monetary measure",
+   definition:"A legal entity from which the group purchases goods or services, resolved to one golden record across all systems.",
+   note:"Certified before this release. Shown here so the Terms surface reads as a register, not a queue.",
+   certifiedBy:"maya.chen", certifiedAt:"2026-08-12",
+   bindings:[
+     {srcId:"sg1", label:"VENDOR_MASTER", expr:"VENDOR_MASTER", chosen:true, why:"Master table."},
+     {srcId:"sg2", label:"AP_SUPPLIERS",  expr:"AP_SUPPLIERS",  chosen:true, why:"Master table."},
+     {srcId:"sg3", label:"POZ_SUPPLIERS", expr:"POZ_SUPPLIERS", chosen:true, why:"Master table."}]},
+];
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MODE 2 — GENERATE THE GOVERNED BUILD
+// The XKG is the build spec. We compile it to a platform-neutral IR first, then a thin
+// adapter turns the IR into readable artifacts. The IR is the valuable, neutral part —
+// the adapter is deliberately dumb, so a second target is a compiler, not a rewrite.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const KL_CUSTOM_OPEN  = "-- ▼ CUSTOM SECTION — your edits below this line survive regeneration";
+const KL_CUSTOM_CLOSE = "-- ▲ END CUSTOM SECTION";
+const KL_TARGETS = [
+  {k:"databricks", l:"Databricks", d:"dbt models + Delta Live Tables, policy pushed to Unity Catalog.", ready:true},
+  {k:"aiwarehouse",l:"Solix AI Warehouse", d:"Native jobs. The reference adapter — we control both ends.", ready:true},
+  {k:"snowflake",  l:"Snowflake", d:"dbt + Horizon. Planned.", ready:false},
+];
+const KL_INTENTS = [
+  {k:"bi", l:"BI star schema", d:"Conformed dimensions and metrics for reporting."},
+  {k:"ml", l:"ML wide tables", d:"One denormalised row per entity, feature-ready."},
+  {k:"reg",l:"Regulatory extract", d:"Flat, fully-attributed files for filing."},
+];
+
+const klSlug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
+
+// Compile the resolver's own SELECT from the structured descriptor. The descriptor is the
+// contract; free-form SQL is never stored and never executed, because stored SQL that the
+// resolver runs verbatim is an injection vector.
+const klRuleSQL = (master, srcName) => {
+  const r = master && master.rule;
+  if(!r) return null;
+  const cols = [
+    ["source_pk", r.pk],
+    ["entity_name", r.name],
+    r.tax    ? ["tax_id", r.tax]       : null,
+    r.code   ? ["entity_code", r.code]  : null,
+    r.serial ? ["serial_no", r.serial]  : null,
+    r.tag    ? ["asset_tag", r.tag]     : null,
+  ].filter(Boolean);
+  return "select\n" + cols.map(([a,c])=>`  ${c} as ${a}`).join(",\n") +
+         `,\n  '${srcName}' as source_system\nfrom {{ source('${klSlug(srcName)}', '${master.table}') }}`;
+};
+
+// The IR. Platform-neutral by construction: nothing below names a target technology.
+const klBuildIR = (xg, srcGraphs, measures, opts) => {
+  const o = opts||{};
+  const sources = xg.srcIds.map(id=>{
+    const g = srcGraphs.find(s=>s.id===id);
+    if(!g) return null;
+    const m = g.masters.find(x=>x.entity===xg.entity);
+    return {srcId:id, system:g.name, opEntity:g.opEntity, table:m?m.table:null,
+            rule:m?m.rule:null, sql:klRuleSQL(m,g.name)};
+  }).filter(Boolean);
+  const exceptions = klExceptions(xg);
+  return {
+    irVersion:"1.0",
+    intent:o.intent||"bi",
+    target:o.target||"databricks",
+    entity:xg.entity,
+    golden:{name:"dim_"+klSlug(xg.entity), grain:"one row per governed "+xg.entity.toLowerCase()},
+    matchKeys:xg.keys||[],
+    survivorship:(xg.beliefs||[]).map(b=>({field:b.f, wins:b.s})),
+    sources,
+    crosswalk:exceptions.map(e=>({
+      golden_id:"GR-"+String(e.id).toUpperCase(),
+      name:e.name, method:e.cls, confidence:e.conf, status:e.state,
+      decided_by:e.decidedBy||(e.state==="open"?"":"edg-resolver"),
+      governs_usd:e.governs,
+      members:(e.members||[]).map(m=>({system:(srcGraphs.find(s=>s.id===m.srcId)||{}).name, table:m.table, pk:m.pk})),
+    })),
+    autoApplied:xg.autoApplied||0,
+    metrics:(measures||[]).filter(m=>m.state==="certified" && m.entity===xg.entity).map(m=>({
+      name:klSlug(m.name), label:m.name, definition:m.definition, currency:m.currency,
+      owner:m.owner, certifiedBy:m.certifiedBy||m.owner,
+      bindings:m.bindings.filter(b=>b.chosen).map(b=>({system:(srcGraphs.find(s=>s.id===b.srcId)||{}).name, expr:b.expr})),
+    })),
+    policy:{name:xg.policy||null, domain:xg.domain, owner:xg.owner,
+            sensitivity:xg.srcIds.flatMap(id=>{
+              const g=srcGraphs.find(s=>s.id===id); if(!g) return [];
+              const m=g.masters.find(x=>x.entity===xg.entity);
+              return ((g.assets||[]).find(a=>a.n===(m&&m.table))||{}).tags||[];
+            }).filter((v,i,a)=>a.indexOf(v)===i)},
+  };
+};
+
+// The adapter. Thin on purpose — everything interesting already happened in the IR.
+// Every artifact carries a provenance header and a custom-section marker, because the
+// regeneration contract (below) is only honest if the boundary is in the file itself.
+const klCompile = (ir, stamp, customs) => {
+  const C = customs||{};
+  const ent = klSlug(ir.entity);
+  const hdr = (what, extra) => [
+    "-- ─────────────────────────────────────────────────────────────",
+    `-- GENERATED BY EDG · Knowledge Layer · IR v${ir.irVersion}`,
+    `-- ${what}`,
+    `-- Entity: ${ir.entity}  ·  Intent: ${ir.intent}  ·  Target: ${ir.target}`,
+    `-- Generated: ${stamp}`,
+    ...(extra||[]).map(l=>"-- "+l),
+    "-- Do not edit above the custom-section marker: regeneration rewrites it.",
+    "-- ─────────────────────────────────────────────────────────────",
+  ].join("\n");
+  const withCustom = (path, body) => body + "\n\n" + KL_CUSTOM_OPEN + "\n" +
+    (C[path] ? C[path] : "-- (nothing yet — use “Custom section” to add your own SQL here)") +
+    "\n" + KL_CUSTOM_CLOSE + "\n";
+
+  const files = [];
+
+  ir.sources.forEach(s=>{
+    const path = `models/staging/stg_${klSlug(s.system)}__${ent}.sql`;
+    files.push({path, kind:"staging", body: withCustom(path,
+      hdr(`Staging model for ${s.system} — compiled from the resolution rule`, [
+        `Operating entity: ${s.opEntity||"unmapped"}`,
+        `Source master:    ${s.table||"none"}`,
+        `Rule provenance:  ${(s.rule&&s.rule.by)||"none"}${s.rule&&s.rule.conf?` (confidence ${s.rule.conf})`:""}`,
+        ...(s.rule&&s.rule.guard?[`Generator guard:  ${s.rule.guard}`]:[]),
+        "The pipeline and the governance cannot drift: this SELECT is compiled from the",
+        "same structured descriptor the resolver itself uses.",
+      ]) + "\n\n" + (s.sql || "-- no resolution rule — this source cannot be staged")) });
+  });
+
+  const dimPath = `models/marts/dim_${ent}.sql`;
+  files.push({path:dimPath, kind:"mart", body: withCustom(dimPath,
+    hdr(`Conformed dimension — one row per governed ${ir.entity.toLowerCase()}`, [
+      "Survivorship (which source wins per field), as decided by the steward:",
+      ...ir.survivorship.map(s=>`  · ${s.field} → ${s.wins}`),
+      `Match keys: ${ir.matchKeys.join(", ")||"none"}`,
+      "Per-record decisions and their deciders live in the crosswalk seed, deliberately:",
+      "a model an engineer reviews as code must not churn every time a steward decides",
+      "something. Rules change this file; individual decisions do not.",
+    ]) + "\n\n" +
+    "with members as (\n" +
+    ir.sources.map(s=>`  select * from {{ ref('stg_${klSlug(s.system)}__${ent}') }}`).join("\n  union all\n") +
+    "\n),\ncrosswalk as (\n  select * from {{ ref('xkg_" + ent + "_crosswalk') }}\n)\n\n" +
+    "select\n  x.golden_id,\n" +
+    ir.survivorship.map(s=>`  -- ${s.field}: ${s.wins}\n  max(case when m.source_system = '${s.wins}' then m.entity_name end) as ${klSlug(s.field)}`).join(",\n") +
+    ",\n  count(distinct m.source_system) as source_systems,\n  x.confidence,\n  x.decided_by\n" +
+    "from crosswalk x\njoin members m on m.source_pk = x.source_pk\ngroup by x.golden_id, x.confidence, x.decided_by") });
+
+  // The decision-stamped crosswalk. Steward names appear verbatim in the artifact —
+  // that is the point: the build can be defended, decision by decision.
+  files.push({path:`seeds/xkg_${ent}_crosswalk.csv`, kind:"seed", body:
+    "golden_id,name,method,confidence,status,decided_by,governs_usd,system,source_table,source_pk\n" +
+    ir.crosswalk.flatMap(c=>(c.members||[]).map(m=>
+      [c.golden_id,`"${c.name}"`,c.method,c.confidence,c.status,c.decided_by||"",c.governs_usd,
+       m.system,m.table,m.pk].join(","))).join("\n") + "\n"});
+
+  files.push({path:"models/marts/metrics.yml", kind:"metrics", body:
+    "# ─────────────────────────────────────────────────────────────\n" +
+    "# GENERATED BY EDG · compiled from CERTIFIED business terms only.\n" +
+    "# A term that is not certified does not appear here — which is how the\n" +
+    "# generated build and the live answer engine stay on one definition.\n" +
+    `# Generated: ${stamp}\n` +
+    "# ─────────────────────────────────────────────────────────────\n" +
+    "version: 2\nmetrics:\n" +
+    (ir.metrics.length
+      ? ir.metrics.map(m=>
+        `  - name: ${m.name}\n    label: "${m.label}"\n    description: "${m.definition}"\n` +
+        `    currency_policy: "${m.currency}"\n    owner: ${m.owner}\n    certified_by: ${m.certifiedBy}\n` +
+        `    model: ref('dim_${ent}')\n    bindings:\n` +
+        m.bindings.map(b=>`      - system: ${b.system}\n        expression: "${b.expr}"`).join("\n")).join("\n")
+      : "  # No certified terms for this entity yet. Certify one in the Worklist and regenerate.\n")});
+
+  files.push({path:"dbt_project.yml", kind:"config", body:
+    `# Generated by EDG · Knowledge Layer\nname: 'xkg_${ent}'\nversion: '1.0.0'\nprofile: '${ir.target}'\n` +
+    `models:\n  xkg_${ent}:\n    staging:\n      +materialized: view\n    marts:\n      +materialized: table\n` +
+    (ir.policy.name ? `      +meta:\n        edg_policy: "${ir.policy.name}"\n        edg_domain: "${ir.policy.domain}"\n        edg_owner: "${ir.policy.owner}"\n        edg_sensitivity: "${ir.policy.sensitivity.join(", ")||"none"}"\n` : "")});
+
+  files.push({path:"README.md", kind:"doc", body:
+    `# ${ir.entity} — governed build\n\nGenerated by **EDG · Knowledge Layer** from the ${ir.entity} cross-source knowledge graph.\n` +
+    `IR version ${ir.irVersion} · intent \`${ir.intent}\` · target \`${ir.target}\` · generated ${stamp}.\n\n` +
+    `## What is governed here\n\n` +
+    `| | |\n|---|---|\n| Match keys | ${ir.matchKeys.join(", ")||"none"} |\n` +
+    `| Sources | ${ir.sources.map(s=>`${s.system} (${s.opEntity||"unmapped"})`).join(", ")} |\n` +
+    `| Auto-confirmed members | ${ir.autoApplied.toLocaleString()} |\n` +
+    `| Steward-adjudicated | ${ir.crosswalk.filter(c=>c.status!=="open").length} |\n` +
+    `| Still open | ${ir.crosswalk.filter(c=>c.status==="open").length} |\n` +
+    `| Certified metrics | ${ir.metrics.length} |\n` +
+    `| Policy | ${ir.policy.name||"none"} |\n\n` +
+    `## The regeneration contract\n\n` +
+    `Everything above a \`CUSTOM SECTION\` marker is generated and **will be rewritten**.\n` +
+    `Everything below it is yours and is **carried into every future generation**.\n\n` +
+    `When governance changes upstream — a golden record renamed, a term certified, a\n` +
+    `survivorship rule changed — regeneration produces a **reviewed diff against the\n` +
+    `accepted baseline**, not a destructive rebuild. You approve or discard it.\n\n` +
+    `## Honest boundaries\n\n` +
+    `This preview generates staging models, the conformed dimension, the decision-stamped\n` +
+    `crosswalk seed and metrics. Fact tables and load patterns (bulk / CDC / streaming)\n` +
+    `are the next phase.\n`});
+
+  return files;
+};
+
+// Diff against the accepted baseline. Generation timestamps are normalised out, so a
+// regeneration that changed no governance honestly proposes nothing at all.
+const klNormalise = body => String(body)
+  .split("\n").filter(l=>!/^(--|#)\s*Generated:/.test(l.trim()) && !/generated \d{4}-\d{2}-\d{2}/i.test(l)).join("\n");
+const klDiff = (baseline, next) => {
+  const bi = {}; (baseline||[]).forEach(f=>{ bi[f.path]=klNormalise(f.body); });
+  const ni = {}; (next||[]).forEach(f=>{ ni[f.path]=klNormalise(f.body); });
+  const changed=[], added=[], removed=[];
+  Object.keys(ni).forEach(p=>{ if(!(p in bi)) added.push(p); else if(bi[p]!==ni[p]) changed.push(p); });
+  Object.keys(bi).forEach(p=>{ if(!(p in ni)) removed.push(p); });
+  return {changed, added, removed, count:changed.length+added.length+removed.length};
+};
+// Line-level diff for one file, so "what governance changed" is legible rather than asserted.
+const klLineDiff = (a,b) => {
+  const A=klNormalise(a||"").split("\n"), B=klNormalise(b||"").split("\n");
+  const setA=new Set(A), setB=new Set(B);
+  return {removed:A.filter(l=>l.trim()&&!setB.has(l)).slice(0,14),
+          added:  B.filter(l=>l.trim()&&!setA.has(l)).slice(0,14)};
+};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GRAPH CANVAS — the knowledge graph itself.
@@ -24659,9 +25091,676 @@ const KLStepRail = ({steps,cur,onPick,doneSet}) => (
   </div>
 );
 
+// ── The Knowledge Layer's governed state lives OUTSIDE the view ──
+// Decisions, certified terms, the trust dial and generated builds are governed objects, not
+// screen state: they must survive a walk to the Glossary and back. Same module-store + subscribe
+// pattern the policies, glossary and notification stores already use.
+let _klState = {
+  src: KL_SRC_SEED, x: KL_X_SEED, measures: KL_MEASURES, trust: KL_TRUST_DEFAULT, builds: {},
+  layerHist: [{at:"2026-08-19 09:00", by:"alex.rivera", kind:"human", action:"Trust dial set",
+    detail:"Entity match 0.90 · Column classification 0.85 · Business term 0.80 · review by default"}],
+};
+const _klStateSubs = new Set();
+const klStoreSet = (patch)=>{
+  _klState = {..._klState, ...(typeof patch==="function" ? patch(_klState) : patch)};
+  _klStateSubs.forEach(f=>f());
+};
+const useKLStore = ()=>{
+  const [,f] = useState(0);
+  useEffect(()=>{ const fn=()=>f(n=>n+1); _klStateSubs.add(fn); return ()=>{_klStateSubs.delete(fn);}; },[]);
+  return _klState;
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// THE STEWARD SURFACES
+// One rule holds across all of them: the machine proposes and shows its work;
+// a person decides; and the decision is written down with their name on it.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── C1 · the audit trail, reachable from every governed object ──
+const KLHistoryDrawer = ({open, onClose, title, kicker, entries}) => {
+  if(!open) return null;
+  return createPortal(
+    <div onClick={onClose} className="fadeIn" style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}>
+      <div onClick={e=>e.stopPropagation()} className="slideInRight"
+        style={{position:"absolute",top:0,right:0,bottom:0,width:520,maxWidth:"96vw",background:T.bgSurface,
+          borderLeft:`1px solid ${T.border}`,boxShadow:"-12px 0 48px rgba(0,0,0,.32)",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"14px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexShrink:0,background:T.bgElevated}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{kicker||"Change history"}</div>
+            <div style={{fontSize:14.5,fontWeight:700,color:T.text,marginTop:2}}>{title}</div>
+          </div>
+          <button onClick={onClose} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.x(12)}</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"18px 22px"}}>
+          <div style={{fontSize:12,color:T.textSub,lineHeight:1.65,marginBottom:16}}>
+            Append-only. Nothing here is edited or removed, and a human decision is never
+            overwritten by automation without a new entry recording it.
+          </div>
+          {(entries||[]).length===0
+            ? <div style={{fontSize:12.5,color:T.textMuted}}>No changes recorded yet.</div>
+            : (entries||[]).map((h,i)=>(
+              <div key={i} style={{display:"flex",gap:11,paddingBottom:16,position:"relative"}}>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0}}>
+                  <span style={{width:9,height:9,borderRadius:"50%",marginTop:4,flexShrink:0,
+                    background:h.kind==="ai"?T.violet:T.accent, border:`2px solid ${T.bgSurface}`,
+                    boxShadow:`0 0 0 1.5px ${h.kind==="ai"?T.violet:T.accent}55`}}/>
+                  {i<entries.length-1&&<span style={{flex:1,width:1.5,background:T.border,marginTop:3}}/>}
+                </div>
+                <div style={{minWidth:0,flex:1}}>
+                  <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
+                    <span style={{fontSize:12.6,fontWeight:700,color:T.text}}>{h.action}</span>
+                    <span style={{fontSize:9.5,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase",padding:"2px 6px",borderRadius:4,
+                      background:h.kind==="ai"?T.violetDim:T.accentDim, color:h.kind==="ai"?T.violet:T.accent,
+                      border:`1px solid ${(h.kind==="ai"?T.violet:T.accent)}33`}}>{h.kind==="ai"?"automation":"person"}</span>
+                  </div>
+                  <div style={{fontSize:11.8,color:T.textSub,lineHeight:1.6,marginTop:3}}>{h.detail}</div>
+                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:4,fontFamily:"'Geist Mono',monospace"}}>{h.by} · {h.at}</div>
+                </div>
+              </div>
+            ))}
+        </div>
+      </div>
+    </div>, document.body);
+};
+
+// ── C1 · the envelope, rendered the same way on every object ──
+const KLEnvelope = ({env}) => {
+  if(!env) return null;
+  const isAi = env.by==="ai";
+  return (
+    <span style={{display:"inline-flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+      <span title={env.src} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:10.5,fontWeight:700,padding:"3px 8px",borderRadius:5,
+        background:isAi?T.violetDim:T.accentDim, color:isAi?T.violet:T.accent, border:`1px solid ${(isAi?T.violet:T.accent)}33`}}>
+        {isAi?"AI":"Steward"} · {env.src}
+      </span>
+      {env.conf!=null&&env.conf<1&&(
+        <span style={{fontSize:10.5,fontWeight:700,padding:"3px 8px",borderRadius:5,fontFamily:"'Geist Mono',monospace",
+          background:env.conf>=0.9?T.green+"1a":T.amber+"1a", color:env.conf>=0.9?T.green:T.amber,
+          border:`1px solid ${(env.conf>=0.9?T.green:T.amber)}44`}}>{env.conf.toFixed(2)}</span>
+      )}
+    </span>
+  );
+};
+
+// ── C5 · the trust dial ──
+// The automation boundary, made explicit and tunable. One threshold per object type,
+// because a match decision and a column classification are not equally expensive to get wrong.
+const KLTrustDial = ({trust, setTrust, items, canApply, onRequest, onApply}) => {
+  const [draft,setDraft] = useState(trust);
+  const [open,setOpen]   = useState(false);
+  useEffect(()=>{ setDraft(trust); },[trust]);
+  const dirty = KL_TRUST_TYPES.some(t=>draft[t.k]!==trust[t.k]) || draft.posture!==trust.posture;
+  const prev  = klDialPreview(items, draft.match);
+  const now   = klDialPreview(items, trust.match);
+  const delta = prev.auto - now.auto;
+  return (
+    <Card2 style={{padding:16,marginBottom:14}}>
+      <SH title="Trust dial"
+        sub="Above the threshold the resolver confirms and stamps itself as the decider. Below it, the decision waits for you."
+        action={<Btn small ghost onClick={()=>setOpen(o=>!o)}>{open?"Hide":"Adjust"}</Btn>}/>
+      <div style={{display:"flex",gap:9,flexWrap:"wrap",alignItems:"center"}}>
+        {KL_TRUST_TYPES.map(t=>(
+          <span key={t.k} title={t.d} style={{display:"inline-flex",alignItems:"center",gap:7,padding:"6px 11px",borderRadius:8,
+            background:T.bgElevated,border:`1px solid ${T.border}`}}>
+            <span style={{fontSize:11.5,color:T.textSub}}>{t.l}</span>
+            <b style={{fontSize:12.5,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{trust[t.k].toFixed(2)}</b>
+          </span>
+        ))}
+        <span style={{display:"inline-flex",alignItems:"center",gap:7,padding:"6px 11px",borderRadius:8,
+          background:T.bgElevated,border:`1px solid ${T.border}`}}>
+          <span style={{fontSize:11.5,color:T.textSub}}>Default posture</span>
+          <b style={{fontSize:12,color:trust.posture==="review"?T.amber:T.green}}>
+            {trust.posture==="review"?"Review by default":"Approve by default"}</b>
+        </span>
+        {!canApply&&<span style={{fontSize:11,color:T.textMuted,marginLeft:"auto"}}>Changing the dial needs an admin or the layer owner.</span>}
+      </div>
+
+      {open&&(
+        <div style={{marginTop:14,paddingTop:14,borderTop:`1px solid ${T.border}`}}>
+          {KL_TRUST_TYPES.map(t=>(
+            <div key={t.k} style={{display:"flex",alignItems:"center",gap:13,flexWrap:"wrap",marginBottom:11}}>
+              <span style={{minWidth:170}}>
+                <span style={{display:"block",fontSize:12.3,fontWeight:600,color:T.text}}>{t.l}</span>
+                <span style={{display:"block",fontSize:10.8,color:T.textMuted,marginTop:1}}>{t.d}</span>
+              </span>
+              <input type="range" min="0.5" max="1" step="0.01" value={draft[t.k]}
+                onChange={e=>setDraft(d=>({...d,[t.k]:parseFloat(e.target.value)}))}
+                style={{flex:1,minWidth:170,accentColor:T.accent,cursor:"pointer"}}/>
+              <b style={{fontSize:13,color:draft[t.k]!==trust[t.k]?T.accent:T.text,fontFamily:"'Geist Mono',monospace",minWidth:42,textAlign:"right"}}>
+                {draft[t.k].toFixed(2)}</b>
+            </div>
+          ))}
+          <div style={{display:"flex",alignItems:"center",gap:11,flexWrap:"wrap",marginTop:6,marginBottom:12}}>
+            <span style={{fontSize:12.3,fontWeight:600,color:T.text,minWidth:170}}>Default posture</span>
+            <select value={draft.posture} onChange={e=>setDraft(d=>({...d,posture:e.target.value}))}
+              style={{padding:"6px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,cursor:"pointer"}}>
+              <option value="review">Review by default — anything below the threshold waits for a person</option>
+              <option value="approve">Approve by default — apply and notify, a person can still reverse it</option>
+            </select>
+          </div>
+
+          {/* Forward preview — nothing is applied until it is applied. */}
+          <div style={{display:"flex",gap:13,flexWrap:"wrap",alignItems:"center",padding:"11px 14px",borderRadius:9,
+            background:dirty?T.accentDim:T.bgElevated, border:`1px solid ${dirty?T.accent+"44":T.border}`}}>
+            <span style={{fontSize:12.4,color:T.textSub,lineHeight:1.6}}>
+              At <b style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{draft.match.toFixed(2)}</b> the resolver would
+              auto-confirm <b style={{color:T.green,fontFamily:"'Geist Mono',monospace"}}>{prev.auto}</b> open decision{prev.auto===1?"":"s"}
+              {" "}({klMoney(prev.autoMoney)}) and leave <b style={{color:T.amber,fontFamily:"'Geist Mono',monospace"}}>{prev.wait}</b> for you
+              {" "}({klMoney(prev.waitMoney)}).
+              {delta!==0&&<> That is <b style={{color:delta>0?T.amber:T.green}}>{delta>0?`${delta} more`:`${-delta} fewer`}</b> than today.</>}
+            </span>
+            <span style={{marginLeft:"auto",display:"flex",gap:7}}>
+              <Btn small ghost onClick={()=>setDraft(trust)}>Reset</Btn>
+              {canApply
+                ? <Btn small variant="primary" disabled={!dirty} onClick={()=>{onApply(draft);setOpen(false);}}>Apply</Btn>
+                : <Btn small variant="primary" disabled={!dirty} onClick={()=>{onRequest(draft);setOpen(false);}}>Send for approval</Btn>}
+            </span>
+          </div>
+          <div style={{fontSize:11,color:T.textMuted,marginTop:9}}>
+            Applying the dial changes governed state. The change is recorded in the audit trail with
+            your name, the old value and the new one.
+          </div>
+        </div>
+      )}
+    </Card2>
+  );
+};
+
+// ── C3 · one decision in the queue ──
+// Rank, the money it governs, the evidence, the values that disagree, and the verbs.
+// Everything a person needs to decide, without leaving the row.
+const KLDecisionCard = ({it, rank, srcById, selected, onSelect, onVerb, onHistory, canCurate}) => {
+  const [open,setOpen]   = useState(rank===1);
+  const [why,setWhy]     = useState("");
+  const [asking,setAsk]  = useState(null);   // which verb is collecting a reason
+  const cls    = KL_CONF_CLASS[it.cls]||{l:it.cls,d:""};
+  const done   = it.state!=="open";
+  const fields = [...new Set((it.members||[]).flatMap(m=>Object.keys(m.vals||{})))];
+  const differs = f => new Set((it.members||[]).map(m=>m.vals?.[f])).size>1;
+  const th = {padding:"7px 11px",fontSize:10,fontWeight:700,color:T.textMuted,textAlign:"left",
+              textTransform:"uppercase",letterSpacing:"0.06em",borderBottom:`1px solid ${T.border}`};
+  const STATE_STYLE = {
+    confirmed:{l:"Confirmed as one record", c:T.green},
+    held:     {l:"Held for later",          c:T.amber},
+    split:    {l:"Kept as separate records",c:T.blue},
+    rejected: {l:"Rejected",                c:T.rose},
+    single:   {l:"Accepted as single-source",c:T.blue},
+    auto:     {l:"Auto-confirmed",          c:T.green},
+  };
+  const st = STATE_STYLE[it.state];
+  const verb = (label, v, danger, needsReason) => (
+    <Btn small ghost={!danger&&v!=="confirm"} variant={v==="confirm"?"primary":danger?"danger":undefined}
+      onClick={()=>{ if(needsReason){ setAsk(v); } else { onVerb(it, v, null); } }}>{label}</Btn>
+  );
+
+  return (
+    <Card2 style={{padding:0,marginBottom:10,opacity:done?0.72:1,
+      borderColor:selected?T.accent+"66":done?T.border:T.border}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",padding:"13px 15px",cursor:"pointer"}}
+        onClick={()=>setOpen(o=>!o)}>
+        {canCurate&&!done&&(
+          <span onClick={e=>{e.stopPropagation();onSelect(it.id);}}
+            style={{width:17,height:17,borderRadius:5,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+              fontSize:11,color:"#fff",background:selected?T.accent:"transparent",
+              border:`1.5px solid ${selected?T.accent:T.borderLight}`}}>{selected?"✓":""}</span>
+        )}
+        <span style={{fontSize:10.5,fontWeight:800,color:T.textMuted,fontFamily:"'Geist Mono',monospace",minWidth:22}}>#{rank}</span>
+        <span style={{minWidth:0,flex:"1 1 190px"}}>
+          <span style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            <b style={{fontSize:13.5,color:T.text}}>{it.name}</b>
+            <KLChip kind="plain">{it.entity}</KLChip>
+            {st&&<span style={{fontSize:10.5,fontWeight:700,padding:"2px 7px",borderRadius:5,background:st.c+"1a",color:st.c,border:`1px solid ${st.c}44`}}>{st.l}</span>}
+          </span>
+          <span style={{display:"block",fontSize:11.5,color:done?T.textMuted:T.amber,marginTop:3}}>{it.issue}</span>
+        </span>
+        {/* the money the decision governs — the whole reason this row is where it is */}
+        <span style={{textAlign:"right",minWidth:104}}>
+          <span style={{display:"block",fontSize:15,fontWeight:800,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{klMoney(it.governs)}</span>
+          <span style={{display:"block",fontSize:10,color:T.textMuted}}>across {it.apps} source{it.apps===1?"":"s"}</span>
+        </span>
+        <span title={cls.d} style={{display:"flex",flexDirection:"column",alignItems:"center",minWidth:66}}>
+          <span style={{fontSize:12.5,fontWeight:800,fontFamily:"'Geist Mono',monospace",
+            color:it.conf>=0.9?T.green:it.conf>=0.7?T.amber:T.rose}}>{it.conf.toFixed(2)}</span>
+          <span style={{fontSize:9.5,color:T.textMuted,whiteSpace:"nowrap"}}>{cls.l}</span>
+        </span>
+        <span style={{color:T.textMuted,display:"flex",transform:open?"rotate(90deg)":"none",transition:"transform .15s"}}>{Ic.chevRight(12)}</span>
+      </div>
+
+      {open&&(
+        <div style={{padding:"0 15px 14px",borderTop:`1px solid ${T.border}`}}>
+          <div style={{display:"flex",gap:9,padding:"11px 13px",margin:"12px 0",borderRadius:9,
+            background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:12.2,color:T.textSub,lineHeight:1.65}}>
+            <span style={{color:T.violet,display:"flex",flexShrink:0,marginTop:1}}>{Ic.bot(13)}</span>
+            <div><b style={{color:T.text}}>Why the resolver is unsure.</b> {it.evidence}</div>
+          </div>
+
+          {fields.length>0&&(
+            <div style={{overflowX:"auto",marginBottom:12}}>
+              <table style={{width:"100%",borderCollapse:"collapse"}}>
+                <thead><tr style={{background:T.bgElevated}}>
+                  <th style={th}>Field</th>
+                  {(it.members||[]).map(m=><th key={m.srcId+m.pk} style={th}>{srcById(m.srcId)?.name||m.srcId}</th>)}
+                </tr></thead>
+                <tbody>
+                  {fields.map(f=>{
+                    const bad = differs(f);
+                    return (
+                      <tr key={f}>
+                        <td style={{padding:"8px 11px",fontSize:11.5,color:T.textSub,borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>{f}</td>
+                        {(it.members||[]).map(m=>(
+                          <td key={m.srcId+m.pk} style={{padding:"8px 11px",fontSize:11.5,borderBottom:`1px solid ${T.border}`,
+                            fontFamily:"'Geist Mono',monospace", background:bad?T.amber+"14":"transparent",
+                            color:bad?T.amber:T.textSub, fontWeight:bad?700:400}}>{m.vals?.[f]||"—"}</td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+            {(it.members||[]).map(m=>(
+              <span key={m.srcId+m.pk} style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:10.5,padding:"3px 8px",borderRadius:6,
+                background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted}}>
+                <ServiceIcon service={srcById(m.srcId)?.service} size={11}/>
+                {srcById(m.srcId)?.opEntity||srcById(m.srcId)?.name} · {m.table} · {m.pk}
+              </span>
+            ))}
+          </div>
+
+          {done ? (
+            <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",padding:"10px 13px",borderRadius:9,
+              background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:12,color:T.textSub}}>
+              <span>Decided by <b style={{color:T.text}}>{it.decidedBy}</b> on {it.decidedAt}
+                {it.reason?<> — “{it.reason}”</>:null}. This decision survives re-resolution.</span>
+              <span style={{marginLeft:"auto",display:"flex",gap:6}}>
+                <Btn small ghost onClick={()=>onHistory(it)}>History</Btn>
+                {canCurate&&<Btn small ghost onClick={()=>onVerb(it,"reopen",null)}>Reopen</Btn>}
+              </span>
+            </div>
+          ) : asking ? (
+            <div style={{padding:"12px 13px",borderRadius:9,background:T.bgElevated,border:`1px solid ${T.amber}44`}}>
+              <div style={{fontSize:11.5,fontWeight:700,color:T.text,marginBottom:7}}>
+                {asking==="reject"?"Why is this not a match?":"Why are you keeping these separate?"}
+              </div>
+              <div style={{fontSize:11,color:T.textMuted,marginBottom:9,lineHeight:1.6}}>
+                The reason is stored with the decision and, once the learning loop ships, stops this
+                pair from ever being proposed again.
+              </div>
+              <Input2 value={why} onChange={e=>setWhy(e.target.value)} placeholder="e.g. two subsidiaries that legitimately share a filing ID"/>
+              <div style={{display:"flex",gap:7,marginTop:10,justifyContent:"flex-end"}}>
+                <Btn small ghost onClick={()=>{setAsk(null);setWhy("");}}>Cancel</Btn>
+                <Btn small variant="primary" disabled={!why.trim()}
+                  onClick={()=>{onVerb(it,asking,why.trim());setAsk(null);setWhy("");}}>Record decision</Btn>
+              </div>
+            </div>
+          ) : canCurate ? (
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+              {it.kind==="conflict" ? (<>
+                {verb("Confirm as one record","confirm")}
+                {verb("Keep separate","split",false,true)}
+                {verb("Hold","hold")}
+                {verb("Not a match","reject",true,true)}
+              </>) : (<>
+                {verb("Accept as single-source","single")}
+                {verb("Hold","hold")}
+                {verb("Not a real entity","reject",true,true)}
+              </>)}
+              <span style={{marginLeft:"auto"}}><Btn small ghost onClick={()=>onHistory(it)}>History</Btn></span>
+            </div>
+          ) : (
+            <div style={{fontSize:11.5,color:T.textMuted}}>
+              Your role can review this decision but not make it. Curation verbs are open to stewards, owners and admins.
+            </div>
+          )}
+        </div>
+      )}
+    </Card2>
+  );
+};
+
+// ── C7 · certifying a measure ──
+// The steward's verb is confirm-or-edit, never blank-form authoring: the definition and the
+// per-application bindings arrive drafted, with the disagreement between sources made explicit.
+const KLTermCard = ({m, srcById, onCertify, onPick, canCertify}) => {
+  const [open,setOpen] = useState(m.state!=="certified");
+  const certified = m.state==="certified";
+  const bySrc = {};
+  (m.bindings||[]).forEach(b=>{ (bySrc[b.srcId]=bySrc[b.srcId]||[]).push(b); });
+  return (
+    <Card2 style={{padding:0,marginBottom:10}}>
+      <div onClick={()=>setOpen(o=>!o)} style={{display:"flex",alignItems:"center",gap:11,flexWrap:"wrap",padding:"13px 15px",cursor:"pointer"}}>
+        <span style={{minWidth:0,flex:"1 1 200px"}}>
+          <span style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            <b style={{fontSize:13.5,color:T.text}}>{m.name}</b>
+            <KLChip kind="plain">{m.entity}</KLChip>
+            {certified
+              ? <span style={{fontSize:10.5,fontWeight:700,padding:"2px 7px",borderRadius:5,background:T.green+"1a",color:T.green,border:`1px solid ${T.green}44`}}>Certified</span>
+              : <span style={{fontSize:10.5,fontWeight:700,padding:"2px 7px",borderRadius:5,background:T.amber+"1a",color:T.amber,border:`1px solid ${T.amber}44`}}>Candidate</span>}
+            {m.drafted==="ai"&&!certified&&(
+              <span style={{fontSize:10.5,fontWeight:700,padding:"2px 7px",borderRadius:5,background:T.violetDim,color:T.violet,border:`1px solid ${T.violet}33`}}>
+                AI-drafted · {m.conf.toFixed(2)}</span>)}
+          </span>
+          <span style={{display:"block",fontSize:11.5,color:T.textMuted,marginTop:3}}>
+            {(m.bindings||[]).filter(b=>b.chosen).length} of {(m.bindings||[]).length} candidate sources chosen
+            {certified?` · certified by ${m.certifiedBy} on ${m.certifiedAt}`:""}
+          </span>
+        </span>
+        <span style={{color:T.textMuted,display:"flex",transform:open?"rotate(90deg)":"none",transition:"transform .15s"}}>{Ic.chevRight(12)}</span>
+      </div>
+      {open&&(
+        <div style={{padding:"0 15px 14px",borderTop:`1px solid ${T.border}`}}>
+          <div style={{fontSize:12.5,color:T.text,lineHeight:1.7,margin:"12px 0 4px"}}>{m.definition}</div>
+          {m.note&&<div style={{fontSize:11.5,color:T.amber,lineHeight:1.6,marginBottom:10}}>{m.note}</div>}
+          <div style={{display:"flex",gap:9,flexWrap:"wrap",marginBottom:12}}>
+            <span style={{fontSize:11,color:T.textSub,padding:"5px 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+              <b style={{color:T.text}}>Owner</b> · {m.owner}</span>
+            <span style={{fontSize:11,color:T.textSub,padding:"5px 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+              <b style={{color:T.text}}>Currency</b> · {m.currency}</span>
+            <span style={{fontSize:11,color:T.textSub,padding:"5px 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+              <b style={{color:T.text}}>Domain</b> · {m.domain}</span>
+          </div>
+
+          <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:7}}>
+            Which source answers this, per application
+          </div>
+          {Object.keys(bySrc).map(sid=>{
+            const g = srcById(sid);
+            const many = bySrc[sid].length>1;
+            return (
+              <div key={sid} style={{marginBottom:9}}>
+                <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:5}}>
+                  <ServiceIcon service={g?.service} size={14}/>
+                  <span style={{fontSize:12,fontWeight:600,color:T.text}}>{g?.name||sid}</span>
+                  {g?.opEntity&&<span style={{fontSize:10.5,color:T.textMuted}}>· {g.opEntity}</span>}
+                  {many&&<span style={{fontSize:10.5,color:T.amber,fontWeight:600}}>· {bySrc[sid].length} candidate definitions disagree</span>}
+                </div>
+                {bySrc[sid].map((b,bi)=>(
+                  <div key={bi} onClick={()=>!certified&&canCertify&&onPick(m.id,b)}
+                    style={{display:"flex",gap:10,padding:"9px 11px",marginBottom:5,borderRadius:9,
+                      cursor:(!certified&&canCertify)?"pointer":"default",
+                      background:b.chosen?T.accentDim:T.bgSurface,
+                      border:`1px solid ${b.chosen?T.accent+"55":T.border}`}}>
+                    <span style={{width:14,height:14,borderRadius:"50%",flexShrink:0,marginTop:2,
+                      border:`1.5px solid ${b.chosen?T.accent:T.borderLight}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      {b.chosen&&<span style={{width:6,height:6,borderRadius:"50%",background:T.accent}}/>}
+                    </span>
+                    <span style={{minWidth:0}}>
+                      <span style={{display:"block",fontSize:12.2,fontWeight:600,color:T.text}}>{b.label}</span>
+                      <span style={{display:"block",fontSize:11,color:T.textSub,fontFamily:"'Geist Mono',monospace",marginTop:2}}>{b.expr}</span>
+                      <span style={{display:"block",fontSize:11,color:T.textMuted,marginTop:3,lineHeight:1.55}}>{b.why}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+
+          {!certified&&(
+            <div style={{display:"flex",gap:9,alignItems:"center",flexWrap:"wrap",padding:"11px 13px",marginTop:6,borderRadius:9,
+              background:T.bgElevated,border:`1px solid ${T.border}`}}>
+              <span style={{fontSize:11.8,color:T.textSub,lineHeight:1.6}}>
+                Certifying changes what the live answer engine returns, and compiles this definition into
+                every generated build. It does not change any source system.
+              </span>
+              <span style={{marginLeft:"auto"}}>
+                {canCertify
+                  ? <Btn small variant="primary" onClick={()=>onCertify(m.id)}>Certify</Btn>
+                  : <span style={{fontSize:11,color:T.textMuted}}>Stewards and owners certify.</span>}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+    </Card2>
+  );
+};
+
+// ── C8 · Mode 2 — generate the governed build ──
+// The build is a governed object, not a button: it is generated from the XKG, every artifact
+// is traceable to the decision that produced it, and a governance change upstream produces a
+// reviewed diff against the accepted baseline — never a destructive rebuild.
+const KLBuildPane = ({xg, build, srcGraphs, measures, canApprove, canGenerate,
+                      onGenerate, onApprove, onDiscard, onCustom, onDownload, onHistory}) => {
+  const [intent,setIntent] = useState((build&&build.intent)||"bi");
+  const [target,setTarget] = useState((build&&build.target)||"databricks");
+  const [selFile,setSelFile] = useState(null);
+  const [editing,setEditing] = useState(null);
+  const [draft,setDraft]     = useState("");
+
+  const files    = (build&&(build.proposed||build.baseline))||null;
+  const isProposed = !!(build&&build.proposed);
+  const diff     = isProposed ? klDiff(build.baseline, build.proposed) : null;
+  const cur      = files && (files.find(f=>f.path===selFile) || files[0]);
+  useEffect(()=>{ if(files && !files.some(f=>f.path===selFile)) setSelFile(files[0].path); },[build]);
+
+  if(!build){
+    const ir = klBuildIR(xg, srcGraphs, measures, {intent,target});
+    return (
+      <>
+        <Card2 style={{padding:18,marginBottom:14}}>
+          <SH title="Generate the governed build"
+            sub="This graph is already the build spec. Generating turns it into readable pipeline code you own, with the governance compiled in."/>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(230px,1fr))",gap:12,marginTop:4}}>
+            <div>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:7}}>
+                What are you building this for?
+              </div>
+              {KL_INTENTS.map(o=>(
+                <div key={o.k} onClick={()=>setIntent(o.k)}
+                  style={{display:"flex",gap:9,padding:"9px 11px",marginBottom:5,cursor:"pointer",borderRadius:9,
+                    background:intent===o.k?T.accentDim:T.bgElevated, border:`1px solid ${intent===o.k?T.accent+"55":T.border}`}}>
+                  <span style={{width:14,height:14,borderRadius:"50%",flexShrink:0,marginTop:2,
+                    border:`1.5px solid ${intent===o.k?T.accent:T.borderLight}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    {intent===o.k&&<span style={{width:6,height:6,borderRadius:"50%",background:T.accent}}/>}</span>
+                  <span><span style={{display:"block",fontSize:12.3,fontWeight:600,color:T.text}}>{o.l}</span>
+                    <span style={{display:"block",fontSize:11,color:T.textMuted,marginTop:2}}>{o.d}</span></span>
+                </div>
+              ))}
+              <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>The shape is your call. We do not guess it.</div>
+            </div>
+            <div>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:7}}>
+                Where does it land?
+              </div>
+              {KL_TARGETS.map(o=>(
+                <div key={o.k} onClick={()=>o.ready&&setTarget(o.k)}
+                  style={{display:"flex",gap:9,padding:"9px 11px",marginBottom:5,cursor:o.ready?"pointer":"default",borderRadius:9,opacity:o.ready?1:.55,
+                    background:target===o.k?T.accentDim:T.bgElevated, border:`1px solid ${target===o.k?T.accent+"55":T.border}`}}>
+                  <span style={{width:14,height:14,borderRadius:"50%",flexShrink:0,marginTop:2,
+                    border:`1.5px solid ${target===o.k?T.accent:T.borderLight}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    {target===o.k&&<span style={{width:6,height:6,borderRadius:"50%",background:T.accent}}/>}</span>
+                  <span><span style={{display:"block",fontSize:12.3,fontWeight:600,color:T.text}}>{o.l}{!o.ready&&" — planned"}</span>
+                    <span style={{display:"block",fontSize:11,color:T.textMuted,marginTop:2}}>{o.d}</span></span>
+                </div>
+              ))}
+              <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>
+                One intermediate representation, thin adapters. The same governed model lands anywhere.
+              </div>
+            </div>
+          </div>
+        </Card2>
+
+        <Card2 style={{padding:18,marginBottom:14}}>
+          <SH title="What will be compiled in" sub="Read from this graph — nothing here is typed by hand."/>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12}}>
+            <Metric label="Source systems"    value={String(ir.sources.length)} sub={ir.sources.map(s=>s.opEntity).filter(Boolean).join(" · ")}/>
+            <Metric label="Auto-confirmed"    value={ir.autoApplied.toLocaleString()} color={T.green} sub="resolver decided"/>
+            <Metric label="Steward-adjudicated" value={String(ir.crosswalk.filter(c=>c.status!=="open").length)} sub="named in the artifacts"/>
+            <Metric label="Still open"        value={String(ir.crosswalk.filter(c=>c.status==="open").length)}
+              color={ir.crosswalk.some(c=>c.status==="open")?T.amber:T.green} sub="ship as unresolved"/>
+            <Metric label="Certified metrics" value={String(ir.metrics.length)}
+              color={ir.metrics.length?T.green:T.textMuted} sub={ir.metrics.length?undefined:"certify a term first"}/>
+          </div>
+          {ir.metrics.length===0&&(
+            <KLNote tone="quiet">
+              No certified term covers <b>{xg.entity}</b> yet, so <b>metrics.yml</b> will generate empty.
+              Certify one in the <b>Worklist › Terms</b> and regenerate — the diff will show exactly what changed.
+            </KLNote>
+          )}
+          {ir.crosswalk.some(c=>c.status==="open")&&(
+            <KLNote>
+              {ir.crosswalk.filter(c=>c.status==="open").length} decisions are still open. They will be generated
+              with status <b>open</b> and no decider — the build never pretends a decision was made.
+            </KLNote>
+          )}
+        </Card2>
+
+        <div style={{display:"flex",gap:9,alignItems:"center",flexWrap:"wrap"}}>
+          {canGenerate
+            ? <Btn variant="primary" small icon={Ic.workflow(12)} onClick={()=>onGenerate(intent,target)}>Generate governed build</Btn>
+            : <span style={{fontSize:12,color:T.textMuted}}>Generating a build is open to data engineers, owners and admins.</span>}
+          <span style={{fontSize:11.5,color:T.textMuted}}>Generation is itself an audited, governed act.</span>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {/* the regeneration diff — the make-or-break of the whole promise */}
+      {isProposed&&(
+        <Card2 style={{padding:16,marginBottom:14,background:T.amberDim,borderColor:T.amber+"55"}}>
+          <SH title={diff.count===0?"Regenerated — nothing changed":`Proposed build · ${diff.count} artifact${diff.count===1?"":"s"} changed`}
+            sub={diff.count===0
+              ? "Governance has not moved since the accepted baseline, so this proposes nothing. Discard it."
+              : "Reviewed diff against the accepted baseline. Your custom sections are already carried over."}/>
+          {diff.count>0&&(
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+              {diff.changed.map(f=><span key={f} onClick={()=>setSelFile(f)} style={{cursor:"pointer",fontSize:11,fontFamily:"'Geist Mono',monospace",padding:"4px 9px",borderRadius:6,background:T.amber+"1a",color:T.amber,border:`1px solid ${T.amber}44`}}>~ {f}</span>)}
+              {diff.added.map(f=><span key={f} onClick={()=>setSelFile(f)} style={{cursor:"pointer",fontSize:11,fontFamily:"'Geist Mono',monospace",padding:"4px 9px",borderRadius:6,background:T.green+"1a",color:T.green,border:`1px solid ${T.green}44`}}>+ {f}</span>)}
+              {diff.removed.map(f=><span key={f} style={{fontSize:11,fontFamily:"'Geist Mono',monospace",padding:"4px 9px",borderRadius:6,background:T.rose+"1a",color:T.rose,border:`1px solid ${T.rose}44`}}>− {f}</span>)}
+            </div>
+          )}
+          {diff.count>0&&cur&&(()=>{
+            const before = (build.baseline||[]).find(f=>f.path===cur.path);
+            const ld = klLineDiff(before&&before.body, cur.body);
+            if(!ld.added.length&&!ld.removed.length) return null;
+            return (
+              <div style={{background:T.bg,border:`1px solid ${T.border}`,borderRadius:9,padding:"10px 12px",marginBottom:12,overflowX:"auto"}}>
+                <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>
+                  {cur.path}
+                </div>
+                {ld.removed.map((l,i)=><div key={"r"+i} style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.rose,whiteSpace:"pre"}}>− {l}</div>)}
+                {ld.added.map((l,i)=><div key={"a"+i} style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.green,whiteSpace:"pre"}}>+ {l}</div>)}
+              </div>
+            );
+          })()}
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+            {/* Nothing changed means there is nothing to approve — bumping the baseline for a
+                no-op would put a version in the trail that governs no decision. */}
+            {diff.count===0
+              ? <><Btn small variant="primary" onClick={onDiscard}>Dismiss</Btn>
+                  <span style={{fontSize:11,color:T.textMuted}}>The accepted baseline already reflects current governance.</span></>
+              : canApprove
+              ? <><Btn small variant="primary" onClick={onApprove}>Approve — make this the new baseline</Btn>
+                  <Btn small ghost onClick={onDiscard}>Discard — keep the baseline</Btn></>
+              : <><Btn small variant="primary" onClick={onApprove}>Send for approval</Btn>
+                  <Btn small ghost onClick={onDiscard}>Discard</Btn>
+                  <span style={{fontSize:11,color:T.textMuted}}>Approving a build is the owner's or an admin's call.</span></>}
+          </div>
+        </Card2>
+      )}
+
+      <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center",padding:"11px 14px",marginBottom:14,
+        background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10}}>
+        <span style={{fontSize:12.4,color:T.textSub}}>
+          Baseline <b style={{color:T.text}}>v{build.version}</b> · intent <b style={{color:T.text}}>{(KL_INTENTS.find(i=>i.k===build.intent)||{}).l}</b>
+          {" · "}target <b style={{color:T.text}}>{(KL_TARGETS.find(t=>t.k===build.target)||{}).l}</b>
+          {build.approvedBy?<> · accepted by <b style={{color:T.text}}>{build.approvedBy}</b> on {build.approvedAt}</>:null}
+        </span>
+        <span style={{marginLeft:"auto",display:"flex",gap:7,flexWrap:"wrap"}}>
+          <Btn small ghost onClick={onHistory}>Build history</Btn>
+          <Btn small ghost icon={Ic.copy(11)} onClick={onDownload}>Download</Btn>
+          {canGenerate&&!isProposed&&<Btn small variant="primary" icon={Ic.refresh(11)} onClick={()=>onGenerate(build.intent,build.target)}>Regenerate</Btn>}
+        </span>
+      </div>
+
+      {/* file rail + body — the artifacts are the product, so they get the room */}
+      <div style={{display:"flex",gap:0,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",minHeight:430}}>
+        <div style={{width:266,flexShrink:0,borderRight:`1px solid ${T.border}`,background:T.bg,overflowY:"auto",padding:"10px 8px"}}>
+          {["staging","mart","seed","metrics","config","doc"].map(k=>{
+            const group = files.filter(f=>f.kind===k);
+            if(!group.length) return null;
+            const LABEL = {staging:"Staging models",mart:"Marts",seed:"Seeds",metrics:"Metrics",config:"Project",doc:"Docs"};
+            return (
+              <div key={k} style={{marginBottom:9}}>
+                <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",padding:"4px 8px"}}>{LABEL[k]}</div>
+                {group.map(f=>{
+                  const on = cur&&cur.path===f.path;
+                  const ch = diff&&(diff.changed.includes(f.path)||diff.added.includes(f.path));
+                  return (
+                    <button key={f.path} onClick={()=>setSelFile(f.path)}
+                      style={{display:"flex",alignItems:"center",gap:7,width:"100%",padding:"6px 8px",borderRadius:7,textAlign:"left",cursor:"pointer",
+                        fontFamily:"'Geist Mono',monospace",fontSize:10.8,
+                        background:on?T.bgSurface:"transparent",border:`1px solid ${on?T.border:"transparent"}`,
+                        color:on?T.text:T.textMuted}}>
+                      {ch&&<span style={{width:6,height:6,borderRadius:"50%",background:T.amber,flexShrink:0}}/>}
+                      <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.path.split("/").pop()}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+        <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column"}}>
+          <div style={{display:"flex",alignItems:"center",gap:9,padding:"9px 13px",borderBottom:`1px solid ${T.border}`,background:T.bgElevated,flexWrap:"wrap"}}>
+            <span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{cur&&cur.path}</span>
+            {cur&&cur.path.endsWith(".sql")&&canGenerate&&(
+              <span style={{marginLeft:"auto"}}>
+                <Btn small ghost icon={Ic.edit(11)} onClick={()=>{
+                  setEditing(cur.path);
+                  const b = cur.body.split(KL_CUSTOM_OPEN)[1];
+                  const inner = b ? b.split(KL_CUSTOM_CLOSE)[0].trim() : "";
+                  setDraft(inner.startsWith("-- (nothing yet")?"":inner);
+                }}>Custom section</Btn>
+              </span>
+            )}
+          </div>
+          {editing===((cur&&cur.path)||null) && editing ? (
+            <div style={{padding:14}}>
+              <div style={{fontSize:12,color:T.textSub,lineHeight:1.65,marginBottom:9}}>
+                Anything you write here is <b style={{color:T.text}}>carried into every future generation</b>.
+                Everything above the marker is generated and will be rewritten.
+              </div>
+              <Input2 multiline rows={9} value={draft} onChange={e=>setDraft(e.target.value)}
+                placeholder="-- your own SQL, joins, tests or comments"
+                style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5}}/>
+              <div style={{display:"flex",gap:7,marginTop:10,justifyContent:"flex-end"}}>
+                <Btn small ghost onClick={()=>setEditing(null)}>Cancel</Btn>
+                <Btn small variant="primary" onClick={()=>{onCustom(editing,draft);setEditing(null);}}>Save custom section</Btn>
+              </div>
+            </div>
+          ) : (
+            <pre style={{flex:1,margin:0,padding:"13px 15px",overflow:"auto",background:T.bg,
+              fontFamily:"'Geist Mono',monospace",fontSize:11.3,lineHeight:1.65,color:T.textSub,whiteSpace:"pre"}}>
+              {(cur&&cur.body)||""}
+            </pre>
+          )}
+        </div>
+      </div>
+      <KLNote tone="quiet">
+        Honest boundary: this generates staging models, the conformed dimension, the decision-stamped
+        crosswalk and metrics. Fact tables and load patterns (bulk, CDC, streaming) are the next phase.
+      </KLNote>
+    </>
+  );
+};
+
 const KnowledgeLayerView = ({onToast, onNav}) => {
-  const [srcGraphs, setSrcGraphs] = useState(KL_SRC_SEED);
-  const [xGraphs,   setXGraphs]   = useState(KL_X_SEED);
+  const klS = useKLStore();
+  const srcGraphs = klS.src, xGraphs = klS.x, measures = klS.measures,
+        trust = klS.trust, builds = klS.builds, layerHist = klS.layerHist;
+  const setSrcGraphs = u => klStoreSet(st=>({src:      typeof u==="function"?u(st.src):u}));
+  const setXGraphs   = u => klStoreSet(st=>({x:        typeof u==="function"?u(st.x):u}));
+  const setMeasures  = u => klStoreSet(st=>({measures: typeof u==="function"?u(st.measures):u}));
+  const setTrust     = u => klStoreSet(st=>({trust:    typeof u==="function"?u(st.trust):u}));
+  const setBuilds    = u => klStoreSet(st=>({builds:   typeof u==="function"?u(st.builds):u}));
+  const setLayerHist = u => klStoreSet(st=>({layerHist:typeof u==="function"?u(st.layerHist):u}));
   const [tab,       setTab]       = useState("overview");   // overview | sources | cross
   const [selSrc,    setSelSrc]    = useState(null);
   const [selX,      setSelX]      = useState(null);
@@ -24683,6 +25782,239 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
   const [wScan,     setWScan]     = useState("later");        // later | sample | full
   const [wKeys,     setWKeys]     = useState([]);
   const [wBeliefs,  setWBeliefs]  = useState({});
+
+  // ── Who is looking, and what they may decide (C10 / §12.1) ──
+  // Curation is the steward's job. Materialisation is the engineer's. The dial and the
+  // acceptance of a build are the owner's or an admin's. Nobody is asked to sign off on
+  // their own request — that is the whole point of routing it to the Inbox.
+  const {role:klRole, roleCfg:klRoleCfg} = useRole();
+  const me            = ((klRoleCfg&&klRoleCfg.email)||"you@jnj").split("@")[0];
+  const isAdmin       = klRole==="admin";
+  const canCurate     = isAdmin || klRole==="steward";
+  const canDial       = isAdmin;
+  const canGenerate   = isAdmin || klRole==="engineer";
+  const canApproveFor = g => isAdmin || (g && g.owner===me);
+  const [, setGTerms] = useGlossaryTerms();     // certifying a measure writes through to the Glossary
+
+  // ── C1 · governed-object state ──
+  const [hist,     setHist]     = useState(null); // {title, kicker, entries}
+  // worklist controls
+  const [wSub,  setWSub]  = useState("decisions");
+  const [wq,    setWq]    = useState("");
+  const [wKind, setWKind] = useState("all");
+  const [wSel,  setWSel]  = useState(()=>new Set());
+
+  const stamp = () => new Date().toISOString().slice(0,16).replace("T"," ");
+
+  // Append-only. Every writer below goes through these two, so no verb can quietly skip the trail.
+  const logX = (xgId, entry) =>
+    setXGraphs(gs=>gs.map(x=>x.id===xgId?{...x, history:[{at:stamp(), by:me, ...entry}, ...(x.history||[])]}:x));
+  const logS = (sgId, entry) =>
+    setSrcGraphs(gs=>gs.map(g=>g.id===sgId?{...g, history:[{at:stamp(), by:me, ...entry}, ...(g.history||[])]}:g));
+
+  // ── The curation verbs ──
+  // confirm · split · hold · reject · single · reopen. Each one writes the state, the decider,
+  // the timestamp and (where it matters) the reason — and the prior value is never discarded.
+  const VERB_STATE = {confirm:"confirmed", split:"split", hold:"held", reject:"rejected", single:"single", reopen:"open"};
+  const VERB_WORD  = {confirm:"Confirmed as one record", split:"Kept as separate records", hold:"Held for later",
+                      reject:"Rejected — not a match", single:"Accepted as single-source", reopen:"Reopened"};
+  const applyVerb = (it, verb, reason) => {
+    const next = VERB_STATE[verb];
+    const patch = r => r.id!==it.id ? r : (verb==="reopen"
+      ? {...r, state:"open", decidedBy:null, decidedAt:null, reason:null}
+      : {...r, state:next, decidedBy:me, decidedAt:stamp(), reason:reason||r.reason||null});
+    setXGraphs(gs=>gs.map(x=>x.id!==it.xgId ? x : {
+      ...x,
+      conflicts:(x.conflicts||[]).map(patch),
+      unmatched:(x.unmatched||[]).map(patch),
+      history:[{at:stamp(), by:me, kind:"human", action:VERB_WORD[verb],
+                detail:`${it.name} · ${klMoneyFull(it.governs)} governed · confidence ${it.conf.toFixed(2)}${reason?` — “${reason}”`:""}`},
+               ...(x.history||[])],
+    }));
+    setWSel(s=>{ const n=new Set(s); n.delete(it.id); return n; });
+    if(verb!=="reopen")
+      pushNotif({category:"Knowledge Layer", type:"field_updated",
+        title:`${VERB_WORD[verb]} · ${it.name}`,
+        body:`${me} decided a ${klMoney(it.governs)} ${it.entity.toLowerCase()} match in ${it.xgName}`,
+        nav:"knowledgelayer"});
+    toast(`${VERB_WORD[verb]} — ${it.name}`);
+  };
+
+  // Bulk confirm is ONE transaction with ONE audit row, not N silent writes.
+  const bulkConfirm = (items) => {
+    if(!items.length) return;
+    const ids = new Set(items.map(i=>i.id));
+    const money = items.reduce((n,i)=>n+(i.governs||0),0);
+    const byGraph = {};
+    items.forEach(i=>{ (byGraph[i.xgId]=byGraph[i.xgId]||[]).push(i); });
+    const patch = r => ids.has(r.id) ? {...r, state:"confirmed", decidedBy:me, decidedAt:stamp()} : r;
+    setXGraphs(gs=>gs.map(x=>!byGraph[x.id] ? x : {
+      ...x,
+      conflicts:(x.conflicts||[]).map(patch),
+      unmatched:(x.unmatched||[]).map(patch),
+      history:[{at:stamp(), by:me, kind:"human", action:"Bulk confirm",
+                detail:`${byGraph[x.id].length} decision${byGraph[x.id].length===1?"":"s"} confirmed in one transaction · ${klMoneyFull(byGraph[x.id].reduce((n,i)=>n+(i.governs||0),0))} governed`},
+               ...(x.history||[])],
+    }));
+    setWSel(new Set());
+    toast(`${items.length} decisions confirmed — ${klMoney(money)} governed`);
+  };
+
+  // ── Durable decisions across re-resolution (C1, normative) ──
+  // The rehearsal, one level down, of the regeneration contract: re-running the resolver
+  // must never cost a person the work they already did.
+  const reResolve = (xgId) => {
+    const x = xGraphs.find(g=>g.id===xgId); if(!x) return;
+    const kept = klExceptions(x).filter(i=>i.state!=="open").length;
+    logX(xgId, {kind:"ai", action:"Re-resolved",
+      detail:`Matching re-run across ${x.srcIds.length} sources. ${kept} human decision${kept===1?"":"s"} preserved and re-applied; golden-record IDs unchanged, so the audit trail stayed attached.`});
+    toast(kept
+      ? `Re-resolved — ${kept} human decision${kept===1?"":"s"} preserved`
+      : "Re-resolved — no human decisions to preserve yet");
+  };
+
+  // ── C5 · the dial ──
+  const applyDial = (next, byWho, onBehalfOf) => {
+    const who = byWho||me;
+    const before = KL_TRUST_TYPES.map(t=>`${t.l} ${trust[t.k].toFixed(2)}`).join(" · ");
+    const after  = KL_TRUST_TYPES.map(t=>`${t.l} ${next[t.k].toFixed(2)}`).join(" · ");
+    setTrust(next);
+    setLayerHist(h=>[{at:stamp(), by:who, kind:"human", action:"Trust dial changed",
+      detail:`From ${before} (${trust.posture} by default) to ${after} (${next.posture} by default)`
+             + (onBehalfOf&&onBehalfOf!==who ? ` — approved by ${who}, requested by ${onBehalfOf}` : "")}, ...h]);
+    toast("Trust dial applied — the change is in the audit trail");
+  };
+  const requestDial = (next) => {
+    requestKLApproval({kind:"dial", name:"Knowledge Layer", targetId:"layer", payload:next, requestedBy:me,
+      body:`${me} proposes entity match ${next.match.toFixed(2)}, classification ${next.classify.toFixed(2)}, term ${next.term.toFixed(2)} — ${next.posture} by default. Applying the dial changes governed state.`});
+    pushNotif({category:"Knowledge Layer", type:"alert", title:"Trust-dial change requested",
+      body:`${me} proposed new thresholds — awaiting an admin`, nav:"knowledgelayer"});
+    toast("Sent to the owner's Inbox for approval");
+  };
+
+  // ── C7 · certify a measure, and write through to the Glossary ──
+  const pickBinding = (mId, binding) => setMeasures(ms=>ms.map(m=>m.id!==mId?m:{
+    ...m, bindings:m.bindings.map(b=>b.srcId!==binding.srcId ? b : {...b, chosen:b===binding||b.label===binding.label})}));
+  const certifyMeasure = (mId) => {
+    const m = measures.find(x=>x.id===mId); if(!m) return;
+    setMeasures(ms=>ms.map(x=>x.id!==mId?x:{...x, state:"certified", certifiedBy:me, certifiedAt:stamp().slice(0,10), conf:1}));
+    // one certified definition, in the one glossary the rest of the product already reads
+    setGTerms(p=>p.some(t=>t.term===m.name) ? p : [...p, {
+      id:"t-kl-"+mId, term:m.name, abbr:"", glossary:"g1", category:"", domain:m.domain,
+      owner:m.owner, steward:me, linked:(m.bindings||[]).filter(b=>b.chosen).length,
+      cert:"Approved", status:"Approved", synonyms:[], definition:m.definition,
+      relatedTerms:[], tags:[], refs:[], linkedAssets:[], readme:"",
+      activity:[{user:me, avatar:(m.owner||me).slice(0,2).toUpperCase(),
+                 action:"Certified from the Knowledge Layer", time:"Just now"}],
+    }]);
+    setLayerHist(h=>[{at:stamp(), by:me, kind:"human", action:"Term certified",
+      detail:`${m.name} — canonical source chosen per application. Live answers and every generated build now use this one definition.`}, ...h]);
+    pushNotif({category:"Knowledge Layer", type:"cert", title:`Term certified · ${m.name}`,
+      body:`${me} certified this measure — live answers now use one definition`, nav:"glossary"});
+    toast(`${m.name} certified — the Glossary and every generated build now agree`);
+  };
+
+  // ── C8 · Mode 2 ──
+  const genBuild = (xgId, intent, target) => {
+    const x = xGraphs.find(g=>g.id===xgId); if(!x) return;
+    const prev = builds[xgId];
+    const ir   = klBuildIR(x, srcGraphs, measures, {intent, target});
+    const files= klCompile(ir, stamp(), (prev&&prev.customs)||{});
+    if(!prev){
+      setBuilds(b=>({...b,[xgId]:{baseline:files, proposed:null, customs:{}, intent, target,
+        version:1, approvedBy:me, approvedAt:stamp().slice(0,10),
+        history:[{at:stamp(), by:me, kind:"human", action:"Build generated",
+          detail:`Baseline v1 · intent ${intent} · target ${target} · ${files.length} artifacts`}]}}));
+      logX(xgId,{kind:"human", action:"Governed build generated",
+        detail:`Baseline v1 compiled from this graph — ${files.length} artifacts, intent ${intent}, target ${target}`});
+      toast("Governed build generated — this is your accepted baseline");
+    } else {
+      const d = klDiff(prev.baseline, files);
+      setBuilds(b=>({...b,[xgId]:{...prev, proposed:files,
+        history:[{at:stamp(), by:me, kind:"human", action:"Regenerated",
+          detail:d.count?`${d.count} artifact${d.count===1?"":"s"} differ from the accepted baseline`:"Nothing changed — governance has not moved"}, ...prev.history]}}));
+      toast(d.count ? `Regenerated — ${d.count} artifact${d.count===1?"":"s"} changed` : "Regenerated — nothing changed");
+    }
+  };
+  const approveBuild = (xgId, _payload, byWho, onBehalfOf) => {
+    const who = byWho||me;
+    setBuilds(b=>{
+      const cur = b[xgId]; if(!cur||!cur.proposed) return b;
+      return {...b,[xgId]:{...cur, baseline:cur.proposed, proposed:null, version:cur.version+1,
+        approvedBy:who, approvedAt:stamp().slice(0,10),
+        history:[{at:stamp(), by:who, kind:"human", action:"Proposed build approved",
+          detail:`v${cur.version+1} is now the accepted baseline. Custom sections carried forward.`
+                 + (onBehalfOf&&onBehalfOf!==who ? ` Regenerated by ${onBehalfOf}, approved by ${who}.` : "")}, ...cur.history]}};
+    });
+    logX(xgId,{kind:"human", action:"Governed build approved", detail:"The proposed build became the accepted baseline"});
+    toast("Approved — this is the new baseline");
+  };
+  const requestBuildApproval = (xgId) => {
+    const x = xGraphs.find(g=>g.id===xgId);
+    const d = klDiff(builds[xgId].baseline, builds[xgId].proposed);
+    requestKLApproval({kind:"build", name:x.name, targetId:xgId, requestedBy:me,
+      body:`${me} regenerated the governed build for ${x.name}. ${d.count} artifact${d.count===1?"":"s"} differ from the accepted baseline: ${[...d.changed,...d.added].join(", ")||"none"}.`});
+    pushNotif({category:"Knowledge Layer", type:"alert", title:`Build approval requested · ${x.name}`,
+      body:`${me} proposed a regenerated build — awaiting the owner`, nav:"knowledgelayer"});
+    toast("Sent to the owner's Inbox for approval");
+  };
+  const discardBuild = (xgId) => {
+    setBuilds(b=>{
+      const cur = b[xgId]; if(!cur) return b;
+      return {...b,[xgId]:{...cur, proposed:null,
+        history:[{at:stamp(), by:me, kind:"human", action:"Proposed build discarded",
+          detail:"The accepted baseline stands unchanged."}, ...cur.history]}};
+    });
+    toast("Discarded — the accepted baseline stands");
+  };
+  const saveCustom = (xgId, path, body) => {
+    setBuilds(b=>{
+      const cur = b[xgId]; if(!cur) return b;
+      const customs = {...cur.customs, [path]:body};
+      const files = (cur.proposed||cur.baseline).map(f=>{
+        if(f.path!==path) return f;
+        const head = f.body.split(KL_CUSTOM_OPEN)[0];
+        return {...f, body: head + KL_CUSTOM_OPEN + "\n" + (body||"-- (nothing yet — use “Custom section” to add your own SQL here)") + "\n" + KL_CUSTOM_CLOSE + "\n"};
+      });
+      return {...b,[xgId]:{...cur, customs, ...(cur.proposed?{proposed:files}:{baseline:files}),
+        history:[{at:stamp(), by:me, kind:"human", action:"Custom section saved",
+          detail:`${path} — this block is now carried into every future generation`}, ...cur.history]}};
+    });
+    toast("Saved — your block will survive every regeneration");
+  };
+  const downloadBuild = (xgId) => {
+    const cur = builds[xgId]; if(!cur) return;
+    const files = cur.proposed||cur.baseline;
+    const bundle = files.map(f=>`${"=".repeat(78)}\n${f.path}\n${"=".repeat(78)}\n${f.body}`).join("\n\n");
+    const url = URL.createObjectURL(new Blob([bundle],{type:"text/plain"}));
+    const a = document.createElement("a");
+    a.href = url; a.download = `xkg_${klSlug((xGraphs.find(g=>g.id===xgId)||{}).entity||"build")}_build.txt`;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    toast(`${files.length} artifacts downloaded`);
+  };
+
+  // Inbox approvals write back into the layer through this bridge.
+  useEffect(()=>{ registerKLApply({
+    applyDial:(_id,payload,reqBy,approvedBy)=>applyDial(payload,approvedBy||reqBy,reqBy),
+    approveBuild:(id,payload,reqBy,approvedBy)=>approveBuild(id,payload,approvedBy||reqBy,reqBy),
+  }); },[trust,builds,xGraphs,measures]);
+
+  // ── Derived, over the WHOLE estate — never over a loaded page ──
+  const wlAll   = klWorklist(xGraphs);
+  const wlOpen  = wlAll.filter(i=>i.state==="open");
+  const ready   = klReadiness(xGraphs);
+  const openMeasures = measures.filter(m=>m.state!=="certified");
+  const wlFiltered = wlAll.filter(i=>{
+    const q = wq.trim().toLowerCase();
+    const hitQ = !q || [i.name,i.entity,i.xgName,i.issue].filter(Boolean).some(v=>String(v).toLowerCase().includes(q));
+    const hitK = wKind==="all" ? i.state==="open"
+               : wKind==="decided" ? i.state!=="open"
+               : wKind==="conflict" ? (i.kind==="conflict"&&i.state==="open")
+               : wKind==="unmatched" ? (i.kind==="unmatched"&&i.state==="open")
+               : true;
+    return hitQ && hitK;
+  });
+  const selItems = wlOpen.filter(i=>wSel.has(i.id));
 
   const srcById = id => srcGraphs.find(s=>s.id===id);
   const unmapped = KL_UNMAPPED.filter(c => !srcGraphs.some(g=>g.name===c));
@@ -24733,8 +26065,10 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
   };
   const closeWizard = () => { setWiz(null); setStep(0); setDoneSet(new Set()); };
 
-  const openSrc = (id,t="overview") => { setSelSrc(id); setSelX(null); setSrcTab(t); };
-  const openX   = (id,t="overview") => { setSelX(id); setSelSrc(null); setXTab(t); };
+  const openSrc = (id,t="overview") => { setHist(null); setSelSrc(id); setSelX(null); setSrcTab(t); };
+  const openX   = (id,t="overview") => { setHist(null); setSelX(id); setSelSrc(null); setXTab(t); };
+  // the history drawer is scoped to whatever you were looking at — leaving closes it
+  useEffect(()=>{ setHist(null); },[tab, selSrc, selX]);
 
   // Graph builders live here, unconditionally — the profiles below return early, so a hook
   // declared inside one of those branches would change hook order between list and profile.
@@ -24763,11 +26097,16 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
     setSrcGraphs(g=>[...g,{id, key:"SKG-"+(1004+g.length), name:wConn, service:wConn.toLowerCase().includes("sales")?"salesforce":"postgres",
       connection:wConn.toLowerCase().replace(/[^a-z0-9]+/g,"-"), domain:"Procurement",
       tables:214, cols:1642, words:100, entities:["Supplier","Customer"],
-      drift:0, status:"Published", owner:"alex.rivera", stewards:[], from:"EDG", step:10,
-      built:"2026-08-24", version:"v1",
+      drift:0, status:"Published", owner:me, stewards:[], from:"EDG", step:10,
+      built:stamp().slice(0,10), version:"v1", opEntity:null,
+      env:{by:"human", src:"EDG · Knowledge Layer builder", conf:1, state:"published"},
+      history:[{at:stamp(), by:me, kind:"human", action:"Source graph published",
+                detail:`Mapped from the ${wConn} connection`}],
       bind:{tags:38, termed:214, proposed:0, invented:0},
-      masters:[{table:"SUPPLIER_MASTER", entity:"Supplier", keys:["Tax ID","Legal Name"], ready:true},
-               {table:"CUSTOMER_MASTER", entity:"Customer", keys:["Tax ID","Name"],       ready:true}],
+      masters:[{table:"SUPPLIER_MASTER", entity:"Supplier", keys:["Tax ID","Legal Name"], ready:true,
+                rule:{pk:"SUPPLIER_ID", name:"SUPPLIER_NAME", tax:"TAX_ID", cls:"party", by:"ai:heuristic-v1.1", conf:0.86}},
+               {table:"CUSTOMER_MASTER", entity:"Customer", keys:["Tax ID","Name"],       ready:true,
+                rule:{pk:"CUSTOMER_ID", name:"CUSTOMER_NAME", tax:"TAX_ID", cls:"party", by:"ai:heuristic-v1.1", conf:0.84}}],
       assets:[{n:"SUPPLIER_MASTER", t:"Table", role:"master",      entity:"Supplier", term:"Supplier", cols:44, tags:["Tax ID","PII"]},
               {n:"CUSTOMER_MASTER", t:"Table", role:"master",      entity:"Customer", term:"Customer", cols:51, tags:["Tax ID","PII"]},
               {n:"ORDER_HEADER",    t:"Table", role:"transaction", term:"Purchase Order",              cols:38, tags:[]}],
@@ -24783,8 +26122,12 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
     const name = dupes ? `${base} (${dupes+1})` : base;
     const fallback = srcById(wSrcIds[0])?.name || "—";
     setXGraphs(g=>[...g,{id, key:"XKG-"+(2003+g.length), name, entity:wEntity, srcIds:[...wSrcIds],
-      records:0, review:0, owner:"alex.rivera", stewards:[], status:"Published",
-      domain:"Procurement", built:"2026-08-24", version:"v1", policy:null,
+      records:0, autoApplied:0, clean:0, owner:me, stewards:[], status:"Published",
+      domain:"Procurement", built:stamp().slice(0,10), version:"v1", policy:null,
+      env:{by:"human", src:"EDG · Knowledge Layer builder", conf:1, state:"published"},
+      conflicts:[], unmatched:[],
+      history:[{at:stamp(), by:me, kind:"human", action:"Cross-source graph published",
+                detail:`Entity ${wEntity} · ${wSrcIds.length} source graphs · match keys ${wKeys.join(", ")||"none"}`}],
       scan:{state:wScan==="later"?"none":"done", mode:wScan==="later"?null:wScan,
             at:wScan==="later"?null:"2026-08-24", rows:wScan==="full"?184200:wScan==="sample"?5000:0,
             approvedBy:wScan==="later"?null:"alex.rivera", stale:false},
@@ -25076,6 +26419,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
           {label:"Source Knowledge Graphs",onClick:()=>{setSelSrc(null);setTab("sources");}},
           {label:sg.name},
         ]} actions={<>
+          <Btn ghost small icon={Ic.audit(12)} onClick={()=>setHist({title:sg.name, kicker:`Source Knowledge Graph · ${sg.key}`, entries:sg.history})}>History</Btn>
           <Btn ghost small icon={Ic.lineage(12)} onClick={()=>onNav&&onNav("catalog")}>Open in Lineage</Btn>
           <Btn ghost small icon={Ic.refresh(12)} onClick={()=>toast("Re-scan queued — see Settings › Background Jobs")}>Re-scan</Btn>
         </>}/>
@@ -25088,9 +26432,11 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               <Badge bg={sg.status==="Published"?T.green+"1a":T.amber+"1a"} color={sg.status==="Published"?T.green:T.amber} border={(sg.status==="Published"?T.green:T.amber)+"55"}>{sg.status}</Badge>
               <Badge bg={T.bgElevated} color={T.textSub} border={T.border}>{sg.version}</Badge>
               {sg.from==="EDG" && <Badge bg={T.accentDim} color={T.accent} border={T.accent+"44"}>built in EDG</Badge>}
+              <KLEnvelope env={sg.env}/>
             </>}
             props={[
-              {l:"Connection", v:sg.connection},
+              {l:"Connection",   v:sg.connection},
+              {l:"Serves",       v:sg.opEntity||"unmapped", c:sg.opEntity?T.text:T.amber},
               {l:"Domain",     v:sg.domain},
               {l:"Owner",      v:sg.owner},
               {l:"Tables",     v:sg.tables},
@@ -25125,7 +26471,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 <Metric label="Awaiting approval" value={String(sg.bind.proposed)} color={sg.bind.proposed?T.amber:T.text}/>
                 <Metric label="Feeds cross-source" value={String(usedBy.length)}/>
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr",gap:14}}>
+              <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr",gap:14,alignItems:"start"}}>
                 <Card2 style={{padding:16}}>
                   <SH title="Coverage" sub="What this graph describes, and how much of it is governed."/>
                   <KLRow nm="Business entities" chip={sg.entities.join(" · ")||"None"} kind={sg.entities.length?"exist":"plain"} cf="Available for cross-source matching"/>
@@ -25139,6 +26485,32 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                   </div>
                   <Btn ghost small style={{marginTop:12}} onClick={()=>setSrcTab("graph")}>Open knowledge graph</Btn>
                 </Card2>
+                <div style={{display:"flex",flexDirection:"column",gap:14,minWidth:0}}>
+                <Card2 style={{padding:16}}>
+                  <SH title="Resolution rules" sub="What makes each master matchable across sources."/>
+                  {(sg.masters||[]).map(m=>(
+                    <div key={m.table} style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",padding:"9px 0",borderBottom:`1px solid ${T.border}`}}>
+                      <span style={{minWidth:0,flex:"1 1 120px"}}>
+                        <b style={{display:"block",fontSize:12,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{m.table}</b>
+                        <span style={{display:"block",fontSize:10.5,color:T.textMuted,marginTop:1}}>{m.entity}</span>
+                      </span>
+                      {m.ready
+                        ? <KLChip kind="exist">{m.keys.join(", ")}</KLChip>
+                        : <KLChip kind="new">Not resolvable yet</KLChip>}
+                      {m.rule
+                        ? <span style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{m.rule.by}</span>
+                        : <Btn small ghost onClick={()=>toast(m.blocked
+                            ? "Not generatable — see the reason on the Tables tab"
+                            : "Rule generated — this master can now be matched")}>Generate rule</Btn>}
+                    </div>
+                  ))}
+                  {(sg.masters||[]).some(m=>!m.ready)&&(
+                    <KLNote tone="quiet">
+                      A master with no rule is reported as <b>not resolvable, and why</b> — it is never
+                      silently skipped. {(sg.masters||[]).filter(m=>!m.ready).length} here.
+                    </KLNote>
+                  )}
+                </Card2>
                 <Card2 style={{padding:16}}>
                   <SH title="Ownership"/>
                   <div style={{fontSize:12.5,color:T.textSub,lineHeight:2}}>
@@ -25146,8 +26518,10 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                     <div><b style={{color:T.text}}>Stewards</b> · {sg.stewards.length?sg.stewards.join(", "):"None assigned"}</div>
                     <div><b style={{color:T.text}}>Domain</b> · {sg.domain}</div>
                     <div><b style={{color:T.text}}>Created in</b> · {sg.from}</div>
+                    <div><b style={{color:T.text}}>Serves</b> · {sg.opEntity||"unmapped"}</div>
                   </div>
                 </Card2>
+                </div>
               </div>
             </>
           )}
@@ -25194,6 +26568,8 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                   rows={usedBy} onRowClick={r=>openX(r.id)}/>
           )}
         </div>
+        <KLHistoryDrawer open={!!hist} onClose={()=>setHist(null)}
+          title={hist?.title} kicker={hist?.kicker} entries={hist?.entries}/>
       </div>
     );
   }
@@ -25208,7 +26584,8 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
           {label:"Cross-Source Knowledge Graphs",onClick:()=>{setSelX(null);setTab("cross");}},
           {label:xg.name},
         ]} actions={<>
-          <Btn ghost small icon={Ic.refresh(12)} onClick={()=>toast("Re-resolve queued — see Settings › Background Jobs")}>Re-resolve</Btn>
+          <Btn ghost small icon={Ic.audit(12)} onClick={()=>setHist({title:xg.name, kicker:`Cross-Source Knowledge Graph · ${xg.key}`, entries:xg.history})}>History</Btn>
+          <Btn ghost small icon={Ic.refresh(12)} onClick={()=>reResolve(xg.id)}>Re-resolve</Btn>
         </>}/>
         <div style={{flex:1,overflowY:"auto",padding:24}}>
           <KLProfileHead
@@ -25219,6 +26596,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               <Badge bg={T.green+"1a"} color={T.green} border={T.green+"55"}>{xg.status}</Badge>
               <Badge bg={T.bgElevated} color={T.textSub} border={T.border}>{xg.version}</Badge>
               {klOpen(xg)>0 && <Badge bg={T.amber+"1a"} color={T.amber} border={T.amber+"55"}>{klOpen(xg)} require review</Badge>}
+              <KLEnvelope env={xg.env}/>
             </>}
             props={[
               {l:"Entity",          v:xg.entity},
@@ -25238,7 +26616,20 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
             {key:"graph",    label:"Knowledge Graph"},
             {key:"records",  label:klOpen(xg)?`Trusted records (${klOpen(xg)})`:"Trusted records"},
             {key:"rules",    label:"Rules"},
+            {key:"build",    label:builds[xg.id]?.proposed ? "Governed Build · 1 proposed" : "Governed Build"},
           ]} active={xTab} onChange={setXTab}/>
+
+          {xTab==="build" && (
+            <KLBuildPane xg={xg} build={builds[xg.id]} srcGraphs={srcGraphs} measures={measures}
+              canGenerate={canGenerate} canApprove={canApproveFor(xg)}
+              onGenerate={(intent,target)=>genBuild(xg.id,intent,target)}
+              onApprove={()=>canApproveFor(xg)?approveBuild(xg.id):requestBuildApproval(xg.id)}
+              onDiscard={()=>discardBuild(xg.id)}
+              onCustom={(path,body)=>saveCustom(xg.id,path,body)}
+              onDownload={()=>downloadBuild(xg.id)}
+              onHistory={()=>setHist({title:xg.name, kicker:"Governed build · change history",
+                                      entries:builds[xg.id]?.history||[]})}/>
+          )}
 
           {xTab==="overview" && (
             <>
@@ -25295,21 +26686,31 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                   })}
                 </div>
               </Card2>
-              {xScanned && klOpen(xg)>0 && (
-                <Card2 style={{padding:16}}>
-                  <SH title={`Requires a decision (${klOpen(xg)})`}
-                    sub="Records accepted automatically are not listed."
-                    action={<Btn small ghost onClick={()=>setXTab("records")}>Open Trusted records</Btn>}/>
-                  {(xg.conflicts||[]).map(c=>(
-                    <KLRow key={c.id} nm={c.n} chip={c.issue} kind="new" cf={`Conflicting values · confidence ${c.conf.toFixed(2)}`}
-                      acts="review" onAct={()=>setXTab("records")}/>
-                  ))}
-                  {(xg.unmatched||[]).map(u=>(
-                    <KLRow key={u.id} nm={u.label} chip={`Only in ${srcById(u.srcId)?.name||u.srcId}`} kind="new"
-                      cf="No counterpart found" acts="review" onAct={()=>setXTab("records")}/>
-                  ))}
-                </Card2>
-              )}
+              {xScanned && klOpen(xg)>0 && (()=>{
+                const top = klExceptions(xg).filter(i=>i.state==="open").sort((a,b)=>klScore(b)-klScore(a));
+                return (
+                  <Card2 style={{padding:16}}>
+                    <SH title={`Requires a decision (${top.length})`}
+                      sub={`${klMoney(top.reduce((n,i)=>n+i.governs,0))} of ${xg.entity.toLowerCase()} spend is governed by decisions nobody has made yet.`}
+                      action={<Btn small ghost onClick={()=>setXTab("records")}>Open Trusted records</Btn>}/>
+                    {top.slice(0,3).map((it,i)=>(
+                      <div key={it.id} onClick={()=>setXTab("records")}
+                        style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",padding:"10px 12px",marginBottom:8,cursor:"pointer",
+                          background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9}}>
+                        <span style={{fontSize:10.5,fontWeight:800,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>#{i+1}</span>
+                        <span style={{minWidth:0,flex:"1 1 150px"}}>
+                          <b style={{display:"block",fontSize:12.5,color:T.text}}>{it.name}</b>
+                          <span style={{display:"block",fontSize:11,color:T.amber,marginTop:2}}>{it.issue}</span>
+                        </span>
+                        <span style={{fontSize:13.5,fontWeight:800,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{klMoney(it.governs)}</span>
+                        <span style={{fontSize:11.5,fontWeight:700,fontFamily:"'Geist Mono',monospace",
+                          color:it.conf>=0.9?T.green:it.conf>=0.7?T.amber:T.rose}}>{it.conf.toFixed(2)}</span>
+                      </div>
+                    ))}
+                    {top.length>3&&<div style={{fontSize:11.5,color:T.textMuted}}>and {top.length-3} more, ranked the same way.</div>}
+                  </Card2>
+                );
+              })()}
             </>
           )}
 
@@ -25334,7 +26735,12 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
           )}
 
           {xTab==="records" && xScanned && (()=>{
-            const conflicts = xg.conflicts||[], unmatched = xg.unmatched||[];
+            // Object-scoped view of the SAME decisions the Worklist ranks globally, rendered by
+            // the same component — so a verb, its evidence and its audit trail behave identically
+            // wherever a steward happens to be standing.
+            const ex   = klExceptions(xg).sort((a,b)=>klScore(b)-klScore(a));
+            const open = ex.filter(i=>i.state==="open");
+            const done = ex.filter(i=>i.state!=="open");
             return (
               <>
                 {/* the point of this tab: almost everything is fine — here is what is not */}
@@ -25342,119 +26748,44 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                   background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10}}>
                   <span style={{fontSize:12.8,color:T.textSub}}>
                     <b style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{xg.records.toLocaleString()}</b> records resolved ·{" "}
-                    <b style={{color:T.green,fontFamily:"'Geist Mono',monospace"}}>{(xg.clean||0).toLocaleString()}</b> without conflict
+                    <b style={{color:T.green,fontFamily:"'Geist Mono',monospace"}}>{(xg.autoApplied||xg.clean||0).toLocaleString()}</b> auto-confirmed by the resolver
                   </span>
                   <span style={{width:1,height:16,background:T.border}}/>
-                  <span style={{fontSize:12.8,color:klOpen(xg)?T.amber:T.green,fontWeight:600}}>
-                    {klOpen(xg)?`${klOpen(xg)} require review`:"No exceptions"}
+                  <span style={{fontSize:12.8,color:open.length?T.amber:T.green,fontWeight:600}}>
+                    {open.length?`${open.length} need you · ${klMoney(open.reduce((n,i)=>n+i.governs,0))} governed`:"No exceptions"}
                   </span>
+                  {done.length>0&&<span style={{fontSize:12.8,color:T.textSub}}>· <b style={{color:T.text}}>{done.length}</b> you decided</span>}
                   <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>
                     {xg.scan.mode==="full"?"All rows":"Sample"} scan · {xg.scan.at}{xg.scan.stale?" · may be out of date":""}
                   </span>
                   <Btn small ghost onClick={()=>setScanFor(xg.id)}>Re-scan</Btn>
                 </div>
 
-                {klOpen(xg)===0 && (
+                {ex.length===0 && (
                   <KLEmpty icon={Ic.check(34)} title="No exceptions"
                     sub="All records resolved without conflict, and none were left unmatched."/>
                 )}
 
-                {conflicts.length>0 && (
-                  <>
-                    <SH title={`Conflicting values (${conflicts.length})`}
-                      sub="Records matched, but the sources hold different values. Differences are highlighted."/>
-                    {conflicts.map(c=>{
-                      const fields = [...new Set(c.members.flatMap(m=>Object.keys(m.vals||{})))];
-                      const differs = fl => new Set(c.members.map(m=>m.vals?.[fl])).size>1;
-                      const th = {padding:"7px 11px",fontSize:10,fontWeight:700,color:T.textMuted,textAlign:"left",
-                                  textTransform:"uppercase",letterSpacing:"0.06em",borderBottom:`1px solid ${T.border}`};
-                      return (
-                        <Card2 key={c.id} style={{padding:14,marginBottom:10}}>
-                          <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:10}}>
-                            <span style={{width:38,height:38,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
-                              fontSize:11,fontWeight:800,fontFamily:"'Geist Mono',monospace",
-                              background:T.amber+"1a",color:T.amber,border:`1px solid ${T.amber}44`}}>{c.conf.toFixed(2)}</span>
-                            <span>
-                              <span style={{display:"block",fontSize:13.5,fontWeight:700,color:T.text}}>{c.n}</span>
-                              <span style={{display:"block",fontSize:11.5,color:T.amber}}>{c.issue}</span>
-                            </span>
-                            <div style={{marginLeft:"auto",display:"flex",gap:6}}>
-                              <Btn small ghost onClick={()=>toast("Kept as separate records")}>Keep separate</Btn>
-                              <Btn small variant="primary" onClick={()=>toast("Merged into one trusted record")}>Confirm as one</Btn>
-                            </div>
-                          </div>
-                          <div style={{overflowX:"auto"}}>
-                            <table style={{width:"100%",borderCollapse:"collapse"}}>
-                              <thead>
-                                <tr style={{background:T.bgElevated}}>
-                                  <th style={th}>Field</th>
-                                  {c.members.map(m=><th key={m.srcId} style={th}>{srcById(m.srcId)?.name||m.srcId}</th>)}
-                                  <th style={th}>Preferred source</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {fields.map(fl=>{
-                                  const bad = differs(fl);
-                                  const belief = (xg.beliefs||[]).find(b=>b.f===fl)?.s || "—";
-                                  return (
-                                    <tr key={fl}>
-                                      <td style={{padding:"8px 11px",fontSize:11.5,color:T.textSub,borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>{fl}</td>
-                                      {c.members.map(m=>(
-                                        <td key={m.srcId} style={{padding:"8px 11px",fontSize:11.5,borderBottom:`1px solid ${T.border}`,
-                                          fontFamily:"'Geist Mono',monospace",
-                                          background:bad?T.amber+"14":"transparent",
-                                          color:bad?T.amber:T.textSub,fontWeight:bad?700:400}}>
-                                          {m.vals?.[fl]||"—"}
-                                        </td>
-                                      ))}
-                                      <td style={{padding:"8px 11px",fontSize:11,color:T.textMuted,borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>
-                                        {bad?belief:""}
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
-                            {c.members.map(m=>(
-                              <button key={m.srcId+m.pk} onClick={()=>openSrc(m.srcId)}
-                                style={{display:"flex",alignItems:"center",gap:6,fontSize:10.5,padding:"3px 8px",borderRadius:6,cursor:"pointer",
-                                  background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,fontFamily:"inherit"}}>
-                                <ServiceIcon service={srcById(m.srcId)?.service} size={11}/>
-                                {m.table} · {m.pk}
-                              </button>
-                            ))}
-                          </div>
-                        </Card2>
-                      );
-                    })}
-                  </>
+                {open.length>0 && (
+                  <SH title={`Needs a decision (${open.length})`}
+                    sub="Ranked by the money each decision governs. Records accepted automatically are not listed."
+                    action={<Btn small ghost onClick={()=>{setSelX(null);setTab("worklist");}}>See the whole estate →</Btn>}/>
                 )}
+                {open.map((it,i)=>(
+                  <KLDecisionCard key={it.id} it={it} rank={i+1} srcById={srcById} canCurate={canCurate}
+                    selected={false} onSelect={()=>{}} onVerb={applyVerb}
+                    onHistory={()=>setHist({title:it.name, kicker:`Decision · ${xg.name}`, entries:xg.history})}/>
+                ))}
 
-                {unmatched.length>0 && (
-                  <>
-                    <SH title={`Unmatched (${unmatched.length})`}
-                      sub="Present in one source with no counterpart found. Either single-source by nature, or a match key is missing."
-                      action={<Btn small ghost onClick={()=>setXTab("rules")}>Review match keys</Btn>}/>
-                    <DataTable
-                      cols={[
-                        {key:"label", label:xg.entity, render:v=><span style={{fontWeight:600}}>{v}</span>},
-                        {key:"srcId", label:"Only in", render:v=>(
-                          <span style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:11.5,color:T.textSub}}>
-                            <ServiceIcon service={srcById(v)?.service} size={14}/>{srcById(v)?.name||v}
-                          </span>)},
-                        {key:"pk", label:"Record", render:(v,r)=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:11,color:T.textMuted}}>{r.table} · {v}</span>},
-                        {key:"reason", label:"Reason", render:v=><span style={{fontSize:11.5,color:T.textSub}}>{v}</span>},
-                        {key:"act", label:"", render:(v,r)=>(
-                          <span style={{display:"flex",gap:5}}>
-                            <Btn small ghost onClick={()=>toast("Accepted as single-source")}>Accept as single-source</Btn>
-                            <Btn small variant="primary" onClick={()=>openSrc(r.srcId,"match")}>Investigate</Btn>
-                          </span>)},
-                      ]}
-                      rows={unmatched}/>
-                  </>
-                )}
+                {done.length>0 && (<>
+                  <SH title={`Decided (${done.length})`}
+                    sub="Kept permanently, with the decider's name. These survive re-resolution untouched."/>
+                  {done.map((it,i)=>(
+                    <KLDecisionCard key={it.id} it={it} rank={open.length+i+1} srcById={srcById} canCurate={canCurate}
+                      selected={false} onSelect={()=>{}} onVerb={applyVerb}
+                      onHistory={()=>setHist({title:it.name, kicker:`Decision · ${xg.name}`, entries:xg.history})}/>
+                  ))}
+                </>)}
               </>
             );
           })()}
@@ -25516,20 +26847,78 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
           )}
 
           {xTab==="rules" && (
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-              <Card2 style={{padding:18}}>
-                <SH title="Match keys" sub="Columns used to identify the same entity across sources."/>
-                {xg.keys.length===0
-                  ? <div style={{fontSize:12.5,color:T.textMuted}}>No match keys recorded for this graph.</div>
-                  : xg.keys.map(k=><KLRow key={k} nm={k} chip="In use" kind="exist" cf="From your classifications"/>)}
-              </Card2>
-              <Card2 style={{padding:18}}>
-                <SH title="Precedence" sub="Which source takes precedence per field when values disagree."/>
-                {xg.beliefs.map(b=><KLRow key={b.f} nm={b.f} chip={b.s} kind="exist" cf="Steward decision" acts="cc" onAct={()=>toast("Rule updated")}/>)}
-              </Card2>
-            </div>
+            <>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
+                <Card2 style={{padding:18}}>
+                  <SH title="Match keys" sub="Columns used to identify the same entity across sources."/>
+                  {xg.keys.length===0
+                    ? <div style={{fontSize:12.5,color:T.textMuted}}>No match keys recorded for this graph.</div>
+                    : xg.keys.map(k=><KLRow key={k} nm={k} chip="In use" kind="exist" cf="From your classifications"/>)}
+                </Card2>
+                <Card2 style={{padding:18}}>
+                  <SH title="Precedence" sub="Which source takes precedence per field when values disagree."/>
+                  {xg.beliefs.map(b=><KLRow key={b.f} nm={b.f} chip={b.s} kind="exist" cf="Steward decision" acts="cc" onAct={()=>toast("Rule updated")}/>)}
+                </Card2>
+              </div>
+
+              {/* The resolution rule is a STRUCTURED DESCRIPTOR, never stored SQL. The resolver
+                  compiles its own SELECT from catalog-validated identifiers — free-form SQL that a
+                  resolver executes verbatim is an injection vector, so it is not storable here. */}
+              <SH title="Resolution rules"
+                sub="One per source. The descriptor is the contract; the SELECT below is compiled from it, not stored."/>
+              {xg.srcIds.map(id=>{
+                const g = srcById(id); if(!g) return null;
+                const m = g.masters.find(x=>x.entity===xg.entity);
+                const sql = m && klRuleSQL(m, g.name);
+                return (
+                  <Card2 key={id} style={{padding:16,marginBottom:10}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:10}}>
+                      <ServiceIcon service={g.service} size={17}/>
+                      <b style={{fontSize:13,color:T.text}}>{g.name}</b>
+                      {g.opEntity&&<KLChip kind="plain">{g.opEntity}</KLChip>}
+                      <span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{m?m.table:"—"}</span>
+                      {m&&m.rule
+                        ? <span style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
+                            <KLEnvelope env={{by:"ai", src:m.rule.by, conf:m.rule.conf}}/>
+                          </span>
+                        : <span style={{marginLeft:"auto"}}><KLChip kind="new">Not generatable</KLChip></span>}
+                    </div>
+                    {m&&m.rule ? (<>
+                      <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:10}}>
+                        {[["Primary key",m.rule.pk],["Name",m.rule.name],["Tax ID",m.rule.tax],
+                          ["Entity code",m.rule.code],["Serial",m.rule.serial],["Asset tag",m.rule.tag]]
+                          .filter(([,v])=>v).map(([l,v])=>(
+                          <span key={l} style={{fontSize:11,color:T.textSub,padding:"4px 9px",borderRadius:6,
+                            background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                            {l} · <b style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{v}</b>
+                          </span>
+                        ))}
+                        <span style={{fontSize:11,color:T.textSub,padding:"4px 9px",borderRadius:6,
+                          background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                          Entity class · <b style={{color:T.text}}>{m.rule.cls}</b>
+                        </span>
+                      </div>
+                      {m.rule.guard&&(
+                        <div style={{display:"flex",gap:9,padding:"9px 12px",marginBottom:10,borderRadius:8,
+                          background:T.amberDim,border:`1px solid ${T.amber}44`,fontSize:11.5,color:T.text,lineHeight:1.6}}>
+                          <b style={{flexShrink:0}}>Generator guard</b><span>{m.rule.guard}</span>
+                        </div>
+                      )}
+                      <pre style={{margin:0,padding:"11px 13px",borderRadius:8,background:T.bg,border:`1px solid ${T.border}`,
+                        fontFamily:"'Geist Mono',monospace",fontSize:11.2,lineHeight:1.6,color:T.textSub,overflowX:"auto"}}>{sql}</pre>
+                    </>) : (
+                      <div style={{fontSize:12,color:T.amber,lineHeight:1.65}}>
+                        {(m&&m.blocked)||`No ${xg.entity} master is classified in this source, so it cannot take part in matching.`}
+                      </div>
+                    )}
+                  </Card2>
+                );
+              })}
+            </>
           )}
         </div>
+        <KLHistoryDrawer open={!!hist} onClose={()=>setHist(null)}
+          title={hist?.title} kicker={hist?.kicker} entries={hist?.entries}/>
       </div>
     );
   }
@@ -25555,7 +26944,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
     return hitQ && hitS;
   }).sort((a,b)=> xSort==="name" ? a.name.localeCompare(b.name)
                 : xSort==="records" ? b.records-a.records
-                : xSort==="review" ? b.review-a.review
+                : xSort==="review" ? klOpen(b)-klOpen(a)
                 : 0);
 
   return (
@@ -25568,6 +26957,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
       <div style={{flex:1,overflowY:"auto",padding:24}}>
         <Tabs2 tabs={[
           {key:"overview", label:"Overview"},
+          {key:"worklist", label:`Worklist${(wlOpen.length+openMeasures.length)?` (${wlOpen.length+openMeasures.length})`:""}`},
           {key:"sources",  label:`Source Knowledge Graphs (${srcGraphs.length})`},
           {key:"cross",    label:`Cross-Source Knowledge Graphs (${xGraphs.length})`},
         ]} active={tab} onChange={setTab}/>
@@ -25575,11 +26965,46 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
         {/* ───────── OVERVIEW ───────── */}
         {tab==="overview" && (
           <>
+            {(()=>{
+              const top = wlOpen[0];
+              const nba = top
+                ? {h:`Decide ${top.name}`, s:`${klMoneyFull(top.governs)} of ${top.entity.toLowerCase()} value hangs on this one match, and the resolver is only ${top.conf.toFixed(2)} sure. It is the most expensive doubt in the estate.`,
+                   b:"Open the Worklist", go:()=>setTab("worklist")}
+                : openMeasures.length
+                ? {h:`Certify ${openMeasures[0].name}`, s:`${openMeasures.length} term${openMeasures.length===1?"":"s"} still answer differently depending on how the question is phrased. Certifying fixes one definition everywhere, including in generated builds.`,
+                   b:"Open Terms", go:()=>{setTab("worklist");setWSub("terms");}}
+                : totals.drift
+                ? {h:"Refresh a stale source graph", s:`${totals.drift} source${totals.drift===1?"":"s"} changed since their graphs were built. Dependent cross-source graphs may be answering from an old shape.`,
+                   b:"Open Source Graphs", go:()=>setTab("sources")}
+                : {h:"Nothing is waiting on you", s:"Every exception is decided, every term is certified and every source graph is current. Browse the model, or generate a governed build.",
+                   b:"Open Cross-Source Graphs", go:()=>setTab("cross")};
+              return (
+                <Card2 style={{padding:"15px 18px",marginBottom:16,display:"flex",gap:14,alignItems:"center",flexWrap:"wrap",
+                  background:top?T.accentDim:T.bgSurface, borderColor:top?T.accent+"44":T.border}}>
+                  <span style={{width:34,height:34,borderRadius:9,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+                    background:T.bgSurface,border:`1px solid ${T.border}`,color:top?T.accent:T.green}}>
+                    {top?Ic.alert(17):Ic.check(17)}</span>
+                  <span style={{minWidth:0,flex:"1 1 320px"}}>
+                    <span style={{display:"block",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>
+                      Next best action</span>
+                    <span style={{display:"block",fontSize:14,fontWeight:700,color:T.text,marginTop:3}}>{nba.h}</span>
+                    <span style={{display:"block",fontSize:12,color:T.textSub,marginTop:3,lineHeight:1.6}}>{nba.s}</span>
+                  </span>
+                  <Btn small variant="primary" onClick={nba.go}>{nba.b}</Btn>
+                </Card2>
+              );
+            })()}
+
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(165px,1fr))",gap:12,marginBottom:20}}>
               <Metric label="Source graphs published" value={`${totals.published} of ${srcGraphs.length}`}/>
               <Metric label="Tables described" value={totals.tables.toLocaleString()}/>
-              <Metric label="Trusted records" value={totals.records.toLocaleString()}/>
-              <Metric label="Requires review" value={String(totals.review+totals.drift+totals.proposed)} color={(totals.review+totals.drift+totals.proposed)?T.amber:T.green}/>
+              <Metric label="Trusted records" value={totals.records.toLocaleString()}
+                sub={`${ready.autoApplied.toLocaleString()} auto-confirmed`}/>
+              <Metric label="Waiting on you" value={String(wlOpen.length+openMeasures.length)}
+                color={(wlOpen.length+openMeasures.length)?T.amber:T.green}
+                sub={wlOpen.length
+                  ? `${wlOpen.length} decision${wlOpen.length===1?"":"s"} (${klMoney(ready.waitingMoney)}) · ${openMeasures.length} term${openMeasures.length===1?"":"s"}`
+                  : openMeasures.length ? `${openMeasures.length} term${openMeasures.length===1?"":"s"} to certify` : "nothing outstanding"}/>
               <Metric label="Ungoverned labels" value={String(totals.invented)} color={T.green} sub="Target: 0"/>
             </div>
 
@@ -25604,7 +27029,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 ))}
               </Card2>
 
-              {/* entity coverage matrix */}
+              {/* entity coverage matrix + who each system serves */}
               <Card2 style={{padding:16}}>
                 <SH title="Entity coverage" sub="An entity requires two or more published source graphs with classified identifying columns."/>
                 {entityMatrix.map(e=>(
@@ -25627,8 +27052,44 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               </Card2>
             </div>
 
+            <Card2 style={{padding:16,marginBottom:20}}>
+              <SH title="Operating entities"
+                sub="Which part of the business each system serves, so people can ask about the division rather than the application."/>
+              <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+                {KL_OP_ENTITIES.map(oe=>{
+                  const gs = srcGraphs.filter(g=>g.opEntity===oe.name);
+                  return (
+                    <div key={oe.id} style={{flex:"1 1 210px",minWidth:0,padding:"12px 14px",borderRadius:9,
+                      background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                      <div style={{fontSize:12.8,fontWeight:700,color:T.text}}>{oe.name}</div>
+                      <div style={{fontSize:10.8,color:T.textMuted,marginTop:2}}>{oe.region} · owner {oe.owner}</div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:9}}>
+                        {gs.length
+                          ? gs.map(g=>(
+                            <button key={g.id} onClick={()=>openSrc(g.id)}
+                              style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,padding:"4px 9px",borderRadius:6,cursor:"pointer",
+                                background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontFamily:"inherit"}}>
+                              <ServiceIcon service={g.service} size={12}/>{g.name}
+                            </button>))
+                          : <span style={{fontSize:11,color:T.textMuted}}>No system mapped yet</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+                {srcGraphs.some(g=>!g.opEntity)&&(
+                  <div style={{flex:"1 1 210px",padding:"12px 14px",borderRadius:9,background:T.amberDim,border:`1px solid ${T.amber}44`}}>
+                    <div style={{fontSize:12.8,fontWeight:700,color:T.text}}>Unmapped</div>
+                    <div style={{fontSize:11.5,color:T.textSub,marginTop:4,lineHeight:1.55}}>
+                      {srcGraphs.filter(g=>!g.opEntity).map(g=>g.name).join(", ")} — questions about the business
+                      cannot reach these until they are mapped.
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card2>
+
             <SH title="Requires attention" sub="Items accepted automatically are not listed."/>
-            {(totals.review+totals.drift+totals.proposed)===0
+            {(totals.review+totals.drift+totals.proposed+openMeasures.length)===0
               ? <KLEmpty icon={Ic.check(34)} title="Nothing requires attention" sub="The Knowledge Layer is up to date."/>
               : <DataTable
                   cols={[
@@ -25639,9 +27100,15 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                     {key:"act",   label:"", render:(v,r)=><Btn small variant="primary" onClick={r.go}>Review</Btn>},
                   ]}
                   rows={[
-                    ...xGraphs.filter(x=>klOpen(x)>0).map(x=>({kind:"Match decision", obj:x.name,
-                      detail:`${(x.conflicts||[]).length} conflicting · ${(x.unmatched||[]).length} unmatched`,
-                      where:"Cross-source", go:()=>openX(x.id,"records")})),
+                    ...xGraphs.filter(x=>klOpen(x)>0).map(x=>{
+                      const open = klExceptions(x).filter(i=>i.state==="open");
+                      return {kind:"Match decision", obj:x.name,
+                        detail:`${open.length} open · ${klMoney(open.reduce((n,i)=>n+i.governs,0))} governed`,
+                        where:"Worklist", go:()=>setTab("worklist")};
+                    }),
+                    ...openMeasures.map(m=>({kind:"Term to certify", obj:m.name,
+                      detail:`${(m.bindings||[]).length} candidate sources still disagree`,
+                      where:"Worklist › Terms", go:()=>{setTab("worklist");setWSub("terms");}})),
                     ...srcGraphs.filter(s=>s.drift>0).map(s=>({kind:"Source drift", obj:s.name,
                       detail:`${s.drift} columns added since last build`, where:"Source graph", go:()=>openSrc(s.id)})),
                     ...srcGraphs.filter(s=>s.bind.proposed>0).map(s=>({kind:"Term approval", obj:s.name,
@@ -25649,9 +27116,134 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                   ]}/>}
 
             <KLNote tone="quiet">
-              Model configuration, confidence thresholds and refresh schedules are managed in
-              <b> Settings › Knowledge Layer</b>. Run history is available in <b>Settings › Background Jobs</b>.
+              Confidence thresholds are set on the <b>Trust dial</b> at the top of the Worklist, where you can
+              see what a change would do before applying it. Refresh schedules live in
+              <b> Settings › Knowledge Layer</b>; run history in <b>Settings › Background Jobs</b>.
             </KLNote>
+          </>
+        )}
+
+        {/* ───────── WORKLIST — the "what needs me" surface ───────── */}
+        {tab==="worklist" && (
+          <>
+            {/* The one line that answers "what's done, what's pending, what's mine to decide". */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(165px,1fr))",gap:12,marginBottom:14}}>
+              <Metric label="Auto-applied by the resolver" value={ready.autoApplied.toLocaleString()} color={T.green}
+                sub={`of ${ready.resolved.toLocaleString()} records resolved`}/>
+              <Metric label="Waiting on you" value={String(ready.waiting)} color={ready.waiting?T.amber:T.green}
+                sub={ready.waiting?`${klMoney(ready.waitingMoney)} governed`:"nothing outstanding"}/>
+              <Metric label="You decided" value={String(ready.decided)} sub="preserved across re-resolution"/>
+              <Metric label="Terms to certify" value={String(openMeasures.length)}
+                color={openMeasures.length?T.amber:T.green} sub={openMeasures.length?"answers still differ by phrasing":"one definition everywhere"}/>
+              <Metric label="Automation rate"
+                value={ready.resolved?`${Math.round(ready.autoApplied/ready.resolved*1000)/10}%`:"—"}
+                color={T.green} sub="the machine does the bulk"/>
+            </div>
+
+            <KLTrustDial trust={trust} setTrust={setTrust} items={wlAll} canApply={canDial}
+              onApply={applyDial} onRequest={requestDial}/>
+
+            <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:14}}>
+              <SegTabs tabs={[
+                {key:"decisions", label:`Decisions${wlOpen.length?` (${wlOpen.length})`:""}`},
+                {key:"terms",     label:`Terms${openMeasures.length?` (${openMeasures.length})`:""}`},
+              ]} active={wSub} onChange={setWSub}/>
+              <span style={{fontSize:11.5,color:T.textMuted,marginLeft:"auto"}}>
+                Ranked by the money the decision governs × how unsure the resolver is.
+              </span>
+              <Btn small ghost onClick={()=>setHist({title:"Knowledge Layer", kicker:"Layer settings · change history", entries:layerHist})}>
+                Layer history
+              </Btn>
+            </div>
+
+            {wSub==="decisions" && (<>
+              <div style={{display:"flex",gap:9,alignItems:"center",flexWrap:"wrap",marginBottom:11}}>
+                <div style={{flex:1,minWidth:220}}>
+                  <Input2 value={wq} onChange={e=>setWq(e.target.value)} icon={Ic.search(12)}
+                    placeholder="Search decisions by name, entity, graph or issue…"/>
+                </div>
+                <span style={{fontSize:11.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>
+                  {wlFiltered.length}/{wlAll.length}
+                </span>
+              </div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginBottom:14}}>
+                {[
+                  {v:"all",       l:"Needs a decision", n:wlOpen.length, c:T.amber},
+                  {v:"conflict",  l:"Conflicting values", n:wlOpen.filter(i=>i.kind==="conflict").length},
+                  {v:"unmatched", l:"Unmatched", n:wlOpen.filter(i=>i.kind==="unmatched").length},
+                  {v:"decided",   l:"You decided", n:wlAll.filter(i=>i.state!=="open").length, c:T.green},
+                ].map(f=>{
+                  const on = wKind===f.v;
+                  return (
+                    <button key={f.v} onClick={()=>setWKind(f.v)}
+                      style={{display:"inline-flex",alignItems:"center",gap:6,padding:"5px 13px",borderRadius:99,fontSize:11.5,cursor:"pointer",fontFamily:"inherit",
+                        fontWeight:on?700:500,border:`1px solid ${on?(f.c||T.accent):T.border}`,
+                        background:on?(f.c?f.c+"1a":T.accentDim):"transparent",color:on?(f.c||T.accent):T.textSub}}>
+                      {f.l}<span style={{fontSize:10,fontFamily:"'Geist Mono',monospace",opacity:.75}}>{f.n}</span>
+                    </button>
+                  );
+                })}
+                {(wq||wKind!=="all")&&<button onClick={()=>{setWq("");setWKind("all");}}
+                  style={{fontSize:11,color:T.textMuted,background:"none",border:"none",cursor:"pointer",marginLeft:2}}>Clear</button>}
+              </div>
+
+              {/* bulk — one transaction, one audit row */}
+              {canCurate && wSel.size>0 && (
+                <div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap",padding:"11px 15px",marginBottom:12,
+                  borderRadius:10,background:T.accentDim,border:`1px solid ${T.accent}44`}}>
+                  <span style={{fontSize:12.5,color:T.text}}>
+                    <b style={{fontFamily:"'Geist Mono',monospace"}}>{wSel.size}</b> selected ·{" "}
+                    <b style={{fontFamily:"'Geist Mono',monospace"}}>{klMoney(selItems.reduce((n,i)=>n+(i.governs||0),0))}</b> governed
+                  </span>
+                  <span style={{marginLeft:"auto",display:"flex",gap:7}}>
+                    <Btn small ghost onClick={()=>setWSel(new Set())}>Clear selection</Btn>
+                    <Btn small variant="primary" onClick={()=>bulkConfirm(selItems)}>Confirm all as one record each</Btn>
+                  </span>
+                </div>
+              )}
+              {canCurate && wSel.size===0 && wlFiltered.some(i=>i.state==="open") && (
+                <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:12}}>
+                  <Btn small ghost onClick={()=>setWSel(new Set(wlFiltered.filter(i=>i.state==="open").map(i=>i.id)))}>
+                    Select all shown
+                  </Btn>
+                  <Btn small ghost onClick={()=>setWSel(new Set(wlFiltered.filter(i=>i.state==="open"&&i.conf>=trust.match).map(i=>i.id)))}>
+                    Select everything above the dial ({wlFiltered.filter(i=>i.state==="open"&&i.conf>=trust.match).length})
+                  </Btn>
+                </div>
+              )}
+
+              {wlFiltered.length===0
+                ? <KLEmpty icon={Ic.check(34)}
+                    title={wKind==="decided"?"No decisions recorded yet":"Nothing is waiting on you"}
+                    sub={wKind==="decided"
+                      ? "Confirm, hold or reject something and it will be listed here — permanently."
+                      : "Every exception across every cross-source graph has been decided."}/>
+                : wlFiltered.map((it,i)=>(
+                    <KLDecisionCard key={it.id} it={it} rank={i+1} srcById={srcById}
+                      selected={wSel.has(it.id)} canCurate={canCurate}
+                      onSelect={id=>setWSel(s=>{const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n;})}
+                      onVerb={applyVerb}
+                      onHistory={item=>{
+                        const g = xGraphs.find(x=>x.id===item.xgId);
+                        setHist({title:item.name, kicker:`Decision · ${g?g.name:""}`,
+                          entries:(g?.history||[]).filter(h=>!h.detail||h.detail.includes(item.name)||h.action==="Resolution complete")});
+                      }}/>
+                  ))}
+            </>)}
+
+            {wSub==="terms" && (<>
+              <div style={{display:"flex",gap:9,padding:"11px 14px",marginBottom:14,borderRadius:10,
+                background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:12.3,color:T.textSub,lineHeight:1.65}}>
+                <span style={{color:T.violet,display:"flex",flexShrink:0,marginTop:1}}>{Ic.bot(13)}</span>
+                <div>Definitions and per-application bindings arrive <b style={{color:T.text}}>drafted</b>. Your
+                  verb is confirm or edit — never authoring from a blank form. Certifying changes what the live
+                  answer engine returns and compiles the definition into every generated build.</div>
+              </div>
+              {measures.map(m=>(
+                <KLTermCard key={m.id} m={m} srcById={srcById} canCertify={canCurate}
+                  onPick={pickBinding} onCertify={certifyMeasure}/>
+              ))}
+            </>)}
           </>
         )}
 
@@ -25750,6 +27342,8 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
         )}
       </div>
       {wiz && renderWizard()}
+      <KLHistoryDrawer open={!!hist} onClose={()=>setHist(null)}
+        title={hist?.title} kicker={hist?.kicker} entries={hist?.entries}/>
     </div>
   );
 };
@@ -31660,6 +33254,7 @@ const TYPE_CATEGORY = {
   policy_violation:"violation", dq_alert:"violation",
   tag_review:"approval", certification_review:"approval", term_review:"approval", contract_approval:"approval", property_change:"approval",
   assigned:"ownership", stewardship_request:"ownership", needs_attention:"ownership", orphan_assignment:"ownership", rbac_request:"ownership", delete_request:"ownership",
+  kl_build_approval:"approval", kl_dial_approval:"approval",
   field_updated:"curation",
 };
 const CATEGORY_META = {
@@ -31675,6 +33270,7 @@ const ITEM_ROLE = {
   tag_review:"steward", dq_alert:"steward", policy_violation:"steward", term_review:"steward", contract_approval:"steward",
   certification_review:"steward",  // status-change requests are approved by the STEWARD
   stewardship_request:"owner", orphan_assignment:"owner", needs_attention:"owner", rbac_request:"owner", delete_request:"owner",
+  kl_build_approval:"owner", kl_dial_approval:"owner",  // engineer proposes a build / steward proposes a dial — the OWNER or admin decides
   enforcement_approval:"owner", property_change:"owner",  // steward proposes a value; the OWNER decides
   field_updated:"fyi", assigned:"fyi",
 };
@@ -31692,6 +33288,7 @@ const TYPE_ACTION = {
   orphan_assignment:"Assign owner", needs_attention:"Assign steward",
   stewardship_request:"Review role request", term_review:"Approve term", rbac_request:"Review platform role",
   delete_request:"Approve deletion", enforcement_approval:"Approve enforcement", property_change:"Approve property change",
+  kl_build_approval:"Approve governed build", kl_dial_approval:"Approve trust-dial change",
   field_updated:"Field updated", assigned:"Assigned to you",
 };
 const itemTitle = (item) => {
@@ -31756,6 +33353,21 @@ const drSet = (u)=>{ _deleteReqs = typeof u==="function"?u(_deleteReqs):u; _drSu
 const requestDeletion = (req)=>drSet(prev=>[{id:"dr-"+Date.now(), status:"pending", at:"just now", ...req}, ...prev]);
 const resolveDeleteRequest = (id,status)=>drSet(prev=>prev.map(r=>r.id===id?{...r,status}:r));
 const useDeleteReqs = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_drSubs.add(fn);return()=>{_drSubs.delete(fn);};},[]); return _deleteReqs; };
+
+// ── Knowledge Layer approval requests ──
+// The Worklist is where a steward DOES the curation work. This store carries only the
+// things a steward may not decide alone — approving a generated build, and changing the
+// trust dial — to the person who can. Same request/approve round-trip as every other
+// section, so these land in the one Inbox rather than a second queue nobody watches.
+let _klReqs = [];
+const _klSubs = new Set();
+const klSet = (u)=>{ _klReqs = typeof u==="function"?u(_klReqs):u; _klSubs.forEach(f=>f()); };
+const requestKLApproval = (req)=>klSet(prev=>[{id:"kl-"+Date.now(), status:"pending", at:"just now", ...req}, ...prev]);
+const resolveKLRequest = (id,status)=>klSet(prev=>prev.map(r=>r.id===id?{...r,status}:r));
+const useKLReqs = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_klSubs.add(fn);return()=>{_klSubs.delete(fn);};},[]); return _klReqs; };
+// The KL view registers a handler here so an Inbox approval writes back into the layer.
+let _klApply = {};
+const registerKLApply = (fns)=>{ _klApply = fns||{}; };
 
 // ── Enforcement approval requests (Policy Manager) ──
 // A rule with "Enforce in place" checked needs its target table's owner to sign off before
@@ -32092,7 +33704,18 @@ const InboxView = ({onToast}) => {
     body:`${r.requestedBy} set ${r.propName} → "${Array.isArray(r.requestedValue)?r.requestedValue.join(", "):r.requestedValue}" — "${r.note||""}"`,
     requestedBy:r.requestedBy, entity:r.entity, reqTargetId:r.targetId, propId:r.propId, propName:r.propName, requestedValue:r.requestedValue, reqId:r.id, readAt:null,
   }));
-  const allItems = [...contractApprovals.filter(ca=>!items.some(i=>i.id===ca.id)), ...ROLE_REQ_ITEMS, ...STATUS_REQ_ITEMS, ...DELETE_REQ_ITEMS, ...ENF_APPROVAL_ITEMS, ...PROP_REQ_ITEMS, ...items];
+  // Knowledge Layer approvals — a proposed governed build, or a trust-dial change
+  // a non-admin wants applied. Both are decided by the owner/admin, not the requester.
+  const klReqs = useKLReqs();
+  const KL_REQ_ITEMS = klReqs.filter(r=>r.status==="pending").map(r=>({
+    id:"klq-"+r.id, type:r.kind==="dial"?"kl_dial_approval":"kl_build_approval", severity:"medium",
+    section:"knowledge", timeAgo:r.at||"just now",
+    asset:{name:r.name, path:r.kind==="dial"?"Trust dial · Knowledge Layer":`Governed build · ${r.name}`,
+           type:r.kind==="dial"?"Setting":"Knowledge Graph"},
+    body:r.body, requestedBy:r.requestedBy, klKind:r.kind, klTargetId:r.targetId,
+    klPayload:r.payload, reqId:r.id, readAt:null,
+  }));
+  const allItems = [...contractApprovals.filter(ca=>!items.some(i=>i.id===ca.id)), ...ROLE_REQ_ITEMS, ...STATUS_REQ_ITEMS, ...DELETE_REQ_ITEMS, ...ENF_APPROVAL_ITEMS, ...PROP_REQ_ITEMS, ...KL_REQ_ITEMS, ...items];
   const isActionItem   = i => itemRole(i)!=="fyi" && !i.readAt;
   const isActivityItem = i => itemRole(i)==="fyi";
   const isDoneItem     = i => itemRole(i)!=="fyi" && !!i.readAt;
@@ -32120,6 +33743,7 @@ const InboxView = ({onToast}) => {
     {k:"policy",   l:"Policy"},
     {k:"glossary", l:"Glossary"},
     {k:"tags",     l:"Tags"},
+    {k:"knowledge",l:"Knowledge Layer"},
   ];
   const toggleSec = s => setSecFilters(prev=>{ const n=new Set(prev); n.has(s)?n.delete(s):n.add(s); return n; });
 
@@ -32157,6 +33781,8 @@ const InboxView = ({onToast}) => {
     delete_request:      {icon:sz=>Ic.trash(sz||12),    label:"Deletion Request", shortLabel:"Delete"},
     enforcement_approval:{icon:sz=>Ic.policies(sz||12), label:"Enforcement Approval", shortLabel:"Enforce"},
     property_change:     {icon:sz=>Ic.props(sz||12),    label:"Property Change",  shortLabel:"Property"},
+    kl_build_approval:   {icon:sz=>Ic.knowledge(sz||12),label:"Governed Build",   shortLabel:"Build"},
+    kl_dial_approval:    {icon:sz=>Ic.knowledge(sz||12),label:"Trust Dial",       shortLabel:"Dial"},
   };
 
   /* ── Action row — only inside detail panel ── */
@@ -32170,6 +33796,25 @@ const InboxView = ({onToast}) => {
     // Consistent action template for every event:
     //   [ Primary action ] · [ Secondary: Reject (approvals) / Dismiss (alerts) / domain action ] · [ Open in {section} ]
     const openIn = (label,nav,arg)=>btn(label,()=>{onNav&&onNav(nav,arg);});
+    if(item.type==="kl_build_approval" || item.type==="kl_dial_approval"){
+      const isDial = item.type==="kl_dial_approval";
+      return <>{btn(isDial?"Approve change":"Approve build",()=>{
+          (isDial ? _klApply.applyDial : _klApply.approveBuild)?.(item.klTargetId, item.klPayload, item.requestedBy, meHandle);
+          resolveKLRequest(item.reqId,"approved");
+          pushNotif({category:"Knowledge Layer", type:"cert",
+            title:isDial?`Trust dial applied · ${item.asset.name}`:`Governed build approved · ${item.asset.name}`,
+            body:`Approved by ${meHandle||"owner"} — ${item.requestedBy} notified`, nav:"knowledgelayer"});
+          ack(item.id, isDial?"Trust dial applied — requester notified":"Build approved and set as the new baseline");
+        },true)}
+        {btn("Reject",()=>{
+          resolveKLRequest(item.reqId,"rejected");
+          pushNotif({category:"Knowledge Layer", type:"field_updated",
+            title:`Request rejected · ${item.asset.name}`,
+            body:`${item.requestedBy}'s request was declined — nothing changed`, nav:"knowledgelayer"});
+          ack(item.id,"Rejected — the existing baseline stands");
+        },false,true)}
+        {openIn("Open in Knowledge Layer","knowledgelayer")}</>;
+    }
     if(item.type==="dq_alert")
       return <>{btn("Resolve",()=>setResolveOpen(true),true)}{btn("Dismiss",()=>dism(item.id))}{openIn("Open in Data Quality","quality")}</>;
     if(item.type==="policy_violation")
@@ -33206,7 +34851,7 @@ const DA_RETRIEVAL = {
 // catalog" — they ask against a scope somebody put their name on.
 const DA_SPACE_SEED = [
   {
-    id:"sp_commerce", key:"AS-1001", name:"Commerce Revenue", mode:"structured",
+    id:"sp_commerce", drift:{tables:2, cols:14, files:0, since:"2026-08-24 02:10"}, key:"AS-1001", name:"Commerce Revenue", mode:"structured",
     status:"Published", version:"v4", owner:"maya.chen", stewards:["dev.patel"],
     domain:"Commerce", published:"2026-08-18", indexed:"2026-08-24 02:10",
     accuracy:94, questions30d:1842, credits30d:4210, avgLatency:"2.9s",
@@ -33247,7 +34892,7 @@ const DA_SPACE_SEED = [
     ],
   },
   {
-    id:"sp_finance", key:"AS-1002", name:"Finance & Contracts", mode:"documents",
+    id:"sp_finance", drift:{tables:0, cols:0,  files:340, since:"2026-08-23 23:40"}, key:"AS-1002", name:"Finance & Contracts", mode:"documents",
     status:"Published", version:"v2", owner:"sarah.kim", stewards:["sarah.kim"],
     domain:"Finance", published:"2026-08-20", indexed:"2026-08-23 23:40",
     accuracy:91, questions30d:604, credits30d:2980, avgLatency:"4.1s",
@@ -33279,7 +34924,7 @@ const DA_SPACE_SEED = [
     ],
   },
   {
-    id:"sp_c360", key:"AS-1003", name:"Customer 360", mode:"hybrid",
+    id:"sp_c360", drift:{tables:0, cols:0,  files:0, since:"2026-08-24 03:02"}, key:"AS-1003", name:"Customer 360", mode:"hybrid",
     status:"Published", version:"v1", owner:"alex.rivera", stewards:["maya.chen"],
     domain:"Commerce", published:"2026-08-24", indexed:"2026-08-24 03:02",
     accuracy:89, questions30d:311, credits30d:1640, avgLatency:"5.4s",
@@ -33311,7 +34956,7 @@ const DA_SPACE_SEED = [
     ],
   },
   {
-    id:"sp_product", key:"AS-1004", name:"Product Analytics", mode:"structured",
+    id:"sp_product", drift:{tables:0, cols:3,  files:0, since:"2026-08-22 04:00"}, key:"AS-1004", name:"Product Analytics", mode:"structured",
     status:"In review", version:"v1 draft", owner:"dev.patel", stewards:["maya.chen"],
     domain:"Product", published:"—", indexed:"2026-08-22 04:00",
     accuracy:76, questions30d:0, credits30d:180, avgLatency:"—",
@@ -33337,7 +34982,7 @@ const DA_SPACE_SEED = [
     ],
   },
   {
-    id:"sp_hr", key:"AS-1005", name:"HR Records", mode:"structured",
+    id:"sp_hr", drift:{tables:0, cols:0,  files:0, since:"—"}, key:"AS-1005", name:"HR Records", mode:"structured",
     status:"Blocked", version:"—", owner:"alex.rivera", stewards:[],
     domain:"Platform", published:"—", indexed:"—",
     accuracy:0, questions30d:0, credits30d:0, avgLatency:"—",
@@ -33658,23 +35303,71 @@ const DA_ACTIVITY_SEED = [
 
 // ── Platform settings (Settings › Data Ask) ─────────────────────────────────
 const DA_SETTINGS_SEED = {
+  // Keyed by EAI "app type / service" — the same activity list the EAI LLM
+  // model-management screen exposes, so a customer running both products
+  // configures the same names in both places.
   models:{
-    sql:      {provider:"anthropic", model:"claude-opus-5",  temp:0,   maxTok:4096, fallback:"gpt-4o"},
-    summary:  {provider:"anthropic", model:"claude-sonnet-5",temp:0.2, maxTok:2048, fallback:"gpt-4o-mini"},
-    embed:    {provider:"openai",    model:"text-embedding-3-large", temp:0, maxTok:8191, fallback:"none"},
-    semantics:{provider:"anthropic", model:"claude-sonnet-5",temp:0.3, maxTok:2048, fallback:"none"},
+    idc:      {provider:"openai",    model:"gpt-4o",                 temp:0,   maxTok:4096, fallback:"claude-sonnet-5", key:"shared"},
+    taxonomy: {provider:"openai",    model:"gpt-4o",                 temp:0,   maxTok:4096, fallback:"none",            key:"shared"},
+    rot:      {provider:"openai",    model:"gpt-4o-mini",            temp:0,   maxTok:2048, fallback:"none",            key:"shared"},
+    enrich:   {provider:"anthropic", model:"claude-sonnet-5",        temp:0.3, maxTok:2048, fallback:"gpt-4o",          key:"shared"},
+    synonym:  {provider:"anthropic", model:"claude-sonnet-5",        temp:0.3, maxTok:2048, fallback:"none",            key:"shared"},
+    index:    {provider:"openai",    model:"text-embedding-3-large", temp:0,   maxTok:8191, fallback:"none",            key:"shared"},
+    sql:      {provider:"anthropic", model:"claude-opus-5",          temp:0,   maxTok:4096, fallback:"gpt-4o",          key:"shared"},
+    search:   {provider:"anthropic", model:"claude-sonnet-5",        temp:0.2, maxTok:2048, fallback:"gpt-4o-mini",     key:"shared"},
+    router:   {provider:"anthropic", model:"claude-haiku-4-5",       temp:0,   maxTok:1024, fallback:"none",            key:"shared"},
+    summary:  {provider:"anthropic", model:"claude-sonnet-5",        temp:0.2, maxTok:2048, fallback:"gpt-4o-mini",     key:"shared"},
   },
+  // EAI exposes "how much of the data content needs to be sent to the LLM" as a
+  // configurable parameter. Structured never sends values — only schema.
+  payload:{maxSentences:120, maxCharsPerDoc:24000, sendStructuredValues:false, ocrImages:true},
   retrieval:{mode:"hybrid", topK:12, chunk:800, overlap:120, rerank:true, minScore:0.62},
   guards:{maxRows:5000, timeout:60, blockedTags:["Restricted-HR"], onConflict:"mask",
           requirePublished:true, editSql:"steward", showRaw:"owner", injectionDefense:true, groundedOnly:true},
   privacy:{retainDays:90, redactPrompts:true, excludeTraining:true, region:"eu-west-1", logPrompts:true},
+  // The lifecycle gap EAI leaves to the customer: when new tables, columns or
+  // files appear, the space is stale until somebody re-runs the pipeline. EDG
+  // owns it — detect drift, re-process only what is new, never re-bill the rest.
+  refresh:{mode:"incremental", schedule:"weekly", autoOnDrift:true, driftThreshold:10,
+           reindexOnSchemaChange:true, notifyOwner:true},
   cost:{balance:38400, granted:50000, rollForward:true, capUser:500, capSpace:8000, alertAt:80,
+        // EAI meters per activity against an account created with the zone. A zone
+        // in EAI is a KB in CDP; the nearest EDG object is the Domain, so balances
+        // and transfers are held per domain.
         rates:[
+          {act:"IDC classification",      unit:"per 1K pages",  rate:"$0.940"},
+          {act:"Taxonomy evaluation run", unit:"per run",       rate:"$1.200"},
+          {act:"ROT semantic analysis",   unit:"per 1K files",  rate:"$0.310"},
+          {act:"AI enrichment",           unit:"per 100 cols",  rate:"$0.240"},
+          {act:"Synonym generation",      unit:"per 100 cols",  rate:"$0.180"},
+          {act:"Index build (embeddings)",unit:"per 1K chunks", rate:"$0.180"},
           {act:"Prompt → SQL",            unit:"per query",     rate:"$0.014"},
-          {act:"Document retrieval",      unit:"per query",     rate:"$0.022"},
+          {act:"Unstructured search",     unit:"per query",     rate:"$0.022"},
           {act:"Hybrid (router + both)",  unit:"per query",     rate:"$0.031"},
-          {act:"Semantic index build",    unit:"per 1K chunks", rate:"$0.180"},
-          {act:"AI semantics generation", unit:"per 100 cols",  rate:"$0.240"},
+        ],
+        domains:[
+          {id:"Commerce",  balance:14200},
+          {id:"Finance",   balance:11800},
+          {id:"Product",   balance:7400},
+          {id:"Platform",  balance:3600},
+          {id:"ML",        balance:1400},
+        ],
+        ledger:[
+          {id:"lg1", at:"2026-08-24 03:02", act:"Index build (embeddings)", svc:"index", model:"text-embedding-3-large",
+           qty:"4.1K chunks", unit:"per 1K chunks", rate:"$0.180", amount:738, domain:"Commerce", by:"system", space:"sp_c360"},
+          {id:"lg2", at:"2026-08-24 02:10", act:"Index build (embeddings)", svc:"index", model:"text-embedding-3-large",
+           qty:"214 cols", unit:"per 1K chunks", rate:"$0.180", amount:412, domain:"Commerce", by:"system", space:"sp_commerce"},
+          {id:"lg3", at:"2026-08-23 23:40", act:"Index build (embeddings)", svc:"index", model:"text-embedding-3-large",
+           qty:"18.4K chunks", unit:"per 1K chunks", rate:"$0.180", amount:3312, domain:"Finance", by:"system", space:"sp_finance"},
+          {id:"lg4", at:"2026-08-23 17:04", act:"Prompt → SQL", svc:"sql", model:"claude-opus-5",
+           qty:"1 query", unit:"per query", rate:"$0.014", amount:11, domain:"Commerce", by:"maya.chen", space:"sp_commerce"},
+          {id:"lg5", at:"2026-08-22 09:30", act:"AI enrichment", svc:"enrich", model:"claude-sonnet-5",
+           qty:"118 cols", unit:"per 100 cols", rate:"$0.240", amount:284, domain:"Product", by:"dev.patel", space:"sp_product"},
+          {id:"lg6", at:"2026-08-19 11:20", act:"IDC classification", svc:"idc", model:"gpt-4o",
+           qty:"0 pages", unit:"per 1K pages", rate:"$0.940", amount:0, domain:"Platform", by:"system", space:"sp_hr", failed:true},
+        ],
+        transfers:[
+          {id:"tr1", at:"2026-08-20 10:02", from:"Platform", to:"Commerce", amount:2000, by:"alex.rivera"},
         ]},
   access:{ask:["admin","steward","analyst","engineer","viewer"], editSql:["admin","steward","engineer"],
           publish:["admin","steward"], seeRaw:["admin"], manage:["admin"]},
@@ -33701,6 +35394,20 @@ const useDA = () => {
   return _da;
 };
 const daSpace = id => _da.spaces.find(s=>s.id===id);
+// Drift = objects added or altered in the source since this space last indexed.
+// The credit estimate is what an *incremental* refresh would cost, which is the
+// number that decides whether an owner refreshes now or waits.
+const daDrift = sp => {
+  const dr = sp.drift || {tables:0,cols:0,files:0};
+  const n = (dr.tables||0)+(dr.cols||0)+(dr.files||0);
+  const bits = [];
+  if(dr.tables) bits.push(dr.tables+" new table"+(dr.tables===1?"":"s"));
+  if(dr.cols)   bits.push(dr.cols+" new column"+(dr.cols===1?"":"s"));
+  if(dr.files)  bits.push(dr.files+" new file"+(dr.files===1?"":"s"));
+  const credits = Math.round((dr.files||0)*8*0.18 + (dr.cols||0)*2.4 + (dr.tables||0)*40);
+  return {n, credits,
+    detail: n ? bits.join(" \u00b7 ")+" since "+dr.since : "Current as of "+dr.since};
+};
 const daUpdSpace = (id,patch) => daPatch({spaces:_da.spaces.map(s=>s.id===id?{...s,...(typeof patch==="function"?patch(s):patch)}:s)});
 const daLog = row => daPatch({activity:[{...row}, ..._da.activity]});
 const daAddReview = row => daPatch({review:[{...row}, ..._da.review]});
@@ -35974,12 +37681,46 @@ const DA_PROVIDERS = {
   bedrock:  {label:"AWS Bedrock",   models:["claude-opus-5 (bedrock)","titan-embed-v2"]},
   selfhost: {label:"Self-hosted",   models:["llama-3.3-70b","mixtral-8x22b","bge-large-en"]},
 };
-const DA_CAPABILITIES = [
-  {k:"sql",       l:"Question → SQL",        d:"Turns a natural-language question into a query plan over the governed schema. The most accuracy-sensitive call — use your strongest model."},
-  {k:"summary",   l:"Answer composition",     d:"Writes the prose summary and grounds every claim in a citation. Never sees raw values for masked columns."},
-  {k:"embed",     l:"Embeddings",             d:"Vectorises documents and questions for semantic retrieval. Changing this invalidates every document index."},
-  {k:"semantics", l:"Semantics generation",   d:"Proposes synonyms and sample questions during a space build. Proposals always need steward approval."},
+// The activity list EAI's LLM model-management screen exposes ("app type" =
+// service). Each carries the model Solix recommends, the accuracy that
+// recommendation was measured at, and whether the activity sends data values or
+// only metadata to the provider — the question every DPO asks first.
+const DA_ACTIVITIES = [
+  {k:"idc",      area:"Classification", l:"IDC — Intelligent Data Classification",
+   d:"Categorises documents and detects sensitivity, data classifiers, retention and responsible values. Feeds the document picker for every Documents space.",
+   rec:"gpt-4o", acc:94, cost:"$$", sends:"content"},
+  {k:"taxonomy", area:"Classification", l:"Human taxonomy evaluation",
+   d:"Scores an uploaded category taxonomy against a sample set so you can iterate to an accuracy you accept before deploying it. Your taxonomy always takes precedence over model-generated categories.",
+   rec:"gpt-4o", acc:92, cost:"$$", sends:"content"},
+  {k:"rot",      area:"Classification", l:"ROT semantic analysis",
+   d:"The two AI rules in redundant / obsolete / trivial detection — semantic keyword and trivial taxonomy. The other eight rules are deterministic and cost nothing.",
+   rec:"gpt-4o-mini", acc:88, cost:"$", sends:"content"},
+  {k:"enrich",   area:"Answer Spaces",  l:"AI enrichment",
+   d:"Writes descriptions and sample questions for tables, columns and relationships during a space build. Proposals need steward approval before they influence an answer.",
+   rec:"claude-sonnet-5", acc:91, cost:"$$", sends:"metadata"},
+  {k:"synonym",  area:"Answer Spaces",  l:"Synonym generation",
+   d:"Proposes the business words people will actually use for a technical column. Glossary terms are authoritative and never overwritten.",
+   rec:"claude-sonnet-5", acc:89, cost:"$", sends:"metadata"},
+  {k:"index",    area:"Answer Spaces",  l:"Index build — embeddings",
+   d:"Vectorises documents and questions for semantic retrieval. Changing this model invalidates every document index and forces a rebuild.",
+   rec:"text-embedding-3-large", acc:93, cost:"$", sends:"content"},
+  {k:"sql",      area:"Data Ask",       l:"Prompt → SQL",
+   d:"Turns a question into a query plan over the governed schema. The most accuracy-sensitive call in the product — use your strongest model. Only schema is sent, never values.",
+   rec:"claude-opus-5", acc:95, cost:"$$$", sends:"metadata"},
+  {k:"search",   area:"Data Ask",       l:"Unstructured search",
+   d:"Retrieves and summarises document passages with citations. Retrieved content is sent to the provider, so the payload and privacy controls matter most here.",
+   rec:"claude-sonnet-5", acc:92, cost:"$$", sends:"content"},
+  {k:"router",   area:"Data Ask",       l:"Hybrid intent router",
+   d:"Decides whether a question belongs to tables, documents or both. Small, fast and called on every question in a Hybrid space — keep it cheap.",
+   rec:"claude-haiku-4-5", acc:90, cost:"$", sends:"metadata"},
+  {k:"summary",  area:"Data Ask",       l:"Answer composition",
+   d:"Writes the prose summary and grounds every claim in a citation. Never receives raw values for columns your role may not see.",
+   rec:"claude-sonnet-5", acc:93, cost:"$$", sends:"content"},
 ];
+const DA_SENDS = {
+  content:  {l:"Sends content",  c:"amber", d:"Document text or retrieved passages are sent to the provider."},
+  metadata: {l:"Metadata only",  c:"green", d:"Schema, column names and descriptions only — no data values leave the tenancy."},
+};
 const DA_ROLE_LIST = [
   {k:"admin",    l:"Admin"},
   {k:"steward",  l:"Data Steward"},
@@ -35993,6 +37734,7 @@ const DASettingsSection = ({onToast}) => {
   const st = useDA();
   const [sub,setSub]   = useState("models");
   const [d,setD]       = useState(()=>JSON.parse(JSON.stringify(st.settings)));
+  const [xfer,setXfer] = useState({from:"Platform",to:"Commerce",amount:1000});
   const [saved,setSaved]=useState(false);
   const dirty = JSON.stringify(d)!==JSON.stringify(st.settings);
 
@@ -36043,6 +37785,7 @@ const DASettingsSection = ({onToast}) => {
           {key:"guards",   label:"Guardrails"},
           {key:"privacy",  label:"Privacy"},
           {key:"cost",     label:"Cost & Credits"},
+          {key:"refresh",  label:"Refresh"},
           {key:"access",   label:"Access"},
         ]} active={sub} onChange={setSub}/>
       </div>
@@ -36050,68 +37793,166 @@ const DASettingsSection = ({onToast}) => {
       {/* ── MODELS ── */}
       {sub==="models"&&(<>
         <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.65,marginBottom:14}}>
-          Data Ask routes each capability to its own model, so a cheap model can summarise while the strongest one plans
-          the query. Bring your own provider — nothing is hard-wired.
+          Every AI activity in the platform routes to its own model, so a cheap model can classify while the strongest one
+          plans a query. Solix publishes a recommendation per activity — measured on mixed real documents, not benchmarks —
+          and you can accept it, pick another model, or register your own provider key and use that instead.
         </div>
-        {DA_CAPABILITIES.map(c=>{
-          const m = d.models[c.k];
-          const prov = DA_PROVIDERS[m.provider]||DA_PROVIDERS.anthropic;
-          return (
-            <Card key={c.k} title={c.l} desc={c.d}>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1.3fr",gap:9,marginBottom:9}}>
-                <div>
-                  <DASectionLabel>Provider</DASectionLabel>
-                  <select value={m.provider} style={{...inp,cursor:"pointer"}}
-                    onChange={e=>{const p=e.target.value;
-                      setD(x=>({...x,models:{...x.models,[c.k]:{...m,provider:p,model:DA_PROVIDERS[p].models[0]}}}));}}>
-                    {Object.keys(DA_PROVIDERS).map(k=><option key={k} value={k}>{DA_PROVIDERS[k].label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <DASectionLabel>Model</DASectionLabel>
-                  <select value={m.model} style={{...inp,cursor:"pointer",fontFamily:"'Geist Mono',monospace"}}
-                    onChange={e=>setD(x=>({...x,models:{...x.models,[c.k]:{...m,model:e.target.value}}}))}>
-                    {prov.models.map(k=><option key={k} value={k}>{k}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1.3fr",gap:9}}>
-                <div>
-                  <DASectionLabel>Temperature</DASectionLabel>
-                  <input type="number" step="0.1" min="0" max="1" value={m.temp} style={{...inp,textAlign:"center",fontFamily:"'Geist Mono',monospace"}}
-                    onChange={e=>setD(x=>({...x,models:{...x.models,[c.k]:{...m,temp:Number(e.target.value)}}}))}/>
-                </div>
-                <div>
-                  <DASectionLabel>Max tokens</DASectionLabel>
-                  <input type="number" value={m.maxTok} style={{...inp,textAlign:"center",fontFamily:"'Geist Mono',monospace"}}
-                    onChange={e=>setD(x=>({...x,models:{...x.models,[c.k]:{...m,maxTok:Number(e.target.value)}}}))}/>
-                </div>
-                <div>
-                  <DASectionLabel>Fallback on failure</DASectionLabel>
-                  <select value={m.fallback} style={{...inp,cursor:"pointer",fontFamily:"'Geist Mono',monospace"}}
-                    onChange={e=>setD(x=>({...x,models:{...x.models,[c.k]:{...m,fallback:e.target.value}}}))}>
-                    <option value="none">none — fail the question</option>
-                    {Object.keys(DA_PROVIDERS).flatMap(p=>DA_PROVIDERS[p].models).map(k=><option key={k} value={k}>{k}</option>)}
-                  </select>
-                </div>
-              </div>
-              {c.k==="sql"&&m.temp>0&&(
-                <div style={{marginTop:11,padding:"9px 11px",borderRadius:7,background:T.amberDim,border:`1px solid ${T.amber}44`,
-                  fontSize:11.5,color:T.text,lineHeight:1.55}}>
-                  Temperature above 0 makes query planning non-deterministic — the same question can produce a different
-                  plan on a second run. Keep this at 0 unless you are deliberately testing variance.
-                </div>
-              )}
-              {c.k==="embed"&&(
-                <div style={{marginTop:11,padding:"9px 11px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,
-                  fontSize:11.5,color:T.textMuted,lineHeight:1.55}}>
-                  Changing the embedding model invalidates every document index. Affected spaces are marked stale and must
-                  be rebuilt before they will answer again.
-                </div>
-              )}
-            </Card>
-          );
-        })}
+
+        <Card title="Apply every Solix recommendation"
+          desc="Sets all ten activities to the recommended model. Accuracy and cost were measured together — the recommendation is the best accuracy inside a sensible cost, not the best accuracy at any price.">
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <Btn small variant="primary" onClick={()=>setD(x=>({...x,models:Object.fromEntries(
+              DA_ACTIVITIES.map(a=>{
+                const prov = Object.keys(DA_PROVIDERS).find(p=>DA_PROVIDERS[p].models.includes(a.rec)) || x.models[a.k].provider;
+                return [a.k,{...x.models[a.k], provider:prov, model:a.rec}];
+              }))}))}>Apply all recommendations</Btn>
+            <span style={{fontSize:11,color:T.textMuted}}>
+              {DA_ACTIVITIES.filter(a=>d.models[a.k].model===a.rec).length} of {DA_ACTIVITIES.length} activities are on the recommended model
+            </span>
+          </div>
+        </Card>
+
+        <Card title="Payload sent to the provider"
+          desc="EAI exposes how much document content is sent for classification; the same control lives here. Structured questions send schema only — column names, types and descriptions — never values, so a Prompt → SQL call cannot leak a row.">
+          <RowToggle l="Send data values for structured activities"
+            d="Off is the safe default and matches EAI: the planner reasons over schema alone. Turning this on improves plans for cryptic column names, at the cost of sending sample values out."
+            on={d.payload.sendStructuredValues} set={()=>setD(x=>({...x,payload:{...x.payload,sendStructuredValues:!x.payload.sendStructuredValues}}))}/>
+          <RowNum l="Maximum sentences per document" suffix="sentences"
+            d="Caps how much of a long file is sent for classification. Lower means cheaper and less exposure; too low and category accuracy drops."
+            val={d.payload.maxSentences} set={v=>setD(x=>({...x,payload:{...x.payload,maxSentences:v}}))}/>
+          <RowNum l="Maximum characters per document" suffix="chars"
+            d="A hard ceiling applied after the sentence limit, so one pathological file cannot dominate a run."
+            val={d.payload.maxCharsPerDoc} set={v=>setD(x=>({...x,payload:{...x.payload,maxCharsPerDoc:v}}))}/>
+          <RowToggle l="Run OCR on images inside documents"
+            d="Scanned pages and embedded images become text. Materially better on contracts and invoices; slower and dearer on everything else."
+            on={d.payload.ocrImages} set={()=>setD(x=>({...x,payload:{...x.payload,ocrImages:!x.payload.ocrImages}}))}/>
+          {d.payload.sendStructuredValues&&(
+            <div style={{marginTop:11,padding:"9px 11px",borderRadius:7,background:T.amberDim,border:`1px solid ${T.amber}44`,
+              fontSize:11.5,color:T.text,lineHeight:1.55}}>
+              Structured activities will now send sample values. Values from columns carrying a blocked or masked
+              classification are still stripped first — but this is a change your DPO should sign off.
+            </div>
+          )}
+        </Card>
+
+        {["Classification","Answer Spaces","Data Ask"].map(area=>(
+          <div key={area}>
+            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",
+              margin:"20px 0 10px"}}>{area}</div>
+            {DA_ACTIVITIES.filter(a=>a.area===area).map(c=>{
+              const m = d.models[c.k];
+              const prov = DA_PROVIDERS[m.provider]||DA_PROVIDERS.anthropic;
+              const onRec = m.model===c.rec;
+              const sends = DA_SENDS[c.sends];
+              const sendsColor = sends.c==="green"?T.green:T.amber;
+              return (
+                <Card key={c.k} title={c.l} desc={c.d}>
+                  <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:12}}>
+                    <DAPill color={sendsColor} title={sends.d}>{sends.l}</DAPill>
+                    <DAPill color={onRec?T.green:T.amber}>
+                      {onRec?"On the recommended model":"Not the recommended model"}
+                    </DAPill>
+                    <DAPill mono title="Accuracy Solix measured for the recommended model on mixed real documents">{c.acc}% measured</DAPill>
+                    <DAPill mono title="Relative cost per call">{c.cost}</DAPill>
+                  </div>
+
+                  {!onRec&&(
+                    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"9px 11px",marginBottom:11,
+                      borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                      <span style={{fontSize:11.5,color:T.textSub,flex:1,minWidth:180}}>
+                        Solix recommends <b style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{c.rec}</b> for this activity
+                        — {c.acc}% measured accuracy at {c.cost} cost.
+                      </span>
+                      <Btn small ghost onClick={()=>{
+                        const p = Object.keys(DA_PROVIDERS).find(x=>DA_PROVIDERS[x].models.includes(c.rec))||m.provider;
+                        setD(x=>({...x,models:{...x.models,[c.k]:{...m,provider:p,model:c.rec}}}));
+                      }}>Use recommendation</Btn>
+                    </div>
+                  )}
+
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1.3fr",gap:9,marginBottom:9}}>
+                    <div>
+                      <DASectionLabel>Provider</DASectionLabel>
+                      <select value={m.provider} style={{...inp,cursor:"pointer"}}
+                        onChange={e=>{const p=e.target.value;
+                          setD(x=>({...x,models:{...x.models,[c.k]:{...m,provider:p,model:DA_PROVIDERS[p].models[0]}}}));}}>
+                        {Object.keys(DA_PROVIDERS).map(k=><option key={k} value={k}>{DA_PROVIDERS[k].label}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <DASectionLabel>Model</DASectionLabel>
+                      <select value={m.model} style={{...inp,cursor:"pointer",fontFamily:"'Geist Mono',monospace"}}
+                        onChange={e=>setD(x=>({...x,models:{...x.models,[c.k]:{...m,model:e.target.value}}}))}>
+                        {prov.models.map(k=><option key={k} value={k}>{k}{k===c.rec?"  — recommended":""}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1.3fr",gap:9,marginBottom:9}}>
+                    <div>
+                      <DASectionLabel>Temperature</DASectionLabel>
+                      <input type="number" step="0.1" min="0" max="1" value={m.temp} style={{...inp,textAlign:"center",fontFamily:"'Geist Mono',monospace"}}
+                        onChange={e=>setD(x=>({...x,models:{...x.models,[c.k]:{...m,temp:Number(e.target.value)}}}))}/>
+                    </div>
+                    <div>
+                      <DASectionLabel>Max tokens</DASectionLabel>
+                      <input type="number" value={m.maxTok} style={{...inp,textAlign:"center",fontFamily:"'Geist Mono',monospace"}}
+                        onChange={e=>setD(x=>({...x,models:{...x.models,[c.k]:{...m,maxTok:Number(e.target.value)}}}))}/>
+                    </div>
+                    <div>
+                      <DASectionLabel>Fallback on failure</DASectionLabel>
+                      <select value={m.fallback} style={{...inp,cursor:"pointer",fontFamily:"'Geist Mono',monospace"}}
+                        onChange={e=>setD(x=>({...x,models:{...x.models,[c.k]:{...m,fallback:e.target.value}}}))}>
+                        <option value="none">none — fail the activity</option>
+                        {Object.keys(DA_PROVIDERS).flatMap(p=>DA_PROVIDERS[p].models).map(k=><option key={k} value={k}>{k}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <DASectionLabel>Credentials</DASectionLabel>
+                    <select value={m.key} style={{...inp,cursor:"pointer",maxWidth:420}}
+                      onChange={e=>setD(x=>({...x,models:{...x.models,[c.k]:{...m,key:e.target.value}}}))}>
+                      <option value="shared">Shared platform key for {prov.label}</option>
+                      <option value="own">This activity's own registered key</option>
+                      <option value="byo">Bring your own inferencing endpoint</option>
+                    </select>
+                    {m.key!=="shared"&&(
+                      <div style={{marginTop:8,display:"flex",gap:7,alignItems:"center",flexWrap:"wrap"}}>
+                        <span style={{fontSize:11.5,color:T.textMuted}}>
+                          {m.key==="own"
+                            ? "Register the key in Settings › API Keys, then select it here."
+                            : "Point at your own endpoint — a self-hosted model or a private inference API."}
+                        </span>
+                        <Btn small ghost onClick={()=>onToast("Register credentials in Settings › API Keys")}>Manage credentials</Btn>
+                      </div>
+                    )}
+                  </div>
+
+                  {c.k==="sql"&&m.temp>0&&(
+                    <div style={{marginTop:11,padding:"9px 11px",borderRadius:7,background:T.amberDim,border:`1px solid ${T.amber}44`,
+                      fontSize:11.5,color:T.text,lineHeight:1.55}}>
+                      Temperature above 0 makes query planning non-deterministic — the same question can produce a different
+                      plan on a second run, and a Verified Answer stops being reproducible. Keep this at 0.
+                    </div>
+                  )}
+                  {c.k==="index"&&(
+                    <div style={{marginTop:11,padding:"9px 11px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,
+                      fontSize:11.5,color:T.textMuted,lineHeight:1.55}}>
+                      Changing the embedding model invalidates every document index. Affected spaces are marked stale and
+                      refuse to answer until they are rebuilt — budget for a full rebuild, not an incremental one.
+                    </div>
+                  )}
+                  {c.k==="taxonomy"&&(
+                    <div style={{marginTop:11,padding:"9px 11px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,
+                      fontSize:11.5,color:T.textMuted,lineHeight:1.55}}>
+                      Your uploaded taxonomy is always the primary source for a category. This model is consulted only when
+                      no taxonomy entry matches, so classification stays consistent with the categories you defined.
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
+        ))}
       </>)}
 
       {/* ── RETRIEVAL ── */}
@@ -36280,14 +38121,137 @@ const DASettingsSection = ({onToast}) => {
           </div>
         </div>
 
-        <Card title="Rate book" desc="What each activity costs. Published to you by Solix — read-only here, and the same numbers your invoice is built from.">
+        <Card title="Rate book"
+          desc="What each activity costs. Published to you by Solix — read-only here, and the same numbers your invoice is built from.">
           <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
             {d.cost.rates.map((r,i)=>(
               <div key={r.act} style={{display:"flex",alignItems:"center",gap:12,padding:"9px 12px",
                 borderTop:i?`1px solid ${T.border}`:"none",background:i%2?T.bgElevated:"transparent"}}>
                 <span style={{fontSize:12,color:T.text,flex:1,minWidth:0}}>{r.act}</span>
-                <span style={{fontSize:11,color:T.textMuted,width:110}}>{r.unit}</span>
+                <span style={{fontSize:11,color:T.textMuted,width:118}}>{r.unit}</span>
                 <span style={{fontSize:12,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{r.rate}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card title="Balances per domain"
+          desc="EAI meters against an account created with the zone; CDP calls that zone a knowledge base. The nearest EDG object is the Domain, so each domain carries its own balance and one domain overspending cannot starve another.">
+          {d.cost.domains.map((dm,i)=>{
+            const max = Math.max(...d.cost.domains.map(x=>x.balance),1);
+            return (
+              <div key={dm.id} style={{padding:"8px 0",borderTop:i?`1px solid ${T.border}`:"none"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:5}}>
+                  <span style={{fontSize:12,fontWeight:600,color:T.text,flex:1,minWidth:0}}>{dm.id}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{dm.balance.toLocaleString()}</span>
+                </div>
+                <div style={{height:4,borderRadius:2,background:T.bgHover,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${Math.round(dm.balance/max*100)}%`,background:T.accent}}/>
+                </div>
+              </div>
+            );
+          })}
+        </Card>
+
+        <Card title="Transfer credit between domains"
+          desc="A domain that is not using its allocation can hand it to one that is, without a new purchase order. Every transfer is recorded with who moved it.">
+          <div style={{display:"flex",gap:8,alignItems:"flex-end",flexWrap:"wrap",marginBottom:12}}>
+            <div style={{minWidth:150}}>
+              <DASectionLabel>From</DASectionLabel>
+              <select value={xfer.from} style={{...inp,cursor:"pointer"}}
+                onChange={e=>setXfer(v=>({...v,from:e.target.value}))}>
+                {d.cost.domains.map(dm=><option key={dm.id} value={dm.id}>{dm.id} — {dm.balance.toLocaleString()}</option>)}
+              </select>
+            </div>
+            <div style={{minWidth:150}}>
+              <DASectionLabel>To</DASectionLabel>
+              <select value={xfer.to} style={{...inp,cursor:"pointer"}}
+                onChange={e=>setXfer(v=>({...v,to:e.target.value}))}>
+                {d.cost.domains.map(dm=><option key={dm.id} value={dm.id}>{dm.id} — {dm.balance.toLocaleString()}</option>)}
+              </select>
+            </div>
+            <div style={{width:120}}>
+              <DASectionLabel>Amount</DASectionLabel>
+              <input type="number" min={1} value={xfer.amount} style={{...inp,textAlign:"center",fontFamily:"'Geist Mono',monospace"}}
+                onChange={e=>setXfer(v=>({...v,amount:Number(e.target.value)}))}/>
+            </div>
+            <Btn small variant="primary"
+              disabled={xfer.from===xfer.to || xfer.amount<=0 ||
+                        xfer.amount>((d.cost.domains.find(x=>x.id===xfer.from)||{}).balance||0)}
+              onClick={()=>{
+                setD(x=>({...x,cost:{...x.cost,
+                  domains:x.cost.domains.map(dm=>dm.id===xfer.from?{...dm,balance:dm.balance-xfer.amount}
+                                              :dm.id===xfer.to?{...dm,balance:dm.balance+xfer.amount}:dm),
+                  transfers:[{id:"tr"+Date.now(), at:daNow(), from:xfer.from, to:xfer.to, amount:xfer.amount, by:"alex.rivera"},
+                             ...x.cost.transfers]}}));
+                onToast(`${xfer.amount.toLocaleString()} credits moved from ${xfer.from} to ${xfer.to}`);
+              }}>Transfer</Btn>
+          </div>
+          {xfer.from===xfer.to
+            ? <div style={{fontSize:11.5,color:T.amber}}>Pick two different domains.</div>
+            : xfer.amount>((d.cost.domains.find(x=>x.id===xfer.from)||{}).balance||0)
+              ? <div style={{fontSize:11.5,color:T.rose}}>
+                  {xfer.from} only holds {((d.cost.domains.find(x=>x.id===xfer.from)||{}).balance||0).toLocaleString()} credits.
+                </div>
+              : null}
+          {d.cost.transfers.length>0&&(<>
+            <DASectionLabel style={{marginTop:16}}>Transfer history</DASectionLabel>
+            <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+              {d.cost.transfers.map((tr,i)=>(
+                <div key={tr.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",
+                  borderTop:i?`1px solid ${T.border}`:"none"}}>
+                  <span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{tr.at}</span>
+                  <span style={{fontSize:11.8,color:T.text}}>{tr.from} → {tr.to}</span>
+                  <span style={{fontSize:11.5,color:T.textMuted}}>by {tr.by}</span>
+                  <span style={{marginLeft:"auto",fontSize:12,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>
+                    {tr.amount.toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>)}
+        </Card>
+
+        <Card title="Usage ledger"
+          desc="Every metered activity with the model that ran it, the quantity consumed and what it cost. If a debit is wrong — a failed run that still billed — revert it here and the credit returns to the domain.">
+          <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+            <div style={{display:"flex",gap:10,padding:"8px 12px",background:T.bgElevated,fontSize:9.5,fontWeight:700,
+              color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>
+              <span style={{width:104}}>When</span>
+              <span style={{flex:1,minWidth:0}}>Activity</span>
+              <span style={{width:150}}>Model</span>
+              <span style={{width:86}}>Quantity</span>
+              <span style={{width:58,textAlign:"right"}}>Credits</span>
+              <span style={{width:64}}/>
+            </div>
+            {d.cost.ledger.map((lg,i)=>(
+              <div key={lg.id} style={{display:"flex",gap:10,alignItems:"center",padding:"9px 12px",
+                borderTop:`1px solid ${T.border}`,opacity:lg.reverted?.55:1}}>
+                <span style={{width:104,fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{lg.at}</span>
+                <span style={{flex:1,minWidth:0}}>
+                  <span style={{display:"block",fontSize:11.8,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{lg.act}</span>
+                  <span style={{display:"block",fontSize:10,color:T.textMuted}}>
+                    {lg.domain} · {lg.by}{lg.failed?" · run failed":""}{lg.reverted?" · reverted":""}
+                  </span>
+                </span>
+                <span style={{width:150,fontSize:10.5,color:T.textSub,fontFamily:"'Geist Mono',monospace",
+                  overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{lg.model}</span>
+                <span style={{width:86,fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{lg.qty}</span>
+                <span style={{width:58,textAlign:"right",fontSize:12,fontWeight:700,fontFamily:"'Geist Mono',monospace",
+                  color:lg.reverted?T.textMuted:T.text,textDecoration:lg.reverted?"line-through":"none"}}>{lg.amount.toLocaleString()}</span>
+                <span style={{width:64,display:"flex",justifyContent:"flex-end"}}>
+                  {lg.reverted
+                    ? <DAPill color={T.green}>Reverted</DAPill>
+                    : lg.amount>0
+                      ? <Btn small ghost onClick={()=>{
+                          setD(x=>({...x,cost:{...x.cost,
+                            balance:x.cost.balance+lg.amount,
+                            domains:x.cost.domains.map(dm=>dm.id===lg.domain?{...dm,balance:dm.balance+lg.amount}:dm),
+                            ledger:x.cost.ledger.map(y=>y.id===lg.id?{...y,reverted:true}:y)}}));
+                          onToast(`${lg.amount.toLocaleString()} credits returned to ${lg.domain}`);
+                        }}>Revert</Btn>
+                      : <span style={{fontSize:10.5,color:T.textMuted}}>—</span>}
+                </span>
               </div>
             ))}
           </div>
@@ -36304,7 +38268,7 @@ const DASettingsSection = ({onToast}) => {
             d="Notifies Admins and the space owner. Delivered through Settings › Notifications."
             val={d.cost.alertAt} set={v=>setD(x=>({...x,cost:{...x.cost,alertAt:v}}))}/>
           <RowToggle l="Carry unused credit into the next term"
-            d="Unspent credit rolls forward on renewal instead of expiring."
+            d="Unspent credit rolls forward on renewal instead of expiring — the competitive point most vendors do not offer."
             on={d.cost.rollForward} set={()=>setD(x=>({...x,cost:{...x.cost,rollForward:!x.cost.rollForward}}))}/>
         </Card>
 
@@ -36324,6 +38288,92 @@ const DASettingsSection = ({onToast}) => {
               </div>
             );
           })}
+        </Card>
+      </>)}
+
+      {/* ── REFRESH ── */}
+      {sub==="refresh"&&(<>
+        <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.65,marginBottom:14}}>
+          The hardest part of running this in production is not building a space — it is keeping one correct. When a new
+          table, column or file appears, the space does not know about it, and a question that should find it silently
+          does not. EAI leaves that re-run to the customer; EDG detects the drift and re-processes only what changed.
+        </div>
+
+        <Card title="What gets re-processed" tone={T.accent+"55"}
+          desc="Re-indexing everything is correct but expensive — every document is re-embedded and re-billed. Incremental picks up only objects added or altered since the last successful build.">
+          <div style={{display:"flex",flexDirection:"column",gap:7}}>
+            {[["incremental","Incremental — only what changed",
+               "New and altered tables, columns and files only. Existing objects are left alone, so an added folder costs the price of that folder."],
+              ["full","Full rebuild every time",
+               "Everything is re-processed on every run. Simplest to reason about, and the only safe choice after an embedding-model change."]].map(([k,l,sub2])=>(
+              <label key={k} onClick={()=>setD(x=>({...x,refresh:{...x.refresh,mode:k}}))}
+                style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 12px",borderRadius:8,cursor:"pointer",
+                  border:`1.5px solid ${d.refresh.mode===k?T.accent:T.border}`,background:d.refresh.mode===k?T.accentDim:"transparent"}}>
+                <div style={{marginTop:2,width:13,height:13,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+                  border:`2px solid ${d.refresh.mode===k?T.accent:T.border}`,background:d.refresh.mode===k?T.accent:"transparent"}}>
+                  {d.refresh.mode===k&&<div style={{width:4,height:4,borderRadius:"50%",background:"#fff"}}/>}
+                </div>
+                <div><div style={{fontSize:12,fontWeight:600,color:d.refresh.mode===k?T.accent:T.text}}>{l}</div>
+                  <div style={{fontSize:11,color:T.textMuted,marginTop:1,lineHeight:1.5}}>{sub2}</div></div>
+              </label>
+            ))}
+          </div>
+          {d.refresh.mode==="full"&&(
+            <div style={{marginTop:11,padding:"9px 11px",borderRadius:7,background:T.amberDim,border:`1px solid ${T.amber}44`,
+              fontSize:11.5,color:T.text,lineHeight:1.55}}>
+              Full rebuilds re-bill every object on every run. On Finance &amp; Contracts alone that is 18,402 chunks —
+              about 3,312 credits a time. Use this only when you have changed something that invalidates the whole index.
+            </div>
+          )}
+        </Card>
+
+        <Card title="When it runs" desc="Drift is detected on every catalog sync. What happens next is your choice.">
+          <div style={{padding:"9px 0"}}>
+            <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:2}}>Scheduled refresh</div>
+            <div style={{fontSize:11,color:T.textMuted,marginBottom:9,lineHeight:1.55}}>
+              A floor, so a space is never more than one period out of date even if nothing trips the drift threshold.
+            </div>
+            <select value={d.refresh.schedule} style={{...inp,cursor:"pointer",maxWidth:320}}
+              onChange={e=>setD(x=>({...x,refresh:{...x.refresh,schedule:e.target.value}}))}>
+              <option value="ingestion">After every source sync</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="manual">Never — owners refresh by hand</option>
+            </select>
+          </div>
+          <RowToggle l="Refresh automatically when drift crosses the threshold"
+            d="Without this, a space with new tables waits for its owner to notice. With it, the space keeps itself current and the owner is told what it cost."
+            on={d.refresh.autoOnDrift} set={()=>setD(x=>({...x,refresh:{...x.refresh,autoOnDrift:!x.refresh.autoOnDrift}}))}/>
+          <RowNum l="Drift threshold" suffix="objects"
+            d="New or altered tables, columns or files needed before an automatic refresh is triggered."
+            val={d.refresh.driftThreshold} set={v=>setD(x=>({...x,refresh:{...x.refresh,driftThreshold:v}}))}/>
+          <RowToggle l="Re-index immediately on a breaking schema change"
+            d="A dropped or retyped column can make a stored plan return wrong results rather than fail. This re-plans straight away instead of waiting for the schedule."
+            on={d.refresh.reindexOnSchemaChange} set={()=>setD(x=>({...x,refresh:{...x.refresh,reindexOnSchemaChange:!x.refresh.reindexOnSchemaChange}}))}/>
+          <RowToggle l="Tell the space owner what drifted"
+            d="Sends the object list and the credit cost, so a refresh is never a surprise on the invoice."
+            on={d.refresh.notifyOwner} set={()=>setD(x=>({...x,refresh:{...x.refresh,notifyOwner:!x.refresh.notifyOwner}}))}/>
+        </Card>
+
+        <Card title="Spaces with drift now"
+          desc="Detected against the last successful index build for each space. Refresh a space from its profile — the estimate is what an incremental run would cost.">
+          {st.spaces.filter(s=>daDrift(s).n>0).length===0
+            ? <div style={{fontSize:11.5,color:T.green}}>Every space is current.</div>
+            : st.spaces.filter(s=>daDrift(s).n>0).map((s,i)=>{
+                const dr = daDrift(s);
+                return (
+                  <div key={s.id} style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 0",
+                    borderTop:i?`1px solid ${T.border}`:"none"}}>
+                    <div style={{flex:1,minWidth:150}}>
+                      <div style={{fontSize:12,fontWeight:600,color:T.text}}>{s.name}</div>
+                      <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{dr.detail}</div>
+                    </div>
+                    <DAPill color={dr.n>=d.refresh.driftThreshold?T.amber:T.textSub}>{dr.n} objects</DAPill>
+                    <DAPill mono title="Estimated credits for an incremental refresh">~{dr.credits} cr</DAPill>
+                  </div>
+                );
+              })}
         </Card>
       </>)}
 
@@ -40081,7 +42131,7 @@ export default function App(){
 
   const handleLogin  = (r) => { setRole(r); setNav("home"); setLoggedIn(true); };
   const handleLogout = () => { setLoggedIn(false); setNav("home"); setAssetStack([]); };
-  const handleRole   = (r) => { setRole(r); setNav("home"); setAsset(null); };
+  const handleRole   = (r) => { setRole(r); setNav("home"); setAssetStack([]); };
   const handleNav    = (id, payload=null) => {
     // Guard: redirect disallowed pages to home
     if(!allowedNav.includes(id) && id!=="profile") { setNav("home"); return; }
