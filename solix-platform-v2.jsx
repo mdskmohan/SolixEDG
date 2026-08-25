@@ -24066,6 +24066,8 @@ const KL_X_SEED = [
   {id:"xg1", key:"XKG-2001", name:"Supplier Master", entity:"Supplier", srcIds:["sg1","sg2","sg3"],
    records:1204, review:6, owner:"maya.chen", stewards:["priya.nair"], status:"Published",
    domain:"Procurement", built:"2026-08-19", version:"v2", policy:"Vendor Data Protection",
+   // reading rows is a separate, consented act — record level stays locked until this says done
+   scan:{state:"done", mode:"full", at:"2026-08-19", rows:184200, approvedBy:"maya.chen", stale:false},
    keys:["Tax ID","Legal Name","Vendor Code"],
    beliefs:[{f:"Tax ID",s:"SAP ECC"},{f:"Legal Name",s:"Oracle EBS"},{f:"Vendor Code",s:"SAP ECC"},{f:"Address",s:"Most recently updated"}],
    golden:[
@@ -24088,6 +24090,7 @@ const KL_X_SEED = [
   {id:"xg2", key:"XKG-2002", name:"Customer 360", entity:"Customer", srcIds:["sg1","sg2"],
    records:3910, review:0, owner:"priya.nair", stewards:[], status:"Published",
    domain:"Sales", built:"2026-08-14", version:"v1", policy:"Customer PII",
+   scan:{state:"done", mode:"sample", at:"2026-08-14", rows:5000, approvedBy:"priya.nair", stale:true},
    keys:["Tax ID","Name"],
    beliefs:[{f:"Tax ID",s:"SAP ECC"},{f:"Name",s:"Oracle EBS"}],
    golden:[
@@ -24167,9 +24170,9 @@ const KL_X_STEPS = [
   {t:"If they disagree", mode:"you", uses:"your owners",
    d:"Systems will disagree. Someone has to decide which one to believe, for each piece of information. This is the one genuinely new decision in the flow.",
    note:["🧭","Vendors call this survivorship. On screen we just ask which system we believe."]},
-  {t:"Review", mode:"you", uses:"your Inbox",
-   d:"Confident matches are already joined. Only the genuinely unclear ones reach a person, most important first.",
-   note:["📥","A high auto-join ratio is what makes this workable on thousands of tables."]},
+  {t:"Data scan", mode:"you", uses:"your owners and audit log",
+   d:"Everything so far is metadata. Actually resolving records means reading rows out of each source, which is a different level of access — so it is a decision you make explicitly, not a side effect of publishing.",
+   note:["🔒","Publish without scanning and you still get a working entity-level graph. Records can be resolved later, whenever the access is approved."]},
   {t:"Govern & Publish", mode:"you", uses:"Policies · Glossary · Domains · Owners",
    d:"The trusted records become governed objects like anything else in EDG — owner, policy, term, domain.",
    note:["🚀","Published trusted records feed Data Ask and the AI copilot: one governed answer across every system."]},
@@ -24356,14 +24359,62 @@ function klBuildSourceGraph(sg, {showGov=true, focus=null}={}){
 // ── Cross-source graph: THIS is the "sits on top of the AKGs" picture.
 // rank0 source systems → rank1 their master tables → rank2 the matched source
 // records → rank3 the golden record → rank4 governance bound to it.
-function klBuildCrossGraph(xg, srcGraphs, {showGov=true, goldenId=null, focus=null}={}){
+// ── Cross-source graph. TWO LEVELS, and the distinction is a governance one:
+//
+//   "entity"  (default) — pure METADATA. How the business entity is represented as an
+//                         object in each source graph: system -> master table -> entity.
+//                         Mirrors the object level an AKG works at. Reads no data, so it
+//                         is always available.
+//   "record"  (opt-in)  — INSTANCES. The resolved golden record and the source rows behind
+//                         it. This can only exist after a data scan, because producing it
+//                         means reading actual rows (often PII). Gated on xg.scan.
+//
+function klBuildCrossGraph(xg, srcGraphs, {showGov=true, goldenId=null, focus=null, level="entity"}={}){
   const N=[], E=[];
+  const entId = "ent:"+xg.entity;
+
+  // ── governance tail, shared by both levels; hangs off `anchor` ──
+  const addGov = (anchor, rank) => {
+    if(!showGov) return;
+    N.push({id:"term:"+xg.entity, rank, kind:"term", label:xg.entity, sub:"certified term", focused:focus==="term:"+xg.entity});
+    E.push(klEdge(anchor, "term:"+xg.entity, "means"));
+    if(xg.policy){
+      N.push({id:"pol:"+xg.policy, rank, kind:"policy", label:xg.policy, sub:"enforced", focused:focus==="pol:"+xg.policy});
+      E.push(klEdge(anchor, "pol:"+xg.policy, "governed by"));
+    }
+    N.push({id:"own:"+xg.owner, rank, kind:"owner", label:xg.owner, sub:`owner · ${xg.domain}`, focused:focus==="own:"+xg.owner});
+    E.push(klEdge(anchor, "own:"+xg.owner, "owned by"));
+  };
+
+  if(level==="entity"){
+    // system -> its master table -> the business entity they all resolve to
+    xg.srcIds.forEach(id=>{
+      const src = srcGraphs.find(x=>x.id===id);
+      if(!src) return;
+      const m = src.masters.find(x=>x.entity===xg.entity);
+      const sysId="sys:"+src.id, tblId="tbl:"+src.id;
+      N.push({id:sysId, rank:0, kind:"system", label:src.name, sub:src.connection,
+              chips:[src.status], focused:focus===sysId, meta:{srcId:src.id}});
+      N.push({id:tblId, rank:1, kind:"master", kindLabel:`Master · ${xg.entity}`,
+              label:m?m.table:"—", sub:m?`${m.keys.length} match keys`:"not matchable",
+              chips:m?m.keys:[], focused:focus===tblId, meta:{srcId:src.id}});
+      E.push(klEdge(sysId, tblId, "contains"));
+      // the match keys ARE the reason this object maps to the entity — say so on the edge
+      E.push(klEdge(tblId, entId, m&&m.keys.length?`matched on ${m.keys[0]}${m.keys.length>1?` +${m.keys.length-1}`:""}`:"represents"));
+    });
+    N.push({id:entId, rank:2, kind:"entity", label:xg.entity, sub:"business entity",
+            chips:[`${xg.srcIds.length} sources`, xg.scan?.state==="done"?`${xg.records.toLocaleString()} records`:"not scanned"].filter(Boolean),
+            focused:focus===entId || !focus});
+    addGov(entId, 3);
+    return {nodes:klLayout(N), edges:E};
+  }
+
+  // ── record level ──
   const g = (xg.golden||[]).find(x=>x.id===goldenId) || (xg.golden||[])[0];
   if(!g) return {nodes:[],edges:[]};
-
   const gid = "gold:"+g.id;
   (g.members||[]).forEach(m=>{
-    const src = srcGraphs.find(s=>s.id===m.srcId);
+    const src = srcGraphs.find(x=>x.id===m.srcId);
     if(!src) return;
     const sysId="sys:"+src.id, tblId="tbl:"+src.id, recId="rec:"+src.id;
     if(!N.some(n=>n.id===sysId))
@@ -24377,38 +24428,28 @@ function klBuildCrossGraph(xg, srcGraphs, {showGov=true, goldenId=null, focus=nu
     E.push(klEdge(tblId, recId, "row"));
     E.push(klEdge(recId, gid, "resolves to"));
   });
-
   N.push({id:gid, rank:3, kind:"golden", label:g.n,
           sub:`${xg.entity} · tax ${g.taxId}`, conf:g.conf,
           chips:[`${(g.members||[]).length} sources`, g.spend].filter(Boolean),
           focused:focus===gid || !focus});
-
-  if(showGov){
-    N.push({id:"ent:"+xg.entity, rank:4, kind:"entity", label:xg.entity, sub:"business entity", focused:focus==="ent:"+xg.entity});
-    E.push(klEdge(gid, "ent:"+xg.entity, "is a"));
-    N.push({id:"term:"+xg.entity, rank:4, kind:"term", label:xg.entity, sub:"certified term", focused:false});
-    E.push(klEdge(gid, "term:"+xg.entity, "means"));
-    if(xg.policy){
-      N.push({id:"pol:"+xg.policy, rank:4, kind:"policy", label:xg.policy, sub:"enforced", focused:false});
-      E.push(klEdge(gid, "pol:"+xg.policy, "governed by"));
-    }
-    N.push({id:"own:"+xg.owner, rank:4, kind:"owner", label:xg.owner, sub:`owner · ${xg.domain}`, focused:false});
-    E.push(klEdge(gid, "own:"+xg.owner, "owned by"));
-  }
+  N.push({id:entId, rank:4, kind:"entity", label:xg.entity, sub:"business entity", focused:focus===entId});
+  E.push(klEdge(gid, entId, "is a"));
+  addGov(gid, 4);
   return {nodes:klLayout(N), edges:E};
 }
 
 // The canvas shell: toolbar (layout mode · depth · governance toggle · search ·
 // fit) + ReactFlow + a legend. Mirrors the controls OpenMetadata exposes on its
 // knowledge-graph tab, in EDG's visual language.
-const KLGraphCanvas = ({build, height=520, emptyMsg="Nothing to draw yet.", extraControls, onNodeClick}) => {
+const KLGraphCanvas = ({build, height=520, emptyMsg="Nothing to draw yet.", extraControls, onNodeClick,
+                        levels=null, level, onLevel}) => {
   const [rf,setRf]        = useState(null);
   const [showGov,setGov]  = useState(true);
   const [depth,setDepth]  = useState(3);
   const [q,setQ]          = useState("");
   const [focus,setFocus]  = useState(null);
 
-  const {nodes,edges} = useMemo(()=>build({showGov, focus}),[build,showGov,focus]);
+  const {nodes,edges} = useMemo(()=>build({showGov, focus, level}),[build,showGov,focus,level]);
   // depth = how many ranks out from the left-most column to reveal
   const visible = useMemo(()=>{
     const keep = new Set(nodes.filter(n=>Math.round(n.position.x/310)<=depth).map(n=>n.id));
@@ -24437,6 +24478,27 @@ const KLGraphCanvas = ({build, height=520, emptyMsg="Nothing to draw yet.", extr
       {/* toolbar */}
       <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",flexWrap:"wrap",
         background:"#f8fafc",border:"1px solid #e2e8f0",borderBottom:"none",borderRadius:"10px 10px 0 0",flexShrink:0}}>
+        {levels && (
+          <>
+            <div style={{display:"flex",gap:2,padding:2,background:"#eef2f6",borderRadius:7,border:"1px solid #e2e8f0"}}>
+              {levels.map(l=>{
+                const on = level===l.v;
+                return (
+                  <button key={l.v} onClick={()=>!l.locked&&onLevel(l.v)} disabled={l.locked} title={l.locked?l.lockedHint:l.hint}
+                    style={{padding:"3px 11px",borderRadius:5,fontSize:11,fontWeight:on?700:500,fontFamily:"inherit",
+                      cursor:l.locked?"not-allowed":"pointer",
+                      background:on?"#fff":"transparent", border:on?"1px solid #e2e8f0":"1px solid transparent",
+                      color:l.locked?"#b6bcc6":on?"#0f172a":"#64748b",
+                      display:"inline-flex",alignItems:"center",gap:5}}>
+                    {l.locked&&<svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M3.2 5.2V3.8a2.8 2.8 0 015.6 0v1.4" stroke="currentColor" strokeWidth="1.3"/><rect x="2.4" y="5.2" width="7.2" height="5.2" rx="1.2" stroke="currentColor" strokeWidth="1.3"/></svg>}
+                    {l.l}
+                  </button>
+                );
+              })}
+            </div>
+            <span style={{width:1,height:18,background:"#e2e8f0"}}/>
+          </>
+        )}
         <span style={{fontSize:10.5,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.06em"}}>Depth</span>
         <div style={{display:"flex",gap:2,padding:2,background:"#eef2f6",borderRadius:7,border:"1px solid #e2e8f0"}}>
           {[1,2,3,4].map(d=>(
@@ -24657,6 +24719,9 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
   const [srcTab,    setSrcTab]    = useState("overview");
   const [xTab,      setXTab]      = useState("overview");
   const [goldenSel, setGoldenSel] = useState(null);          // which golden record the graph draws
+  const [xLevel,    setXLevel]    = useState("entity");      // cross graph: entity (metadata) | record (needs a scan)
+  const [scanFor,   setScanFor]   = useState(null);          // cross graph id awaiting scan consent
+  const [scanMode,  setScanMode]  = useState("sample");
   // list controls
   const [sq,  setSq]  = useState(""); const [sStatus,setSStatus] = useState("all"); const [sSort,setSSort] = useState("name");
   const [xq,  setXq]  = useState(""); const [xStatus,setXStatus] = useState("all"); const [xSort,setXSort] = useState("name");
@@ -24664,6 +24729,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
   const [wConn,     setWConn]     = useState(KL_UNMAPPED[0]);
   const [wEntity,   setWEntity]   = useState(KL_DEFAULT_ENTITY);
   const [wSrcIds,   setWSrcIds]   = useState(()=>KL_READY_FOR(KL_SRC_SEED, KL_DEFAULT_ENTITY));
+  const [wScan,     setWScan]     = useState("later");        // later | sample | full
   const [wKeys,     setWKeys]     = useState([]);
   const [wBeliefs,  setWBeliefs]  = useState({});
 
@@ -24708,7 +24774,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
     setWiz(kind); setStep(0); setAi({}); setDoneSet(new Set()); setSelSrc(null); setSelX(null);
     if(kind==="cross"){
       const e = KL_ENTITIES.find(x=>KL_READY_FOR(srcGraphs,x).length>=2) || KL_ENTITIES[0];
-      setWEntity(e); reseed(KL_READY_FOR(srcGraphs,e), e);
+      setWEntity(e); reseed(KL_READY_FOR(srcGraphs,e), e); setWScan("later");
     } else {
       const free = KL_UNMAPPED.filter(c => !srcGraphs.some(g=>g.name===c));
       setWConn(free[0] || "");
@@ -24717,7 +24783,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
   const closeWizard = () => { setWiz(null); setStep(0); setDoneSet(new Set()); };
 
   const openSrc = (id,t="overview") => { setSelSrc(id); setSelX(null); setSrcTab(t); };
-  const openX   = (id,t="overview") => { setSelX(id); setSelSrc(null); setXTab(t); setGoldenSel(null); };
+  const openX   = (id,t="overview") => { setSelX(id); setSelSrc(null); setXTab(t); setGoldenSel(null); setXLevel("entity"); };
 
   // Graph builders live here, unconditionally — the profiles below return early, so a hook
   // declared inside one of those branches would change hook order between list and profile.
@@ -24730,6 +24796,16 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
   const buildXGraph = useCallback(
     o => xgSel ? klBuildCrossGraph(xgSel,srcGraphs,{...o,goldenId:gselId}) : {nodes:[],edges:[]},
     [xgSel,srcGraphs,gselId]);
+  // A cross graph always opens at entity level; record level needs a completed data scan.
+  const xScanned = xgSel?.scan?.state==="done";
+  const runScan = (id,mode) => {
+    setXGraphs(gs=>gs.map(x=>x.id===id
+      ? {...x, scan:{state:"done", mode, at:"2026-08-24", rows:mode==="full"?184200:5000,
+                     approvedBy:"alex.rivera", stale:false}}
+      : x));
+    setScanFor(null);
+    toast(`Data scan queued (${mode}) — see Settings › Background Jobs`);
+  };
 
   const finishSrc = () => {
     const id = "sg_"+wConn.toLowerCase().replace(/[^a-z0-9]+/g,"_");
@@ -24759,6 +24835,9 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
     setXGraphs(g=>[...g,{id, key:"XKG-"+(2003+g.length), name, entity:wEntity, srcIds:[...wSrcIds],
       records:0, review:0, owner:"alex.rivera", stewards:[], status:"Published",
       domain:"Procurement", built:"2026-08-24", version:"v1", policy:null,
+      scan:{state:wScan==="later"?"none":"done", mode:wScan==="later"?null:wScan,
+            at:wScan==="later"?null:"2026-08-24", rows:wScan==="full"?184200:wScan==="sample"?5000:0,
+            approvedBy:wScan==="later"?null:"alex.rivera", stale:false},
       keys:[...wKeys],
       beliefs:[...wKeys,"Address"].map(f=>({f, s:wBeliefs[f] ?? fallback})),
       golden:[]}]);
@@ -24931,12 +25010,54 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
 
               {wiz==="cross" && step===4 && (
                 <div style={{maxWidth:780}}>
-                  <KLRow nm="GAF Materials"  chip="joined automatically" kind="exist" cf="3 sources · very confident"/>
-                  <KLRow nm="IKO Industries" chip="two possible matches" kind="new" cf="needs your decision" acts="cc" onAct={()=>toast("Decision recorded")}/>
-                  <KLRow nm="TAMKO Building" chip="tax IDs differ by one digit" kind="new" cf="needs your decision" acts="cc" onAct={()=>toast("Decision recorded")}/>
-                  <div style={{marginTop:10,padding:"10px 13px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,fontSize:12,color:T.textSub}}>
-                    <b style={{color:T.text}}>1,198 joined automatically · 6 waiting on you.</b> That ratio is what makes this workable at real scale.
+                  <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:7}}>
+                    Rows this scan would read
                   </div>
+                  {wSrcIds.map(id=>{
+                    const g=srcById(id); if(!g) return null;
+                    const m=g.masters.find(x=>x.entity===wEntity);
+                    const pii=(g.assets||[]).find(a=>a.n===m?.table)?.tags||[];
+                    return (
+                      <div key={id} style={{display:"flex",alignItems:"center",gap:9,padding:"9px 11px",marginBottom:6,
+                        background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
+                        <ServiceIcon service={g.service} size={15}/>
+                        <span style={{fontSize:12.5,fontWeight:600,color:T.text,minWidth:110}}>{g.name}</span>
+                        <span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{m?m.table:"—"}</span>
+                        <span style={{marginLeft:"auto",display:"flex",gap:4}}>
+                          {pii.map(t=><Badge key={t} bg={T.amber+"1a"} color={T.amber} border={T.amber+"44"}>{t}</Badge>)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"15px 0 7px"}}>
+                    What should happen on publish
+                  </div>
+                  {[
+                    {v:"later",  l:"Publish the entity-level graph only",  d:"Recommended. You get the governed model now; resolve records later when the access is approved."},
+                    {v:"sample", l:"Scan a sample — 5,000 rows per source", d:"Proves the matching works with the least data exposure."},
+                    {v:"full",   l:"Scan everything",                      d:"Complete golden records. Longer job, and reads every row including PII."},
+                  ].map(o=>(
+                    <div key={o.v} onClick={()=>setWScan(o.v)}
+                      style={{display:"flex",gap:10,padding:"10px 12px",marginBottom:6,cursor:"pointer",borderRadius:9,
+                        background:wScan===o.v?T.accentDim:T.bgSurface,
+                        border:`1px solid ${wScan===o.v?T.accent+"55":T.border}`}}>
+                      <span style={{width:15,height:15,borderRadius:"50%",flexShrink:0,marginTop:2,
+                        border:`1.5px solid ${wScan===o.v?T.accent:T.borderLight}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                        {wScan===o.v&&<span style={{width:7,height:7,borderRadius:"50%",background:T.accent}}/>}
+                      </span>
+                      <span>
+                        <span style={{display:"block",fontSize:12.5,fontWeight:600,color:T.text}}>{o.l}</span>
+                        <span style={{display:"block",fontSize:11.5,color:T.textMuted,marginTop:2}}>{o.d}</span>
+                      </span>
+                    </div>
+                  ))}
+                  {wScan!=="later" && (
+                    <div style={{display:"flex",gap:9,alignItems:"center",padding:"10px 13px",marginTop:8,borderRadius:9,
+                      background:T.amberDim,border:`1px solid ${T.amber}44`,fontSize:12,color:T.text,lineHeight:1.6}}>
+                      <span>⚠️</span>
+                      <div>Approved as <b>alex.rivera</b>. Runs as a background job and is written to the audit log.</div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -25174,12 +25295,14 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
             props={[
               {l:"Entity",          v:xg.entity},
               {l:"Built on",        v:`${xg.srcIds.length} source graphs`},
-              {l:"Trusted records", v:xg.records.toLocaleString()},
               {l:"Match keys",      v:xg.keys.length?xg.keys.join(", "):"—"},
+              {l:"Data scan",       v:xScanned?(xg.scan.stale?"stale":`${xg.scan.mode} · ${xg.scan.at}`):"not scanned",
+                                    c:xScanned?(xg.scan.stale?T.amber:T.green):T.textMuted},
+              {l:"Trusted records", v:xScanned?xg.records.toLocaleString():"—",
+                                    c:xScanned?T.text:T.textMuted},
               {l:"Owner",           v:xg.owner},
               {l:"Domain",          v:xg.domain},
               {l:"Policy",          v:xg.policy||"none"},
-              {l:"Last resolved",   v:xg.built},
             ]}/>
 
           <Tabs2 tabs={[
@@ -25193,10 +25316,38 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
           {xTab==="overview" && (
             <>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:12,marginBottom:18}}>
-                <Metric label="Trusted records" value={xg.records.toLocaleString()}/>
                 <Metric label="Source graphs joined" value={String(xg.srcIds.length)}/>
-                <Metric label="Waiting on you" value={String(xg.review)} color={xg.review?T.amber:T.green}/>
                 <Metric label="Match keys" value={String(xg.keys.length)} sub={xg.keys.join(", ")}/>
+                <Metric label="Trusted records" value={xScanned?xg.records.toLocaleString():"—"}
+                  sub={xScanned?undefined:"needs a data scan"} color={xScanned?T.text:T.textMuted}/>
+                <Metric label="Waiting on you" value={xScanned?String(xg.review):"—"}
+                  color={xScanned&&xg.review?T.amber:xScanned?T.green:T.textMuted}/>
+              </div>
+
+              {/* the metadata/data boundary, stated once, at the top of the profile */}
+              <div style={{display:"flex",gap:10,alignItems:"center",padding:"12px 14px",marginBottom:14,borderRadius:10,
+                background:xScanned?(xg.scan.stale?T.amberDim:T.bgSurface):T.bgElevated,
+                border:`1px solid ${xScanned?(xg.scan.stale?T.amber+"44":T.border):T.border}`}}>
+                <span style={{fontSize:15}}>{xScanned?(xg.scan.stale?"⚠️":"✓"):"🔒"}</span>
+                <div style={{fontSize:12.4,color:T.textSub,lineHeight:1.6}}>
+                  {!xScanned && <>
+                    <b style={{color:T.text}}>Entity level only.</b> This graph knows how {xg.entity} is represented as an
+                    object in each source — that is all metadata. Resolving the actual records means reading rows, so it
+                    needs a scan you approve.
+                  </>}
+                  {xScanned && !xg.scan.stale && <>
+                    <b style={{color:T.text}}>Records resolved.</b> {xg.scan.mode==="full"?"Full":"Sample"} scan of{" "}
+                    {xg.scan.rows.toLocaleString()} rows on {xg.scan.at}, approved by <b>{xg.scan.approvedBy}</b>.
+                  </>}
+                  {xScanned && xg.scan.stale && <>
+                    <b style={{color:T.text}}>Records may be stale.</b> A source has changed since the{" "}
+                    {xg.scan.mode} scan on {xg.scan.at}. Re-scan to bring the records back in line.
+                  </>}
+                </div>
+                <div style={{marginLeft:"auto"}}>
+                  <Btn small variant={xScanned&&!xg.scan.stale?undefined:"primary"} ghost={xScanned&&!xg.scan.stale}
+                    onClick={()=>setScanFor(xg.id)}>{xScanned?"Re-scan":"Run data scan"}</Btn>
+                </div>
               </div>
               <Card2 style={{padding:16,marginBottom:14}}>
                 <SH title="Built on top of these source graphs" sub="A cross-source graph never reads a system directly — it joins what each source graph already understands."/>
@@ -25229,20 +25380,44 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
           )}
 
           {xTab==="graph" && (
-            <KLGraphCanvas build={buildXGraph} height={560}
-              emptyMsg="No records resolved yet — run a resolve from Settings › Background Jobs."
-              extraControls={xg.golden.length>0&&(
-                <div style={{display:"flex",alignItems:"center",gap:7}}>
-                  <span style={{fontSize:10.5,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.06em"}}>Record</span>
-                  <select value={gsel||""} onChange={e=>setGoldenSel(e.target.value)}
-                    style={{padding:"4px 8px",borderRadius:7,border:"1px solid #e2e8f0",background:"#fff",fontSize:11.5,color:"#0f172a",cursor:"pointer",fontFamily:"inherit"}}>
-                    {xg.golden.map(g=><option key={g.id} value={g.id}>{g.n} · {g.conf.toFixed(2)}</option>)}
-                  </select>
+            <>
+              {!xScanned && (
+                <div style={{display:"flex",gap:9,alignItems:"center",padding:"10px 13px",marginBottom:10,borderRadius:9,
+                  background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:12.3,color:T.textSub}}>
+                  <span>🔒</span>
+                  <div>Showing the <b style={{color:T.text}}>entity level</b> — how {xg.entity} is represented as an object in
+                    each source. Seeing the actual resolved records means reading data, so it needs a scan you approve.</div>
+                  <Btn small variant="primary" onClick={()=>setScanFor(xg.id)}>Run data scan</Btn>
                 </div>
-              )}/>
+              )}
+              <KLGraphCanvas build={buildXGraph} height={560}
+                emptyMsg="No records resolved yet — run a data scan to resolve them."
+                level={xLevel} onLevel={setXLevel}
+                levels={[
+                  {v:"entity", l:"Entity level", hint:"Metadata only — how the entity maps to an object in each source"},
+                  {v:"record", l:"Record level", locked:!xScanned,
+                   hint:"The resolved golden record and the source rows behind it",
+                   lockedHint:"Run a data scan first — this level reads actual rows"},
+                ]}
+                extraControls={xLevel==="record" && xg.golden.length>0 && (
+                  <div style={{display:"flex",alignItems:"center",gap:7}}>
+                    <span style={{fontSize:10.5,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.06em"}}>Record</span>
+                    <select value={gsel||""} onChange={e=>setGoldenSel(e.target.value)}
+                      style={{padding:"4px 8px",borderRadius:7,border:"1px solid #e2e8f0",background:"#fff",fontSize:11.5,color:"#0f172a",cursor:"pointer",fontFamily:"inherit"}}>
+                      {xg.golden.map(g=><option key={g.id} value={g.id}>{g.n} · {g.conf.toFixed(2)}</option>)}
+                    </select>
+                  </div>
+                )}/>
+            </>
           )}
 
-          {xTab==="records" && (
+          {xTab==="records" && !xScanned && (
+            <KLEmpty icon={Ic.shield(34)} title="Records are not scanned yet"
+              sub={`The graph knows how ${xg.entity} maps across ${xg.srcIds.length} sources. Resolving actual records means reading data.`}
+              action={<Btn small variant="primary" onClick={()=>setScanFor(xg.id)}>Run data scan</Btn>}/>
+          )}
+
+          {xTab==="records" && xScanned && (
             xg.golden.length===0
               ? <KLEmpty icon={Ic.knowledge(34)} title="No records resolved yet"
                   sub="Run a resolve to match records across the joined source graphs."
@@ -25307,6 +25482,62 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               ]}
               rows={xg.srcIds.map(id=>srcById(id)).filter(Boolean)}
               onRowClick={r=>openSrc(r.id)}/>
+          )}
+
+          {scanFor===xg.id && (
+            <Modal open onClose={()=>setScanFor(null)} title={`Run a data scan — ${xg.name}`} width={580}>
+              <p style={{fontSize:13,color:T.textSub,lineHeight:1.75,marginBottom:14}}>
+                Everything so far has used <b style={{color:T.text}}>metadata only</b>. To resolve actual
+                {" "}{xg.entity.toLowerCase()} records the scan has to <b style={{color:T.text}}>read rows</b> from the
+                tables below. That is a different level of access, so it is recorded against you and audited.
+              </p>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:7}}>What will be read</div>
+              {xg.srcIds.map(id=>{
+                const g=srcById(id); if(!g) return null;
+                const m=g.masters.find(x=>x.entity===xg.entity);
+                const pii=(g.assets||[]).find(a=>a.n===m?.table)?.tags||[];
+                return (
+                  <div key={id} style={{display:"flex",alignItems:"center",gap:9,padding:"8px 11px",marginBottom:6,
+                    background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+                    <ServiceIcon service={g.service} size={15}/>
+                    <span style={{fontSize:12,fontWeight:600,color:T.text,minWidth:104}}>{g.name}</span>
+                    <span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{m?m.table:"—"}</span>
+                    <span style={{marginLeft:"auto",display:"flex",gap:4}}>
+                      {pii.map(t=><Badge key={t} bg={T.amber+"1a"} color={T.amber} border={T.amber+"44"}>{t}</Badge>)}
+                    </span>
+                  </div>
+                );
+              })}
+              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"14px 0 7px"}}>How much to read</div>
+              {[
+                {v:"sample", l:"Sample — 5,000 rows per source", d:"Enough to prove the matching works. Least exposure. Recommended first."},
+                {v:"full",   l:"Full — every row",               d:"Complete golden records. Longer job, and reads all rows including PII."},
+              ].map(o=>(
+                <div key={o.v} onClick={()=>setScanMode(o.v)}
+                  style={{display:"flex",gap:10,padding:"10px 12px",marginBottom:6,cursor:"pointer",borderRadius:9,
+                    background:scanMode===o.v?T.accentDim:T.bgElevated,
+                    border:`1px solid ${scanMode===o.v?T.accent+"55":T.border}`}}>
+                  <span style={{width:15,height:15,borderRadius:"50%",flexShrink:0,marginTop:2,
+                    border:`1.5px solid ${scanMode===o.v?T.accent:T.borderLight}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    {scanMode===o.v&&<span style={{width:7,height:7,borderRadius:"50%",background:T.accent}}/>}
+                  </span>
+                  <span>
+                    <span style={{display:"block",fontSize:12.5,fontWeight:600,color:T.text}}>{o.l}</span>
+                    <span style={{display:"block",fontSize:11.5,color:T.textMuted,marginTop:2}}>{o.d}</span>
+                  </span>
+                </div>
+              ))}
+              <div style={{display:"flex",gap:9,alignItems:"center",padding:"10px 13px",marginTop:12,borderRadius:9,
+                background:T.amberDim,border:`1px solid ${T.amber}44`,fontSize:12,color:T.text,lineHeight:1.6}}>
+                <span>⚠️</span>
+                <div>Approved as <b>alex.rivera</b>. The scan runs as a background job, is written to the audit log, and
+                  the resolved records stay governed by <b>{xg.policy||"this graph's policy"}</b>.</div>
+              </div>
+              <div style={{display:"flex",gap:8,marginTop:18,justifyContent:"flex-end"}}>
+                <Btn onClick={()=>setScanFor(null)}>Cancel</Btn>
+                <Btn variant="primary" onClick={()=>runScan(xg.id,scanMode)}>Approve &amp; run scan</Btn>
+              </div>
+            </Modal>
           )}
 
           {xTab==="rules" && (
