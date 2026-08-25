@@ -25270,7 +25270,8 @@ const KLTrustDial = ({trust, setTrust, items, canApply, onRequest, onApply}) => 
 // ── C3 · one decision in the queue ──
 // Rank, the money it governs, the evidence, the values that disagree, and the verbs.
 // Everything a person needs to decide, without leaving the row.
-const KLDecisionCard = ({it, rank, srcById, selected, onSelect, onVerb, onHistory, canCurate}) => {
+const KLDecisionCard = ({it, rank, srcById, selected, onSelect, onVerb, onHistory, canCurate,
+                        showGraph, onOpenGraph}) => {
   const [open,setOpen]   = useState(rank===1);
   const [why,setWhy]     = useState("");
   const [asking,setAsk]  = useState(null);   // which verb is collecting a reason
@@ -25310,6 +25311,16 @@ const KLDecisionCard = ({it, rank, srcById, selected, onSelect, onVerb, onHistor
           <span style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             <b style={{fontSize:13.5,color:T.text}}>{it.name}</b>
             <KLChip kind="plain">{it.entity}</KLChip>
+            {/* In the estate-wide queue the graph is the missing context: without it the list
+                reads as a repeat of one graph's exceptions rather than a span across all of them. */}
+            {showGraph&&(
+              <button onClick={e=>{e.stopPropagation();onOpenGraph&&onOpenGraph(it.xgId);}}
+                style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:10.5,fontWeight:600,padding:"2px 8px",
+                  borderRadius:5,cursor:"pointer",fontFamily:"inherit",
+                  background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted}}>
+                {Ic.knowledge(10)}{it.xgName}
+              </button>
+            )}
             {st&&<span style={{fontSize:10.5,fontWeight:700,padding:"2px 7px",borderRadius:5,background:st.c+"1a",color:st.c,border:`1px solid ${st.c}44`}}>{st.l}</span>}
           </span>
           <span style={{display:"block",fontSize:11.5,color:done?T.textMuted:T.amber,marginTop:3}}>{it.issue}</span>
@@ -27166,6 +27177,35 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                   {wlFiltered.length}/{wlAll.length}
                 </span>
               </div>
+              {(()=>{
+                // The one line that explains why this surface is not a repeat of a graph's tab.
+                const byGraph = {};
+                wlOpen.forEach(i=>{ (byGraph[i.xgId]=byGraph[i.xgId]||{name:i.xgName,n:0,m:0}); byGraph[i.xgId].n++; byGraph[i.xgId].m+=i.governs||0; });
+                const gs = Object.entries(byGraph).sort((a,b)=>b[1].m-a[1].m);
+                if(gs.length===0) return null;
+                return (
+                  <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",padding:"10px 13px",marginBottom:12,
+                    borderRadius:9,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                    <span style={{fontSize:12,color:T.textSub}}>
+                      {wlOpen.length} open decision{wlOpen.length===1?"":"s"} across{" "}
+                      <b style={{color:T.text}}>{gs.length} cross-source graph{gs.length===1?"":"s"}</b> —
+                      ranked together so the most expensive doubt wins, whichever graph it sits in.
+                    </span>
+                    <span style={{marginLeft:"auto",display:"flex",gap:6,flexWrap:"wrap"}}>
+                      {gs.map(([id,g])=>(
+                        <button key={id} onClick={()=>openX(id,"records")}
+                          style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,padding:"4px 9px",borderRadius:6,cursor:"pointer",
+                            background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontFamily:"inherit"}}>
+                          {g.name}
+                          <b style={{fontFamily:"'Geist Mono',monospace",color:T.text}}>{g.n}</b>
+                          <span style={{fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{klMoney(g.m)}</span>
+                        </button>
+                      ))}
+                    </span>
+                  </div>
+                );
+              })()}
+
               <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginBottom:14}}>
                 {[
                   {v:"all",       l:"Needs a decision", n:wlOpen.length, c:T.amber},
@@ -27221,6 +27261,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 : wlFiltered.map((it,i)=>(
                     <KLDecisionCard key={it.id} it={it} rank={i+1} srcById={srcById}
                       selected={wSel.has(it.id)} canCurate={canCurate}
+                      showGraph onOpenGraph={id=>openX(id,"records")}
                       onSelect={id=>setWSel(s=>{const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n;})}
                       onVerb={applyVerb}
                       onHistory={item=>{
@@ -36337,43 +36378,98 @@ const DAAskTab = ({me,role,onToast,onNav,onManage}) => {
 
 
 // ── Answer Spaces: builder ──────────────────────────────────────────────────
-// EAI's AKG builder is ten steps because it has to discover everything from
-// scratch. EDG inherits classifications, glossary terms, owners and lineage, so
-// the same journey collapses to seven — and three of them are review rather
-// than data entry. The step rail, AI-assist toggle and "requires input" tagging
-// match the Knowledge Layer builder so the two feel like one system.
-const DA_WIZ_STEPS = [
-  {t:"Scope & sources",   mode:"input", uses:"Catalog, Knowledge Layer",
-   d:"Choose what this space may reach. Only certified assets and published knowledge graphs are offered — an uncertified asset cannot be the basis of an answer somebody acts on."},
-  {t:"Inherited context", mode:"auto",  uses:"Classifications, Glossary, Domains, Owners",
-   d:"Everything EDG already knows about the scope is pulled in. This is the step EAI cannot skip and EDG never has to run: the vocabulary already exists and is already governed."},
-  {t:"Relationships",     mode:"auto",  uses:"Lineage, Source Knowledge Graphs",
-   d:"Joins are proposed from foreign keys, observed lineage and the source knowledge graph. Anything below the confidence threshold needs a human before it can be used in a plan."},
-  {t:"Semantics",         mode:"input", uses:"Glossary, AI assist",
-   d:"Synonyms and sample questions — how people actually talk about this data. Glossary terms are authoritative; AI proposals need approval before they influence an answer."},
-  {t:"Guardrails",        mode:"input", uses:"Policies, Classifications",
-   d:"The limits this space operates inside: row caps, timeouts, classifications it may never touch, and what happens when a policy conflicts with a question."},
-  {t:"Index & test",      mode:"auto",  uses:"—",
-   d:"Build the index, then prove it. The test console is the gate — a space with failing test questions should not be published."},
-  {t:"Review & publish",  mode:"input", uses:"Stewardship",
-   d:"Publishing sends the space to its steward for approval. Until then nobody can ask questions against it."},
+// EAI runs two separate builders: the AKG Builder in Data Sense walks ten steps
+// over structured sources, and Content Intelligence runs a workflow over
+// unstructured ones. Both are reproduced here step for step, keyed by mode, so
+// anyone who has used EAI recognises the journey. What differs is that the steps
+// EAI spends discovering metadata are read-outs in EDG — the vocabulary already
+// exists and is already governed — and one governance step (Guardrails) is added
+// that EAI has no equivalent of.
+const DA_WIZ_ALL = [
+  {k:"connect", t:"Connect & load",        mode:"input", uses:"Catalog, Connections",
+   d:"Pick the connection and the objects this space may reach. Only certified assets and published knowledge graphs are offered — an uncertified asset cannot be the basis of an answer somebody acts on."},
+  {k:"profile", t:"Profile & classify",    mode:"auto",  modes:["structured","hybrid"], uses:"Profiling, Classifications, Glossary, Domains, Owners",
+   d:"EAI runs a profiler here to learn data types, patterns, cardinality and null density, then classifies what it found. EDG already holds all of it from ingestion, so this step reads it back rather than paying to rediscover it."},
+  {k:"rel",     t:"Discover relationships",mode:"auto",  modes:["structured","hybrid"], uses:"Lineage, Source Knowledge Graphs",
+   d:"Joins are proposed from foreign keys, observed lineage and the source knowledge graph, each with a detection method and a confidence score. Anything below the threshold needs a human before the planner will use it."},
+  {k:"docs",    t:"Select documents",      mode:"input", modes:["documents","hybrid"], uses:"IDC classification",
+   d:"Choose documents from what IDC has already classified. Category, sensitivity and detected classifiers come from the classification run, so you are picking against meaning rather than filenames."},
+  {k:"filters", t:"Advanced filters",      mode:"input", modes:["documents","hybrid"], uses:"IDC classification",
+   d:"Pattern rules that decide what the workflow picks up on this and every future run. This is what stops a space quietly swallowing an archive folder somebody dropped into the bucket."},
+  {k:"enable",  t:"Retrieval enablement",  mode:"input", modes:["documents","hybrid"], uses:"—",
+   d:"How documents are indexed and searched: embeddings for meaning, BM25 for exact terms, or both reranked together."},
+  {k:"context", t:"Add context",           mode:"input", modes:["structured","hybrid"], uses:"—",
+   d:"Upload the documents that explain the data — a data dictionary, a metric definition sheet, a schema note. Indexed alongside the schema so the planner can read what a column actually means."},
+  {k:"enrich",  t:"AI enrichment",         mode:"auto",  uses:"AI assist",
+   d:"Descriptions and sample questions written for tables, columns and relationships. Proposals, not facts — nothing here influences an answer until a steward approves it."},
+  {k:"syn",     t:"Synonyms",              mode:"input", uses:"Glossary, AI assist",
+   d:"The business words people will actually type. Glossary terms are authoritative and land approved; model proposals arrive with a confidence score and wait for a decision."},
+  {k:"curate",  t:"Curate & review",       mode:"input", uses:"—",
+   d:"The whole space in one list — every object, column and relationship with its role and status. The last chance to catch something that should not be in scope before it is indexed."},
+  {k:"guards",  t:"Guardrails",            mode:"input", uses:"Policies, Classifications",
+   d:"The limits this space operates inside: row caps, timeouts, and what happens when a policy conflicts with a question. EAI has no equivalent — this is the step that makes an answer defensible."},
+  {k:"index",   t:"Build index",           mode:"auto",  uses:"—",
+   d:"Build the searchable index. The credit cost is shown before you commit, because on a large document set this is the most expensive thing the space will ever do."},
+  {k:"test",    t:"Test console",          mode:"input", uses:"—",
+   d:"Prove it before anyone else sees it. Ask real questions, read the generated plan, mark each result right or wrong — the pass rate becomes the space's accuracy figure."},
+  {k:"publish", t:"Review & publish",      mode:"input", uses:"Stewardship",
+   d:"Publishing sends the space to its steward for approval. Until that is granted nobody can ask questions against it."},
 ];
+const daWizSteps = mode => DA_WIZ_ALL.filter(s=>!s.modes||s.modes.includes(mode));
 
 const DA_WIZ_ASSETS = [
-  {n:"orders",             t:"Table",           dom:"Commerce", cert:"Approved",  tags:["PII","GDPR"]},
-  {n:"customers",          t:"Table",           dom:"Commerce", cert:"Approved",  tags:["PII","GDPR"]},
-  {n:"dim_products",       t:"Table",           dom:"Commerce", cert:"Approved",  tags:[]},
-  {n:"transactions",       t:"Table",           dom:"Finance",  cert:"Approved",  tags:["PII"]},
-  {n:"vw_order_summary",   t:"View",            dom:"Commerce", cert:"Approved",  tags:[]},
-  {n:"user_events",        t:"Table",           dom:"Product",  cert:"Approved",  tags:[]},
-  {n:"user_sessions",      t:"Table",           dom:"Product",  cert:"Deprecated",tags:["PII"]},
-  {n:"gl_accounts",        t:"Table",           dom:"Finance",  cert:"Approved",  tags:[]},
-  {n:"invoices_2026.parquet",t:"Object",        dom:"Finance",  cert:"Approved",  tags:[]},
-  {n:"contracts_2025.pdf", t:"Object",          dom:"Finance",  cert:"Approved",  tags:["confidential"]},
-  {n:"XKG — Customer",     t:"Knowledge Graph", dom:"Commerce", cert:"Approved",  tags:["PII","GDPR"]},
-  {n:"XKG — Supplier",     t:"Knowledge Graph", dom:"Procurement",cert:"Approved",tags:[]},
-  {n:"employees",          t:"Table",           dom:"Platform", cert:"Approved",  tags:["Restricted-HR","PII"]},
+  {n:"orders",             t:"Table",           dom:"Commerce", cert:"Approved",  tags:["PII","GDPR"], cols:38, rows:"48.2M"},
+  {n:"customers",          t:"Table",           dom:"Commerce", cert:"Approved",  tags:["PII","GDPR"], cols:51, rows:"2.1M"},
+  {n:"dim_products",       t:"Table",           dom:"Commerce", cert:"Approved",  tags:[],             cols:24, rows:"84K"},
+  {n:"transactions",       t:"Table",           dom:"Finance",  cert:"Approved",  tags:["PII"],        cols:42, rows:"96.4M"},
+  {n:"vw_order_summary",   t:"View",            dom:"Commerce", cert:"Approved",  tags:[],             cols:18, rows:"1.2M"},
+  {n:"user_events",        t:"Table",           dom:"Product",  cert:"Approved",  tags:[],             cols:31, rows:"1.2B"},
+  {n:"user_sessions",      t:"Table",           dom:"Product",  cert:"Deprecated",tags:["PII"],        cols:27, rows:"340M"},
+  {n:"gl_accounts",        t:"Table",           dom:"Finance",  cert:"Approved",  tags:[],             cols:16, rows:"12K"},
+  {n:"invoices_2026.parquet",t:"Object",        dom:"Finance",  cert:"Approved",  tags:[],             cols:0,  rows:"1.4M"},
+  {n:"contracts_2025.pdf", t:"Object",          dom:"Finance",  cert:"Approved",  tags:["confidential"],cols:0, rows:"312 pages"},
+  {n:"XKG — Customer",     t:"Knowledge Graph", dom:"Commerce", cert:"Approved",  tags:["PII","GDPR"], cols:0,  rows:"184,200"},
+  {n:"XKG — Supplier",     t:"Knowledge Graph", dom:"Procurement",cert:"Approved",tags:[],             cols:0,  rows:"41,800"},
+  {n:"employees",          t:"Table",           dom:"Platform", cert:"Approved",  tags:["Restricted-HR","PII"], cols:34, rows:"84K"},
 ];
+
+// Documents as IDC left them: category and sensitivity are classification
+// output, not filename guesses. The picker filters on those.
+const DA_IDC_DOCS = [
+  {n:"MSA_Cardinal_2025.pdf",     folder:"/legal/contracts/2025", type:"PDF",  size:4.2,  pages:42, cat:"Contract",        sens:"Confidential", cls:["Party name","Tax ID"]},
+  {n:"MSA_Merck_2025.pdf",        folder:"/legal/contracts/2025", type:"PDF",  size:3.8,  pages:38, cat:"Contract",        sens:"Confidential", cls:["Party name"]},
+  {n:"SOW_Thermo_2025.pdf",       folder:"/legal/contracts/2025", type:"PDF",  size:1.4,  pages:14, cat:"Contract",        sens:"Internal",     cls:["Party name"]},
+  {n:"NDA_Veeva_2025.pdf",        folder:"/legal/contracts/2025", type:"PDF",  size:0.6,  pages:6,  cat:"Contract",        sens:"Confidential", cls:["Party name"]},
+  {n:"invoices_2026_q1.parquet",  folder:"/finance/ap/2026",      type:"PARQUET",size:88.0,pages:0,  cat:"Invoice",         sens:"Internal",     cls:["Amount","Vendor"]},
+  {n:"invoices_2026_q2.parquet",  folder:"/finance/ap/2026",      type:"PARQUET",size:91.4,pages:0,  cat:"Invoice",         sens:"Internal",     cls:["Amount","Vendor"]},
+  {n:"AP_close_apr26.xlsx",       folder:"/finance/close",        type:"XLSX", size:2.1,  pages:0,  cat:"Financial report",sens:"Internal",     cls:["Amount"]},
+  {n:"exports_2025_q4.csv",       folder:"/finance/exports",      type:"CSV",  size:64.0, pages:0,  cat:"Export",          sens:"Confidential", cls:["Amount","Customer"]},
+  {n:"Vendor_onboarding_guide.docx",folder:"/ops/playbooks",      type:"DOCX", size:0.9,  pages:22, cat:"Technical guide", sens:"Internal",     cls:[]},
+  {n:"QA_test_framework.docx",    folder:"/ops/playbooks",        type:"DOCX", size:1.2,  pages:31, cat:"Testing framework guide",sens:"Internal",cls:[]},
+  {n:"team_offsite_photos.zip",   folder:"/misc",                 type:"ZIP",  size:412.0,pages:0,  cat:"Trivial",         sens:"Public",       cls:[]},
+  {n:"birthday_lunch.mp4",        folder:"/misc",                 type:"MP4",  size:284.0,pages:0,  cat:"Trivial",         sens:"Public",       cls:[]},
+  {n:"payroll_2025_final.xlsx",   folder:"/hr/payroll",           type:"XLSX", size:3.4,  pages:0,  cat:"HR record",       sens:"Restricted",   cls:["Salary","National ID"]},
+  {n:"contract_draft_old_v1.pdf", folder:"/legal/contracts/2024", type:"PDF",  size:2.8,  pages:36, cat:"Contract",        sens:"Internal",     cls:["Party name"], rot:"Obsolete"},
+];
+const DA_IDC_CATS = [...new Set(DA_IDC_DOCS.map(d=>d.cat))];
+const DA_IDC_SENS = ["Public","Internal","Confidential","Restricted"];
+
+// EAI's pattern-rule filters, applied in the same order it applies them.
+const daDocMatch = (doc, f, blockedTags) => {
+  if(f.excludeDocs.includes(doc.n)) return {ok:false, why:"Excluded explicitly"};
+  if(f.cats.length && !f.cats.includes(doc.cat)) return {ok:false, why:`Category ${doc.cat} not included`};
+  if(f.excludeCats.includes(doc.cat)) return {ok:false, why:`Category ${doc.cat} excluded`};
+  if(f.sens.length && !f.sens.includes(doc.sens)) return {ok:false, why:`Sensitivity ${doc.sens} not included`};
+  if(f.folders.length && !f.folders.some(p=>doc.folder.startsWith(p))) return {ok:false, why:"Outside the included folders"};
+  if(f.excludeFolders.some(p=>doc.folder.startsWith(p))) return {ok:false, why:"In an excluded folder"};
+  if(f.types.length && !f.types.includes(doc.type)) return {ok:false, why:`${doc.type} not an included file type`};
+  if(f.excludeTypes.includes(doc.type)) return {ok:false, why:`${doc.type} excluded`};
+  if(doc.size < f.minSize) return {ok:false, why:`Smaller than ${f.minSize} MB`};
+  if(doc.size > f.maxSize) return {ok:false, why:`Larger than ${f.maxSize} MB`};
+  if(f.skipRot && doc.rot) return {ok:false, why:`Marked ${doc.rot} by the ROT scan`};
+  if(doc.sens==="Restricted") return {ok:false, why:"Restricted sensitivity — refused by the platform blocklist"};
+  return {ok:true, why:"Included"};
+};
 
 const DAWizard = ({me,onClose,onToast,onCreated}) => {
   const S = _da.settings;
@@ -36383,13 +36479,18 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
   const [name,setName]   = useState("");
   const [mode,setMode]   = useState("structured");
   const [domain,setDomain]=useState("Commerce");
+  const [conn,setConn]   = useState("snowflake_dwh");
   const [picked,setPicked]=useState([]);
+  const [showData,setShowData]=useState(null);   // object whose sample rows are open
   const [retr,setRetr]   = useState("hybrid");
-  const [joins,setJoins] = useState({});     // index → confirmed
-  const [syns,setSyns]   = useState([]);     // {term,maps,src,conf,status}
+  const [joins,setJoins] = useState({});
+  const [ctxDocs,setCtxDocs]=useState([]);
+  const [enrich,setEnrich]=useState([]);
+  const [syns,setSyns]   = useState([]);
   const [newSyn,setNewSyn]=useState({term:"",maps:""});
   const [samples,setSamples]=useState([]);
   const [newSample,setNewSample]=useState("");
+  const [curated,setCurated]=useState({});       // object name → false when dropped
   const [guards,setGuards]=useState({rowLimit:S.guards.maxRows, timeout:S.guards.timeout,
     refuse:S.guards.onConflict, editSql:S.guards.editSql, requireCert:true});
   const [built,setBuilt] = useState(false);
@@ -36398,23 +36499,35 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
   const [tRes,setTRes]   = useState(null);
   const [tested,setTested]=useState([]);
   const [steward,setSteward]=useState("maya.chen");
+  const [filters,setFilters]=useState({
+    cats:[], excludeCats:[], sens:["Public","Internal","Confidential"], excludeDocs:[],
+    folders:[], excludeFolders:[], types:[], excludeTypes:["MP4","ZIP","MP3"],
+    minSize:0, maxSize:200, maxSentences:S.payload.maxSentences, skipRot:true,
+  });
+  const [newFolder,setNewFolder]=useState("");
 
-  const s = DA_WIZ_STEPS[step];
-  const aiKey = "w"+step, aiOn = ai[aiKey]!==false;
+  const steps = daWizSteps(mode);
+  const s = steps[Math.min(step,steps.length-1)];
+  const aiKey = "w"+s.k, aiOn = ai[aiKey]!==false;
   const chosen = DA_WIZ_ASSETS.filter(a=>picked.includes(a.n));
   const blockedPick = chosen.filter(a=>a.tags.some(t=>S.guards.blockedTags.includes(t)));
   const uncertified = chosen.filter(a=>a.cert!=="Approved");
+  const totalCols = chosen.reduce((n,a)=>n+a.cols,0);
 
-  // What the scope inherits — computed, not typed. This is the whole argument
-  // for building Data Ask inside the governance catalogue.
+  // documents surviving the filter chain
+  const docEval = DA_IDC_DOCS.map(dc=>({...dc, ...daDocMatch(dc,filters,S.guards.blockedTags)}));
+  const docsIn  = docEval.filter(x=>x.ok);
+
+  useEffect(()=>{ if(step>steps.length-1) setStep(steps.length-1); },[mode]);
+
   const inherited = {
     tags:   [...new Set(chosen.flatMap(a=>a.tags))],
-    terms:  chosen.length*8,
+    terms:  totalCols ? Math.round(totalCols*0.62) : 0,
     domains:[...new Set(chosen.map(a=>a.dom))],
     owners: [...new Set(chosen.map(a=>({orders:"maya.chen",customers:"maya.chen",dim_products:"maya.chen",
       transactions:"sarah.kim",vw_order_summary:"maya.chen",user_events:"dev.patel",user_sessions:"dev.patel",
       gl_accounts:"sarah.kim","invoices_2026.parquet":"sarah.kim","contracts_2025.pdf":"sarah.kim",
-      "XKG — Customer":"alex.rivera","XKG — Supplier":"alex.rivera",employees:"alex.rivera"}[a.n]||"—")))],
+      "XKG — Customer":"alex.rivera","XKG — Supplier":"alex.rivera",employees:"alex.rivera"}[a.n]||"—")))].filter(o=>o!=="—"),
     policies:[...new Set(chosen.flatMap(a=>a.tags.map(t=>({PII:"PII Data Handling",GDPR:"GDPR Compliance",
       confidential:"SOC2 Access Controls","Restricted-HR":"SOC2 Access Controls"}[t])).filter(Boolean)))],
   };
@@ -36422,89 +36535,135 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
     {from:"orders.customer_id",     to:"customers.id",       how:"FK constraint",  conf:100, need:["orders","customers"]},
     {from:"orders.product_id",      to:"dim_products.id",    how:"FK constraint",  conf:100, need:["orders","dim_products"]},
     {from:"transactions.order_id",  to:"orders.id",          how:"Lineage + name", conf:92,  need:["transactions","orders"]},
-    {from:"user_sessions.user_id",  to:"user_events.user_id",how:"Name match",     conf:68,  need:["user_sessions","user_events"]},
+    {from:"user_sessions.user_id",  to:"user_events.user_id",how:"Column name",    conf:68,  need:["user_sessions","user_events"]},
     {from:"XKG — Customer.id",      to:"customers.id",       how:"Golden record",  conf:100, need:["XKG — Customer","customers"]},
   ].filter(j=>j.need.every(n=>picked.includes(n)));
+
   const aiSyns = [
-    {term:"revenue", maps:"orders.net_amount", src:"Glossary — Net Revenue", conf:98, need:"orders"},
-    {term:"GMV",     maps:"orders.gross_amount",src:"Glossary — GMV",        conf:96, need:"orders"},
-    {term:"sales",   maps:"orders.net_amount", src:"AI suggested",           conf:81, need:"orders"},
-    {term:"basket",  maps:"orders.item_count", src:"AI suggested",           conf:64, need:"orders"},
-    {term:"invoice", maps:"Invoice",           src:"Glossary — Invoice",      conf:99, need:"invoices_2026.parquet"},
-    {term:"golden record", maps:"XKG.customer",src:"Knowledge Layer",         conf:100,need:"XKG — Customer"},
-    {term:"DAU",     maps:"user_events.distinct_users", src:"Glossary — DAU", conf:97, need:"user_events"},
+    {term:"revenue", maps:"orders.net_amount",  src:"Glossary — Net Revenue", conf:98, need:"orders"},
+    {term:"GMV",     maps:"orders.gross_amount",src:"Glossary — GMV",         conf:96, need:"orders"},
+    {term:"sales",   maps:"orders.net_amount",  src:"AI suggested",           conf:81, need:"orders"},
+    {term:"basket",  maps:"orders.item_count",  src:"AI suggested",           conf:64, need:"orders"},
+    {term:"invoice", maps:"Invoice",            src:"Glossary — Invoice",     conf:99, need:"invoices_2026.parquet"},
+    {term:"golden record",maps:"XKG.customer",  src:"Knowledge Layer",        conf:100,need:"XKG — Customer"},
+    {term:"DAU",     maps:"user_events.distinct_users",src:"Glossary — DAU",  conf:97, need:"user_events"},
   ].filter(x=>picked.includes(x.need));
 
-  useEffect(()=>{ // seed the AI-generated semantics when the step is first opened with AI on
-    if(step===3 && aiOn && syns.length===0 && aiSyns.length) setSyns(aiSyns.map(x=>({...x,status:x.conf>=95?"Approved":"Pending"})));
-  },[step,aiOn,picked.join()]);
+  const aiEnrich = [
+    {obj:"orders",       kind:"Table",  text:"One row per placed order. Grain is order header, not line item — join to order_line for item detail.", conf:94, need:"orders"},
+    {obj:"orders.net_amount",kind:"Column",text:"Order value after discounts, returns and tax. This is the column behind Net Revenue.", conf:96, need:"orders"},
+    {obj:"customers.region",kind:"Column",text:"Sales region, one of five values. Not a geography — a US-billed customer shipping to EMEA is still North America.", conf:88, need:"customers"},
+    {obj:"transactions", kind:"Table",  text:"Settled payment events. Lags orders by up to 3 days, so same-day revenue will not reconcile.", conf:91, need:"transactions"},
+    {obj:"user_events",  kind:"Table",  text:"Raw event stream, one row per user action. Deduplicate on event_id before counting.", conf:90, need:"user_events"},
+    {obj:"XKG — Customer",kind:"Graph", text:"Resolved customer identity across Salesforce and the warehouse. Use this, not raw customer counts.", conf:97, need:"XKG — Customer"},
+  ].filter(x=>picked.includes(x.need));
+
+  useEffect(()=>{
+    if(s.k==="syn" && aiOn && syns.length===0 && aiSyns.length)
+      setSyns(aiSyns.map(x=>({...x,status:x.conf>=95?"Approved":"Pending"})));
+  },[s.k,aiOn,picked.join()]);
+  useEffect(()=>{
+    if(s.k==="enrich" && aiOn && enrich.length===0 && aiEnrich.length)
+      setEnrich(aiEnrich.map(x=>({...x,status:"Pending"})));
+  },[s.k,aiOn,picked.join()]);
+
+  const needsDocs = mode==="documents"||mode==="hybrid";
+  const needsStruct = mode==="structured"||mode==="hybrid";
+  const indexCredits = Math.round(totalCols*2.4 + docsIn.length*8*0.18 + ctxDocs.length*4);
 
   const blocked =
-      (step===0 && (!name.trim() || picked.length===0 || blockedPick.length>0))
-   || (step===2 && propJoins.some((j,i)=>j.conf<80 && !joins[i]))
-   || (step===3 && syns.some(x=>x.status==="Pending"))
-   || (step===5 && !built);
+      (s.k==="connect" && (!name.trim() || (needsStruct&&picked.length===0) || blockedPick.length>0))
+   || (s.k==="docs"    && docsIn.length===0)
+   || (s.k==="rel"     && propJoins.some((j,i)=>j.conf<80 && !joins[i]))
+   || (s.k==="enrich"  && enrich.some(x=>x.status==="Pending"))
+   || (s.k==="syn"     && syns.some(x=>x.status==="Pending"))
+   || (s.k==="index"   && !built);
 
   const blockReason =
-      step===0 ? (!name.trim() ? "Give the space a name"
-                 : picked.length===0 ? "Select at least one object"
+      s.k==="connect" ? (!name.trim() ? "Give the space a name"
+                 : (needsStruct&&picked.length===0) ? "Select at least one object"
                  : `${blockedPick.map(a=>a.n).join(", ")} carries a blocklisted classification — remove it, or have an Admin allow the classification in Settings › Data Ask › Guardrails`)
-    : step===2 ? "Confirm or drop every join below the 80% confidence threshold"
-    : step===3 ? "Approve or reject every pending synonym"
-    : step===5 ? "Build the index before continuing"
+    : s.k==="docs"    ? "No documents survive the current filters"
+    : s.k==="rel"     ? "Confirm or drop every join below the 80% confidence threshold"
+    : s.k==="enrich"  ? "Approve or reject every proposed description"
+    : s.k==="syn"     ? "Approve or reject every pending synonym"
+    : s.k==="index"   ? "Build the index before continuing"
     : "";
 
-  const advance = () => { setDone(d=>new Set([...d,step])); setStep(n=>Math.min(DA_WIZ_STEPS.length-1,n+1)); };
-
-  const runIndex = () => {
-    setBuilding(true);
-    setTimeout(()=>{ setBuilding(false); setBuilt(true); onToast("Index built — run the test console before publishing"); }, 1500);
-  };
-  const runTest = () => {
-    const q = tq.trim(); if(!q) return;
-    const raw = daResolve(q, null);
-    setTRes(raw ? daProject({...raw,q},"admin") : {miss:true,q});
-  };
+  const advance = () => { setDone(d=>new Set([...d,step])); setStep(n=>Math.min(steps.length-1,n+1)); };
+  const runIndex = () => { setBuilding(true);
+    setTimeout(()=>{ setBuilding(false); setBuilt(true);
+      onToast(`Index built — ${indexCredits} credits consumed`); }, 1600); };
+  const runTest = () => { const q=tq.trim(); if(!q) return;
+    const raw = daResolve(q,null); setTRes(raw?daProject({...raw,q},"admin"):{miss:true,q}); };
 
   const finish = (publish) => {
     const id = "sp_"+(name.trim().toLowerCase().replace(/[^a-z0-9]+/g,"_")||"new");
     const sp = {
-      id, key:"AS-"+(1001+_da.spaces.length), name:name.trim(), mode,
+      id, drift:{tables:0,cols:0,files:0,since:built?daNow():"—"},
+      key:"AS-"+(1001+_da.spaces.length), name:name.trim(), mode,
       status: publish?"In review":"Draft", version:"v1 draft", owner:me, stewards:[steward],
       domain, published:"—", indexed:built?daNow():"—",
       accuracy: tested.length?Math.round(tested.filter(t=>t.ok).length/tested.length*100):0,
-      questions30d:0, credits30d: built?Math.round(picked.length*38):0, avgLatency:"—",
-      desc: `${chosen.length} object${chosen.length===1?"":"s"} across ${inherited.domains.join(", ")}. Created in EDG by ${me}.`,
-      retrieval: mode==="structured"?undefined:retr,
-      sources: chosen.map(a=>({name:a.n, type:a.t, role:a.t==="Knowledge Graph"?"golden record":a.t==="Object"?"document":"fact",
-        rows:"—", tags:a.tags, term:"—"})),
-      joins: propJoins.map((j,i)=>({from:j.from,to:j.to,how:j.how,conf:j.conf,ok:j.conf>=80||!!joins[i]})),
-      synonyms: syns, samples,
+      questions30d:0, credits30d: built?indexCredits:0, avgLatency:"—",
+      desc:`${needsStruct?`${chosen.length} object${chosen.length===1?"":"s"}`:""}${needsStruct&&needsDocs?" and ":""}${needsDocs?`${docsIn.length} document${docsIn.length===1?"":"s"}`:""} across ${(inherited.domains.length?inherited.domains:[domain]).join(", ")}. Created in EDG by ${me}.`,
+      retrieval: needsDocs?retr:undefined,
+      chunks: needsDocs?String(docsIn.length*8):undefined,
+      filters: needsDocs?filters:undefined,
+      contextDocs: ctxDocs,
+      sources:[
+        ...chosen.filter(a=>curated[a.n]!==false).map(a=>({name:a.n, type:a.t,
+          role:a.t==="Knowledge Graph"?"golden record":a.t==="Object"?"document":a.cols>30?"fact":"dimension",
+          rows:a.rows, tags:a.tags, term:"—"})),
+        ...(needsDocs?docsIn.map(dc=>({name:dc.n, type:"Object", role:"document",
+          rows:dc.pages?`${dc.pages} pages`:`${dc.size} MB`, tags:dc.sens==="Confidential"?["confidential"]:[], term:dc.cat})):[]),
+      ],
+      joins: propJoins.map((j,i)=>({from:j.from,to:j.to,how:j.how,conf:j.conf,ok:j.conf>=80||joins[i]==="confirm"})),
+      synonyms: syns.filter(x=>x.status!=="Rejected"), samples,
+      enrichment: enrich.filter(x=>x.status==="Approved"),
       guards:{...guards, blockedTags:S.guards.blockedTags},
       history:[
         publish?{at:daNow(), what:"Submitted for review", who:me, detail:`→ ${steward}`}:null,
-        built?{at:daNow(), what:"Index built", who:"system", detail:`${chosen.length} objects`}:null,
+        built?{at:daNow(), what:"Index built", who:"system", detail:`${chosen.length} objects · ${docsIn.length} documents · ${indexCredits} credits`}:null,
         {at:daNow(), what:"Created", who:me, detail:"Built in EDG"},
       ].filter(Boolean),
+      blockers: publish?[]:[{t:"Not submitted for review yet", fix:"Submit the space so its steward can approve it"}],
     };
     daPatch({spaces:[..._da.spaces, sp]});
+    if(built) daPatch({settings:{..._da.settings, cost:{..._da.settings.cost,
+      balance:_da.settings.cost.balance-indexCredits,
+      ledger:[{id:"lg"+Date.now(), at:daNow(), act:"Index build (embeddings)", svc:"index",
+        model:_da.settings.models.index.model, qty:needsDocs?`${docsIn.length*8} chunks`:`${totalCols} cols`,
+        unit:"per 1K chunks", rate:"$0.180", amount:indexCredits, domain, by:me, space:id},
+        ..._da.settings.cost.ledger]}}});
     onToast(publish?`${sp.name} submitted to ${steward} for approval`:`${sp.name} saved as a draft`);
     onCreated(id);
   };
 
   const inp = {width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,
     color:T.text,fontSize:12.5,outline:"none",fontFamily:"inherit"};
+  const Chips = ({opts,sel,onTog,color}) => (
+    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+      {opts.map(o=>{
+        const on = sel.includes(o);
+        const c = color||T.accent;
+        return <button key={o} onClick={()=>onTog(o)} style={{padding:"5px 11px",borderRadius:99,cursor:"pointer",
+          fontSize:11.5,fontWeight:on?700:500,fontFamily:"inherit",
+          border:`1px solid ${on?c:T.border}`,background:on?c+"1a":"transparent",color:on?c:T.textSub}}>{o}</button>;
+      })}
+    </div>
+  );
 
   return createPortal(
     <div onClick={onClose} className="fadeIn" style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}>
-      <div onClick={e=>e.stopPropagation()} className="slideInRight" style={{position:"absolute",top:0,right:0,bottom:0,width:940,maxWidth:"96vw",
+      <div onClick={e=>e.stopPropagation()} className="slideInRight" style={{position:"absolute",top:0,right:0,bottom:0,width:980,maxWidth:"97vw",
         background:T.bgSurface,borderLeft:`1px solid ${T.border}`,boxShadow:"-12px 0 48px rgba(0,0,0,.32)",display:"flex",flexDirection:"column"}}>
 
         <div style={{padding:"14px 20px",borderBottom:`1px solid ${T.border}`,background:T.bgElevated,display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
           <div style={{minWidth:0}}>
             <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>New Answer Space</div>
             <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>
-              Seven steps — three of them are review, because EDG already governs the vocabulary
+              {steps.length} steps for a {DA_MODES[mode].label.toLowerCase()} space · {steps.filter(x=>x.mode==="auto").length} run without input
             </div>
           </div>
           <button onClick={onClose} style={{marginLeft:"auto",width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,
@@ -36512,13 +36671,13 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
         </div>
 
         <div style={{flex:1,display:"flex",minHeight:0}}>
-          <KLStepRail steps={DA_WIZ_STEPS} cur={step} onPick={setStep} doneSet={done}/>
+          <KLStepRail steps={steps} cur={step} onPick={setStep} doneSet={done}/>
           <div style={{flex:1,overflowY:"auto",padding:"22px 26px"}}>
             <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:6}}>
               <div style={{fontSize:16,fontWeight:700,color:T.text}}>Step {step+1} · {s.t}</div>
               <KLModeTag mode={s.mode==="auto"?"auto":"input"}/>
               <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:9}}>
-                {[1,2,3].includes(step) ? (<>
+                {["profile","rel","enrich","syn"].includes(s.k) ? (<>
                   <span style={{fontSize:11.5,fontWeight:700,color:T.violet}}>AI assist</span>
                   <Toggle on={aiOn} onChange={()=>setAi(a=>({...a,[aiKey]:!aiOn}))}/>
                   <span style={{fontSize:11.5,color:T.textSub,fontWeight:600,width:22}}>{aiOn?"On":"Off"}</span>
@@ -36528,75 +36687,89 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
             <div style={{fontSize:11,fontWeight:700,color:s.uses==="—"?T.textMuted:T.green,marginBottom:10}}>
               {s.uses==="—" ? "No governed inputs required" : `Governed inputs: ${s.uses}`}
             </div>
-            <div style={{fontSize:12.8,color:T.textSub,lineHeight:1.65,maxWidth:780,marginBottom:18}}>{s.d}</div>
+            <div style={{fontSize:12.8,color:T.textSub,lineHeight:1.65,maxWidth:800,marginBottom:18}}>{s.d}</div>
 
-            {/* ── 1 · scope ── */}
-            {step===0&&(
-              <div style={{maxWidth:800}}>
-                <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr 1fr",gap:10,marginBottom:16}}>
-                  <div>
-                    <DASectionLabel>Name</DASectionLabel>
-                    <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Supplier Spend" style={inp}/>
-                  </div>
-                  <div>
-                    <DASectionLabel>Answer mode</DASectionLabel>
-                    <select value={mode} onChange={e=>setMode(e.target.value)} style={{...inp,cursor:"pointer"}}>
+            {/* ═══ CONNECT & LOAD ═══ */}
+            {s.k==="connect"&&(
+              <div style={{maxWidth:820}}>
+                <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr 1fr",gap:10,marginBottom:14}}>
+                  <div><DASectionLabel>Name</DASectionLabel>
+                    <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Supplier Spend" style={inp}/></div>
+                  <div><DASectionLabel>Answer mode</DASectionLabel>
+                    <select value={mode} onChange={e=>{setMode(e.target.value);setStep(0);setDone(new Set());}} style={{...inp,cursor:"pointer"}}>
                       {Object.keys(DA_MODES).map(k=><option key={k} value={k}>{DA_MODES[k].label} — {DA_MODES[k].sub}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <DASectionLabel>Domain</DASectionLabel>
+                    </select></div>
+                  <div><DASectionLabel>Domain</DASectionLabel>
                     <select value={domain} onChange={e=>setDomain(e.target.value)} style={{...inp,cursor:"pointer"}}>
-                      {["Commerce","Finance","Product","Platform","ML","Procurement"].map(d=><option key={d}>{d}</option>)}
-                    </select>
+                      {["Commerce","Finance","Product","Platform","ML","Procurement"].map(x=><option key={x}>{x}</option>)}
+                    </select></div>
+                </div>
+                <div style={{marginBottom:16}}>
+                  <DASectionLabel>Connection</DASectionLabel>
+                  <select value={conn} onChange={e=>setConn(e.target.value)} style={{...inp,cursor:"pointer",maxWidth:340}}>
+                    {["snowflake_dwh","postgresql_prod","oracle_erp","salesforce_crm","unity_catalog",
+                      "jnj-data-lake-prod","analytics-exports","solix_ecs_content"].map(c=><option key={c}>{c}</option>)}
+                  </select>
+                  <div style={{fontSize:11,color:T.textMuted,marginTop:6,lineHeight:1.55}}>
+                    Connections are managed in <b>Settings › Connections</b>. A space reads through the same connection and
+                    the same credentials the catalog already uses — Data Ask never holds its own.
                   </div>
                 </div>
-                {mode!=="structured"&&(
-                  <div style={{marginBottom:16}}>
-                    <DASectionLabel>Retrieval strategy</DASectionLabel>
-                    <div style={{display:"flex",flexDirection:"column",gap:7}}>
-                      {Object.keys(DA_RETRIEVAL).map(k=>(
-                        <label key={k} onClick={()=>setRetr(k)} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"9px 12px",borderRadius:8,cursor:"pointer",
-                          border:`1.5px solid ${retr===k?T.accent:T.border}`,background:retr===k?T.accentDim:"transparent"}}>
-                          <div style={{marginTop:2,width:13,height:13,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
-                            border:`2px solid ${retr===k?T.accent:T.border}`,background:retr===k?T.accent:"transparent"}}>
-                            {retr===k&&<div style={{width:4,height:4,borderRadius:"50%",background:"#fff"}}/>}
+
+                {needsStruct&&(<>
+                  <DASectionLabel>Schema explorer · {picked.length} of {DA_WIZ_ASSETS.length} selected · {totalCols} columns</DASectionLabel>
+                  <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",marginBottom:12}}>
+                    {DA_WIZ_ASSETS.map((a,i)=>{
+                      const on = picked.includes(a.n);
+                      const bad = a.tags.some(t=>S.guards.blockedTags.includes(t));
+                      return (
+                        <div key={a.n} style={{borderTop:i?`1px solid ${T.border}`:"none",background:on?(bad?T.rose+"0e":T.accentDim):"transparent"}}>
+                          <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",cursor:"pointer"}}
+                            onClick={()=>setPicked(p=>on?p.filter(x=>x!==a.n):[...p,a.n])}>
+                            <span style={{width:16,height:16,borderRadius:4,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+                              fontSize:10,color:"#fff",background:on?(bad?T.rose:T.accent):"transparent",
+                              border:`1.5px solid ${on?(bad?T.rose:T.accent):T.borderLight}`}}>{on?"✓":""}</span>
+                            <span style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace",minWidth:168}}>{a.n}</span>
+                            <DAPill color={T.textSub}>{a.t}</DAPill>
+                            <span style={{fontSize:11,color:T.textMuted,width:82}}>{a.dom}</span>
+                            <span style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace",width:96}}>
+                              {a.cols?`${a.cols} cols · `:""}{a.rows}
+                            </span>
+                            <div style={{marginLeft:"auto",display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
+                              {a.tags.map(t=><DAPill key={t} color={S.guards.blockedTags.includes(t)?T.rose:T.amber}>{t}</DAPill>)}
+                              {a.cert!=="Approved"&&<DAPill color={T.rose}>{a.cert}</DAPill>}
+                              <button onClick={e=>{e.stopPropagation();setShowData(showData===a.n?null:a.n);}}
+                                style={{padding:"3px 9px",borderRadius:6,cursor:"pointer",fontSize:10.5,fontFamily:"inherit",
+                                  background:"transparent",border:`1px solid ${T.border}`,color:T.textSub}}>
+                                {showData===a.n?"Hide data":"Show data"}
+                              </button>
+                            </div>
                           </div>
-                          <div><div style={{fontSize:12,fontWeight:600,color:retr===k?T.accent:T.text}}>{DA_RETRIEVAL[k].label}</div>
-                            <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{DA_RETRIEVAL[k].sub}</div></div>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <DASectionLabel>Objects in scope · {picked.length} selected</DASectionLabel>
-                <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",marginBottom:12}}>
-                  {DA_WIZ_ASSETS.map((a,i)=>{
-                    const on = picked.includes(a.n);
-                    const bad = a.tags.some(t=>S.guards.blockedTags.includes(t));
-                    const uncert = a.cert!=="Approved";
-                    return (
-                      <div key={a.n} onClick={()=>setPicked(p=>on?p.filter(x=>x!==a.n):[...p,a.n])}
-                        style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",cursor:"pointer",
-                          borderTop:i?`1px solid ${T.border}`:"none",background:on?(bad?T.rose+"0e":T.accentDim):"transparent"}}>
-                        <span style={{width:16,height:16,borderRadius:4,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
-                          fontSize:10,color:"#fff",background:on?(bad?T.rose:T.accent):"transparent",border:`1.5px solid ${on?(bad?T.rose:T.accent):T.borderLight}`}}>{on?"✓":""}</span>
-                        <span style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace",minWidth:172}}>{a.n}</span>
-                        <DAPill color={T.textSub}>{a.t}</DAPill>
-                        <span style={{fontSize:11,color:T.textMuted}}>{a.dom}</span>
-                        <div style={{marginLeft:"auto",display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
-                          {a.tags.map(t=><DAPill key={t} color={S.guards.blockedTags.includes(t)?T.rose:T.amber}>{t}</DAPill>)}
-                          {uncert&&<DAPill color={T.rose}>{a.cert}</DAPill>}
+                          {showData===a.n&&(
+                            <div style={{padding:"0 12px 11px 38px"}}>
+                              <DAResultTable
+                                cols={a.t==="Knowledge Graph"?["golden_id","legal_name","tax_id","sources"]
+                                  :a.n==="orders"?["id","customer_id","net_amount","status"]
+                                  :a.n==="customers"?["id","company_name","region","tier"]
+                                  :["col_1","col_2","col_3","col_4"]}
+                                rows={[["…","…","…","…"],["…","…","…","…"],["…","…","…","…"]]}/>
+                              <div style={{fontSize:10.5,color:T.textMuted,marginTop:6}}>
+                                Sample values are withheld in the builder — masking is evaluated per asker, and the builder
+                                has no asker. Use the Test console to see what a given role would actually get.
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                </>)}
+
                 {blockedPick.length>0&&(
                   <div style={{padding:"10px 13px",borderRadius:8,background:T.roseDim,border:`1px solid ${T.rose}55`,fontSize:12,color:T.text,lineHeight:1.6}}>
-                    <b>{blockedPick.map(a=>a.n).join(", ")}</b> carries the <b>{S.guards.blockedTags.join(", ")}</b> classification, which is on
-                    the platform blocklist. Data Ask cannot index it. Remove it from scope, or ask an Admin to allow the
-                    classification in <b>Settings › Data Ask › Guardrails</b>.
+                    <b>{blockedPick.map(a=>a.n).join(", ")}</b> carries the <b>{S.guards.blockedTags.join(", ")}</b> classification,
+                    which is on the platform blocklist. Data Ask cannot index it. Remove it from scope, or ask an Admin to
+                    allow the classification in <b>Settings › Data Ask › Guardrails</b>.
                   </div>
                 )}
                 {uncertified.length>0&&blockedPick.length===0&&(
@@ -36608,26 +36781,51 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
               </div>
             )}
 
-            {/* ── 2 · inherited ── */}
-            {step===1&&(
-              <div style={{maxWidth:800}}>
+            {/* ═══ PROFILE & CLASSIFY ═══ */}
+            {s.k==="profile"&&(
+              <div style={{maxWidth:840}}>
                 {picked.length===0
                   ? <KLEmpty icon={Ic.info(30)} title="Nothing in scope yet" sub="Go back to step 1 and pick objects."/>
                   : (<>
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:16}}>
+                    <DASectionLabel>Profile · already computed at ingestion</DASectionLabel>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(148px,1fr))",gap:10,marginBottom:16}}>
+                      <Metric label="Columns profiled" value={String(totalCols)} sub="100% of scope"/>
+                      <Metric label="Types detected" value="9" sub="numeric, date, text, bool…"/>
+                      <Metric label="Patterns found" value="14" sub="email, IBAN, ISO date, UUID"/>
+                      <Metric label="Currency columns" value={String(chosen.some(a=>a.n==="orders"||a.n==="transactions")?4:0)} sub="USD, EUR"/>
+                      <Metric label="Low-cardinality" value="11" sub="candidate dimensions"/>
+                    </div>
+                    <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",marginBottom:16}}>
+                      <div style={{display:"flex",gap:10,padding:"8px 12px",background:T.bgElevated,fontSize:9.5,fontWeight:700,
+                        color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>
+                        <span style={{flex:1}}>Object</span><span style={{width:70}}>Columns</span>
+                        <span style={{width:80}}>Null density</span><span style={{width:96}}>Cardinality</span><span style={{width:88}}>Distribution</span>
+                      </div>
+                      {chosen.map((a,i)=>(
+                        <div key={a.n} style={{display:"flex",gap:10,alignItems:"center",padding:"9px 12px",borderTop:`1px solid ${T.border}`}}>
+                          <span style={{flex:1,fontSize:11.8,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{a.n}</span>
+                          <span style={{width:70,fontSize:11,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{a.cols||"—"}</span>
+                          <span style={{width:80,fontSize:11,color:i%3===1?T.amber:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{i%3===1?"12.4%":"0.8%"}</span>
+                          <span style={{width:96,fontSize:11,color:T.textSub}}>{a.t==="Table"?(a.cols>30?"high":"low"):"—"}</span>
+                          <span style={{width:88,fontSize:11,color:T.textSub}}>{i%2?"skewed":"uniform"}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <DASectionLabel>Governance inherited from the catalog</DASectionLabel>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(148px,1fr))",gap:10,marginBottom:16}}>
                       <Metric label="Classifications" value={String(inherited.tags.length)} sub={inherited.tags.join(" · ")||"none"}/>
                       <Metric label="Glossary terms" value={String(inherited.terms)} sub="already bound to these columns"/>
                       <Metric label="Domains" value={String(inherited.domains.length)} sub={inherited.domains.join(" · ")}/>
                       <Metric label="Policies in force" value={String(inherited.policies.length)} sub={inherited.policies.join(" · ")||"none"}/>
                     </div>
-                    <DASectionLabel>What this means at answer time</DASectionLabel>
                     <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",marginBottom:14}}>
                       {[
                         inherited.tags.includes("PII")&&{c:T.amber,h:"PII columns will be masked",s:"Rule “Mask PII for non-data-owners” from PII Data Handling applies to every answer for non-owners."},
                         inherited.tags.includes("GDPR")&&{c:T.amber,h:"EU rows will be filtered",s:"Rule “EU data must remain in EU region” from GDPR Compliance withholds EU-resident rows from unentitled askers."},
                         inherited.tags.includes("confidential")&&{c:T.rose,h:"Legal hold respected",s:"Objects under hold stay readable in place, but export and download are refused."},
-                        {c:T.green,h:`${inherited.owners.filter(o=>o!=="—").length} owner(s) inherit accountability`,s:`Reported answers route to ${inherited.owners.filter(o=>o!=="—").join(", ")||"the space owner"} without anyone assigning them.`},
-                        {c:T.green,h:"Glossary definitions become the answer's definitions",s:"Ambiguous business terms trigger a clarification rather than a guess."},
+                        inherited.owners.length>0&&{c:T.green,h:`${inherited.owners.length} owner(s) inherit accountability`,s:`Reported answers route to ${inherited.owners.join(", ")} without anyone assigning them.`},
+                        {c:T.green,h:"Glossary definitions become the answer's definitions",s:"An ambiguous business term triggers a clarification rather than a guess."},
                       ].filter(Boolean).map((r,i)=>(
                         <div key={r.h} style={{display:"flex",gap:10,padding:"10px 12px",borderTop:i?`1px solid ${T.border}`:"none"}}>
                           <span style={{width:6,height:6,borderRadius:"50%",background:r.c,flexShrink:0,marginTop:5}}/>
@@ -36637,19 +36835,20 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
                       ))}
                     </div>
                     <KLNote tone="quiet">
-                      Nothing on this step is editable — it is a read-out of governance that already exists. To change it,
-                      change the classification, term or policy at its source and the space follows.
+                      Nothing on this step is editable, and nothing on it costs credits — it is a read-out of profiling and
+                      governance that already exist. To change it, change the classification, term or policy at its source
+                      and the space follows.
                     </KLNote>
                   </>)}
               </div>
             )}
 
-            {/* ── 3 · relationships ── */}
-            {step===2&&(
-              <div style={{maxWidth:800}}>
+            {/* ═══ RELATIONSHIPS ═══ */}
+            {s.k==="rel"&&(
+              <div style={{maxWidth:820}}>
                 {propJoins.length===0
                   ? <KLEmpty icon={Ic.branches(30)} title="No relationships to confirm"
-                      sub={mode==="documents"?"Document spaces do not join.":"Pick two or more related tables in step 1."}/>
+                      sub="Pick two or more related tables in step 1."/>
                   : propJoins.map((j,i)=>{
                       const ok = j.conf>=80 || joins[i]==="confirm";
                       const dropped = joins[i]==="drop";
@@ -36684,9 +36883,271 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
               </div>
             )}
 
-            {/* ── 4 · semantics ── */}
-            {step===3&&(
+            {/* ═══ SELECT DOCUMENTS ═══ */}
+            {s.k==="docs"&&(
+              <div style={{maxWidth:880}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,marginBottom:16}}>
+                  <Metric label="Classified documents" value={String(DA_IDC_DOCS.length)}/>
+                  <Metric label="Surviving filters" value={String(docsIn.length)} color={docsIn.length?T.green:T.rose}/>
+                  <Metric label="Excluded" value={String(docEval.length-docsIn.length)} color={T.amber}/>
+                  <Metric label="Est. chunks" value={(docsIn.length*8).toLocaleString()} sub="at current chunk size"/>
+                </div>
+                <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>
+                  <div style={{display:"flex",gap:10,padding:"8px 12px",background:T.bgElevated,fontSize:9.5,fontWeight:700,
+                    color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>
+                    <span style={{flex:1}}>Document</span><span style={{width:150}}>Category</span>
+                    <span style={{width:96}}>Sensitivity</span><span style={{width:62}}>Size</span><span style={{width:190}}>Status</span>
+                  </div>
+                  {docEval.map((dc,i)=>(
+                    <div key={dc.n} style={{display:"flex",gap:10,alignItems:"center",padding:"9px 12px",borderTop:`1px solid ${T.border}`,
+                      opacity:dc.ok?1:.55}}>
+                      <span style={{flex:1,minWidth:0}}>
+                        <span style={{display:"block",fontSize:11.8,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace",
+                          overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dc.n}</span>
+                        <span style={{display:"block",fontSize:10,color:T.textMuted}}>{dc.folder} · {dc.type}
+                          {dc.cls.length?` · ${dc.cls.join(", ")}`:""}{dc.rot?` · ROT: ${dc.rot}`:""}</span>
+                      </span>
+                      <span style={{width:150}}><DAPill color={dc.cat==="Trivial"?T.textMuted:T.textSub}>{dc.cat}</DAPill></span>
+                      <span style={{width:96}}><DAPill color={dc.sens==="Restricted"?T.rose:dc.sens==="Confidential"?T.amber:T.textSub}>{dc.sens}</DAPill></span>
+                      <span style={{width:62,fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{dc.size} MB</span>
+                      <span style={{width:190,display:"flex",alignItems:"center",gap:6}}>
+                        {dc.ok
+                          ? (<><span style={{color:T.green,fontSize:11,fontWeight:700}}>✓</span>
+                              <span style={{fontSize:10.5,color:T.green}}>Included</span>
+                              <button onClick={()=>setFilters(f=>({...f,excludeDocs:[...f.excludeDocs,dc.n]}))}
+                                style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:10.5,fontFamily:"inherit"}}>exclude</button></>)
+                          : (<><span style={{color:T.textMuted,fontSize:11}}>✕</span>
+                              <span style={{fontSize:10.5,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dc.why}</span>
+                              {filters.excludeDocs.includes(dc.n)&&
+                                <button onClick={()=>setFilters(f=>({...f,excludeDocs:f.excludeDocs.filter(x=>x!==dc.n)}))}
+                                  style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",color:T.accent,fontSize:10.5,fontFamily:"inherit"}}>undo</button>}</>)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <KLNote tone="quiet">
+                  Category and sensitivity come from the IDC classification run, not from filenames — which is why
+                  <b> payroll_2025_final.xlsx</b> is refused on sensitivity even though nothing in its name says so.
+                  Tune what is picked up on the next step.
+                </KLNote>
+              </div>
+            )}
+
+            {/* ═══ ADVANCED FILTERS ═══ */}
+            {s.k==="filters"&&(
               <div style={{maxWidth:820}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 13px",marginBottom:16,borderRadius:9,
+                  background:docsIn.length?T.green+"0e":T.roseDim,border:`1px solid ${(docsIn.length?T.green:T.rose)}44`}}>
+                  <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>
+                    {docsIn.length} of {DA_IDC_DOCS.length} documents match
+                  </span>
+                  <span style={{fontSize:11.5,color:T.textMuted}}>
+                    · {(docsIn.length*8).toLocaleString()} chunks · ~{Math.round(docsIn.length*8*0.18)} credits to index
+                  </span>
+                </div>
+
+                <DASectionLabel>Include categories · empty means all</DASectionLabel>
+                <div style={{marginBottom:14}}>
+                  <Chips opts={DA_IDC_CATS} sel={filters.cats}
+                    onTog={o=>setFilters(f=>({...f,cats:f.cats.includes(o)?f.cats.filter(x=>x!==o):[...f.cats,o]}))}/>
+                </div>
+                <DASectionLabel>Exclude categories</DASectionLabel>
+                <div style={{marginBottom:14}}>
+                  <Chips opts={DA_IDC_CATS} sel={filters.excludeCats} color={T.rose}
+                    onTog={o=>setFilters(f=>({...f,excludeCats:f.excludeCats.includes(o)?f.excludeCats.filter(x=>x!==o):[...f.excludeCats,o]}))}/>
+                </div>
+                <DASectionLabel>Sensitivity allowed</DASectionLabel>
+                <div style={{marginBottom:14}}>
+                  <Chips opts={DA_IDC_SENS} sel={filters.sens}
+                    onTog={o=>setFilters(f=>({...f,sens:f.sens.includes(o)?f.sens.filter(x=>x!==o):[...f.sens,o]}))}/>
+                  <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>
+                    Restricted is refused by the platform blocklist whether or not it is selected here.
+                  </div>
+                </div>
+
+                <DASectionLabel>Folder pattern rules</DASectionLabel>
+                <div style={{marginBottom:8}}>
+                  {filters.folders.map(p=>(
+                    <div key={p} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px",margin:"0 6px 6px 0",
+                      borderRadius:99,background:T.green+"1a",border:`1px solid ${T.green}44`,fontSize:11.5,color:T.green}}>
+                      include {p}
+                      <button onClick={()=>setFilters(f=>({...f,folders:f.folders.filter(x=>x!==p)}))}
+                        style={{background:"none",border:"none",cursor:"pointer",color:"inherit",display:"flex"}}>{Ic.x(9)}</button>
+                    </div>
+                  ))}
+                  {filters.excludeFolders.map(p=>(
+                    <div key={p} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px",margin:"0 6px 6px 0",
+                      borderRadius:99,background:T.roseDim,border:`1px solid ${T.rose}44`,fontSize:11.5,color:T.rose}}>
+                      exclude {p}
+                      <button onClick={()=>setFilters(f=>({...f,excludeFolders:f.excludeFolders.filter(x=>x!==p)}))}
+                        style={{background:"none",border:"none",cursor:"pointer",color:"inherit",display:"flex"}}>{Ic.x(9)}</button>
+                    </div>
+                  ))}
+                </div>
+                <div style={{display:"flex",gap:7,marginBottom:16,flexWrap:"wrap"}}>
+                  <input value={newFolder} onChange={e=>setNewFolder(e.target.value)} placeholder="/legal/contracts/2025"
+                    style={{...inp,width:260,fontFamily:"'Geist Mono',monospace"}}/>
+                  <Btn small disabled={!newFolder.trim()} onClick={()=>{setFilters(f=>({...f,folders:[...f.folders,newFolder.trim()]}));setNewFolder("");}}>Include path</Btn>
+                  <Btn small ghost disabled={!newFolder.trim()} onClick={()=>{setFilters(f=>({...f,excludeFolders:[...f.excludeFolders,newFolder.trim()]}));setNewFolder("");}}>Exclude path</Btn>
+                </div>
+
+                <DASectionLabel>File type rules · include (empty means all)</DASectionLabel>
+                <div style={{marginBottom:12}}>
+                  <Chips opts={["PDF","DOCX","XLSX","CSV","PARQUET","TXT","JSON","MP4","ZIP"]} sel={filters.types}
+                    onTog={o=>setFilters(f=>({...f,types:f.types.includes(o)?f.types.filter(x=>x!==o):[...f.types,o]}))}/>
+                </div>
+                <DASectionLabel>File type rules · exclude</DASectionLabel>
+                <div style={{marginBottom:16}}>
+                  <Chips opts={["PDF","DOCX","XLSX","CSV","PARQUET","TXT","JSON","MP4","ZIP","MP3"]} sel={filters.excludeTypes} color={T.rose}
+                    onTog={o=>setFilters(f=>({...f,excludeTypes:f.excludeTypes.includes(o)?f.excludeTypes.filter(x=>x!==o):[...f.excludeTypes,o]}))}/>
+                  <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>
+                    Non-business formats are excluded by default — they cost tokens to read and answer nothing.
+                  </div>
+                </div>
+
+                <DASectionLabel>Size constraints</DASectionLabel>
+                <div style={{display:"flex",gap:10,alignItems:"flex-end",marginBottom:16,flexWrap:"wrap"}}>
+                  <div><div style={{fontSize:11,color:T.textMuted,marginBottom:4}}>Minimum (MB)</div>
+                    <input type="number" min={0} value={filters.minSize} onChange={e=>setFilters(f=>({...f,minSize:Number(e.target.value)}))}
+                      style={{...inp,width:110,textAlign:"center",fontFamily:"'Geist Mono',monospace"}}/></div>
+                  <div><div style={{fontSize:11,color:T.textMuted,marginBottom:4}}>Maximum (MB)</div>
+                    <input type="number" min={1} value={filters.maxSize} onChange={e=>setFilters(f=>({...f,maxSize:Number(e.target.value)}))}
+                      style={{...inp,width:110,textAlign:"center",fontFamily:"'Geist Mono',monospace"}}/></div>
+                  <div><div style={{fontSize:11,color:T.textMuted,marginBottom:4}}>Max sentences per file</div>
+                    <input type="number" min={10} value={filters.maxSentences} onChange={e=>setFilters(f=>({...f,maxSentences:Number(e.target.value)}))}
+                      style={{...inp,width:150,textAlign:"center",fontFamily:"'Geist Mono',monospace"}}/></div>
+                </div>
+
+                <div style={{display:"flex",alignItems:"center",gap:14,padding:"12px 14px",background:T.bgSurface,
+                  border:`1px solid ${T.border}`,borderRadius:9}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12.3,fontWeight:600,color:T.text}}>Skip documents the ROT scan flagged</div>
+                    <div style={{fontSize:11,color:T.textMuted,marginTop:1,lineHeight:1.5}}>
+                      Redundant duplicates, obsolete drafts and trivial files are excluded. Indexing an obsolete draft is
+                      how a space starts answering from a superseded contract.
+                    </div>
+                  </div>
+                  <Toggle on={filters.skipRot} onChange={()=>setFilters(f=>({...f,skipRot:!f.skipRot}))}/>
+                </div>
+              </div>
+            )}
+
+            {/* ═══ RETRIEVAL ENABLEMENT ═══ */}
+            {s.k==="enable"&&(
+              <div style={{maxWidth:700}}>
+                <div style={{display:"flex",flexDirection:"column",gap:7,marginBottom:16}}>
+                  {Object.keys(DA_RETRIEVAL).map(k=>(
+                    <label key={k} onClick={()=>setRetr(k)} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"11px 13px",borderRadius:8,cursor:"pointer",
+                      border:`1.5px solid ${retr===k?T.accent:T.border}`,background:retr===k?T.accentDim:"transparent"}}>
+                      <div style={{marginTop:2,width:13,height:13,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+                        border:`2px solid ${retr===k?T.accent:T.border}`,background:retr===k?T.accent:"transparent"}}>
+                        {retr===k&&<div style={{width:4,height:4,borderRadius:"50%",background:"#fff"}}/>}
+                      </div>
+                      <div><div style={{fontSize:12.3,fontWeight:600,color:retr===k?T.accent:T.text}}>{DA_RETRIEVAL[k].label}</div>
+                        <div style={{fontSize:11.5,color:T.textMuted,marginTop:2,lineHeight:1.55}}>{DA_RETRIEVAL[k].sub}</div></div>
+                    </label>
+                  ))}
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:0,
+                  background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",marginBottom:14}}>
+                  {[{l:"Documents",v:String(docsIn.length)},{l:"Chunks",v:(docsIn.length*8).toLocaleString()},
+                    {l:"Embedding model",v:S.models.index.model},{l:"Est. credits",v:String(Math.round(docsIn.length*8*0.18))}].map((p,i)=>(
+                    <div key={p.l} style={{padding:"11px 14px",borderLeft:i?`1px solid ${T.border}`:"none"}}>
+                      <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{p.l}</div>
+                      <div style={{fontSize:11.8,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace",
+                        overflow:"hidden",textOverflow:"ellipsis"}}>{p.v}</div>
+                    </div>
+                  ))}
+                </div>
+                <KLNote tone="quiet">
+                  Keyword-only skips embedding entirely, so it indexes free and answers instantly — but it cannot match a
+                  question that uses different words from the document. Hybrid is the default for a reason.
+                </KLNote>
+              </div>
+            )}
+
+            {/* ═══ ADD CONTEXT ═══ */}
+            {s.k==="context"&&(
+              <div style={{maxWidth:760}}>
+                <DASectionLabel>Context documents · {ctxDocs.length} attached</DASectionLabel>
+                {ctxDocs.length>0&&(
+                  <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",marginBottom:12}}>
+                    {ctxDocs.map((c,i)=>(
+                      <div key={c.n} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+                        <span style={{fontSize:11.8,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace",flex:1}}>{c.n}</span>
+                        <DAPill color={T.textSub}>{c.t}</DAPill>
+                        <DAPill color={T.green}>Indexed</DAPill>
+                        <button onClick={()=>setCtxDocs(a=>a.filter(x=>x.n!==c.n))}
+                          style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex"}}>{Ic.x(11)}</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:14}}>
+                  {[{n:"commerce_data_dictionary.pdf",t:"PDF"},{n:"metric_definitions.csv",t:"CSV"},
+                    {n:"schema_notes.txt",t:"TXT"},{n:"fiscal_calendar.json",t:"JSON"}].map(c=>(
+                    <Btn key={c.n} small ghost disabled={ctxDocs.some(x=>x.n===c.n)}
+                      onClick={()=>{setCtxDocs(a=>[...a,c]);onToast(`${c.n} attached and indexed`);}}>
+                      + {c.n}
+                    </Btn>
+                  ))}
+                </div>
+                <KLNote tone="quiet">
+                  Accepts TXT, CSV, JSON and PDF, the same formats EAI accepts here. A data dictionary is the single
+                  highest-leverage upload: it turns <span className="mono">NET_AMT_C</span> from a guess into a definition.
+                  Optional — skip it and the space still works.
+                </KLNote>
+              </div>
+            )}
+
+            {/* ═══ AI ENRICHMENT ═══ */}
+            {s.k==="enrich"&&(
+              <div style={{maxWidth:840}}>
+                {enrich.length===0
+                  ? <KLEmpty icon={Ic.bot(30)} title={aiOn?"Nothing proposed for this scope":"AI assist is off"}
+                      sub={aiOn?"Pick objects in step 1 first.":"Turn AI assist on to have descriptions and sample questions proposed."}/>
+                  : (<>
+                    <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>
+                      {enrich.filter(x=>x.status==="Approved").length} approved · {enrich.filter(x=>x.status==="Pending").length} pending ·
+                      {" "}{enrich.filter(x=>x.status==="Rejected").length} rejected
+                      {enrich.some(x=>x.status==="Pending")&&<>
+                        {" — "}
+                        <button onClick={()=>setEnrich(a=>a.map(x=>x.status==="Pending"?{...x,status:"Approved"}:x))}
+                          style={{background:"none",border:"none",cursor:"pointer",color:T.accent,fontSize:11.5,fontWeight:600,fontFamily:"inherit",padding:0}}>
+                          approve all
+                        </button>
+                      </>}
+                    </div>
+                    {enrich.map((x,i)=>(
+                      <div key={x.obj} style={{padding:"11px 13px",marginBottom:8,borderRadius:9,background:T.bgSurface,
+                        border:`1px solid ${x.status==="Pending"?T.amber+"55":T.border}`}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:6}}>
+                          <span style={{fontSize:11.8,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{x.obj}</span>
+                          <DAPill color={T.textSub}>{x.kind}</DAPill>
+                          <DAPill color={x.conf>=90?T.green:T.amber}>{x.conf}%</DAPill>
+                          <div style={{marginLeft:"auto",display:"flex",gap:5}}>
+                            {x.status==="Pending"
+                              ? (<>
+                                  <Btn small ghost onClick={()=>setEnrich(a=>a.map((y,j)=>j===i?{...y,status:"Rejected"}:y))}>Reject</Btn>
+                                  <Btn small variant="primary" onClick={()=>setEnrich(a=>a.map((y,j)=>j===i?{...y,status:"Approved"}:y))}>Approve</Btn>
+                                </>)
+                              : <DAStatusTag status={x.status==="Approved"?"Verified":"Retired"}/>}
+                          </div>
+                        </div>
+                        <div style={{fontSize:12,color:T.textSub,lineHeight:1.6}}>{x.text}</div>
+                      </div>
+                    ))}
+                    <KLNote>
+                      An approved description is what the planner reads when it decides whether a column answers a
+                      question. A wrong one is worse than none — it produces a confident wrong answer. Read them.
+                    </KLNote>
+                  </>)}
+              </div>
+            )}
+
+            {/* ═══ SYNONYMS ═══ */}
+            {s.k==="syn"&&(
+              <div style={{maxWidth:840}}>
                 <DASectionLabel>Synonyms · {syns.filter(x=>x.status==="Approved").length} approved, {syns.filter(x=>x.status==="Pending").length} pending</DASectionLabel>
                 {syns.length===0
                   ? <KLEmpty icon={Ic.glossary(30)} title={aiOn?"Nothing proposed for this scope":"AI assist is off"}
@@ -36698,7 +37159,7 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
                           <span style={{fontSize:12,fontWeight:700,color:T.text,minWidth:112}}>{x.term}</span>
                           <span style={{color:T.textMuted}}>→</span>
                           <span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace",minWidth:170}}>{x.maps}</span>
-                          <DAPill color={x.src.startsWith("Glossary")||x.src.startsWith("Knowledge")?T.green:T.violet}>{x.src}</DAPill>
+                          <DAPill color={/Glossary|Knowledge/.test(x.src)?T.green:T.violet}>{x.src}</DAPill>
                           <DAPill color={x.conf>=90?T.green:x.conf>=70?T.amber:T.rose}>{x.conf}%</DAPill>
                           <div style={{marginLeft:"auto",display:"flex",gap:5,alignItems:"center"}}>
                             {x.status==="Pending"
@@ -36721,7 +37182,7 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
                   }}>Add synonym</Btn>
                 </div>
 
-                <DASectionLabel>Sample questions · used as the space's test set and shown to askers</DASectionLabel>
+                <DASectionLabel>Sample questions · the space's test set, and what askers see first</DASectionLabel>
                 {samples.map((q,i)=>(
                   <div key={q} style={{display:"flex",alignItems:"center",gap:9,padding:"8px 11px",marginBottom:6,
                     background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8}}>
@@ -36737,13 +37198,69 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
               </div>
             )}
 
-            {/* ── 5 · guardrails ── */}
-            {step===4&&(
+            {/* ═══ CURATE & REVIEW ═══ */}
+            {s.k==="curate"&&(
+              <div style={{maxWidth:860}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(132px,1fr))",gap:10,marginBottom:16}}>
+                  <Metric label="Objects" value={String(chosen.filter(a=>curated[a.n]!==false).length)}/>
+                  <Metric label="Columns" value={String(totalCols)}/>
+                  <Metric label="Relationships" value={String(propJoins.filter((j,i)=>j.conf>=80||joins[i]==="confirm").length)}/>
+                  <Metric label="Documents" value={String(needsDocs?docsIn.length:0)}/>
+                  <Metric label="Synonyms" value={String(syns.filter(x=>x.status==="Approved").length)}/>
+                  <Metric label="Descriptions" value={String(enrich.filter(x=>x.status==="Approved").length)}/>
+                </div>
+                <DASectionLabel>Everything in this space</DASectionLabel>
+                <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",marginBottom:14}}>
+                  <div style={{display:"flex",gap:10,padding:"8px 12px",background:T.bgElevated,fontSize:9.5,fontWeight:700,
+                    color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>
+                    <span style={{flex:1}}>Object</span><span style={{width:120}}>Type</span>
+                    <span style={{width:104}}>Role</span><span style={{width:150}}>Classifications</span><span style={{width:74}}/>
+                  </div>
+                  {chosen.map(a=>{
+                    const dropped = curated[a.n]===false;
+                    return (
+                      <div key={a.n} style={{display:"flex",gap:10,alignItems:"center",padding:"9px 12px",borderTop:`1px solid ${T.border}`,opacity:dropped?.45:1}}>
+                        <span style={{flex:1,fontSize:11.8,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace",
+                          textDecoration:dropped?"line-through":"none"}}>{a.n}</span>
+                        <span style={{width:120}}><DAPill color={T.textSub}>{a.t}</DAPill></span>
+                        <span style={{width:104,fontSize:11,color:T.textMuted}}>
+                          {a.t==="Knowledge Graph"?"golden record":a.t==="Object"?"document":a.cols>30?"fact":"dimension"}
+                        </span>
+                        <span style={{width:150,display:"flex",gap:4,flexWrap:"wrap"}}>
+                          {a.tags.length?a.tags.map(t=><DAPill key={t} color={T.amber}>{t}</DAPill>)
+                            :<span style={{fontSize:10.5,color:T.textMuted}}>none</span>}
+                        </span>
+                        <span style={{width:74,display:"flex",justifyContent:"flex-end"}}>
+                          <Btn small ghost onClick={()=>setCurated(c=>({...c,[a.n]:dropped?true:false}))}>{dropped?"Restore":"Drop"}</Btn>
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {needsDocs&&docsIn.map(dc=>(
+                    <div key={dc.n} style={{display:"flex",gap:10,alignItems:"center",padding:"9px 12px",borderTop:`1px solid ${T.border}`}}>
+                      <span style={{flex:1,fontSize:11.8,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace",
+                        overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dc.n}</span>
+                      <span style={{width:120}}><DAPill color={T.violet}>{dc.type}</DAPill></span>
+                      <span style={{width:104,fontSize:11,color:T.textMuted}}>document</span>
+                      <span style={{width:150}}><DAPill color={dc.sens==="Confidential"?T.amber:T.textSub}>{dc.sens}</DAPill></span>
+                      <span style={{width:74,display:"flex",justifyContent:"flex-end"}}>
+                        <Btn small ghost onClick={()=>setFilters(f=>({...f,excludeDocs:[...f.excludeDocs,dc.n]}))}>Drop</Btn>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <KLNote tone="quiet">
+                  Dropping something here removes it from this space only. The asset stays in the catalog, keeps its
+                  classifications and remains available to every other space.
+                </KLNote>
+              </div>
+            )}
+
+            {/* ═══ GUARDRAILS ═══ */}
+            {s.k==="guards"&&(
               <div style={{maxWidth:700}}>
-                {[
-                  {k:"rowLimit", l:"Maximum rows returned", d:"A question that would return more is refused rather than truncated silently.", num:true, min:100, max:100000},
-                  {k:"timeout",  l:"Query timeout (seconds)", d:"Long-running plans are cancelled and reported, not left hanging.", num:true, min:5, max:600},
-                ].map(f=>(
+                {[{k:"rowLimit",l:"Maximum rows returned",d:"A question that would return more is refused rather than truncated silently.",min:100,max:100000},
+                  {k:"timeout", l:"Query timeout (seconds)",d:"Long-running plans are cancelled and reported, not left hanging.",min:5,max:600}].map(f=>(
                   <div key={f.k} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 14px",marginBottom:9,
                     background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
                     <div style={{flex:1,minWidth:0}}>
@@ -36791,48 +37308,76 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
               </div>
             )}
 
-            {/* ── 6 · index & test ── */}
-            {step===5&&(
-              <div style={{maxWidth:820}}>
-                <div style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",marginBottom:16,
+            {/* ═══ BUILD INDEX ═══ */}
+            {s.k==="index"&&(
+              <div style={{maxWidth:760}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(132px,1fr))",gap:0,
+                  background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",marginBottom:14}}>
+                  {[{l:"Objects",v:String(chosen.filter(a=>curated[a.n]!==false).length)},
+                    {l:"Columns",v:String(totalCols)},
+                    {l:"Documents",v:String(needsDocs?docsIn.length:0)},
+                    {l:"Context files",v:String(ctxDocs.length)},
+                    {l:"Est. credits",v:String(indexCredits)}].map((p,i)=>(
+                    <div key={p.l} style={{padding:"11px 14px",borderLeft:i?`1px solid ${T.border}`:"none"}}>
+                      <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{p.l}</div>
+                      <div style={{fontSize:12.3,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{p.v}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",marginBottom:14,
                   background:T.bgSurface,border:`1px solid ${built?T.green+"55":T.border}`,borderRadius:10}}>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:12.8,fontWeight:700,color:T.text}}>
                       {built?"Index built":building?"Building index…":"Index not built"}
                     </div>
                     <div style={{fontSize:11.5,color:T.textMuted,marginTop:2,lineHeight:1.5}}>
-                      {chosen.length} object{chosen.length===1?"":"s"} · {mode==="structured"?"schema + joins + semantics":`${DA_RETRIEVAL[retr].label} retrieval index`}
-                      {built?` · completed ${daNow()}`:""}
+                      {needsStruct?"Schema, joins, descriptions and synonyms":""}
+                      {needsStruct&&needsDocs?" · ":""}
+                      {needsDocs?`${DA_RETRIEVAL[retr].label} retrieval over ${(docsIn.length*8).toLocaleString()} chunks`:""}
+                      {built?` · completed ${daNow()} · ${indexCredits} credits`:` · ${indexCredits} credits when you run it`}
                     </div>
                   </div>
                   {building
                     ? <span style={{width:18,height:18,borderRadius:"50%",border:`2px solid ${T.border}`,borderTopColor:T.accent,animation:"spin .8s linear infinite"}}/>
                     : <Btn small variant={built?undefined:"primary"} onClick={runIndex}>{built?"Rebuild":"Build index"}</Btn>}
                 </div>
+                <KLNote tone="quiet">
+                  This first build processes everything in scope. Every build after it is incremental by default — only
+                  objects added or altered since this one are re-processed, so you are not re-billed for work already done.
+                  That behaviour is set in <b>Settings › Data Ask › Refresh</b>.
+                </KLNote>
+              </div>
+            )}
 
-                <DASectionLabel>Test console</DASectionLabel>
-                <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6,marginBottom:10}}>
-                  Ask the space a question before anyone else can. Mark each result right or wrong — the pass rate becomes
-                  the space's accuracy figure, and a wrong result files itself as a review item.
-                </div>
+            {/* ═══ TEST CONSOLE ═══ */}
+            {s.k==="test"&&(
+              <div style={{maxWidth:840}}>
                 <div style={{display:"flex",gap:7,marginBottom:12,flexWrap:"wrap"}}>
-                  <input value={tq} onChange={e=>setTq(e.target.value)} disabled={!built}
-                    placeholder={built?"e.g. What was net revenue by region last quarter?":"Build the index first"}
-                    onKeyDown={e=>{if(e.key==="Enter")runTest();}}
-                    style={{...inp,flex:1,minWidth:280,opacity:built?1:.5}}/>
-                  <Btn small variant="primary" disabled={!built||!tq.trim()} onClick={runTest}>Run</Btn>
+                  <input value={tq} onChange={e=>setTq(e.target.value)}
+                    placeholder="e.g. What was net revenue by region last quarter?"
+                    onKeyDown={e=>{if(e.key==="Enter")runTest();}} style={{...inp,flex:1,minWidth:290}}/>
+                  <Btn small variant="primary" disabled={!tq.trim()} onClick={runTest}>Run</Btn>
                 </div>
-
+                {samples.length>0&&(
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+                    {samples.map(q=>(
+                      <button key={q} onClick={()=>{setTq(q);const raw=daResolve(q,null);setTRes(raw?daProject({...raw,q},"admin"):{miss:true,q});}}
+                        style={{padding:"5px 11px",borderRadius:99,cursor:"pointer",fontFamily:"inherit",background:T.bgElevated,
+                          border:`1px solid ${T.border}`,fontSize:11.5,color:T.textSub}}>{q}</button>
+                    ))}
+                  </div>
+                )}
                 {tRes&&(tRes.miss
                   ? <div style={{padding:"12px 14px",borderRadius:9,background:T.bgSurface,border:`1px solid ${T.amber}55`,marginBottom:12}}>
                       <div style={{fontSize:12.3,fontWeight:700,color:T.text,marginBottom:3}}>Not understood</div>
                       <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>
-                        The space has no vocabulary for “{tRes.q}”. Add a synonym in step 4, or accept that this question is out of scope.
+                        The space has no vocabulary for “{tRes.q}”. Add a synonym on the Synonyms step, or accept that this
+                        question is out of scope — refusing is better than guessing.
                       </div>
                     </div>
                   : <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:12}}>
                       <div style={{padding:"12px 14px",borderRadius:9,background:T.bgSurface,border:`1px solid ${T.border}`}}>
-                        <DAText size={12.5}>{tRes.summary}</DAText>
+                        <DAText size={12.5}>{tRes.summary||(tRes.denied&&tRes.denied.headline)}</DAText>
                       </div>
                       {tRes.sql&&<DASqlPanel sql={tRes.sql} canEdit={true} onRun={()=>onToast("Edited SQL executed in the test console")}/>}
                       {tRes.cols&&<DAResultTable cols={tRes.cols} rows={tRes.rows} maskCol={tRes.maskCol} masked={false}/>}
@@ -36847,7 +37392,6 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
                         <span style={{fontSize:11,color:T.textMuted,marginLeft:"auto"}}>Confidence {tRes.conf}% · {tRes.credits} credits</span>
                       </div>
                     </div>)}
-
                 {tested.length>0&&(
                   <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>
                     <div style={{padding:"8px 12px",background:T.bgElevated,fontSize:11,fontWeight:700,color:T.textSub}}>
@@ -36864,12 +37408,13 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
               </div>
             )}
 
-            {/* ── 7 · publish ── */}
-            {step===6&&(
-              <div style={{maxWidth:720}}>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:0,
+            {/* ═══ PUBLISH ═══ */}
+            {s.k==="publish"&&(
+              <div style={{maxWidth:740}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(132px,1fr))",gap:0,
                   background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",marginBottom:18}}>
-                  {[{l:"Name",v:name||"—"},{l:"Mode",v:DA_MODES[mode].label},{l:"Objects",v:String(picked.length)},
+                  {[{l:"Name",v:name||"—"},{l:"Mode",v:DA_MODES[mode].label},
+                    {l:"Objects",v:String(chosen.filter(a=>curated[a.n]!==false).length+(needsDocs?docsIn.length:0))},
                     {l:"Synonyms",v:String(syns.filter(x=>x.status==="Approved").length)},
                     {l:"Test pass rate",v:tested.length?`${Math.round(tested.filter(t=>t.ok).length/tested.length*100)}%`:"not tested"}].map((p,i)=>(
                     <div key={p.l} style={{padding:"11px 14px",borderLeft:i?`1px solid ${T.border}`:"none"}}>
@@ -36882,10 +37427,13 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
                 <DASectionLabel>Pre-publication checks</DASectionLabel>
                 <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",marginBottom:18}}>
                   {[
-                    {ok:picked.length>0, t:"Scope defined", f:"No objects selected"},
+                    {ok:!!name.trim(), t:"Named", f:"No name given"},
+                    {ok:!needsStruct||picked.length>0, t:"Scope defined", f:"No objects selected"},
+                    {ok:!needsDocs||docsIn.length>0, t:`${docsIn.length} documents pass the filters`, f:"No documents survive the filters"},
                     {ok:blockedPick.length===0, t:"No blocklisted classifications in scope", f:"Blocklisted classification present"},
                     {ok:!guards.requireCert||uncertified.length===0, t:"All objects certified", f:`${uncertified.length} uncertified object(s) — Require certified assets is on`},
                     {ok:!propJoins.some((j,i)=>j.conf<80&&!joins[i]), t:"All low-confidence joins resolved", f:"Unresolved joins remain"},
+                    {ok:!enrich.some(x=>x.status==="Pending"), t:"No pending descriptions", f:"Descriptions still awaiting approval"},
                     {ok:!syns.some(x=>x.status==="Pending"), t:"No pending synonyms", f:"Synonyms still awaiting approval"},
                     {ok:built, t:"Index built", f:"Index not built"},
                     {ok:tested.length>0&&tested.every(t=>t.ok), t:`Test set passing (${tested.filter(t=>t.ok).length}/${tested.length})`,
@@ -36904,7 +37452,7 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
                 <select value={steward} onChange={e=>setSteward(e.target.value)} style={{...inp,cursor:"pointer",marginBottom:8,maxWidth:280}}>
                   {["maya.chen","dev.patel","sarah.kim","alex.rivera"].map(u=><option key={u}>{u}</option>)}
                 </select>
-                <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6,marginBottom:4}}>
+                <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>
                   Submitting sends an approval work item to {steward}'s inbox. Until it is approved the space stays
                   unaskable — the same review path every other governed object in EDG uses.
                 </div>
@@ -36918,18 +37466,17 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
           <div style={{marginLeft:"auto",display:"flex",gap:8}}>
             <Btn ghost small onClick={onClose}>Cancel</Btn>
             {step>0&&<Btn ghost small onClick={()=>setStep(n=>n-1)}>Back</Btn>}
-            {step<DA_WIZ_STEPS.length-1
+            {step<steps.length-1
               ? <Btn variant="primary" small disabled={blocked} onClick={advance}>Continue</Btn>
               : (<>
                   <Btn small onClick={()=>finish(false)}>Save as draft</Btn>
-                  <Btn variant="primary" small disabled={!name.trim()||picked.length===0} onClick={()=>finish(true)}>Submit for approval</Btn>
+                  <Btn variant="primary" small disabled={!name.trim()||(needsStruct&&picked.length===0)} onClick={()=>finish(true)}>Submit for approval</Btn>
                 </>)}
           </div>
         </div>
       </div>
     </div>, document.body);
 };
-
 
 // ── Answer Space profile ────────────────────────────────────────────────────
 const DASpaceProfile = ({sp,me,role,onBack,onToast,onNav,onAsk}) => {
