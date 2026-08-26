@@ -121,12 +121,12 @@ const ASSETS = [
   {id:9002, name:"customers_archive", type:"Table",  domain:"Finance",  owner:"dev.patel", owners:["dev.patel"], steward:"sarah.kim", stewards:["sarah.kim"], cert:"Approved", quality:90, usage:"Low", updated:"1w ago", service:"cdp", connectionLabel:"Solix CDP — Archive", db:"cdp / kb.commerce / customers_archive", tier:1, rows:"28M", size:"14 GB", tags:["PII","legal-hold"], description:"Archived customer records under legal hold via Federated Governance.", slaFreshness:"—"},
   {id:9003, name:"contracts_2025.pdf",type:"Object", domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"sarah.kim", stewards:["sarah.kim"], cert:"Approved", quality:0, usage:"Med", updated:"2d ago", service:"ecs", connectionLabel:"Solix ECS — Content", db:"ecs / legal / contracts_2025.pdf", tier:2, rows:"—", size:"4.2 MB", tags:["confidential"], description:"Executed vendor contracts in ECS. Retention + legal hold enforced in place.", slaFreshness:"—", assetLevel:"object", fileFormat:"PDF"},
   {id:9004, name:"hr_records",        type:"Folder", domain:"Platform", owner:"james.oh",  owners:["james.oh"],  steward:"james.oh",  stewards:["james.oh"],  cert:"Approved", quality:0, usage:"Low", updated:"5d ago", service:"ecs", connectionLabel:"Solix ECS — Content", db:"ecs / hr / hr_records", tier:1, rows:"—", size:"1.1 GB", tags:["PII","confidential"], description:"HR document folder in ECS. Access-restricted; retention governed by EDG.", slaFreshness:"—", assetLevel:"folder", childCount:240},
-  {id:1, name:"orders",              type:"Table",     domain:"Commerce",  owner:"maya.chen",  owners:["maya.chen"],               steward:"dev.patel",  stewards:["dev.patel","sarah.kim"],  cert:"Approved",   quality:94, usage:"High", updated:"2h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",   db:"snowflake_prod / COMMERCE / orders",       tier:1, rows:"48.2M",  size:"12.4 GB", tags:["PII","revenue"],          description:"Core transactional orders table. Source of truth for all order data.",     slaFreshness:"2h"},
-  {id:2, name:"customers",           type:"Table",     domain:"Commerce",  owner:"dev.patel",  owners:["dev.patel","maya.chen"],    steward:"dev.patel",  stewards:["dev.patel"],              cert:"Approved",   quality:91, usage:"High", updated:"1d ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",   db:"snowflake_prod / COMMERCE / customers",    tier:1, rows:"3.1M",   size:"2.8 GB",  tags:["PII"],                    description:"Master customer dimension table from Salesforce CRM.",                     slaFreshness:"6h"},
+  {id:1, name:"orders",              type:"Table",     domain:"Commerce",  owner:"maya.chen",  owners:["maya.chen"],               steward:"dev.patel",  stewards:["dev.patel","sarah.kim"],  cert:"Approved",   quality:94, usage:"High", updated:"2h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",   db:"snowflake_prod / COMMERCE / orders",       tier:1, rows:"48.2M",  size:"12.4 GB", tags:["PII","revenue"],          description:"Core transactional orders table. Source of truth for all order data.",     slaFreshness:"2h", dbtSource:"snowflake_raw.orders"},
+  {id:2, name:"customers",           type:"Table",     domain:"Commerce",  owner:"dev.patel",  owners:["dev.patel","maya.chen"],    steward:"dev.patel",  stewards:["dev.patel"],              cert:"Approved",   quality:91, usage:"High", updated:"1d ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",   db:"snowflake_prod / COMMERCE / customers",    tier:1, rows:"3.1M",   size:"2.8 GB",  tags:["PII"],                    description:"Master customer dimension table from Salesforce CRM.",                     slaFreshness:"6h", dbtSource:"snowflake_raw.customers"},
   {id:4, name:"product_events",      type:"Table",     domain:"Product",   owner:"alex.wu",    owners:["alex.wu"],                 steward:"alex.wu",    stewards:["alex.wu"],                cert:"Draft", quality:72, usage:"Med",  updated:"5d ago",  service:"postgres",   connectionLabel:"PostgreSQL Prod",  db:"postgresql_prod / PRODUCT / events",        tier:3, rows:"210M",   size:"38 GB",   tags:["events"],                 description:"Raw product analytics events from web and mobile.",                         slaFreshness:"1h"},
   {id:6, name:"etl_orders_pipeline", type:"Pipeline",  domain:"Commerce",  owner:"james.oh",   owners:["james.oh"],                steward:"james.oh",   stewards:["james.oh"],               cert:"Approved",   quality:96, usage:"High", updated:"30m ago", service:"airflow",    connectionLabel:"Airflow",         db:"airflow_prod / PIPELINES",                 tier:1, rows:"—",      size:"—",       tags:["etl"],                    description:"Fivetran-powered orders ETL. Runs hourly.",                                 slaFreshness:"2h"},
   {id:7, name:"user_sessions",       type:"Table",     domain:"Product",   owner:"alex.wu",    owners:["alex.wu"],                 steward:"alex.wu",    stewards:["alex.wu"],                cert:"Deprecated",  quality:45, usage:"Low",  updated:"2w ago",  service:"postgres",   connectionLabel:"PostgreSQL Prod",  db:"postgresql_prod / PRODUCT / sessions", tier:3, rows:"890M",   size:"142 GB",  tags:["PII","events"],           description:"Legacy session table. Use product_events instead.",                         slaFreshness:"4h"},
-  {id:9, name:"dim_products",        type:"Table",     domain:"Commerce",  owner:"james.oh",   owners:["james.oh"],                steward:"maya.chen",  stewards:["maya.chen","dev.patel"],  cert:"Approved",   quality:98, usage:"High", updated:"1h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",   db:"snowflake_prod / COMMERCE / dim_products", tier:1, rows:"82K",    size:"45 MB",   tags:["dimension"],              description:"Product dimension with SKU, categories, pricing.",                          slaFreshness:"24h"},
+  {id:9, name:"dim_products",        type:"Table",     domain:"Commerce",  owner:"james.oh",   owners:["james.oh"],                steward:"maya.chen",  stewards:["maya.chen","dev.patel"],  cert:"Approved",   quality:98, usage:"High", updated:"1h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",   db:"snowflake_prod / COMMERCE / dim_products", tier:1, rows:"82K",    size:"45 MB",   tags:["dimension"],              description:"Product dimension with SKU, categories, pricing.",                          slaFreshness:"24h", dbtSource:"snowflake_raw.dim_products"},
   {id:12,name:"user_events",         type:"Table",     domain:"Product",   owner:"alex.wu",    owners:["alex.wu"],                 steward:"priya.nair", stewards:["priya.nair"],             cert:"Approved",   quality:90, usage:"High", updated:"1h ago",  service:"databricks", connectionLabel:"Databricks Unity", db:"unity_catalog / analytics / user_events",  tier:2, rows:"120M",   size:"22 GB",   tags:["PII"],                    description:"User interaction events, Delta table in Databricks Unity Catalog.",           slaFreshness:"1h"},
   // ── Archived assets — objects no longer present in the source. Retained in the catalog (not deleted) so lineage, policy history and audit trail survive the source deletion. Detected and archived automatically on the next connection/workflow run. Hidden from the default catalog view. ──
   {id:8001,name:"legacy_promotions", type:"Table",     domain:"Commerce",  owner:"maya.chen",  owners:["maya.chen"],               steward:"dev.patel",  stewards:["dev.patel"],              cert:"Deprecated", quality:61, usage:"Low",  updated:"2d ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",    db:"SNOWFLAKE_PROD / COMMERCE / legacy_promotions", tier:3, rows:"1.2M",  size:"680 MB",  tags:["revenue"],                description:"Legacy promotions table. Dropped from Snowflake during the Q3 schema cleanup.",          slaFreshness:"—", archived:true, archivedAt:"2026-07-26", archivedRun:"Snowflake DWH · run #4821", archivedReason:"No longer present in source at last scan"},
@@ -140,8 +140,8 @@ const HIERARCHY_ASSETS = [
   {id:101,name:"COMMERCE",          type:"Schema",    domain:"Commerce", owner:"maya.chen",  owners:["maya.chen"],             steward:"maya.chen",  stewards:["maya.chen"],              cert:"Approved",  quality:93,usage:"High",updated:"2h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",     db:"SNOWFLAKE_PROD / COMMERCE",                   tier:1,rows:"—",    size:"13.4 GB",tags:[],          description:"Commerce domain schema. Orders, customers, and product dimensions.",               slaFreshness:"2h",  path:["SNOWFLAKE_PROD"],          parentId:100,assetLevel:"schema",  childCount:4},
   {id:102,name:"FINANCE",           type:"Schema",    domain:"Finance",  owner:"sarah.kim",  owners:["sarah.kim"],             steward:"sarah.kim",  stewards:["sarah.kim"],              cert:"Approved",  quality:91,usage:"Med", updated:"4h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",     db:"SNOWFLAKE_PROD / FINANCE",                    tier:1,rows:"—",    size:"1.8 GB", tags:[],          description:"Finance schema. GL accounts, transactions, and reporting views.",                  slaFreshness:"4h",  path:["SNOWFLAKE_PROD"],          parentId:100,assetLevel:"schema",  childCount:2},
   {id:103,name:"ANALYTICS",         type:"Schema",    domain:"Product",  owner:"alex.wu",    owners:["alex.wu"],               steward:"alex.wu",    stewards:["alex.wu"],                cert:"In Review", quality:78,usage:"Med", updated:"1d ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",     db:"SNOWFLAKE_PROD / ANALYTICS",                  tier:2,rows:"—",    size:"0.9 GB", tags:[],          description:"Analytics layer with aggregated metrics and reporting views.",                     slaFreshness:"12h", path:["SNOWFLAKE_PROD"],          parentId:100,assetLevel:"schema",  childCount:1},
-  {id:104,name:"vw_order_summary",  type:"View",      domain:"Commerce", owner:"maya.chen",  owners:["maya.chen"],             steward:"maya.chen",  stewards:["maya.chen"],              cert:"Approved",  quality:93,usage:"High",updated:"2h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",     db:"SNOWFLAKE_PROD / COMMERCE / vw_order_summary",tier:1,rows:"48.2M",size:"—",      tags:["revenue"], description:"Aggregated order summary joining orders, customers and products.",                 slaFreshness:"2h",  path:["SNOWFLAKE_PROD","COMMERCE"],parentId:101,assetLevel:"view"},
-  {id:105,name:"transactions",      type:"Table",     domain:"Finance",  owner:"sarah.kim",  owners:["sarah.kim"],             steward:"sarah.kim",  stewards:["sarah.kim"],              cert:"Approved",  quality:95,usage:"High",updated:"1h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",     db:"SNOWFLAKE_PROD / FINANCE / transactions",     tier:1,rows:"12.7M", size:"4.2 GB",tags:["finance"],  description:"Financial transactions ledger. Source of truth for all monetary movements.",       slaFreshness:"1h",  path:["SNOWFLAKE_PROD","FINANCE"], parentId:102,assetLevel:"table"},
+  {id:104,name:"vw_order_summary",  type:"View",      domain:"Commerce", owner:"maya.chen",  owners:["maya.chen"],             steward:"maya.chen",  stewards:["maya.chen"],              cert:"Approved",  quality:93,usage:"High",updated:"2h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",     db:"SNOWFLAKE_PROD / COMMERCE / vw_order_summary",tier:1,rows:"48.2M",size:"—",      tags:["revenue"], description:"Aggregated order summary joining orders, customers and products.",                 slaFreshness:"2h",  path:["SNOWFLAKE_PROD","COMMERCE"],parentId:101,assetLevel:"view", dbtModel:"mart_order_summary"},
+  {id:105,name:"transactions",      type:"Table",     domain:"Finance",  owner:"sarah.kim",  owners:["sarah.kim"],             steward:"sarah.kim",  stewards:["sarah.kim"],              cert:"Approved",  quality:95,usage:"High",updated:"1h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",     db:"SNOWFLAKE_PROD / FINANCE / transactions",     tier:1,rows:"12.7M", size:"4.2 GB",tags:["finance"],  description:"Financial transactions ledger. Source of truth for all monetary movements.",       slaFreshness:"1h",  path:["SNOWFLAKE_PROD","FINANCE"], parentId:102,assetLevel:"table", dbtSource:"snowflake_raw.transactions"},
   // ── Databricks Unity Catalog: Catalog → Schema → Table/View ──
   {id:110,name:"unity_catalog",     type:"Catalog",   domain:"Platform", owner:"james.oh",   owners:["james.oh"],              steward:"james.oh",   stewards:["james.oh"],               cert:"Approved",  quality:89,usage:"High",updated:"30m ago", service:"databricks", connectionLabel:"Databricks Unity",  db:"unity_catalog",                               tier:1,rows:"—",    size:"8.6 GB", tags:[],          description:"Databricks Unity Catalog. Unified governance for all Databricks workspaces.",     slaFreshness:"30m", path:[],                          parentId:null,assetLevel:"catalog", childCount:2},
   {id:111,name:"analytics",         type:"Schema",    domain:"Product",  owner:"alex.wu",    owners:["alex.wu"],               steward:"alex.wu",    stewards:["alex.wu"],                cert:"Approved",  quality:85,usage:"High",updated:"1h ago",  service:"databricks", connectionLabel:"Databricks Unity",  db:"unity_catalog / analytics",                   tier:2,rows:"—",    size:"5.2 GB", tags:[],          description:"Analytics schema with Delta tables for user events and aggregations.",             slaFreshness:"1h",  path:["unity_catalog"],           parentId:110,assetLevel:"schema",  childCount:3},
@@ -226,7 +226,10 @@ ASSETS.push(...DBT_TARGET_ASSETS);
 //    inside their parent's profile (dbt Model -> Columns tab, see DBT_MODEL_COLUMNS). --
 const DBT_ASSETS = [
   {id:6100,name:"jnj_analytics",                     type:"dbt Project",  domain:"Platform", owner:"james.oh",   owners:["james.oh"],   steward:"maya.chen", stewards:["maya.chen"], cert:"Approved",   quality:0,  usage:"High", updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics", tier:1, rows:"—", size:"—", tags:["etl"], description:"dbt Cloud project (account jnj · production environment). Root container for all models, sources, seeds, snapshots, tests, metrics and exposures.", slaFreshness:"1h"},
-  {id:6101,name:"postgres_raw.orders",               type:"dbt Source",   domain:"Commerce", owner:"dev.patel",  owners:["dev.patel"],  steward:"priya.nair",stewards:["priya.nair"],cert:"Approved",   quality:88, usage:"High", updated:"40m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / sources / postgres_raw.orders", tier:2, rows:"48.6M", size:"—", tags:["PII","raw"], description:"Declared dbt source pointing at the raw Postgres orders table. Carries a freshness contract (warn 12h / error 24h) checked on every run.", slaFreshness:"12h"},
+  {id:6101,name:"snowflake_raw.orders",              type:"dbt Source",   domain:"Commerce", owner:"dev.patel",  owners:["dev.patel"],  steward:"priya.nair",stewards:["priya.nair"],cert:"Approved",   quality:88, usage:"High", updated:"40m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / sources / snowflake_raw.orders", tier:2, rows:"48.2M", size:"—", tags:["PII","raw"], description:"Declared dbt source over SNOWFLAKE_PROD.COMMERCE.orders. Carries a freshness contract (warn 12h / error 24h) checked on every run.", slaFreshness:"12h", materializedFrom:"orders"},
+  {id:6107,name:"snowflake_raw.customers",           type:"dbt Source",   domain:"Commerce", owner:"dev.patel",  owners:["dev.patel"],  steward:"priya.nair",stewards:["priya.nair"],cert:"Approved",   quality:86, usage:"High", updated:"1h ago",  service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / sources / snowflake_raw.customers", tier:2, rows:"3.1M", size:"—", tags:["PII","raw"], description:"Declared dbt source over SNOWFLAKE_PROD.COMMERCE.customers, the Salesforce-loaded master. Read by the staging model and the type-2 snapshot.", slaFreshness:"12h", materializedFrom:"customers"},
+  {id:6108,name:"snowflake_raw.transactions",        type:"dbt Source",   domain:"Finance",  owner:"sarah.kim",  owners:["sarah.kim"],  steward:"sarah.kim", stewards:["sarah.kim"], cert:"Approved",   quality:92, usage:"Med",  updated:"1h ago",  service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / sources / snowflake_raw.transactions", tier:1, rows:"12.7M", size:"—", tags:["finance","raw"], description:"Declared dbt source over the finance transactions ledger. Joined into the enriched order grain to attach payment state.", slaFreshness:"6h", materializedFrom:"transactions"},
+  {id:6109,name:"snowflake_raw.dim_products",        type:"dbt Source",   domain:"Commerce", owner:"james.oh",   owners:["james.oh"],   steward:"maya.chen", stewards:["maya.chen"], cert:"Approved",   quality:98, usage:"Med",  updated:"1h ago",  service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / sources / snowflake_raw.dim_products", tier:2, rows:"82K", size:"—", tags:["reference","raw"], description:"Declared dbt source over the loaded product dimension. Read by the order-summary mart; dbt does not build this table.", slaFreshness:"24h", materializedFrom:"dim_products"},
   {id:6102,name:"stg_orders",                        type:"dbt Model",    domain:"Commerce", owner:"dev.patel",  owners:["dev.patel"],  steward:"maya.chen", stewards:["maya.chen"], cert:"Approved",   quality:92, usage:"High", updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / models / staging / stg_orders", tier:2, rows:"48.6M", size:"—", tags:["PII","staging"], description:"Staging model - renames, casts and lightly cleans the raw Postgres orders source. Materialized as a view, so it costs nothing to store.", slaFreshness:"1h"},
   {id:6103,name:"int_orders_enriched",               type:"dbt Model",    domain:"Commerce", owner:"maya.chen",  owners:["maya.chen"],  steward:"dev.patel", stewards:["dev.patel"], cert:"Approved",   quality:90, usage:"High", updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / models / intermediate / int_orders_enriched", tier:2, rows:"48.4M", size:"6.1 GB", tags:["PII","intermediate"], description:"Intermediate model joining staged orders to customers and country codes, and deriving gross revenue. Incremental - merges on order_id.", slaFreshness:"1h"},
   {id:6104,name:"fct_revenue",                       type:"dbt Model",    domain:"Finance",  owner:"sarah.kim",  owners:["sarah.kim"],  steward:"alex.wu",   stewards:["alex.wu"],   cert:"Approved",   quality:95, usage:"High", updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / models / marts / finance / fct_revenue", tier:1, rows:"48.2M", size:"11.2 GB", tags:["revenue","KPI","finance"], description:"Finance mart fact model. Materializes the Snowflake orders_fact table - the certified revenue surface every downstream report reads.", slaFreshness:"1h", materializes:"orders_fact"},
@@ -238,10 +241,14 @@ const DBT_ASSETS = [
   {id:6113,name:"relationships_fct_revenue_customer",type:"dbt Test",     domain:"Finance",  owner:"sarah.kim",  owners:["sarah.kim"],  steward:"alex.wu",   stewards:["alex.wu"],   cert:"In Review",  quality:0,  usage:"Med",  updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / tests / relationships_fct_revenue_customer", tier:2, rows:"—", size:"—", tags:["dq"], description:"Referential-integrity test - every fct_revenue.customer_id must exist in customers_snapshot. Warns rather than errors while the backfill completes.", slaFreshness:"1h", dbtTestOn:"fct_revenue", dbtTestCol:"customer_id", dbtTestKind:"relationships", dbtTestStatus:"warn"},
   {id:6114,name:"not_null_stg_orders_order_id",      type:"dbt Test",     domain:"Commerce", owner:"dev.patel",  owners:["dev.patel"],  steward:"maya.chen", stewards:["maya.chen"], cert:"Approved",   quality:0,  usage:"High", updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / tests / not_null_stg_orders_order_id", tier:2, rows:"—", size:"—", tags:["dq"], description:"Generic not-null test on stg_orders.order_id. Paired with the uniqueness test to guarantee the staging grain.", slaFreshness:"1h", dbtTestOn:"stg_orders", dbtTestCol:"order_id", dbtTestKind:"not_null", dbtTestStatus:"pass"},
   {id:6115,name:"not_null_int_orders_order_id",      type:"dbt Test",     domain:"Commerce", owner:"maya.chen",  owners:["maya.chen"],  steward:"dev.patel", stewards:["dev.patel"], cert:"Approved",   quality:0,  usage:"Med",  updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / tests / not_null_int_orders_order_id", tier:2, rows:"—", size:"—", tags:["dq"], description:"Generic not-null test on int_orders_enriched.order_id. Guards the incremental merge key.", slaFreshness:"1h", dbtTestOn:"int_orders_enriched", dbtTestCol:"order_id", dbtTestKind:"not_null", dbtTestStatus:"pass"},
-  {id:6116,name:"unique_source_orders_order_id",     type:"dbt Test",     domain:"Commerce", owner:"dev.patel",  owners:["dev.patel"],  steward:"priya.nair",stewards:["priya.nair"],cert:"Approved",   quality:0,  usage:"Med",  updated:"40m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / tests / unique_source_orders_order_id", tier:2, rows:"—", size:"—", tags:["dq"], description:"Uniqueness test declared directly on the raw source, so a duplicate is caught before it enters the project.", slaFreshness:"12h", dbtTestOn:"postgres_raw.orders", dbtTestCol:"order_id", dbtTestKind:"unique", dbtTestStatus:"pass"},
-  {id:6117,name:"not_null_source_orders_order_id",   type:"dbt Test",     domain:"Commerce", owner:"dev.patel",  owners:["dev.patel"],  steward:"priya.nair",stewards:["priya.nair"],cert:"Approved",   quality:0,  usage:"Med",  updated:"40m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / tests / not_null_source_orders_order_id", tier:2, rows:"—", size:"—", tags:["dq"], description:"Not-null test on the raw source key.", slaFreshness:"12h", dbtTestOn:"postgres_raw.orders", dbtTestCol:"order_id", dbtTestKind:"not_null", dbtTestStatus:"pass"},
+  {id:6116,name:"unique_source_orders_order_id",     type:"dbt Test",     domain:"Commerce", owner:"dev.patel",  owners:["dev.patel"],  steward:"priya.nair",stewards:["priya.nair"],cert:"Approved",   quality:0,  usage:"Med",  updated:"40m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / tests / unique_source_orders_order_id", tier:2, rows:"—", size:"—", tags:["dq"], description:"Uniqueness test declared directly on the raw source, so a duplicate is caught before it enters the project.", slaFreshness:"12h", dbtTestOn:"snowflake_raw.orders", dbtTestCol:"order_id", dbtTestKind:"unique", dbtTestStatus:"pass"},
+  {id:6117,name:"not_null_source_orders_order_id",   type:"dbt Test",     domain:"Commerce", owner:"dev.patel",  owners:["dev.patel"],  steward:"priya.nair",stewards:["priya.nair"],cert:"Approved",   quality:0,  usage:"Med",  updated:"40m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / tests / not_null_source_orders_order_id", tier:2, rows:"—", size:"—", tags:["dq"], description:"Not-null test on the raw source key.", slaFreshness:"12h", dbtTestOn:"snowflake_raw.orders", dbtTestCol:"order_id", dbtTestKind:"not_null", dbtTestStatus:"pass"},
   {id:6118,name:"unique_country_codes_country_code", type:"dbt Test",     domain:"Platform", owner:"james.oh",   owners:["james.oh"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",   quality:0,  usage:"Low",  updated:"3w ago",  service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / tests / unique_country_codes_country_code", tier:3, rows:"—", size:"—", tags:["dq"], description:"Uniqueness test on the seed key. Cheap, but it is what stops a duplicated country code fanning out the revenue join.", slaFreshness:"—", dbtTestOn:"country_codes", dbtTestCol:"country_code", dbtTestKind:"unique", dbtTestStatus:"pass"},
   {id:6119,name:"not_null_country_codes_country_code",type:"dbt Test",    domain:"Platform", owner:"james.oh",   owners:["james.oh"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",   quality:0,  usage:"Low",  updated:"3w ago",  service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / tests / not_null_country_codes_country_code", tier:3, rows:"—", size:"—", tags:["dq"], description:"Not-null test on the seed key.", slaFreshness:"—", dbtTestOn:"country_codes", dbtTestCol:"country_code", dbtTestKind:"not_null", dbtTestStatus:"pass"},
+  {id:6121,name:"stg_customers",                      type:"dbt Model",    domain:"Commerce", owner:"dev.patel",  owners:["dev.patel"],  steward:"maya.chen", stewards:["maya.chen"], cert:"Approved",   quality:89, usage:"High", updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / models / staging / stg_customers", tier:2, rows:"3.1M", size:"—", tags:["PII","staging"], description:"Staging model over the customers source. Standardises email casing and splits name fields. Materialized as a view.", slaFreshness:"1h"},
+  {id:6122,name:"mart_order_summary",                 type:"dbt Model",    domain:"Commerce", owner:"maya.chen",  owners:["maya.chen"],  steward:"dev.patel", stewards:["dev.patel"], cert:"Approved",   quality:93, usage:"High", updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / models / marts / commerce / mart_order_summary", tier:1, rows:"48.2M", size:"—", tags:["revenue","reporting"], description:"Commerce mart joining revenue facts to the product dimension. Materializes the Snowflake vw_order_summary view.", slaFreshness:"1h", materializes:"vw_order_summary"},
+  {id:6123,name:"not_null_stg_customers_customer_id", type:"dbt Test",     domain:"Commerce", owner:"dev.patel",  owners:["dev.patel"],  steward:"maya.chen", stewards:["maya.chen"], cert:"Approved",   quality:0,  usage:"Med",  updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / tests / not_null_stg_customers_customer_id", tier:2, rows:"—", size:"—", tags:["dq"], description:"Not-null test on stg_customers.customer_id, the key every customer join depends on.", slaFreshness:"1h", dbtTestOn:"stg_customers", dbtTestCol:"customer_id", dbtTestKind:"not_null", dbtTestStatus:"pass"},
+  {id:6124,name:"unique_mart_order_summary_order_id", type:"dbt Test",     domain:"Commerce", owner:"maya.chen",  owners:["maya.chen"],  steward:"dev.patel", stewards:["dev.patel"], cert:"Approved",   quality:0,  usage:"Med",  updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / tests / unique_mart_order_summary_order_id", tier:2, rows:"—", size:"—", tags:["dq"], description:"Uniqueness test on the mart grain. Catches a fan-out from the product join before it reaches reporting.", slaFreshness:"1h", dbtTestOn:"mart_order_summary", dbtTestCol:"order_id", dbtTestKind:"unique", dbtTestStatus:"pass"},
   {id:6120,name:"daily_revenue",                     type:"dbt Metric",   domain:"Finance",  owner:"sarah.kim",  owners:["sarah.kim"],  steward:"alex.wu",   stewards:["alex.wu"],   cert:"Approved",   quality:0,  usage:"Med",  updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / metrics / daily_revenue", tier:2, rows:"—", size:"—", tags:["KPI","finance"], description:"Semantic-layer metric - sum of fct_revenue.revenue by day. One definition of daily revenue, so BI tools stop each inventing their own.", slaFreshness:"1h"},
   {id:6130,name:"exec_revenue_dashboard",            type:"dbt Exposure", domain:"Finance",  owner:"alex.wu",    owners:["alex.wu"],    steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",   quality:0,  usage:"High", updated:"1h ago",  service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / exposures / exec_revenue_dashboard", tier:1, rows:"—", size:"—", tags:["KPI","Board reporting"], description:"Declared dbt exposure - tells dbt that the Tableau Revenue_Dashboard depends on fct_revenue, so a breaking change is caught before it ships.", slaFreshness:"1h"},
   {id:6140,name:"nightly_production",                type:"dbt Job",      domain:"Platform", owner:"james.oh",   owners:["james.oh"],   steward:"maya.chen", stewards:["maya.chen"], cert:"Approved",   quality:0,  usage:"High", updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / jobs / nightly_production", tier:1, rows:"—", size:"—", tags:["etl"], description:"dbt Cloud job running dbt build against production on a 02:00 UTC schedule plus per-PR CI. Run history and per-model timings live on this asset.", slaFreshness:"1h"},
@@ -258,6 +265,8 @@ const ASSET_COLUMNS = {
   "customers_archive": ["customer_id","email","phone","first_name","last_name","date_of_birth","address","country","legal_hold_flag","archived_at"],
   // ── orders (Snowflake) ──
   "orders":          ["order_id","customer_id","product_id","order_date","status","amount","currency","discount","region","shipping_address","created_at","updated_at"],
+  // -- orders_fact (Snowflake, built by the fct_revenue dbt model) --
+  "orders_fact":       ["order_id","customer_id","revenue","order_status","order_date","region"],
   // ── customers (Snowflake) ──
   "customers":       ["customer_id","email","phone","first_name","last_name","date_of_birth","address","city","country","segment","created_at","updated_at"],
   // ── dim_products (Snowflake) ──
@@ -13153,7 +13162,7 @@ function buildLinEdges(hiddenNodes,edgesDef=LINEAGE_EDGES_DEF){
 //   back to the physical Snowflake table.
 // ═══════════════════════════════════════════════════════════════════════════
 const TABLEAU_NODE_META={
-  tb_tbl:{assetType:"Table",       service:"snowflake",db:"SNOWFLAKE_PROD / COMMERCE / orders_fact", domain:"Commerce",owner:"maya.chen",steward:"dev.patel",quality:94,cert:"Approved",tags:["PII","revenue"],description:"Snowflake fact table. Physical source the Tableau data source pulls from via custom SQL.", cols:[{n:"order_amount",t:"decimal"},{n:"order_date",t:"date"},{n:"region",t:"varchar"},{n:"customer_id",t:"bigint"}]},
+  tb_tbl:{assetType:"Table",       service:"snowflake",db:"SNOWFLAKE_PROD / COMMERCE / orders_fact", domain:"Commerce",owner:"maya.chen",steward:"dev.patel",quality:94,cert:"Approved",tags:["PII","revenue"],description:"Snowflake fact table. Physical source the Tableau data source pulls from via custom SQL.", cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"revenue",t:"decimal"},{n:"order_status",t:"varchar"},{n:"order_date",t:"date"},{n:"region",t:"varchar"}]},
   tb_ds: {assetType:"Data Source", service:"tableau",  db:"Analytics / Finance / Orders_Certified",  domain:"Finance", owner:"alex.wu",  steward:"james.oh", quality:90,cert:"Approved",tags:["revenue","KPI"],description:"Published, certified Tableau data source. Reusable governed surface consumed by worksheets.", cols:[{n:"revenue",t:"field"},{n:"yoy_growth_pct",t:"calc"},{n:"region",t:"field"},{n:"order_date",t:"field"}]},
   tb_ws: {assetType:"Worksheet",   service:"tableau",  db:"Analytics / Finance / Revenue_by_Region", domain:"Finance", owner:"alex.wu",  steward:"james.oh", quality:86,cert:"Approved",tags:["KPI"],          description:"Worksheet (view) plotting revenue by region. Middle hop between data source and dashboard.", cols:[{n:"revenue",t:"measure"},{n:"region",t:"dim"}]},
   tb_db: {assetType:"Dashboard",   service:"tableau",  db:"Analytics / Finance / Revenue_Dashboard", domain:"Finance", owner:"alex.wu",  steward:"james.oh", quality:88,cert:"Approved",tags:["KPI","Board reporting"],description:"Executive revenue dashboard. Consumer end of the Tableau lineage path.", cols:[{n:"total_revenue",t:"decimal"},{n:"region",t:"dim"}]},
@@ -13170,7 +13179,7 @@ const TABLEAU_EDGES_DEF=[
   {id:"tle3",s:"tb_ws", t:"tb_db",tk:"Direct"},
 ];
 const TABLEAU_COL_MAPS=[
-  {s:"tb_tbl",t:"tb_ds",cols:[{sc:"order_amount",tc:"revenue"},{sc:"order_amount",tc:"yoy_growth_pct"},{sc:"order_date",tc:"yoy_growth_pct"},{sc:"order_date",tc:"order_date"},{sc:"region",tc:"region"}]},
+  {s:"tb_tbl",t:"tb_ds",cols:[{sc:"revenue",tc:"revenue"},{sc:"revenue",tc:"yoy_growth_pct"},{sc:"order_date",tc:"yoy_growth_pct"},{sc:"order_date",tc:"order_date"},{sc:"region",tc:"region"}]},
   {s:"tb_ds", t:"tb_ws",cols:[{sc:"revenue",tc:"revenue"},{sc:"region",tc:"region"}]},
   {s:"tb_ws", t:"tb_db",cols:[{sc:"revenue",tc:"total_revenue"},{sc:"region",tc:"region"}]},
 ];
@@ -13181,77 +13190,198 @@ const TABLEAU_ACTIVE_BY_TYPE={
   "Project":"tb_ds","Site":"tb_ds","Metric":"tb_db","Flow":"tb_tbl",
 };
 // ===========================================================================
-// dbt LINEAGE GRAPH - the full transformation path, end to end across three
-// connectors: Postgres -> dbt (source, seed, snapshot, models, metric, exposure)
-// -> Snowflake -> Tableau. This is the graph dbt users actually care about: the
-// transformation is drawn, not hidden behind an edge labelled "Direct".
 // ===========================================================================
-const DBT_NODE_META={
-  pg_raw:  {assetType:"Table",        service:"postgres", db:"postgresql_prod / PRODUCT / orders",                     domain:"Commerce",owner:"dev.patel", steward:"priya.nair",quality:84,cert:"Approved", tags:["PII","raw"],        description:"Physical Postgres orders table. The system of record dbt declares as a source.", cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"amount",t:"decimal"},{n:"status",t:"varchar"},{n:"created_at",t:"timestamp"},{n:"region",t:"varchar"}]},
-  db_src:  {assetType:"dbt Source",   service:"dbt",      db:"jnj_analytics / sources / postgres_raw.orders",          domain:"Commerce",owner:"dev.patel", steward:"priya.nair",quality:88,cert:"Approved", tags:["PII","raw"],        description:"Declared dbt source with a freshness contract (warn 12h / error 24h). Nothing enters the project without being declared here.", cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"amount",t:"decimal"},{n:"status",t:"varchar"},{n:"created_at",t:"timestamp"},{n:"region",t:"varchar"}]},
-  db_seed: {assetType:"dbt Seed",     service:"dbt",      db:"jnj_analytics / seeds / country_codes",                  domain:"Platform",owner:"james.oh",  steward:"james.oh",  quality:100,cert:"Approved",tags:["reference"],        description:"Version-controlled CSV seed. Country code to region and currency mapping, loaded from the dbt repo.", cols:[{n:"country_code",t:"varchar"},{n:"region",t:"varchar"},{n:"currency",t:"varchar"}]},
-  db_snap: {assetType:"dbt Snapshot", service:"dbt",      db:"jnj_analytics / snapshots / customers_snapshot",         domain:"Commerce",owner:"dev.patel", steward:"sarah.kim", quality:93,cert:"Approved", tags:["PII","scd2"],       description:"Type-2 SCD snapshot of customers. Preserves the history the source system overwrites.", cols:[{n:"customer_id",t:"bigint"},{n:"customer_tier",t:"varchar"},{n:"valid_from",t:"timestamp"},{n:"valid_to",t:"timestamp"}]},
-  db_stg:  {assetType:"dbt Model",    service:"dbt",      db:"jnj_analytics / models / staging / stg_orders",          domain:"Commerce",owner:"dev.patel", steward:"maya.chen", quality:92,cert:"Approved", tags:["PII","staging"],    description:"Staging model (view). Renames, casts and lightly cleans the raw source. 3 dbt tests, 1 failing.", cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"amount",t:"decimal"},{n:"status",t:"varchar"},{n:"order_date",t:"date"},{n:"region",t:"varchar"}]},
-  db_int:  {assetType:"dbt Model",    service:"dbt",      db:"jnj_analytics / models / intermediate / int_orders_enriched",domain:"Commerce",owner:"maya.chen",steward:"dev.patel",quality:90,cert:"Approved",tags:["PII","intermediate"],description:"Intermediate model (incremental, merge on order_id). Joins staged orders to the customer snapshot and the country seed, derives gross revenue.", cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"gross_revenue",t:"decimal"},{n:"status",t:"varchar"},{n:"order_date",t:"date"},{n:"region",t:"varchar"},{n:"customer_tier",t:"varchar"}]},
-  db_fct:  {assetType:"dbt Model",    service:"dbt",      db:"jnj_analytics / models / marts / finance / fct_revenue", domain:"Finance", owner:"sarah.kim", steward:"alex.wu",   quality:95,cert:"Approved", tags:["revenue","KPI"],    description:"Finance mart fact model (table). Materializes the Snowflake orders_fact table - the certified revenue surface.", cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"revenue",t:"decimal"},{n:"order_status",t:"varchar"},{n:"order_date",t:"date"},{n:"region",t:"varchar"}]},
-  db_metric:{assetType:"dbt Metric", service:"dbt",      db:"jnj_analytics / metrics / daily_revenue",                domain:"Finance", owner:"sarah.kim", steward:"alex.wu",   quality:0, cert:"Approved", tags:["KPI"],              description:"Semantic-layer metric: sum of revenue by day, defined once over fct_revenue.", cols:[{n:"revenue",t:"sum"},{n:"order_date",t:"time grain"}]},
-  db_expo: {assetType:"dbt Exposure",service:"dbt",      db:"jnj_analytics / exposures / exec_revenue_dashboard",     domain:"Finance", owner:"alex.wu",   steward:"james.oh",  quality:0, cert:"Approved", tags:["Board reporting"],  description:"Declared exposure. Names the Tableau dashboard as a dependant so a breaking change to fct_revenue fails CI, not the board meeting.", cols:[{n:"depends_on",t:"fct_revenue"},{n:"type",t:"dashboard"}]},
-  sf_tbl:  {assetType:"Table",        service:"snowflake",db:"SNOWFLAKE_PROD / COMMERCE / orders_fact",                domain:"Commerce",owner:"maya.chen", steward:"dev.patel", quality:94,cert:"Approved", tags:["PII","revenue"],    description:"The physical Snowflake table fct_revenue writes. Governed in EDG, built by dbt, read by Tableau.", cols:[{n:"order_amount",t:"decimal"},{n:"order_date",t:"date"},{n:"region",t:"varchar"},{n:"customer_id",t:"bigint"}]},
-  tbl_ds:  {assetType:"Data Source",  service:"tableau",  db:"Analytics / Finance / Orders_Certified",                 domain:"Finance", owner:"alex.wu",   steward:"james.oh",  quality:90,cert:"Approved", tags:["revenue","KPI"],    description:"Published, certified Tableau data source reading the Snowflake table via custom SQL.", cols:[{n:"revenue",t:"field"},{n:"yoy_growth_pct",t:"calc"},{n:"region",t:"field"},{n:"order_date",t:"field"}]},
-  tbl_ws:  {assetType:"Worksheet",    service:"tableau",  db:"Analytics / Finance / Revenue_by_Region",                domain:"Finance", owner:"alex.wu",   steward:"james.oh",  quality:86,cert:"Approved", tags:["KPI"],              description:"Worksheet plotting revenue by region.", cols:[{n:"revenue",t:"measure"},{n:"region",t:"dim"}]},
-  tbl_db:  {assetType:"Dashboard",    service:"tableau",  db:"Analytics / Finance / Revenue_Dashboard",                domain:"Finance", owner:"alex.wu",   steward:"james.oh",  quality:88,cert:"Approved", tags:["KPI","Board reporting"],description:"Executive revenue dashboard. Consumer end of the whole chain, and the target of the dbt exposure.", cols:[{n:"total_revenue",t:"decimal"},{n:"region",t:"dim"}]},
+// dbt LINEAGE - one declared DAG, and a focused subgraph derived per asset.
+//
+// This is deliberately NOT a hardcoded chain. Every node names the catalog asset
+// it is, so its label, type, owner and columns are resolved from the catalog
+// itself - a warehouse table borrows the column list of the dbt source or model
+// that mirrors it, which is why lineage columns can never drift from the Schema
+// tab. Opening the Lineage tab on any participant walks its full ancestry and
+// descendancy and lays that closure out by depth, so every Snowflake table gets
+// its own real lineage rather than a shared placeholder.
+// ===========================================================================
+
+// Nodes outside the catalog: upstream operational systems EDG does not crawl.
+const DBT_EXTERNAL_NODES = {
+  ext_pg:   {label:"orders",  assetType:"Table", service:"postgres",   db:"postgresql_prod / PRODUCT / orders",
+             domain:"Commerce", owner:"dev.patel", steward:"priya.nair", quality:0, cert:"Draft", tags:["PII","raw"],
+             description:"Operational Postgres orders table. Upstream of the warehouse and not crawled by EDG - shown so the chain does not begin mid-air.",
+             cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"amount",t:"decimal"},{n:"status",t:"varchar"},{n:"created_at",t:"timestamp"},{n:"region",t:"varchar"}]},
+  ext_sfdc: {label:"Account", assetType:"Table", service:"salesforce", db:"Salesforce / Account",
+             domain:"Commerce", owner:"dev.patel", steward:"priya.nair", quality:0, cert:"Draft", tags:["PII","raw"],
+             description:"Salesforce Account object. The system of record the customers table is loaded from.",
+             cols:[{n:"Id",t:"id"},{n:"Name",t:"string"},{n:"Email",t:"email"},{n:"Segment",t:"picklist"},{n:"BillingCountry",t:"string"}]},
 };
-const DBT_TOPO={
-  pg_raw:  {x:0,   y:210,label:"orders",                 upstream:[],                            downstream:["db_src"]},
-  db_src:  {x:300, y:210,label:"postgres_raw.orders",    upstream:["pg_raw"],                    downstream:["db_stg"]},
-  db_seed: {x:600, y:30, label:"country_codes",          upstream:[],                            downstream:["db_int"]},
-  db_stg:  {x:600, y:210,label:"stg_orders",             upstream:["db_src"],                    downstream:["db_int"]},
-  db_snap: {x:600, y:390,label:"customers_snapshot",     upstream:[],                            downstream:["db_int"]},
-  db_int:  {x:900, y:210,label:"int_orders_enriched",    upstream:["db_stg","db_seed","db_snap"],downstream:["db_fct"]},
-  db_fct:  {x:1200,y:210,label:"fct_revenue",            upstream:["db_int"],                    downstream:["sf_tbl","db_metric","db_expo"]},
-  db_metric:{x:1500,y:30,label:"daily_revenue",          upstream:["db_fct"],                    downstream:[]},
-  sf_tbl:  {x:1500,y:210,label:"orders_fact",            upstream:["db_fct"],                    downstream:["tbl_ds"]},
-  db_expo: {x:1500,y:400,label:"exec_revenue_dashboard", upstream:["db_fct"],                    downstream:["tbl_db"]},
-  tbl_ds:  {x:1800,y:210,label:"Orders_Certified",       upstream:["sf_tbl"],                    downstream:["tbl_ws"]},
-  tbl_ws:  {x:2100,y:210,label:"Revenue_by_Region",      upstream:["tbl_ds"],                    downstream:["tbl_db"]},
-  tbl_db:  {x:2400,y:210,label:"Revenue_Dashboard",      upstream:["tbl_ws","db_expo"],          downstream:[]},
+
+// Each node either names a catalog asset or is external. `cols` may be given
+// explicitly for objects with no column list of their own (metrics, exposures, BI).
+const DBT_DAG_NODES = {
+  ext_pg:       {external:true},
+  ext_sfdc:     {external:true},
+  etl:          {asset:"etl_orders_pipeline", cols:[]},
+  sf_orders:    {asset:"orders"},
+  sf_customers: {asset:"customers"},
+  sf_txn:       {asset:"transactions"},
+  sf_products:  {asset:"dim_products"},
+  src_orders:   {asset:"snowflake_raw.orders"},
+  src_cust:     {asset:"snowflake_raw.customers"},
+  src_txn:      {asset:"snowflake_raw.transactions"},
+  src_prod:     {asset:"snowflake_raw.dim_products"},
+  seed_country: {asset:"country_codes"},
+  snap_cust:    {asset:"customers_snapshot"},
+  stg_orders:   {asset:"stg_orders"},
+  stg_cust:     {asset:"stg_customers"},
+  int_orders:   {asset:"int_orders_enriched"},
+  fct_rev:      {asset:"fct_revenue"},
+  mart_summ:    {asset:"mart_order_summary"},
+  sf_fact:      {asset:"orders_fact"},
+  sf_vw:        {asset:"vw_order_summary"},
+  metric_rev:   {asset:"daily_revenue",          cols:[{n:"revenue",t:"sum"},{n:"order_date",t:"time grain"}]},
+  expo_dash:    {asset:"exec_revenue_dashboard", cols:[{n:"depends_on",t:"fct_revenue"},{n:"type",t:"dashboard"}]},
+  tb_ds:        {asset:"Orders_Certified",       cols:[{n:"revenue",t:"field"},{n:"yoy_growth_pct",t:"calc"},{n:"region",t:"field"},{n:"order_date",t:"field"}]},
+  tb_ws:        {asset:"Revenue_by_Region",      cols:[{n:"revenue",t:"measure"},{n:"region",t:"dim"}]},
+  tb_db:        {asset:"Revenue_Dashboard",      cols:[{n:"total_revenue",t:"decimal"},{n:"region",t:"dim"}]},
 };
-const DBT_EDGES_DEF=[
-  {id:"dle1", s:"pg_raw", t:"db_src",   tk:"Declared source"},
-  {id:"dle2", s:"db_src", t:"db_stg",   tk:"dbt ref"},
-  {id:"dle3", s:"db_stg", t:"db_int",   tk:"dbt ref"},
-  {id:"dle4", s:"db_seed",t:"db_int",   tk:"dbt ref"},
-  {id:"dle5", s:"db_snap",t:"db_int",   tk:"dbt ref"},
-  {id:"dle6", s:"db_int", t:"db_fct",   tk:"dbt ref"},
-  {id:"dle7", s:"db_fct", t:"sf_tbl",   tk:"Materializes"},
-  {id:"dle8", s:"db_fct", t:"db_metric",tk:"Metric definition"},
-  {id:"dle9", s:"db_fct", t:"db_expo",  tk:"Exposure"},
-  {id:"dle10",s:"db_expo",t:"tbl_db",   tk:"Declared dependency"},
-  {id:"dle11",s:"sf_tbl", t:"tbl_ds",   tk:"Custom SQL"},
-  {id:"dle12",s:"tbl_ds", t:"tbl_ws",   tk:"Direct"},
-  {id:"dle13",s:"tbl_ws", t:"tbl_db",   tk:"Direct"},
+
+const DBT_DAG_EDGES = [
+  {id:"de01",s:"ext_pg",      t:"etl",        tk:"Fivetran sync"},
+  {id:"de02",s:"etl",         t:"sf_orders",  tk:"Loads"},
+  {id:"de03",s:"ext_sfdc",    t:"sf_customers",tk:"Fivetran sync"},
+  {id:"de04",s:"sf_orders",   t:"src_orders", tk:"Declared source"},
+  {id:"de05",s:"sf_customers",t:"src_cust",   tk:"Declared source"},
+  {id:"de06",s:"sf_txn",      t:"src_txn",    tk:"Declared source"},
+  {id:"de07",s:"sf_products", t:"src_prod",   tk:"Declared source"},
+  {id:"de08",s:"src_orders",  t:"stg_orders", tk:"dbt ref"},
+  {id:"de09",s:"src_cust",    t:"stg_cust",   tk:"dbt ref"},
+  {id:"de10",s:"src_cust",    t:"snap_cust",  tk:"dbt snapshot"},
+  {id:"de11",s:"stg_orders",  t:"int_orders", tk:"dbt ref"},
+  {id:"de12",s:"seed_country",t:"int_orders", tk:"dbt ref"},
+  {id:"de13",s:"snap_cust",   t:"int_orders", tk:"dbt ref"},
+  {id:"de14",s:"src_txn",     t:"int_orders", tk:"dbt ref"},
+  {id:"de15",s:"int_orders",  t:"fct_rev",    tk:"dbt ref"},
+  {id:"de16",s:"fct_rev",     t:"sf_fact",    tk:"Materializes"},
+  {id:"de17",s:"fct_rev",     t:"mart_summ",  tk:"dbt ref"},
+  {id:"de18",s:"stg_cust",    t:"mart_summ",  tk:"dbt ref"},
+  {id:"de19",s:"stg_orders",  t:"mart_summ",  tk:"dbt ref"},
+  {id:"de20",s:"src_prod",    t:"mart_summ",  tk:"dbt ref"},
+  {id:"de21",s:"mart_summ",   t:"sf_vw",      tk:"Materializes"},
+  {id:"de22",s:"fct_rev",     t:"metric_rev", tk:"Metric definition"},
+  {id:"de23",s:"fct_rev",     t:"expo_dash",  tk:"Exposure"},
+  {id:"de24",s:"expo_dash",   t:"tb_db",      tk:"Declared dependency"},
+  {id:"de25",s:"sf_fact",     t:"tb_ds",      tk:"Custom SQL"},
+  {id:"de26",s:"tb_ds",       t:"tb_ws",      tk:"Direct"},
+  {id:"de27",s:"tb_ws",       t:"tb_db",      tk:"Direct"},
 ];
-const DBT_COL_MAPS=[
-  {s:"pg_raw",t:"db_src", cols:[{sc:"order_id",tc:"order_id"},{sc:"customer_id",tc:"customer_id"},{sc:"amount",tc:"amount"},{sc:"status",tc:"status"},{sc:"created_at",tc:"created_at"},{sc:"region",tc:"region"}]},
-  {s:"db_src",t:"db_stg", cols:[{sc:"order_id",tc:"order_id"},{sc:"customer_id",tc:"customer_id"},{sc:"amount",tc:"amount"},{sc:"status",tc:"status"},{sc:"created_at",tc:"order_date"},{sc:"region",tc:"region"}]},
-  {s:"db_stg",t:"db_int", cols:[{sc:"order_id",tc:"order_id"},{sc:"customer_id",tc:"customer_id"},{sc:"amount",tc:"gross_revenue"},{sc:"status",tc:"status"},{sc:"order_date",tc:"order_date"},{sc:"region",tc:"region"}]},
-  {s:"db_seed",t:"db_int",cols:[{sc:"region",tc:"region"}]},
-  {s:"db_snap",t:"db_int",cols:[{sc:"customer_id",tc:"customer_id"},{sc:"customer_tier",tc:"customer_tier"}]},
-  {s:"db_int",t:"db_fct", cols:[{sc:"order_id",tc:"order_id"},{sc:"customer_id",tc:"customer_id"},{sc:"gross_revenue",tc:"revenue"},{sc:"status",tc:"order_status"},{sc:"order_date",tc:"order_date"},{sc:"region",tc:"region"}]},
-  {s:"db_fct",t:"sf_tbl", cols:[{sc:"revenue",tc:"order_amount"},{sc:"order_date",tc:"order_date"},{sc:"region",tc:"region"},{sc:"customer_id",tc:"customer_id"}]},
-  {s:"db_fct",t:"db_metric",cols:[{sc:"revenue",tc:"revenue"},{sc:"order_date",tc:"order_date"}]},
-  {s:"sf_tbl",t:"tbl_ds", cols:[{sc:"order_amount",tc:"revenue"},{sc:"order_amount",tc:"yoy_growth_pct"},{sc:"order_date",tc:"yoy_growth_pct"},{sc:"order_date",tc:"order_date"},{sc:"region",tc:"region"}]},
-  {s:"tbl_ds",t:"tbl_ws", cols:[{sc:"revenue",tc:"revenue"},{sc:"region",tc:"region"}]},
-  {s:"tbl_ws",t:"tbl_db", cols:[{sc:"revenue",tc:"total_revenue"},{sc:"region",tc:"region"}]},
+
+const idm = (...names)=>names.map(n=>({sc:n,tc:n}));
+const DBT_DAG_COLMAPS = [
+  {s:"sf_orders",   t:"src_orders",cols:idm("order_id","customer_id","product_id","amount","discount","status","order_date","region")},
+  {s:"sf_customers",t:"src_cust",  cols:idm("customer_id","email","first_name","last_name","segment","country")},
+  {s:"sf_txn",      t:"src_txn",   cols:idm("transaction_id","account_id","amount","status","date")},
+  {s:"sf_products", t:"src_prod",  cols:idm("product_id","sku","name","category","unit_price")},
+  {s:"src_orders",  t:"stg_orders",cols:idm("order_id","customer_id","product_id","amount","discount","status","order_date","region")},
+  {s:"src_cust",    t:"stg_cust",  cols:[...idm("customer_id","email","segment","country"),{sc:"first_name",tc:"customer_name"},{sc:"last_name",tc:"customer_name"}]},
+  {s:"src_cust",    t:"snap_cust", cols:[{sc:"customer_id",tc:"customer_id"},{sc:"segment",tc:"customer_tier"}]},
+  {s:"src_txn",     t:"int_orders",cols:[{sc:"status",tc:"payment_status"}]},
+  {s:"stg_orders",  t:"int_orders",cols:[...idm("order_id","customer_id","status","order_date"),{sc:"amount",tc:"gross_revenue"}]},
+  {s:"seed_country",t:"int_orders",cols:[{sc:"region",tc:"region"}]},
+  {s:"snap_cust",   t:"int_orders",cols:idm("customer_id","customer_tier")},
+  {s:"int_orders",  t:"fct_rev",   cols:[...idm("order_id","customer_id","order_date","region"),{sc:"gross_revenue",tc:"revenue"},{sc:"status",tc:"order_status"}]},
+  {s:"fct_rev",     t:"sf_fact",   cols:idm("order_id","customer_id","revenue","order_status","order_date","region")},
+  {s:"fct_rev",     t:"mart_summ", cols:[...idm("order_id","customer_id","region","order_date"),{sc:"revenue",tc:"total_amount"}]},
+  {s:"stg_cust",    t:"mart_summ", cols:[{sc:"customer_name",tc:"customer_name"}]},
+  {s:"stg_orders",  t:"mart_summ", cols:[{sc:"discount",tc:"discount_pct"}]},
+  {s:"src_prod",    t:"mart_summ", cols:[{sc:"product_id",tc:"product_id"}]},
+  {s:"mart_summ",   t:"sf_vw",     cols:idm("order_id","customer_id","customer_name","product_id","total_amount","discount_pct","region","order_date")},
+  {s:"fct_rev",     t:"metric_rev",cols:idm("revenue","order_date")},
+  {s:"sf_fact",     t:"tb_ds",     cols:[{sc:"revenue",tc:"revenue"},{sc:"revenue",tc:"yoy_growth_pct"},{sc:"order_date",tc:"yoy_growth_pct"},{sc:"order_date",tc:"order_date"},{sc:"region",tc:"region"}]},
+  {s:"tb_ds",       t:"tb_ws",     cols:idm("revenue","region")},
+  {s:"tb_ws",       t:"tb_db",     cols:[{sc:"revenue",tc:"total_revenue"},{sc:"region",tc:"region"}]},
 ];
-// Which node is CURRENT when a given dbt (or materialized) asset is viewed. Containers
-// (dbt Project, dbt Job) and tests are not lineage nodes, so they mark nothing CURRENT -
-// same rule Tableau applies to Workbooks.
-const DBT_ACTIVE_BY_NAME={
-  "postgres_raw.orders":"db_src", "stg_orders":"db_stg", "int_orders_enriched":"db_int",
-  "fct_revenue":"db_fct", "country_codes":"db_seed", "customers_snapshot":"db_snap",
-  "daily_revenue":"db_metric", "exec_revenue_dashboard":"db_expo", "orders_fact":"sf_tbl",
+
+// Resolve every node's display metadata from the catalog once. A warehouse table
+// borrows the columns of the dbt source or model that mirrors it, so the graph and
+// the Schema tab cannot disagree.
+// Resolved lazily, not at module-eval time: DBT_MODEL_COLUMNS and ASSET_COLUMNS are
+// declared further down the file, so touching them during evaluation would throw.
+let _dbtDagMeta = null;
+const dbtDagMeta = ()=>{
+  if(_dbtDagMeta) return _dbtDagMeta;
+  const all = (typeof ASSETS!=="undefined"?ASSETS:[]);
+  const colsOf = (a)=>{
+    const key = a.dbtSource || a.dbtModel || a.name;
+    const dc = DBT_MODEL_COLUMNS[key];
+    if(dc) return dc.map(c=>({n:c.name,t:c.dataType}));
+    const ac = (typeof ASSET_COLUMNS!=="undefined" && ASSET_COLUMNS[a.name]) || [];
+    return ac.map(n=>({n,t:"column"}));
+  };
+  const meta = {};
+  Object.entries(DBT_DAG_NODES).forEach(([id,n])=>{
+    if(n.external){ meta[id] = {...DBT_EXTERNAL_NODES[id]}; return; }
+    const a = all.find(x=>x.name===n.asset);
+    if(!a) return;   // a node whose asset was removed simply drops out of the graph
+    meta[id] = {
+      assetType:a.type, service:a.service, db:a.db, domain:a.domain,
+      owner:a.owner, steward:a.steward, quality:a.quality, cert:a.cert,
+      tags:a.tags||[], description:a.description, label:a.name, assetName:a.name,
+      cols: n.cols!==undefined ? n.cols : colsOf(a),
+    };
+  });
+  return (_dbtDagMeta = meta);
 };
+
+// asset name -> node id, so an asset's Lineage tab knows where it sits. Lazy for the
+// same reason as the metadata above.
+let _dbtNodeByAsset = null;
+const dbtNodeByAsset = ()=>{
+  if(_dbtNodeByAsset) return _dbtNodeByAsset;
+  const meta = dbtDagMeta(), m = {};
+  Object.entries(DBT_DAG_NODES).forEach(([id,n])=>{ if(n.asset && meta[id]) m[n.asset] = id; });
+  return (_dbtNodeByAsset = m);
+};
+
+// Focused subgraph: the node's full ancestry + descendancy, laid out by depth.
+// Columns are packed left to right on a 310px grid; siblings at the same depth
+// stack vertically around the centre line.
+function dbtFocusedGraph(activeId){
+  const upOf   = id => DBT_DAG_EDGES.filter(e=>e.t===id).map(e=>e.s);
+  const downOf = id => DBT_DAG_EDGES.filter(e=>e.s===id).map(e=>e.t);
+  const walk = (id,step,acc)=>step(id).forEach(n=>{ if(!acc.has(n)){ acc.add(n); walk(n,step,acc); } });
+  const anc=new Set(), desc=new Set();
+  walk(activeId,upOf,anc); walk(activeId,downOf,desc);
+  const META = dbtDagMeta();
+  const keep = new Set([activeId,...anc,...desc].filter(id=>META[id]));
+  const edges = DBT_DAG_EDGES.filter(e=>keep.has(e.s)&&keep.has(e.t));
+
+  // Longest-path depth. The graph is a DAG, so relaxing |keep| times settles it.
+  const depth = {}; keep.forEach(id=>depth[id]=0);
+  for(let pass=0; pass<keep.size; pass++){
+    let moved=false;
+    edges.forEach(e=>{ if(depth[e.t] < depth[e.s]+1){ depth[e.t]=depth[e.s]+1; moved=true; } });
+    if(!moved) break;
+  }
+
+  // Group by depth, then stack. Sorting by id keeps the layout stable across renders.
+  const byDepth = {};
+  [...keep].sort().forEach(id=>{ (byDepth[depth[id]] = byDepth[depth[id]]||[]).push(id); });
+  const topo = {};
+  Object.entries(byDepth).forEach(([d,ids])=>{
+    ids.forEach((id,k)=>{
+      topo[id] = {
+        x: Number(d)*310,
+        y: Math.round(210 + (k - (ids.length-1)/2) * 185),
+        label: META[id].label,
+        upstream:   upOf(id).filter(n=>keep.has(n)),
+        downstream: downOf(id).filter(n=>keep.has(n)),
+        active: id===activeId,
+      };
+    });
+  });
+  const colMaps = DBT_DAG_COLMAPS.filter(m=>keep.has(m.s)&&keep.has(m.t));
+  const hasDbt = [...keep].some(id=>String(META[id].assetType||"").startsWith("dbt "));
+  return {topo, meta:META, colMaps, edges, hasDbt};
+}
 
 // Collapse the dbt layer out of a graph: dbt nodes are removed, their upstreams wired
 // straight to their downstreams (transitively), column maps composed across the gap, and
@@ -13349,18 +13479,21 @@ function collapseDbtNodes(G){
 // Tableau assets get the BI path; everything else keeps the default graph. The matching node
 // is marked CURRENT.
 function pickLineageGraph(asset){
-  if(asset&&(asset.service==="dbt"||asset.dbtModel)){
-    const activeId=DBT_ACTIVE_BY_NAME[asset.name]
-      ||(asset.dbtTestOn?DBT_ACTIVE_BY_NAME[asset.dbtTestOn]:null)||null;
-    const topo={};
-    Object.entries(DBT_TOPO).forEach(([id,t])=>{ topo[id]={...t,active:id===activeId}; });
-    return {topo,meta:DBT_NODE_META,colMaps:DBT_COL_MAPS,edges:DBT_EDGES_DEF,hasDbt:true};
-  }
+  // Tableau objects keep their BI-connector path (the dbt DAG carries the same tail,
+  // but Sites/Projects/Workbooks/Flows have no place in it).
   if(asset&&asset.service==="tableau"){
     const activeId=TABLEAU_ACTIVE_BY_TYPE[asset.type]||"tb_ds";
     const topo={};
     Object.entries(TABLEAU_TOPO).forEach(([id,t])=>{ topo[id]={...t,active:id===activeId}; });
     return {topo,meta:TABLEAU_NODE_META,colMaps:TABLEAU_COL_MAPS,edges:TABLEAU_EDGES_DEF};
+  }
+  // Anything in the dbt DAG - every dbt object, and every Snowflake table or view that
+  // dbt builds or declares as a source - gets its own focused slice of that graph. A dbt
+  // Test is not a node, so it borrows the lineage of the object it guards.
+  if(asset){
+    const byAsset = dbtNodeByAsset();
+    const nodeId = byAsset[asset.name] || (asset.dbtTestOn ? byAsset[asset.dbtTestOn] : null);
+    if(nodeId) return dbtFocusedGraph(nodeId);
   }
   return {topo:LINEAGE_TOPO,meta:LINEAGE_NODE_META,colMaps:LINEAGE_COL_MAPS,edges:LINEAGE_EDGES_DEF};
 }
@@ -18563,7 +18696,7 @@ const TABLEAU_PROFILE = {
                         rel:{upstream:[{name:"orders_fact",type:"Table"}],downstream:[{name:"Revenue_by_Region",type:"Worksheet"},{name:"Revenue_Dashboard",type:"Dashboard"}]}},
   "Revenue_Extract":   {props:[["Object type","Embedded data source"],["Workbook","Revenue_Analytics"],["Connection","Extract (420 MB)"],["Fields","2"],["Upstream","SNOWFLAKE_PROD / COMMERCE / orders_fact"]],
                         rel:{parent:{name:"Revenue_Analytics",type:"Workbook"},upstream:[{name:"orders_fact",type:"Table"}]}},
-  "order_amount":      {props:[["Object type","Datasource field"],["Data source","Orders_Certified"],["Data type","decimal"],["Role","Measure"],["Upstream column","orders_fact.order_amount"]],
+  "order_amount":      {props:[["Object type","Datasource field"],["Data source","Orders_Certified"],["Data type","decimal"],["Role","Measure"],["Upstream column","orders_fact.revenue"]],
                         rel:{parent:{name:"Orders_Certified",type:"Data Source"}}},
   "yoy_growth_pct":    {formula:"(SUM([order_amount]) - LOOKUP(SUM([order_amount]), -1))\n/ ABS(LOOKUP(SUM([order_amount]), -1))",
                         props:[["Object type","Calculated field"],["Data source","Orders_Certified"],["Data type","percentage"],["Role","Measure"]],
@@ -18577,13 +18710,13 @@ const TABLEAU_PROFILE = {
 // Fields exposed by each Tableau data source (the "schema" equivalent for a BI source).
 const TABLEAU_FIELDS = {
   "Orders_Certified":[
-    {name:"revenue",        dataType:"decimal",    role:"Measure",   calc:false, upstream:"orders_fact.order_amount"},
+    {name:"revenue",        dataType:"decimal",    role:"Measure",   calc:false, upstream:"orders_fact.revenue"},
     {name:"yoy_growth_pct", dataType:"percentage", role:"Measure",   calc:true,  formula:"(SUM([order_amount]) − LOOKUP(SUM([order_amount]),−1)) / ABS(LOOKUP(SUM([order_amount]),−1))"},
     {name:"region",         dataType:"string",     role:"Dimension", calc:false, upstream:"orders_fact.region"},
     {name:"order_date",     dataType:"date",       role:"Dimension", calc:false, upstream:"orders_fact.order_date"},
   ],
   "Revenue_Extract":[
-    {name:"order_amount",   dataType:"decimal",    role:"Measure",   calc:false, upstream:"orders_fact.order_amount"},
+    {name:"order_amount",   dataType:"decimal",    role:"Measure",   calc:false, upstream:"orders_fact.revenue"},
     {name:"region",         dataType:"string",     role:"Dimension", calc:false, upstream:"orders_fact.region"},
   ],
 };
@@ -18815,21 +18948,78 @@ const TableauFieldsPanel = ({asset})=>{
 // Engineering facts that only exist for dbt objects. Rendered as the "dbt" panel on
 // the object's own page AND on the warehouse table it materializes.
 const DBT_META = {
-  "stg_orders":          {materialization:"view",        schema:"COMMERCE_STG", alias:"stg_orders",          tags:["staging","pii"],      meta:{owner:"data-eng",layer:"staging"},           git:"jnj/analytics · models/staging/stg_orders.sql",                  lastRun:"35m ago", runStatus:"success", runTime:"14s",   rows:"48.6M", freshness:"35m", job:"nightly_production", refs:["postgres_raw.orders"],                              tests:3},
-  "int_orders_enriched": {materialization:"incremental", schema:"COMMERCE_INT", alias:"int_orders_enriched", tags:["intermediate","pii"], meta:{owner:"data-eng",layer:"intermediate"},      git:"jnj/analytics · models/intermediate/int_orders_enriched.sql",    lastRun:"35m ago", runStatus:"success", runTime:"2m 41s",rows:"48.4M", freshness:"35m", job:"nightly_production", refs:["stg_orders","country_codes","customers_snapshot"], tests:1, strategy:"merge on order_id"},
+  "snowflake_raw.customers":   {materialization:"source",      schema:"COMMERCE",      alias:"customers",          tags:["raw","pii"],          meta:{owner:"platform",loader:"fivetran"},      git:"jnj/analytics · models/staging/_sources.yml",                   lastRun:"1h ago",  runStatus:"success", runTime:"3s",    rows:"3.1M",  freshness:"1h",  job:"nightly_production", refs:[], tests:2, freshnessContract:"warn 12h / error 24h"},
+  "snowflake_raw.transactions":{materialization:"source",      schema:"FINANCE",       alias:"transactions",       tags:["raw","finance"],      meta:{owner:"finance-analytics",loader:"fivetran"}, git:"jnj/analytics · models/staging/_sources.yml",               lastRun:"1h ago",  runStatus:"success", runTime:"2s",    rows:"12.7M", freshness:"1h",  job:"nightly_production", refs:[], tests:2, freshnessContract:"warn 6h / error 12h"},
+  "snowflake_raw.dim_products":{materialization:"source",      schema:"COMMERCE",      alias:"dim_products",       tags:["raw","reference"],    meta:{owner:"platform",loader:"fivetran"},      git:"jnj/analytics · models/staging/_sources.yml",                   lastRun:"1h ago",  runStatus:"success", runTime:"1s",    rows:"82K",   freshness:"1h",  job:"nightly_production", refs:[], tests:2, freshnessContract:"warn 24h / error 48h"},
+  "stg_customers":             {materialization:"view",        schema:"COMMERCE_STG",  alias:"stg_customers",      tags:["staging","pii"],      meta:{owner:"data-eng",layer:"staging"},        git:"jnj/analytics · models/staging/stg_customers.sql",              lastRun:"35m ago", runStatus:"success", runTime:"6s",    rows:"3.1M",  freshness:"35m", job:"nightly_production", refs:["snowflake_raw.customers"], tests:1},
+  "mart_order_summary":        {materialization:"view",        schema:"COMMERCE",      alias:"vw_order_summary",   tags:["revenue","reporting"],meta:{owner:"commerce-analytics",layer:"marts"}, git:"jnj/analytics · models/marts/commerce/mart_order_summary.sql", lastRun:"35m ago", runStatus:"success", runTime:"51s",   rows:"48.2M", freshness:"35m", job:"nightly_production", refs:["fct_revenue","stg_customers","stg_orders","snowflake_raw.dim_products"], tests:1},
+  "stg_orders":          {materialization:"view",        schema:"COMMERCE_STG", alias:"stg_orders",          tags:["staging","pii"],      meta:{owner:"data-eng",layer:"staging"},           git:"jnj/analytics · models/staging/stg_orders.sql",                  lastRun:"35m ago", runStatus:"success", runTime:"14s",   rows:"48.6M", freshness:"35m", job:"nightly_production", refs:["snowflake_raw.orders"],                              tests:3},
+  "int_orders_enriched": {materialization:"incremental", schema:"COMMERCE_INT", alias:"int_orders_enriched", tags:["intermediate","pii"], meta:{owner:"data-eng",layer:"intermediate"},      git:"jnj/analytics · models/intermediate/int_orders_enriched.sql",    lastRun:"35m ago", runStatus:"success", runTime:"2m 41s",rows:"48.4M", freshness:"35m", job:"nightly_production", refs:["stg_orders","country_codes","customers_snapshot","snowflake_raw.transactions"], tests:1, strategy:"merge on order_id"},
   "fct_revenue":         {materialization:"table",       schema:"COMMERCE",     alias:"orders_fact",         tags:["revenue","kpi"],      meta:{owner:"finance-analytics",layer:"marts"},    git:"jnj/analytics · models/marts/finance/fct_revenue.sql",           lastRun:"35m ago", runStatus:"success", runTime:"4m 08s",rows:"48.2M", freshness:"35m", job:"nightly_production", refs:["int_orders_enriched"],                              tests:2},
-  "postgres_raw.orders": {materialization:"source",      schema:"PRODUCT",      alias:"orders",              tags:["raw","pii"],          meta:{owner:"platform",loader:"fivetran"},         git:"jnj/analytics · models/staging/_sources.yml",                    lastRun:"40m ago", runStatus:"success", runTime:"3s",    rows:"48.6M", freshness:"40m", job:"nightly_production", refs:[],                                                   tests:2, freshnessContract:"warn 12h / error 24h"},
+  "snowflake_raw.orders": {materialization:"source",      schema:"PRODUCT",      alias:"orders",              tags:["raw","pii"],          meta:{owner:"platform",loader:"fivetran"},         git:"jnj/analytics · models/staging/_sources.yml",                    lastRun:"40m ago", runStatus:"success", runTime:"3s",    rows:"48.6M", freshness:"40m", job:"nightly_production", refs:[],                                                   tests:2, freshnessContract:"warn 12h / error 24h"},
   "country_codes":       {materialization:"seed",        schema:"REFERENCE",    alias:"country_codes",       tags:["reference"],          meta:{owner:"platform"},                           git:"jnj/analytics · seeds/country_codes.csv",                        lastRun:"3w ago",  runStatus:"success", runTime:"1s",    rows:"249",   freshness:"—",  job:"nightly_production", refs:[],                                                   tests:2},
-  "customers_snapshot":  {materialization:"snapshot",    schema:"COMMERCE_SNAP",alias:"customers_snapshot",  tags:["scd2","pii"],         meta:{owner:"data-eng",strategy:"timestamp"},      git:"jnj/analytics · snapshots/customers_snapshot.sql",               lastRun:"35m ago", runStatus:"success", runTime:"48s",   rows:"4.4M",  freshness:"35m", job:"nightly_production", refs:[],                                                   tests:0, strategy:"timestamp on updated_at"},
+  "customers_snapshot":  {materialization:"snapshot",    schema:"COMMERCE_SNAP",alias:"customers_snapshot",  tags:["scd2","pii"],         meta:{owner:"data-eng",strategy:"timestamp"},      git:"jnj/analytics · snapshots/customers_snapshot.sql",               lastRun:"35m ago", runStatus:"success", runTime:"48s",   rows:"4.4M",  freshness:"35m", job:"nightly_production", refs:["snowflake_raw.customers"],                           tests:0, strategy:"timestamp on updated_at"},
 };
 
 // Raw (Jinja) and compiled SQL for each dbt node. OpenMetadata surfaces exactly this pair.
 const DBT_SQL = {
+  "stg_customers":{
+    raw:`{{ config(materialized='view') }}
+
+select
+    customer_id,
+    lower(trim(email))                        as email,
+    first_name || ' ' || last_name            as customer_name,
+    segment,
+    country
+from {{ source('snowflake_raw', 'customers') }}
+where customer_id is not null`,
+    compiled:`create or replace view COMMERCE_STG.stg_customers as (
+  select
+      customer_id,
+      lower(trim(email))                      as email,
+      first_name || ' ' || last_name          as customer_name,
+      segment,
+      country
+  from SNOWFLAKE_PROD.COMMERCE.customers
+  where customer_id is not null
+);`},
+  "mart_order_summary":{
+    raw:`{{ config(materialized='view', alias='vw_order_summary') }}
+
+select
+    f.order_id,
+    f.customer_id,
+    c.customer_name,
+    p.product_id,
+    f.revenue                                 as total_amount,
+    round(o.discount / nullif(o.amount, 0) * 100, 2) as discount_pct,
+    f.region,
+    f.order_date
+from {{ ref('fct_revenue') }} f
+left join {{ ref('stg_customers') }} c on f.customer_id = c.customer_id
+left join {{ ref('stg_orders') }}    o on f.order_id    = o.order_id
+left join {{ source('snowflake_raw', 'dim_products') }} p on o.product_id = p.product_id`,
+    compiled:`create or replace view SNOWFLAKE_PROD.COMMERCE.vw_order_summary as (
+  select
+      f.order_id,
+      f.customer_id,
+      c.customer_name,
+      p.product_id,
+      f.revenue                               as total_amount,
+      round(o.discount / nullif(o.amount, 0) * 100, 2) as discount_pct,
+      f.region,
+      f.order_date
+  from SNOWFLAKE_PROD.COMMERCE.orders_fact f
+  left join COMMERCE_STG.stg_customers c on f.customer_id = c.customer_id
+  left join COMMERCE_STG.stg_orders    o on f.order_id    = o.order_id
+  left join SNOWFLAKE_PROD.COMMERCE.dim_products p on o.product_id = p.product_id
+);`},
   "stg_orders":{
     raw:`{{ config(materialized='view') }}
 
 with source as (
-    select * from {{ source('postgres_raw', 'orders') }}
+    select * from {{ source('snowflake_raw', 'orders') }}
 )
 
 select
@@ -18933,7 +19123,7 @@ where status != 'cancelled'`,
 ) }}
 
 select customer_id, customer_tier, updated_at
-from {{ source('postgres_raw', 'customers') }}
+from {{ source('snowflake_raw', 'customers') }}
 {% endsnapshot %}`,
     compiled:`-- dbt snapshot: type-2 merge into COMMERCE_SNAP.customers_snapshot
 -- adds dbt_valid_from / dbt_valid_to on every change to updated_at`},
@@ -18941,21 +19131,54 @@ from {{ source('postgres_raw', 'customers') }}
 
 // Columns exposed by each dbt node (the "schema" equivalent). Not separate catalog rows.
 const DBT_MODEL_COLUMNS = {
-  "postgres_raw.orders":[
-    {name:"order_id",     dataType:"bigint",    tests:["unique","not_null"], desc:"Source order key.",                          upstream:"postgresql_prod.PRODUCT.orders.order_id"},
-    {name:"customer_id",  dataType:"bigint",    tests:[],                    desc:"Source customer key.",                       upstream:"postgresql_prod.PRODUCT.orders.customer_id"},
-    {name:"amount",       dataType:"decimal",   tests:[],                    desc:"Order gross amount, source currency.",       upstream:"postgresql_prod.PRODUCT.orders.amount"},
-    {name:"status",       dataType:"varchar",   tests:[],                    desc:"Raw order status, mixed casing at source.",  upstream:"postgresql_prod.PRODUCT.orders.status"},
-    {name:"created_at",   dataType:"timestamp", tests:[],                    desc:"Order creation timestamp.",                  upstream:"postgresql_prod.PRODUCT.orders.created_at"},
-    {name:"region",       dataType:"varchar",   tests:[],                    desc:"Two-letter country code at source.",         upstream:"postgresql_prod.PRODUCT.orders.region"},
+  "snowflake_raw.orders":[
+    {name:"order_id",    dataType:"bigint",    tests:["unique","not_null"], desc:"Source order key.",                        upstream:"SNOWFLAKE_PROD.COMMERCE.orders.order_id"},
+    {name:"customer_id", dataType:"bigint",    tests:[],                    desc:"Source customer key.",                     upstream:"SNOWFLAKE_PROD.COMMERCE.orders.customer_id"},
+    {name:"product_id",  dataType:"bigint",    tests:[],                    desc:"Source product key.",                      upstream:"SNOWFLAKE_PROD.COMMERCE.orders.product_id"},
+    {name:"amount",      dataType:"decimal",   tests:[],                    desc:"Order gross amount, source currency.",     upstream:"SNOWFLAKE_PROD.COMMERCE.orders.amount"},
+    {name:"discount",    dataType:"decimal",   tests:[],                    desc:"Discount applied at order time.",          upstream:"SNOWFLAKE_PROD.COMMERCE.orders.discount"},
+    {name:"status",      dataType:"varchar",   tests:[],                    desc:"Raw order status, mixed casing at source.", upstream:"SNOWFLAKE_PROD.COMMERCE.orders.status"},
+    {name:"order_date",  dataType:"date",      tests:[],                    desc:"Order date at source.",                    upstream:"SNOWFLAKE_PROD.COMMERCE.orders.order_date"},
+    {name:"region",      dataType:"varchar",   tests:[],                    desc:"Two-letter country code at source.",       upstream:"SNOWFLAKE_PROD.COMMERCE.orders.region"},
+  ],
+  "snowflake_raw.customers":[
+    {name:"customer_id", dataType:"bigint",  tests:["unique","not_null"], desc:"Source customer key.",              upstream:"SNOWFLAKE_PROD.COMMERCE.customers.customer_id"},
+    {name:"email",       dataType:"varchar", tests:[],                    desc:"Contact email, inconsistent casing at source.", upstream:"SNOWFLAKE_PROD.COMMERCE.customers.email"},
+    {name:"first_name",  dataType:"varchar", tests:[],                    desc:"Given name.",                       upstream:"SNOWFLAKE_PROD.COMMERCE.customers.first_name"},
+    {name:"last_name",   dataType:"varchar", tests:[],                    desc:"Family name.",                      upstream:"SNOWFLAKE_PROD.COMMERCE.customers.last_name"},
+    {name:"segment",     dataType:"varchar", tests:[],                    desc:"Commercial segment from Salesforce.", upstream:"SNOWFLAKE_PROD.COMMERCE.customers.segment"},
+    {name:"country",     dataType:"varchar", tests:[],                    desc:"Country of record.",                upstream:"SNOWFLAKE_PROD.COMMERCE.customers.country"},
+  ],
+  "snowflake_raw.transactions":[
+    {name:"transaction_id",dataType:"bigint",  tests:["unique","not_null"], desc:"Ledger entry key.",                upstream:"SNOWFLAKE_PROD.FINANCE.transactions.transaction_id"},
+    {name:"account_id",    dataType:"bigint",  tests:[],                    desc:"Account the movement belongs to.", upstream:"SNOWFLAKE_PROD.FINANCE.transactions.account_id"},
+    {name:"amount",        dataType:"decimal", tests:[],                    desc:"Monetary amount.",                 upstream:"SNOWFLAKE_PROD.FINANCE.transactions.amount"},
+    {name:"status",        dataType:"varchar", tests:[],                    desc:"Settlement status. Attached to the order grain as payment state.", upstream:"SNOWFLAKE_PROD.FINANCE.transactions.status"},
+    {name:"date",          dataType:"date",    tests:[],                    desc:"Value date.",                      upstream:"SNOWFLAKE_PROD.FINANCE.transactions.date"},
+  ],
+  "snowflake_raw.dim_products":[
+    {name:"product_id", dataType:"bigint",  tests:["unique","not_null"], desc:"Product key.",         upstream:"SNOWFLAKE_PROD.COMMERCE.dim_products.product_id"},
+    {name:"sku",        dataType:"varchar", tests:[],                    desc:"Stock keeping unit.",  upstream:"SNOWFLAKE_PROD.COMMERCE.dim_products.sku"},
+    {name:"name",       dataType:"varchar", tests:[],                    desc:"Product name.",        upstream:"SNOWFLAKE_PROD.COMMERCE.dim_products.name"},
+    {name:"category",   dataType:"varchar", tests:[],                    desc:"Product category.",    upstream:"SNOWFLAKE_PROD.COMMERCE.dim_products.category"},
+    {name:"unit_price", dataType:"decimal", tests:[],                    desc:"List unit price.",     upstream:"SNOWFLAKE_PROD.COMMERCE.dim_products.unit_price"},
   ],
   "stg_orders":[
-    {name:"order_id",     dataType:"bigint",  tests:["unique","not_null"],  desc:"Order key. Grain of this model.",                     upstream:"postgres_raw.orders.order_id"},
-    {name:"customer_id",  dataType:"bigint",  tests:[],                     desc:"Customer key, passed through unchanged.",             upstream:"postgres_raw.orders.customer_id"},
-    {name:"amount",       dataType:"decimal", tests:[],                     desc:"Order amount, nulls filtered out.",                   upstream:"postgres_raw.orders.amount"},
-    {name:"status",       dataType:"varchar", tests:["accepted_values"],    desc:"Lower-cased order status. Accepted-values test FAILING.", upstream:"postgres_raw.orders.status"},
-    {name:"order_date",   dataType:"date",    tests:[],                     desc:"created_at cast to a date.",                          upstream:"postgres_raw.orders.created_at"},
-    {name:"region",       dataType:"varchar", tests:[],                     desc:"Country code, still raw at this layer.",              upstream:"postgres_raw.orders.region"},
+    {name:"order_id",    dataType:"bigint",  tests:["unique","not_null"], desc:"Order key. Grain of this model.",                     upstream:"snowflake_raw.orders.order_id"},
+    {name:"customer_id", dataType:"bigint",  tests:[],                    desc:"Customer key, passed through unchanged.",             upstream:"snowflake_raw.orders.customer_id"},
+    {name:"product_id",  dataType:"bigint",  tests:[],                    desc:"Product key, passed through unchanged.",              upstream:"snowflake_raw.orders.product_id"},
+    {name:"amount",      dataType:"decimal", tests:[],                    desc:"Order amount, nulls filtered out.",                   upstream:"snowflake_raw.orders.amount"},
+    {name:"discount",    dataType:"decimal", tests:[],                    desc:"Discount, defaulted to zero when absent.",            upstream:"snowflake_raw.orders.discount"},
+    {name:"status",      dataType:"varchar", tests:["accepted_values"],   desc:"Lower-cased order status. Accepted-values test FAILING.", upstream:"snowflake_raw.orders.status"},
+    {name:"order_date",  dataType:"date",    tests:[],                    desc:"Order date.",                                         upstream:"snowflake_raw.orders.order_date"},
+    {name:"region",      dataType:"varchar", tests:[],                    desc:"Country code, still raw at this layer.",              upstream:"snowflake_raw.orders.region"},
+  ],
+  "stg_customers":[
+    {name:"customer_id",   dataType:"bigint",  tests:["not_null"], desc:"Customer key. Grain of this model.",              upstream:"snowflake_raw.customers.customer_id"},
+    {name:"email",         dataType:"varchar", tests:[],           desc:"Lower-cased and trimmed email.",                  upstream:"snowflake_raw.customers.email"},
+    {name:"customer_name", dataType:"varchar", tests:[],           desc:"Display name built from first and last name.",    upstream:"snowflake_raw.customers.last_name"},
+    {name:"segment",       dataType:"varchar", tests:[],           desc:"Commercial segment.",                             upstream:"snowflake_raw.customers.segment"},
+    {name:"country",       dataType:"varchar", tests:[],           desc:"Country of record.",                              upstream:"snowflake_raw.customers.country"},
   ],
   "int_orders_enriched":[
     {name:"order_id",      dataType:"bigint",  tests:["not_null"], desc:"Order key. Incremental merge key.",                        upstream:"stg_orders.order_id"},
@@ -18965,6 +19188,7 @@ const DBT_MODEL_COLUMNS = {
     {name:"order_date",    dataType:"date",    tests:[],           desc:"Order date.",                                              upstream:"stg_orders.order_date"},
     {name:"region",        dataType:"varchar", tests:[],           desc:"Region resolved via the country_codes seed.",              upstream:"country_codes.region"},
     {name:"customer_tier", dataType:"varchar", tests:[],           desc:"Tier as of the order, from the customer snapshot.",        upstream:"customers_snapshot.customer_tier"},
+    {name:"payment_status",dataType:"varchar", tests:[],           desc:"Settlement state joined from the transactions source.",    upstream:"snowflake_raw.transactions.status"},
   ],
   "fct_revenue":[
     {name:"order_id",     dataType:"bigint",  tests:["not_null"],      desc:"Order key. Grain of the finance mart.",                       upstream:"int_orders_enriched.order_id"},
@@ -18974,14 +19198,24 @@ const DBT_MODEL_COLUMNS = {
     {name:"order_date",   dataType:"date",    tests:[],                desc:"Order date. Time grain for the daily_revenue metric.",        upstream:"int_orders_enriched.order_date"},
     {name:"region",       dataType:"varchar", tests:[],                desc:"Resolved region.",                                            upstream:"int_orders_enriched.region"},
   ],
+  "mart_order_summary":[
+    {name:"order_id",      dataType:"bigint",  tests:["unique"], desc:"Order key. Grain of the summary.",                        upstream:"fct_revenue.order_id"},
+    {name:"customer_id",   dataType:"bigint",  tests:[],         desc:"Customer key.",                                           upstream:"fct_revenue.customer_id"},
+    {name:"customer_name", dataType:"varchar", tests:[],         desc:"Display name joined from the customer staging model.",    upstream:"stg_customers.customer_name"},
+    {name:"product_id",    dataType:"bigint",  tests:[],         desc:"Product key joined from the product dimension source.",   upstream:"snowflake_raw.dim_products.product_id"},
+    {name:"total_amount",  dataType:"decimal", tests:[],         desc:"Recognised revenue for the order.",                       upstream:"fct_revenue.revenue"},
+    {name:"discount_pct",  dataType:"float",   tests:[],         desc:"Discount as a percentage, derived from the staged order.", upstream:"stg_orders.discount"},
+    {name:"region",        dataType:"varchar", tests:[],         desc:"Resolved region.",                                        upstream:"fct_revenue.region"},
+    {name:"order_date",    dataType:"date",    tests:[],         desc:"Order date.",                                             upstream:"fct_revenue.order_date"},
+  ],
   "country_codes":[
     {name:"country_code", dataType:"varchar", tests:["unique","not_null"], desc:"ISO 3166-1 alpha-2 code. Seed key.", upstream:"seeds/country_codes.csv"},
     {name:"region",       dataType:"varchar", tests:[],                    desc:"Sales region the country rolls into.", upstream:"seeds/country_codes.csv"},
     {name:"currency",     dataType:"varchar", tests:[],                    desc:"ISO currency code.",                   upstream:"seeds/country_codes.csv"},
   ],
   "customers_snapshot":[
-    {name:"customer_id",   dataType:"bigint",    tests:[], desc:"Customer key. Snapshot unique key.",                      upstream:"postgres_raw.customers.customer_id"},
-    {name:"customer_tier", dataType:"varchar",   tests:[], desc:"Tier at the time of the snapshot row.",                   upstream:"postgres_raw.customers.customer_tier"},
+    {name:"customer_id",   dataType:"bigint",    tests:[], desc:"Customer key. Snapshot unique key.",                      upstream:"snowflake_raw.customers.customer_id"},
+    {name:"customer_tier", dataType:"varchar",   tests:[], desc:"Tier at the time of the snapshot row.",                   upstream:"snowflake_raw.customers.segment"},
     {name:"valid_from",    dataType:"timestamp", tests:[], desc:"dbt_valid_from - when this version became current.",      upstream:"dbt snapshot metadata"},
     {name:"valid_to",      dataType:"timestamp", tests:[], desc:"dbt_valid_to - null on the current version.",             upstream:"dbt snapshot metadata"},
   ],
@@ -18990,43 +19224,65 @@ const DBT_MODEL_COLUMNS = {
 // dbt tests, keyed by the node they guard. Read-only in EDG - they are declared in the
 // repo's schema.yml, so EDG reports their result and never pretends to own them.
 const DBT_TESTS = [
+  {name:"not_null_stg_customers_customer_id", on:"stg_customers",      col:"customer_id",    kind:"not_null", severity:"error", status:"pass", lastRun:"35m ago", failedRows:0, detail:"Declared in models/staging/schema.yml"},
+  {name:"unique_mart_order_summary_order_id", on:"mart_order_summary", col:"order_id",       kind:"unique",   severity:"error", status:"pass", lastRun:"35m ago", failedRows:0, detail:"Declared in models/marts/commerce/schema.yml - guards against a product-join fan-out"},
+  {name:"unique_source_customers_customer_id",on:"snowflake_raw.customers",    col:"customer_id",    kind:"unique",   severity:"error", status:"pass", lastRun:"1h ago",  failedRows:0, detail:"Declared in models/staging/_sources.yml"},
+  {name:"not_null_source_customers_customer_id",on:"snowflake_raw.customers",  col:"customer_id",    kind:"not_null", severity:"error", status:"pass", lastRun:"1h ago",  failedRows:0, detail:"Declared in models/staging/_sources.yml"},
+  {name:"unique_source_transactions_id",      on:"snowflake_raw.transactions", col:"transaction_id", kind:"unique",   severity:"error", status:"pass", lastRun:"1h ago",  failedRows:0, detail:"Declared in models/staging/_sources.yml"},
+  {name:"not_null_source_transactions_id",    on:"snowflake_raw.transactions", col:"transaction_id", kind:"not_null", severity:"error", status:"pass", lastRun:"1h ago",  failedRows:0, detail:"Declared in models/staging/_sources.yml"},
+  {name:"unique_source_products_product_id",  on:"snowflake_raw.dim_products", col:"product_id",     kind:"unique",   severity:"error", status:"pass", lastRun:"1h ago",  failedRows:0, detail:"Declared in models/staging/_sources.yml"},
+  {name:"not_null_source_products_product_id",on:"snowflake_raw.dim_products", col:"product_id",     kind:"not_null", severity:"error", status:"pass", lastRun:"1h ago",  failedRows:0, detail:"Declared in models/staging/_sources.yml"},
   {name:"unique_stg_orders_order_id",         on:"stg_orders",  col:"order_id",    kind:"unique",          severity:"error", status:"pass", lastRun:"35m ago", failedRows:0,     detail:"Declared in models/staging/schema.yml"},
   {name:"not_null_stg_orders_order_id",       on:"stg_orders",  col:"order_id",    kind:"not_null",        severity:"error", status:"pass", lastRun:"35m ago", failedRows:0,     detail:"Declared in models/staging/schema.yml"},
   {name:"accepted_values_stg_orders_status",  on:"stg_orders",  col:"status",      kind:"accepted_values", severity:"error", status:"fail", lastRun:"35m ago", failedRows:1284,  detail:"Unexpected value refunded_pending - not in the accepted list"},
   {name:"not_null_int_orders_order_id",       on:"int_orders_enriched", col:"order_id", kind:"not_null",   severity:"error", status:"pass", lastRun:"35m ago", failedRows:0,     detail:"Declared in models/intermediate/schema.yml"},
   {name:"not_null_fct_revenue_order_id",      on:"fct_revenue", col:"order_id",    kind:"not_null",        severity:"error", status:"pass", lastRun:"35m ago", failedRows:0,     detail:"Declared in models/marts/finance/schema.yml"},
   {name:"relationships_fct_revenue_customer", on:"fct_revenue", col:"customer_id", kind:"relationships",   severity:"warn",  status:"warn", lastRun:"35m ago", failedRows:312,   detail:"312 customer_id values absent from customers_snapshot - backfill in progress"},
-  {name:"unique_source_orders_order_id",      on:"postgres_raw.orders", col:"order_id",     kind:"unique",   severity:"error", status:"pass", lastRun:"40m ago", failedRows:0,     detail:"Declared in models/staging/_sources.yml"},
-  {name:"not_null_source_orders_order_id",    on:"postgres_raw.orders", col:"order_id",     kind:"not_null", severity:"error", status:"pass", lastRun:"40m ago", failedRows:0,     detail:"Declared in models/staging/_sources.yml"},
+  {name:"unique_source_orders_order_id",      on:"snowflake_raw.orders", col:"order_id",     kind:"unique",   severity:"error", status:"pass", lastRun:"40m ago", failedRows:0,     detail:"Declared in models/staging/_sources.yml"},
+  {name:"not_null_source_orders_order_id",    on:"snowflake_raw.orders", col:"order_id",     kind:"not_null", severity:"error", status:"pass", lastRun:"40m ago", failedRows:0,     detail:"Declared in models/staging/_sources.yml"},
   {name:"unique_country_codes_country_code",  on:"country_codes",       col:"country_code", kind:"unique",   severity:"error", status:"pass", lastRun:"3w ago",  failedRows:0,     detail:"Declared in seeds/schema.yml"},
   {name:"not_null_country_codes_country_code",on:"country_codes",       col:"country_code", kind:"not_null", severity:"error", status:"pass", lastRun:"3w ago",  failedRows:0,     detail:"Declared in seeds/schema.yml"},
 ];
 
 // dbt Cloud run history for the job asset.
 const DBT_RUNS = [
-  {id:"#4821", trigger:"Schedule",  status:"success", started:"35m ago", duration:"7m 51s", models:6, tests:10, failed:1, note:"1 test failure (accepted_values on stg_orders.status), run continued"},
-  {id:"#4820", trigger:"Pull request", status:"success", started:"6h ago", duration:"8m 12s", models:6, tests:10, failed:0, note:"CI run for PR #338 - add customer_tier to the mart"},
-  {id:"#4819", trigger:"Schedule",  status:"success", started:"1d ago",  duration:"7m 40s", models:6, tests:10, failed:0, note:""},
-  {id:"#4818", trigger:"Schedule",  status:"failed",  started:"2d ago",  duration:"1m 04s", models:1, tests:0, failed:0, note:"Source freshness error on postgres_raw.orders - credentials rotation not reflected in the connection"},
-  {id:"#4817", trigger:"Manual",    status:"success", started:"2d ago",  duration:"9m 22s", models:6, tests:10, failed:0, note:"Full refresh after the incremental model was rebuilt"},
+  {id:"#4821", trigger:"Schedule",  status:"success", started:"35m ago", duration:"7m 51s", models:7, tests:20, failed:1, note:"1 test failure (accepted_values on stg_orders.status), run continued"},
+  {id:"#4820", trigger:"Pull request", status:"success", started:"6h ago", duration:"8m 12s", models:7, tests:20, failed:0, note:"CI run for PR #338 - add customer_tier to the mart"},
+  {id:"#4819", trigger:"Schedule",  status:"success", started:"1d ago",  duration:"7m 40s", models:7, tests:20, failed:0, note:""},
+  {id:"#4818", trigger:"Schedule",  status:"failed",  started:"2d ago",  duration:"1m 04s", models:1, tests:0, failed:0, note:"Source freshness error on snowflake_raw.orders - credentials rotation not reflected in the connection"},
+  {id:"#4817", trigger:"Manual",    status:"success", started:"2d ago",  duration:"9m 22s", models:7, tests:20, failed:0, note:"Full refresh after the incremental model was rebuilt"},
 ];
 
 // Per-object profile content: props = labelled key/values; rel = related objects.
 const DBT_PROFILE = {
-  "jnj_analytics":{props:[["Object type","dbt Project"],["dbt Cloud account","jnj"],["Environment","production"],["Contents","3 models · 1 source · 1 seed · 1 snapshot · 10 tests · 1 metric · 1 exposure"],["Repository","github.com/jnj/analytics"],["Branch","main"],["dbt version","1.8"]],
-    rel:{contains:[{name:"postgres_raw.orders",type:"dbt Source"},{name:"stg_orders",type:"dbt Model"},{name:"int_orders_enriched",type:"dbt Model"},{name:"fct_revenue",type:"dbt Model"},{name:"country_codes",type:"dbt Seed"},{name:"customers_snapshot",type:"dbt Snapshot"},{name:"daily_revenue",type:"dbt Metric"},{name:"exec_revenue_dashboard",type:"dbt Exposure"},{name:"nightly_production",type:"dbt Job"}]}},
-  "postgres_raw.orders":{props:[["Object type","dbt Source"],["Source name","postgres_raw"],["Table","orders"],["Physical location","postgresql_prod / PRODUCT / orders"],["Freshness contract","warn 12h · error 24h"],["Tests","2"],["Loader","Fivetran"]],
-    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"product_events",type:"Table"}],downstream:[{name:"stg_orders",type:"dbt Model"}]}},
-  "stg_orders":{props:[["Object type","dbt Model (staging)"],["Materialization","view"],["Target","COMMERCE_STG / stg_orders"],["Refs","source postgres_raw.orders"],["Tests","3 (1 failing)"],["Last run","35m ago · 14s"]],
-    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"postgres_raw.orders",type:"dbt Source"}],downstream:[{name:"int_orders_enriched",type:"dbt Model"}]}},
-  "int_orders_enriched":{props:[["Object type","dbt Model (intermediate)"],["Materialization","incremental · merge on order_id"],["Target","COMMERCE_INT / int_orders_enriched"],["Refs","stg_orders, country_codes, customers_snapshot"],["Tests","1"],["Last run","35m ago · 2m 41s"]],
-    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"stg_orders",type:"dbt Model"},{name:"country_codes",type:"dbt Seed"},{name:"customers_snapshot",type:"dbt Snapshot"}],downstream:[{name:"fct_revenue",type:"dbt Model"}]}},
+  "snowflake_raw.customers":{props:[["Object type","dbt Source"],["Source name","snowflake_raw"],["Table","customers"],["Physical location","SNOWFLAKE_PROD / COMMERCE / customers"],["Freshness contract","warn 12h · error 12h"],["Tests","2"],["Loader","Fivetran (Salesforce)"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"customers",type:"Table"}],downstream:[{name:"stg_customers",type:"dbt Model"},{name:"customers_snapshot",type:"dbt Snapshot"}]}},
+  "snowflake_raw.transactions":{props:[["Object type","dbt Source"],["Source name","snowflake_raw"],["Table","transactions"],["Physical location","SNOWFLAKE_PROD / FINANCE / transactions"],["Freshness contract","warn 6h · error 12h"],["Tests","2"],["Loader","Fivetran"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"transactions",type:"Table"}],downstream:[{name:"int_orders_enriched",type:"dbt Model"}]}},
+  "snowflake_raw.dim_products":{props:[["Object type","dbt Source"],["Source name","snowflake_raw"],["Table","dim_products"],["Physical location","SNOWFLAKE_PROD / COMMERCE / dim_products"],["Freshness contract","warn 24h · error 48h"],["Tests","2"],["Note","dbt reads this dimension; it does not build it"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"dim_products",type:"Table"}],downstream:[{name:"mart_order_summary",type:"dbt Model"}]}},
+  "stg_customers":{props:[["Object type","dbt Model (staging)"],["Materialization","view"],["Target","COMMERCE_STG / stg_customers"],["Refs","source snowflake_raw.customers"],["Tests","1"],["Last run","35m ago · 6s"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"snowflake_raw.customers",type:"dbt Source"}],downstream:[{name:"mart_order_summary",type:"dbt Model"}]}},
+  "mart_order_summary":{props:[["Object type","dbt Model (mart)"],["Materialization","view"],["Materializes","SNOWFLAKE_PROD / COMMERCE / vw_order_summary"],["Refs","fct_revenue, stg_customers, stg_orders, source snowflake_raw.dim_products"],["Tests","1"],["Last run","35m ago · 51s"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"fct_revenue",type:"dbt Model"},{name:"stg_customers",type:"dbt Model"},{name:"stg_orders",type:"dbt Model"},{name:"snowflake_raw.dim_products",type:"dbt Source"}],downstream:[{name:"vw_order_summary",type:"View"}]}},
+  "not_null_stg_customers_customer_id":{props:[["Object type","dbt Test (generic)"],["Test","not_null"],["Tests","stg_customers.customer_id"],["Severity","error"],["Result","Pass · 0 failing rows"],["Declared in","models/staging/schema.yml"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"stg_customers",type:"dbt Model"}]}},
+  "unique_mart_order_summary_order_id":{props:[["Object type","dbt Test (generic)"],["Test","unique"],["Tests","mart_order_summary.order_id"],["Severity","error"],["Result","Pass · 0 failing rows"],["Declared in","models/marts/commerce/schema.yml"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"mart_order_summary",type:"dbt Model"}]}},
+  "jnj_analytics":{props:[["Object type","dbt Project"],["dbt Cloud account","jnj"],["Environment","production"],["Contents","5 models · 4 sources · 1 seed · 1 snapshot · 20 tests · 1 metric · 1 exposure"],["Repository","github.com/jnj/analytics"],["Branch","main"],["dbt version","1.8"]],
+    rel:{contains:[{name:"snowflake_raw.orders",type:"dbt Source"},{name:"stg_orders",type:"dbt Model"},{name:"int_orders_enriched",type:"dbt Model"},{name:"fct_revenue",type:"dbt Model"},{name:"country_codes",type:"dbt Seed"},{name:"customers_snapshot",type:"dbt Snapshot"},{name:"daily_revenue",type:"dbt Metric"},{name:"exec_revenue_dashboard",type:"dbt Exposure"},{name:"nightly_production",type:"dbt Job"}]}},
+  "snowflake_raw.orders":{props:[["Object type","dbt Source"],["Source name","snowflake_raw"],["Table","orders"],["Physical location","SNOWFLAKE_PROD / COMMERCE / orders"],["Freshness contract","warn 12h · error 24h"],["Tests","2"],["Loader","Fivetran"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"orders",type:"Table"}],downstream:[{name:"stg_orders",type:"dbt Model"}]}},
+  "stg_orders":{props:[["Object type","dbt Model (staging)"],["Materialization","view"],["Target","COMMERCE_STG / stg_orders"],["Refs","source snowflake_raw.orders"],["Tests","3 (1 failing)"],["Last run","35m ago · 14s"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"snowflake_raw.orders",type:"dbt Source"}],downstream:[{name:"int_orders_enriched",type:"dbt Model"},{name:"mart_order_summary",type:"dbt Model"}]}},
+  "int_orders_enriched":{props:[["Object type","dbt Model (intermediate)"],["Materialization","incremental · merge on order_id"],["Target","COMMERCE_INT / int_orders_enriched"],["Refs","stg_orders, country_codes, customers_snapshot, source snowflake_raw.transactions"],["Tests","1"],["Last run","35m ago · 2m 41s"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"stg_orders",type:"dbt Model"},{name:"country_codes",type:"dbt Seed"},{name:"customers_snapshot",type:"dbt Snapshot"},{name:"snowflake_raw.transactions",type:"dbt Source"}],downstream:[{name:"fct_revenue",type:"dbt Model"}]}},
   "fct_revenue":{props:[["Object type","dbt Model (mart)"],["Materialization","table"],["Materializes","SNOWFLAKE_PROD / COMMERCE / orders_fact"],["Refs","int_orders_enriched"],["Tests","2 (1 warning)"],["Last run","35m ago · 4m 08s"]],
-    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"int_orders_enriched",type:"dbt Model"}],downstream:[{name:"orders_fact",type:"Table"},{name:"daily_revenue",type:"dbt Metric"},{name:"exec_revenue_dashboard",type:"dbt Exposure"}]}},
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"int_orders_enriched",type:"dbt Model"}],downstream:[{name:"orders_fact",type:"Table"},{name:"mart_order_summary",type:"dbt Model"},{name:"daily_revenue",type:"dbt Metric"},{name:"exec_revenue_dashboard",type:"dbt Exposure"}]}},
   "country_codes":{props:[["Object type","dbt Seed"],["Source file","seeds/country_codes.csv"],["Target","REFERENCE / country_codes"],["Rows","249"],["Tests","2"],["Loaded","3w ago"]],
     rel:{parent:{name:"jnj_analytics",type:"dbt Project"},downstream:[{name:"int_orders_enriched",type:"dbt Model"}]}},
-  "customers_snapshot":{props:[["Object type","dbt Snapshot"],["Strategy","timestamp on updated_at"],["Unique key","customer_id"],["Target","COMMERCE_SNAP / customers_snapshot"],["History","Type-2 (valid_from / valid_to)"],["Last run","35m ago · 48s"]],
-    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},downstream:[{name:"int_orders_enriched",type:"dbt Model"}]}},
+  "customers_snapshot":{props:[["Object type","dbt Snapshot"],["Reads","source snowflake_raw.customers"],["Strategy","timestamp on updated_at"],["Unique key","customer_id"],["Target","COMMERCE_SNAP / customers_snapshot"],["History","Type-2 (valid_from / valid_to)"],["Last run","35m ago · 48s"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"snowflake_raw.customers",type:"dbt Source"}],downstream:[{name:"int_orders_enriched",type:"dbt Model"}]}},
   "unique_stg_orders_order_id":{props:[["Object type","dbt Test (generic)"],["Test","unique"],["Tests","stg_orders.order_id"],["Severity","error"],["Result","Pass · 0 failing rows"],["Declared in","models/staging/schema.yml"]],
     rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"stg_orders",type:"dbt Model"}]}},
   "not_null_fct_revenue_order_id":{props:[["Object type","dbt Test (generic)"],["Test","not_null"],["Tests","fct_revenue.order_id"],["Severity","error"],["Result","Pass · 0 failing rows"],["Declared in","models/marts/finance/schema.yml"]],
@@ -19039,10 +19295,10 @@ const DBT_PROFILE = {
     rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"stg_orders",type:"dbt Model"}]}},
   "not_null_int_orders_order_id":{props:[["Object type","dbt Test (generic)"],["Test","not_null"],["Tests","int_orders_enriched.order_id"],["Severity","error"],["Result","Pass · 0 failing rows"],["Declared in","models/intermediate/schema.yml"]],
     rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"int_orders_enriched",type:"dbt Model"}]}},
-  "unique_source_orders_order_id":{props:[["Object type","dbt Test (generic)"],["Test","unique"],["Tests","postgres_raw.orders.order_id"],["Severity","error"],["Result","Pass · 0 failing rows"],["Declared in","models/staging/_sources.yml"]],
-    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"postgres_raw.orders",type:"dbt Source"}]}},
-  "not_null_source_orders_order_id":{props:[["Object type","dbt Test (generic)"],["Test","not_null"],["Tests","postgres_raw.orders.order_id"],["Severity","error"],["Result","Pass · 0 failing rows"],["Declared in","models/staging/_sources.yml"]],
-    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"postgres_raw.orders",type:"dbt Source"}]}},
+  "unique_source_orders_order_id":{props:[["Object type","dbt Test (generic)"],["Test","unique"],["Tests","snowflake_raw.orders.order_id"],["Severity","error"],["Result","Pass · 0 failing rows"],["Declared in","models/staging/_sources.yml"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"snowflake_raw.orders",type:"dbt Source"}]}},
+  "not_null_source_orders_order_id":{props:[["Object type","dbt Test (generic)"],["Test","not_null"],["Tests","snowflake_raw.orders.order_id"],["Severity","error"],["Result","Pass · 0 failing rows"],["Declared in","models/staging/_sources.yml"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"snowflake_raw.orders",type:"dbt Source"}]}},
   "unique_country_codes_country_code":{props:[["Object type","dbt Test (generic)"],["Test","unique"],["Tests","country_codes.country_code"],["Severity","error"],["Result","Pass · 0 failing rows"],["Declared in","seeds/schema.yml"]],
     rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"country_codes",type:"dbt Seed"}]}},
   "not_null_country_codes_country_code":{props:[["Object type","dbt Test (generic)"],["Test","not_null"],["Tests","country_codes.country_code"],["Severity","error"],["Result","Pass · 0 failing rows"],["Declared in","seeds/schema.yml"]],
@@ -19382,40 +19638,56 @@ const DbtTestsPanel = ({asset,onToast})=>{
 // OpenMetadata half of the model: a consumer who lands on the physical table sees who
 // built it, how, when it last ran, whether its tests passed, and the SQL behind it.
 const DbtOnTablePanel = ({asset,onAsset})=>{
-  const modelName=asset.dbtModel;
-  const model=(typeof ASSETS!=="undefined"?ASSETS:[]).find(a=>a.name===modelName&&a.service==="dbt");
-  const m=DBT_META[modelName];
-  if(!m) return <div className="fadeIn" style={{fontSize:12.5,color:T.textMuted}}>No dbt model builds this asset.</div>;
+  const isBuilt   = !!asset.dbtModel;                       // dbt materializes this table
+  const refName   = asset.dbtModel || asset.dbtSource;      // ...or merely declares it
+  const ref=(typeof ASSETS!=="undefined"?ASSETS:[]).find(a=>a.name===refName&&a.service==="dbt");
+  const m=DBT_META[refName];
+  if(!m) return <div className="fadeIn" style={{fontSize:12.5,color:T.textMuted}}>dbt neither builds nor reads this asset.</div>;
+  const readers=(DBT_PROFILE[refName]&&DBT_PROFILE[refName].rel&&DBT_PROFILE[refName].rel.downstream)||[];
   return (
     <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:16,maxWidth:900}}>
       <Card2>
         <div style={{padding:"14px 16px"}}>
-          <SH title="Built by dbt" sub="This table is not hand-maintained — a dbt model owns its shape and contents"/>
+          <SH title={isBuilt?"Built by dbt":"Read by dbt"}
+            sub={isBuilt
+              ? "This table is not hand-maintained — a dbt model owns its shape and contents"
+              : "dbt does not build this table; it declares it as a source and holds it to a freshness contract"}/>
           <div style={{display:"flex",alignItems:"center",gap:12,padding:"11px 13px",background:"rgba(255,105,75,.06)",
             border:"1px solid rgba(255,105,75,.25)",borderRadius:9}}>
             <ServiceIcon service="dbt" size={22}/>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:13,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{modelName}</div>
-              <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>dbt Model · materialized as {m.materialization} → {m.schema} / {m.alias}</div>
+              <div style={{fontSize:13,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{refName}</div>
+              <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>
+                {isBuilt
+                  ? "dbt Model · materialized as "+m.materialization+" → "+m.schema+" / "+m.alias
+                  : "dbt Source · freshness "+(m.freshnessContract||"not contracted")+" · checked "+m.lastRun}
+              </div>
             </div>
-            {model&&onAsset&&<Btn small ghost onClick={()=>onAsset(model)}>Open dbt model</Btn>}
+            {ref&&onAsset&&<Btn small ghost onClick={()=>onAsset(ref)}>{isBuilt?"Open dbt model":"Open dbt source"}</Btn>}
           </div>
         </div>
       </Card2>
 
       <Card2>
         <div style={{padding:"14px 16px"}}>
-          <SH title="dbt" sub="Run state, tags, meta and the tests guarding this table"/>
-          <DbtEnginePanel name={modelName}/>
+          <SH title="dbt" sub={isBuilt?"Run state, tags, meta and the tests guarding this table":"Freshness state, tags, meta and the source tests guarding this table"}/>
+          <DbtEnginePanel name={refName}/>
         </div>
       </Card2>
 
-      <Card2>
-        <div style={{padding:"14px 16px"}}>
-          <SH title="Model SQL" sub="The definition that produced this table"/>
-          <DbtSqlBlock name={modelName}/>
-        </div>
-      </Card2>
+      {isBuilt
+        ? <Card2>
+            <div style={{padding:"14px 16px"}}>
+              <SH title="Model SQL" sub="The definition that produced this table"/>
+              <DbtSqlBlock name={refName}/>
+            </div>
+          </Card2>
+        : readers.length>0&&<Card2>
+            <div style={{padding:"14px 16px"}}>
+              <SH title="Read by" sub="dbt objects that consume this table — a breaking change here breaks these"/>
+              {readers.map(r=><DbtRelRow key={r.name} name={r.name} type={r.type} rel="Consumer" onAsset={onAsset}/>)}
+            </div>
+          </Card2>}
     </div>
   );
 };
@@ -19508,8 +19780,10 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
   const dbtHasSql  = isDbt && !!DBT_SQL[asset.name];
   const dbtHasTests= isDbt && DBT_TESTS.some(t=>t.on===asset.name);
   const dbtInDag   = isDbt && !["dbt Project","dbt Job"].includes(asset.type);
-  // A warehouse table built by a dbt model carries the dbt story on its own profile.
-  const dbtOnTable = !isDbt && !!asset.dbtModel && !!DBT_META[asset.dbtModel];
+  // A warehouse table carries the dbt story on its own profile when dbt builds it
+  // (materialized by a model) or reads it (declared as a source).
+  const dbtRef     = asset.dbtModel || asset.dbtSource;
+  const dbtOnTable = !isDbt && !!dbtRef && !!DBT_META[dbtRef];
   const tabs = isDbt
     ? [
         {key:"overview",label:"Overview"},
@@ -28598,7 +28872,7 @@ const OM_CONNECTORS = [
 
   // ── PIPELINE ──
   {name:"Apache Airflow",  cat:"Pipeline",       logoUrl:SI("apacheairflow","017CEE"),            desc:"Workflow orchestration platform for data pipelines",  status:"Connected",  assets:89,   lastSync:"3m ago"},
-  {name:"dbt",             cat:"Pipeline",       logoUrl:SI("dbt","FF694B"),                      desc:"SQL transformation layer. dbt Cloud or dbt Core, chosen per connection", status:"Connected",  assets:20,   lastSync:"7m ago"},
+  {name:"dbt",             cat:"Pipeline",       logoUrl:SI("dbt","FF694B"),                      desc:"SQL transformation layer. dbt Cloud or dbt Core, chosen per connection", status:"Connected",  assets:27,   lastSync:"7m ago"},
   {name:"Dagster",         cat:"Pipeline",       logoUrl:SI("dagster","4F43DD"),                  desc:"Cloud-native data orchestration platform",           status:"Available",  assets:0,    lastSync:null},
   {name:"Fivetran",        cat:"Pipeline",       logoUrl:SI("fivetran","0073FF"),                 desc:"Fully managed ELT data integration service",          status:"Warning",    assets:48,   lastSync:"3h ago"},
   {name:"Airbyte",         cat:"Pipeline",       logoUrl:SI("airbyte","615EFF"),                  desc:"Open-source ELT data integration platform",           status:"Available",  assets:0,    lastSync:null},
