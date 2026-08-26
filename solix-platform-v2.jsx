@@ -211,6 +211,43 @@ const TABLEAU_ASSETS = [
 ];
 ASSETS.push(...TABLEAU_ASSETS);
 
+// -- orders_fact - the Snowflake table the dbt chain materializes. Referenced by the
+//    Tableau profiles and BI lineage as their physical upstream, so it belongs in the catalog. --
+const DBT_TARGET_ASSETS = [
+  {id:6050,name:"orders_fact", type:"Table", domain:"Commerce", owner:"maya.chen", owners:["maya.chen"], steward:"dev.patel", stewards:["dev.patel"], cert:"Approved", quality:94, usage:"High", updated:"35m ago", service:"snowflake", connectionLabel:"Snowflake DWH", db:"SNOWFLAKE_PROD / COMMERCE / orders_fact", tier:1, rows:"48.2M", size:"11.2 GB", tags:["PII","revenue","KPI"], description:"Order-grain revenue fact table. Built and owned by the fct_revenue dbt model; consumed by the Tableau Orders_Certified data source.", slaFreshness:"1h", path:["SNOWFLAKE_PROD","COMMERCE"], parentId:101, assetLevel:"table", dbtModel:"fct_revenue"},
+];
+ASSETS.push(...DBT_TARGET_ASSETS);
+
+// -- dbt Cloud assets - the object types the dbt connector crawls into the catalog.
+//    Follows Atlan's dbt crawl model: Project > Model / Source / Seed / Snapshot / Test /
+//    Metric / Exposure, plus the dbt Cloud Job that runs them. Every object type is its own
+//    catalog asset so it can hold owners, certification and policy scope.
+//    Model COLUMNS are not separate rows - like table columns and Tableau fields they live
+//    inside their parent's profile (dbt Model -> Columns tab, see DBT_MODEL_COLUMNS). --
+const DBT_ASSETS = [
+  {id:6100,name:"jnj_analytics",                     type:"dbt Project",  domain:"Platform", owner:"james.oh",   owners:["james.oh"],   steward:"maya.chen", stewards:["maya.chen"], cert:"Approved",   quality:0,  usage:"High", updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics", tier:1, rows:"—", size:"—", tags:["etl"], description:"dbt Cloud project (account jnj · production environment). Root container for all models, sources, seeds, snapshots, tests, metrics and exposures.", slaFreshness:"1h"},
+  {id:6101,name:"postgres_raw.orders",               type:"dbt Source",   domain:"Commerce", owner:"dev.patel",  owners:["dev.patel"],  steward:"priya.nair",stewards:["priya.nair"],cert:"Approved",   quality:88, usage:"High", updated:"40m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / sources / postgres_raw.orders", tier:2, rows:"48.6M", size:"—", tags:["PII","raw"], description:"Declared dbt source pointing at the raw Postgres orders table. Carries a freshness contract (warn 12h / error 24h) checked on every run.", slaFreshness:"12h"},
+  {id:6102,name:"stg_orders",                        type:"dbt Model",    domain:"Commerce", owner:"dev.patel",  owners:["dev.patel"],  steward:"maya.chen", stewards:["maya.chen"], cert:"Approved",   quality:92, usage:"High", updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / models / staging / stg_orders", tier:2, rows:"48.6M", size:"—", tags:["PII","staging"], description:"Staging model - renames, casts and lightly cleans the raw Postgres orders source. Materialized as a view, so it costs nothing to store.", slaFreshness:"1h"},
+  {id:6103,name:"int_orders_enriched",               type:"dbt Model",    domain:"Commerce", owner:"maya.chen",  owners:["maya.chen"],  steward:"dev.patel", stewards:["dev.patel"], cert:"Approved",   quality:90, usage:"High", updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / models / intermediate / int_orders_enriched", tier:2, rows:"48.4M", size:"6.1 GB", tags:["PII","intermediate"], description:"Intermediate model joining staged orders to customers and country codes, and deriving gross revenue. Incremental - merges on order_id.", slaFreshness:"1h"},
+  {id:6104,name:"fct_revenue",                       type:"dbt Model",    domain:"Finance",  owner:"sarah.kim",  owners:["sarah.kim"],  steward:"alex.wu",   stewards:["alex.wu"],   cert:"Approved",   quality:95, usage:"High", updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / models / marts / finance / fct_revenue", tier:1, rows:"48.2M", size:"11.2 GB", tags:["revenue","KPI","finance"], description:"Finance mart fact model. Materializes the Snowflake orders_fact table - the certified revenue surface every downstream report reads.", slaFreshness:"1h", materializes:"orders_fact"},
+  {id:6105,name:"country_codes",                     type:"dbt Seed",     domain:"Platform", owner:"james.oh",   owners:["james.oh"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",   quality:100,usage:"Med",  updated:"3w ago",  service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / seeds / country_codes", tier:3, rows:"249", size:"18 KB", tags:["reference"], description:"Version-controlled CSV seed mapping ISO country codes to region and currency. Loaded from the dbt repo, not from a source system.", slaFreshness:"—"},
+  {id:6106,name:"customers_snapshot",                type:"dbt Snapshot", domain:"Commerce", owner:"dev.patel",  owners:["dev.patel"],  steward:"sarah.kim", stewards:["sarah.kim"], cert:"Approved",   quality:93, usage:"Med",  updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / snapshots / customers_snapshot", tier:2, rows:"4.4M", size:"2.1 GB", tags:["PII","scd2"], description:"Type-2 slowly-changing-dimension snapshot of the customers source. Preserves history with valid_from / valid_to - the audit trail source systems overwrite.", slaFreshness:"24h"},
+  {id:6110,name:"unique_stg_orders_order_id",        type:"dbt Test",     domain:"Commerce", owner:"dev.patel",  owners:["dev.patel"],  steward:"maya.chen", stewards:["maya.chen"], cert:"Approved",   quality:0,  usage:"High", updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / tests / unique_stg_orders_order_id", tier:2, rows:"—", size:"—", tags:["dq"], description:"Generic uniqueness test on stg_orders.order_id. Declared in the model's schema.yml - the grain guarantee everything downstream assumes.", slaFreshness:"1h", dbtTestOn:"stg_orders", dbtTestCol:"order_id", dbtTestKind:"unique", dbtTestStatus:"pass"},
+  {id:6111,name:"not_null_fct_revenue_order_id",     type:"dbt Test",     domain:"Finance",  owner:"sarah.kim",  owners:["sarah.kim"],  steward:"alex.wu",   stewards:["alex.wu"],   cert:"Approved",   quality:0,  usage:"High", updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / tests / not_null_fct_revenue_order_id", tier:1, rows:"—", size:"—", tags:["dq"], description:"Generic not-null test on fct_revenue.order_id. Blocks the run when the finance mart loses its key.", slaFreshness:"1h", dbtTestOn:"fct_revenue", dbtTestCol:"order_id", dbtTestKind:"not_null", dbtTestStatus:"pass"},
+  {id:6112,name:"accepted_values_stg_orders_status", type:"dbt Test",     domain:"Commerce", owner:"dev.patel",  owners:["dev.patel"],  steward:"maya.chen", stewards:["maya.chen"], cert:"Approved",   quality:0,  usage:"High", updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / tests / accepted_values_stg_orders_status", tier:2, rows:"—", size:"—", tags:["dq"], description:"Accepted-values test on stg_orders.status. Currently FAILING - the source began emitting refunded_pending, a value the mart does not handle.", slaFreshness:"1h", dbtTestOn:"stg_orders", dbtTestCol:"status", dbtTestKind:"accepted_values", dbtTestStatus:"fail"},
+  {id:6113,name:"relationships_fct_revenue_customer",type:"dbt Test",     domain:"Finance",  owner:"sarah.kim",  owners:["sarah.kim"],  steward:"alex.wu",   stewards:["alex.wu"],   cert:"In Review",  quality:0,  usage:"Med",  updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / tests / relationships_fct_revenue_customer", tier:2, rows:"—", size:"—", tags:["dq"], description:"Referential-integrity test - every fct_revenue.customer_id must exist in customers_snapshot. Warns rather than errors while the backfill completes.", slaFreshness:"1h", dbtTestOn:"fct_revenue", dbtTestCol:"customer_id", dbtTestKind:"relationships", dbtTestStatus:"warn"},
+  {id:6114,name:"not_null_stg_orders_order_id",      type:"dbt Test",     domain:"Commerce", owner:"dev.patel",  owners:["dev.patel"],  steward:"maya.chen", stewards:["maya.chen"], cert:"Approved",   quality:0,  usage:"High", updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / tests / not_null_stg_orders_order_id", tier:2, rows:"—", size:"—", tags:["dq"], description:"Generic not-null test on stg_orders.order_id. Paired with the uniqueness test to guarantee the staging grain.", slaFreshness:"1h", dbtTestOn:"stg_orders", dbtTestCol:"order_id", dbtTestKind:"not_null", dbtTestStatus:"pass"},
+  {id:6115,name:"not_null_int_orders_order_id",      type:"dbt Test",     domain:"Commerce", owner:"maya.chen",  owners:["maya.chen"],  steward:"dev.patel", stewards:["dev.patel"], cert:"Approved",   quality:0,  usage:"Med",  updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / tests / not_null_int_orders_order_id", tier:2, rows:"—", size:"—", tags:["dq"], description:"Generic not-null test on int_orders_enriched.order_id. Guards the incremental merge key.", slaFreshness:"1h", dbtTestOn:"int_orders_enriched", dbtTestCol:"order_id", dbtTestKind:"not_null", dbtTestStatus:"pass"},
+  {id:6116,name:"unique_source_orders_order_id",     type:"dbt Test",     domain:"Commerce", owner:"dev.patel",  owners:["dev.patel"],  steward:"priya.nair",stewards:["priya.nair"],cert:"Approved",   quality:0,  usage:"Med",  updated:"40m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / tests / unique_source_orders_order_id", tier:2, rows:"—", size:"—", tags:["dq"], description:"Uniqueness test declared directly on the raw source, so a duplicate is caught before it enters the project.", slaFreshness:"12h", dbtTestOn:"postgres_raw.orders", dbtTestCol:"order_id", dbtTestKind:"unique", dbtTestStatus:"pass"},
+  {id:6117,name:"not_null_source_orders_order_id",   type:"dbt Test",     domain:"Commerce", owner:"dev.patel",  owners:["dev.patel"],  steward:"priya.nair",stewards:["priya.nair"],cert:"Approved",   quality:0,  usage:"Med",  updated:"40m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / tests / not_null_source_orders_order_id", tier:2, rows:"—", size:"—", tags:["dq"], description:"Not-null test on the raw source key.", slaFreshness:"12h", dbtTestOn:"postgres_raw.orders", dbtTestCol:"order_id", dbtTestKind:"not_null", dbtTestStatus:"pass"},
+  {id:6118,name:"unique_country_codes_country_code", type:"dbt Test",     domain:"Platform", owner:"james.oh",   owners:["james.oh"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",   quality:0,  usage:"Low",  updated:"3w ago",  service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / tests / unique_country_codes_country_code", tier:3, rows:"—", size:"—", tags:["dq"], description:"Uniqueness test on the seed key. Cheap, but it is what stops a duplicated country code fanning out the revenue join.", slaFreshness:"—", dbtTestOn:"country_codes", dbtTestCol:"country_code", dbtTestKind:"unique", dbtTestStatus:"pass"},
+  {id:6119,name:"not_null_country_codes_country_code",type:"dbt Test",    domain:"Platform", owner:"james.oh",   owners:["james.oh"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",   quality:0,  usage:"Low",  updated:"3w ago",  service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / tests / not_null_country_codes_country_code", tier:3, rows:"—", size:"—", tags:["dq"], description:"Not-null test on the seed key.", slaFreshness:"—", dbtTestOn:"country_codes", dbtTestCol:"country_code", dbtTestKind:"not_null", dbtTestStatus:"pass"},
+  {id:6120,name:"daily_revenue",                     type:"dbt Metric",   domain:"Finance",  owner:"sarah.kim",  owners:["sarah.kim"],  steward:"alex.wu",   stewards:["alex.wu"],   cert:"Approved",   quality:0,  usage:"Med",  updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / metrics / daily_revenue", tier:2, rows:"—", size:"—", tags:["KPI","finance"], description:"Semantic-layer metric - sum of fct_revenue.revenue by day. One definition of daily revenue, so BI tools stop each inventing their own.", slaFreshness:"1h"},
+  {id:6130,name:"exec_revenue_dashboard",            type:"dbt Exposure", domain:"Finance",  owner:"alex.wu",    owners:["alex.wu"],    steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",   quality:0,  usage:"High", updated:"1h ago",  service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / exposures / exec_revenue_dashboard", tier:1, rows:"—", size:"—", tags:["KPI","Board reporting"], description:"Declared dbt exposure - tells dbt that the Tableau Revenue_Dashboard depends on fct_revenue, so a breaking change is caught before it ships.", slaFreshness:"1h"},
+  {id:6140,name:"nightly_production",                type:"dbt Job",      domain:"Platform", owner:"james.oh",   owners:["james.oh"],   steward:"maya.chen", stewards:["maya.chen"], cert:"Approved",   quality:0,  usage:"High", updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / jobs / nightly_production", tier:1, rows:"—", size:"—", tags:["etl"], description:"dbt Cloud job running dbt build against production on a 02:00 UTC schedule plus per-PR CI. Run history and per-model timings live on this asset.", slaFreshness:"1h"},
+];
+ASSETS.push(...DBT_ASSETS);
+
 // ─────────────────────────────────────────────
 // COLUMN METADATA (keyed by asset name)
 // ─────────────────────────────────────────────
@@ -1029,11 +1066,17 @@ const DQ_TEST_DEFINITIONS = [
   {id:"td27", name:"Column Values Distinct Ratio To Be Between", entityType:"COLUMN", dim:"Uniqueness", testPlatforms:["OpenMetadata"],        enabled:true,  params:["minValue","maxValue"],            fn:"columnValuesDistinctRatioToBeBetween", desc:"This schema defines the test ColumnValuesDistinctRatioToBeBetween. Test the ratio of distinct values to total values in a column is between min and max."},
 ];
 
+// -- dbt-authored tests are ingested, not authored in EDG. They arrive with the dbt run
+//    results (run_results.json / the dbt Cloud API) and are marked source:"dbt" so a steward
+//    can tell at a glance which checks EDG owns and which the repo owns. --
+const DBT_TEST_SUITE = {id:"ts5",name:"orders_fact_dbt",table:"commerce.orders_fact",type:"table",testCount:3,success:1,failed:1,aborted:1,lastRun:"35m ago",nextRun:"in 8h",schedule:"0 2 * * *",owner:"sarah.kim",desc:"dbt tests declared in the fct_revenue model's schema.yml, ingested from dbt Cloud run results",source:"dbt"};
+
 const DQ_SUITES = [
   {id:"ts1",name:"orders_suite",         table:"commerce.orders",             type:"table", testCount:8, success:6,failed:1,aborted:1,lastRun:"2h ago",  nextRun:"in 6h", schedule:"0 */8 * * *", owner:"dev.patel",    desc:"All quality checks for the orders table"},
   {id:"ts2",name:"users_suite",          table:"platform.users",              type:"table", testCount:5, success:5,failed:0,aborted:0,lastRun:"1h ago",  nextRun:"in 7h", schedule:"0 */8 * * *", owner:"maya.chen",    desc:"User data completeness and format checks"},
   {id:"ts3",name:"product_events_suite", table:"analytics.product_events",    type:"table", testCount:6, success:4,failed:2,aborted:0,lastRun:"3h ago",  nextRun:"in 5h", schedule:"0 */4 * * *", owner:"arjun.sharma", desc:"Event pipeline volume and schema checks"},
   {id:"ts4",name:"fact_revenue_suite",   table:"finance.fact_revenue",        type:"table", testCount:7, success:7,failed:0,aborted:0,lastRun:"6h ago",  nextRun:"in 6h", schedule:"0 6 * * *",   owner:"dev.patel",    desc:"Finance accuracy and sum validation"},
+  DBT_TEST_SUITE,
   {id:"ts5",name:"PII Column Tests",     table:"",                            type:"bundle",testCount:12,success:10,failed:1,aborted:1,lastRun:"2h ago", nextRun:"",       schedule:"",            owner:"maya.chen",    desc:"All tests on columns tagged as PII across all schemas"},
   {id:"ts6",name:"Finance Quality Gate", table:"",                            type:"bundle",testCount:15,success:14,failed:0,aborted:1,lastRun:"4h ago", nextRun:"",       schedule:"",            owner:"dev.patel",    desc:"Revenue and transaction accuracy checks required for FP&A sign-off"},
   {id:"ts7",name:"Critical Tables SLA",  table:"",                            type:"bundle",testCount:9, success:8, failed:0,aborted:1,lastRun:"1h ago", nextRun:"",       schedule:"",            owner:"arjun.sharma", desc:"Freshness and row count checks for all SLA-monitored tables"},
@@ -1041,6 +1084,10 @@ const DQ_SUITES = [
 
 // status: "Success" | "Failed" | "Aborted"
 const DQ_TEST_CASES = [
+  // -- Ingested from dbt (read-only in EDG; declared in the dbt repo's schema.yml) --
+  {id:"tcd1", name:"fct_revenue.order_id not null",        suiteId:"ts5",table:"commerce.orders_fact", col:"order_id",    defId:"td21",defName:"Column Values To Be Not Null", dim:"Completeness", status:"Success", lastVal:"0 nulls",           expected:"0 null values",                                              lastRun:"35m ago", history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{}, source:"dbt", dbtTest:"not_null_fct_revenue_order_id", readOnly:true, failedReason:"", incidentId:null},
+  {id:"tcd2", name:"fct_revenue.customer_id relationships",suiteId:"ts5",table:"commerce.orders_fact", col:"customer_id", defId:"td19",defName:"Column Values To Be In Set",   dim:"Consistency",  status:"Aborted", lastVal:"312 orphans",       expected:"every customer_id present in customers_snapshot",            lastRun:"35m ago", history:[1,1,1,1,1,1,1,1,1,1,0.5,0.5,0.5,0.5,0.5], params:{}, source:"dbt", dbtTest:"relationships_fct_revenue_customer", readOnly:true, failedReason:"312 customer_id values absent from customers_snapshot — backfill in progress. dbt severity is warn, so the run continued.", incidentId:null},
+  {id:"tcd3", name:"stg_orders.status accepted values",    suiteId:"ts5",table:"commerce.orders_fact", col:"order_status",defId:"td19",defName:"Column Values To Be In Set",   dim:"Validity",     status:"Failed",  lastVal:"refunded_pending",  expected:"pending, confirmed, shipped, delivered, cancelled, refunded",  lastRun:"35m ago", history:[1,1,1,1,1,1,1,1,1,1,0,0,0,0,0], params:{}, source:"dbt", dbtTest:"accepted_values_stg_orders_status", readOnly:true, failedReason:"Upstream staging model emits refunded_pending, which the finance mart does not handle. Fix in the dbt repo, not in EDG.", incidentId:null},
   {id:"tc1", name:"orders.total_amount value range",    suiteId:"ts1",table:"commerce.orders",         col:"total_amount", defId:"td18",defName:"Column Values To Be Between",       dim:"Validity",     status:"Success", lastVal:"4,829.50",   expected:"0 — 100,000",                                         lastRun:"2h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{minValue:0,maxValue:100000},     failedReason:"",                                incidentId:null},
   {id:"tc2", name:"orders row count range",             suiteId:"ts1",table:"commerce.orders",         col:null,           defId:"td1", defName:"Table Row Count To Be Between",      dim:"Volume",       status:"Aborted", lastVal:"48,293",     expected:"50,000 — 80,000",                                     lastRun:"2h ago",  history:[1,1,1,1,1,1,0.5,1,1,0.5,0.5,0.5,0.5,0.5,0.5], params:{minValue:50000,maxValue:80000}, failedReason:"Row count 48,293 is below minimum threshold 50,000", incidentId:"inc3"},
   {id:"tc3", name:"orders.status value in set",         suiteId:"ts1",table:"commerce.orders",         col:"status",       defId:"td19",defName:"Column Values To Be In Set",         dim:"Validity",     status:"Failed",  lastVal:"refunded_pending", expected:"pending, confirmed, shipped, delivered, cancelled, refunded", lastRun:"2h ago",history:[1,1,1,1,1,1,1,1,1,1,0,0,0,0,0], params:{allowedValues:["pending","confirmed","shipped","delivered","cancelled","refunded"]}, failedReason:"Found unexpected value 'refunded_pending' in 847 rows", incidentId:"inc1"},
@@ -2977,6 +3024,16 @@ const TYPE_META = {
   "Calculated Field":  {c:"#d97706", bg:"rgba(217,119,6,.08)",  icon:"ƒ"},
   Flow:                {c:"#0ea5e9", bg:"rgba(14,165,233,.1)",  icon:"⇄"},
   Metric:              {c:"#a78bfa", bg:"rgba(167,139,250,.1)", icon:"◎"},
+  // -- dbt object types (dbt brand orange; tests green, exposures violet) --
+  "dbt Project":        {c:"#ff694b", bg:"rgba(255,105,75,.07)", icon:"▤"},
+  "dbt Model":          {c:"#ff694b", bg:"rgba(255,105,75,.12)", icon:"◆"},
+  "dbt Source":         {c:"#f97316", bg:"rgba(249,115,22,.1)",  icon:"◇"},
+  "dbt Seed":           {c:"#eab308", bg:"rgba(234,179,8,.1)",   icon:"⁘"},
+  "dbt Snapshot":       {c:"#8b5cf6", bg:"rgba(139,92,246,.1)",  icon:"⧗"},
+  "dbt Test":           {c:"#16a34a", bg:"rgba(22,163,74,.1)",   icon:"✓"},
+  "dbt Metric":         {c:"#0ea5e9", bg:"rgba(14,165,233,.1)",  icon:"◎"},
+  "dbt Exposure":       {c:"#a78bfa", bg:"rgba(167,139,250,.1)", icon:"▣"},
+  "dbt Job":            {c:"#64748b", bg:"rgba(100,116,139,.1)", icon:"⟳"},
 };
 const TypeBadge = ({type})=>{
   const s = TYPE_META[type]||{c:T.textMuted,bg:T.bgHover,icon:"▪"};
@@ -12877,6 +12934,9 @@ const AssetSchema = ({asset,selCol,onColClick,onToast})=>{
 const LINEAGE_TYPE_COLOR={
   Database:"#7dd3fc", Table:"#ee2424", Dashboard:"#c4b5fd",
   "Data Source":"#16a34a", Worksheet:"#a78bfa",
+  // -- dbt node types --
+  "dbt Source":"#f97316", "dbt Model":"#ff694b", "dbt Seed":"#eab308",
+  "dbt Snapshot":"#8b5cf6", "dbt Metric":"#0ea5e9", "dbt Exposure":"#a78bfa",
 };
 
 // ─── Per-node metadata (for info panel) ──────────────────────────────────────
@@ -13069,9 +13129,17 @@ function buildLinEdges(hiddenNodes,edgesDef=LINEAGE_EDGES_DEF){
   return edgesDef
     .filter(e=>!hiddenNodes.has(e.s)&&!hiddenNodes.has(e.t))
     .map(e=>{
-      const c="#94a3b8";
+      // dbt-authored links are drawn in dbt orange and named, so a transformation never
+      // hides behind a nameless arrow. Everything else keeps the neutral edge.
+      const isDbt=e.tk==="dbt ref"||e.tk==="Materializes"||e.tk==="dbt model"
+        ||e.tk==="Metric definition"||e.tk==="Exposure"||e.tk==="Declared source"||e.tk==="Declared dependency";
+      const c=isDbt?"#fb8f66":"#94a3b8";
       return{
         id:e.id,source:e.s,target:e.t,type:"smoothstep",
+        label:e.tk||null,
+        labelShowBg:true, labelBgPadding:[5,2], labelBgBorderRadius:4,
+        labelBgStyle:{fill:"#ffffff",fillOpacity:.92,stroke:isDbt?"#fed7c3":"#e2e8f0"},
+        labelStyle:{fill:isDbt?"#c2410c":"#64748b",fontSize:9.5,fontWeight:600,fontFamily:"inherit"},
         markerEnd:{type:MarkerType.ArrowClosed,color:c,width:12,height:12},
         style:{stroke:c,strokeWidth:1.6},
       };
@@ -13112,9 +13180,182 @@ const TABLEAU_ACTIVE_BY_TYPE={
   "Worksheet":"tb_ws","Dashboard":"tb_db","Workbook":"tb_db",
   "Project":"tb_ds","Site":"tb_ds","Metric":"tb_db","Flow":"tb_tbl",
 };
-// Resolve which lineage graph an asset's Lineage tab renders. Tableau assets get the
-// BI path (with the matching node marked CURRENT); everything else keeps the default graph.
+// ===========================================================================
+// dbt LINEAGE GRAPH - the full transformation path, end to end across three
+// connectors: Postgres -> dbt (source, seed, snapshot, models, metric, exposure)
+// -> Snowflake -> Tableau. This is the graph dbt users actually care about: the
+// transformation is drawn, not hidden behind an edge labelled "Direct".
+// ===========================================================================
+const DBT_NODE_META={
+  pg_raw:  {assetType:"Table",        service:"postgres", db:"postgresql_prod / PRODUCT / orders",                     domain:"Commerce",owner:"dev.patel", steward:"priya.nair",quality:84,cert:"Approved", tags:["PII","raw"],        description:"Physical Postgres orders table. The system of record dbt declares as a source.", cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"amount",t:"decimal"},{n:"status",t:"varchar"},{n:"created_at",t:"timestamp"},{n:"region",t:"varchar"}]},
+  db_src:  {assetType:"dbt Source",   service:"dbt",      db:"jnj_analytics / sources / postgres_raw.orders",          domain:"Commerce",owner:"dev.patel", steward:"priya.nair",quality:88,cert:"Approved", tags:["PII","raw"],        description:"Declared dbt source with a freshness contract (warn 12h / error 24h). Nothing enters the project without being declared here.", cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"amount",t:"decimal"},{n:"status",t:"varchar"},{n:"created_at",t:"timestamp"},{n:"region",t:"varchar"}]},
+  db_seed: {assetType:"dbt Seed",     service:"dbt",      db:"jnj_analytics / seeds / country_codes",                  domain:"Platform",owner:"james.oh",  steward:"james.oh",  quality:100,cert:"Approved",tags:["reference"],        description:"Version-controlled CSV seed. Country code to region and currency mapping, loaded from the dbt repo.", cols:[{n:"country_code",t:"varchar"},{n:"region",t:"varchar"},{n:"currency",t:"varchar"}]},
+  db_snap: {assetType:"dbt Snapshot", service:"dbt",      db:"jnj_analytics / snapshots / customers_snapshot",         domain:"Commerce",owner:"dev.patel", steward:"sarah.kim", quality:93,cert:"Approved", tags:["PII","scd2"],       description:"Type-2 SCD snapshot of customers. Preserves the history the source system overwrites.", cols:[{n:"customer_id",t:"bigint"},{n:"customer_tier",t:"varchar"},{n:"valid_from",t:"timestamp"},{n:"valid_to",t:"timestamp"}]},
+  db_stg:  {assetType:"dbt Model",    service:"dbt",      db:"jnj_analytics / models / staging / stg_orders",          domain:"Commerce",owner:"dev.patel", steward:"maya.chen", quality:92,cert:"Approved", tags:["PII","staging"],    description:"Staging model (view). Renames, casts and lightly cleans the raw source. 3 dbt tests, 1 failing.", cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"amount",t:"decimal"},{n:"status",t:"varchar"},{n:"order_date",t:"date"},{n:"region",t:"varchar"}]},
+  db_int:  {assetType:"dbt Model",    service:"dbt",      db:"jnj_analytics / models / intermediate / int_orders_enriched",domain:"Commerce",owner:"maya.chen",steward:"dev.patel",quality:90,cert:"Approved",tags:["PII","intermediate"],description:"Intermediate model (incremental, merge on order_id). Joins staged orders to the customer snapshot and the country seed, derives gross revenue.", cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"gross_revenue",t:"decimal"},{n:"status",t:"varchar"},{n:"order_date",t:"date"},{n:"region",t:"varchar"},{n:"customer_tier",t:"varchar"}]},
+  db_fct:  {assetType:"dbt Model",    service:"dbt",      db:"jnj_analytics / models / marts / finance / fct_revenue", domain:"Finance", owner:"sarah.kim", steward:"alex.wu",   quality:95,cert:"Approved", tags:["revenue","KPI"],    description:"Finance mart fact model (table). Materializes the Snowflake orders_fact table - the certified revenue surface.", cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"revenue",t:"decimal"},{n:"order_status",t:"varchar"},{n:"order_date",t:"date"},{n:"region",t:"varchar"}]},
+  db_metric:{assetType:"dbt Metric", service:"dbt",      db:"jnj_analytics / metrics / daily_revenue",                domain:"Finance", owner:"sarah.kim", steward:"alex.wu",   quality:0, cert:"Approved", tags:["KPI"],              description:"Semantic-layer metric: sum of revenue by day, defined once over fct_revenue.", cols:[{n:"revenue",t:"sum"},{n:"order_date",t:"time grain"}]},
+  db_expo: {assetType:"dbt Exposure",service:"dbt",      db:"jnj_analytics / exposures / exec_revenue_dashboard",     domain:"Finance", owner:"alex.wu",   steward:"james.oh",  quality:0, cert:"Approved", tags:["Board reporting"],  description:"Declared exposure. Names the Tableau dashboard as a dependant so a breaking change to fct_revenue fails CI, not the board meeting.", cols:[{n:"depends_on",t:"fct_revenue"},{n:"type",t:"dashboard"}]},
+  sf_tbl:  {assetType:"Table",        service:"snowflake",db:"SNOWFLAKE_PROD / COMMERCE / orders_fact",                domain:"Commerce",owner:"maya.chen", steward:"dev.patel", quality:94,cert:"Approved", tags:["PII","revenue"],    description:"The physical Snowflake table fct_revenue writes. Governed in EDG, built by dbt, read by Tableau.", cols:[{n:"order_amount",t:"decimal"},{n:"order_date",t:"date"},{n:"region",t:"varchar"},{n:"customer_id",t:"bigint"}]},
+  tbl_ds:  {assetType:"Data Source",  service:"tableau",  db:"Analytics / Finance / Orders_Certified",                 domain:"Finance", owner:"alex.wu",   steward:"james.oh",  quality:90,cert:"Approved", tags:["revenue","KPI"],    description:"Published, certified Tableau data source reading the Snowflake table via custom SQL.", cols:[{n:"revenue",t:"field"},{n:"yoy_growth_pct",t:"calc"},{n:"region",t:"field"},{n:"order_date",t:"field"}]},
+  tbl_ws:  {assetType:"Worksheet",    service:"tableau",  db:"Analytics / Finance / Revenue_by_Region",                domain:"Finance", owner:"alex.wu",   steward:"james.oh",  quality:86,cert:"Approved", tags:["KPI"],              description:"Worksheet plotting revenue by region.", cols:[{n:"revenue",t:"measure"},{n:"region",t:"dim"}]},
+  tbl_db:  {assetType:"Dashboard",    service:"tableau",  db:"Analytics / Finance / Revenue_Dashboard",                domain:"Finance", owner:"alex.wu",   steward:"james.oh",  quality:88,cert:"Approved", tags:["KPI","Board reporting"],description:"Executive revenue dashboard. Consumer end of the whole chain, and the target of the dbt exposure.", cols:[{n:"total_revenue",t:"decimal"},{n:"region",t:"dim"}]},
+};
+const DBT_TOPO={
+  pg_raw:  {x:0,   y:210,label:"orders",                 upstream:[],                            downstream:["db_src"]},
+  db_src:  {x:300, y:210,label:"postgres_raw.orders",    upstream:["pg_raw"],                    downstream:["db_stg"]},
+  db_seed: {x:600, y:30, label:"country_codes",          upstream:[],                            downstream:["db_int"]},
+  db_stg:  {x:600, y:210,label:"stg_orders",             upstream:["db_src"],                    downstream:["db_int"]},
+  db_snap: {x:600, y:390,label:"customers_snapshot",     upstream:[],                            downstream:["db_int"]},
+  db_int:  {x:900, y:210,label:"int_orders_enriched",    upstream:["db_stg","db_seed","db_snap"],downstream:["db_fct"]},
+  db_fct:  {x:1200,y:210,label:"fct_revenue",            upstream:["db_int"],                    downstream:["sf_tbl","db_metric","db_expo"]},
+  db_metric:{x:1500,y:30,label:"daily_revenue",          upstream:["db_fct"],                    downstream:[]},
+  sf_tbl:  {x:1500,y:210,label:"orders_fact",            upstream:["db_fct"],                    downstream:["tbl_ds"]},
+  db_expo: {x:1500,y:400,label:"exec_revenue_dashboard", upstream:["db_fct"],                    downstream:["tbl_db"]},
+  tbl_ds:  {x:1800,y:210,label:"Orders_Certified",       upstream:["sf_tbl"],                    downstream:["tbl_ws"]},
+  tbl_ws:  {x:2100,y:210,label:"Revenue_by_Region",      upstream:["tbl_ds"],                    downstream:["tbl_db"]},
+  tbl_db:  {x:2400,y:210,label:"Revenue_Dashboard",      upstream:["tbl_ws","db_expo"],          downstream:[]},
+};
+const DBT_EDGES_DEF=[
+  {id:"dle1", s:"pg_raw", t:"db_src",   tk:"Declared source"},
+  {id:"dle2", s:"db_src", t:"db_stg",   tk:"dbt ref"},
+  {id:"dle3", s:"db_stg", t:"db_int",   tk:"dbt ref"},
+  {id:"dle4", s:"db_seed",t:"db_int",   tk:"dbt ref"},
+  {id:"dle5", s:"db_snap",t:"db_int",   tk:"dbt ref"},
+  {id:"dle6", s:"db_int", t:"db_fct",   tk:"dbt ref"},
+  {id:"dle7", s:"db_fct", t:"sf_tbl",   tk:"Materializes"},
+  {id:"dle8", s:"db_fct", t:"db_metric",tk:"Metric definition"},
+  {id:"dle9", s:"db_fct", t:"db_expo",  tk:"Exposure"},
+  {id:"dle10",s:"db_expo",t:"tbl_db",   tk:"Declared dependency"},
+  {id:"dle11",s:"sf_tbl", t:"tbl_ds",   tk:"Custom SQL"},
+  {id:"dle12",s:"tbl_ds", t:"tbl_ws",   tk:"Direct"},
+  {id:"dle13",s:"tbl_ws", t:"tbl_db",   tk:"Direct"},
+];
+const DBT_COL_MAPS=[
+  {s:"pg_raw",t:"db_src", cols:[{sc:"order_id",tc:"order_id"},{sc:"customer_id",tc:"customer_id"},{sc:"amount",tc:"amount"},{sc:"status",tc:"status"},{sc:"created_at",tc:"created_at"},{sc:"region",tc:"region"}]},
+  {s:"db_src",t:"db_stg", cols:[{sc:"order_id",tc:"order_id"},{sc:"customer_id",tc:"customer_id"},{sc:"amount",tc:"amount"},{sc:"status",tc:"status"},{sc:"created_at",tc:"order_date"},{sc:"region",tc:"region"}]},
+  {s:"db_stg",t:"db_int", cols:[{sc:"order_id",tc:"order_id"},{sc:"customer_id",tc:"customer_id"},{sc:"amount",tc:"gross_revenue"},{sc:"status",tc:"status"},{sc:"order_date",tc:"order_date"},{sc:"region",tc:"region"}]},
+  {s:"db_seed",t:"db_int",cols:[{sc:"region",tc:"region"}]},
+  {s:"db_snap",t:"db_int",cols:[{sc:"customer_id",tc:"customer_id"},{sc:"customer_tier",tc:"customer_tier"}]},
+  {s:"db_int",t:"db_fct", cols:[{sc:"order_id",tc:"order_id"},{sc:"customer_id",tc:"customer_id"},{sc:"gross_revenue",tc:"revenue"},{sc:"status",tc:"order_status"},{sc:"order_date",tc:"order_date"},{sc:"region",tc:"region"}]},
+  {s:"db_fct",t:"sf_tbl", cols:[{sc:"revenue",tc:"order_amount"},{sc:"order_date",tc:"order_date"},{sc:"region",tc:"region"},{sc:"customer_id",tc:"customer_id"}]},
+  {s:"db_fct",t:"db_metric",cols:[{sc:"revenue",tc:"revenue"},{sc:"order_date",tc:"order_date"}]},
+  {s:"sf_tbl",t:"tbl_ds", cols:[{sc:"order_amount",tc:"revenue"},{sc:"order_amount",tc:"yoy_growth_pct"},{sc:"order_date",tc:"yoy_growth_pct"},{sc:"order_date",tc:"order_date"},{sc:"region",tc:"region"}]},
+  {s:"tbl_ds",t:"tbl_ws", cols:[{sc:"revenue",tc:"revenue"},{sc:"region",tc:"region"}]},
+  {s:"tbl_ws",t:"tbl_db", cols:[{sc:"revenue",tc:"total_revenue"},{sc:"region",tc:"region"}]},
+];
+// Which node is CURRENT when a given dbt (or materialized) asset is viewed. Containers
+// (dbt Project, dbt Job) and tests are not lineage nodes, so they mark nothing CURRENT -
+// same rule Tableau applies to Workbooks.
+const DBT_ACTIVE_BY_NAME={
+  "postgres_raw.orders":"db_src", "stg_orders":"db_stg", "int_orders_enriched":"db_int",
+  "fct_revenue":"db_fct", "country_codes":"db_seed", "customers_snapshot":"db_snap",
+  "daily_revenue":"db_metric", "exec_revenue_dashboard":"db_expo", "orders_fact":"sf_tbl",
+};
+
+// Collapse the dbt layer out of a graph: dbt nodes are removed, their upstreams wired
+// straight to their downstreams (transitively), column maps composed across the gap, and
+// the surviving nodes re-spaced so no hole is left behind. This is what the "Show dbt
+// models" toggle turns off - the same lineage read as business flow instead of engineering
+// flow, exactly the choice Atlan gives you.
+function collapseDbtNodes(G){
+  const isDbt=id=>String(G.meta[id]&&G.meta[id].assetType||"").startsWith("dbt ");
+  const dropped=Object.keys(G.topo).filter(isDbt);
+  if(!dropped.length) return G;
+  const keep=Object.keys(G.topo).filter(id=>!isDbt(id));
+  const dropSet=new Set(dropped);
+
+  // Resolve a node to the nearest surviving ancestors / descendants.
+  const upKept=(id,seen)=>{
+    seen=seen||new Set();
+    return (G.topo[id].upstream||[]).flatMap(u=>{
+      if(seen.has(u)) return []; seen.add(u);
+      return dropSet.has(u)?upKept(u,seen):[u];
+    });
+  };
+  const downKept=(id,seen)=>{
+    seen=seen||new Set();
+    return (G.topo[id].downstream||[]).flatMap(d=>{
+      if(seen.has(d)) return []; seen.add(d);
+      return dropSet.has(d)?downKept(d,seen):[d];
+    });
+  };
+
+  // Bridged links, before cleanup.
+  const down={},up={};
+  keep.forEach(id=>{ down[id]=[...new Set(downKept(id))]; up[id]=[...new Set(upKept(id))]; });
+
+  // Transitive reduction. Bridging a branch out (the exposure, say) can imply a shortcut
+  // that duplicates a path already on screen - postgres straight to the dashboard, leaping
+  // over Snowflake and Tableau. Drop any link that a longer surviving path already tells.
+  const reachable=(from,to,viaOnly)=>{
+    const stack=(down[from]||[]).filter(n=>!(viaOnly&&n===to));
+    const seen=new Set();
+    while(stack.length){
+      const n=stack.pop();
+      if(n===to) return true;
+      if(seen.has(n)) continue; seen.add(n);
+      (down[n]||[]).forEach(x=>stack.push(x));
+    }
+    return false;
+  };
+  keep.forEach(id=>{
+    down[id]=(down[id]||[]).filter(d=>!reachable(id,d,true));
+  });
+  keep.forEach(id=>{ up[id]=keep.filter(u=>(down[u]||[]).includes(id)); });
+
+  // Re-space surviving nodes: distinct original x values collapse to an even 310px grid.
+  const xs=[...new Set(keep.map(id=>G.topo[id].x))].sort((a,b)=>a-b);
+  const topo={};
+  keep.forEach(id=>{
+    const t=G.topo[id];
+    topo[id]={...t, x:xs.indexOf(t.x)*310, upstream:up[id], downstream:down[id]};
+  });
+
+  // Edges: one per surviving pair, labelled by whether dbt was bridged out.
+  const edges=[];const seenE=new Set();
+  keep.forEach(id=>topo[id].downstream.forEach(d=>{
+    const k=id+">"+d; if(seenE.has(k))return; seenE.add(k);
+    const direct=(G.edges||[]).find(e=>e.s===id&&e.t===d);
+    edges.push({id:"c_"+id+"_"+d,s:id,t:d,tk:direct?direct.tk:"dbt model"});
+  }));
+
+  // Column maps: compose s->[dbt...]->t by joining on the intermediate column name.
+  const colMaps=[];
+  const compose=(originId,fromId,cols,seen)=>{
+    (G.colMaps||[]).filter(m=>m.s===fromId).forEach(m=>{
+      const joined=cols.map(c=>{
+        const hop=m.cols.find(x=>x.sc===c.tc);
+        return hop?{sc:c.sc,tc:hop.tc}:null;
+      }).filter(Boolean);
+      if(!joined.length) return;
+      if(dropSet.has(m.t)){ if(!seen.has(m.t)) compose(originId,m.t,joined,new Set([...seen,m.t])); }
+      else colMaps.push({s:originId,t:m.t,cols:joined});
+    });
+  };
+  (G.colMaps||[]).forEach(m=>{
+    if(dropSet.has(m.s)) return;
+    if(!dropSet.has(m.t)){ colMaps.push(m); return; }
+    compose(m.s,m.t,m.cols.map(c=>({sc:c.sc,tc:c.tc})),new Set([m.t]));
+  });
+
+  // A column map is only meaningful if its edge survived the reduction above.
+  const live=new Set(edges.map(e=>e.s+">"+e.t));
+  return {topo,meta:G.meta,colMaps:colMaps.filter(m=>live.has(m.s+">"+m.t)),edges};
+}
+
+// Resolve which lineage graph an asset's Lineage tab renders. dbt assets (and the Snowflake
+// table a dbt model materializes) get the full Postgres -> dbt -> Snowflake -> Tableau path;
+// Tableau assets get the BI path; everything else keeps the default graph. The matching node
+// is marked CURRENT.
 function pickLineageGraph(asset){
+  if(asset&&(asset.service==="dbt"||asset.dbtModel)){
+    const activeId=DBT_ACTIVE_BY_NAME[asset.name]
+      ||(asset.dbtTestOn?DBT_ACTIVE_BY_NAME[asset.dbtTestOn]:null)||null;
+    const topo={};
+    Object.entries(DBT_TOPO).forEach(([id,t])=>{ topo[id]={...t,active:id===activeId}; });
+    return {topo,meta:DBT_NODE_META,colMaps:DBT_COL_MAPS,edges:DBT_EDGES_DEF,hasDbt:true};
+  }
   if(asset&&asset.service==="tableau"){
     const activeId=TABLEAU_ACTIVE_BY_TYPE[asset.type]||"tb_ds";
     const topo={};
@@ -13126,8 +13367,11 @@ function pickLineageGraph(asset){
 
 // ─── AssetLineageFull ─────────────────────────────────────────────────────────
 const AssetLineageFull=({asset})=>{
-  // Asset-aware lineage graph (Tableau BI path vs. default). Stable per asset.
-  const _G=useMemo(()=>pickLineageGraph(asset),[asset]);
+  // Asset-aware lineage graph (dbt transformation path vs. Tableau BI path vs. default).
+  // Stable per asset. On a dbt graph the model layer can be collapsed out - see below.
+  const _Graw=useMemo(()=>pickLineageGraph(asset),[asset]);
+  const [showDbt,setShowDbt]=useState(true);
+  const _G=useMemo(()=>(_Graw.hasDbt&&!showDbt)?collapseDbtNodes(_Graw):_Graw,[_Graw,showDbt]);
   const LINEAGE_TOPO=_G.topo, LINEAGE_NODE_META=_G.meta, LINEAGE_COL_MAPS=_G.colMaps, LINEAGE_EDGES_DEF=_G.edges;
   const aName=asset?.name||"orders_fact";
   const [hiddenNodes,  setHiddenNodes] =useState(new Set());
@@ -13144,6 +13388,12 @@ const AssetLineageFull=({asset})=>{
   // Clear any node/column selection when the asset (and thus its lineage graph) changes,
   // so a node id from the previous graph can never linger in the info panel.
   useEffect(()=>{ setSelectedId(null); setSelectedCol(null); setHiddenNodes(new Set()); setExpandedCols(new Set()); },[aName]);
+  // Same when the dbt layer is collapsed or restored - the node ids change under us, so any
+  // held selection or hidden/expanded id would point at a node that no longer exists.
+  useEffect(()=>{
+    setSelectedId(null); setSelectedCol(null); setHiddenNodes(new Set()); setExpandedCols(new Set());
+    setTimeout(()=>rf?.fitView({padding:0.15,duration:350}),60);
+  },[showDbt]);
 
   const callbacks=useMemo(()=>({
     toggleExpand:(id)=>{
@@ -13195,6 +13445,9 @@ const AssetLineageFull=({asset})=>{
       const base=buildLinEdges(hiddenNodes,LINEAGE_EDGES_DEF).map(e=>({...e,
         style:{stroke:"#e2e8f0",strokeWidth:1.2,strokeDasharray:"5 4"},
         markerEnd:{type:MarkerType.ArrowClosed,color:"#e2e8f0",width:10,height:10},
+        // Column trace takes over the canvas — drop the edge-kind labels so they don't
+        // compete with the highlighted column path.
+        label:null,labelShowBg:false,
         animated:false,
       }));
       const colPaths=colPathEdges(selectedCol.nodeId,selectedCol.colName,LINEAGE_COL_MAPS);
@@ -13244,7 +13497,9 @@ const AssetLineageFull=({asset})=>{
         borderBottom:"none",flexShrink:0,flexWrap:"wrap"}}>
         {/* Legend */}
         <div style={{display:"flex",gap:10,flexWrap:"wrap",flex:1}}>
-          {[...new Set(Object.values(LINEAGE_NODE_META).map(m=>m.assetType))].map(type=>(
+          {/* Legend follows the nodes actually on the canvas, not the whole meta map — with the
+              dbt layer collapsed, a "dbt Model" swatch would name a type nothing is drawn for. */}
+          {[...new Set(Object.keys(LINEAGE_TOPO).map(id=>LINEAGE_NODE_META[id]?.assetType).filter(Boolean))].map(type=>(
             <span key={type} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:"#64748b"}}>
               <span style={{width:8,height:8,borderRadius:2,background:LINEAGE_TYPE_COLOR[type]||"#94a3b8",display:"inline-block"}}/>
               {type}
@@ -13258,6 +13513,17 @@ const AssetLineageFull=({asset})=>{
           <span style={{width:14,height:14,borderRadius:3,background:"#fff",border:"1.5px solid #8b5cf6",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#8b5cf6",fontWeight:700,lineHeight:1}}>+</span>
           downstream&nbsp;·&nbsp;click node for details
         </span>
+        {/* dbt layer toggle — read the graph as engineering flow (every model drawn) or
+            as business flow (models collapsed, source wired straight to target). */}
+        {_Graw.hasDbt&&(
+          <button onClick={()=>setShowDbt(v=>!v)} title={showDbt?"Collapse the dbt model layer out of the graph":"Draw every dbt model in the graph"}
+            style={{padding:"4px 10px",borderRadius:6,background:showDbt?"rgba(255,105,75,.1)":"#fff",
+              border:`1px solid ${showDbt?"#ff694b":"#e2e8f0"}`,color:showDbt?"#c2410c":"#64748b",
+              fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>
+            <span style={{width:8,height:8,borderRadius:2,background:showDbt?"#ff694b":"#cbd5e1",display:"inline-block"}}/>
+            Show dbt models
+          </button>
+        )}
         <button onClick={()=>rf?.fitView({padding:0.15,duration:400})}
           style={{padding:"4px 12px",borderRadius:6,background:"#fff",border:"1px solid #e2e8f0",color:"#64748b",fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>
           Fit
@@ -14416,6 +14682,17 @@ const AlertWizard = ({open,onClose,onCreate,seedSource})=>{
 };
 
 // ── Top-level asset tab: the connected loop ──────────────────────────────────
+// Marks a test case that EDG ingested rather than authored. dbt tests live in the repo, so
+// EDG reports them and can require them in a policy, but never claims to own them.
+const TestSourceChip = ({source})=>{
+  if(source!=="dbt") return null;
+  return <span title="Declared in the dbt repo and ingested from dbt Cloud run results - read-only in EDG"
+    style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:4,background:"rgba(255,105,75,.12)",
+      color:"#c2410c",border:"1px solid rgba(255,105,75,.3)",whiteSpace:"nowrap",display:"inline-flex",alignItems:"center",gap:3}}>
+    <span style={{width:5,height:5,borderRadius:1.5,background:"#ff694b",display:"inline-block"}}/>dbt
+  </span>;
+};
+
 const AssetObservabilityTab = ({asset,onToast,onNav})=>{
   const [sub,setSub]=useState("table");
   const [range,setRange]=useState("Last 7 days");
@@ -16372,7 +16649,11 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
                       <DQStatusDot status={isRunning?"Aborted":t.status}/>
                     </td>
                     <td style={{padding:"10px 14px"}}>
-                      <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{t.name}</div>
+                      <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                        <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{t.name}</span>
+                        <TestSourceChip source={t.source}/>
+                      </div>
+                      {t.source==="dbt"&&t.dbtTest&&<div style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace",marginTop:3}}>{t.dbtTest}</div>}
                       {(()=>{const l=tcPolicyLink(t);return l?<div style={{marginTop:4}}><PolicyChip link={l} onNav={onNav} compact/></div>:null;})()}
                     </td>
                     <td style={{padding:"10px 14px"}}>
@@ -16394,9 +16675,9 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
                     </td>
                     <td style={{padding:"8px 14px"}} onClick={e=>e.stopPropagation()}>
                       <div style={{display:"flex",gap:4}}>
-                        <button title={isRunning?"Running…":"Run now"} disabled={isRunning} onClick={e=>{e.stopPropagation();!isRunning&&runTest(t.id);}}
-                          style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent,cursor:isRunning?"not-allowed":"pointer",opacity:isRunning?0.4:1,transition:"opacity .1s"}}
-                          onMouseEnter={e=>{if(!isRunning)e.currentTarget.style.opacity=".7";}} onMouseLeave={e=>{if(!isRunning)e.currentTarget.style.opacity="1";}}>
+                        <button title={t.source==="dbt"?"Declared in the dbt repo — run it from dbt Cloud, not here":isRunning?"Running…":"Run now"} disabled={isRunning||t.source==="dbt"} onClick={e=>{e.stopPropagation();if(t.source==="dbt"){onToast&&onToast("This test is owned by dbt — trigger it from the dbt Cloud job","info");return;}!isRunning&&runTest(t.id);}}
+                          style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent,cursor:(isRunning||t.source==="dbt")?"not-allowed":"pointer",opacity:(isRunning||t.source==="dbt")?0.4:1,transition:"opacity .1s"}}
+                          onMouseEnter={e=>{if(!isRunning&&t.source!=="dbt")e.currentTarget.style.opacity=".7";}} onMouseLeave={e=>{if(!isRunning&&t.source!=="dbt")e.currentTarget.style.opacity="1";}}>
                           <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
                         </button>
                       </div>
@@ -18255,7 +18536,7 @@ const CONTAINER_TYPES = new Set(["Database","Catalog","Schema","Bucket","Contain
 const AssetDetail = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}) => {
   if(CONTAINER_TYPES.has(asset.type)) return <ContainerAssetDetail asset={asset} assetStack={assetStack} onBack={onBack} onAsset={onAsset} onToast={onToast}/>;
   if(asset.type==="Object"||asset.type==="Blob") return <FileAssetDetail asset={asset} onBack={onBack} onToast={onToast}/>;
-  return <AssetDetailFull asset={asset} assetStack={assetStack} onBack={onBack} onToast={onToast} onNav={onNav}/>;
+  return <AssetDetailFull asset={asset} assetStack={assetStack} onBack={onBack} onAsset={onAsset} onToast={onToast} onNav={onNav}/>;
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -18523,7 +18804,623 @@ const TableauFieldsPanel = ({asset})=>{
   );
 };
 
-const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
+// ===========================================================================
+// dbt ASSET PROFILE - object-appropriate detail for every dbt object type.
+// A dbt model is not a table: what matters is how it is materialized, what it
+// refs, which tests guard it, when it last ran, and the SQL that defines it -
+// raw (with Jinja) and compiled. Follows Atlan's dbt asset pages; the compiled/
+// raw SQL pairing and description propagation come from OpenMetadata's dbt tab.
+// ===========================================================================
+
+// Engineering facts that only exist for dbt objects. Rendered as the "dbt" panel on
+// the object's own page AND on the warehouse table it materializes.
+const DBT_META = {
+  "stg_orders":          {materialization:"view",        schema:"COMMERCE_STG", alias:"stg_orders",          tags:["staging","pii"],      meta:{owner:"data-eng",layer:"staging"},           git:"jnj/analytics · models/staging/stg_orders.sql",                  lastRun:"35m ago", runStatus:"success", runTime:"14s",   rows:"48.6M", freshness:"35m", job:"nightly_production", refs:["postgres_raw.orders"],                              tests:3},
+  "int_orders_enriched": {materialization:"incremental", schema:"COMMERCE_INT", alias:"int_orders_enriched", tags:["intermediate","pii"], meta:{owner:"data-eng",layer:"intermediate"},      git:"jnj/analytics · models/intermediate/int_orders_enriched.sql",    lastRun:"35m ago", runStatus:"success", runTime:"2m 41s",rows:"48.4M", freshness:"35m", job:"nightly_production", refs:["stg_orders","country_codes","customers_snapshot"], tests:1, strategy:"merge on order_id"},
+  "fct_revenue":         {materialization:"table",       schema:"COMMERCE",     alias:"orders_fact",         tags:["revenue","kpi"],      meta:{owner:"finance-analytics",layer:"marts"},    git:"jnj/analytics · models/marts/finance/fct_revenue.sql",           lastRun:"35m ago", runStatus:"success", runTime:"4m 08s",rows:"48.2M", freshness:"35m", job:"nightly_production", refs:["int_orders_enriched"],                              tests:2},
+  "postgres_raw.orders": {materialization:"source",      schema:"PRODUCT",      alias:"orders",              tags:["raw","pii"],          meta:{owner:"platform",loader:"fivetran"},         git:"jnj/analytics · models/staging/_sources.yml",                    lastRun:"40m ago", runStatus:"success", runTime:"3s",    rows:"48.6M", freshness:"40m", job:"nightly_production", refs:[],                                                   tests:2, freshnessContract:"warn 12h / error 24h"},
+  "country_codes":       {materialization:"seed",        schema:"REFERENCE",    alias:"country_codes",       tags:["reference"],          meta:{owner:"platform"},                           git:"jnj/analytics · seeds/country_codes.csv",                        lastRun:"3w ago",  runStatus:"success", runTime:"1s",    rows:"249",   freshness:"—",  job:"nightly_production", refs:[],                                                   tests:2},
+  "customers_snapshot":  {materialization:"snapshot",    schema:"COMMERCE_SNAP",alias:"customers_snapshot",  tags:["scd2","pii"],         meta:{owner:"data-eng",strategy:"timestamp"},      git:"jnj/analytics · snapshots/customers_snapshot.sql",               lastRun:"35m ago", runStatus:"success", runTime:"48s",   rows:"4.4M",  freshness:"35m", job:"nightly_production", refs:[],                                                   tests:0, strategy:"timestamp on updated_at"},
+};
+
+// Raw (Jinja) and compiled SQL for each dbt node. OpenMetadata surfaces exactly this pair.
+const DBT_SQL = {
+  "stg_orders":{
+    raw:`{{ config(materialized='view') }}
+
+with source as (
+    select * from {{ source('postgres_raw', 'orders') }}
+)
+
+select
+    order_id,
+    customer_id,
+    amount,
+    lower(status)             as status,
+    created_at::date          as order_date,
+    region
+from source
+where amount is not null`,
+    compiled:`create or replace view COMMERCE_STG.stg_orders as (
+  with source as (
+      select * from postgresql_prod.PRODUCT.orders
+  )
+  select
+      order_id,
+      customer_id,
+      amount,
+      lower(status)           as status,
+      created_at::date        as order_date,
+      region
+  from source
+  where amount is not null
+);`},
+  "int_orders_enriched":{
+    raw:`{{ config(
+    materialized='incremental',
+    unique_key='order_id',
+    incremental_strategy='merge'
+) }}
+
+select
+    o.order_id,
+    o.customer_id,
+    o.amount * 1.0            as gross_revenue,
+    o.status,
+    o.order_date,
+    coalesce(c.region, o.region) as region,
+    s.customer_tier
+from {{ ref('stg_orders') }} o
+left join {{ ref('customers_snapshot') }} s
+    on o.customer_id = s.customer_id
+   and s.valid_to is null
+left join {{ ref('country_codes') }} c
+    on o.region = c.country_code
+
+{% if is_incremental() %}
+where o.order_date >= (select max(order_date) from {{ this }})
+{% endif %}`,
+    compiled:`merge into COMMERCE_INT.int_orders_enriched as target
+using (
+  select
+      o.order_id,
+      o.customer_id,
+      o.amount * 1.0          as gross_revenue,
+      o.status,
+      o.order_date,
+      coalesce(c.region, o.region) as region,
+      s.customer_tier
+  from COMMERCE_STG.stg_orders o
+  left join COMMERCE_SNAP.customers_snapshot s
+      on o.customer_id = s.customer_id and s.valid_to is null
+  left join REFERENCE.country_codes c
+      on o.region = c.country_code
+  where o.order_date >= (select max(order_date) from COMMERCE_INT.int_orders_enriched)
+) as source
+on target.order_id = source.order_id
+when matched then update set ...
+when not matched then insert ...;`},
+  "fct_revenue":{
+    raw:`{{ config(materialized='table', alias='orders_fact') }}
+
+select
+    order_id,
+    customer_id,
+    gross_revenue             as revenue,
+    status                    as order_status,
+    order_date,
+    region
+from {{ ref('int_orders_enriched') }}
+where status != 'cancelled'`,
+    compiled:`create or replace table SNOWFLAKE_PROD.COMMERCE.orders_fact as (
+  select
+      order_id,
+      customer_id,
+      gross_revenue           as revenue,
+      status                  as order_status,
+      order_date,
+      region
+  from COMMERCE_INT.int_orders_enriched
+  where status != 'cancelled'
+);`},
+  "customers_snapshot":{
+    raw:`{% snapshot customers_snapshot %}
+{{ config(
+    target_schema='COMMERCE_SNAP',
+    unique_key='customer_id',
+    strategy='timestamp',
+    updated_at='updated_at'
+) }}
+
+select customer_id, customer_tier, updated_at
+from {{ source('postgres_raw', 'customers') }}
+{% endsnapshot %}`,
+    compiled:`-- dbt snapshot: type-2 merge into COMMERCE_SNAP.customers_snapshot
+-- adds dbt_valid_from / dbt_valid_to on every change to updated_at`},
+};
+
+// Columns exposed by each dbt node (the "schema" equivalent). Not separate catalog rows.
+const DBT_MODEL_COLUMNS = {
+  "postgres_raw.orders":[
+    {name:"order_id",     dataType:"bigint",    tests:["unique","not_null"], desc:"Source order key.",                          upstream:"postgresql_prod.PRODUCT.orders.order_id"},
+    {name:"customer_id",  dataType:"bigint",    tests:[],                    desc:"Source customer key.",                       upstream:"postgresql_prod.PRODUCT.orders.customer_id"},
+    {name:"amount",       dataType:"decimal",   tests:[],                    desc:"Order gross amount, source currency.",       upstream:"postgresql_prod.PRODUCT.orders.amount"},
+    {name:"status",       dataType:"varchar",   tests:[],                    desc:"Raw order status, mixed casing at source.",  upstream:"postgresql_prod.PRODUCT.orders.status"},
+    {name:"created_at",   dataType:"timestamp", tests:[],                    desc:"Order creation timestamp.",                  upstream:"postgresql_prod.PRODUCT.orders.created_at"},
+    {name:"region",       dataType:"varchar",   tests:[],                    desc:"Two-letter country code at source.",         upstream:"postgresql_prod.PRODUCT.orders.region"},
+  ],
+  "stg_orders":[
+    {name:"order_id",     dataType:"bigint",  tests:["unique","not_null"],  desc:"Order key. Grain of this model.",                     upstream:"postgres_raw.orders.order_id"},
+    {name:"customer_id",  dataType:"bigint",  tests:[],                     desc:"Customer key, passed through unchanged.",             upstream:"postgres_raw.orders.customer_id"},
+    {name:"amount",       dataType:"decimal", tests:[],                     desc:"Order amount, nulls filtered out.",                   upstream:"postgres_raw.orders.amount"},
+    {name:"status",       dataType:"varchar", tests:["accepted_values"],    desc:"Lower-cased order status. Accepted-values test FAILING.", upstream:"postgres_raw.orders.status"},
+    {name:"order_date",   dataType:"date",    tests:[],                     desc:"created_at cast to a date.",                          upstream:"postgres_raw.orders.created_at"},
+    {name:"region",       dataType:"varchar", tests:[],                     desc:"Country code, still raw at this layer.",              upstream:"postgres_raw.orders.region"},
+  ],
+  "int_orders_enriched":[
+    {name:"order_id",      dataType:"bigint",  tests:["not_null"], desc:"Order key. Incremental merge key.",                        upstream:"stg_orders.order_id"},
+    {name:"customer_id",   dataType:"bigint",  tests:[],           desc:"Customer key.",                                            upstream:"stg_orders.customer_id"},
+    {name:"gross_revenue", dataType:"decimal", tests:[],           desc:"Derived gross revenue from the staged order amount.",      upstream:"stg_orders.amount"},
+    {name:"status",        dataType:"varchar", tests:[],           desc:"Order status.",                                            upstream:"stg_orders.status"},
+    {name:"order_date",    dataType:"date",    tests:[],           desc:"Order date.",                                              upstream:"stg_orders.order_date"},
+    {name:"region",        dataType:"varchar", tests:[],           desc:"Region resolved via the country_codes seed.",              upstream:"country_codes.region"},
+    {name:"customer_tier", dataType:"varchar", tests:[],           desc:"Tier as of the order, from the customer snapshot.",        upstream:"customers_snapshot.customer_tier"},
+  ],
+  "fct_revenue":[
+    {name:"order_id",     dataType:"bigint",  tests:["not_null"],      desc:"Order key. Grain of the finance mart.",                       upstream:"int_orders_enriched.order_id"},
+    {name:"customer_id",  dataType:"bigint",  tests:["relationships"], desc:"Customer key. Referential test against the snapshot warns.",  upstream:"int_orders_enriched.customer_id"},
+    {name:"revenue",      dataType:"decimal", tests:[],                desc:"Recognised revenue. Certified measure.",                      upstream:"int_orders_enriched.gross_revenue"},
+    {name:"order_status", dataType:"varchar", tests:[],                desc:"Order status, cancelled rows excluded by the model.",         upstream:"int_orders_enriched.status"},
+    {name:"order_date",   dataType:"date",    tests:[],                desc:"Order date. Time grain for the daily_revenue metric.",        upstream:"int_orders_enriched.order_date"},
+    {name:"region",       dataType:"varchar", tests:[],                desc:"Resolved region.",                                            upstream:"int_orders_enriched.region"},
+  ],
+  "country_codes":[
+    {name:"country_code", dataType:"varchar", tests:["unique","not_null"], desc:"ISO 3166-1 alpha-2 code. Seed key.", upstream:"seeds/country_codes.csv"},
+    {name:"region",       dataType:"varchar", tests:[],                    desc:"Sales region the country rolls into.", upstream:"seeds/country_codes.csv"},
+    {name:"currency",     dataType:"varchar", tests:[],                    desc:"ISO currency code.",                   upstream:"seeds/country_codes.csv"},
+  ],
+  "customers_snapshot":[
+    {name:"customer_id",   dataType:"bigint",    tests:[], desc:"Customer key. Snapshot unique key.",                      upstream:"postgres_raw.customers.customer_id"},
+    {name:"customer_tier", dataType:"varchar",   tests:[], desc:"Tier at the time of the snapshot row.",                   upstream:"postgres_raw.customers.customer_tier"},
+    {name:"valid_from",    dataType:"timestamp", tests:[], desc:"dbt_valid_from - when this version became current.",      upstream:"dbt snapshot metadata"},
+    {name:"valid_to",      dataType:"timestamp", tests:[], desc:"dbt_valid_to - null on the current version.",             upstream:"dbt snapshot metadata"},
+  ],
+};
+
+// dbt tests, keyed by the node they guard. Read-only in EDG - they are declared in the
+// repo's schema.yml, so EDG reports their result and never pretends to own them.
+const DBT_TESTS = [
+  {name:"unique_stg_orders_order_id",         on:"stg_orders",  col:"order_id",    kind:"unique",          severity:"error", status:"pass", lastRun:"35m ago", failedRows:0,     detail:"Declared in models/staging/schema.yml"},
+  {name:"not_null_stg_orders_order_id",       on:"stg_orders",  col:"order_id",    kind:"not_null",        severity:"error", status:"pass", lastRun:"35m ago", failedRows:0,     detail:"Declared in models/staging/schema.yml"},
+  {name:"accepted_values_stg_orders_status",  on:"stg_orders",  col:"status",      kind:"accepted_values", severity:"error", status:"fail", lastRun:"35m ago", failedRows:1284,  detail:"Unexpected value refunded_pending - not in the accepted list"},
+  {name:"not_null_int_orders_order_id",       on:"int_orders_enriched", col:"order_id", kind:"not_null",   severity:"error", status:"pass", lastRun:"35m ago", failedRows:0,     detail:"Declared in models/intermediate/schema.yml"},
+  {name:"not_null_fct_revenue_order_id",      on:"fct_revenue", col:"order_id",    kind:"not_null",        severity:"error", status:"pass", lastRun:"35m ago", failedRows:0,     detail:"Declared in models/marts/finance/schema.yml"},
+  {name:"relationships_fct_revenue_customer", on:"fct_revenue", col:"customer_id", kind:"relationships",   severity:"warn",  status:"warn", lastRun:"35m ago", failedRows:312,   detail:"312 customer_id values absent from customers_snapshot - backfill in progress"},
+  {name:"unique_source_orders_order_id",      on:"postgres_raw.orders", col:"order_id",     kind:"unique",   severity:"error", status:"pass", lastRun:"40m ago", failedRows:0,     detail:"Declared in models/staging/_sources.yml"},
+  {name:"not_null_source_orders_order_id",    on:"postgres_raw.orders", col:"order_id",     kind:"not_null", severity:"error", status:"pass", lastRun:"40m ago", failedRows:0,     detail:"Declared in models/staging/_sources.yml"},
+  {name:"unique_country_codes_country_code",  on:"country_codes",       col:"country_code", kind:"unique",   severity:"error", status:"pass", lastRun:"3w ago",  failedRows:0,     detail:"Declared in seeds/schema.yml"},
+  {name:"not_null_country_codes_country_code",on:"country_codes",       col:"country_code", kind:"not_null", severity:"error", status:"pass", lastRun:"3w ago",  failedRows:0,     detail:"Declared in seeds/schema.yml"},
+];
+
+// dbt Cloud run history for the job asset.
+const DBT_RUNS = [
+  {id:"#4821", trigger:"Schedule",  status:"success", started:"35m ago", duration:"7m 51s", models:6, tests:10, failed:1, note:"1 test failure (accepted_values on stg_orders.status), run continued"},
+  {id:"#4820", trigger:"Pull request", status:"success", started:"6h ago", duration:"8m 12s", models:6, tests:10, failed:0, note:"CI run for PR #338 - add customer_tier to the mart"},
+  {id:"#4819", trigger:"Schedule",  status:"success", started:"1d ago",  duration:"7m 40s", models:6, tests:10, failed:0, note:""},
+  {id:"#4818", trigger:"Schedule",  status:"failed",  started:"2d ago",  duration:"1m 04s", models:1, tests:0, failed:0, note:"Source freshness error on postgres_raw.orders - credentials rotation not reflected in the connection"},
+  {id:"#4817", trigger:"Manual",    status:"success", started:"2d ago",  duration:"9m 22s", models:6, tests:10, failed:0, note:"Full refresh after the incremental model was rebuilt"},
+];
+
+// Per-object profile content: props = labelled key/values; rel = related objects.
+const DBT_PROFILE = {
+  "jnj_analytics":{props:[["Object type","dbt Project"],["dbt Cloud account","jnj"],["Environment","production"],["Contents","3 models · 1 source · 1 seed · 1 snapshot · 10 tests · 1 metric · 1 exposure"],["Repository","github.com/jnj/analytics"],["Branch","main"],["dbt version","1.8"]],
+    rel:{contains:[{name:"postgres_raw.orders",type:"dbt Source"},{name:"stg_orders",type:"dbt Model"},{name:"int_orders_enriched",type:"dbt Model"},{name:"fct_revenue",type:"dbt Model"},{name:"country_codes",type:"dbt Seed"},{name:"customers_snapshot",type:"dbt Snapshot"},{name:"daily_revenue",type:"dbt Metric"},{name:"exec_revenue_dashboard",type:"dbt Exposure"},{name:"nightly_production",type:"dbt Job"}]}},
+  "postgres_raw.orders":{props:[["Object type","dbt Source"],["Source name","postgres_raw"],["Table","orders"],["Physical location","postgresql_prod / PRODUCT / orders"],["Freshness contract","warn 12h · error 24h"],["Tests","2"],["Loader","Fivetran"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"product_events",type:"Table"}],downstream:[{name:"stg_orders",type:"dbt Model"}]}},
+  "stg_orders":{props:[["Object type","dbt Model (staging)"],["Materialization","view"],["Target","COMMERCE_STG / stg_orders"],["Refs","source postgres_raw.orders"],["Tests","3 (1 failing)"],["Last run","35m ago · 14s"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"postgres_raw.orders",type:"dbt Source"}],downstream:[{name:"int_orders_enriched",type:"dbt Model"}]}},
+  "int_orders_enriched":{props:[["Object type","dbt Model (intermediate)"],["Materialization","incremental · merge on order_id"],["Target","COMMERCE_INT / int_orders_enriched"],["Refs","stg_orders, country_codes, customers_snapshot"],["Tests","1"],["Last run","35m ago · 2m 41s"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"stg_orders",type:"dbt Model"},{name:"country_codes",type:"dbt Seed"},{name:"customers_snapshot",type:"dbt Snapshot"}],downstream:[{name:"fct_revenue",type:"dbt Model"}]}},
+  "fct_revenue":{props:[["Object type","dbt Model (mart)"],["Materialization","table"],["Materializes","SNOWFLAKE_PROD / COMMERCE / orders_fact"],["Refs","int_orders_enriched"],["Tests","2 (1 warning)"],["Last run","35m ago · 4m 08s"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"int_orders_enriched",type:"dbt Model"}],downstream:[{name:"orders_fact",type:"Table"},{name:"daily_revenue",type:"dbt Metric"},{name:"exec_revenue_dashboard",type:"dbt Exposure"}]}},
+  "country_codes":{props:[["Object type","dbt Seed"],["Source file","seeds/country_codes.csv"],["Target","REFERENCE / country_codes"],["Rows","249"],["Tests","2"],["Loaded","3w ago"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},downstream:[{name:"int_orders_enriched",type:"dbt Model"}]}},
+  "customers_snapshot":{props:[["Object type","dbt Snapshot"],["Strategy","timestamp on updated_at"],["Unique key","customer_id"],["Target","COMMERCE_SNAP / customers_snapshot"],["History","Type-2 (valid_from / valid_to)"],["Last run","35m ago · 48s"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},downstream:[{name:"int_orders_enriched",type:"dbt Model"}]}},
+  "unique_stg_orders_order_id":{props:[["Object type","dbt Test (generic)"],["Test","unique"],["Tests","stg_orders.order_id"],["Severity","error"],["Result","Pass · 0 failing rows"],["Declared in","models/staging/schema.yml"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"stg_orders",type:"dbt Model"}]}},
+  "not_null_fct_revenue_order_id":{props:[["Object type","dbt Test (generic)"],["Test","not_null"],["Tests","fct_revenue.order_id"],["Severity","error"],["Result","Pass · 0 failing rows"],["Declared in","models/marts/finance/schema.yml"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"fct_revenue",type:"dbt Model"}]}},
+  "accepted_values_stg_orders_status":{props:[["Object type","dbt Test (generic)"],["Test","accepted_values"],["Tests","stg_orders.status"],["Severity","error"],["Result","FAIL · 1,284 failing rows"],["Cause","Source emits refunded_pending, not in the accepted list"],["Declared in","models/staging/schema.yml"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"stg_orders",type:"dbt Model"}]}},
+  "relationships_fct_revenue_customer":{props:[["Object type","dbt Test (generic)"],["Test","relationships"],["Tests","fct_revenue.customer_id"],["Against","customers_snapshot.customer_id"],["Severity","warn"],["Result","Warn · 312 failing rows"],["Declared in","models/marts/finance/schema.yml"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"fct_revenue",type:"dbt Model"}]}},
+  "not_null_stg_orders_order_id":{props:[["Object type","dbt Test (generic)"],["Test","not_null"],["Tests","stg_orders.order_id"],["Severity","error"],["Result","Pass · 0 failing rows"],["Declared in","models/staging/schema.yml"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"stg_orders",type:"dbt Model"}]}},
+  "not_null_int_orders_order_id":{props:[["Object type","dbt Test (generic)"],["Test","not_null"],["Tests","int_orders_enriched.order_id"],["Severity","error"],["Result","Pass · 0 failing rows"],["Declared in","models/intermediate/schema.yml"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"int_orders_enriched",type:"dbt Model"}]}},
+  "unique_source_orders_order_id":{props:[["Object type","dbt Test (generic)"],["Test","unique"],["Tests","postgres_raw.orders.order_id"],["Severity","error"],["Result","Pass · 0 failing rows"],["Declared in","models/staging/_sources.yml"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"postgres_raw.orders",type:"dbt Source"}]}},
+  "not_null_source_orders_order_id":{props:[["Object type","dbt Test (generic)"],["Test","not_null"],["Tests","postgres_raw.orders.order_id"],["Severity","error"],["Result","Pass · 0 failing rows"],["Declared in","models/staging/_sources.yml"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"postgres_raw.orders",type:"dbt Source"}]}},
+  "unique_country_codes_country_code":{props:[["Object type","dbt Test (generic)"],["Test","unique"],["Tests","country_codes.country_code"],["Severity","error"],["Result","Pass · 0 failing rows"],["Declared in","seeds/schema.yml"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"country_codes",type:"dbt Seed"}]}},
+  "not_null_country_codes_country_code":{props:[["Object type","dbt Test (generic)"],["Test","not_null"],["Tests","country_codes.country_code"],["Severity","error"],["Result","Pass · 0 failing rows"],["Declared in","seeds/schema.yml"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"country_codes",type:"dbt Seed"}]}},
+  "daily_revenue":{props:[["Object type","dbt Metric"],["Calculation","sum(revenue)"],["Over","fct_revenue"],["Time grain","day"],["Dimensions","region, customer_tier"],["Label","Daily Revenue"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"fct_revenue",type:"dbt Model"}]}},
+  "exec_revenue_dashboard":{props:[["Object type","dbt Exposure"],["Exposure type","dashboard"],["Depends on","fct_revenue"],["Maturity","high"],["Owner (dbt meta)","alex.wu@jnj.com"],["URL","Tableau › Revenue_Dashboard"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"fct_revenue",type:"dbt Model"}],downstream:[{name:"Revenue_Dashboard",type:"Dashboard"}]}},
+  "nightly_production":{props:[["Object type","dbt Cloud Job"],["Command","dbt build"],["Environment","production"],["Schedule","0 2 * * * (02:00 UTC)"],["CI","Runs on every pull request"],["Last run","#4821 · 35m ago · success"],["Success rate (30d)","96%"]],
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},downstream:[{name:"stg_orders",type:"dbt Model"},{name:"int_orders_enriched",type:"dbt Model"},{name:"fct_revenue",type:"dbt Model"}]}},
+};
+
+const DBT_RUN_C = {success:{c:"#16a34a",bg:"rgba(22,163,74,.1)"},failed:{c:"#e11d48",bg:"rgba(225,29,72,.1)"},pass:{c:"#16a34a",bg:"rgba(22,163,74,.1)"},fail:{c:"#e11d48",bg:"rgba(225,29,72,.1)"},warn:{c:"#d97706",bg:"rgba(217,119,6,.12)"}};
+const DbtStatusPill = ({status})=>{
+  const c=DBT_RUN_C[status]||{c:T.textMuted,bg:T.bgHover};
+  return <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:5,background:c.bg,color:c.c,border:`1px solid ${c.c}33`,textTransform:"uppercase",letterSpacing:".05em",whiteSpace:"nowrap"}}>{status}</span>;
+};
+
+// Labelled key/value grid, two columns.
+const DbtProps = ({rows})=>(
+  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 24px"}}>
+    {rows.map(([k,v])=>(
+      <div key={k}>
+        <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:3}}>{k}</div>
+        <div style={{fontSize:12.5,color:T.text,fontFamily:"'Geist Mono',monospace",wordBreak:"break-word"}}>{v}</div>
+      </div>
+    ))}
+  </div>
+);
+
+// SQL block with a raw (Jinja) / compiled switch - the pair a dbt developer reads together.
+const DbtSqlBlock = ({name})=>{
+  const sql=DBT_SQL[name];
+  const [mode,setMode]=useState("raw");
+  if(!sql) return <div style={{fontSize:12,color:T.textMuted,padding:"18px 0"}}>This dbt object has no SQL definition — seeds are CSV files and tests are declared in YAML.</div>;
+  const Tab=({k,label,sub})=>(
+    <button onClick={()=>setMode(k)} style={{padding:"5px 12px",borderRadius:6,border:`1px solid ${mode===k?"#ff694b":T.border}`,
+      background:mode===k?"rgba(255,105,75,.1)":T.bgSurface,color:mode===k?"#c2410c":T.textSub,fontSize:11.5,fontWeight:600,
+      cursor:"pointer",fontFamily:"inherit",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:1,lineHeight:1.3}}>
+      {label}<span style={{fontSize:9.5,fontWeight:500,opacity:.75}}>{sub}</span>
+    </button>
+  );
+  return (
+    <div>
+      <div style={{display:"flex",gap:8,marginBottom:10}}>
+        <Tab k="raw" label="Raw" sub="as written, with Jinja"/>
+        <Tab k="compiled" label="Compiled" sub="as the warehouse ran it"/>
+      </div>
+      <pre style={{margin:0,padding:14,background:"#0f172a",color:"#e2e8f0",borderRadius:8,fontSize:11.5,
+        fontFamily:"'Geist Mono',monospace",lineHeight:1.6,overflowX:"auto",whiteSpace:"pre"}}>{sql[mode]}</pre>
+    </div>
+  );
+};
+
+// The "dbt" panel. Rendered on a dbt object's own Overview AND on the warehouse table it
+// materializes - the OpenMetadata idea: whoever lands on the table can see how it was built.
+const DbtEnginePanel = ({name,compact})=>{
+  const m=DBT_META[name];
+  if(!m) return null;
+  const tests=DBT_TESTS.filter(t=>t.on===name);
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <div style={{display:"grid",gridTemplateColumns:compact?"1fr 1fr":"repeat(4,1fr)",gap:"12px 18px"}}>
+        {[["Materialization",m.materialization],["Target",m.schema+" / "+m.alias],
+          ["Last run",m.lastRun+" · "+m.runTime],["Rows",m.rows],
+          ["dbt Cloud job",m.job],["Freshness",m.freshness],
+          ...(m.strategy?[["Strategy",m.strategy]]:[]),
+          ...(m.freshnessContract?[["Freshness contract",m.freshnessContract]]:[]),
+        ].map(([k,v])=>(
+          <div key={k}>
+            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:3}}>{k}</div>
+            <div style={{fontSize:12,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{v}</div>
+          </div>
+        ))}
+        <div>
+          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:3}}>Run status</div>
+          <DbtStatusPill status={m.runStatus}/>
+        </div>
+      </div>
+
+      <div style={{display:"flex",flexWrap:"wrap",gap:16,paddingTop:12,borderTop:`1px solid ${T.border}`}}>
+        <div style={{minWidth:200}}>
+          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:5}}>dbt tags</div>
+          <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+            {m.tags.map(t=><span key={t} style={{fontSize:10.5,padding:"2px 8px",borderRadius:4,background:"rgba(255,105,75,.1)",color:"#c2410c",border:"1px solid rgba(255,105,75,.25)",fontFamily:"'Geist Mono',monospace"}}>{t}</span>)}
+          </div>
+        </div>
+        <div style={{minWidth:200}}>
+          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:5}}>dbt meta</div>
+          <div style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>
+            {Object.entries(m.meta).map(([k,v])=><div key={k}>{k}: {v}</div>)}
+          </div>
+        </div>
+        <div style={{flex:1,minWidth:240}}>
+          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:5}}>Source file</div>
+          <div style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace",wordBreak:"break-all"}}>{m.git}</div>
+        </div>
+      </div>
+
+      {tests.length>0&&(
+        <div style={{paddingTop:12,borderTop:`1px solid ${T.border}`}}>
+          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:7}}>
+            dbt tests · {tests.filter(t=>t.status==="pass").length} passing, {tests.filter(t=>t.status==="fail").length} failing, {tests.filter(t=>t.status==="warn").length} warning
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:5}}>
+            {tests.map(t=>(
+              <div key={t.name} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7}}>
+                <DbtStatusPill status={t.status}/>
+                <span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.text,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</span>
+                <span style={{fontSize:10.5,color:T.textMuted,whiteSpace:"nowrap"}}>{t.col} · {t.failedRows>0?t.failedRows.toLocaleString()+" failing rows":"0 failing rows"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Relationship row that walks the dbt DAG. Clickable only when the target resolves to a
+// real catalog asset - otherwise it falls back to the plain read-only row, so a row never
+// promises a link it cannot honour.
+const DbtRelRow = ({name,type,rel,onAsset})=>{
+  const target=(typeof ASSETS!=="undefined"?ASSETS:[]).find(a=>a.name===name);
+  if(!target||!onAsset) return <TbRelRow name={name} type={type} rel={rel}/>;
+  return (
+    <div onClick={()=>onAsset(target)} title={"Open "+name}
+      style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:T.bgElevated,
+        border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6,cursor:"pointer",transition:"all .12s"}}
+      onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;e.currentTarget.style.borderColor=`${T.accent}55`;}}
+      onMouseLeave={e=>{e.currentTarget.style.background=T.bgElevated;e.currentTarget.style.borderColor=T.border;}}>
+      <TypeBadge type={type}/>
+      <span style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</span>
+      <span style={{fontSize:11,color:T.textMuted,whiteSpace:"nowrap"}}>{rel}</span>
+      <svg width="11" height="11" viewBox="0 0 12 12" fill="none" style={{color:T.textMuted,flexShrink:0}}><path d="M4 2l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+    </div>
+  );
+};
+
+// Overview for any dbt object type.
+const DbtAssetOverview = ({asset,data,setData,onToast,onAsset})=>{
+  const navFn=useNav();
+  const Pr=DBT_PROFILE[asset.name]||{props:[["Object type",asset.type],["Path",asset.db]],rel:{}};
+  const rel=Pr.rel||{};
+  const [editingDesc,setEditingDesc]=useState(false);
+  const [descVal,setDescVal]=useState(data.description||asset.description||"");
+  const isJob=asset.type==="dbt Job";
+  const hasEngine=!!DBT_META[asset.name];
+
+  return (
+  <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:900}}>
+
+    {/* Description — dbt propagates the model's own description; a steward can override it here. */}
+    <Card2>
+      <div style={{padding:"14px 16px"}}>
+        <SH title="Description" sub={asset.type==="dbt Model"?"Synced from the dbt model description on every run":"Synced from dbt on every run"}
+          action={editingDesc
+            ? <div style={{display:"flex",gap:6}}>
+                <Btn small ghost onClick={()=>{setData(d=>({...d,description:descVal}));setEditingDesc(false);onToast&&onToast("Description saved","success");}}>Save</Btn>
+                <Btn small ghost onClick={()=>{setDescVal(data.description||asset.description||"");setEditingDesc(false);}}>Cancel</Btn>
+              </div>
+            : <Btn small ghost icon={Ic.edit(11)} onClick={()=>setEditingDesc(true)}>Edit</Btn>}/>
+        {editingDesc
+          ? <textarea value={descVal} onChange={e=>setDescVal(e.target.value)} rows={3}
+              style={{width:"100%",padding:10,borderRadius:8,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12.5,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box"}}/>
+          : <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65}}>{data.description||asset.description}</div>}
+      </div>
+    </Card2>
+
+    {/* Object properties */}
+    <Card2>
+      <div style={{padding:"14px 16px"}}>
+        <SH title="Properties"/>
+        <DbtProps rows={Pr.props}/>
+      </div>
+    </Card2>
+
+    {/* The dbt panel — how this object is built and run */}
+    {hasEngine&&(
+      <Card2>
+        <div style={{padding:"14px 16px"}}>
+          <SH title="dbt" sub="Materialization, run state and the tests declared in the repo"/>
+          <DbtEnginePanel name={asset.name}/>
+        </div>
+      </Card2>
+    )}
+
+    {/* Run history — job assets only. Runs are events, so they live here rather than as catalog rows. */}
+    {isJob&&(
+      <Card2 style={{overflow:"hidden"}}>
+        <div style={{padding:"14px 16px 10px"}}><SH title="Run history" sub="dbt Cloud runs for this job — last 5"/></div>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead><tr style={{background:T.bgElevated}}>
+            {["Run","Trigger","Status","Started","Duration","Models","Tests"].map(h=>(
+              <th key={h} style={{padding:"7px 14px",textAlign:"left",fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",borderBottom:`1px solid ${T.border}`}}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {DBT_RUNS.map((r,i)=>(
+              <React.Fragment key={r.id}>
+                <tr style={{borderBottom:r.note?"none":(i<DBT_RUNS.length-1?`1px solid ${T.border}`:"none")}}>
+                  <td style={{padding:"8px 14px",fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600}}>{r.id}</td>
+                  <td style={{padding:"8px 14px",fontSize:11.5,color:T.textSub}}>{r.trigger}</td>
+                  <td style={{padding:"8px 14px"}}><DbtStatusPill status={r.status}/></td>
+                  <td style={{padding:"8px 14px",fontSize:11.5,color:T.textMuted,whiteSpace:"nowrap"}}>{r.started}</td>
+                  <td style={{padding:"8px 14px",fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{r.duration}</td>
+                  <td style={{padding:"8px 14px",fontSize:11.5,color:T.textSub}}>{r.models}</td>
+                  <td style={{padding:"8px 14px",fontSize:11.5,color:r.failed>0?"#d97706":T.textSub}}>{r.tests}{r.failed>0?" ("+r.failed+" failed)":""}</td>
+                </tr>
+                {r.note&&<tr style={{borderBottom:i<DBT_RUNS.length-1?`1px solid ${T.border}`:"none"}}>
+                  <td colSpan={7} style={{padding:"0 14px 8px",fontSize:11,color:T.textMuted,fontStyle:"italic"}}>{r.note}</td>
+                </tr>}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+      </Card2>
+    )}
+
+    {/* Relationships */}
+    {(rel.parent||rel.contains||rel.upstream||rel.downstream)&&(
+      <Card2>
+        <div style={{padding:"14px 16px"}}>
+          <SH title="Relationships" sub="Where this object sits in the dbt DAG"/>
+          {rel.parent&&<DbtRelRow name={rel.parent.name} type={rel.parent.type} rel="Parent" onAsset={onAsset}/>}
+          {(rel.upstream||[]).map(r=><DbtRelRow key={r.name} name={r.name} type={r.type} rel="Upstream" onAsset={onAsset}/>)}
+          {(rel.downstream||[]).map(r=><DbtRelRow key={r.name} name={r.name} type={r.type} rel="Downstream" onAsset={onAsset}/>)}
+          {(rel.contains||[]).map(r=><DbtRelRow key={r.name} name={r.name} type={r.type} rel="Contains" onAsset={onAsset}/>)}
+        </div>
+      </Card2>
+    )}
+  </div>
+  );
+};
+
+// Columns tab for dbt models / sources / seeds / snapshots.
+const DbtColumnsPanel = ({asset})=>{
+  const cols=DBT_MODEL_COLUMNS[asset.name]||[];
+  const [q,setQ]=useState("");
+  const filtered=cols.filter(c=>!q||c.name.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <div className="fadeIn">
+      <Card2 style={{overflow:"hidden",padding:0}}>
+        <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:12,alignItems:"center"}}>
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search columns…"
+            style={{flex:1,padding:"6px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
+          <span style={{fontSize:11,color:T.textMuted,whiteSpace:"nowrap"}}>{cols.length} columns</span>
+        </div>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead><tr style={{background:T.bgElevated}}>
+            {["Column","Type","dbt tests","Description","Upstream column"].map(h=>(
+              <th key={h} style={{padding:"8px 14px",textAlign:"left",fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",borderBottom:`1px solid ${T.border}`}}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {filtered.map((c,i)=>(
+              <tr key={c.name} style={{borderBottom:i<filtered.length-1?`1px solid ${T.border}`:"none"}}>
+                <td style={{padding:"9px 14px",fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600}}>{c.name}</td>
+                <td style={{padding:"9px 14px",fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{c.dataType}</td>
+                <td style={{padding:"9px 14px"}}>
+                  {c.tests.length===0
+                    ? <span style={{fontSize:11,color:T.textMuted}}>—</span>
+                    : <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{c.tests.map(t=>{
+                        const st=DBT_TESTS.find(x=>x.on===asset.name&&x.col===c.name&&x.kind===t);
+                        const col=st&&st.status==="fail"?"#e11d48":st&&st.status==="warn"?"#d97706":"#16a34a";
+                        return <span key={t} style={{fontSize:10,padding:"2px 7px",borderRadius:4,background:`${col}14`,color:col,border:`1px solid ${col}33`,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{t}</span>;
+                      })}</div>}
+                </td>
+                <td style={{padding:"9px 14px",fontSize:11.5,color:T.textSub,maxWidth:260}}>{c.desc}</td>
+                <td style={{padding:"9px 14px",fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace",wordBreak:"break-all",maxWidth:200}}>{c.upstream}</td>
+              </tr>
+            ))}
+            {filtered.length===0&&<tr><td colSpan={5} style={{padding:28,textAlign:"center",fontSize:12.5,color:T.textMuted}}>No columns match "{q}"</td></tr>}
+          </tbody>
+        </table>
+      </Card2>
+    </div>
+  );
+};
+
+// SQL tab for dbt models / snapshots.
+const DbtSqlPanel = ({asset})=>(
+  <div className="fadeIn">
+    <Card2><div style={{padding:"14px 16px"}}>
+      <SH title="Model SQL" sub="Raw is what the repo holds; compiled is what the warehouse actually executed"/>
+      <DbtSqlBlock name={asset.name}/>
+    </div></Card2>
+  </div>
+);
+
+// Tests tab for a dbt node - read-only, because these live in the repo, not in EDG.
+const DbtTestsPanel = ({asset,onToast})=>{
+  const tests=DBT_TESTS.filter(t=>t.on===asset.name);
+  return (
+    <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:14}}>
+      <Card2><div style={{padding:"12px 16px",display:"flex",alignItems:"center",gap:10}}>
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,color:"#c2410c"}}><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5v4M8 11h.01" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+        <div style={{fontSize:12,color:T.textSub,lineHeight:1.55}}>
+          These tests are declared in the dbt repo's <span style={{fontFamily:"'Geist Mono',monospace"}}>schema.yml</span> and run by dbt Cloud.
+          EDG reports their results and can require them in a policy, but cannot edit them here — change them in the repo.
+        </div>
+      </div></Card2>
+      {tests.length===0
+        ? <Card2><div style={{padding:"28px 16px",textAlign:"center",fontSize:12.5,color:T.textMuted}}>No dbt tests are declared on this object.</div></Card2>
+        : <Card2 style={{overflow:"hidden",padding:0}}>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead><tr style={{background:T.bgElevated}}>
+                {["Test","Type","Column","Severity","Result","Failing rows","Last run"].map(h=>(
+                  <th key={h} style={{padding:"8px 14px",textAlign:"left",fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",borderBottom:`1px solid ${T.border}`}}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {tests.map((t,i)=>(
+                  <React.Fragment key={t.name}>
+                    <tr style={{borderBottom:"none"}}>
+                      <td style={{padding:"9px 14px",fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600}}>{t.name}</td>
+                      <td style={{padding:"9px 14px",fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{t.kind}</td>
+                      <td style={{padding:"9px 14px",fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{t.col}</td>
+                      <td style={{padding:"9px 14px",fontSize:11.5,color:t.severity==="error"?"#e11d48":"#d97706"}}>{t.severity}</td>
+                      <td style={{padding:"9px 14px"}}><DbtStatusPill status={t.status}/></td>
+                      <td style={{padding:"9px 14px",fontSize:11.5,color:t.failedRows>0?"#e11d48":T.textSub,fontFamily:"'Geist Mono',monospace"}}>{t.failedRows.toLocaleString()}</td>
+                      <td style={{padding:"9px 14px",fontSize:11.5,color:T.textMuted,whiteSpace:"nowrap"}}>{t.lastRun}</td>
+                    </tr>
+                    <tr style={{borderBottom:i<tests.length-1?`1px solid ${T.border}`:"none"}}>
+                      <td colSpan={7} style={{padding:"0 14px 9px",fontSize:11,color:T.textMuted,fontStyle:"italic"}}>{t.detail}</td>
+                    </tr>
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </Card2>}
+    </div>
+  );
+};
+
+// The "dbt" tab on a warehouse table that a dbt model materializes. This is the
+// OpenMetadata half of the model: a consumer who lands on the physical table sees who
+// built it, how, when it last ran, whether its tests passed, and the SQL behind it.
+const DbtOnTablePanel = ({asset,onAsset})=>{
+  const modelName=asset.dbtModel;
+  const model=(typeof ASSETS!=="undefined"?ASSETS:[]).find(a=>a.name===modelName&&a.service==="dbt");
+  const m=DBT_META[modelName];
+  if(!m) return <div className="fadeIn" style={{fontSize:12.5,color:T.textMuted}}>No dbt model builds this asset.</div>;
+  return (
+    <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:16,maxWidth:900}}>
+      <Card2>
+        <div style={{padding:"14px 16px"}}>
+          <SH title="Built by dbt" sub="This table is not hand-maintained — a dbt model owns its shape and contents"/>
+          <div style={{display:"flex",alignItems:"center",gap:12,padding:"11px 13px",background:"rgba(255,105,75,.06)",
+            border:"1px solid rgba(255,105,75,.25)",borderRadius:9}}>
+            <ServiceIcon service="dbt" size={22}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{modelName}</div>
+              <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>dbt Model · materialized as {m.materialization} → {m.schema} / {m.alias}</div>
+            </div>
+            {model&&onAsset&&<Btn small ghost onClick={()=>onAsset(model)}>Open dbt model</Btn>}
+          </div>
+        </div>
+      </Card2>
+
+      <Card2>
+        <div style={{padding:"14px 16px"}}>
+          <SH title="dbt" sub="Run state, tags, meta and the tests guarding this table"/>
+          <DbtEnginePanel name={modelName}/>
+        </div>
+      </Card2>
+
+      <Card2>
+        <div style={{padding:"14px 16px"}}>
+          <SH title="Model SQL" sub="The definition that produced this table"/>
+          <DbtSqlBlock name={modelName}/>
+        </div>
+      </Card2>
+    </div>
+  );
+};
+
+const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}) => {
   const [tab,        setTab]       = useState("overview");
   const [selCol,     setSelCol]    = useState(null);
   const [colPanelTab,setColPanelTab]=useState("overview");
@@ -18602,7 +19499,29 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
   // ── Tableau (BI) objects get an object-appropriate profile (no columns / DQ / contract) ──
   const isBI = asset.service==="tableau";
   const biHasFields = isBI && !!TABLEAU_FIELDS[asset.name];   // data sources expose fields
-  const tabs = isBI
+  // ── dbt objects get an object-appropriate profile too. A model is not a table: what
+  //    matters is materialization, refs, tests and its SQL — not row counts or a contract.
+  //    Projects and jobs are containers, so they have no lineage of their own (same rule
+  //    Tableau applies to workbooks). ──
+  const isDbt      = asset.service==="dbt";
+  const dbtHasCols = isDbt && !!DBT_MODEL_COLUMNS[asset.name];
+  const dbtHasSql  = isDbt && !!DBT_SQL[asset.name];
+  const dbtHasTests= isDbt && DBT_TESTS.some(t=>t.on===asset.name);
+  const dbtInDag   = isDbt && !["dbt Project","dbt Job"].includes(asset.type);
+  // A warehouse table built by a dbt model carries the dbt story on its own profile.
+  const dbtOnTable = !isDbt && !!asset.dbtModel && !!DBT_META[asset.dbtModel];
+  const tabs = isDbt
+    ? [
+        {key:"overview",label:"Overview"},
+        ...(dbtHasCols?[{key:"schema",label:"Columns"}]:[]),
+        ...(dbtHasSql?[{key:"dbtsql",label:"SQL"}]:[]),
+        ...(dbtHasTests?[{key:"dbttests",label:"Tests"}]:[]),
+        ...(dbtInDag?[{key:"lineage",label:"Lineage"}]:[]),
+        {key:"usage",label:"Usage"},
+        {key:"customprops",label:"Custom Properties"},
+        {key:"activity",label:"Audit Logs"},
+      ]
+    : isBI
     ? [
         {key:"overview",label:"Overview"},
         ...(biHasFields?[{key:"schema",label:"Fields"}]:[]),
@@ -18613,11 +19532,19 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
       ]
     : [
         {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},{key:"lineage",label:"Lineage"},
+        ...(dbtOnTable?[{key:"dbt",label:"dbt"}]:[]),
         {key:"observability",label:"Data Quality"},{key:"contract",label:"Contract"},{key:"usage",label:"Usage"},
         {key:"customprops",label:"Custom Properties"},{key:"activity",label:"Audit Logs"},
       ];
   // If the active tab isn't available for this object type, fall back to Overview.
   useEffect(()=>{ if(!tabs.some(t=>t.key===tab)) setTab("overview"); },[asset.name]);
+  // Drilling from one asset straight to another (a table to the dbt model that builds it, say)
+  // re-renders this same component with a new asset prop. `data` is seeded from that prop, so
+  // without this it would keep showing the asset we navigated away from.
+  useEffect(()=>{
+    setData({...asset, owners:asset.owners||[asset.owner],
+      stewards:asset.stewards||(asset.steward?[asset.steward]:[]), tags:[...(asset.tags||[])]});
+  },[asset.name]);
 
   const handleCertify=()=>{
     setData(d=>({...d,cert:"Approved"}));
@@ -18699,14 +19626,21 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
 
       {/* Main content */}
       <div style={{flex:1,overflowY:"auto",padding:24,minWidth:0}}>
-        {tab==="overview"  && (isBI
+        {tab==="overview"  && (isDbt
+          ? <DbtAssetOverview asset={asset} data={data} setData={setData} onToast={onToast} onAsset={onAsset}/>
+          : isBI
           ? <TableauAssetOverview asset={asset} data={data} setData={setData} onToast={onToast}/>
           : <AssetOverview asset={asset} data={data} setData={setData} onToast={onToast}/>)}
-        {tab==="schema"    && (isBI
+        {tab==="schema"    && (isDbt
+          ? <DbtColumnsPanel asset={data}/>
+          : isBI
           ? <TableauFieldsPanel asset={data}/>
           : <AssetSchema asset={asset} selCol={selCol} onColClick={c=>{ setSelCol(selCol?.name===c?.name?null:c); }} onToast={onToast}/>)}
-        {tab==="observability" && !isBI && <AssetObservabilityTab asset={data} onToast={onToast} onNav={onNav}/>}
-        {tab==="contract"      && !isBI && <AssetContractTab asset={data} onToast={onToast}/>}
+        {tab==="dbtsql"    && isDbt && <DbtSqlPanel asset={data}/>}
+        {tab==="dbttests"  && isDbt && <DbtTestsPanel asset={data} onToast={onToast}/>}
+        {tab==="dbt"       && dbtOnTable && <DbtOnTablePanel asset={data} onAsset={onAsset}/>}
+        {tab==="observability" && !isBI && !isDbt && <AssetObservabilityTab asset={data} onToast={onToast} onNav={onNav}/>}
+        {tab==="contract"      && !isBI && !isDbt && <AssetContractTab asset={data} onToast={onToast}/>}
         {tab==="usage"     && <AssetUsageTab/>}
         {tab==="lineage"   && <AssetLineageFull asset={data}/>}
         {tab==="customprops" && <CustomPropsPanel entity={data.type||"Table"} objectId={data.name} objectName={data.name} owners={owners} stewards={stewards} onToast={onToast}/>}
@@ -19098,6 +20032,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
                         <div style={{display:"flex",gap:5,marginBottom:8,flexWrap:"wrap"}}>
                           <DimChip dim={tc.dim}/>
                           <span style={{fontSize:10,color:T.textMuted,background:T.bgSurface,padding:"1px 6px",borderRadius:3,border:`1px solid ${T.border}`}}>{tc.defName}</span>
+                          <TestSourceChip source={tc.source}/>
                         </div>
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:tc.history?6:0}}>
                           <div>
@@ -19168,8 +20103,9 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
                             <span style={{fontSize:10,fontWeight:700,color:SC2[t.status]||T.textMuted,background:`${SC2[t.status]||T.bgSurface}18`,padding:"1px 6px",borderRadius:4,border:`1px solid ${SC2[t.status]||T.border}33`}}>{t.status}</span>
                             <span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:`${dimC[t.dim]||T.textMuted}12`,color:dimC[t.dim]||T.textMuted,fontWeight:600,border:`1px solid ${dimC[t.dim]||T.textMuted}22`}}>{t.dim}</span>
                             <span style={{fontSize:10,color:T.textMuted,background:T.bgSurface,padding:"1px 6px",borderRadius:4,border:`1px solid ${T.border}`}}>{t.defName}</span>
+                            <TestSourceChip source={t.source}/>
                           </div>
-                          <div style={{fontSize:10,color:T.textMuted,marginTop:4}}>Last run: {t.lastRun}</div>
+                          <div style={{fontSize:10,color:T.textMuted,marginTop:4}}>Last run: {t.lastRun}{t.source==="dbt"&&t.dbtTest?" · "+t.dbtTest:""}</div>
                         </div>
                       </div>
                     </div>
@@ -19564,7 +20500,9 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onToast, onNav}) => {
           {[
             {l:"Request Access", fn:()=>onToast("Access request sent","success")},
             {l:"Copy Link",      fn:()=>onToast("Link copied","success")},
-            {l:"View Lineage",   fn:()=>setTab("lineage")},
+            // Containers (a dbt project or job) have no lineage of their own, so offering the
+            // action would land the user on a tab that is not in the strip.
+            ...(tabs.some(t=>t.key==="lineage")?[{l:"View Lineage", fn:()=>setTab("lineage")}]:[]),
           ].map((a,i,arr)=>(
             <button key={i} onClick={a.fn}
               style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",background:"none",border:"none",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",color:T.textSub,fontSize:12.5,cursor:"pointer",transition:"color .1s"}}
@@ -27660,14 +28598,13 @@ const OM_CONNECTORS = [
 
   // ── PIPELINE ──
   {name:"Apache Airflow",  cat:"Pipeline",       logoUrl:SI("apacheairflow","017CEE"),            desc:"Workflow orchestration platform for data pipelines",  status:"Connected",  assets:89,   lastSync:"3m ago"},
-  {name:"dbt",             cat:"Pipeline",       logoUrl:SI("dbt","FF694B"),                      desc:"SQL-based data transformation and modeling tool",     status:"Connected",  assets:234,  lastSync:"7m ago"},
+  {name:"dbt",             cat:"Pipeline",       logoUrl:SI("dbt","FF694B"),                      desc:"SQL transformation layer. dbt Cloud or dbt Core, chosen per connection", status:"Connected",  assets:20,   lastSync:"7m ago"},
   {name:"Dagster",         cat:"Pipeline",       logoUrl:SI("dagster","4F43DD"),                  desc:"Cloud-native data orchestration platform",           status:"Available",  assets:0,    lastSync:null},
   {name:"Fivetran",        cat:"Pipeline",       logoUrl:SI("fivetran","0073FF"),                 desc:"Fully managed ELT data integration service",          status:"Warning",    assets:48,   lastSync:"3h ago"},
   {name:"Airbyte",         cat:"Pipeline",       logoUrl:SI("airbyte","615EFF"),                  desc:"Open-source ELT data integration platform",           status:"Available",  assets:0,    lastSync:null},
   {name:"Apache NiFi",     cat:"Pipeline",       logoUrl:SI("apachenifi","728E9B"),               desc:"Data flow automation and integration platform",       status:"Available",  assets:0,    lastSync:null},
   {name:"Apache Flink",    cat:"Pipeline",       logoUrl:SI("apacheflink","E6526F"),              desc:"Stateful stream and batch processing framework",     status:"Available",  assets:0,    lastSync:null},
   {name:"AWS Glue",        cat:"Pipeline",       logoUrl:SI("amazonwebservices","FF9900"),        desc:"Serverless data integration and ETL service",         status:"Available",  assets:0,    lastSync:null},
-  {name:"dbt Cloud",       cat:"Pipeline",       logoUrl:SI("dbt","FF694B"),                      desc:"Managed dbt with CI/CD and collaboration features",  status:"Available",  assets:0,    lastSync:null},
   {name:"Spline",          cat:"Pipeline",       logoUrl:null, color:"#FF4500",                  desc:"Apache Spark data lineage tracking",                  status:"Available",  assets:0,    lastSync:null},
 
   // ── MESSAGING ──
@@ -29500,7 +30437,7 @@ const CONNECTOR_FIELDS = {
   snowflake:  [{k:"account",l:"Account",ph:"company.us-east-1",type:"text"},{k:"warehouse",l:"Warehouse",ph:"COMPUTE_WH",type:"text"},{k:"database",l:"Database",ph:"PROD_DWH",type:"text"},{k:"schema",l:"Schema",ph:"PUBLIC",type:"text"},{k:"username",l:"Username",ph:"SOLIX_USER",type:"text"},{k:"password",l:"Password",ph:"••••••••",type:"password"},{k:"role",l:"Role",ph:"SOLIX_READER",type:"text"}],
   bigquery:   [{k:"project",l:"Project ID",ph:"my-gcp-project",type:"text"},{k:"dataset",l:"Default Dataset",ph:"production",type:"text"},{k:"keyfile",l:"Service Account JSON",ph:"Paste JSON key…",type:"textarea"}],
   kafka:      [{k:"bootstrap",l:"Bootstrap Servers",ph:"kafka.company.com:9092",type:"text"},{k:"schema_registry",l:"Schema Registry URL",ph:"http://schema-registry:8081",type:"text"},{k:"security",l:"Security Protocol",ph:"PLAINTEXT",type:"select",opts:["PLAINTEXT","SSL","SASL_PLAINTEXT","SASL_SSL"]}],
-  dbt:        [{k:"project_id",l:"Project ID",ph:"123456",type:"text"},{k:"account",l:"Account",ph:"company",type:"text"},{k:"api_key",l:"API Key",ph:"dbt_••••••••",type:"password"},{k:"environment",l:"Environment",ph:"production",type:"select",opts:["production","staging","development"]}],
+  dbt:        [{k:"deployment",l:"Deployment",ph:"dbt Cloud",type:"select",opts:["dbt Cloud (Discovery API)","dbt Core (manifest + run_results artifacts)"]},{k:"project_id",l:"Project ID",ph:"123456",type:"text"},{k:"account",l:"Account",ph:"company",type:"text"},{k:"api_key",l:"API Key",ph:"dbt_••••••••",type:"password"},{k:"environment",l:"Environment",ph:"production",type:"select",opts:["production","staging","development"]}],
   tableau:    [{k:"server",l:"Server URL",ph:"https://company.tableau.com",type:"text"},{k:"site",l:"Site Name",ph:"company",type:"text"},{k:"token_name",l:"Personal Access Token Name",ph:"solix-ingest",type:"text"},{k:"token",l:"Personal Access Token",ph:"••••••••",type:"password"}],
   looker:     [{k:"host",l:"Looker URL",ph:"https://company.looker.com",type:"text"},{k:"client_id",l:"Client ID",ph:"abc123",type:"text"},{k:"client_secret",l:"Client Secret",ph:"••••••••",type:"password"}],
   airflow:    [{k:"host",l:"Airflow URL",ph:"https://airflow.company.com",type:"text"},{k:"username",l:"Username",ph:"admin",type:"text"},{k:"password",l:"Password",ph:"••••••••",type:"password"}],
