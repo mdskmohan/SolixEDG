@@ -13143,14 +13143,25 @@ function buildLinEdges(hiddenNodes,edgesDef=LINEAGE_EDGES_DEF){
       const isDbt=e.tk==="dbt ref"||e.tk==="Materializes"||e.tk==="dbt model"
         ||e.tk==="Metric definition"||e.tk==="Exposure"||e.tk==="Declared source"||e.tk==="Declared dependency";
       const c=isDbt?"#fb8f66":"#94a3b8";
+      // A few edges are unavoidably long: a source read by two models sits next to the
+      // nearer one, so the far hop crosses intervening columns and passes behind their
+      // cards. Drawing those dashed and faded reads as "this line is only passing
+      // through" instead of looking like an edge belonging to the node it crosses.
+      const longHaul = e.span!==undefined && e.span>1;
+      // A label sits at the edge midpoint, so on a multi-column edge it would float over
+      // an unrelated node. Those edges keep their colour and stay in the info panel, but
+      // go unlabelled on the canvas.
+      const labelled = e.tk && (e.span===undefined || e.span<=1);
       return{
         id:e.id,source:e.s,target:e.t,type:"smoothstep",
-        label:e.tk||null,
-        labelShowBg:true, labelBgPadding:[5,2], labelBgBorderRadius:4,
+        label:labelled?e.tk:null,
+        labelShowBg:!!labelled, labelBgPadding:[5,2], labelBgBorderRadius:4,
         labelBgStyle:{fill:"#ffffff",fillOpacity:.92,stroke:isDbt?"#fed7c3":"#e2e8f0"},
         labelStyle:{fill:isDbt?"#c2410c":"#64748b",fontSize:9.5,fontWeight:600,fontFamily:"inherit"},
         markerEnd:{type:MarkerType.ArrowClosed,color:c,width:12,height:12},
-        style:{stroke:c,strokeWidth:1.6},
+        style:longHaul
+          ? {stroke:c,strokeWidth:1.3,strokeDasharray:"6 5",opacity:.55}
+          : {stroke:c,strokeWidth:1.6},
       };
     });
 }
@@ -13362,6 +13373,18 @@ function dbtFocusedGraph(activeId){
     if(!moved) break;
   }
 
+  // Then pull every non-sink rightwards until it sits directly before its earliest
+  // consumer. Longest-path alone parks each branch input in the first column it is
+  // allowed to occupy, which leaves a seed or a source stranded columns away from the
+  // model that reads it - and the connecting edge then flies across the canvas behind
+  // unrelated node cards. Walking in reverse depth order means a node is only moved
+  // once its consumers are final, and moving right can never break the left-to-right
+  // rule, so the layout stays valid while most edges shorten to a single hop.
+  [...keep].sort((a,b)=>depth[b]-depth[a]).forEach(id=>{
+    const outs = DBT_DAG_EDGES.filter(e=>e.s===id&&keep.has(e.t)).map(e=>e.t);
+    if(outs.length) depth[id] = Math.min(...outs.map(t=>depth[t])) - 1;
+  });
+
   // Group by depth, then stack. Sorting by id keeps the layout stable across renders.
   const byDepth = {};
   [...keep].sort().forEach(id=>{ (byDepth[depth[id]] = byDepth[depth[id]]||[]).push(id); });
@@ -13378,9 +13401,12 @@ function dbtFocusedGraph(activeId){
       };
     });
   });
+  // Span in columns, so the renderer can skip labelling an edge whose midpoint would
+  // land on top of an unrelated node.
+  const spanned = edges.map(e=>({...e, span:(topo[e.t].x-topo[e.s].x)/310}));
   const colMaps = DBT_DAG_COLMAPS.filter(m=>keep.has(m.s)&&keep.has(m.t));
   const hasDbt = [...keep].some(id=>String(META[id].assetType||"").startsWith("dbt "));
-  return {topo, meta:META, colMaps, edges, hasDbt};
+  return {topo, meta:META, colMaps, edges:spanned, hasDbt};
 }
 
 // Collapse the dbt layer out of a graph: dbt nodes are removed, their upstreams wired
