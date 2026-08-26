@@ -3259,6 +3259,7 @@ const NOTIF_CATALOG = [
     {ev:"da_space_published", label:"Answer Space published / unpublished → owner"},
     {ev:"da_access_denied",   label:"Question refused by the classification blocklist → Admin"},
     {ev:"da_index_failed",    label:"Index build failed → space owner"},
+    {ev:"da_drift_detected",  label:"New tables / columns / files not yet indexed → space owner"},
     {ev:"da_credit_threshold",label:"Credit cap threshold reached → Admin & space owner"},
   ]},
   {menu:"Connections",     key:"integrations", events:[
@@ -34939,6 +34940,11 @@ const DA_SPACE_SEED = [
     accuracy:91, questions30d:604, credits30d:2980, avgLatency:"4.1s",
     desc:"Executed contracts, invoices and quarterly exports held in ECS and the finance lake.",
     retrieval:"hybrid", chunks:"18,402",
+    filters:{cats:["Contract","Invoice","Export","Financial report"], excludeCats:["Trivial","HR record"],
+             sens:["Public","Internal","Confidential"], excludeDocs:["contract_draft_old_v1.pdf"],
+             folders:["/legal/contracts/2025","/finance"], excludeFolders:["/misc","/hr"],
+             types:["PDF","DOCX","XLSX","CSV","PARQUET"], excludeTypes:["MP4","ZIP","MP3"],
+             minSize:0, maxSize:200, maxSentences:120, skipRot:true},
     sources:[
       {name:"contracts_2025.pdf",     type:"Object", role:"document", rows:"312 pages", tags:["confidential"], term:"Contract", hold:true},
       {name:"invoices_2026.parquet",  type:"Object", role:"document", rows:"1.4M rows", tags:[],              term:"Invoice"},
@@ -34971,6 +34977,11 @@ const DA_SPACE_SEED = [
     accuracy:89, questions30d:311, credits30d:1640, avgLatency:"5.4s",
     desc:"Trusted customer records from the cross-source knowledge graph, plus the contracts and support files attached to them.",
     retrieval:"hybrid", chunks:"4,120", kg:"XKG — Customer (184,200 golden records)",
+    filters:{cats:["Contract"], excludeCats:["Trivial","HR record"],
+             sens:["Internal","Confidential"], excludeDocs:[],
+             folders:["/legal/contracts/2025"], excludeFolders:["/misc","/hr"],
+             types:["PDF"], excludeTypes:["MP4","ZIP","MP3"],
+             minSize:0, maxSize:200, maxSentences:120, skipRot:true},
     sources:[
       {name:"XKG — Customer",    type:"Knowledge Graph", role:"golden record", rows:"184,200", tags:["PII","GDPR"], term:"Customer"},
       {name:"customers",         type:"Table",  role:"dimension", rows:"2.1M", tags:["PII","GDPR"], term:"Customer"},
@@ -35527,6 +35538,12 @@ const daProject = (ans, role) => {
                  : ans.ambiguous ? "Clarified"
                  : willMask ? "Masked" : "Answered";
   return {...ans, rows, entitled, willMask, decision};
+};
+// Re-derive a stored turn's answer for whoever is reading it now.
+const daReproject = (msg, role) => {
+  if(!msg.ansId) return null;
+  const raw = DA_ANSWERS.find(a=>a.id===msg.ansId);
+  return raw ? daProject({...raw, q:msg.q}, role) : null;
 };
 const DA_DECISION_COLOR = d => ({Answered:T.green, Masked:T.amber, Denied:T.rose,
   Clarified:T.blue, Reported:T.violet, "Not understood":T.textMuted}[d]||T.textSub);
@@ -36175,7 +36192,10 @@ const DAAskTab = ({me,role,onToast,onNav,onManage}) => {
       if(i < DA_THINK_STEPS.length){ setMsg(tid,aid,{step:i}); setTimeout(tick,430); return; }
       const raw = daResolve(q, spaceId);
       const ans = raw ? daProject({...raw, q}, role) : null;
-      setMsg(tid,aid,{state:"done", ans});
+      // Persist the answer's identity only — the projection is recomputed per
+      // render against whoever is looking, so a role switch cannot leave a
+      // more-privileged result on screen.
+      setMsg(tid,aid,{state:"done", ansId: raw?raw.id:null, resolved:true});
       daLog({at:daNow(), who:me, space:(raw&&raw.denied)?"—":spaceId, q, mode:raw?raw.mode:(space?space.mode:"structured"),
         decision: ans?ans.decision:"Not understood",
         masked: ans&&ans.willMask?ans.masked.length:0,
@@ -36260,6 +36280,18 @@ const DAAskTab = ({me,role,onToast,onNav,onManage}) => {
           </div>
         </div>
 
+        {space&&daDrift(space).n>0&&(
+          <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"8px 20px",
+            background:T.amber+"12",borderBottom:`1px solid ${T.amber}44`,flexShrink:0}}>
+            <span style={{color:T.amber,display:"flex",flexShrink:0}}>{Ic.alert(12)}</span>
+            <span style={{fontSize:11.5,color:T.text,flex:1,minWidth:200,lineHeight:1.5}}>
+              This space has not indexed {daDrift(space).detail.replace(/ since .*/,"")} — a question about them will come
+              back empty rather than wrong. {canPublish?"Refresh it from the space profile.":"Its owner has been notified."}
+            </span>
+            {canPublish&&<Btn small ghost onClick={onManage}>Refresh space</Btn>}
+          </div>
+        )}
+
         {/* messages */}
         <div ref={scroller} style={{flex:1,overflowY:"auto",padding:"22px 24px"}}>
           {!thread || thread.msgs.length===0 ? (
@@ -36320,13 +36352,13 @@ const DAAskTab = ({me,role,onToast,onNav,onManage}) => {
                   <div style={{minWidth:0,flex:1}}>
                     {m.state==="thinking"
                       ? <DAThinking step={m.step}/>
-                      : <DAAnswerCard msg={m} space={space} role={role} me={me}
+                      : <DAAnswerCard msg={{...m, ans: daReproject(m, role)}} space={space} role={role} me={me}
                           canEditSql={canEditSql} canPublish={canPublish}
                           onToast={onToast} onNav={onNav}
                           onTrust={()=>setTrust(m)} onReport={()=>setReport(m)} onAsk={ask} onManage={onManage}
                           onEditSql={sql=>setMsg(thread.id,m.id,{editedSql:sql})}
                           onSaveVerified={()=>{
-                            daPatch({verified:[{id:"v"+Date.now(), q:m.q, space:spaceId, answerId:m.ans.id,
+                            daPatch({verified:[{id:"v"+Date.now(), q:m.q, space:spaceId, answerId:m.ansId,
                               owner:me, verified:daNow().slice(0,10), uses:0, status:"Verified",
                               note:"Promoted from a Data Ask conversation."}, ..._da.verified]});
                             onToast("Saved as a Verified Answer");
@@ -37588,6 +37620,60 @@ const DASpaceProfile = ({sp,me,role,onBack,onToast,onNav,onAsk}) => {
             <Metric label="Open reviews" value={String(_da.review.filter(r=>r.space===sp.id&&r.status==="Open").length)}
               color={_da.review.filter(r=>r.space===sp.id&&r.status==="Open").length?T.amber:T.green}/>
           </div>
+          {(()=>{
+            const dr = daDrift(sp);
+            const R  = _da.settings.refresh;
+            return (
+              <div style={{padding:"13px 15px",marginBottom:18,borderRadius:10,
+                background:dr.n?T.amber+"0e":T.bgSurface, border:`1px solid ${dr.n?T.amber+"55":T.border}`}}>
+                <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+                  <div style={{flex:1,minWidth:200}}>
+                    <div style={{fontSize:12.8,fontWeight:700,color:T.text,marginBottom:2}}>
+                      {dr.n?`${dr.n} objects have appeared since this space last indexed`:"Index is current"}
+                    </div>
+                    <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.55}}>
+                      {dr.detail}. {dr.n
+                        ? `A question about them returns nothing today — not an error, just silence. An incremental refresh processes only these ${dr.n} and costs about ${dr.credits} credits; a full rebuild would re-bill everything.`
+                        : `Drift is checked on every source sync. Refresh mode is ${R.mode}, on a ${R.schedule} schedule.`}
+                    </div>
+                  </div>
+                  {dr.n>0&&canManage&&(
+                    <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                      <Btn small ghost disabled={building} onClick={()=>{
+                        setBuilding(true);
+                        setTimeout(()=>{ setBuilding(false);
+                          daUpdSpace(sp.id,x=>({indexed:daNow(),
+                            drift:{tables:0,cols:0,files:0,since:daNow()},
+                            credits30d:x.credits30d+dr.credits,
+                            history:[{at:daNow(),what:"Full rebuild",who:me,
+                              detail:`${x.sources.length} objects re-processed`},...x.history]}));
+                          onToast("Full rebuild complete — every object re-processed");
+                        },1600);
+                      }}>Full rebuild</Btn>
+                      <Btn small variant="primary" disabled={building} onClick={()=>{
+                        setBuilding(true);
+                        setTimeout(()=>{ setBuilding(false);
+                          daUpdSpace(sp.id,x=>({indexed:daNow(),
+                            drift:{tables:0,cols:0,files:0,since:daNow()},
+                            credits30d:x.credits30d+dr.credits,
+                            history:[{at:daNow(),what:"Incremental refresh",who:me,
+                              detail:`${dr.n} new objects · ${dr.credits} credits`},...x.history]}));
+                          daPatch({settings:{..._da.settings, cost:{..._da.settings.cost,
+                            balance:_da.settings.cost.balance-dr.credits,
+                            ledger:[{id:"lg"+Date.now(), at:daNow(), act:"Index build (embeddings)", svc:"index",
+                              model:_da.settings.models.index.model, qty:`${dr.n} objects`, unit:"per 1K chunks",
+                              rate:"$0.180", amount:dr.credits, domain:sp.domain, by:me, space:sp.id},
+                              ..._da.settings.cost.ledger]}}});
+                          onToast(`Refreshed ${dr.n} new objects — ${dr.credits} credits`);
+                        },1600);
+                      }}>{building?"Refreshing…":`Refresh ${dr.n} new (~${dr.credits} cr)`}</Btn>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
           <div style={{display:"grid",gridTemplateColumns:"1.2fr 1fr",gap:14}}>
             <Card2 style={{padding:16}}>
               <SH title="What this space is for" sub="Shown to everyone who selects it on the Ask screen."/>
@@ -37637,6 +37723,53 @@ const DASpaceProfile = ({sp,me,role,onBack,onToast,onNav,onAsk}) => {
             ]}
             rows={sp.sources}
             onRowClick={()=>onNav&&onNav("catalog")}/>
+          {sp.filters&&(()=>{
+            const f = sp.filters;
+            const Chip = ({children,c}) => (
+              <span style={{display:"inline-block",padding:"3px 9px",margin:"0 5px 5px 0",borderRadius:99,fontSize:11,
+                fontWeight:600,background:(c||T.textSub)+"1a",color:c||T.textSub,border:`1px solid ${(c||T.textSub)}44`}}>{children}</span>
+            );
+            const Line = ({l,children}) => (
+              <div style={{display:"flex",gap:12,padding:"9px 0",borderTop:`1px solid ${T.border}`,flexWrap:"wrap"}}>
+                <span style={{fontSize:11.5,color:T.textMuted,width:152,flexShrink:0}}>{l}</span>
+                <span style={{flex:1,minWidth:200}}>{children}</span>
+              </div>
+            );
+            return (<>
+              <SH title="Document filters"
+                sub="What the workflow picks up on every run — including runs after new files land. Edit these and the next refresh honours them." action={null}/>
+              <Card2 style={{padding:16,marginBottom:20}}>
+                <Line l="Categories included">{f.cats.length?f.cats.map(x=><Chip key={x} c={T.green}>{x}</Chip>):<span style={{fontSize:11.5,color:T.textMuted}}>all categories</span>}</Line>
+                <Line l="Categories excluded">{f.excludeCats.length?f.excludeCats.map(x=><Chip key={x} c={T.rose}>{x}</Chip>):<span style={{fontSize:11.5,color:T.textMuted}}>none</span>}</Line>
+                <Line l="Sensitivity allowed">{f.sens.map(x=><Chip key={x} c={x==="Confidential"?T.amber:T.textSub}>{x}</Chip>)}</Line>
+                <Line l="Folder rules">
+                  {f.folders.map(x=><Chip key={x} c={T.green}>include {x}</Chip>)}
+                  {f.excludeFolders.map(x=><Chip key={x} c={T.rose}>exclude {x}</Chip>)}
+                </Line>
+                <Line l="File types">
+                  {f.types.map(x=><Chip key={x} c={T.green}>{x}</Chip>)}
+                  {f.excludeTypes.map(x=><Chip key={x} c={T.rose}>no {x}</Chip>)}
+                </Line>
+                <Line l="Size constraints">
+                  <span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{f.minSize}–{f.maxSize} MB · max {f.maxSentences} sentences per file</span>
+                </Line>
+                <Line l="ROT-flagged files">
+                  <span style={{fontSize:11.5,color:f.skipRot?T.green:T.amber}}>
+                    {f.skipRot?"Skipped — redundant, obsolete and trivial files are never indexed":"Indexed — obsolete drafts can be cited"}
+                  </span>
+                </Line>
+                {f.excludeDocs.length>0&&(
+                  <Line l="Excluded by name">{f.excludeDocs.map(x=><Chip key={x} c={T.rose}>{x}</Chip>)}</Line>
+                )}
+                <Line l="Retrieval">
+                  <span style={{fontSize:11.5,color:T.textSub}}>
+                    {(DA_RETRIEVAL[sp.retrieval]||{}).label||"Hybrid"} · {sp.chunks} chunks · {(DA_RETRIEVAL[sp.retrieval]||{}).sub}
+                  </span>
+                </Line>
+              </Card2>
+            </>);
+          })()}
+
           {(sp.joins||[]).length>0&&(<>
             <SH title="Relationships" sub="Anything below 80% confidence must be confirmed before the planner will use it." action={null}/>
             <DataTable
@@ -38282,6 +38415,12 @@ const DASettingsSection = ({onToast}) => {
   const [sub,setSub]   = useState("models");
   const [d,setD]       = useState(()=>JSON.parse(JSON.stringify(st.settings)));
   const [xfer,setXfer] = useState({from:"Platform",to:"Commerce",amount:1000});
+  // Commits a cost mutation to the store and the draft at once.
+  const applyCost = fn => {
+    const nextCost = fn(_da.settings.cost);
+    daPatch({settings:{..._da.settings, cost:nextCost}});
+    setD(x=>({...x, cost:fn(x.cost)}));
+  };
   const [saved,setSaved]=useState(false);
   const dirty = JSON.stringify(d)!==JSON.stringify(st.settings);
 
@@ -38726,12 +38865,12 @@ const DASettingsSection = ({onToast}) => {
               disabled={xfer.from===xfer.to || xfer.amount<=0 ||
                         xfer.amount>((d.cost.domains.find(x=>x.id===xfer.from)||{}).balance||0)}
               onClick={()=>{
-                setD(x=>({...x,cost:{...x.cost,
-                  domains:x.cost.domains.map(dm=>dm.id===xfer.from?{...dm,balance:dm.balance-xfer.amount}
-                                              :dm.id===xfer.to?{...dm,balance:dm.balance+xfer.amount}:dm),
+                applyCost(c=>({...c,
+                  domains:c.domains.map(dm=>dm.id===xfer.from?{...dm,balance:dm.balance-xfer.amount}
+                                        :dm.id===xfer.to?{...dm,balance:dm.balance+xfer.amount}:dm),
                   transfers:[{id:"tr"+Date.now(), at:daNow(), from:xfer.from, to:xfer.to, amount:xfer.amount, by:"alex.rivera"},
-                             ...x.cost.transfers]}}));
-                onToast(`${xfer.amount.toLocaleString()} credits moved from ${xfer.from} to ${xfer.to}`);
+                             ...c.transfers]}));
+                onToast(`${xfer.amount.toLocaleString()} credits moved from ${xfer.from} to ${xfer.to} — applied immediately`);
               }}>Transfer</Btn>
           </div>
           {xfer.from===xfer.to
@@ -38791,11 +38930,11 @@ const DASettingsSection = ({onToast}) => {
                     ? <DAPill color={T.green}>Reverted</DAPill>
                     : lg.amount>0
                       ? <Btn small ghost onClick={()=>{
-                          setD(x=>({...x,cost:{...x.cost,
-                            balance:x.cost.balance+lg.amount,
-                            domains:x.cost.domains.map(dm=>dm.id===lg.domain?{...dm,balance:dm.balance+lg.amount}:dm),
-                            ledger:x.cost.ledger.map(y=>y.id===lg.id?{...y,reverted:true}:y)}}));
-                          onToast(`${lg.amount.toLocaleString()} credits returned to ${lg.domain}`);
+                          applyCost(c=>({...c,
+                            balance:c.balance+lg.amount,
+                            domains:c.domains.map(dm=>dm.id===lg.domain?{...dm,balance:dm.balance+lg.amount}:dm),
+                            ledger:c.ledger.map(y=>y.id===lg.id?{...y,reverted:true}:y)}));
+                          onToast(`${lg.amount.toLocaleString()} credits returned to ${lg.domain} — applied immediately`);
                         }}>Revert</Btn>
                       : <span style={{fontSize:10.5,color:T.textMuted}}>—</span>}
                 </span>
