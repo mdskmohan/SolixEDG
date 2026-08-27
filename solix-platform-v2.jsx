@@ -262,13 +262,6 @@ const DBT_ASSETS = [
   {id:6123,name:"not_null_stg_customers_customer_id", type:"dbt Test",     domain:"Commerce", owner:"dev.patel",  owners:["dev.patel"],  steward:"maya.chen", stewards:["maya.chen"], cert:"Approved",   quality:0,  usage:"",  updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / tests / not_null_stg_customers_customer_id", tier:2, rows:"—", size:"—", tags:["dq"], description:"Not-null test on stg_customers.customer_id, the key every customer join depends on.", slaFreshness:"", dbtTestOn:"stg_customers", dbtTestCol:"customer_id", dbtTestKind:"not_null", dbtTestStatus:"pass"},
   {id:6124,name:"unique_mart_order_summary_order_id", type:"dbt Test",     domain:"Commerce", owner:"maya.chen",  owners:["maya.chen"],  steward:"dev.patel", stewards:["dev.patel"], cert:"Approved",   quality:0,  usage:"",  updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / tests / unique_mart_order_summary_order_id", tier:2, rows:"—", size:"—", tags:["dq"], description:"Uniqueness test on the mart grain. Catches a fan-out from the product join before it reaches reporting.", slaFreshness:"", dbtTestOn:"mart_order_summary", dbtTestCol:"order_id", dbtTestKind:"unique", dbtTestStatus:"pass"},
   {id:6200,name:"revenue",                            type:"dbt Semantic Model", domain:"Finance", owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",  stewards:["alex.wu"],  cert:"Approved", quality:0, usage:"", updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / semantic_models / revenue", tier:1, rows:"—", size:"—", tags:["KPI","finance"], description:"Semantic model over fct_revenue. Declares the entities, dimensions and measures the metrics layer is allowed to query. One semantic model per dbt model.", slaFreshness:"", semanticOver:"fct_revenue"},
-  {id:6201,name:"revenue.revenue_total",              type:"dbt Measure",        domain:"Finance", owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",  stewards:["alex.wu"],  cert:"Approved", quality:0, usage:"", updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / semantic_models / revenue / revenue_total", tier:1, rows:"—", size:"—", tags:["KPI","finance"], description:"Measure: sum of fct_revenue.revenue. The single aggregation every revenue metric is built from.", slaFreshness:"", semanticParent:"revenue"},
-  {id:6202,name:"revenue.order_count",                type:"dbt Measure",        domain:"Finance", owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",  stewards:["alex.wu"],  cert:"Approved", quality:0, usage:"",  updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / semantic_models / revenue / order_count", tier:2, rows:"—", size:"—", tags:["KPI"], description:"Measure: distinct count of order_id. Used as the denominator for average order value.", slaFreshness:"", semanticParent:"revenue"},
-  {id:6203,name:"revenue.order_date",                 type:"dbt Dimension",      domain:"Finance", owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",  stewards:["alex.wu"],  cert:"Approved", quality:0, usage:"", updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / semantic_models / revenue / order_date", tier:1, rows:"—", size:"—", tags:["finance"], description:"Time dimension (agg_time_dimension). Every metric over this semantic model is grained by it.", slaFreshness:"", semanticParent:"revenue"},
-  {id:6204,name:"revenue.region",                     type:"dbt Dimension",      domain:"Finance", owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",  stewards:["alex.wu"],  cert:"Approved", quality:0, usage:"",  updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / semantic_models / revenue / region", tier:2, rows:"—", size:"—", tags:["finance"], description:"Categorical dimension. Resolved via the country_codes seed upstream, so the seed governs how revenue slices by region.", slaFreshness:"", semanticParent:"revenue"},
-  {id:6205,name:"revenue.order_status",               type:"dbt Dimension",      domain:"Finance", owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",  stewards:["alex.wu"],  cert:"In Review", quality:0, usage:"", updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / semantic_models / revenue / order_status", tier:3, rows:"—", size:"—", tags:[], description:"Categorical dimension. Under review because the upstream accepted-values test on stg_orders.status is failing, so this dimension can return an unexpected value.", slaFreshness:"", semanticParent:"revenue"},
-  {id:6206,name:"revenue.order",                      type:"dbt Entity",         domain:"Finance", owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",  stewards:["alex.wu"],  cert:"Approved", quality:0, usage:"", updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / semantic_models / revenue / order", tier:1, rows:"—", size:"—", tags:["KPI"], description:"Primary entity on order_id. Defines the grain of the semantic model and what other semantic models may join to.", slaFreshness:"", semanticParent:"revenue"},
-  {id:6207,name:"revenue.customer",                   type:"dbt Entity",         domain:"Finance", owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",  stewards:["alex.wu"],  cert:"Approved", quality:0, usage:"",  updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / semantic_models / revenue / customer", tier:2, rows:"—", size:"—", tags:["PII"], description:"Foreign entity on customer_id. The join key a customer semantic model would attach to.", slaFreshness:"", semanticParent:"revenue"},
   {id:6120,name:"daily_revenue",                     type:"dbt Metric",   domain:"Finance",  owner:"sarah.kim",  owners:["sarah.kim"],  steward:"alex.wu",   stewards:["alex.wu"],   cert:"Approved",   quality:0,  usage:"",  updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / metrics / daily_revenue", tier:2, rows:"—", size:"—", tags:["KPI","finance"], description:"Semantic-layer metric - sum of fct_revenue.revenue by day. One definition of daily revenue, so BI tools stop each inventing their own.", slaFreshness:""},
   {id:6130,name:"exec_revenue_dashboard",            type:"dbt Exposure", domain:"Finance",  owner:"alex.wu",    owners:["alex.wu"],    steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",   quality:0,  usage:"", updated:"1h ago",  service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / exposures / exec_revenue_dashboard", tier:1, rows:"—", size:"—", tags:["KPI","Board reporting"], description:"Declared dbt exposure - tells dbt that the Tableau Revenue_Dashboard depends on fct_revenue, so a breaking change is caught before it ships.", slaFreshness:""},
 ];
@@ -3065,9 +3058,6 @@ const TYPE_META = {
   // -- dbt semantic layer (MetricFlow). The semantic model is a DAG node; its
   //    entities, measures and dimensions are components of it, not nodes. --
   "dbt Semantic Model": {c:"#7c3aed", bg:"rgba(124,58,237,.11)", icon:"◈"},
-  "dbt Measure":        {c:"#0ea5e9", bg:"rgba(14,165,233,.1)",  icon:"∑"},
-  "dbt Dimension":      {c:"#0891b2", bg:"rgba(8,145,178,.1)",   icon:"◫"},
-  "dbt Entity":         {c:"#65a30d", bg:"rgba(101,163,13,.1)",  icon:"⚿"},
 };
 const TypeBadge = ({type})=>{
   const s = TYPE_META[type]||{c:T.textMuted,bg:T.bgHover,icon:"▪"};
@@ -19200,34 +19190,36 @@ const DBT_TESTS = [
   {name:"not_null_country_codes_country_code",on:"country_codes",       col:"country_code", kind:"not_null", severity:"error", status:"pass", lastRun:"3w ago",  failedRows:0,     detail:"Declared in seeds/schema.yml"},
 ];
 
-// The components of a semantic model. dbt nests entities, dimensions and measures
-// inside the semantic model's YAML - they are NOT DAG nodes, which is why they are
-// catalog assets (searchable, governable) but have no Lineage tab of their own.
+// The parts of a semantic model. dbt declares entities, dimensions and measures inside
+// the semantic model's YAML, so they are its inner parts - the same kind of thing as a
+// table's columns or a Tableau data source's fields. Parts live inside their object and
+// are never catalog rows, so all of their detail lives here.
 const DBT_SEMANTIC_COMPONENTS = {
   "revenue":[
-    {kind:"Entity",    name:"order",         type:"primary",     expr:"order_id",     desc:"Grain of the semantic model."},
-    {kind:"Entity",    name:"customer",      type:"foreign",     expr:"customer_id",  desc:"Join key to a customer semantic model."},
-    {kind:"Dimension", name:"order_date",    type:"time",        expr:"order_date",   desc:"agg_time_dimension - the default grain for every metric here."},
-    {kind:"Dimension", name:"region",        type:"categorical", expr:"region",       desc:"Resolved upstream via the country_codes seed."},
-    {kind:"Dimension", name:"order_status",  type:"categorical", expr:"order_status",  desc:"Under review - the upstream accepted-values test is failing."},
-    {kind:"Measure",   name:"revenue_total", type:"sum",         expr:"revenue",      desc:"The aggregation daily_revenue is built from."},
-    {kind:"Measure",   name:"order_count",   type:"count_distinct", expr:"order_id",  desc:"Denominator for average order value."},
+    {kind:"Entity",    name:"order",         type:"primary",        expr:"order_id",     source:"fct_revenue.order_id",    desc:"Primary entity. Defines the grain of the semantic model and what other semantic models may join to."},
+    {kind:"Entity",    name:"customer",      type:"foreign",        expr:"customer_id",  source:"fct_revenue.customer_id", desc:"Foreign entity - the join key a customer semantic model would attach to."},
+    {kind:"Dimension", name:"order_date",    type:"time",           expr:"order_date",   source:"fct_revenue.order_date",  desc:"The agg_time_dimension: every metric over this semantic model is grained by it."},
+    {kind:"Dimension", name:"region",        type:"categorical",    expr:"region",       source:"fct_revenue.region",      desc:"Resolved upstream by the country_codes seed, so that seed governs how revenue slices by region."},
+    {kind:"Dimension", name:"order_status",  type:"categorical",    expr:"order_status", source:"fct_revenue.order_status",desc:"Under review: the accepted-values test on stg_orders.status is failing upstream, so this dimension can return an unexpected value."},
+    {kind:"Measure",   name:"revenue_total", type:"sum",            expr:"revenue",      source:"fct_revenue.revenue",     desc:"The aggregation daily_revenue is built from - one definition of revenue for every metric."},
+    {kind:"Measure",   name:"order_count",   type:"count_distinct", expr:"order_id",     source:"fct_revenue.order_id",    desc:"Distinct count of orders. Denominator for average order value."},
   ],
 };
 
 const DBT_COMP_C = {Entity:"#65a30d", Dimension:"#0891b2", Measure:"#0ea5e9"};
 
 // Components tab for a semantic model.
-const DbtSemanticPanel = ({asset,onAsset})=>{
+const DbtSemanticPanel = ({asset})=>{
   const comps=DBT_SEMANTIC_COMPONENTS[asset.name]||[];
-  const all=(typeof ASSETS!=="undefined"?ASSETS:[]);
+  const [open,setOpen]=useState(null);   // a part expands in place - it is not its own page
   return (
     <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:14}}>
       <Card2><div style={{padding:"12px 16px",display:"flex",alignItems:"center",gap:10}}>
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,color:"#7c3aed"}}><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5v4M8 11h.01" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
         <div style={{fontSize:12,color:T.textSub,lineHeight:1.55}}>
-          dbt nests these inside the semantic model&rsquo;s YAML, so they are not nodes in the dbt DAG.
-          They are catalog assets here &mdash; searchable and governable &mdash; but their lineage is the semantic model&rsquo;s.
+          dbt declares these inside the semantic model&rsquo;s YAML, so they are its parts &mdash; the same
+          kind of thing as a table&rsquo;s columns. Like columns, they are not catalog assets and not nodes
+          in the dbt DAG; their lineage is the semantic model&rsquo;s. Select one for its detail.
         </div>
       </div></Card2>
       <Card2 style={{overflow:"hidden",padding:0}}>
@@ -19239,19 +19231,35 @@ const DbtSemanticPanel = ({asset,onAsset})=>{
           </tr></thead>
           <tbody>
             {comps.map((c,i)=>{
-              const target=all.find(a=>a.name===asset.name+"."+c.name);
               const col=DBT_COMP_C[c.kind]||T.textMuted;
+              const isOpen=open===c.name;
               return (
-                <tr key={c.name} onClick={()=>target&&onAsset&&onAsset(target)}
-                  style={{borderBottom:i<comps.length-1?`1px solid ${T.border}`:"none",cursor:target&&onAsset?"pointer":"default"}}
-                  onMouseEnter={e=>{if(target&&onAsset)e.currentTarget.style.background=T.bgHover;}}
-                  onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
+                <React.Fragment key={c.name}>
+                <tr onClick={()=>setOpen(isOpen?null:c.name)}
+                  title={isOpen?"Hide detail":"Show detail"}
+                  style={{borderBottom:(isOpen||i<comps.length-1)?`1px solid ${T.border}`:"none",cursor:"pointer",background:isOpen?T.bgHover:"transparent"}}>
                   <td style={{padding:"9px 14px",fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600}}>{c.name}</td>
                   <td style={{padding:"9px 14px"}}><span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:5,background:`${col}16`,color:col,border:`1px solid ${col}33`}}>{c.kind}</span></td>
                   <td style={{padding:"9px 14px",fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{c.type}</td>
                   <td style={{padding:"9px 14px",fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{c.expr}</td>
                   <td style={{padding:"9px 14px",fontSize:11.5,color:T.textSub,maxWidth:280}}>{c.desc}</td>
                 </tr>
+                {isOpen&&(
+                  <tr>
+                    <td colSpan={5} style={{padding:"12px 14px 14px",background:T.bgElevated,borderBottom:i<comps.length-1?`1px solid ${T.border}`:"none"}}>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"10px 18px"}}>
+                        {[["Kind",c.kind],["Type",c.type],["Expression",c.expr],
+                          ["Source column",c.source],["Semantic model",asset.name]].map(([k,v])=>(
+                          <div key={k}>
+                            <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:3}}>{k}</div>
+                            <div style={{fontSize:11.5,color:T.text,fontFamily:"'Geist Mono',monospace",wordBreak:"break-word"}}>{v}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               );
             })}
           </tbody>
@@ -19322,22 +19330,8 @@ const DBT_PROFILE = {
     rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"country_codes",type:"dbt Seed"}]}},
   "revenue":{props:[["Object type","dbt Semantic Model"],["Over dbt model","fct_revenue"],["Primary entity","order (order_id)"],["Time dimension","order_date"],["Components","2 entities · 3 dimensions · 2 measures"],["Queried by","1 metric"]],
     rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"fct_revenue",type:"dbt Model"}],downstream:[{name:"daily_revenue",type:"dbt Metric"}]}},
-  "revenue.revenue_total":{props:[["Object type","dbt Measure"],["Semantic model","revenue"],["Aggregation","sum"],["Expression","revenue"],["Source column","fct_revenue.revenue"]],
-    rel:{parent:{name:"revenue",type:"dbt Semantic Model"},downstream:[{name:"daily_revenue",type:"dbt Metric"}]}},
-  "revenue.order_count":{props:[["Object type","dbt Measure"],["Semantic model","revenue"],["Aggregation","count_distinct"],["Expression","order_id"],["Source column","fct_revenue.order_id"]],
-    rel:{parent:{name:"revenue",type:"dbt Semantic Model"}}},
-  "revenue.order_date":{props:[["Object type","dbt Dimension"],["Semantic model","revenue"],["Dimension type","time"],["Role","agg_time_dimension"],["Source column","fct_revenue.order_date"]],
-    rel:{parent:{name:"revenue",type:"dbt Semantic Model"}}},
-  "revenue.region":{props:[["Object type","dbt Dimension"],["Semantic model","revenue"],["Dimension type","categorical"],["Source column","fct_revenue.region"],["Governed upstream by","country_codes seed"]],
-    rel:{parent:{name:"revenue",type:"dbt Semantic Model"},upstream:[{name:"country_codes",type:"dbt Seed"}]}},
-  "revenue.order_status":{props:[["Object type","dbt Dimension"],["Semantic model","revenue"],["Dimension type","categorical"],["Source column","fct_revenue.order_status"],["Risk","upstream accepted-values test FAILING on stg_orders.status"]],
-    rel:{parent:{name:"revenue",type:"dbt Semantic Model"},upstream:[{name:"stg_orders",type:"dbt Model"}]}},
-  "revenue.order":{props:[["Object type","dbt Entity"],["Semantic model","revenue"],["Entity type","primary"],["Expression","order_id"],["Defines","the grain of the semantic model"]],
-    rel:{parent:{name:"revenue",type:"dbt Semantic Model"}}},
-  "revenue.customer":{props:[["Object type","dbt Entity"],["Semantic model","revenue"],["Entity type","foreign"],["Expression","customer_id"],["Joins to","a customer semantic model"]],
-    rel:{parent:{name:"revenue",type:"dbt Semantic Model"}}},
   "daily_revenue":{props:[["Object type","dbt Metric"],["Metric type","simple"],["Measure","revenue_total"],["Semantic model","revenue"],["Time grain","day"],["Dimensions","order_date, region, order_status"],["Label","Daily Revenue"]],
-    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"revenue",type:"dbt Semantic Model"},{name:"revenue.revenue_total",type:"dbt Measure"}]}},
+    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"revenue",type:"dbt Semantic Model"}]}},
   "exec_revenue_dashboard":{props:[["Object type","dbt Exposure"],["Exposure type","dashboard"],["Depends on","fct_revenue"],["Maturity","high"],["Owner (dbt meta)","alex.wu@jnj.com"],["URL","Tableau › Revenue_Dashboard"]],
     rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"fct_revenue",type:"dbt Model"}],downstream:[{name:"Revenue_Dashboard",type:"Dashboard"}]}},
 };
@@ -19829,9 +19823,15 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
   const biHasFields = isBI && !!TABLEAU_FIELDS[asset.name];   // data sources expose fields
   // Fields are components of a data source, not nodes in the BI graph - same rule as dbt
   // semantic-model components. Containers have no lineage of their own either.
-  // Containers (Site, Project, Workbook) plus the types no vendor reports lineage for
-  // (Flow, Metric, Story) have no lineage of their own.
-  const biInDag = isBI && !["Site","Project","Workbook","Flow","Metric","Story"].includes(asset.type);
+  // Only true CONTAINERS are excluded: a Site, Project or Workbook holds other objects
+  // and no data flows through them, which is why Atlan removed workbook nodes ("no longer
+  // appear in lineage traversal") and Alation treats them as containers too.
+  //
+  // Flow, Metric and Story keep the tab and show the empty state instead. That distinction
+  // matters: a Prep flow genuinely transforms data and a Story genuinely consumes sheets -
+  // Tableau simply does not expose their lineage to us (flows need non-JWT auth, metrics
+  // were retired in API 3.22+). "Not reported yet" is true; "has no lineage" would not be.
+  const biInDag = isBI && !["Site","Project","Workbook"].includes(asset.type);
   // ── dbt objects get an object-appropriate profile too. A model is not a table: what
   //    matters is materialization, refs, tests and its SQL — not row counts or a contract.
   //    Projects and jobs are containers, so they have no lineage of their own (same rule
@@ -19842,7 +19842,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
   const dbtHasTests= isDbt && DBT_TESTS.some(t=>t.on===asset.name);
   // Measures, dimensions and entities are components of a semantic model, not dbt DAG
   // nodes, so they get no Lineage tab - the same rule that excludes containers.
-  const dbtInDag   = isDbt && !["dbt Project","dbt Test","dbt Measure","dbt Dimension","dbt Entity"].includes(asset.type);
+  const dbtInDag   = isDbt && !["dbt Project","dbt Test"].includes(asset.type);
   const dbtHasComps= isDbt && !!DBT_SEMANTIC_COMPONENTS[asset.name];
   // A warehouse table carries the dbt story on its own profile when dbt builds it
   // (materialized by a model) or reads it (declared as a source).
@@ -19977,7 +19977,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
           ? <TableauFieldsPanel asset={data}/>
           : <AssetSchema asset={asset} selCol={selCol} onColClick={c=>{ setSelCol(selCol?.name===c?.name?null:c); }} onToast={onToast}/>)}
         {tab==="dbtsql"    && isDbt && <DbtSqlPanel asset={data}/>}
-        {tab==="components"&& isDbt && <DbtSemanticPanel asset={data} onAsset={onAsset}/>}
+        {tab==="components"&& isDbt && <DbtSemanticPanel asset={data}/>}
         {tab==="dbttests"  && isDbt && <DbtTestsPanel asset={data} onToast={onToast}/>}
         {tab==="dbt"       && dbtOnTable && <DbtOnTablePanel asset={data} onAsset={onAsset}/>}
         {tab==="observability" && !isBI && !isDbt && <AssetObservabilityTab asset={data} onToast={onToast} onNav={onNav}/>}
@@ -28942,7 +28942,7 @@ const OM_CONNECTORS = [
 
   // ── PIPELINE ──
   {name:"Apache Airflow",  cat:"Pipeline",       logoUrl:SI("apacheairflow","017CEE"),            desc:"Workflow orchestration platform for data pipelines",  status:"Connected",  assets:89,   lastSync:"3m ago"},
-  {name:"dbt",             cat:"Pipeline",       logoUrl:SI("dbt","FF694B"),                      desc:"SQL transformation layer. dbt Cloud or dbt Core, chosen per connection", status:"Connected",  assets:34,   lastSync:"7m ago"},
+  {name:"dbt",             cat:"Pipeline",       logoUrl:SI("dbt","FF694B"),                      desc:"SQL transformation layer. dbt Cloud or dbt Core, chosen per connection", status:"Connected",  assets:27,   lastSync:"7m ago"},
   {name:"Dagster",         cat:"Pipeline",       logoUrl:SI("dagster","4F43DD"),                  desc:"Cloud-native data orchestration platform",           status:"Available",  assets:0,    lastSync:null},
   {name:"Airbyte",         cat:"Pipeline",       logoUrl:SI("airbyte","615EFF"),                  desc:"Open-source ELT data integration platform",           status:"Available",  assets:0,    lastSync:null},
   {name:"Apache NiFi",     cat:"Pipeline",       logoUrl:SI("apachenifi","728E9B"),               desc:"Data flow automation and integration platform",       status:"Available",  assets:0,    lastSync:null},
