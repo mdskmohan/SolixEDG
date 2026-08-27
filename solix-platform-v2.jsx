@@ -259,7 +259,6 @@ const DBT_ASSETS = [
   {id:6207,name:"revenue.customer",                   type:"dbt Entity",         domain:"Finance", owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",  stewards:["alex.wu"],  cert:"Approved", quality:0, usage:"",  updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / semantic_models / revenue / customer", tier:2, rows:"—", size:"—", tags:["PII"], description:"Foreign entity on customer_id. The join key a customer semantic model would attach to.", slaFreshness:"", semanticParent:"revenue"},
   {id:6120,name:"daily_revenue",                     type:"dbt Metric",   domain:"Finance",  owner:"sarah.kim",  owners:["sarah.kim"],  steward:"alex.wu",   stewards:["alex.wu"],   cert:"Approved",   quality:0,  usage:"",  updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / metrics / daily_revenue", tier:2, rows:"—", size:"—", tags:["KPI","finance"], description:"Semantic-layer metric - sum of fct_revenue.revenue by day. One definition of daily revenue, so BI tools stop each inventing their own.", slaFreshness:""},
   {id:6130,name:"exec_revenue_dashboard",            type:"dbt Exposure", domain:"Finance",  owner:"alex.wu",    owners:["alex.wu"],    steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",   quality:0,  usage:"", updated:"1h ago",  service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / exposures / exec_revenue_dashboard", tier:1, rows:"—", size:"—", tags:["KPI","Board reporting"], description:"Declared dbt exposure - tells dbt that the Tableau Revenue_Dashboard depends on fct_revenue, so a breaking change is caught before it ships.", slaFreshness:""},
-  {id:6140,name:"nightly_production",                type:"dbt Job",      domain:"Platform", owner:"james.oh",   owners:["james.oh"],   steward:"maya.chen", stewards:["maya.chen"], cert:"Approved",   quality:0,  usage:"", updated:"35m ago", service:"dbt", connectionLabel:"dbt Cloud", db:"jnj_analytics / jobs / nightly_production", tier:1, rows:"—", size:"—", tags:["etl"], description:"dbt Cloud job running dbt build against production on a 02:00 UTC schedule plus per-PR CI. Run history and per-model timings live on this asset.", slaFreshness:""},
 ];
 ASSETS.push(...DBT_ASSETS);
 
@@ -3050,7 +3049,6 @@ const TYPE_META = {
   "dbt Test":           {c:"#16a34a", bg:"rgba(22,163,74,.1)",   icon:"✓"},
   "dbt Metric":         {c:"#0ea5e9", bg:"rgba(14,165,233,.1)",  icon:"◎"},
   "dbt Exposure":       {c:"#a78bfa", bg:"rgba(167,139,250,.1)", icon:"▣"},
-  "dbt Job":            {c:"#64748b", bg:"rgba(100,116,139,.1)", icon:"⟳"},
   // -- dbt semantic layer (MetricFlow). The semantic model is a DAG node; its
   //    entities, measures and dimensions are components of it, not nodes. --
   "dbt Semantic Model": {c:"#7c3aed", bg:"rgba(124,58,237,.11)", icon:"◈"},
@@ -19360,8 +19358,8 @@ const DBT_PROFILE = {
     rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"stg_customers",type:"dbt Model"}]}},
   "unique_mart_order_summary_order_id":{props:[["Object type","dbt Test (generic)"],["Test","unique"],["Tests","mart_order_summary.order_id"],["Severity","error"],["Result","Pass · 0 failing rows"],["Declared in","models/marts/commerce/schema.yml"]],
     rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"mart_order_summary",type:"dbt Model"}]}},
-  "jnj_analytics":{props:[["Object type","dbt Project"],["dbt Cloud account","jnj"],["Environment","production"],["Contents","5 models · 4 sources · 1 seed · 1 snapshot · 20 tests · 1 semantic model (7 components) · 1 metric · 1 exposure"],["Repository","github.com/jnj/analytics"],["Branch","main"],["dbt version","1.8"]],
-    rel:{contains:[{name:"snowflake_raw.orders",type:"dbt Source"},{name:"stg_orders",type:"dbt Model"},{name:"int_orders_enriched",type:"dbt Model"},{name:"fct_revenue",type:"dbt Model"},{name:"country_codes",type:"dbt Seed"},{name:"customers_snapshot",type:"dbt Snapshot"},{name:"revenue",type:"dbt Semantic Model"},{name:"daily_revenue",type:"dbt Metric"},{name:"exec_revenue_dashboard",type:"dbt Exposure"},{name:"nightly_production",type:"dbt Job"}]}},
+  "jnj_analytics":{props:[["Object type","dbt Project"],["dbt Cloud account","jnj"],["Environment","production"],["Contents","5 models · 4 sources · 1 seed · 1 snapshot · 20 tests · 1 semantic model (7 components) · 1 metric · 1 exposure"],["Repository","github.com/jnj/analytics"],["Branch","main"],["dbt version","1.8"],["dbt Cloud job","nightly_production · dbt build"],["Schedule","0 2 * * * (02:00 UTC)"],["CI","Runs on every pull request"],["Last run","#4821 · 35m ago · success"],["Success rate (30d)","96%"]],
+    rel:{contains:[{name:"snowflake_raw.orders",type:"dbt Source"},{name:"stg_orders",type:"dbt Model"},{name:"int_orders_enriched",type:"dbt Model"},{name:"fct_revenue",type:"dbt Model"},{name:"country_codes",type:"dbt Seed"},{name:"customers_snapshot",type:"dbt Snapshot"},{name:"revenue",type:"dbt Semantic Model"},{name:"daily_revenue",type:"dbt Metric"},{name:"exec_revenue_dashboard",type:"dbt Exposure"}]}},
   "snowflake_raw.orders":{props:[["Object type","dbt Source"],["Source name","snowflake_raw"],["Table","orders"],["Physical location","SNOWFLAKE_PROD / COMMERCE / orders"],["Freshness contract","warn 12h · error 24h"],["Tests","2"]],
     rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"orders",type:"Table"}],downstream:[{name:"stg_orders",type:"dbt Model"}]}},
   "stg_orders":{props:[["Object type","dbt Model (staging)"],["Materialization","view"],["Target","COMMERCE_STG / stg_orders"],["Refs","source snowflake_raw.orders"],["Tests","3 (1 failing)"],["Last run","35m ago · 14s"]],
@@ -19414,8 +19412,6 @@ const DBT_PROFILE = {
     rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"revenue",type:"dbt Semantic Model"},{name:"revenue.revenue_total",type:"dbt Measure"}]}},
   "exec_revenue_dashboard":{props:[["Object type","dbt Exposure"],["Exposure type","dashboard"],["Depends on","fct_revenue"],["Maturity","high"],["Owner (dbt meta)","alex.wu@jnj.com"],["URL","Tableau › Revenue_Dashboard"]],
     rel:{parent:{name:"jnj_analytics",type:"dbt Project"},upstream:[{name:"fct_revenue",type:"dbt Model"}],downstream:[{name:"Revenue_Dashboard",type:"Dashboard"}]}},
-  "nightly_production":{props:[["Object type","dbt Cloud Job"],["Command","dbt build"],["Environment","production"],["Schedule","0 2 * * * (02:00 UTC)"],["CI","Runs on every pull request"],["Last run","#4821 · 35m ago · success"],["Success rate (30d)","96%"]],
-    rel:{parent:{name:"jnj_analytics",type:"dbt Project"},downstream:[{name:"stg_orders",type:"dbt Model"},{name:"int_orders_enriched",type:"dbt Model"},{name:"fct_revenue",type:"dbt Model"}]}},
 };
 
 const DBT_RUN_C = {success:{c:"#16a34a",bg:"rgba(22,163,74,.1)"},failed:{c:"#e11d48",bg:"rgba(225,29,72,.1)"},pass:{c:"#16a34a",bg:"rgba(22,163,74,.1)"},fail:{c:"#e11d48",bg:"rgba(225,29,72,.1)"},warn:{c:"#d97706",bg:"rgba(217,119,6,.12)"}};
@@ -19576,7 +19572,8 @@ const DbtAssetOverview = ({asset,data,setData,onToast,onAsset})=>{
   const rel=Pr.rel||{};
   const [editingDesc,setEditingDesc]=useState(false);
   const [descVal,setDescVal]=useState(data.description||asset.description||"");
-  const isJob=asset.type==="dbt Job";
+  // Run history belongs to the project now that a job is not an asset of its own.
+  const isProject=asset.type==="dbt Project";
   const hasEngine=!!DBT_META[asset.name];
 
   return (
@@ -19618,9 +19615,9 @@ const DbtAssetOverview = ({asset,data,setData,onToast,onAsset})=>{
     )}
 
     {/* Run history — job assets only. Runs are events, so they live here rather than as catalog rows. */}
-    {isJob&&(
+    {isProject&&(
       <Card2 style={{overflow:"hidden"}}>
-        <div style={{padding:"14px 16px 10px"}}><SH title="Run history" sub="dbt Cloud runs for this job — last 5"/></div>
+        <div style={{padding:"14px 16px 10px"}}><SH title="Run history" sub="dbt Cloud runs for this project — last 5, from the dbt Cloud API"/></div>
         <table style={{width:"100%",borderCollapse:"collapse"}}>
           <thead><tr style={{background:T.bgElevated}}>
             {["Run","Trigger","Status","Started","Duration","Models","Tests"].map(h=>(
@@ -19912,7 +19909,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
   const dbtHasTests= isDbt && DBT_TESTS.some(t=>t.on===asset.name);
   // Measures, dimensions and entities are components of a semantic model, not dbt DAG
   // nodes, so they get no Lineage tab - the same rule that excludes containers.
-  const dbtInDag   = isDbt && !["dbt Project","dbt Job","dbt Test","dbt Measure","dbt Dimension","dbt Entity"].includes(asset.type);
+  const dbtInDag   = isDbt && !["dbt Project","dbt Test","dbt Measure","dbt Dimension","dbt Entity"].includes(asset.type);
   const dbtHasComps= isDbt && !!DBT_SEMANTIC_COMPONENTS[asset.name];
   // A warehouse table carries the dbt story on its own profile when dbt builds it
   // (materialized by a model) or reads it (declared as a source).
@@ -29010,7 +29007,7 @@ const OM_CONNECTORS = [
 
   // ── PIPELINE ──
   {name:"Apache Airflow",  cat:"Pipeline",       logoUrl:SI("apacheairflow","017CEE"),            desc:"Workflow orchestration platform for data pipelines",  status:"Connected",  assets:89,   lastSync:"3m ago"},
-  {name:"dbt",             cat:"Pipeline",       logoUrl:SI("dbt","FF694B"),                      desc:"SQL transformation layer. dbt Cloud or dbt Core, chosen per connection", status:"Connected",  assets:35,   lastSync:"7m ago"},
+  {name:"dbt",             cat:"Pipeline",       logoUrl:SI("dbt","FF694B"),                      desc:"SQL transformation layer. dbt Cloud or dbt Core, chosen per connection", status:"Connected",  assets:34,   lastSync:"7m ago"},
   {name:"Dagster",         cat:"Pipeline",       logoUrl:SI("dagster","4F43DD"),                  desc:"Cloud-native data orchestration platform",           status:"Available",  assets:0,    lastSync:null},
   {name:"Airbyte",         cat:"Pipeline",       logoUrl:SI("airbyte","615EFF"),                  desc:"Open-source ELT data integration platform",           status:"Available",  assets:0,    lastSync:null},
   {name:"Apache NiFi",     cat:"Pipeline",       logoUrl:SI("apachenifi","728E9B"),               desc:"Data flow automation and integration platform",       status:"Available",  assets:0,    lastSync:null},
