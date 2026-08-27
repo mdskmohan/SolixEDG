@@ -4341,155 +4341,12 @@ const HomeView = ({onNav, onToast}) => {
   );
 };;
 
-const LineageView = () => {
-  const tagCtx = useTagCtx();
-  const onNav = useNav();
-  const [selected, setSelected] = useState(null);
-  const [hoveredNode, setHoveredNode] = useState(null);
-
-  const nodes = [
-    {id:"n1", label:"etl_orders_pipeline", type:"Pipeline",  x:60,  y:180, cert:"Approved"},
-    {id:"n2", label:"orders",              type:"Table",     x:220, y:100, cert:"Approved"},
-    {id:"n3", label:"customers",           type:"Table",     x:220, y:260, cert:"Approved"},
-    {id:"n4", label:"dim_products",        type:"Table",     x:220, y:180, cert:"Approved"},
-    {id:"n5", label:"revenue_dashboard",   type:"Dashboard", x:400, y:100, cert:"In Review"},
-    {id:"n6", label:"finance_summary",     type:"Dashboard", x:400, y:260, cert:"Approved"},
-    {id:"n7", label:"ml_churn_model",      type:"ML Model",  x:400, y:180, cert:"Approved"},
-  ];
-
-  const edges = [
-    {s:"n1",t:"n2"},{s:"n1",t:"n3"},{s:"n1",t:"n4"},
-    {s:"n2",t:"n5"},{s:"n2",t:"n7"},{s:"n3",t:"n7"},
-    {s:"n4",t:"n5"},{s:"n3",t:"n6"},
-  ];
-
-  const typeColors = {Table:"#38bdf8",Dashboard:"#a78bfa",Pipeline:"#34d399","ML Model":"#fb923c"};
-
-  const getNode = id => nodes.find(n=>n.id===id);
-
-  return (
-    <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <Topbar breadcrumb={[{label:"Lineage"}]}/>
-      <div style={{flex:1,display:"flex",overflow:"hidden"}}>
-        {/* Graph canvas */}
-        <div style={{flex:1,position:"relative",background:T.bg,overflow:"hidden"}}>
-          {/* Floating toolbar */}
-          <div style={{position:"absolute",top:14,left:14,zIndex:10,display:"flex",gap:6,alignItems:"center"}}>
-            <Btn small ghost icon={Ic.refresh(12)}>Refresh</Btn>
-            <select style={{padding:"5px 10px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none"}}>
-              <option>All Assets</option>
-              {ASSETS.map(a=><option key={a.id}>{a.name}</option>)}
-            </select>
-          </div>
-          {/* Grid background */}
-          <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:.04}} xmlns="http://www.w3.org/2000/svg">
-            <defs><pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M 32 0 L 0 0 0 32" fill="none" stroke={T.text} strokeWidth="0.5"/></pattern></defs>
-            <rect width="100%" height="100%" fill="url(#grid)"/>
-          </svg>
-          <svg style={{position:"absolute",inset:0,width:"100%",height:"100%"}}>
-            <defs>
-              <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-                <path d="M0,0 L0,6 L8,3 z" fill={T.borderLight}/>
-              </marker>
-            </defs>
-            {/* Edges */}
-            {edges.map((e,i)=>{
-              const s=getNode(e.s), t=getNode(e.t);
-              if(!s||!t) return null;
-              const sx=(s.x+90)*1.8, sy=(s.y+20)*1.5, tx=(t.x)*1.8, ty=(t.y+20)*1.5;
-              const mx=(sx+tx)/2;
-              return <path key={i} d={`M${sx},${sy} C${mx},${sy} ${mx},${ty} ${tx},${ty}`}
-                stroke={T.border} strokeWidth="1.5" fill="none" markerEnd="url(#arrow)"/>;
-            })}
-          </svg>
-          {/* Nodes */}
-          {nodes.map(n=>{
-            const tc = typeColors[n.type]||T.accent;
-            const isSelected = selected===n.id;
-            const isHovered  = hoveredNode===n.id;
-            const asset = ASSETS.find(a=>a.name===n.label);
-            const nodeAsns = asset&&tagCtx ? tagCtx.getAssetAssignments(asset.id).filter(a=>a.status!=='rejected') : [];
-            const hasSensitivity = nodeAsns.some(asn=>{const td=tagCtx?.getTagDef(asn.tagId);return td?.category==='sensitivity';});
-            const hasRegulatory  = nodeAsns.some(asn=>{const td=tagCtx?.getTagDef(asn.tagId);return td?.category==='regulatory';});
-            const dotColor = hasSensitivity ? '#fbbf24' : hasRegulatory ? T.blue : null;
-            return (
-              <div key={n.id}
-                onClick={()=>setSelected(isSelected?null:n.id)}
-                onMouseEnter={()=>setHoveredNode(n.id)}
-                onMouseLeave={()=>setHoveredNode(null)}
-                style={{
-                  position:"absolute",
-                  left: n.x*1.8, top: n.y*1.5,
-                  width:160, padding:"10px 14px",
-                  background:isSelected?T.bgHover:T.bgSurface,
-                  border:`1.5px solid ${isSelected?T.accent:isHovered?tc+"88":T.border}`,
-                  borderLeft:`3px solid ${tc}`,
-                  borderRadius:10,
-                  cursor:"pointer",
-                  transition:"all .15s",
-                  boxShadow:isSelected?`0 0 0 3px ${T.accent}22`:"none",
-                  userSelect:"none",
-                  zIndex:isSelected?10:1,
-                }}>
-                {dotColor&&<span title={hasSensitivity?"Sensitivity tags":"Regulatory tags"} style={{position:"absolute",top:6,right:8,width:6,height:6,borderRadius:"50%",background:dotColor,boxShadow:`0 0 0 2px ${dotColor}44`,display:"block"}}/>}
-                <div style={{fontSize:11,fontWeight:600,color:tc,marginBottom:3}}>{n.type}</div>
-                <div style={{fontSize:12,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.label}</div>
-                <div style={{marginTop:5}}><CertBadge cert={n.cert}/></div>
-              </div>
-            );
-          })}
-        </div>
-        {/* Detail panel */}
-        {selected&&(()=>{
-          const n = getNode(selected);
-          const a = ASSETS.find(a=>a.name===n.label);
-          const upstream   = edges.filter(e=>e.t===selected).map(e=>getNode(e.s));
-          const downstream = edges.filter(e=>e.s===selected).map(e=>getNode(e.t));
-          return (
-            <div className="slideIn" style={{width:280,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto",padding:20,flexShrink:0}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-                <div style={{fontSize:14,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{n.label}</div>
-                <button onClick={()=>setSelected(null)} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer"}}>{Ic.x(13)}</button>
-              </div>
-              <div style={{marginBottom:12}}>
-                <TypeBadge type={n.type}/> <CertBadge cert={n.cert}/>
-              </div>
-              {a&&(()=>{
-                const detailAsns = tagCtx ? tagCtx.getAssetAssignments(a.id).filter(x=>x.status!=='rejected') : [];
-                return <>
-                  <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginBottom:14}}>{a.description}</div>
-                  <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:16}}>
-                    {[{l:"Domain",v:a.domain},{l:"Owner",v:a.owner},{l:"Quality",v:null},{l:"Updated",v:a.updated}].map(({l,v})=>(
-                      <div key={l} style={{display:"flex",justifyContent:"space-between",fontSize:12}}>
-                        <span style={{color:T.textMuted}}>{l}</span>
-                        <span style={{color:T.text}}>{l==="Quality"?<QScore score={a.quality}/>:v}</span>
-                      </div>
-                    ))}
-                  </div>
-                  {detailAsns.length>0&&<div style={{marginBottom:14}}>
-                    <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Tags</div>
-                    <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                      {detailAsns.slice(0,5).map(asn=>{const td=tagCtx.getTagDef(asn.tagId);return td?<TagPill key={asn.tagId} tagDef={td} assignment={asn} size="sm"/>:null;})}
-                    </div>
-                    <button onClick={()=>onNav("catalog")} style={{fontSize:10.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:"4px 0 0",display:"block"}} onMouseEnter={e=>e.currentTarget.style.opacity=".7"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>View all tags →</button>
-                  </div>}
-                </>;
-              })()}
-              {upstream.length>0&&<>
-                <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Upstream ({upstream.length})</div>
-                {upstream.map(u=><div key={u.id} onClick={()=>setSelected(u.id)} style={{padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,marginBottom:5,cursor:"pointer",fontSize:12,color:T.accent,fontFamily:"'Geist Mono',monospace"}}>{u.label}</div>)}
-              </>}
-              {downstream.length>0&&<>
-                <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8,marginTop:12}}>Downstream ({downstream.length})</div>
-                {downstream.map(d=><div key={d.id} onClick={()=>setSelected(d.id)} style={{padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,marginBottom:5,cursor:"pointer",fontSize:12,color:T.accent,fontFamily:"'Geist Mono',monospace"}}>{d.label}</div>)}
-              </>}
-            </div>
-          );
-        })()}
-      </div>
-    </div>
-  );
-};
+// NOTE: a standalone LineageView screen used to live here with its own hardcoded
+// seven-node graph (etl_orders_pipeline feeding orders/customers/dim_products, those
+// feeding revenue_dashboard / finance_summary / ml_churn_model). It was never routed,
+// and it contradicted the real lineage on every edge - those three tables are dbt
+// SOURCES that reach Tableau through the dbt models, and three of its nodes were not
+// catalog assets at all. Deleted; lineage lives only in the derived dbt DAG now.
 
 const DQSparkline = ({data,w=64,h=22}) => {
   if(!data||data.length<2) return null;
@@ -12960,34 +12817,18 @@ const LINEAGE_TYPE_COLOR={
   "dbt Snapshot":"#8b5cf6", "dbt Metric":"#0ea5e9", "dbt Exposure":"#a78bfa",
 };
 
-// ─── Per-node metadata (for info panel) ──────────────────────────────────────
-const LINEAGE_NODE_META={
-  pg:  {assetType:"Database", service:"PostgreSQL", db:"postgresql_prod",        domain:"Commerce",  owner:"dev.patel",  steward:"priya.nair", quality:92,cert:"Approved",   tags:["PII","finance"],description:"Production PostgreSQL database serving Commerce orders and customer data.",                cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"amount",t:"decimal"},{n:"status",t:"varchar"},{n:"created_at",t:"timestamp"}]},
-  self:{assetType:"Table",    service:"Snowflake",  db:"COMMERCE / orders_fact", domain:"Commerce",  owner:"maya.chen", steward:"sarah.kim",  quality:95,cert:"Approved",   tags:["PII","KPI"],    description:"Fact table tracking all commerce orders. Source of truth for revenue, retention and growth reporting.", cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"revenue",t:"decimal"},{n:"order_status",t:"varchar"},{n:"created_at",t:"date"}]},
-  d1:  {assetType:"Dashboard",service:"Tableau",    db:"Revenue Dashboard",      domain:"Finance",   owner:"alex.wu",   steward:"james.oh",   quality:88,cert:"Approved",   tags:["KPI"],          description:"Executive revenue dashboard consuming enriched order data for Finance stakeholders.",       cols:[{n:"total_revenue",t:"decimal"},{n:"order_count",t:"bigint"},{n:"avg_order",t:"decimal"}]},
-  d2:  {assetType:"Dashboard",service:"Tableau",    db:"Finance Summary",        domain:"Finance",   owner:"james.oh",  steward:"alex.wu",    quality:84,cert:"Draft",      tags:["finance"],      description:"Finance summary dashboard aggregating revenue across all domains. Updated daily.",        cols:[{n:"domain",t:"varchar"},{n:"total_rev",t:"decimal"},{n:"growth_pct",t:"float"}]},
-};
-
-// ─── Fixed topology (positions + connections) ─────────────────────────────────
-const LINEAGE_TOPO={
-  pg:  {x:0,   y:160, label:"postgresql_prod",   upstream:[],      downstream:["self"], active:false},
-  self:{x:310, y:160, label:"",                  upstream:["pg"],  downstream:["d1"],  active:true},
-  d1:  {x:620, y:160, label:"revenue_dashboard", upstream:["self"],downstream:["d2"],  active:false},
-  d2:  {x:930, y:160, label:"finance_summary",   upstream:["d1"],  downstream:[],      active:false},
-};
-
-const LINEAGE_EDGES_DEF=[
-  {id:"le1",s:"pg",  t:"self",tk:"Direct"},
-  {id:"le2",s:"self",t:"d1",  tk:"Direct"},
-  {id:"le3",s:"d1",  t:"d2",  tk:"Direct"},
-];
-
-// ─── Column-level mappings between nodes ──────────────────────────────────────
-const LINEAGE_COL_MAPS=[
-  {s:"pg",  t:"self",cols:[{sc:"order_id",tc:"order_id"},{sc:"customer_id",tc:"customer_id"},{sc:"amount",tc:"revenue"},{sc:"status",tc:"order_status"},{sc:"created_at",tc:"created_at"}]},
-  {s:"self",t:"d1",  cols:[{sc:"revenue",tc:"total_revenue"},{sc:"order_id",tc:"order_count"},{sc:"revenue",tc:"avg_order"}]},
-  {s:"d1",  t:"d2",  cols:[{sc:"total_revenue",tc:"total_rev"},{sc:"order_count",tc:"total_rev"}]},
-];
+// ─── Default lineage: deliberately EMPTY ──────────────────────────────────────
+// There used to be a hardcoded four-node chain here (postgresql_prod -> <this asset>
+// -> revenue_dashboard -> finance_summary) that every asset without a real graph fell
+// back on. It was fiction: an Oracle HR table was shown feeding a revenue dashboard
+// through Postgres, and two of its four nodes were not catalog assets at all. Lineage
+// is either ingested from a connector or it is not known, so the fallback is now empty
+// and the Lineage tab says so. These four names are kept because the graph helpers
+// default to them; they must stay empty.
+const LINEAGE_NODE_META={};
+const LINEAGE_TOPO={};
+const LINEAGE_EDGES_DEF=[];
+const LINEAGE_COL_MAPS=[];
 
 // Recursively trace all col-level edges upstream + downstream from a start column
 function colPathEdges(startNodeId,startColName,colMaps=LINEAGE_COL_MAPS){
@@ -13229,8 +13070,11 @@ const TABLEAU_ACTIVE_BY_TYPE={
 // column list of their own (metrics, exposures, semantic models, BI). Nothing is invented:
 // a system EDG does not crawl does not get a node, because there would be no metadata
 // behind it - the upstream boundary is simply where the catalog ends.
+//
+// The graph therefore starts at the warehouse tables dbt declares as sources, which is
+// also where dbt's own DAG starts: dbt knows nothing about whatever loaded them, and the
+// loader's lineage would have to come from that tool's own connector, not from dbt.
 const DBT_DAG_NODES = {
-  etl:          {asset:"etl_orders_pipeline", cols:[]},
   sf_orders:    {asset:"orders"},
   sf_customers: {asset:"customers"},
   sf_txn:       {asset:"transactions"},
@@ -13259,7 +13103,6 @@ const DBT_DAG_NODES = {
 };
 
 const DBT_DAG_EDGES = [
-  {id:"de02",s:"etl",         t:"sf_orders",  tk:"Loads"},
   {id:"de04",s:"sf_orders",   t:"src_orders", tk:"Declared source"},
   {id:"de05",s:"sf_customers",t:"src_cust",   tk:"Declared source"},
   {id:"de06",s:"sf_txn",      t:"src_txn",    tk:"Declared source"},
@@ -13523,7 +13366,9 @@ function pickLineageGraph(asset){
     const nodeId = byAsset[asset.name] || (asset.dbtTestOn ? byAsset[asset.dbtTestOn] : null);
     if(nodeId) return dbtFocusedGraph(nodeId);
   }
-  return {topo:LINEAGE_TOPO,meta:LINEAGE_NODE_META,colMaps:LINEAGE_COL_MAPS,edges:LINEAGE_EDGES_DEF};
+  // No connector has contributed lineage for this asset. Say that, rather than drawing
+  // a chain that belongs to something else.
+  return {topo:LINEAGE_TOPO,meta:LINEAGE_NODE_META,colMaps:LINEAGE_COL_MAPS,edges:LINEAGE_EDGES_DEF,empty:true};
 }
 
 // ─── AssetLineageFull ─────────────────────────────────────────────────────────
@@ -13649,6 +13494,28 @@ const AssetLineageFull=({asset})=>{
   // cert colour helper (hardcoded, no T)
   const certC=(c)=>c==="Approved"?"#16a34a":c==="In Review"?"#d97706":"#6b7280";
   const qualC=(q)=>q>=90?"#16a34a":q>=75?"#d97706":"#e11d48";
+
+  // Nothing ingested for this asset - an honest empty state beats an invented graph.
+  if(_G.empty||Object.keys(LINEAGE_TOPO).length===0){
+    const svc=asset?.connectionLabel||asset?.service||"this source";
+    return (
+      <div className="fadeIn" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+        gap:12,height:340,background:T.bgSurface,border:`1px dashed ${T.border}`,borderRadius:10,padding:32,textAlign:"center"}}>
+        <div style={{width:44,height:44,borderRadius:11,background:T.bgElevated,border:`1px solid ${T.border}`,
+          display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted}}>{Ic.lineage(22)}</div>
+        <div style={{fontSize:14.5,fontWeight:600,color:T.text}}>No lineage ingested for this asset</div>
+        <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65,maxWidth:460}}>
+          EDG draws lineage only from what a connector actually reports &mdash; a dbt manifest,
+          Tableau&rsquo;s metadata API, or warehouse query-log parsing. Nothing has been ingested for{" "}
+          <span style={{fontFamily:"'Geist Mono',monospace",color:T.text}}>{svc}</span> yet, so there is
+          nothing to draw. Rather than show a placeholder chain, this stays empty until a run populates it.
+        </div>
+        {asset?.archived&&<div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>
+          This asset is archived &mdash; it was deleted at source, so its lineage is no longer refreshed.
+        </div>}
+      </div>
+    );
+  }
 
   return(
     <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:0,height:520}}>
@@ -18432,7 +18299,9 @@ const FileAssetDetail = ({asset, onBack, onToast}) => {
     return <div style={{width:size,height:size,borderRadius:Math.floor(size/3),background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*0.32,fontWeight:700,color:T.accent,flexShrink:0}}>{initials}</div>;
   };
 
-  const TABS = [{id:"overview",label:"Overview"},{id:"properties",label:"Properties"},{id:"customprops",label:"Custom Properties"},{id:"lineage",label:"Lineage"}];
+  // The last tab shows where the object physically sits, not what produced it - calling
+  // a storage path "Lineage" promised data lineage this connector does not report.
+  const TABS = [{id:"overview",label:"Overview"},{id:"properties",label:"Properties"},{id:"customprops",label:"Custom Properties"},{id:"lineage",label:"Storage Path"}];
 
   const formatDate = (iso) => {
     if(!iso) return "—";
