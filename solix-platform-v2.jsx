@@ -196,20 +196,35 @@ ASSETS.push(...HIERARCHY_ASSETS);
 //    plus Published/Embedded Data Sources, their Fields & Calculated Fields, Flows and Metrics.
 //    Presented as flat catalog assets so every object type is visible with its own detail + lineage. ──
 const TABLEAU_ASSETS = [
-  {id:6001,name:"Analytics",          type:"Site",             domain:"Platform", owner:"james.oh",  owners:["james.oh"],  steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:0,  usage:"High", updated:"20m ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics", tier:1, rows:"—", size:"—", tags:[],                   description:"Tableau site (tenant boundary). Root container for all projects, workbooks and data sources.", slaFreshness:"20m"},
-  {id:6002,name:"Finance",            type:"Project",          domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",   stewards:["alex.wu"],   cert:"Approved",  quality:0,  usage:"High", updated:"1h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance", tier:1, rows:"—", size:"—", tags:[],           description:"Top-level Tableau project grouping Finance workbooks and published data sources. Nests recursively.", slaFreshness:"1h"},
+  {id:6001,name:"Analytics",          type:"Site",             domain:"Platform", owner:"james.oh",  owners:["james.oh"],  steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:0,  usage:"", updated:"20m ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics", tier:1, rows:"—", size:"—", tags:[],                   description:"Tableau site (tenant boundary). Root container for all projects, workbooks and data sources.", slaFreshness:"20m"},
+  {id:6002,name:"Finance",            type:"Project",          domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",   stewards:["alex.wu"],   cert:"Approved",  quality:0,  usage:"", updated:"1h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance", tier:1, rows:"—", size:"—", tags:[],           description:"Top-level Tableau project grouping Finance workbooks and published data sources. Nests recursively.", slaFreshness:"1h"},
   {id:6003,name:"Revenue_Analytics",  type:"Workbook",         domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:0,  usage:"High", updated:"1h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics", tier:1, rows:"—", size:"—", tags:["KPI"], description:"Published workbook containing the revenue dashboard, its worksheets and an embedded data source. Excluded from lineage traversal (container).", slaFreshness:"1h"},
-  {id:6004,name:"Revenue_Dashboard",  type:"Dashboard",        domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:88, usage:"High", updated:"1h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics / Revenue_Dashboard", tier:1, rows:"—", size:"—", tags:["KPI","Board reporting"], description:"Executive revenue dashboard assembled from the Revenue_by_Region worksheet. Consumer end of Tableau lineage.", slaFreshness:"1h"},
-  {id:6005,name:"Revenue_by_Region",  type:"Worksheet",        domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:86, usage:"High", updated:"1h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics / Revenue_by_Region", tier:2, rows:"—", size:"—", tags:["KPI"], description:"Worksheet (view) plotting revenue by region. The middle hop between data source and dashboard.", slaFreshness:"1h"},
-  {id:6006,name:"Orders_Certified",   type:"Data Source",      domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:90, usage:"High", updated:"2h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Orders_Certified", tier:1, rows:"—", size:"—", tags:["revenue","KPI"], description:"Published data source (reusable, owned, certified). Pulls from Snowflake ORDERS_FACT via custom SQL — the governed data surface.", slaFreshness:"2h"},
-  {id:6007,name:"Revenue_Extract",    type:"Data Source",      domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Draft",     quality:72, usage:"Med",  updated:"1h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics / Revenue_Extract", tier:2, rows:"—", size:"420 MB", tags:[], description:"Embedded data source (lives inside the Revenue_Analytics workbook). Same shape as a published source, minus ownership & popularity. Has a materialized extract.", slaFreshness:"1h"},
+  {id:6004,name:"Revenue_Dashboard",  type:"Dashboard",        domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:0, usage:"High", updated:"1h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics / Revenue_Dashboard", tier:1, rows:"—", size:"—", tags:["KPI","Board reporting"], description:"Executive revenue dashboard assembled from the Revenue_by_Region worksheet. Consumer end of Tableau lineage.", slaFreshness:"1h"},
+  {id:6005,name:"Revenue_by_Region",  type:"Worksheet",        domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:0, usage:"High", updated:"1h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics / Revenue_by_Region", tier:2, rows:"—", size:"—", tags:["KPI"], description:"Worksheet (view) plotting revenue by region. The middle hop between data source and dashboard.", slaFreshness:"1h"},
+  {id:6006,name:"Orders_Certified",   type:"Data Source",      domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:0, usage:"High", updated:"2h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Orders_Certified", tier:1, rows:"—", size:"—", tags:["revenue","KPI"], description:"Published data source (reusable, owned, certified). Pulls from Snowflake ORDERS_FACT via custom SQL — the governed data surface.", slaFreshness:"2h"},
+  {id:6007,name:"Revenue_Extract",    type:"Data Source",      domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Draft",     quality:0, usage:"",  updated:"1h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics / Revenue_Extract", tier:2, rows:"—", size:"420 MB", tags:[], description:"Embedded data source (lives inside the Revenue_Analytics workbook). Same shape as a published source, minus ownership & popularity. Has a materialized extract.", slaFreshness:"1h"},
   // NOTE: Datasource fields & calculated fields are NOT separate catalog rows — like table columns,
   // they live inside their parent's profile (Data Source → Fields tab, see TABLEAU_FIELDS). This keeps
   // fields/columns consistent across DB and BI sources.
-  {id:6010,name:"Orders_Prep_Flow",   type:"Flow",             domain:"Commerce", owner:"james.oh",  owners:["james.oh"],  steward:"maya.chen", stewards:["maya.chen"], cert:"Approved",  quality:0,  usage:"Med",  updated:"6h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Orders_Prep_Flow", tier:2, rows:"—", size:"—", tags:["etl"], description:"Tableau Prep flow shaping order data before it reaches the data source. No lineage yet; unavailable under JWT bearer auth.", slaFreshness:"6h"},
-  {id:6011,name:"Daily_Revenue",      type:"Metric",           domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",   stewards:["alex.wu"],   cert:"Deprecated",quality:0,  usage:"Low",  updated:"3w ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Daily_Revenue", tier:3, rows:"—", size:"—", tags:[], description:"Legacy standalone KPI metric. Retired by Tableau in API 3.22+ — crawled only from older servers.", slaFreshness:"—"},
+  {id:6010,name:"Orders_Prep_Flow",   type:"Flow",             domain:"Commerce", owner:"james.oh",  owners:["james.oh"],  steward:"maya.chen", stewards:["maya.chen"], cert:"Approved",  quality:0,  usage:"",  updated:"6h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Orders_Prep_Flow", tier:2, rows:"—", size:"—", tags:["etl"], description:"Tableau Prep flow shaping order data before it reaches the data source. No lineage yet; unavailable under JWT bearer auth.", slaFreshness:"6h"},
+  {id:6011,name:"Daily_Revenue",      type:"Metric",           domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",   stewards:["alex.wu"],   cert:"Deprecated",quality:0,  usage:"",  updated:"3w ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Daily_Revenue", tier:3, rows:"—", size:"—", tags:[], description:"Legacy standalone KPI metric. Retired by Tableau in API 3.22+ — crawled only from older servers.", slaFreshness:"—"},
 ];
-ASSETS.push(...TABLEAU_ASSETS);
+// -- Tableau objects the connector also crawls. Datasource fields and calculated fields
+//    are addressable in Atlan (TableauDatasourceField / TableauCalculatedField), Collibra
+//    (Tableau Data Attribute) and Alation alike, so they are catalog assets here too -
+//    namespaced under their datasource, listed on its Fields tab, and NOT lineage nodes.
+//    A Story is a Tableau view type that Collibra ingests; it belongs in the hierarchy. --
+const TABLEAU_EXTRA_ASSETS = [
+  {id:6013,name:"Revenue_Reporting",              type:"Project",          domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",  stewards:["alex.wu"],  cert:"Approved", quality:0, usage:"",     updated:"2h ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Reporting", tier:2, rows:"—", size:"—", tags:[], description:"Nested project inside Finance. Tableau projects nest recursively, and permissions are inherited down the tree unless a child locks them.", slaFreshness:"2h"},
+  {id:6012,name:"Revenue_Story",                  type:"Story",            domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved", quality:0, usage:"Med",  updated:"1h ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics / Revenue_Story", tier:2, rows:"—", size:"—", tags:["Board reporting"], description:"Story sequencing the revenue worksheets into a narrative for the board pack. A view type in its own right, alongside worksheets and dashboards.", slaFreshness:"1h"},
+  {id:6020,name:"Orders_Certified.revenue",       type:"Datasource Field", domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved", quality:0, usage:"",     updated:"2h ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Orders_Certified / revenue", tier:1, rows:"—", size:"—", tags:["revenue"], description:"Measure passed straight through from the Snowflake orders_fact.revenue column. No Tableau-side logic.", slaFreshness:"2h", tableauParent:"Orders_Certified"},
+  {id:6021,name:"Orders_Certified.yoy_growth_pct",type:"Calculated Field", domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"In Review",quality:0, usage:"",     updated:"2h ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Orders_Certified / yoy_growth_pct", tier:1, rows:"—", size:"—", tags:["KPI"], description:"Calculated field holding business logic that exists only in Tableau - year-on-year growth, computed with LOOKUP over the previous period. Governed because the definition is not in the warehouse.", slaFreshness:"2h", tableauParent:"Orders_Certified"},
+  {id:6022,name:"Orders_Certified.region",        type:"Datasource Field", domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved", quality:0, usage:"",     updated:"2h ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Orders_Certified / region", tier:2, rows:"—", size:"—", tags:[], description:"Dimension passed through from orders_fact.region.", slaFreshness:"2h", tableauParent:"Orders_Certified"},
+  {id:6023,name:"Orders_Certified.order_date",    type:"Datasource Field", domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved", quality:0, usage:"",     updated:"2h ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Orders_Certified / order_date", tier:2, rows:"—", size:"—", tags:[], description:"Date dimension passed through from orders_fact.order_date.", slaFreshness:"2h", tableauParent:"Orders_Certified"},
+  {id:6024,name:"Revenue_Extract.order_amount",   type:"Datasource Field", domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Draft",    quality:0, usage:"",     updated:"1h ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics / Revenue_Extract / order_amount", tier:3, rows:"—", size:"—", tags:[], description:"Measure in the embedded extract, sourced from orders_fact.revenue. Duplicates the certified data source - a governance smell worth surfacing.", slaFreshness:"1h", tableauParent:"Revenue_Extract"},
+  {id:6025,name:"Revenue_Extract.region",         type:"Datasource Field", domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Draft",    quality:0, usage:"",     updated:"1h ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics / Revenue_Extract / region", tier:3, rows:"—", size:"—", tags:[], description:"Dimension in the embedded extract, sourced from orders_fact.region.", slaFreshness:"1h", tableauParent:"Revenue_Extract"},
+];
+ASSETS.push(...TABLEAU_ASSETS, ...TABLEAU_EXTRA_ASSETS);
 
 // -- orders_fact - the Snowflake table the dbt chain materializes. Referenced by the
 //    Tableau profiles and BI lineage as their physical upstream, so it belongs in the catalog. --
@@ -3040,6 +3055,7 @@ const TYPE_META = {
   "Calculated Field":  {c:"#d97706", bg:"rgba(217,119,6,.08)",  icon:"ƒ"},
   Flow:                {c:"#0ea5e9", bg:"rgba(14,165,233,.1)",  icon:"⇄"},
   Metric:              {c:"#a78bfa", bg:"rgba(167,139,250,.1)", icon:"◎"},
+  Story:               {c:"#7c3aed", bg:"rgba(124,58,237,.09)", icon:"◳"},
   // -- dbt object types (dbt brand orange; tests green, exposures violet) --
   "dbt Project":        {c:"#ff694b", bg:"rgba(255,105,75,.07)", icon:"▤"},
   "dbt Model":          {c:"#ff694b", bg:"rgba(255,105,75,.12)", icon:"◆"},
@@ -18582,22 +18598,34 @@ const TABLEAU_PROFILE = {
   "Analytics":         {props:[["Object type","Site"],["Projects","1"],["Data sources","2"],["Source","Tableau Cloud"]],
                         rel:{contains:[{name:"Finance",type:"Project"}]}},
   "Finance":           {props:[["Object type","Project"],["Site","Analytics"],["Top-level","Yes"],["Contents","1 workbook · 1 data source · 1 flow"]],
-                        rel:{parent:{name:"Analytics",type:"Site"},contains:[{name:"Revenue_Analytics",type:"Workbook"},{name:"Orders_Certified",type:"Data Source"},{name:"Orders_Prep_Flow",type:"Flow"}]}},
+                        rel:{parent:{name:"Analytics",type:"Site"},contains:[{name:"Revenue_Reporting",type:"Project"},{name:"Revenue_Analytics",type:"Workbook"},{name:"Orders_Certified",type:"Data Source"},{name:"Orders_Prep_Flow",type:"Flow"}]}},
   "Revenue_Analytics": {props:[["Object type","Workbook"],["Project","Analytics / Finance"],["Contents","1 dashboard · 1 worksheet · 1 embedded source"],["Popularity","1,240 views (30d)"],["Source","Open in Tableau ↗"]],
-                        rel:{parent:{name:"Finance",type:"Project"},contains:[{name:"Revenue_Dashboard",type:"Dashboard"},{name:"Revenue_by_Region",type:"Worksheet"},{name:"Revenue_Extract",type:"Data Source"}]}},
+                        rel:{parent:{name:"Finance",type:"Project"},contains:[{name:"Revenue_Dashboard",type:"Dashboard"},{name:"Revenue_by_Region",type:"Worksheet"},{name:"Revenue_Story",type:"Story"},{name:"Revenue_Extract",type:"Data Source"}]}},
   "Revenue_Dashboard": {props:[["Object type","Dashboard"],["Project","Analytics / Finance"],["Workbook","Revenue_Analytics"],["Popularity","980 views (30d)"],["Last refresh","1h ago"],["Source","Open in Tableau ↗"]],
                         rel:{contains:[{name:"Revenue_by_Region",type:"Worksheet"}],upstream:[{name:"Orders_Certified",type:"Data Source"}]}},
   "Revenue_by_Region": {props:[["Object type","Worksheet (view)"],["Workbook","Revenue_Analytics"],["Fields used","revenue, region"],["Popularity","640 views (30d)"],["Source","Open in Tableau ↗"]],
                         rel:{upstream:[{name:"Orders_Certified",type:"Data Source"}],downstream:[{name:"Revenue_Dashboard",type:"Dashboard"}]}},
-  "Orders_Certified":  {props:[["Object type","Published data source"],["Project","Analytics / Finance"],["Certified","Yes"],["Connection","Live extract"],["Fields","4 (1 calculated)"],["Upstream","SNOWFLAKE_PROD / COMMERCE / orders_fact"]],
+  "Orders_Certified":  {props:[["Object type","Published data source"],["Publish state","Published (reusable, owned)"],["Project","Analytics / Finance"],["Certified","Yes"],["Connection","Live extract"],["Fields","4 (1 calculated)"],["Upstream","SNOWFLAKE_PROD / COMMERCE / orders_fact"]],
                         rel:{upstream:[{name:"orders_fact",type:"Table"}],downstream:[{name:"Revenue_by_Region",type:"Worksheet"},{name:"Revenue_Dashboard",type:"Dashboard"}]}},
-  "Revenue_Extract":   {props:[["Object type","Embedded data source"],["Workbook","Revenue_Analytics"],["Connection","Extract (420 MB)"],["Fields","2"],["Upstream","SNOWFLAKE_PROD / COMMERCE / orders_fact"]],
+  "Revenue_Extract":   {props:[["Object type","Embedded data source"],["Publish state","Embedded in a workbook - no independent usage stats"],["Workbook","Revenue_Analytics"],["Connection","Extract (420 MB)"],["Fields","2"],["Upstream","SNOWFLAKE_PROD / COMMERCE / orders_fact"]],
                         rel:{parent:{name:"Revenue_Analytics",type:"Workbook"},upstream:[{name:"orders_fact",type:"Table"}]}},
-  "order_amount":      {props:[["Object type","Datasource field"],["Data source","Orders_Certified"],["Data type","decimal"],["Role","Measure"],["Upstream column","orders_fact.revenue"]],
+  "Orders_Certified.revenue":       {props:[["Object type","Datasource field"],["Data source","Orders_Certified"],["Data type","decimal"],["Role","Measure"],["Tableau logic","None - passthrough"],["Upstream column","orders_fact.revenue"]],
+                        rel:{parent:{name:"Orders_Certified",type:"Data Source"},upstream:[{name:"orders_fact",type:"Table"}]}},
+  "Orders_Certified.yoy_growth_pct":{formula:"(SUM([revenue]) - LOOKUP(SUM([revenue]), -1))\n/ ABS(LOOKUP(SUM([revenue]), -1))",
+                        props:[["Object type","Calculated field"],["Data source","Orders_Certified"],["Data type","percentage"],["Role","Measure"],["Tableau logic","Yes - defined in Tableau only"],["Depends on","revenue"]],
                         rel:{parent:{name:"Orders_Certified",type:"Data Source"}}},
-  "yoy_growth_pct":    {formula:"(SUM([order_amount]) - LOOKUP(SUM([order_amount]), -1))\n/ ABS(LOOKUP(SUM([order_amount]), -1))",
-                        props:[["Object type","Calculated field"],["Data source","Orders_Certified"],["Data type","percentage"],["Role","Measure"]],
-                        rel:{parent:{name:"Orders_Certified",type:"Data Source"}}},
+  "Orders_Certified.region":        {props:[["Object type","Datasource field"],["Data source","Orders_Certified"],["Data type","string"],["Role","Dimension"],["Tableau logic","None - passthrough"],["Upstream column","orders_fact.region"]],
+                        rel:{parent:{name:"Orders_Certified",type:"Data Source"},upstream:[{name:"orders_fact",type:"Table"}]}},
+  "Orders_Certified.order_date":    {props:[["Object type","Datasource field"],["Data source","Orders_Certified"],["Data type","date"],["Role","Dimension"],["Tableau logic","None - passthrough"],["Upstream column","orders_fact.order_date"]],
+                        rel:{parent:{name:"Orders_Certified",type:"Data Source"},upstream:[{name:"orders_fact",type:"Table"}]}},
+  "Revenue_Extract.order_amount":   {props:[["Object type","Datasource field"],["Data source","Revenue_Extract (embedded)"],["Data type","decimal"],["Role","Measure"],["Upstream column","orders_fact.revenue"],["Note","duplicates the certified data source"]],
+                        rel:{parent:{name:"Revenue_Extract",type:"Data Source"},upstream:[{name:"orders_fact",type:"Table"}]}},
+  "Revenue_Extract.region":         {props:[["Object type","Datasource field"],["Data source","Revenue_Extract (embedded)"],["Data type","string"],["Role","Dimension"],["Upstream column","orders_fact.region"]],
+                        rel:{parent:{name:"Revenue_Extract",type:"Data Source"},upstream:[{name:"orders_fact",type:"Table"}]}},
+  "Revenue_Story":     {props:[["Object type","Story"],["Workbook","Revenue_Analytics"],["Sheets in sequence","3"],["Popularity","210 views (30d)"],["Source","Open in Tableau \u2197"]],
+                        rel:{parent:{name:"Revenue_Analytics",type:"Workbook"},upstream:[{name:"Revenue_by_Region",type:"Worksheet"}]}},
+  "Revenue_Reporting": {props:[["Object type","Project (nested)"],["Parent project","Finance"],["Site","Analytics"],["Permissions","Inherited from Finance"],["Contents","empty - created for the FY27 pack"]],
+                        rel:{parent:{name:"Finance",type:"Project"}}},
   "Orders_Prep_Flow":  {props:[["Object type","Prep flow"],["Project","Analytics / Finance"],["Inputs","app_orders (MySQL)"],["Outputs","orders_fact (Snowflake)"],["Schedule","Daily 02:00 UTC"]],
                         rel:{downstream:[{name:"orders_fact",type:"Table"}]}},
   "Daily_Revenue":     {legacy:true,props:[["Object type","Metric (legacy)"],["Project","Analytics / Finance"],["Status","Retired — unavailable in Tableau API 3.22+"]],
@@ -18799,7 +18827,8 @@ const TableauAssetOverview = ({asset,data,setData,onToast})=>{
 };
 
 // Fields tab for a Tableau data source (the schema equivalent).
-const TableauFieldsPanel = ({asset})=>{
+const TableauFieldsPanel = ({asset,onAsset})=>{
+  const allAssets=(typeof ASSETS!=="undefined"?ASSETS:[]);
   const fields = TABLEAU_FIELDS[asset.name]||[];
   const [q,setQ]=useState("");
   const filtered = fields.filter(f=>!q||f.name.toLowerCase().includes(q.toLowerCase()));
@@ -18818,7 +18847,9 @@ const TableauFieldsPanel = ({asset})=>{
           <span>Field</span><span>Role</span><span>Data type</span><span>Upstream / formula</span>
         </div>
         {filtered.map((f,i)=>(
-          <div key={f.name} style={{display:"grid",gridTemplateColumns:"1.4fr 0.7fr 0.8fr 1.6fr",alignItems:"center",padding:"10px 16px",borderBottom:i<filtered.length-1?`1px solid ${T.border}`:"none"}}>
+          <div key={f.name} onClick={()=>{const t=allAssets.find(x=>x.name===asset.name+"."+f.name);if(t&&onAsset)onAsset(t);}}
+            title={`Open ${asset.name}.${f.name}`}
+            style={{cursor:allAssets.some(x=>x.name===asset.name+"."+f.name)&&onAsset?"pointer":"default",display:"grid",gridTemplateColumns:"1.4fr 0.7fr 0.8fr 1.6fr",alignItems:"center",padding:"10px 16px",borderBottom:i<filtered.length-1?`1px solid ${T.border}`:"none"}}>
             <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text,minWidth:0}}>
               <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.name}</span>
               {f.calc&&<span style={{fontSize:9,fontWeight:700,color:"#d97706",background:"rgba(217,119,6,.1)",border:"1px solid rgba(217,119,6,.25)",borderRadius:4,padding:"0 5px",flexShrink:0}}>ƒ</span>}
@@ -19768,6 +19799,9 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
   // ── Tableau (BI) objects get an object-appropriate profile (no columns / DQ / contract) ──
   const isBI = asset.service==="tableau";
   const biHasFields = isBI && !!TABLEAU_FIELDS[asset.name];   // data sources expose fields
+  // Fields are components of a data source, not nodes in the BI graph - same rule as dbt
+  // semantic-model components. Containers have no lineage of their own either.
+  const biInDag = isBI && !["Datasource Field","Calculated Field","Site","Project"].includes(asset.type);
   // ── dbt objects get an object-appropriate profile too. A model is not a table: what
   //    matters is materialization, refs, tests and its SQL — not row counts or a contract.
   //    Projects and jobs are containers, so they have no lineage of their own (same rule
@@ -19799,8 +19833,10 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
     ? [
         {key:"overview",label:"Overview"},
         ...(biHasFields?[{key:"schema",label:"Fields"}]:[]),
-        {key:"lineage",label:"Lineage"},
-        {key:"usage",label:"Usage"},
+        ...(biInDag?[{key:"lineage",label:"Lineage"}]:[]),
+        // Tableau reports view counts for views and workbooks, and popularity only for
+        // PUBLISHED data sources - so the tab appears only where there is a number.
+        ...(asset.usage?[{key:"usage",label:"Usage"}]:[]),
         {key:"customprops",label:"Custom Properties"},
         {key:"activity",label:"Audit Logs"},
       ]
@@ -19908,7 +19944,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
         {tab==="schema"    && (isDbt
           ? <DbtColumnsPanel asset={data}/>
           : isBI
-          ? <TableauFieldsPanel asset={data}/>
+          ? <TableauFieldsPanel asset={data} onAsset={onAsset}/>
           : <AssetSchema asset={asset} selCol={selCol} onColClick={c=>{ setSelCol(selCol?.name===c?.name?null:c); }} onToast={onToast}/>)}
         {tab==="dbtsql"    && isDbt && <DbtSqlPanel asset={data}/>}
         {tab==="components"&& isDbt && <DbtSemanticPanel asset={data} onAsset={onAsset}/>}
