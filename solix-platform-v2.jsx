@@ -241,6 +241,24 @@ const POWERBI_ASSETS = [
 ];
 ASSETS.push(...POWERBI_ASSETS);
 
+// -- AWS Glue. NO new object types: Atlan maps Glue's Data Catalog onto the generic
+//    Database / Schema / Table / View / Column types, and so do we - a Glue table is a
+//    Table with service:"glue". The Glue Data Catalog is a metastore, so it reuses the
+//    warehouse hierarchy this catalog already has for Snowflake and Oracle.
+//
+//    A Glue JOB or CRAWLER is not an asset either. Following the same call we made for
+//    dbt Cloud jobs, the job that builds a table is an ATTRIBUTE on that table
+//    (glueJob / glueCrawler) with its run history on the table's profile. Jobs are
+//    orchestration, not data objects.
+const GLUE_ASSETS = [
+  {id:6400,name:"GLUE_LAKE",          type:"Database", domain:"Platform", owner:"james.oh",  owners:["james.oh"],  steward:"maya.chen", stewards:["maya.chen"], cert:"Approved", quality:0,  usage:"",     updated:"1h ago",  service:"glue", connectionLabel:"AWS Glue Data Catalog", db:"GLUE_LAKE", tier:1, rows:"—", size:"—", tags:[], description:"Glue Data Catalog database over the S3 data lake. A metastore, so it holds table definitions rather than the data itself.", slaFreshness:"1h", path:[], assetLevel:"database"},
+  {id:6401,name:"events",             type:"Schema",   domain:"Product",  owner:"james.oh",  owners:["james.oh"],  steward:"alex.wu",   stewards:["alex.wu"],   cert:"Approved", quality:0,  usage:"",     updated:"1h ago",  service:"glue", connectionLabel:"AWS Glue Data Catalog", db:"GLUE_LAKE / events", tier:2, rows:"—", size:"—", tags:[], description:"Glue schema holding the crawled event tables from the raw S3 prefix.", slaFreshness:"1h", path:["GLUE_LAKE"], parentId:6400, assetLevel:"schema"},
+  {id:6402,name:"raw_clickstream",    type:"Table",    domain:"Product",  owner:"james.oh",  owners:["james.oh"],  steward:"alex.wu",   stewards:["alex.wu"],   cert:"Draft",    quality:76, usage:"Med",  updated:"1h ago",  service:"glue", connectionLabel:"AWS Glue Data Catalog", db:"GLUE_LAKE / events / raw_clickstream", tier:3, rows:"1.8B", size:"940 GB", tags:["events","raw"], description:"Raw clickstream events on S3 in Parquet, table definition discovered by a Glue crawler. Nested payload, so its schema is not flat.", slaFreshness:"1h", path:["GLUE_LAKE","events"], parentId:6401, assetLevel:"table", glueCrawler:"clickstream_crawler", s3Location:"s3://jnj-data-lake-prod/raw/clickstream/"},
+  {id:6403,name:"sessions_enriched",  type:"Table",    domain:"Product",  owner:"maya.chen", owners:["maya.chen"], steward:"alex.wu",   stewards:["alex.wu"],   cert:"Approved", quality:88, usage:"High", updated:"55m ago", service:"glue", connectionLabel:"AWS Glue Data Catalog", db:"GLUE_LAKE / events / sessions_enriched", tier:2, rows:"412M", size:"180 GB", tags:["events"], description:"Sessionised clickstream, written by a Glue ETL job. The job that builds it is an attribute here, not a separate asset.", slaFreshness:"1h", path:["GLUE_LAKE","events"], parentId:6401, assetLevel:"table", glueJob:"sessionize_clickstream", s3Location:"s3://jnj-data-lake-prod/curated/sessions/"},
+  {id:6404,name:"vw_daily_sessions",  type:"View",     domain:"Product",  owner:"maya.chen", owners:["maya.chen"], steward:"alex.wu",   stewards:["alex.wu"],   cert:"Approved", quality:0,  usage:"Med",  updated:"55m ago", service:"glue", connectionLabel:"AWS Glue Data Catalog", db:"GLUE_LAKE / events / vw_daily_sessions", tier:3, rows:"—", size:"—", tags:[], description:"Athena view aggregating enriched sessions by day. Definition lives in the Glue Data Catalog.", slaFreshness:"1h", path:["GLUE_LAKE","events"], parentId:6401, assetLevel:"view"},
+];
+ASSETS.push(...GLUE_ASSETS);
+
 // -- orders_fact - the Snowflake table the dbt chain materializes. Referenced by the
 //    Tableau profiles and BI lineage as their physical upstream, so it belongs in the catalog. --
 const DBT_TARGET_ASSETS = [
@@ -295,6 +313,12 @@ const ASSET_COLUMNS = {
   "customers_archive": ["customer_id","email","phone","first_name","last_name","date_of_birth","address","country","legal_hold_flag","archived_at"],
   // ── orders (Snowflake) ──
   "orders":          ["order_id","customer_id","product_id","order_date","status","amount","currency","discount","region","shipping_address","created_at","updated_at"],
+  // -- AWS Glue. raw_clickstream is deliberately NESTED: Glue tables over S3 carry STRUCT
+  //    and ARRAY types, which Atlan supports to 15 levels. A dotted name here is a nested
+  //    path within one column, not a separate asset. --
+  "raw_clickstream":   ["event_id","event_ts","user_id","device.type","device.os","device.os_version","payload.page","payload.referrer","payload.utm.source","payload.utm.campaign","items[].sku","items[].qty"],
+  "sessions_enriched": ["session_id","user_id","started_at","ended_at","event_count","device_type","utm_source","landing_page"],
+  "vw_daily_sessions": ["session_date","sessions","users","avg_events_per_session"],
   // -- orders_fact (Snowflake, built by the fct_revenue dbt model) --
   "orders_fact":       ["order_id","customer_id","revenue","order_status","order_date","region"],
   // ── customers (Snowflake) ──
@@ -3005,6 +3029,7 @@ const SERVICE_LOGOS = {
   tableau:    <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#1f77b4"/><path d="M16 8v16M8 16h16M11 11v10M21 11v10M8 13h16M8 19h16" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>,
   airflow:    <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#017cee"/><circle cx="10" cy="16" r="2.5" fill="white"/><circle cx="22" cy="10" r="2.5" fill="white"/><circle cx="22" cy="22" r="2.5" fill="white"/><path d="M12.5 15L19.5 11M12.5 17L19.5 21" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>,
   mlflow:     <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#0194e2"/><path d="M8 24l8-16 8 16" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/><path d="M11 18h10" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>,
+  glue:       <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#8C4FFF"/><path d="M11 20l5-9 5 9H11z" fill="white" opacity=".35"/><circle cx="11" cy="21" r="2.4" fill="white"/><circle cx="21" cy="21" r="2.4" fill="white"/><circle cx="16" cy="11" r="2.4" fill="white"/></svg>,
   powerbi:    <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#F2C811"/><rect x="9" y="16" width="4.5" height="9" rx="1" fill="#8a6d00"/><rect x="14.5" y="11" width="4.5" height="14" rx="1" fill="#6b5400"/><rect x="20" y="7" width="4.5" height="18" rx="1" fill="#4d3c00"/></svg>,
   dbt:        <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#ff6f44"/><path d="M16 8l4 4-4 4-4-4 4-4z" fill="white" opacity=".3"/><path d="M16 12v8M12 16h8" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>,
   bigquery:   <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#4285f4"/><circle cx="14" cy="14" r="5" fill="none" stroke="white" strokeWidth="1.5" opacity=".5"/><circle cx="14" cy="14" r="2.5" fill="white"/><path d="M18 18l4 4" stroke="white" strokeWidth="2.5" strokeLinecap="round"/></svg>,
@@ -18975,6 +19000,108 @@ const TableauFieldsPanel = ({asset})=>{
 };
 
 // ===========================================================================
+// AWS GLUE - what a Glue table adds over a warehouse table. Glue introduces no new
+// object types (Atlan maps it onto Database/Schema/Table/View/Column), so the only
+// extra surface is the ETL side: the job or crawler that produced the table, and
+// where it physically sits on S3. Jobs are orchestration, so they are attributes
+// with run history here rather than governed assets - the same call as dbt Cloud jobs.
+// ===========================================================================
+const GLUE_RUNS = {
+  "sessionize_clickstream":{
+    kind:"ETL job", trigger:"EventBridge, hourly", worker:"G.2X · 10 workers", glueVersion:"4.0",
+    script:"s3://jnj-glue-scripts/sessionize_clickstream.py", bookmark:"Enabled",
+    runs:[
+      {id:"jr_8841", status:"succeeded", started:"55m ago", duration:"11m 20s", read:"1.8B rows", written:"412M rows", note:""},
+      {id:"jr_8840", status:"succeeded", started:"1h 55m ago", duration:"10m 48s", read:"1.8B rows", written:"411M rows", note:""},
+      {id:"jr_8839", status:"failed",    started:"2h 55m ago", duration:"2m 04s",  read:"—", written:"—", note:"Job bookmark hit a schema change: payload.utm.campaign appeared mid-run. Re-ran after the crawler refreshed the table definition."},
+      {id:"jr_8838", status:"succeeded", started:"3h 55m ago", duration:"10m 12s", read:"1.7B rows", written:"408M rows", note:""},
+    ]},
+  "clickstream_crawler":{
+    kind:"Crawler", trigger:"Schedule, every 6 hours", worker:"—", glueVersion:"—",
+    script:"—", bookmark:"—",
+    runs:[
+      {id:"cr_2210", status:"succeeded", started:"1h ago",  duration:"3m 41s", read:"—", written:"2 columns added", note:"Detected payload.utm.source and payload.utm.campaign. Schema drift on a Draft table."},
+      {id:"cr_2209", status:"succeeded", started:"7h ago",  duration:"3m 12s", read:"—", written:"no change", note:""},
+    ]},
+};
+
+const GLUE_RUN_C = {succeeded:{c:"#16a34a",bg:"rgba(22,163,74,.1)"},failed:{c:"#e11d48",bg:"rgba(225,29,72,.1)"},running:{c:"#d97706",bg:"rgba(217,119,6,.12)"}};
+
+// The "Glue" tab on a Glue table: what built it, where it lives, and its run history.
+const GlueOnTablePanel = ({asset})=>{
+  const name=asset.glueJob||asset.glueCrawler;
+  const g=GLUE_RUNS[name];
+  if(!g) return <div className="fadeIn" style={{fontSize:12.5,color:T.textMuted}}>No Glue job or crawler is associated with this table.</div>;
+  const isJob=!!asset.glueJob;
+  return (
+    <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:16,maxWidth:900}}>
+      <Card2><div style={{padding:"14px 16px"}}>
+        <SH title={isJob?"Built by a Glue ETL job":"Discovered by a Glue crawler"}
+          sub={isJob
+            ? "A Glue job writes this table. The job is an attribute here, not a catalog asset \u2014 orchestration is not a data object."
+            : "A crawler discovered this table definition from S3. It does not write the data; it infers the schema."}/>
+        <div style={{display:"flex",alignItems:"center",gap:12,padding:"11px 13px",background:"rgba(140,79,255,.06)",
+          border:"1px solid rgba(140,79,255,.25)",borderRadius:9}}>
+          <ServiceIcon service="glue" size={22}/>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{name}</div>
+            <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{g.kind} {"\u00b7"} {g.trigger}</div>
+          </div>
+        </div>
+      </div></Card2>
+
+      <Card2><div style={{padding:"14px 16px"}}>
+        <SH title="Glue" sub="Ingested from the Glue Data Catalog and the job run API"/>
+        <DbtProps rows={[
+          ["S3 location",asset.s3Location||"—"],
+          ["Glue version",g.glueVersion],
+          ["Worker type",g.worker],
+          ["Trigger",g.trigger],
+          ["Job bookmark",g.bookmark],
+          ["Script",g.script],
+        ]}/>
+        <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${T.border}`,fontSize:10.5,color:T.textMuted,lineHeight:1.6}}>
+          Ingested from AWS, not authored in EDG: <span style={{fontFamily:"'Geist Mono',monospace"}}>GetTable</span> (schema, S3 location, parameters)
+          {" \u00b7 "}<span style={{fontFamily:"'Geist Mono',monospace"}}>GetJobRuns</span> (run history, rows read and written)
+          {asset.glueCrawler?<>{" \u00b7 "}<span style={{fontFamily:"'Geist Mono',monospace"}}>GetCrawlerMetrics</span> (schema drift)</>:null}
+        </div>
+      </div></Card2>
+
+      <Card2 style={{overflow:"hidden"}}>
+        <div style={{padding:"14px 16px 10px"}}><SH title="Run history" sub={"Recent "+(isJob?"job":"crawler")+" runs from the Glue API"}/></div>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead><tr style={{background:T.bgElevated}}>
+            {["Run","Status","Started","Duration","Read","Written"].map(h=>(
+              <th key={h} style={{padding:"7px 14px",textAlign:"left",fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",borderBottom:`1px solid ${T.border}`}}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {g.runs.map((r,i)=>{
+              const c=GLUE_RUN_C[r.status]||{c:T.textMuted,bg:T.bgHover};
+              return (
+                <React.Fragment key={r.id}>
+                  <tr style={{borderBottom:r.note?"none":(i<g.runs.length-1?`1px solid ${T.border}`:"none")}}>
+                    <td style={{padding:"8px 14px",fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600}}>{r.id}</td>
+                    <td style={{padding:"8px 14px"}}><span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:5,background:c.bg,color:c.c,border:`1px solid ${c.c}33`,textTransform:"uppercase",letterSpacing:".05em"}}>{r.status}</span></td>
+                    <td style={{padding:"8px 14px",fontSize:11.5,color:T.textMuted,whiteSpace:"nowrap"}}>{r.started}</td>
+                    <td style={{padding:"8px 14px",fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{r.duration}</td>
+                    <td style={{padding:"8px 14px",fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{r.read}</td>
+                    <td style={{padding:"8px 14px",fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{r.written}</td>
+                  </tr>
+                  {r.note&&<tr style={{borderBottom:i<g.runs.length-1?`1px solid ${T.border}`:"none"}}>
+                    <td colSpan={6} style={{padding:"0 14px 8px",fontSize:11,color:T.textMuted,fontStyle:"italic"}}>{r.note}</td>
+                  </tr>}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card2>
+    </div>
+  );
+};
+
+// ===========================================================================
 // POWER BI ASSET PROFILE - object-appropriate detail per Atlan's crawl model.
 // A dataset is not a table: what matters is its tables/columns/DAX measures, its
 // endorsement, and what binds to it. Parts live inside, never as catalog rows.
@@ -20121,6 +20248,10 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
   // (materialized by a model) or reads it (declared as a source).
   const dbtRef     = asset.dbtModel || asset.dbtSource;
   const dbtOnTable = !isDbt && !!dbtRef && !!DBT_META[dbtRef];
+  // A Glue table names the job or crawler that produced it; that is where its ETL story
+  // lives, since Glue jobs are attributes rather than assets.
+  const glueRef    = asset.glueJob || asset.glueCrawler;
+  const glueOnTable= asset.service==="glue" && !!glueRef && !!GLUE_RUNS[glueRef];
   const tabs = isPBI
     ? [
         {key:"overview",label:"Overview"},
@@ -20157,6 +20288,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
     : [
         {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},{key:"lineage",label:"Lineage"},
         ...(dbtOnTable?[{key:"dbt",label:"dbt"}]:[]),
+        ...(glueOnTable?[{key:"glue",label:"Glue"}]:[]),
         {key:"observability",label:"Data Quality"},{key:"contract",label:"Contract"},{key:"usage",label:"Usage"},
         {key:"customprops",label:"Custom Properties"},{key:"activity",label:"Audit Logs"},
       ];
@@ -20268,6 +20400,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
         {tab==="components"&& isDbt && <DbtSemanticPanel asset={data}/>}
         {tab==="dbttests"  && isDbt && <DbtTestsPanel asset={data} onToast={onToast}/>}
         {tab==="dbt"       && dbtOnTable && <DbtOnTablePanel asset={data} onAsset={onAsset}/>}
+        {tab==="glue"      && glueOnTable && <GlueOnTablePanel asset={data}/>}
         {tab==="observability" && !isBI && !isDbt && !isPBI && <AssetObservabilityTab asset={data} onToast={onToast} onNav={onNav}/>}
         {tab==="contract"      && !isBI && !isDbt && !isPBI && <AssetContractTab asset={data} onToast={onToast}/>}
         {tab==="usage"     && <AssetUsageTab/>}
@@ -29236,7 +29369,7 @@ const OM_CONNECTORS = [
   {name:"Airbyte",         cat:"Pipeline",       logoUrl:SI("airbyte","615EFF"),                  desc:"Open-source ELT data integration platform",           status:"Available",  assets:0,    lastSync:null},
   {name:"Apache NiFi",     cat:"Pipeline",       logoUrl:SI("apachenifi","728E9B"),               desc:"Data flow automation and integration platform",       status:"Available",  assets:0,    lastSync:null},
   {name:"Apache Flink",    cat:"Pipeline",       logoUrl:SI("apacheflink","E6526F"),              desc:"Stateful stream and batch processing framework",     status:"Available",  assets:0,    lastSync:null},
-  {name:"AWS Glue",        cat:"Pipeline",       logoUrl:SI("amazonwebservices","FF9900"),        desc:"Serverless data integration and ETL service",         status:"Available",  assets:0,    lastSync:null},
+  {name:"AWS Glue",        cat:"Pipeline",       logoUrl:SI("amazonwebservices","FF9900"),        desc:"Glue Data Catalog — databases, tables and columns, plus the jobs that build them", status:"Connected",  assets:5,    lastSync:"55m ago"},
   {name:"Spline",          cat:"Pipeline",       logoUrl:null, color:"#FF4500",                  desc:"Apache Spark data lineage tracking",                  status:"Available",  assets:0,    lastSync:null},
 
   // ── MESSAGING ──
