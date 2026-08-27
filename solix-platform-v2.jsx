@@ -209,20 +209,17 @@ const TABLEAU_ASSETS = [
   {id:6010,name:"Orders_Prep_Flow",   type:"Flow",             domain:"Commerce", owner:"james.oh",  owners:["james.oh"],  steward:"maya.chen", stewards:["maya.chen"], cert:"Approved",  quality:0,  usage:"",  updated:"6h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Orders_Prep_Flow", tier:2, rows:"—", size:"—", tags:["etl"], description:"Tableau Prep flow shaping order data before it reaches the data source. No lineage yet; unavailable under JWT bearer auth.", slaFreshness:"6h"},
   {id:6011,name:"Daily_Revenue",      type:"Metric",           domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",   stewards:["alex.wu"],   cert:"Deprecated",quality:0,  usage:"",  updated:"3w ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Daily_Revenue", tier:3, rows:"—", size:"—", tags:[], description:"Legacy standalone KPI metric. Retired by Tableau in API 3.22+ — crawled only from older servers.", slaFreshness:"—"},
 ];
-// -- Tableau objects the connector also crawls. Datasource fields and calculated fields
-//    are addressable in Atlan (TableauDatasourceField / TableauCalculatedField), Collibra
-//    (Tableau Data Attribute) and Alation alike, so they are catalog assets here too -
-//    namespaced under their datasource, listed on its Fields tab, and NOT lineage nodes.
+// -- Tableau objects the connector also crawls beyond the originals.
+//    NOTE ON FIELDS: Atlan (TableauDatasourceField / TableauCalculatedField), Collibra
+//    (Tableau Data Attribute) and Alation all make datasource fields addressable assets.
+//    We deliberately do NOT: a field is a column, and columns never appear as catalog
+//    rows in this product - they live inside their parent object, exactly as table
+//    columns and dbt model columns do. The field detail lives on the data source's
+//    Fields tab instead (see TABLEAU_FIELDS), which keeps DB and BI sources consistent.
 //    A Story is a Tableau view type that Collibra ingests; it belongs in the hierarchy. --
 const TABLEAU_EXTRA_ASSETS = [
   {id:6013,name:"Revenue_Reporting",              type:"Project",          domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",  stewards:["alex.wu"],  cert:"Approved", quality:0, usage:"",     updated:"2h ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Reporting", tier:2, rows:"—", size:"—", tags:[], description:"Nested project inside Finance. Tableau projects nest recursively, and permissions are inherited down the tree unless a child locks them.", slaFreshness:"2h"},
   {id:6012,name:"Revenue_Story",                  type:"Story",            domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved", quality:0, usage:"Med",  updated:"1h ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics / Revenue_Story", tier:2, rows:"—", size:"—", tags:["Board reporting"], description:"Story sequencing the revenue worksheets into a narrative for the board pack. A view type in its own right, alongside worksheets and dashboards.", slaFreshness:"1h"},
-  {id:6020,name:"Orders_Certified.revenue",       type:"Datasource Field", domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved", quality:0, usage:"",     updated:"2h ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Orders_Certified / revenue", tier:1, rows:"—", size:"—", tags:["revenue"], description:"Measure passed straight through from the Snowflake orders_fact.revenue column. No Tableau-side logic.", slaFreshness:"2h", tableauParent:"Orders_Certified"},
-  {id:6021,name:"Orders_Certified.yoy_growth_pct",type:"Calculated Field", domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"In Review",quality:0, usage:"",     updated:"2h ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Orders_Certified / yoy_growth_pct", tier:1, rows:"—", size:"—", tags:["KPI"], description:"Calculated field holding business logic that exists only in Tableau - year-on-year growth, computed with LOOKUP over the previous period. Governed because the definition is not in the warehouse.", slaFreshness:"2h", tableauParent:"Orders_Certified"},
-  {id:6022,name:"Orders_Certified.region",        type:"Datasource Field", domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved", quality:0, usage:"",     updated:"2h ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Orders_Certified / region", tier:2, rows:"—", size:"—", tags:[], description:"Dimension passed through from orders_fact.region.", slaFreshness:"2h", tableauParent:"Orders_Certified"},
-  {id:6023,name:"Orders_Certified.order_date",    type:"Datasource Field", domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved", quality:0, usage:"",     updated:"2h ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Orders_Certified / order_date", tier:2, rows:"—", size:"—", tags:[], description:"Date dimension passed through from orders_fact.order_date.", slaFreshness:"2h", tableauParent:"Orders_Certified"},
-  {id:6024,name:"Revenue_Extract.order_amount",   type:"Datasource Field", domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Draft",    quality:0, usage:"",     updated:"1h ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics / Revenue_Extract / order_amount", tier:3, rows:"—", size:"—", tags:[], description:"Measure in the embedded extract, sourced from orders_fact.revenue. Duplicates the certified data source - a governance smell worth surfacing.", slaFreshness:"1h", tableauParent:"Revenue_Extract"},
-  {id:6025,name:"Revenue_Extract.region",         type:"Datasource Field", domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Draft",    quality:0, usage:"",     updated:"1h ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics / Revenue_Extract / region", tier:3, rows:"—", size:"—", tags:[], description:"Dimension in the embedded extract, sourced from orders_fact.region.", slaFreshness:"1h", tableauParent:"Revenue_Extract"},
 ];
 ASSETS.push(...TABLEAU_ASSETS, ...TABLEAU_EXTRA_ASSETS);
 
@@ -18609,19 +18606,6 @@ const TABLEAU_PROFILE = {
                         rel:{upstream:[{name:"orders_fact",type:"Table"}],downstream:[{name:"Revenue_by_Region",type:"Worksheet"},{name:"Revenue_Dashboard",type:"Dashboard"}]}},
   "Revenue_Extract":   {props:[["Object type","Embedded data source"],["Publish state","Embedded in a workbook - no independent usage stats"],["Workbook","Revenue_Analytics"],["Connection","Extract (420 MB)"],["Fields","2"],["Upstream","SNOWFLAKE_PROD / COMMERCE / orders_fact"]],
                         rel:{parent:{name:"Revenue_Analytics",type:"Workbook"},upstream:[{name:"orders_fact",type:"Table"}]}},
-  "Orders_Certified.revenue":       {props:[["Object type","Datasource field"],["Data source","Orders_Certified"],["Data type","decimal"],["Role","Measure"],["Tableau logic","None - passthrough"],["Upstream column","orders_fact.revenue"]],
-                        rel:{parent:{name:"Orders_Certified",type:"Data Source"},upstream:[{name:"orders_fact",type:"Table"}]}},
-  "Orders_Certified.yoy_growth_pct":{formula:"(SUM([revenue]) - LOOKUP(SUM([revenue]), -1))\n/ ABS(LOOKUP(SUM([revenue]), -1))",
-                        props:[["Object type","Calculated field"],["Data source","Orders_Certified"],["Data type","percentage"],["Role","Measure"],["Tableau logic","Yes - defined in Tableau only"],["Depends on","revenue"]],
-                        rel:{parent:{name:"Orders_Certified",type:"Data Source"}}},
-  "Orders_Certified.region":        {props:[["Object type","Datasource field"],["Data source","Orders_Certified"],["Data type","string"],["Role","Dimension"],["Tableau logic","None - passthrough"],["Upstream column","orders_fact.region"]],
-                        rel:{parent:{name:"Orders_Certified",type:"Data Source"},upstream:[{name:"orders_fact",type:"Table"}]}},
-  "Orders_Certified.order_date":    {props:[["Object type","Datasource field"],["Data source","Orders_Certified"],["Data type","date"],["Role","Dimension"],["Tableau logic","None - passthrough"],["Upstream column","orders_fact.order_date"]],
-                        rel:{parent:{name:"Orders_Certified",type:"Data Source"},upstream:[{name:"orders_fact",type:"Table"}]}},
-  "Revenue_Extract.order_amount":   {props:[["Object type","Datasource field"],["Data source","Revenue_Extract (embedded)"],["Data type","decimal"],["Role","Measure"],["Upstream column","orders_fact.revenue"],["Note","duplicates the certified data source"]],
-                        rel:{parent:{name:"Revenue_Extract",type:"Data Source"},upstream:[{name:"orders_fact",type:"Table"}]}},
-  "Revenue_Extract.region":         {props:[["Object type","Datasource field"],["Data source","Revenue_Extract (embedded)"],["Data type","string"],["Role","Dimension"],["Upstream column","orders_fact.region"]],
-                        rel:{parent:{name:"Revenue_Extract",type:"Data Source"},upstream:[{name:"orders_fact",type:"Table"}]}},
   "Revenue_Story":     {props:[["Object type","Story"],["Workbook","Revenue_Analytics"],["Sheets in sequence","3"],["Popularity","210 views (30d)"],["Source","Open in Tableau \u2197"]],
                         rel:{parent:{name:"Revenue_Analytics",type:"Workbook"},upstream:[{name:"Revenue_by_Region",type:"Worksheet"}]}},
   "Revenue_Reporting": {props:[["Object type","Project (nested)"],["Parent project","Finance"],["Site","Analytics"],["Permissions","Inherited from Finance"],["Contents","empty - created for the FY27 pack"]],
@@ -18633,16 +18617,19 @@ const TABLEAU_PROFILE = {
 };
 
 // Fields exposed by each Tableau data source (the "schema" equivalent for a BI source).
+// Fields exposed by each Tableau data source - the "schema" equivalent for a BI source.
+// `logic` states whether the definition lives in Tableau or is a passthrough, which is the
+// governance question a calculated field raises: business logic outside the warehouse.
 const TABLEAU_FIELDS = {
   "Orders_Certified":[
-    {name:"revenue",        dataType:"decimal",    role:"Measure",   calc:false, upstream:"orders_fact.revenue"},
-    {name:"yoy_growth_pct", dataType:"percentage", role:"Measure",   calc:true,  formula:"(SUM([order_amount]) − LOOKUP(SUM([order_amount]),−1)) / ABS(LOOKUP(SUM([order_amount]),−1))"},
-    {name:"region",         dataType:"string",     role:"Dimension", calc:false, upstream:"orders_fact.region"},
-    {name:"order_date",     dataType:"date",       role:"Dimension", calc:false, upstream:"orders_fact.order_date"},
+    {name:"revenue",        dataType:"decimal",    role:"Measure",   calc:false, upstream:"orders_fact.revenue",    logic:"Passthrough", desc:"Recognised revenue, passed straight through from the Snowflake column. No Tableau-side logic."},
+    {name:"yoy_growth_pct", dataType:"percentage", role:"Measure",   calc:true,  dependsOn:"revenue",               logic:"Defined in Tableau only", desc:"Year-on-year growth. The definition exists nowhere but this data source, so it cannot be governed at the warehouse.", formula:"(SUM([revenue]) − LOOKUP(SUM([revenue]), −1))\n/ ABS(LOOKUP(SUM([revenue]), −1))"},
+    {name:"region",         dataType:"string",     role:"Dimension", calc:false, upstream:"orders_fact.region",     logic:"Passthrough", desc:"Sales region, resolved upstream by the dbt country_codes seed."},
+    {name:"order_date",     dataType:"date",       role:"Dimension", calc:false, upstream:"orders_fact.order_date", logic:"Passthrough", desc:"Order date. Time grain for every revenue view."},
   ],
   "Revenue_Extract":[
-    {name:"order_amount",   dataType:"decimal",    role:"Measure",   calc:false, upstream:"orders_fact.revenue"},
-    {name:"region",         dataType:"string",     role:"Dimension", calc:false, upstream:"orders_fact.region"},
+    {name:"order_amount",   dataType:"decimal",    role:"Measure",   calc:false, upstream:"orders_fact.revenue",    logic:"Passthrough", desc:"Duplicates the certified data source's revenue measure under a different name - a governance smell worth surfacing."},
+    {name:"region",         dataType:"string",     role:"Dimension", calc:false, upstream:"orders_fact.region",     logic:"Passthrough", desc:"Sales region."},
   ],
 };
 
@@ -18827,10 +18814,10 @@ const TableauAssetOverview = ({asset,data,setData,onToast})=>{
 };
 
 // Fields tab for a Tableau data source (the schema equivalent).
-const TableauFieldsPanel = ({asset,onAsset})=>{
-  const allAssets=(typeof ASSETS!=="undefined"?ASSETS:[]);
+const TableauFieldsPanel = ({asset})=>{
   const fields = TABLEAU_FIELDS[asset.name]||[];
   const [q,setQ]=useState("");
+  const [open,setOpen]=useState(null);   // a field expands in place - it is not its own page
   const filtered = fields.filter(f=>!q||f.name.toLowerCase().includes(q.toLowerCase()));
   return (
     <div className="fadeIn">
@@ -18847,9 +18834,10 @@ const TableauFieldsPanel = ({asset,onAsset})=>{
           <span>Field</span><span>Role</span><span>Data type</span><span>Upstream / formula</span>
         </div>
         {filtered.map((f,i)=>(
-          <div key={f.name} onClick={()=>{const t=allAssets.find(x=>x.name===asset.name+"."+f.name);if(t&&onAsset)onAsset(t);}}
-            title={`Open ${asset.name}.${f.name}`}
-            style={{cursor:allAssets.some(x=>x.name===asset.name+"."+f.name)&&onAsset?"pointer":"default",display:"grid",gridTemplateColumns:"1.4fr 0.7fr 0.8fr 1.6fr",alignItems:"center",padding:"10px 16px",borderBottom:i<filtered.length-1?`1px solid ${T.border}`:"none"}}>
+          <React.Fragment key={f.name}>
+          <div onClick={()=>setOpen(open===f.name?null:f.name)}
+            title={open===f.name?"Hide details":"Show details"}
+            style={{cursor:"pointer",background:open===f.name?T.bgHover:"transparent",display:"grid",gridTemplateColumns:"1.4fr 0.7fr 0.8fr 1.6fr",alignItems:"center",padding:"10px 16px",borderBottom:(open===f.name||i<filtered.length-1)?`1px solid ${T.border}`:"none"}}>
             <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text,minWidth:0}}>
               <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.name}</span>
               {f.calc&&<span style={{fontSize:9,fontWeight:700,color:"#d97706",background:"rgba(217,119,6,.1)",border:"1px solid rgba(217,119,6,.25)",borderRadius:4,padding:"0 5px",flexShrink:0}}>ƒ</span>}
@@ -18858,6 +18846,30 @@ const TableauFieldsPanel = ({asset,onAsset})=>{
             <span style={{fontSize:11.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{f.dataType}</span>
             <span style={{fontSize:11,color:T.textSub,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={f.calc?f.formula:f.upstream}>{f.calc?f.formula:f.upstream}</span>
           </div>
+          {open===f.name&&(
+            <div style={{padding:"12px 16px 14px",background:T.bgElevated,borderBottom:i<filtered.length-1?`1px solid ${T.border}`:"none",
+              display:"flex",flexDirection:"column",gap:10}}>
+              <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,maxWidth:640}}>{f.desc}</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"10px 18px"}}>
+                {[["Role",f.role],["Data type",f.dataType],["Definition",f.logic],
+                  ...(f.upstream?[["Upstream column",f.upstream]]:[]),
+                  ...(f.dependsOn?[["Depends on",f.dependsOn]]:[])].map(([k,v])=>(
+                  <div key={k}>
+                    <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:3}}>{k}</div>
+                    <div style={{fontSize:11.5,color:T.text,fontFamily:"'Geist Mono',monospace",wordBreak:"break-word"}}>{v}</div>
+                  </div>
+                ))}
+              </div>
+              {f.calc&&(
+                <div>
+                  <div style={{fontSize:9.5,fontWeight:700,color:"#c2410c",textTransform:"uppercase",letterSpacing:".06em",marginBottom:5}}>Calculation — lives only in Tableau</div>
+                  <pre style={{margin:0,padding:11,background:"#0f172a",color:"#e2e8f0",borderRadius:7,fontSize:11,
+                    fontFamily:"'Geist Mono',monospace",lineHeight:1.6,overflowX:"auto",whiteSpace:"pre"}}>{f.formula}</pre>
+                </div>
+              )}
+            </div>
+          )}
+          </React.Fragment>
         ))}
         {filtered.length===0&&<div style={{padding:"28px",textAlign:"center",fontSize:12,color:T.textMuted}}>No fields match.</div>}
       </Card2>
@@ -19801,7 +19813,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
   const biHasFields = isBI && !!TABLEAU_FIELDS[asset.name];   // data sources expose fields
   // Fields are components of a data source, not nodes in the BI graph - same rule as dbt
   // semantic-model components. Containers have no lineage of their own either.
-  const biInDag = isBI && !["Datasource Field","Calculated Field","Site","Project"].includes(asset.type);
+  const biInDag = isBI && !["Site","Project"].includes(asset.type);
   // ── dbt objects get an object-appropriate profile too. A model is not a table: what
   //    matters is materialization, refs, tests and its SQL — not row counts or a contract.
   //    Projects and jobs are containers, so they have no lineage of their own (same rule
@@ -19944,7 +19956,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
         {tab==="schema"    && (isDbt
           ? <DbtColumnsPanel asset={data}/>
           : isBI
-          ? <TableauFieldsPanel asset={data} onAsset={onAsset}/>
+          ? <TableauFieldsPanel asset={data}/>
           : <AssetSchema asset={asset} selCol={selCol} onColClick={c=>{ setSelCol(selCol?.name===c?.name?null:c); }} onToast={onToast}/>)}
         {tab==="dbtsql"    && isDbt && <DbtSqlPanel asset={data}/>}
         {tab==="components"&& isDbt && <DbtSemanticPanel asset={data} onAsset={onAsset}/>}
