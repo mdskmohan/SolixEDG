@@ -13043,28 +13043,41 @@ const TABLEAU_NODE_META={
   tb_ds: {assetType:"Data Source", service:"tableau",  db:"Analytics / Finance / Orders_Certified",  domain:"Finance", owner:"alex.wu",  steward:"james.oh", quality:90,cert:"Approved",tags:["revenue","KPI"],description:"Published, certified Tableau data source. Reusable governed surface consumed by worksheets.", cols:[{n:"revenue",t:"field"},{n:"yoy_growth_pct",t:"calc"},{n:"region",t:"field"},{n:"order_date",t:"field"}]},
   tb_ws: {assetType:"Worksheet",   service:"tableau",  db:"Analytics / Finance / Revenue_by_Region", domain:"Finance", owner:"alex.wu",  steward:"james.oh", quality:86,cert:"Approved",tags:["KPI"],          description:"Worksheet (view) plotting revenue by region. Middle hop between data source and dashboard.", cols:[{n:"revenue",t:"measure"},{n:"region",t:"dim"}]},
   tb_db: {assetType:"Dashboard",   service:"tableau",  db:"Analytics / Finance / Revenue_Dashboard", domain:"Finance", owner:"alex.wu",  steward:"james.oh", quality:88,cert:"Approved",tags:["KPI","Board reporting"],description:"Executive revenue dashboard. Consumer end of the Tableau lineage path.", cols:[{n:"total_revenue",t:"decimal"},{n:"region",t:"dim"}]},
+  // The embedded extract is a second, separate consumer of the same Snowflake table - it is
+  // not downstream of the certified data source, which is exactly the duplication worth seeing.
+  tb_ext:{assetType:"Data Source", service:"tableau",  db:"Analytics / Finance / Revenue_Analytics / Revenue_Extract", domain:"Finance", owner:"alex.wu", steward:"james.oh", quality:0, cert:"Draft", tags:[], description:"Embedded data source inside the Revenue_Analytics workbook, with its own materialized extract off the same Snowflake table.", cols:[{n:"order_amount",t:"field"},{n:"region",t:"field"}]},
 };
 const TABLEAU_TOPO={
-  tb_tbl:{x:0,  y:160,label:"orders_fact",       upstream:[],        downstream:["tb_ds"]},
+  tb_tbl:{x:0,  y:160,label:"orders_fact",       upstream:[],        downstream:["tb_ds","tb_ext"]},
   tb_ds: {x:310,y:160,label:"Orders_Certified",  upstream:["tb_tbl"],downstream:["tb_ws"]},
   tb_ws: {x:620,y:160,label:"Revenue_by_Region", upstream:["tb_ds"], downstream:["tb_db"]},
   tb_db: {x:930,y:160,label:"Revenue_Dashboard", upstream:["tb_ws"], downstream:[]},
+  tb_ext:{x:310,y:340,label:"Revenue_Extract",   upstream:["tb_tbl"],downstream:[]},
 };
 const TABLEAU_EDGES_DEF=[
   {id:"tle1",s:"tb_tbl",t:"tb_ds",tk:"Custom SQL"},
   {id:"tle2",s:"tb_ds", t:"tb_ws",tk:"Direct"},
   {id:"tle3",s:"tb_ws", t:"tb_db",tk:"Direct"},
+  {id:"tle4",s:"tb_tbl",t:"tb_ext",tk:"Extract"},
 ];
 const TABLEAU_COL_MAPS=[
   {s:"tb_tbl",t:"tb_ds",cols:[{sc:"revenue",tc:"revenue"},{sc:"revenue",tc:"yoy_growth_pct"},{sc:"order_date",tc:"yoy_growth_pct"},{sc:"order_date",tc:"order_date"},{sc:"region",tc:"region"}]},
   {s:"tb_ds", t:"tb_ws",cols:[{sc:"revenue",tc:"revenue"},{sc:"region",tc:"region"}]},
   {s:"tb_ws", t:"tb_db",cols:[{sc:"revenue",tc:"total_revenue"},{sc:"region",tc:"region"}]},
+  {s:"tb_tbl",t:"tb_ext",cols:[{sc:"revenue",tc:"order_amount"},{sc:"region",tc:"region"}]},
 ];
-// Which Tableau node is "CURRENT" when a given Tableau object type is viewed.
-const TABLEAU_ACTIVE_BY_TYPE={
-  "Data Source":"tb_ds","Datasource Field":"tb_ds","Calculated Field":"tb_ds",
-  "Worksheet":"tb_ws","Dashboard":"tb_db","Workbook":"tb_db",
-  "Project":"tb_ds","Site":"tb_ds","Metric":"tb_db","Flow":"tb_tbl",
+// Which Tableau node is CURRENT for a given asset. Keyed by NAME, not by type: the old
+// type-keyed map meant the two data sources shared one node, so opening Revenue_Extract
+// highlighted Orders_Certified instead. Anything absent here has no lineage of its own -
+// per Atlan's Tableau reference, workbook nodes "no longer appear in lineage traversal",
+// and "lineage is currently not supported for Tableau flows, metrics and embedded
+// dashboards". Sites, projects and workbooks are containers; stories are not crawled for
+// lineage by any of the three vendors. Those get no Lineage tab at all.
+const TABLEAU_NODE_BY_ASSET={
+  "Orders_Certified":"tb_ds",
+  "Revenue_Extract":"tb_ext",
+  "Revenue_by_Region":"tb_ws",
+  "Revenue_Dashboard":"tb_db",
 };
 // ===========================================================================
 // ===========================================================================
@@ -13366,7 +13379,10 @@ function pickLineageGraph(asset){
   // Tableau objects keep their BI-connector path (the dbt DAG carries the same tail,
   // but Sites/Projects/Workbooks/Flows have no place in it).
   if(asset&&asset.service==="tableau"){
-    const activeId=TABLEAU_ACTIVE_BY_TYPE[asset.type]||"tb_ds";
+    const activeId=TABLEAU_NODE_BY_ASSET[asset.name];
+    // No node means no lineage for this object type - say so rather than highlighting
+    // an unrelated node, which is what the old type-keyed lookup did.
+    if(!activeId) return {topo:{},meta:{},colMaps:[],edges:[],empty:true};
     const topo={};
     Object.entries(TABLEAU_TOPO).forEach(([id,t])=>{ topo[id]={...t,active:id===activeId}; });
     return {topo,meta:TABLEAU_NODE_META,colMaps:TABLEAU_COL_MAPS,edges:TABLEAU_EDGES_DEF};
@@ -18602,17 +18618,17 @@ const TABLEAU_PROFILE = {
                         rel:{contains:[{name:"Revenue_by_Region",type:"Worksheet"}],upstream:[{name:"Orders_Certified",type:"Data Source"}]}},
   "Revenue_by_Region": {props:[["Object type","Worksheet (view)"],["Workbook","Revenue_Analytics"],["Fields used","revenue, region"],["Popularity","640 views (30d)"],["Source","Open in Tableau ↗"]],
                         rel:{upstream:[{name:"Orders_Certified",type:"Data Source"}],downstream:[{name:"Revenue_Dashboard",type:"Dashboard"}]}},
-  "Orders_Certified":  {props:[["Object type","Published data source"],["Publish state","Published (reusable, owned)"],["Project","Analytics / Finance"],["Certified","Yes"],["Connection","Live extract"],["Fields","4 (1 calculated)"],["Upstream","SNOWFLAKE_PROD / COMMERCE / orders_fact"]],
+  "Orders_Certified":  {props:[["Object type","Published data source"],["Publish state","Published (reusable, owned)"],["Project","Analytics / Finance"],["Tableau certified","Yes · by alex.wu — “Governed revenue surface, use this one”"],["Connection","Live (hasExtracts: false)"],["Fields","4 (1 calculated)"],["Upstream","SNOWFLAKE_PROD / COMMERCE / orders_fact"]],
                         rel:{upstream:[{name:"orders_fact",type:"Table"}],downstream:[{name:"Revenue_by_Region",type:"Worksheet"},{name:"Revenue_Dashboard",type:"Dashboard"}]}},
-  "Revenue_Extract":   {props:[["Object type","Embedded data source"],["Publish state","Embedded in a workbook - no independent usage stats"],["Workbook","Revenue_Analytics"],["Connection","Extract (420 MB)"],["Fields","2"],["Upstream","SNOWFLAKE_PROD / COMMERCE / orders_fact"]],
+  "Revenue_Extract":   {props:[["Object type","Embedded data source"],["Publish state","Embedded in a workbook - no independent usage stats"],["Workbook","Revenue_Analytics"],["Connection","Extract, 420 MB (hasExtracts: true)"],["Fields","2"],["Upstream","SNOWFLAKE_PROD / COMMERCE / orders_fact"]],
                         rel:{parent:{name:"Revenue_Analytics",type:"Workbook"},upstream:[{name:"orders_fact",type:"Table"}]}},
   "Revenue_Story":     {props:[["Object type","Story"],["Workbook","Revenue_Analytics"],["Sheets in sequence","3"],["Popularity","210 views (30d)"],["Source","Open in Tableau \u2197"]],
                         rel:{parent:{name:"Revenue_Analytics",type:"Workbook"},upstream:[{name:"Revenue_by_Region",type:"Worksheet"}]}},
-  "Revenue_Reporting": {props:[["Object type","Project (nested)"],["Parent project","Finance"],["Site","Analytics"],["Permissions","Inherited from Finance"],["Contents","empty - created for the FY27 pack"]],
+  "Revenue_Reporting": {props:[["Object type","Project (nested)"],["Top-level","No"],["Parent project","Finance"],["Site","Analytics"],["Permissions","Inherited from Finance"],["Contents","empty - created for the FY27 pack"]],
                         rel:{parent:{name:"Finance",type:"Project"}}},
-  "Orders_Prep_Flow":  {props:[["Object type","Prep flow"],["Project","Analytics / Finance"],["Inputs","app_orders (MySQL)"],["Outputs","orders_fact (Snowflake)"],["Schedule","Daily 02:00 UTC"]],
-                        rel:{downstream:[{name:"orders_fact",type:"Table"}]}},
-  "Daily_Revenue":     {legacy:true,props:[["Object type","Metric (legacy)"],["Project","Analytics / Finance"],["Status","Retired — unavailable in Tableau API 3.22+"]],
+  "Orders_Prep_Flow":  {props:[["Object type","Prep flow"],["Project","Analytics / Finance"],["Inputs","app_orders (MySQL)"],["Outputs","a Prep staging table, not crawled"],["Schedule","Daily 02:00 UTC"],["Lineage","Not reported \u2014 Tableau exposes no lineage for Prep flows"]],
+                        rel:{parent:{name:"Finance",type:"Project"}}},
+  "Daily_Revenue":     {legacy:true,props:[["Object type","Metric (legacy)"],["Project","Analytics / Finance"],["Status","Retired — unavailable in Tableau API 3.22+"],["Lineage","Not reported for Tableau metrics"]],
                         rel:{}},
 };
 
@@ -19813,7 +19829,9 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
   const biHasFields = isBI && !!TABLEAU_FIELDS[asset.name];   // data sources expose fields
   // Fields are components of a data source, not nodes in the BI graph - same rule as dbt
   // semantic-model components. Containers have no lineage of their own either.
-  const biInDag = isBI && !["Site","Project"].includes(asset.type);
+  // Containers (Site, Project, Workbook) plus the types no vendor reports lineage for
+  // (Flow, Metric, Story) have no lineage of their own.
+  const biInDag = isBI && !["Site","Project","Workbook","Flow","Metric","Story"].includes(asset.type);
   // ── dbt objects get an object-appropriate profile too. A model is not a table: what
   //    matters is materialization, refs, tests and its SQL — not row counts or a contract.
   //    Projects and jobs are containers, so they have no lineage of their own (same rule
