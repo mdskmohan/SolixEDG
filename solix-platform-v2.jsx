@@ -223,6 +223,24 @@ const TABLEAU_EXTRA_ASSETS = [
 ];
 ASSETS.push(...TABLEAU_ASSETS, ...TABLEAU_EXTRA_ASSETS);
 
+// -- Power BI. Object types per Atlan's crawl reference. A dataset's tables, columns and
+//    measures, and a dataflow's entity columns, are PARTS - they live inside their parent
+//    (see POWERBI_PARTS), never as catalog rows, exactly as Tableau fields and dbt model
+//    columns do. Quality is 0 everywhere because Power BI reports no quality score, and
+//    popularity is set only on reports and dashboards, which are what it counts views for. --
+const POWERBI_ASSETS = [
+  {id:6300,name:"Finance_Insights",   type:"Power BI App",        domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved",  quality:0, usage:"",     updated:"2h ago", service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Insights", tier:1, rows:"—", size:"—", tags:["Board reporting"], description:"Published Power BI app - the read-only package of reports and dashboards that business users actually open. Container only.", slaFreshness:"2h"},
+  {id:6301,name:"Finance_Analytics",  type:"Power BI Workspace",  domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",  stewards:["alex.wu"],  cert:"Approved",  quality:0, usage:"",     updated:"2h ago", service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Analytics", tier:1, rows:"—", size:"—", tags:[], description:"Workspace holding the finance datasets, dataflows, reports and dashboards. The permission boundary in Power BI.", slaFreshness:"2h"},
+  {id:6308,name:"Snowflake_COMMERCE", type:"Power BI Datasource", domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",  stewards:["alex.wu"],  cert:"Approved",  quality:0, usage:"",     updated:"40m ago",service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Analytics / Snowflake_COMMERCE", tier:2, rows:"—", size:"—", tags:[], description:"Gateway connection to SNOWFLAKE_PROD.COMMERCE. The physical hop between the warehouse and everything Power BI builds on top of it.", slaFreshness:"40m"},
+  {id:6307,name:"Orders_Prep",        type:"Power BI Dataflow",   domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",  stewards:["alex.wu"],  cert:"Approved",  quality:0, usage:"",     updated:"1h ago", service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Analytics / Orders_Prep", tier:2, rows:"48.2M", size:"3.4 GB", tags:["etl"], description:"Dataflow shaping order data in Power Query before it reaches the dataset. Refreshes on a schedule, so it is Power BI's equivalent of a transformation step.", slaFreshness:"1h", pbiEndorsement:"Promoted"},
+  {id:6306,name:"Revenue_Model",      type:"Power BI Dataset",    domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",  stewards:["alex.wu"],  cert:"Approved",  quality:0, usage:"",     updated:"1h ago", service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Analytics / Revenue_Model", tier:1, rows:"48.2M", size:"5.1 GB", tags:["revenue","KPI"], description:"Semantic dataset every finance report binds to. Holds the DAX measures, which is business logic that exists nowhere but Power BI.", slaFreshness:"1h", pbiEndorsement:"Certified"},
+  {id:6303,name:"Revenue_Detail",     type:"Power BI Report",     domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved",  quality:0, usage:"High", updated:"1h ago", service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Analytics / Revenue_Detail", tier:1, rows:"—", size:"—", tags:["KPI"], description:"Multi-page report bound to the Revenue_Model dataset. The analytical surface finance works in.", slaFreshness:"1h", pbiEndorsement:"Certified"},
+  {id:6304,name:"Regional_Breakdown", type:"Power BI Page",       domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved",  quality:0, usage:"",     updated:"1h ago", service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Analytics / Revenue_Detail / Regional_Breakdown", tier:2, rows:"—", size:"—", tags:[], description:"Report page breaking revenue down by region. Pages are crawled only with workspace-level access, not by the scanner API alone.", slaFreshness:"1h"},
+  {id:6302,name:"Revenue_Overview",   type:"Power BI Dashboard",  domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved",  quality:0, usage:"High", updated:"1h ago", service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Analytics / Revenue_Overview", tier:1, rows:"—", size:"—", tags:["KPI","Board reporting"], description:"Executive dashboard of pinned tiles. Consumer end of the Power BI chain.", slaFreshness:"1h"},
+  {id:6305,name:"Revenue_KPI",        type:"Power BI Tile",       domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved",  quality:0, usage:"",     updated:"1h ago", service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Analytics / Revenue_Overview / Revenue_KPI", tier:2, rows:"—", size:"—", tags:["KPI"], description:"Tile pinned to the executive dashboard, showing Total Revenue from the Revenue_Model dataset.", slaFreshness:"1h"},
+];
+ASSETS.push(...POWERBI_ASSETS);
+
 // -- orders_fact - the Snowflake table the dbt chain materializes. Referenced by the
 //    Tableau profiles and BI lineage as their physical upstream, so it belongs in the catalog. --
 const DBT_TARGET_ASSETS = [
@@ -2987,6 +3005,7 @@ const SERVICE_LOGOS = {
   tableau:    <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#1f77b4"/><path d="M16 8v16M8 16h16M11 11v10M21 11v10M8 13h16M8 19h16" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>,
   airflow:    <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#017cee"/><circle cx="10" cy="16" r="2.5" fill="white"/><circle cx="22" cy="10" r="2.5" fill="white"/><circle cx="22" cy="22" r="2.5" fill="white"/><path d="M12.5 15L19.5 11M12.5 17L19.5 21" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>,
   mlflow:     <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#0194e2"/><path d="M8 24l8-16 8 16" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/><path d="M11 18h10" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>,
+  powerbi:    <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#F2C811"/><rect x="9" y="16" width="4.5" height="9" rx="1" fill="#8a6d00"/><rect x="14.5" y="11" width="4.5" height="14" rx="1" fill="#6b5400"/><rect x="20" y="7" width="4.5" height="18" rx="1" fill="#4d3c00"/></svg>,
   dbt:        <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#ff6f44"/><path d="M16 8l4 4-4 4-4-4 4-4z" fill="white" opacity=".3"/><path d="M16 12v8M12 16h8" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>,
   bigquery:   <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#4285f4"/><circle cx="14" cy="14" r="5" fill="none" stroke="white" strokeWidth="1.5" opacity=".5"/><circle cx="14" cy="14" r="2.5" fill="white"/><path d="M18 18l4 4" stroke="white" strokeWidth="2.5" strokeLinecap="round"/></svg>,
   sap:        <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#0FAAFF"/><text x="16" y="21" textAnchor="middle" fill="white" fontSize="10" fontWeight="700" fontFamily="Arial">SAP</text></svg>,
@@ -3046,6 +3065,18 @@ const TYPE_META = {
   Flow:                {c:"#0ea5e9", bg:"rgba(14,165,233,.1)",  icon:"⇄"},
   Metric:              {c:"#a78bfa", bg:"rgba(167,139,250,.1)", icon:"◎"},
   Story:               {c:"#7c3aed", bg:"rgba(124,58,237,.09)", icon:"◳"},
+  // -- Power BI object types (Atlan: PowerBIApp/Workspace/Dashboard/Report/Page/Tile/
+  //    Dataset/Dataflow/Datasource). Prefixed because Dashboard and Data Source already
+  //    mean the Tableau ones; the service icon alone would not disambiguate the facet. --
+  "Power BI App":        {c:"#b58900", bg:"rgba(242,200,17,.10)", icon:"◱"},
+  "Power BI Workspace":  {c:"#b58900", bg:"rgba(242,200,17,.14)", icon:"▤"},
+  "Power BI Dashboard":  {c:"#a855f7", bg:"rgba(168,85,247,.10)", icon:"▣"},
+  "Power BI Report":     {c:"#7c3aed", bg:"rgba(124,58,237,.10)", icon:"▥"},
+  "Power BI Page":       {c:"#8b5cf6", bg:"rgba(139,92,246,.10)", icon:"▨"},
+  "Power BI Tile":       {c:"#c084fc", bg:"rgba(192,132,252,.12)",icon:"▪"},
+  "Power BI Dataset":    {c:"#0891b2", bg:"rgba(8,145,178,.10)",  icon:"◰"},
+  "Power BI Dataflow":   {c:"#0ea5e9", bg:"rgba(14,165,233,.10)", icon:"⇄"},
+  "Power BI Datasource": {c:"#16a34a", bg:"rgba(22,163,74,.10)",  icon:"◇"},
   // -- dbt object types (dbt brand orange; tests green, exposures violet) --
   "dbt Project":        {c:"#ff694b", bg:"rgba(255,105,75,.07)", icon:"▤"},
   "dbt Model":          {c:"#ff694b", bg:"rgba(255,105,75,.12)", icon:"◆"},
@@ -13056,6 +13087,59 @@ const TABLEAU_COL_MAPS=[
   {s:"tb_ws", t:"tb_db",cols:[{sc:"revenue",tc:"total_revenue"},{sc:"region",tc:"region"}]},
   {s:"tb_tbl",t:"tb_ext",cols:[{sc:"revenue",tc:"order_amount"},{sc:"region",tc:"region"}]},
 ];
+// ===========================================================================
+// POWER BI LINEAGE. Atlan represents only some Power BI objects in lineage -
+// dashboards, reports, pages, tiles, datasets, dataflows - so Apps and Workspaces
+// get no node, the same treatment as Tableau Sites, Projects and Workbooks.
+// Chain: Snowflake table -> Datasource -> Dataflow -> Dataset -> Report -> Page,
+// with the Dataset also feeding a pinned Tile on the Dashboard.
+// ===========================================================================
+const POWERBI_NODE_META={
+  pb_tbl: {assetType:"Table",               service:"snowflake",db:"SNOWFLAKE_PROD / COMMERCE / orders_fact",          domain:"Commerce",owner:"maya.chen",steward:"dev.patel",quality:94,cert:"Approved",tags:["PII","revenue"],description:"The Snowflake table Power BI connects to. Built by the fct_revenue dbt model.", cols:[{n:"revenue",t:"decimal"},{n:"region",t:"varchar"},{n:"order_date",t:"date"},{n:"order_id",t:"bigint"}]},
+  pb_src: {assetType:"Power BI Datasource",  service:"powerbi",  db:"Finance_Analytics / Snowflake_COMMERCE",           domain:"Finance", owner:"sarah.kim",steward:"alex.wu",  quality:0, cert:"Approved",tags:[],                description:"Gateway connection to Snowflake. The physical hop into Power BI.", cols:[{n:"revenue",t:"decimal"},{n:"region",t:"text"},{n:"order_date",t:"date"},{n:"order_id",t:"int64"}]},
+  pb_flow:{assetType:"Power BI Dataflow",    service:"powerbi",  db:"Finance_Analytics / Orders_Prep",                  domain:"Finance", owner:"sarah.kim",steward:"alex.wu",  quality:0, cert:"Approved",tags:["etl"],           description:"Power Query dataflow shaping orders before the dataset loads them.", cols:[{n:"revenue",t:"decimal"},{n:"region",t:"text"},{n:"order_date",t:"date"},{n:"order_id",t:"int64"}]},
+  pb_ds:  {assetType:"Power BI Dataset",     service:"powerbi",  db:"Finance_Analytics / Revenue_Model",                domain:"Finance", owner:"sarah.kim",steward:"alex.wu",  quality:0, cert:"Approved",tags:["revenue","KPI"], description:"Certified semantic dataset holding the DAX measures.", cols:[{n:"revenue",t:"column"},{n:"region",t:"column"},{n:"order_date",t:"column"},{n:"Total Revenue",t:"DAX"},{n:"YoY Growth %",t:"DAX"}]},
+  pb_rpt: {assetType:"Power BI Report",      service:"powerbi",  db:"Finance_Analytics / Revenue_Detail",               domain:"Finance", owner:"alex.wu",  steward:"james.oh", quality:0, cert:"Approved",tags:["KPI"],           description:"Multi-page report bound to the certified dataset.", cols:[{n:"Total Revenue",t:"measure"},{n:"region",t:"dim"}]},
+  pb_page:{assetType:"Power BI Page",        service:"powerbi",  db:"Finance_Analytics / Revenue_Detail / Regional_Breakdown",domain:"Finance",owner:"alex.wu",steward:"james.oh",quality:0,cert:"Approved",tags:[],          description:"Report page breaking revenue down by region.", cols:[{n:"Total Revenue",t:"visual"},{n:"region",t:"axis"}]},
+  pb_tile:{assetType:"Power BI Tile",        service:"powerbi",  db:"Finance_Analytics / Revenue_Overview / Revenue_KPI",domain:"Finance",owner:"alex.wu", steward:"james.oh", quality:0, cert:"Approved",tags:["KPI"],           description:"KPI tile pinned from the dataset onto the executive dashboard.", cols:[{n:"Total Revenue",t:"measure"}]},
+  pb_dash:{assetType:"Power BI Dashboard",   service:"powerbi",  db:"Finance_Analytics / Revenue_Overview",             domain:"Finance", owner:"alex.wu",  steward:"james.oh", quality:0, cert:"Approved",tags:["KPI","Board reporting"],description:"Executive dashboard of pinned tiles. Consumer end of the chain.", cols:[{n:"Total Revenue",t:"measure"}]},
+};
+const POWERBI_TOPO={
+  pb_tbl: {x:0,   y:170,label:"orders_fact",        upstream:[],           downstream:["pb_src"]},
+  pb_src: {x:310, y:170,label:"Snowflake_COMMERCE", upstream:["pb_tbl"],   downstream:["pb_flow"]},
+  pb_flow:{x:620, y:170,label:"Orders_Prep",        upstream:["pb_src"],   downstream:["pb_ds"]},
+  pb_ds:  {x:930, y:170,label:"Revenue_Model",      upstream:["pb_flow"],  downstream:["pb_rpt","pb_tile"]},
+  pb_rpt: {x:1240,y:90, label:"Revenue_Detail",     upstream:["pb_ds"],    downstream:["pb_page"]},
+  pb_tile:{x:1240,y:290,label:"Revenue_KPI",        upstream:["pb_ds"],    downstream:["pb_dash"]},
+  pb_page:{x:1550,y:90, label:"Regional_Breakdown", upstream:["pb_rpt"],   downstream:[]},
+  pb_dash:{x:1550,y:290,label:"Revenue_Overview",   upstream:["pb_tile"],  downstream:[]},
+};
+const POWERBI_EDGES_DEF=[
+  {id:"ple1",s:"pb_tbl", t:"pb_src", tk:"Gateway connection"},
+  {id:"ple2",s:"pb_src", t:"pb_flow",tk:"Power Query"},
+  {id:"ple3",s:"pb_flow",t:"pb_ds",  tk:"Loads entity"},
+  {id:"ple4",s:"pb_ds",  t:"pb_rpt", tk:"Dataset binding"},
+  {id:"ple5",s:"pb_rpt", t:"pb_page",tk:"Report page"},
+  {id:"ple6",s:"pb_ds",  t:"pb_tile",tk:"Pinned from"},
+  {id:"ple7",s:"pb_tile",t:"pb_dash",tk:"Pinned to"},
+];
+const POWERBI_COL_MAPS=[
+  {s:"pb_tbl", t:"pb_src", cols:[{sc:"revenue",tc:"revenue"},{sc:"region",tc:"region"},{sc:"order_date",tc:"order_date"},{sc:"order_id",tc:"order_id"}]},
+  {s:"pb_src", t:"pb_flow",cols:[{sc:"revenue",tc:"revenue"},{sc:"region",tc:"region"},{sc:"order_date",tc:"order_date"},{sc:"order_id",tc:"order_id"}]},
+  {s:"pb_flow",t:"pb_ds",  cols:[{sc:"revenue",tc:"revenue"},{sc:"region",tc:"region"},{sc:"order_date",tc:"order_date"}]},
+  {s:"pb_ds",  t:"pb_rpt", cols:[{sc:"Total Revenue",tc:"Total Revenue"},{sc:"region",tc:"region"}]},
+  {s:"pb_rpt", t:"pb_page",cols:[{sc:"Total Revenue",tc:"Total Revenue"},{sc:"region",tc:"region"}]},
+  {s:"pb_ds",  t:"pb_tile",cols:[{sc:"Total Revenue",tc:"Total Revenue"}]},
+  {s:"pb_tile",t:"pb_dash",cols:[{sc:"Total Revenue",tc:"Total Revenue"}]},
+];
+// Keyed by NAME, like the Tableau map. Apps and Workspaces are containers and are absent,
+// so they fall through to the empty state rather than borrowing another object's graph.
+const POWERBI_NODE_BY_ASSET={
+  "Snowflake_COMMERCE":"pb_src","Orders_Prep":"pb_flow","Revenue_Model":"pb_ds",
+  "Revenue_Detail":"pb_rpt","Regional_Breakdown":"pb_page","Revenue_KPI":"pb_tile",
+  "Revenue_Overview":"pb_dash",
+};
+
 // Which Tableau node is CURRENT for a given asset. Keyed by NAME, not by type: the old
 // type-keyed map meant the two data sources shared one node, so opening Revenue_Extract
 // highlighted Orders_Certified instead. Anything absent here has no lineage of its own -
@@ -13368,6 +13452,13 @@ function collapseDbtNodes(G){
 function pickLineageGraph(asset){
   // Tableau objects keep their BI-connector path (the dbt DAG carries the same tail,
   // but Sites/Projects/Workbooks/Flows have no place in it).
+  if(asset&&asset.service==="powerbi"){
+    const activeId=POWERBI_NODE_BY_ASSET[asset.name];
+    if(!activeId) return {topo:{},meta:{},colMaps:[],edges:[],empty:true};
+    const topo={};
+    Object.entries(POWERBI_TOPO).forEach(([id,t])=>{ topo[id]={...t,active:id===activeId}; });
+    return {topo,meta:POWERBI_NODE_META,colMaps:POWERBI_COL_MAPS,edges:POWERBI_EDGES_DEF};
+  }
   if(asset&&asset.service==="tableau"){
     const activeId=TABLEAU_NODE_BY_ASSET[asset.name];
     // No node means no lineage for this object type - say so rather than highlighting
@@ -18884,6 +18975,183 @@ const TableauFieldsPanel = ({asset})=>{
 };
 
 // ===========================================================================
+// POWER BI ASSET PROFILE - object-appropriate detail per Atlan's crawl model.
+// A dataset is not a table: what matters is its tables/columns/DAX measures, its
+// endorsement, and what binds to it. Parts live inside, never as catalog rows.
+// ===========================================================================
+
+// The parts of a Power BI dataset or dataflow. A DAX measure is the interesting one to
+// govern: like a Tableau calculated field, its logic exists only in the BI tool.
+const POWERBI_PARTS = {
+  "Revenue_Model":[
+    {kind:"Table",   name:"orders_fact",   type:"import",  expr:"",  source:"SNOWFLAKE_PROD.COMMERCE.orders_fact", logic:"Passthrough",          desc:"Imported table backing the model. Refreshed with the dataset."},
+    {kind:"Column",  name:"revenue",       type:"decimal", expr:"",  source:"orders_fact.revenue",                 logic:"Passthrough",          desc:"Recognised revenue, straight from the warehouse column."},
+    {kind:"Column",  name:"region",        type:"string",  expr:"",  source:"orders_fact.region",                  logic:"Passthrough",          desc:"Sales region, resolved upstream by the dbt country_codes seed."},
+    {kind:"Column",  name:"order_date",    type:"date",    expr:"",  source:"orders_fact.order_date",              logic:"Passthrough",          desc:"Order date. Drives the model's date hierarchy."},
+    {kind:"Measure", name:"Total Revenue", type:"DAX",     expr:"SUM(orders_fact[revenue])",                       source:"orders_fact.revenue", logic:"Defined in Power BI only", desc:"The measure every finance visual reads. One definition, held in the dataset rather than the warehouse."},
+    {kind:"Measure", name:"YoY Growth %",  type:"DAX",     expr:"DIVIDE(\n  [Total Revenue] - CALCULATE([Total Revenue], SAMEPERIODLASTYEAR('orders_fact'[order_date])),\n  CALCULATE([Total Revenue], SAMEPERIODLASTYEAR('orders_fact'[order_date]))\n)", source:"Total Revenue", logic:"Defined in Power BI only", desc:"Year-on-year growth. Exists nowhere but this dataset, so it cannot be governed at the warehouse - the same exposure as the Tableau yoy_growth_pct field."},
+  ],
+  "Orders_Prep":[
+    {kind:"Entity column", name:"order_id",   type:"Int64",    expr:"", source:"Snowflake_COMMERCE.order_id",   logic:"Passthrough", desc:"Order key carried through Power Query."},
+    {kind:"Entity column", name:"revenue",    type:"Decimal",  expr:"", source:"Snowflake_COMMERCE.revenue",    logic:"Passthrough", desc:"Revenue, unchanged by the dataflow."},
+    {kind:"Entity column", name:"region",     type:"Text",     expr:"", source:"Snowflake_COMMERCE.region",     logic:"Passthrough", desc:"Region, trimmed and upper-cased in Power Query."},
+    {kind:"Entity column", name:"order_date", type:"Date",     expr:"", source:"Snowflake_COMMERCE.order_date", logic:"Passthrough", desc:"Order date, cast from timestamp."},
+  ],
+};
+
+const POWERBI_PART_C = {Table:"#0891b2", Column:"#64748b", Measure:"#a855f7", "Entity column":"#0ea5e9"};
+
+// Per-object properties and relationships.
+const POWERBI_PROFILE = {
+  "Finance_Insights":{props:[["Object type","Power BI App"],["Workspace","Finance_Analytics"],["Audience","Finance leadership (read-only)"],["Contents","1 dashboard · 1 report"],["Published","2h ago"]],
+    rel:{contains:[{name:"Revenue_Overview",type:"Power BI Dashboard"},{name:"Revenue_Detail",type:"Power BI Report"}]}},
+  "Finance_Analytics":{props:[["Object type","Power BI Workspace"],["Capacity","Premium P1"],["Permission boundary","Yes · workspace roles govern everything inside"],["Contents","1 dataset · 1 dataflow · 1 report · 1 dashboard · 1 datasource"]],
+    rel:{contains:[{name:"Snowflake_COMMERCE",type:"Power BI Datasource"},{name:"Orders_Prep",type:"Power BI Dataflow"},{name:"Revenue_Model",type:"Power BI Dataset"},{name:"Revenue_Detail",type:"Power BI Report"},{name:"Revenue_Overview",type:"Power BI Dashboard"}]}},
+  "Snowflake_COMMERCE":{props:[["Object type","Power BI Datasource"],["Connection type","Snowflake via on-premises gateway"],["Physical location","SNOWFLAKE_PROD / COMMERCE"],["Mode","Import"],["Last connected","40m ago"]],
+    rel:{parent:{name:"Finance_Analytics",type:"Power BI Workspace"},upstream:[{name:"orders_fact",type:"Table"}],downstream:[{name:"Orders_Prep",type:"Power BI Dataflow"}]}},
+  "Orders_Prep":{props:[["Object type","Power BI Dataflow"],["Power BI endorsement","Promoted"],["Refresh schedule","Every 4 hours · 02:00 UTC first run"],["Entities","1 (4 entity columns)"],["Storage","3.4 GB in the workspace"],["Last refresh","1h ago · success"]],
+    rel:{parent:{name:"Finance_Analytics",type:"Power BI Workspace"},upstream:[{name:"Snowflake_COMMERCE",type:"Power BI Datasource"}],downstream:[{name:"Revenue_Model",type:"Power BI Dataset"}]}},
+  "Revenue_Model":{props:[["Object type","Power BI Dataset"],["Power BI endorsement","Certified · by sarah.kim"],["Storage mode","Import"],["Refresh schedule","Every 4 hours"],["Parts","1 table · 3 columns · 2 DAX measures"],["Bound reports","1"],["Last refresh","1h ago · success"]],
+    rel:{parent:{name:"Finance_Analytics",type:"Power BI Workspace"},upstream:[{name:"Orders_Prep",type:"Power BI Dataflow"}],downstream:[{name:"Revenue_Detail",type:"Power BI Report"},{name:"Revenue_KPI",type:"Power BI Tile"}]}},
+  "Revenue_Detail":{props:[["Object type","Power BI Report"],["Power BI endorsement","Certified · by sarah.kim"],["Dataset","Revenue_Model"],["Pages","1"],["Views (30d)","1,840"],["Source","Open in Power BI \u2197"]],
+    rel:{parent:{name:"Finance_Analytics",type:"Power BI Workspace"},upstream:[{name:"Revenue_Model",type:"Power BI Dataset"}],downstream:[{name:"Regional_Breakdown",type:"Power BI Page"}]}},
+  "Regional_Breakdown":{props:[["Object type","Power BI Page"],["Report","Revenue_Detail"],["Visuals","4"],["Measures used","Total Revenue, YoY Growth %"],["Crawl note","Pages need workspace-level access · the scanner API alone does not catalog them"]],
+    rel:{parent:{name:"Revenue_Detail",type:"Power BI Report"},upstream:[{name:"Revenue_Detail",type:"Power BI Report"}]}},
+  "Revenue_Overview":{props:[["Object type","Power BI Dashboard"],["Workspace","Finance_Analytics"],["Tiles","1"],["Views (30d)","2,410"],["Source","Open in Power BI \u2197"]],
+    rel:{parent:{name:"Finance_Analytics",type:"Power BI Workspace"},upstream:[{name:"Revenue_KPI",type:"Power BI Tile"}]}},
+  "Revenue_KPI":{props:[["Object type","Power BI Tile"],["Dashboard","Revenue_Overview"],["Pinned from","Revenue_Model"],["Shows","Total Revenue"],["Visual","KPI card"]],
+    rel:{parent:{name:"Revenue_Overview",type:"Power BI Dashboard"},upstream:[{name:"Revenue_Model",type:"Power BI Dataset"}],downstream:[{name:"Revenue_Overview",type:"Power BI Dashboard"}]}},
+};
+
+// Parts tab for a Power BI dataset or dataflow. Rows expand in place - a part is not a page.
+const PowerBiPartsPanel = ({asset})=>{
+  const parts=POWERBI_PARTS[asset.name]||[];
+  const [open,setOpen]=useState(null);
+  const [q,setQ]=useState("");
+  const shown=parts.filter(p=>!q||p.name.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:14}}>
+      <Card2><div style={{padding:"12px 16px",display:"flex",alignItems:"center",gap:10}}>
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,color:"#a855f7"}}><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5v4M8 11h.01" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+        <div style={{fontSize:12,color:T.textSub,lineHeight:1.55}}>
+          Power BI holds these inside the {asset.type==="Power BI Dataflow"?"dataflow":"dataset"}, so they are its parts &mdash; the same
+          kind of thing as a table&rsquo;s columns. Like columns they are not catalog assets. Select one for its detail.
+        </div>
+      </div></Card2>
+      <Card2 style={{overflow:"hidden",padding:0}}>
+        <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:12,alignItems:"center"}}>
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search parts&hellip;"
+            style={{flex:1,padding:"6px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
+          <span style={{fontSize:11,color:T.textMuted,whiteSpace:"nowrap"}}>{parts.length} parts · {parts.filter(p=>p.kind==="Measure").length} DAX measures</span>
+        </div>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead><tr style={{background:T.bgElevated}}>
+            {["Part","Kind","Type","Definition","Description"].map(h=>(
+              <th key={h} style={{padding:"8px 14px",textAlign:"left",fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",borderBottom:`1px solid ${T.border}`}}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {shown.map((p,i)=>{
+              const col=POWERBI_PART_C[p.kind]||T.textMuted;
+              const isOpen=open===p.name;
+              return (
+                <React.Fragment key={p.name}>
+                  <tr onClick={()=>setOpen(isOpen?null:p.name)} title={isOpen?"Hide detail":"Show detail"}
+                    style={{cursor:"pointer",background:isOpen?T.bgHover:"transparent",borderBottom:(isOpen||i<shown.length-1)?`1px solid ${T.border}`:"none"}}>
+                    <td style={{padding:"9px 14px",fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600}}>{p.name}</td>
+                    <td style={{padding:"9px 14px"}}><span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:5,background:`${col}16`,color:col,border:`1px solid ${col}33`,whiteSpace:"nowrap"}}>{p.kind}</span></td>
+                    <td style={{padding:"9px 14px",fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{p.type}</td>
+                    <td style={{padding:"9px 14px",fontSize:11,color:p.logic==="Passthrough"?T.textMuted:"#a855f7",fontWeight:p.logic==="Passthrough"?400:600}}>{p.logic}</td>
+                    <td style={{padding:"9px 14px",fontSize:11.5,color:T.textSub,maxWidth:260}}>{p.desc}</td>
+                  </tr>
+                  {isOpen&&(
+                    <tr><td colSpan={5} style={{padding:"12px 14px 14px",background:T.bgElevated,borderBottom:i<shown.length-1?`1px solid ${T.border}`:"none"}}>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:"10px 18px",marginBottom:p.expr?12:0}}>
+                        {[["Kind",p.kind],["Type",p.type],["Definition",p.logic],["Source",p.source],[asset.type==="Power BI Dataflow"?"Dataflow":"Dataset",asset.name]].map(([k,v])=>(
+                          <div key={k}>
+                            <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:3}}>{k}</div>
+                            <div style={{fontSize:11.5,color:T.text,fontFamily:"'Geist Mono',monospace",wordBreak:"break-word"}}>{v}</div>
+                          </div>
+                        ))}
+                      </div>
+                      {p.expr&&(
+                        <div>
+                          <div style={{fontSize:9.5,fontWeight:700,color:"#a855f7",textTransform:"uppercase",letterSpacing:".06em",marginBottom:5}}>DAX — lives only in Power BI</div>
+                          <pre style={{margin:0,padding:11,background:"#0f172a",color:"#e2e8f0",borderRadius:7,fontSize:11,fontFamily:"'Geist Mono',monospace",lineHeight:1.6,overflowX:"auto",whiteSpace:"pre"}}>{p.expr}</pre>
+                        </div>
+                      )}
+                    </td></tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+            {shown.length===0&&<tr><td colSpan={5} style={{padding:28,textAlign:"center",fontSize:12.5,color:T.textMuted}}>No parts match "{q}"</td></tr>}
+          </tbody>
+        </table>
+      </Card2>
+    </div>
+  );
+};
+
+// Overview for any Power BI object.
+const PowerBiOverview = ({asset,data,setData,onToast,onAsset})=>{
+  const Pr=POWERBI_PROFILE[asset.name]||{props:[["Object type",asset.type],["Path",asset.db]],rel:{}};
+  const rel=Pr.rel||{};
+  const [editingDesc,setEditingDesc]=useState(false);
+  const [descVal,setDescVal]=useState(data.description||asset.description||"");
+  return (
+  <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:900}}>
+    <Card2><div style={{padding:"14px 16px"}}>
+      <SH title="Description" sub="Synced from the Power BI description on every crawl"
+        action={editingDesc
+          ? <div style={{display:"flex",gap:6}}>
+              <Btn small ghost onClick={()=>{setData(d=>({...d,description:descVal}));setEditingDesc(false);onToast&&onToast("Description saved","success");}}>Save</Btn>
+              <Btn small ghost onClick={()=>{setDescVal(data.description||asset.description||"");setEditingDesc(false);}}>Cancel</Btn>
+            </div>
+          : <Btn small ghost icon={Ic.edit(11)} onClick={()=>setEditingDesc(true)}>Edit</Btn>}/>
+      {editingDesc
+        ? <textarea value={descVal} onChange={e=>setDescVal(e.target.value)} rows={3}
+            style={{width:"100%",padding:10,borderRadius:8,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12.5,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box"}}/>
+        : <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65}}>{data.description||asset.description}</div>}
+    </div></Card2>
+
+    <Card2><div style={{padding:"14px 16px"}}>
+      <SH title="Properties"/>
+      <DbtProps rows={Pr.props}/>
+    </div></Card2>
+
+    {/* Power BI's own endorsement is not EDG certification - both are shown, separately. */}
+    {asset.pbiEndorsement&&(
+      <Card2><div style={{padding:"14px 16px"}}>
+        <SH title="Power BI endorsement" sub="Set in Power BI, ingested read-only. EDG certification is separate and lives in the rail."/>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:6,
+            background:asset.pbiEndorsement==="Certified"?"rgba(22,163,74,.12)":"rgba(217,119,6,.12)",
+            color:asset.pbiEndorsement==="Certified"?"#16a34a":"#d97706",
+            border:`1px solid ${asset.pbiEndorsement==="Certified"?"#16a34a":"#d97706"}33`}}>{asset.pbiEndorsement}</span>
+          <span style={{fontSize:12,color:T.textSub}}>
+            {asset.pbiEndorsement==="Certified"
+              ? "Marked Certified in Power BI \u2014 the tenant treats this as an approved, reusable source."
+              : "Marked Promoted in Power BI \u2014 recommended by its owner, but not tenant-certified."}
+          </span>
+        </div>
+      </div></Card2>
+    )}
+
+    {(rel.parent||rel.contains||rel.upstream||rel.downstream)&&(
+      <Card2><div style={{padding:"14px 16px"}}>
+        <SH title="Relationships" sub="Where this object sits in the Power BI hierarchy"/>
+        {rel.parent&&<DbtRelRow name={rel.parent.name} type={rel.parent.type} rel="Parent" onAsset={onAsset}/>}
+        {(rel.upstream||[]).map(r=><DbtRelRow key={r.name} name={r.name} type={r.type} rel="Upstream" onAsset={onAsset}/>)}
+        {(rel.downstream||[]).map(r=><DbtRelRow key={r.name} name={r.name} type={r.type} rel="Downstream" onAsset={onAsset}/>)}
+        {(rel.contains||[]).map(r=><DbtRelRow key={r.name} name={r.name} type={r.type} rel="Contains" onAsset={onAsset}/>)}
+      </div></Card2>
+    )}
+  </div>
+  );
+};
+
+// ===========================================================================
 // dbt ASSET PROFILE - object-appropriate detail for every dbt object type.
 // A dbt model is not a table: what matters is how it is materialized, what it
 // refs, which tests guard it, when it last ran, and the SQL that defines it -
@@ -19819,6 +20087,11 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
   },[certOpen]);
 
   // ── Tableau (BI) objects get an object-appropriate profile (no columns / DQ / contract) ──
+  // ── Power BI: same shape as Tableau. Parts live inside the dataset/dataflow, and
+  //    App and Workspace are containers with no lineage of their own. ──
+  const isPBI      = asset.service==="powerbi";
+  const pbiHasParts= isPBI && !!POWERBI_PARTS[asset.name];
+  const pbiInDag   = isPBI && !["Power BI App","Power BI Workspace"].includes(asset.type);
   const isBI = asset.service==="tableau";
   const biHasFields = isBI && !!TABLEAU_FIELDS[asset.name];   // data sources expose fields
   // Fields are components of a data source, not nodes in the BI graph - same rule as dbt
@@ -19848,7 +20121,18 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
   // (materialized by a model) or reads it (declared as a source).
   const dbtRef     = asset.dbtModel || asset.dbtSource;
   const dbtOnTable = !isDbt && !!dbtRef && !!DBT_META[dbtRef];
-  const tabs = isDbt
+  const tabs = isPBI
+    ? [
+        {key:"overview",label:"Overview"},
+        ...(pbiHasParts?[{key:"schema",label:asset.type==="Power BI Dataflow"?"Entity columns":"Parts"}]:[]),
+        ...(pbiInDag?[{key:"lineage",label:"Lineage"}]:[]),
+        // Power BI counts views for reports and dashboards; the tab appears only where
+        // there is a number to show.
+        ...(asset.usage?[{key:"usage",label:"Usage"}]:[]),
+        {key:"customprops",label:"Custom Properties"},
+        {key:"activity",label:"Audit Logs"},
+      ]
+    : isDbt
     ? [
         {key:"overview",label:"Overview"},
         ...(dbtHasCols?[{key:"schema",label:"Columns"}]:[]),
@@ -19966,12 +20250,16 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
 
       {/* Main content */}
       <div style={{flex:1,overflowY:"auto",padding:24,minWidth:0}}>
-        {tab==="overview"  && (isDbt
+        {tab==="overview"  && (isPBI
+          ? <PowerBiOverview asset={asset} data={data} setData={setData} onToast={onToast} onAsset={onAsset}/>
+          : isDbt
           ? <DbtAssetOverview asset={asset} data={data} setData={setData} onToast={onToast} onAsset={onAsset}/>
           : isBI
           ? <TableauAssetOverview asset={asset} data={data} setData={setData} onToast={onToast}/>
           : <AssetOverview asset={asset} data={data} setData={setData} onToast={onToast}/>)}
-        {tab==="schema"    && (isDbt
+        {tab==="schema"    && (isPBI
+          ? <PowerBiPartsPanel asset={data}/>
+          : isDbt
           ? <DbtColumnsPanel asset={data}/>
           : isBI
           ? <TableauFieldsPanel asset={data}/>
@@ -19980,8 +20268,8 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
         {tab==="components"&& isDbt && <DbtSemanticPanel asset={data}/>}
         {tab==="dbttests"  && isDbt && <DbtTestsPanel asset={data} onToast={onToast}/>}
         {tab==="dbt"       && dbtOnTable && <DbtOnTablePanel asset={data} onAsset={onAsset}/>}
-        {tab==="observability" && !isBI && !isDbt && <AssetObservabilityTab asset={data} onToast={onToast} onNav={onNav}/>}
-        {tab==="contract"      && !isBI && !isDbt && <AssetContractTab asset={data} onToast={onToast}/>}
+        {tab==="observability" && !isBI && !isDbt && !isPBI && <AssetObservabilityTab asset={data} onToast={onToast} onNav={onNav}/>}
+        {tab==="contract"      && !isBI && !isDbt && !isPBI && <AssetContractTab asset={data} onToast={onToast}/>}
         {tab==="usage"     && <AssetUsageTab/>}
         {tab==="lineage"   && <AssetLineageFull asset={data}/>}
         {tab==="customprops" && <CustomPropsPanel entity={data.type||"Table"} objectId={data.name} objectName={data.name} owners={owners} stewards={stewards} onToast={onToast}/>}
@@ -28928,6 +29216,7 @@ const OM_CONNECTORS = [
   // ── DASHBOARD ──
   {name:"Tableau",         cat:"Dashboard",      logoUrl:SI("tableau","E97627"),                  desc:"Leading enterprise data visualization platform",       status:"Connected",  assets:312,  lastSync:"20m ago"},
   {name:"Power BI",        cat:"Dashboard",      logoUrl:SI("powerbi","F2C811"),                  desc:"Microsoft business analytics and BI service",          status:"Connected",  assets:187,  lastSync:"1h ago"},
+  {name:"Microsoft Power BI",cat:"Dashboard",     logoUrl:SI("powerbi","F2C811"),                  desc:"Microsoft BI platform — workspaces, datasets, reports, dashboards", status:"Connected",  assets:9,    lastSync:"12m ago"},
   {name:"Looker",          cat:"Dashboard",      logoUrl:SI("looker","4285F4"),                   desc:"Google Cloud BI platform with LookML modeling",       status:"Connected",  assets:445,  lastSync:"10m ago"},
   {name:"Apache Superset", cat:"Dashboard",      logoUrl:SI("apachesuperset","20A6C9"),           desc:"Open-source data exploration and visualization",      status:"Available",  assets:0,    lastSync:null},
   {name:"Metabase",        cat:"Dashboard",      logoUrl:SI("metabase","509EE3"),                 desc:"Open-source business intelligence and analytics",     status:"Available",  assets:0,    lastSync:null},
