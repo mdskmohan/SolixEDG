@@ -707,6 +707,16 @@ const INITIAL_CONNECTOR_CONFIGS = {
       { id:'m16', sourceTagName:'deprecated',edgTagId:'t14',reverseSyncAlias:'deprecated',status:'mapped'   },
       { id:'m6',  sourceTagName:'restricted',edgTagId:null, reverseSyncAlias:'restricted',status:'unmapped' },
     ]},
+  // BigID contributes CLASSIFICATIONS, which is what a tag is here. Reverse sync is off:
+  // EDG never writes a classification back into a discovery tool - the classifier is theirs.
+  bigid:      { connectorId:'bigid',      syncEnabled:true,  reverseSyncEnabled:false, reverseSyncApproval:false, conflictRule:'flag_always',  lastSyncAt:'2026-08-27T04:10:00Z', lastSyncStatus:'success',  lastSyncNewTags:2, lastSyncConflicts:0,
+    nameMappings:[
+      { id:'mb1', sourceTagName:'Email Address',  edgTagId:'t1', reverseSyncAlias:'PII', status:'mapped' },
+      { id:'mb2', sourceTagName:'Phone Number',   edgTagId:'t1', reverseSyncAlias:'PII', status:'mapped' },
+      { id:'mb3', sourceTagName:'Date of Birth',  edgTagId:null, reverseSyncAlias:null,  status:'unmapped' },
+      { id:'mb4', sourceTagName:'Street Address', edgTagId:null, reverseSyncAlias:null,  status:'unmapped' },
+    ],
+  },
   dbt:        { connectorId:'dbt',        syncEnabled:true,  reverseSyncEnabled:false, reverseSyncApproval:false, conflictRule:'flag_always',  lastSyncAt:'2026-04-20T09:42:00Z', lastSyncStatus:'success',  lastSyncNewTags:1, lastSyncConflicts:0,
     nameMappings:[
       { id:'m7',  sourceTagName:'PII',   edgTagId:'t1', reverseSyncAlias:'PII',   status:'mapped'   },
@@ -3029,6 +3039,7 @@ const SERVICE_LOGOS = {
   tableau:    <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#1f77b4"/><path d="M16 8v16M8 16h16M11 11v10M21 11v10M8 13h16M8 19h16" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>,
   airflow:    <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#017cee"/><circle cx="10" cy="16" r="2.5" fill="white"/><circle cx="22" cy="10" r="2.5" fill="white"/><circle cx="22" cy="22" r="2.5" fill="white"/><path d="M12.5 15L19.5 11M12.5 17L19.5 21" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>,
   mlflow:     <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#0194e2"/><path d="M8 24l8-16 8 16" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/><path d="M11 18h10" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>,
+  bigid:      <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#12B76A"/><circle cx="16" cy="16" r="7" fill="none" stroke="white" strokeWidth="2"/><circle cx="16" cy="16" r="2.4" fill="white"/><path d="M22 22l4 4" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>,
   glue:       <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#8C4FFF"/><path d="M11 20l5-9 5 9H11z" fill="white" opacity=".35"/><circle cx="11" cy="21" r="2.4" fill="white"/><circle cx="21" cy="21" r="2.4" fill="white"/><circle cx="16" cy="11" r="2.4" fill="white"/></svg>,
   powerbi:    <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#F2C811"/><rect x="9" y="16" width="4.5" height="9" rx="1" fill="#8a6d00"/><rect x="14.5" y="11" width="4.5" height="14" rx="1" fill="#6b5400"/><rect x="20" y="7" width="4.5" height="18" rx="1" fill="#4d3c00"/></svg>,
   dbt:        <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#ff6f44"/><path d="M16 8l4 4-4 4-4-4 4-4z" fill="white" opacity=".3"/><path d="M16 12v8M12 16h8" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>,
@@ -19000,6 +19011,152 @@ const TableauFieldsPanel = ({asset})=>{
 };
 
 // ===========================================================================
+// BigID - a CONTRIBUTOR, not an asset family. BigID's own inventory is the objects
+// and columns its scans discover, which are the tables this catalog already holds,
+// so it creates no assets. What it adds is column-level classification with a
+// confidence score, and those arrive as PROPOSALS a steward accepts or rejects -
+// never as tags applied silently. Accepted ones land in the existing tag model
+// with origin "synced" and sourceSystem "BigID".
+// ===========================================================================
+const BIGID_FINDINGS = {
+  "customers":{
+    scan:"weekly_pii_scan", lastScan:"3h ago", duration:"18m 40s", scanned:"3.1M rows sampled (1,000 per column)",
+    columns:[
+      {col:"email",         classifier:"Email Address",  confidence:99, samples:1000, matched:998, status:"accepted", tag:"PII",       note:""},
+      {col:"phone",         classifier:"Phone Number",   confidence:96, samples:1000, matched:961, status:"accepted", tag:"PII",       note:""},
+      {col:"date_of_birth", classifier:"Date of Birth",  confidence:93, samples:1000, matched:930, status:"proposed", tag:"sensitive", note:"No EDG classification mapped yet \u2014 waiting on a steward."},
+      {col:"address",       classifier:"Street Address", confidence:88, samples:1000, matched:884, status:"proposed", tag:"PII",       note:"No EDG classification mapped yet \u2014 waiting on a steward."},
+      {col:"customer_id",   classifier:"National ID",    confidence:41, samples:1000, matched:412, status:"rejected", tag:null,        note:"Rejected by priya.nair \u2014 the pattern matches an internal surrogate key, not a national ID. Low confidence was the tell."},
+    ],
+    policies:[
+      {name:"GDPR Art. 9 \u2014 special category data", status:"hit",   detail:"date_of_birth is unmasked in 2 downstream views. Masking is enforced on the table but not on the views built from it."},
+      {name:"Retention \u2014 contact data 7 years",     status:"clear", detail:"No records older than the retention window."},
+    ]},
+  "orders":{
+    scan:"weekly_pii_scan", lastScan:"3h ago", duration:"18m 40s", scanned:"48.6M rows sampled (1,000 per column)",
+    columns:[
+      {col:"customer_id",      classifier:"Cross-reference to PII", confidence:97, samples:1000, matched:970, status:"accepted", tag:"PII", note:"Correlated to customers.customer_id, so this column is an indirect identifier."},
+      {col:"shipping_address", classifier:"Street Address",         confidence:91, samples:1000, matched:912, status:"accepted", tag:"PII", note:""},
+    ],
+    policies:[
+      {name:"GDPR Art. 5 \u2014 minimisation", status:"hit", detail:"shipping_address is retained on every historical order; only the latest is needed downstream."},
+    ]},
+};
+
+const BIGID_STATUS_C = {
+  accepted:{c:"#16a34a", bg:"rgba(22,163,74,.1)",  label:"Accepted"},
+  proposed:{c:"#d97706", bg:"rgba(217,119,6,.12)", label:"Proposed"},
+  rejected:{c:"#6b7280", bg:"rgba(107,114,128,.1)",label:"Rejected"},
+};
+
+// The BigID tab on a scanned asset.
+const BigIdOnAssetPanel = ({asset,onToast})=>{
+  const f=BIGID_FINDINGS[asset.name];
+  if(!f) return <div className="fadeIn" style={{fontSize:12.5,color:T.textMuted}}>No BigID scan has covered this asset.</div>;
+  const counts=["accepted","proposed","rejected"].map(k=>({k,n:f.columns.filter(c=>c.status===k).length}));
+  return (
+    <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:16,maxWidth:940}}>
+
+      <Card2><div style={{padding:"14px 16px"}}>
+        <SH title="Scanned by BigID" sub="BigID creates no catalog assets — it classifies the columns of assets EDG already holds"/>
+        <div style={{display:"flex",alignItems:"center",gap:12,padding:"11px 13px",background:"rgba(18,183,106,.06)",
+          border:"1px solid rgba(18,183,106,.25)",borderRadius:9,marginBottom:12}}>
+          <ServiceIcon service="bigid" size={22}/>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{f.scan}</div>
+            <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>Last scan {f.lastScan} {"\u00b7"} {f.duration} {"\u00b7"} {f.scanned}</div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {counts.map(({k,n})=>{
+            const c=BIGID_STATUS_C[k];
+            return <span key={k} style={{fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:6,background:c.bg,color:c.c,border:`1px solid ${c.c}33`}}>{n} {c.label.toLowerCase()}</span>;
+          })}
+        </div>
+      </div></Card2>
+
+      <Card2 style={{overflow:"hidden"}}>
+        <div style={{padding:"14px 16px 10px"}}>
+          <SH title="Column classifications" sub="A finding is a proposal until a steward accepts it. Confidence is BigID's, not ours."/>
+        </div>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead><tr style={{background:T.bgElevated}}>
+            {["Column","BigID classifier","Confidence","Matched","EDG classification","State"].map(h=>(
+              <th key={h} style={{padding:"8px 14px",textAlign:"left",fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",borderBottom:`1px solid ${T.border}`}}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {f.columns.map((c,i)=>{
+              const st=BIGID_STATUS_C[c.status];
+              const conf=c.confidence>=90?"#16a34a":c.confidence>=70?"#d97706":"#e11d48";
+              return (
+                <React.Fragment key={c.col}>
+                  <tr style={{borderBottom:c.note?"none":(i<f.columns.length-1?`1px solid ${T.border}`:"none")}}>
+                    <td style={{padding:"9px 14px",fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600}}>{c.col}</td>
+                    <td style={{padding:"9px 14px",fontSize:11.5,color:T.textSub}}>{c.classifier}</td>
+                    <td style={{padding:"9px 14px"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:7}}>
+                        <div style={{width:52,height:5,borderRadius:3,background:T.border,overflow:"hidden",flexShrink:0}}>
+                          <div style={{width:`${c.confidence}%`,height:"100%",background:conf}}/>
+                        </div>
+                        <span style={{fontSize:11.5,color:conf,fontWeight:600,fontVariantNumeric:"tabular-nums"}}>{c.confidence}%</span>
+                      </div>
+                    </td>
+                    <td style={{padding:"9px 14px",fontSize:11.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace",fontVariantNumeric:"tabular-nums"}}>{c.matched}/{c.samples}</td>
+                    <td style={{padding:"9px 14px"}}>
+                      {c.tag
+                        ? <span style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:4,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`,fontFamily:"'Geist Mono',monospace"}}>{c.tag}</span>
+                        : <span style={{fontSize:11,color:T.textMuted}}>{"\u2014"}</span>}
+                    </td>
+                    <td style={{padding:"9px 14px",whiteSpace:"nowrap"}}>
+                      <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:5,background:st.bg,color:st.c,border:`1px solid ${st.c}33`,textTransform:"uppercase",letterSpacing:".05em"}}>{st.label}</span>
+                      {c.status==="proposed"&&(
+                        <button onClick={()=>onToast&&onToast(`${c.col} sent to the steward inbox for review`,"success")}
+                          style={{marginLeft:8,fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:5,background:"transparent",
+                            color:T.accent,border:`1px solid ${T.accent}55`,cursor:"pointer",fontFamily:"inherit"}}>Review</button>
+                      )}
+                    </td>
+                  </tr>
+                  {c.note&&<tr style={{borderBottom:i<f.columns.length-1?`1px solid ${T.border}`:"none"}}>
+                    <td colSpan={6} style={{padding:"0 14px 9px",fontSize:11,color:T.textMuted,fontStyle:"italic"}}>{c.note}</td>
+                  </tr>}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card2>
+
+      <Card2><div style={{padding:"14px 16px"}}>
+        <SH title="Policy findings" sub="BigID evaluates its own policies over what it found; EDG policies stay separate"/>
+        <div style={{display:"flex",flexDirection:"column",gap:7}}>
+          {f.policies.map(p=>{
+            const hit=p.status==="hit";
+            return (
+              <div key={p.name} style={{display:"flex",gap:10,padding:"9px 11px",background:T.bgElevated,
+                border:`1px solid ${hit?"rgba(225,29,72,.28)":T.border}`,borderRadius:8,alignItems:"flex-start"}}>
+                <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:4,marginTop:1,whiteSpace:"nowrap",
+                  background:hit?"rgba(225,29,72,.1)":"rgba(22,163,74,.1)",color:hit?"#e11d48":"#16a34a",
+                  border:`1px solid ${hit?"#e11d48":"#16a34a"}33`,textTransform:"uppercase",letterSpacing:".05em"}}>{hit?"Hit":"Clear"}</span>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:600,color:T.text}}>{p.name}</div>
+                  <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginTop:2}}>{p.detail}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${T.border}`,fontSize:10.5,color:T.textMuted,lineHeight:1.6}}>
+          Ingested from BigID, not authored in EDG: scan results, classifier names and confidence scores.
+          Accepted classifications flow into the EDG tag model with origin <span style={{fontFamily:"'Geist Mono',monospace"}}>synced</span> and
+          source <span style={{fontFamily:"'Geist Mono',monospace"}}>BigID</span>. Reverse sync is off — EDG never writes a classification back.
+        </div>
+      </div></Card2>
+    </div>
+  );
+};
+
+// ===========================================================================
 // AWS GLUE - what a Glue table adds over a warehouse table. Glue introduces no new
 // object types (Atlan maps it onto Database/Schema/Table/View/Column), so the only
 // extra surface is the ETL side: the job or crawler that produced the table, and
@@ -20252,6 +20409,9 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
   // lives, since Glue jobs are attributes rather than assets.
   const glueRef    = asset.glueJob || asset.glueCrawler;
   const glueOnTable= asset.service==="glue" && !!glueRef && !!GLUE_RUNS[glueRef];
+  // BigID scans assets EDG already holds, so its findings are a tab on the asset rather
+  // than a connector with a hierarchy of its own.
+  const bigidOnAsset= !!BIGID_FINDINGS[asset.name];
   const tabs = isPBI
     ? [
         {key:"overview",label:"Overview"},
@@ -20289,6 +20449,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
         {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},{key:"lineage",label:"Lineage"},
         ...(dbtOnTable?[{key:"dbt",label:"dbt"}]:[]),
         ...(glueOnTable?[{key:"glue",label:"Glue"}]:[]),
+        ...(bigidOnAsset?[{key:"bigid",label:"BigID"}]:[]),
         {key:"observability",label:"Data Quality"},{key:"contract",label:"Contract"},{key:"usage",label:"Usage"},
         {key:"customprops",label:"Custom Properties"},{key:"activity",label:"Audit Logs"},
       ];
@@ -20401,6 +20562,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
         {tab==="dbttests"  && isDbt && <DbtTestsPanel asset={data} onToast={onToast}/>}
         {tab==="dbt"       && dbtOnTable && <DbtOnTablePanel asset={data} onAsset={onAsset}/>}
         {tab==="glue"      && glueOnTable && <GlueOnTablePanel asset={data}/>}
+        {tab==="bigid"     && bigidOnAsset && <BigIdOnAssetPanel asset={data} onToast={onToast}/>}
         {tab==="observability" && !isBI && !isDbt && !isPBI && <AssetObservabilityTab asset={data} onToast={onToast} onNav={onNav}/>}
         {tab==="contract"      && !isBI && !isDbt && !isPBI && <AssetContractTab asset={data} onToast={onToast}/>}
         {tab==="usage"     && <AssetUsageTab/>}
@@ -29369,6 +29531,7 @@ const OM_CONNECTORS = [
   {name:"Airbyte",         cat:"Pipeline",       logoUrl:SI("airbyte","615EFF"),                  desc:"Open-source ELT data integration platform",           status:"Available",  assets:0,    lastSync:null},
   {name:"Apache NiFi",     cat:"Pipeline",       logoUrl:SI("apachenifi","728E9B"),               desc:"Data flow automation and integration platform",       status:"Available",  assets:0,    lastSync:null},
   {name:"Apache Flink",    cat:"Pipeline",       logoUrl:SI("apacheflink","E6526F"),              desc:"Stateful stream and batch processing framework",     status:"Available",  assets:0,    lastSync:null},
+  {name:"BigID",           cat:"Metadata",       logoUrl:null, color:"#12B76A",                 desc:"Sensitive-data discovery — contributes classifications and findings, not assets", status:"Connected",  assets:0,    lastSync:"3h ago"},
   {name:"AWS Glue",        cat:"Pipeline",       logoUrl:SI("amazonwebservices","FF9900"),        desc:"Glue Data Catalog — databases, tables and columns, plus the jobs that build them", status:"Connected",  assets:5,    lastSync:"55m ago"},
   {name:"Spline",          cat:"Pipeline",       logoUrl:null, color:"#FF4500",                  desc:"Apache Spark data lineage tracking",                  status:"Available",  assets:0,    lastSync:null},
 
