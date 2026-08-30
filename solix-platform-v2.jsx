@@ -1845,12 +1845,8 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
 
   // ── Term metadata ──
   const patchTerm = (id,fields) => setTerms(p=>p.map(t=>t.id===id?{...t,...fields}:t));
-  const addTag = id => {
-    const tag = tagInput.trim().toLowerCase().replace(/^#/,"");
-    if(!tag) return;
-    patchTerm(id,{tags:[...(term?.tags||[]).filter(x=>x!==tag),tag]});
-    setTagInput("");
-  };
+  // (an addTag helper lived here, referencing a tagInput state that does not exist in
+  //  this component and calling nothing. Deleted rather than wired to a phantom input.)
   const doAddRef = id => {
     if(!refForm.url.trim()) return;
     patchTerm(id,{refs:[...(term?.refs||[]),{label:refForm.label||refForm.url,url:refForm.url}]});
@@ -4464,7 +4460,7 @@ const TC_STATUS_CFG = {
   Aborted:{color:T.amber,  bg:T.amberDim, label:"Aborted"},
 };
 
-const QualityView = () => {
+const QualityView = ({onToast=()=>{}}) => {
   const [tab, setTab] = useState("testcases");
 
   // mutable state
@@ -4576,6 +4572,21 @@ const QualityView = () => {
   const healthyPct  = coveredTables.length>0?Math.round(healthyTables.length/coveredTables.length*100):0;
 
   // filter helpers
+  // The Assign modal's confirm had no handler at all - the button referenced a name that
+  // was never defined, so clicking it threw. Assigns the incident, records it on the
+  // timeline, then closes.
+  const doConfirmAssign = () => {
+    if(!incAssignee||!incAssignId) return;
+    setIncidents(prev=>prev.map(i=>i.id===incAssignId
+      ? {...i, assignee:incAssignee,
+         timeline:[...(i.timeline||[]),{action:`Assigned to ${incAssignee}`,by:"You",at:"just now"}]}
+      : i));
+    setIncAssignModal(false);
+    setIncAssignId(null);
+    setIncAssignee("");
+    onToast(`Incident assigned to ${incAssignee}`,"success");
+  };
+
   const filteredTC = testCases.filter(t=>{
     if(tcTableSel.length>0&&!tcTableSel.includes(t.table)) return false;
     if(tcTypeFilter!=="all"&&t.defId!==tcTypeFilter) return false;
@@ -5001,7 +5012,7 @@ const QualityView = () => {
                 <div style={{fontSize:32,marginBottom:10,opacity:.15}}>◎</div>
                 <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:6}}>No test cases match these filters</div>
                 <button
-                  onClick={()=>{setTcTableFilter("all");setTcTypeFilter("all");setTcStatusFilter("all");setTcSearch("");}}
+                  onClick={()=>{setTcTableSel([]);setTcTypeFilter("all");setTcStatusSel([]);setTcSearch("");}}
                   style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer"}}
                 >Clear all filters</button>
               </div>
@@ -5545,7 +5556,7 @@ const QualityView = () => {
           const ns = incActionModal.newStatus;
           const timeline = [...(inc.timeline||[]),{action:ns==="In Progress"?"Moved to In Review":ns==="Open"?"Re-opened":ns,by:"You",at:"Just now",note:incActionModal.desc.trim()||undefined}];
           setIncidents(prev=>prev.map(i=>i.id===inc.id?{...i,status:ns,resolutionReason:terminalTarget?incActionModal.desc.trim():i.resolutionReason,timeline}:i));
-          setIncStatusF("all");
+          setIncStatusSel([]);
           setIncActionModal(null);
         };
         return (
@@ -6052,7 +6063,7 @@ const QualityView = () => {
             </div>
             <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,justifyContent:"flex-end",background:T.bgElevated,borderRadius:"0 0 16px 16px"}}>
               <button onClick={()=>setIncAssignModal(false)} style={{padding:"9px 20px",borderRadius:9,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer",fontWeight:500}}>Cancel</button>
-              <button onClick={confirmAssign} disabled={!incAssignee}
+              <button onClick={doConfirmAssign} disabled={!incAssignee}
                 style={{padding:"9px 22px",borderRadius:9,background:incAssignee?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:incAssignee?"pointer":"default"}}>
                 Assign Incident
               </button>
@@ -7661,107 +7672,11 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   };
 
   // ─── sub-components ──────────────────────────────────────────────────
-  const PolicyCriteriaBuilder = ({isEdit}) => {
-    const pol = isEdit ? editDraft : newPol;
-    const set = isEdit ? setEditDraft : setNewPol;
-    const lbl={display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
-    return (
-      <div>
-        <label style={lbl}>Policy Criteria</label>
-        <div style={{fontSize:11,color:T.textMuted,marginBottom:8,lineHeight:1.6}}>Plain-text statements describing what this policy requires — human-readable governance rules.</div>
-        {(pol?.criteria||[]).map((c,i)=>(
-          <div key={i} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"8px 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,marginBottom:6}}>
-            <div style={{width:5,height:5,borderRadius:"50%",background:T.accent,flexShrink:0,marginTop:5}}/>
-            <span style={{flex:1,fontSize:12,color:T.text,lineHeight:1.6}}>{c}</span>
-            <button onClick={()=>set(p=>({...p,criteria:(p.criteria||[]).filter((_,j)=>j!==i)}))} style={{background:"none",border:"none",color:T.rose,cursor:"pointer",fontSize:16,padding:0,lineHeight:1,flexShrink:0}}>×</button>
-          </div>
-        ))}
-        <div style={{display:"flex",gap:6,marginTop:8}}>
-          <input value={newCriteriaText} onChange={e=>setNewCriteriaText(e.target.value)}
-            onKeyDown={e=>{if(e.key==="Enter"&&newCriteriaText.trim()){set(p=>({...p,criteria:[...(p.criteria||[]),newCriteriaText.trim()]}));setNewCriteriaText("");}}}
-            placeholder="e.g. All PII columns must carry a sensitivity tag before publication…"
-            style={{flex:1,padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none"}}
-            onFocus={e=>e.target.style.borderColor=T.blue} onBlur={e=>e.target.style.borderColor=T.border}/>
-          <button onClick={()=>{if(newCriteriaText.trim()){set(p=>({...p,criteria:[...(p.criteria||[]),newCriteriaText.trim()]}));setNewCriteriaText("");}}}
-            style={{padding:"8px 14px",borderRadius:7,background:T.blue,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0}}>Add</button>
-        </div>
-      </div>
-    );
-  };
-
-  const PolicyFormBody = ({isEdit}) => {
-    const pol = isEdit ? editDraft : newPol;
-    const set = isEdit ? setEditDraft : setNewPol;
-    if (!pol) return null;
-    const inp={width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"};
-    const lbl={display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5};
-    const toggleBtn=(val,sel,style)=>({padding:"5px 11px",borderRadius:6,border:`1.5px solid ${sel?T.blue:T.border}`,background:sel?T.blueDim:T.bgElevated,color:sel?T.blue:T.textSub,fontSize:11.5,fontWeight:sel?600:400,cursor:"pointer",transition:"all .1s",...style});
-    return (
-      <div style={{padding:"20px 24px",display:"flex",flexDirection:"column",gap:16}}>
-        <div>
-          <label style={lbl}>Policy Name <span style={{color:T.rose}}>*</span></label>
-          <input value={pol.name} onChange={e=>set(p=>({...p,name:e.target.value}))} autoFocus placeholder="e.g. Commerce PII Sensitivity"
-            style={inp} onFocus={e=>e.target.style.borderColor=T.blue} onBlur={e=>e.target.style.borderColor=T.border}/>
-        </div>
-        <div>
-          <label style={lbl}>Category</label>
-          <select value={pol.category} onChange={e=>set(p=>({...p,category:e.target.value}))} style={inp}>
-            {POLICY_CATS.map(c=><option key={c}>{c}</option>)}
-          </select>
-        </div>
-        <div>
-          <label style={lbl}>Description</label>
-          <textarea value={pol.description} onChange={e=>set(p=>({...p,description:e.target.value}))} rows={3} placeholder="What does this policy govern and why does it exist?"
-            style={{...inp,resize:"vertical",fontFamily:"inherit"}} onFocus={e=>e.target.style.borderColor=T.blue} onBlur={e=>e.target.style.borderColor=T.border}/>
-        </div>
-        <div>
-          <label style={lbl}>Owner</label>
-          <select value={pol.owner} onChange={e=>set(p=>({...p,owner:e.target.value}))} style={inp}>
-            <option value="">— Select owner —</option>
-            {PMV_USERS.map(u=><option key={u}>{u}</option>)}
-          </select>
-        </div>
-        <div>
-          <label style={lbl}>Stewards</label>
-          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-            {PMV_USERS.map(u=>{
-              const sel=(pol.stewards||[]).includes(u);
-              return <button key={u} onClick={()=>set(p=>{const s=p.stewards||[];return{...p,stewards:sel?s.filter(x=>x!==u):[...s,u]};})} style={toggleBtn(u,sel)}>{u}</button>;
-            })}
-          </div>
-        </div>
-        <div>
-          <label style={lbl}>Scope — Domains</label>
-          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-            {ALL_DOMAINS.map(d=>{
-              const sel=(pol.scope?.domains||[]).includes(d);
-              return <button key={d} onClick={()=>set(p=>{const ds=p.scope?.domains||[];return{...p,scope:{...p.scope,domains:sel?ds.filter(x=>x!==d):[...ds,d]}};})} style={toggleBtn(d,sel)}>{d}</button>;
-            })}
-          </div>
-          {!(pol.scope?.domains||[]).length&&<div style={{fontSize:11,color:T.textMuted,marginTop:5,fontStyle:"italic"}}>No domains selected — applies to all assets</div>}
-        </div>
-        <div>
-          <label style={lbl}>Tags</label>
-          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-            {POLICY_TAGS.map(t=>{
-              const sel=(pol.tags||[]).includes(t);
-              return <button key={t} onClick={()=>set(p=>{const ts=p.tags||[];return{...p,tags:sel?ts.filter(x=>x!==t):[...ts,t]};})} style={toggleBtn(t,sel)}>{t}</button>;
-            })}
-          </div>
-        </div>
-        <PolicyCriteriaBuilder isEdit={isEdit}/>
-        <div>
-          <label style={lbl}>Regulatory Frameworks</label>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-            {REGULATION_FRAMEWORKS.slice(0,10).map(r=>{
-              const sel=(pol.regulations||[]).includes(r);
-              return <button key={r} onClick={()=>set(p=>{const rs=p.regulations||[];return{...p,regulations:sel?rs.filter(x=>x!==r):[...rs,r]};})} style={toggleBtn(r,sel)}>{r}</button>;
-            })}
-          </div>
-        </div>
-      </div>
-    );
-  };
+  // (PolicyCriteriaBuilder and PolicyFormBody lived here. Both were defined but never
+  //  rendered - PolicyCriteriaBuilder only from inside PolicyFormBody, and PolicyFormBody
+  //  from nowhere at all - leftovers from the form the section-rail wizard replaced. They
+  //  also read an editDraft state declared in a different component entirely, so the edit
+  //  branch would have thrown had anything reached it. Deleted.)
 
   // ─── render helpers ──────────────────────────────────────────────────
   const RightPanel = ({onClose,children,title,sub,onSave,saveLabel}) => (
@@ -7911,7 +7826,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   </button>
                   {polPlusMenuOpen&&(
                     <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,width:180,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",zIndex:300,overflow:"hidden"}}>
-                      <button onClick={()=>{setPolNewCatOpen(true);setPolNewCatDraft({name:"",description:"",color:"#6366f1"});setSelPol(null);setPolPlusMenuOpen(false);}}
+                      <button onClick={()=>{setPolNewCatOpen(true);setPolNewCatDraft({name:"",description:"",color:"#6366f1"});setSelPolicyId(null);setPolPlusMenuOpen(false);}}
                         style={{width:"100%",padding:"10px 12px",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:9,color:T.text,fontSize:12,fontWeight:500,borderBottom:`1px solid ${T.border}`}}
                         onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                         <span style={{width:20,height:20,borderRadius:5,background:"rgba(99,102,241,.12)",display:"flex",alignItems:"center",justifyContent:"center",color:"#6366f1",flexShrink:0}}>{Ic.catalog(10)}</span>
@@ -44760,7 +44675,7 @@ export default function App(){
       case "home":          return <HomeView onNav={handleNav} onToast={showToast} role={role} roleCfg={roleCfg}/>;
       case "search":        return <SearchView onAsset={handleAsset}/>;
       case "catalog":       return <CatalogView onAsset={handleAsset}/>;
-      case "quality":       return <QualityView/>;
+      case "quality":       return <QualityView onToast={showToast}/>;
       case "policymanager": return <PolicyManagerView onToast={showToast} onNav={handleNav} deepLinkPolicyId={deepLinkPolicyId}/>;
       case "access":        return <AccessView onToast={showToast}/>;
       case "certifications":return <CertificationsView onToast={showToast}/>;
@@ -44772,7 +44687,7 @@ export default function App(){
       case "dataproducts":  return <DataProductsView onAsset={handleAsset} onNav={handleNav}/>;
       case "knowledgelayer":return <KnowledgeLayerView onToast={showToast} onNav={handleNav}/>;
       case "dataask":       return <DataAskView onToast={showToast} onNav={handleNav}/>;
-      case "observability": return <QualityView/>;
+      case "observability": return <QualityView onToast={showToast}/>;
       case "analytics":     return <AnalyticsView/>;
       case "teams":         return <TeamsView onToast={showToast}/>;
       case "integrations":  return <IntegrationsView onToast={showToast} deepLinkConnName={deepLinkConnName}/>;
