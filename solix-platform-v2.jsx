@@ -13124,6 +13124,41 @@ const TABLEAU_COL_MAPS=[
   {s:"tb_tbl",t:"tb_ext",cols:[{sc:"revenue",tc:"order_amount"},{sc:"region",tc:"region"}]},
 ];
 // ===========================================================================
+// AWS GLUE LINEAGE. A Glue job is an attribute, not a node, so the edge runs
+// table -> table and is labelled with the job that produced it - the same shape a
+// collapsed dbt edge takes. Databases and schemas are containers with no node.
+// This also carries NESTED column lineage: device.type and payload.utm.source are
+// paths inside one STRUCT column, and they flow into flat columns downstream.
+// ===========================================================================
+const GLUE_NODE_META={
+  gl_raw:  {assetType:"Table", service:"glue", db:"GLUE_LAKE / events / raw_clickstream",   domain:"Product", owner:"james.oh",  steward:"alex.wu", quality:76, cert:"Draft",    tags:["events","raw"], description:"Raw clickstream on S3 in Parquet, schema discovered by a crawler. Nested payload.",
+            cols:[{n:"event_id",t:"string"},{n:"event_ts",t:"timestamp"},{n:"user_id",t:"string"},{n:"device.type",t:"struct"},{n:"payload.page",t:"struct"},{n:"payload.utm.source",t:"struct"}]},
+  gl_sess: {assetType:"Table", service:"glue", db:"GLUE_LAKE / events / sessions_enriched",  domain:"Product", owner:"maya.chen", steward:"alex.wu", quality:88, cert:"Approved", tags:["events"],       description:"Sessionised clickstream, written by the sessionize_clickstream Glue job.",
+            cols:[{n:"session_id",t:"string"},{n:"user_id",t:"string"},{n:"started_at",t:"timestamp"},{n:"event_count",t:"bigint"},{n:"device_type",t:"string"},{n:"utm_source",t:"string"},{n:"landing_page",t:"string"}]},
+  gl_view: {assetType:"View",  service:"glue", db:"GLUE_LAKE / events / vw_daily_sessions",  domain:"Product", owner:"maya.chen", steward:"alex.wu", quality:0,  cert:"Approved", tags:[],               description:"Athena view aggregating enriched sessions by day.",
+            cols:[{n:"session_date",t:"date"},{n:"sessions",t:"bigint"},{n:"users",t:"bigint"},{n:"avg_events_per_session",t:"double"}]},
+};
+const GLUE_TOPO={
+  gl_raw: {x:0,  y:170,label:"raw_clickstream",   upstream:[],          downstream:["gl_sess"]},
+  gl_sess:{x:310,y:170,label:"sessions_enriched", upstream:["gl_raw"],  downstream:["gl_view"]},
+  gl_view:{x:620,y:170,label:"vw_daily_sessions", upstream:["gl_sess"], downstream:[]},
+};
+const GLUE_EDGES_DEF=[
+  {id:"gle1",s:"gl_raw", t:"gl_sess",tk:"Glue job"},
+  {id:"gle2",s:"gl_sess",t:"gl_view",tk:"Athena view"},
+];
+const GLUE_COL_MAPS=[
+  {s:"gl_raw", t:"gl_sess",cols:[
+    {sc:"user_id",tc:"user_id"},{sc:"event_ts",tc:"started_at"},{sc:"event_id",tc:"event_count"},
+    {sc:"device.type",tc:"device_type"},{sc:"payload.utm.source",tc:"utm_source"},{sc:"payload.page",tc:"landing_page"}]},
+  {s:"gl_sess",t:"gl_view",cols:[
+    {sc:"started_at",tc:"session_date"},{sc:"session_id",tc:"sessions"},{sc:"user_id",tc:"users"},{sc:"event_count",tc:"avg_events_per_session"}]},
+];
+const GLUE_NODE_BY_ASSET={
+  "raw_clickstream":"gl_raw","sessions_enriched":"gl_sess","vw_daily_sessions":"gl_view",
+};
+
+// ===========================================================================
 // POWER BI LINEAGE. Atlan represents only some Power BI objects in lineage -
 // dashboards, reports, pages, tiles, datasets, dataflows - so Apps and Workspaces
 // get no node, the same treatment as Tableau Sites, Projects and Workbooks.
@@ -13488,6 +13523,14 @@ function collapseDbtNodes(G){
 function pickLineageGraph(asset){
   // Tableau objects keep their BI-connector path (the dbt DAG carries the same tail,
   // but Sites/Projects/Workbooks/Flows have no place in it).
+  if(asset&&asset.service==="glue"){
+    const activeId=GLUE_NODE_BY_ASSET[asset.name];
+    // Databases and schemas are containers and are absent from the map.
+    if(!activeId) return {topo:{},meta:{},colMaps:[],edges:[],empty:true};
+    const topo={};
+    Object.entries(GLUE_TOPO).forEach(([id,t])=>{ topo[id]={...t,active:id===activeId}; });
+    return {topo,meta:GLUE_NODE_META,colMaps:GLUE_COL_MAPS,edges:GLUE_EDGES_DEF};
+  }
   if(asset&&asset.service==="powerbi"){
     const activeId=POWERBI_NODE_BY_ASSET[asset.name];
     if(!activeId) return {topo:{},meta:{},colMaps:[],edges:[],empty:true};
@@ -19220,6 +19263,7 @@ const GlueOnTablePanel = ({asset})=>{
         <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${T.border}`,fontSize:10.5,color:T.textMuted,lineHeight:1.6}}>
           Ingested from AWS, not authored in EDG: <span style={{fontFamily:"'Geist Mono',monospace"}}>GetTable</span> (schema, S3 location, parameters)
           {" \u00b7 "}<span style={{fontFamily:"'Geist Mono',monospace"}}>GetJobRuns</span> (run history, rows read and written)
+          {" \u00b7 "}<span style={{fontFamily:"'Geist Mono',monospace"}}>GetDataflowGraph</span> (the table-to-table edge on the Lineage tab)
           {asset.glueCrawler?<>{" \u00b7 "}<span style={{fontFamily:"'Geist Mono',monospace"}}>GetCrawlerMetrics</span> (schema drift)</>:null}
         </div>
       </div></Card2>
