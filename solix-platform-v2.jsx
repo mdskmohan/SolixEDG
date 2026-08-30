@@ -29469,8 +29469,7 @@ const OM_CONNECTORS = [
 
   // ── DASHBOARD ──
   {name:"Tableau",         cat:"Dashboard",      logoUrl:SI("tableau","E97627"),                  desc:"Leading enterprise data visualization platform",       status:"Connected",  assets:312,  lastSync:"20m ago"},
-  {name:"Power BI",        cat:"Dashboard",      logoUrl:SI("powerbi","F2C811"),                  desc:"Microsoft business analytics and BI service",          status:"Connected",  assets:187,  lastSync:"1h ago"},
-  {name:"Microsoft Power BI",cat:"Dashboard",     logoUrl:SI("powerbi","F2C811"),                  desc:"Microsoft BI platform — workspaces, datasets, reports, dashboards", status:"Connected",  assets:9,    lastSync:"12m ago"},
+  {name:"Power BI",        cat:"Dashboard",      logoUrl:SI("powerbi","F2C811"),                  desc:"Workspaces, datasets, dataflows, reports, pages, tiles and dashboards",          status:"Connected",  assets:187,  lastSync:"1h ago"},
   {name:"Looker",          cat:"Dashboard",      logoUrl:SI("looker","4285F4"),                   desc:"Google Cloud BI platform with LookML modeling",       status:"Connected",  assets:445,  lastSync:"10m ago"},
   {name:"Apache Superset", cat:"Dashboard",      logoUrl:SI("apachesuperset","20A6C9"),           desc:"Open-source data exploration and visualization",      status:"Available",  assets:0,    lastSync:null},
   {name:"Metabase",        cat:"Dashboard",      logoUrl:SI("metabase","509EE3"),                 desc:"Open-source business intelligence and analytics",     status:"Available",  assets:0,    lastSync:null},
@@ -29491,7 +29490,7 @@ const OM_CONNECTORS = [
   {name:"Apache NiFi",     cat:"Pipeline",       logoUrl:SI("apachenifi","728E9B"),               desc:"Data flow automation and integration platform",       status:"Available",  assets:0,    lastSync:null},
   {name:"Apache Flink",    cat:"Pipeline",       logoUrl:SI("apacheflink","E6526F"),              desc:"Stateful stream and batch processing framework",     status:"Available",  assets:0,    lastSync:null},
   {name:"BigID",           cat:"Metadata",       logoUrl:null, color:"#12B76A",                 desc:"Sensitive-data discovery — contributes classifications and findings, not assets", status:"Connected",  assets:0,    lastSync:"3h ago"},
-  {name:"AWS Glue",        cat:"Pipeline",       logoUrl:SI("amazonwebservices","FF9900"),        desc:"Glue Data Catalog — databases, tables and columns, plus the jobs that build them", status:"Connected",  assets:5,    lastSync:"55m ago"},
+  {name:"AWS Glue",        cat:"Database",       logoUrl:SI("amazonwebservices","FF9900"),        desc:"Glue Data Catalog — databases, tables and columns, plus the jobs that build them", status:"Connected",  assets:5,    lastSync:"55m ago"},
   {name:"Spline",          cat:"Pipeline",       logoUrl:null, color:"#FF4500",                  desc:"Apache Spark data lineage tracking",                  status:"Available",  assets:0,    lastSync:null},
 
   // ── MESSAGING ──
@@ -29520,6 +29519,19 @@ const OM_CONNECTORS = [
   {name:"Alation",         cat:"Metadata",       logoUrl:null, color:"#0062FF",                  desc:"Enterprise data catalog and intelligence platform",   status:"Available",  assets:0,    lastSync:null},
   {name:"Microsoft Fabric",cat:"Metadata",       logoUrl:SI("microsoft","5C2D91"),               desc:"Microsoft unified data and analytics platform",       status:"Available",  assets:0,    lastSync:null},
 ];
+
+// The five sources EDG actually seeds report their real catalog count, so the gallery can
+// never claim a number the Data Catalog does not have. BigID legitimately reads 0 - it
+// contributes classifications and findings, not assets of its own. Everything else in the
+// gallery is an available connector carrying an illustrative figure.
+(()=>{
+  const byName = {"dbt":"dbt", "Tableau":"tableau", "Power BI":"powerbi",
+                  "AWS Glue":"glue", "BigID":"bigid"};
+  OM_CONNECTORS.forEach(c=>{
+    const svc = byName[c.name];
+    if(svc) c.assets = ASSETS.filter(a=>a.service===svc).length;
+  });
+})();
 
 const CONN_CONFIG_FIELDS = {
   "Database":      [{l:"Connection Name",ph:"My PostgreSQL",type:"text"},{l:"Host",ph:"localhost",type:"text"},{l:"Port",ph:"5432",type:"text"},{l:"Database",ph:"my_database",type:"text"},{l:"Schema",ph:"public",type:"text"},{l:"Username",ph:"db_user",type:"text"},{l:"Password",ph:"••••••••",type:"password"},{l:"SSL Mode",ph:"prefer",type:"text"}],
@@ -29617,19 +29629,23 @@ const PREFLIGHT_STAGES = [
 // ─────────────────────────────────────────────
 const TagSyncTab = ({connectorId, connectorName}) => {
   const { tagDefs, connectorConfigs, updateConnectorConfig, upsertNameMapping, getTagDef } = useTagCtx();
-  // Normalize connectorId to match our config keys
-  const cfgKey = ['snowflake','dbt','bigquery','databricks'].find(k=>connectorId.includes(k)) || 'snowflake';
-  const cfg = connectorConfigs[cfgKey] || connectorConfigs.snowflake;
+  // Resolve against the actual config map rather than a hardcoded allowlist. The old
+  // version fell back to 'snowflake', so a connector with no tag-sync config silently
+  // showed Snowflake's settings and Snowflake's tag mappings as if they were its own.
+  const cfgKey = Object.keys(connectorConfigs)
+    .find(k=>String(connectorId||'').toLowerCase().includes(k)) || null;
+  const cfg = cfgKey ? connectorConfigs[cfgKey] : null;
   const [assignOpen, setAssignOpen] = useState(null);
   const [assignVal,  setAssignVal]  = useState('');
   const [editAlias,  setEditAlias]  = useState(null);
+  // Declared before the early return below so the hook order never changes.
   const [aliasVal,   setAliasVal]   = useState('');
   const [histOpen,   setHistOpen]   = useState(false);
   const [newSrcName, setNewSrcName] = useState('');
   const [newEdgTag,  setNewEdgTag]  = useState('');
 
-  const mapped   = cfg.nameMappings.filter(m=>m.status==='mapped').length;
-  const unmapped = cfg.nameMappings.filter(m=>m.status==='unmapped').length;
+  const mapped   = cfg ? cfg.nameMappings.filter(m=>m.status==='mapped').length   : 0;
+  const unmapped = cfg ? cfg.nameMappings.filter(m=>m.status==='unmapped').length : 0;
 
   const Toggle = ({on,onChange})=>(
     <div onClick={onChange} style={{width:32,height:18,borderRadius:10,background:on?T.accent:T.border,position:'relative',cursor:'pointer',transition:'background .2s',flexShrink:0,display:'inline-flex'}}>
@@ -29645,6 +29661,21 @@ const TagSyncTab = ({connectorId, connectorName}) => {
     {status:'success',time:'2026-04-16 10:00',synced:39,newT:2,conf:0,dur:'3.5s'},
   ];
   const statusDot = s => ({success:T.green,partial:T.amber,failed:T.rose}[s]||T.textMuted);
+
+  // Not every connector contributes classifications. Saying so beats showing another
+  // connector's settings, which is what the old 'snowflake' fallback did.
+  if(!cfg) return (
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
+      gap:10,padding:'44px 28px',textAlign:'center'}}>
+      <div style={{width:42,height:42,borderRadius:11,background:T.bgElevated,border:`1px solid ${T.border}`,
+        display:'flex',alignItems:'center',justifyContent:'center',color:T.textMuted}}>{Ic.tag(20)}</div>
+      <div style={{fontSize:14,fontWeight:600,color:T.text}}>{connectorName||'This connector'} does not contribute classifications</div>
+      <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65,maxWidth:430}}>
+        Tag sync is only configured for sources that carry their own tags or classifiers.
+        Nothing is pulled from here, so there is nothing to map and no conflict rule to hold.
+      </div>
+    </div>
+  );
 
   return (
     <div className="fadeIn" style={{display:'flex',flexDirection:'column',gap:20}}>
@@ -29844,6 +29875,8 @@ const IntegrationsView = ({onToast, deepLinkConnName})=>{
   const warnings   = OM_CONNECTORS.filter(c => getStatus(c) === "Warning").length;
   const available  = OM_CONNECTORS.filter(c => getStatus(c) === "Available").length;
 
+  // Scope of the connector currently open in the config modal.
+  const scopeForCfg = scopeFor(configTarget && configTarget.name);
   const statusColor = {Connected:T.green, Warning:T.amber, Available:T.textMuted};
   const statusBg    = {Connected:`${T.green}15`, Warning:`${T.amber}15`, Available:T.bgElevated};
 
@@ -30168,10 +30201,12 @@ const IntegrationsView = ({onToast, deepLinkConnName})=>{
                 <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:14}}>Ingestion Filters</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:22}}>
                   {[
-                    {l:"Schema Include Pattern",ph:"public, analytics_.*",d:"Regex to include schemas"},
-                    {l:"Table Include Pattern",ph:"fact_.*, dim_.*",d:"Regex to include tables"},
-                    {l:"Schema Exclude Pattern",ph:"tmp_.*, test_.*",d:"Regex to exclude schemas"},
-                    {l:"Table Exclude Pattern",ph:".*_staging",d:"Regex to exclude tables"},
+                    // Driven by the connector being configured. A Power BI workspace and a
+                    // Postgres schema are not the same thing, so the fields differ.
+                    ...scopeForCfg.dims.flatMap(d=>[
+                      {l:d.label+" include pattern",ph:d.rxIn,d:"Regex to include "+d.label.toLowerCase()},
+                      {l:d.label+" exclude pattern",ph:d.rxEx,d:"Regex to exclude "+d.label.toLowerCase()},
+                    ]),
                   ].map(f=>(
                     <div key={f.l}>
                       <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:2}}>{f.l}</label>
@@ -31250,7 +31285,172 @@ const RunRow = ({run, onShowLogs}) => {
 // ─────────────────────────────────────────────
 // ADD SERVICE WIZARD
 // ─────────────────────────────────────────────
+// What each connector actually contains, what you can filter it by, and how it
+// authenticates. Atlan asks per connector, not per category, because a Power BI workspace
+// and a Postgres schema are not the same kind of thing. Everything the wizard shows in
+// Object types, Filters, Review and the connection test is driven from here.
+const CONNECTOR_SCOPE = {
+  powerbi:{
+    objectTypes:["Workspaces","Datasets","Dataflows","Reports","Pages","Tiles","Dashboards","Datasource connections"],
+    note:"Power BI has no databases or schemas. Pages are only available with workspace-level access \u2014 the scanner API alone cannot catalog them.",
+    dims:[
+      {k:"workspace",label:"Workspaces",ph:"Finance_Analytics, Sales\u2026", rxIn:"^Finance_.*",  rxEx:"^(Personal|Sandbox).*", hint:"The permission boundary in Power BI. Start here \u2014 it is the cheapest filter."},
+      {k:"dataset",  label:"Datasets",  ph:"Revenue_Model\u2026",            rxIn:"^Revenue.*",   rxEx:"^tmp_.*",              hint:"Skipping a dataset also skips its DAX measures and everything bound to it."},
+      {k:"report",   label:"Reports",   ph:"Revenue_Detail\u2026",           rxIn:".*",           rxEx:"^(Draft|Test).*",      hint:"Dashboards are filtered separately \u2014 a dashboard can pin tiles from several reports."},
+    ],
+    auth:"Validating the Azure AD service principal",
+    transport:"api",
+    discover:"Reading the workspace scan result",
+    discovery:{"Workspaces":4,"Datasets":11,"Reports":18,"Dashboards":6,"Datasource connections":9},
+  },
+  glue:{
+    objectTypes:["Databases","Schemas","Tables","Views","Columns","Nested columns (STRUCT / ARRAY)"],
+    note:"Glue is a metastore, so it uses the same database and table shape as a warehouse. Nested columns are the difference \u2014 expansion depth is set on the Configure step.",
+    dims:[
+      {k:"database",label:"Databases",ph:"GLUE_LAKE\u2026",       rxIn:"^GLUE_.*",     rxEx:"^(temp|scratch)_.*", hint:"Glue database, not an RDBMS database \u2014 it holds table definitions, not data."},
+      {k:"schema",  label:"Schemas",  ph:"events, curated\u2026",  rxIn:".*",           rxEx:"^_.*",               hint:"The grouping EDG holds between a Glue database and its tables."},
+      {k:"table",   label:"Tables",   ph:"raw_clickstream\u2026", rxIn:"^(raw|curated)_.*", rxEx:"^_tmp.*",      hint:"Applied to the table name inside the catalog."},
+    ],
+    auth:"Assuming the IAM role and calling glue:GetDatabases",
+    transport:"api",
+    discover:"Listing databases in the Glue Data Catalog",
+    discovery:{"Databases":2,"Tables":36,"Columns":412,"Nested columns":58},
+  },
+  bigid:{
+    objectTypes:[],
+    note:"BigID creates no assets. It classifies columns of assets EDG already holds, so there is nothing here to select \u2014 scope it by scan instead.",
+    dims:[
+      {k:"scan",   label:"Scans",        ph:"weekly_pii_scan\u2026", rxIn:"^weekly_.*", rxEx:"^adhoc_.*", hint:"Restrict to named scans. Leave blank to read every completed scan."},
+      {k:"dsource",label:"Data sources", ph:"snowflake-prod\u2026",  rxIn:".*",         rxEx:"^dev-.*",   hint:"BigID's own name for the system it scanned, which EDG matches back to a connection."},
+    ],
+    auth:"Exchanging the user token for a session token",
+    transport:"api",
+    discover:"Reading completed scan results",
+    discovery:{"Scans":3,"Data sources":4,"Columns classified":1284},
+  },
+  tableau:{
+    objectTypes:["Sites","Projects","Workbooks","Worksheets","Dashboards","Stories","Data Sources","Datasource fields","Flows","Metrics"],
+    note:"Fields live inside their data source rather than being catalogued separately. Prep flows cannot be crawled under JWT bearer auth.",
+    dims:[
+      {k:"project", label:"Projects",  ph:"Finance\u2026",           rxIn:"^Finance.*", rxEx:"^Archive.*", hint:"Projects nest, and a filter here applies to the whole subtree."},
+      {k:"workbook",label:"Workbooks", ph:"Revenue_Analytics\u2026", rxIn:".*",         rxEx:"^(Draft|Personal).*", hint:"Excluding a workbook also excludes its worksheets, dashboards and embedded sources."},
+    ],
+    auth:"Signing in with the personal access token",
+    transport:"api",
+    discover:"Querying the Metadata API",
+    discovery:{"Sites":1,"Projects":6,"Workbooks":14,"Worksheets":41,"Dashboards":12,"Data sources":19},
+  },
+  dbt:{
+    objectTypes:["Projects","Sources","Models","Seeds","Snapshots","Tests","Semantic models","Metrics","Exposures"],
+    note:"dbt has no databases of its own \u2014 it describes objects in your warehouse. Only assets in the applied (built) state are crawled.",
+    dims:[
+      {k:"project",label:"Projects",ph:"jnj_analytics\u2026",  rxIn:".*",          rxEx:"^sandbox_.*", hint:"A dbt Cloud project, or one manifest for dbt Core."},
+      {k:"model",  label:"Models",  ph:"fct_revenue, stg_\u2026", rxIn:"^(stg|int|fct|dim|mart)_.*", rxEx:"^_.*", hint:"Applied to the model name. Tests follow whatever their model does."},
+      {k:"tag",    label:"dbt tags",ph:"finance, pii\u2026",   rxIn:".*",          rxEx:"^deprecated$", hint:"Filter by the tags declared in the dbt project itself."},
+    ],
+    auth:"Validating the dbt Cloud API token",
+    transport:"api",
+    discover:"Reading the manifest of the latest applied run",
+    discovery:{"Projects":1,"Sources":4,"Models":12,"Seeds":2,"Tests":34,"Exposures":3},
+  },
+  snowflake:{
+    objectTypes:["Databases","Schemas","Tables","Views","Materialized views","Stored procedures","Columns"],
+    dims:[
+      {k:"database",label:"Databases",ph:"SNOWFLAKE_PROD\u2026", rxIn:"^(PROD|ANALYTICS).*", rxEx:"^DEV_.*", hint:"Applied first, so excluding a database skips everything inside it."},
+      {k:"schema",  label:"Schemas",  ph:"COMMERCE, FINANCE\u2026", rxIn:".*",             rxEx:"^(INFORMATION_SCHEMA)$", hint:"Snowflake always exposes INFORMATION_SCHEMA; excluding it is usual."},
+      {k:"table",   label:"Tables",   ph:"orders, customers\u2026", rxIn:".*",             rxEx:"^(TMP_|_BAK)", hint:"Applied to table and view names alike."},
+    ],
+    auth:"Validating the Snowflake user and role",
+    transport:"db",
+    discover:"Sampling INFORMATION_SCHEMA",
+    discovery:{"Databases":3,"Schemas":47,"Tables":1203,"Views":89,"Columns":14820},
+  },
+  s3:{
+    objectTypes:["Buckets","Prefixes / paths","Objects"],
+    note:"Object storage has no schema. Scope by prefix, which is what actually bounds a crawl.",
+    dims:[
+      {k:"bucket",label:"Buckets", ph:"jnj-data-lake-prod\u2026", rxIn:".*",        rxEx:"^.*-logs$", hint:"Bucket names are global to the account."},
+      {k:"prefix",label:"Prefixes",ph:"raw/, curated/\u2026",     rxIn:"^(raw|curated)/", rxEx:"^_temp/", hint:"A trailing slash matters \u2014 prefixes are string matches, not directories."},
+    ],
+    auth:"Assuming the IAM role and listing the bucket",
+    transport:"api",
+    discover:"Listing objects under the configured prefixes",
+    discovery:{"Buckets":2,"Prefixes":31,"Objects":18402},
+  },
+  kafka:{
+    objectTypes:["Topics","Consumer groups","Schemas"],
+    note:"Streaming has no tables. A topic's shape comes from the schema registry, not the broker.",
+    dims:[
+      {k:"topic",label:"Topics",ph:"orders.v1\u2026", rxIn:"^(orders|customers)\\..*", rxEx:"^(_|__consumer).*", hint:"Internal topics start with an underscore and are usually excluded."},
+    ],
+    auth:"Connecting to the bootstrap servers",
+    transport:"db",
+    discover:"Reading topic metadata and the schema registry",
+    discovery:{"Topics":24,"Consumer groups":9,"Schemas":24},
+  },
+  airflow:{
+    objectTypes:["DAGs","Tasks","Task runs"],
+    dims:[
+      {k:"dag",label:"DAGs",ph:"etl_orders_pipeline\u2026", rxIn:".*", rxEx:"^example_.*", hint:"Airflow ships example DAGs; excluding them is usual."},
+    ],
+    auth:"Validating the Airflow API credentials",
+    transport:"api",
+    discover:"Reading the DAG list",
+    discovery:{"DAGs":17,"Tasks":214},
+  },
+};
+
+// Warehouse shape, used only for connectors with no entry of their own.
+const DEFAULT_CONNECTOR_SCOPE = {
+  objectTypes:["Databases","Schemas","Tables","Views","Stored procedures","Columns"],
+  dims:[
+    {k:"schema",label:"Schemas",ph:"public, analytics\u2026", rxIn:"^(?!pg_).*", rxEx:"^(pg_catalog|information_schema)$", hint:"Regex applied to schema names."},
+    {k:"table", label:"Tables", ph:"orders, users\u2026",     rxIn:".*",         rxEx:"^(tmp_|_bak|test_)",               hint:"Regex applied to table and view names."},
+  ],
+  auth:"Validating the username and password",
+  transport:"db",
+  discover:"Sampling the metadata structure",
+  discovery:{"Databases":3,"Schemas":47,"Tables":1203,"Views":89,"Columns":14820},
+};
+
+// The connection test, told in the connector's own terms. A REST-only source has no port to
+// open, a service principal is not a password, and the final count should name the things
+// this source actually has.
+const testPhasesFor = (sc) => {
+  const counts = Object.keys(sc.discovery||{});
+  return [
+    ...(sc.transport==="api"
+      ? [{s:"Endpoint Resolution", d:"Resolving the API host"},
+         {s:"TLS Handshake",       d:"Negotiating a secure channel"}]
+      : [{s:"DNS Resolution",      d:"Resolving hostname to IP"},
+         {s:"TCP Connection",      d:"Opening the port connection"},
+         {s:"TLS Handshake",       d:"Negotiating a secure channel"}]),
+    {s:"Credential Check",   d:sc.auth||"Validating the credentials"},
+    {s:"Permission Scan",    d:"Verifying read access"},
+    {s:"Metadata Discovery", d:sc.discover||"Sampling the metadata structure"},
+    ...(counts.length?[{s:"Asset Estimation", d:"Counting "+counts.map(c=>c.toLowerCase()).join(", ")}]:[]),
+  ];
+};
+
+// Resolve a connector id from whatever a screen happens to hold - a picker id, a display
+// name ("Microsoft Power BI"), or a service name ("powerbi_service").
+const connIdFrom = (v) => {
+  const t = String(v||"").toLowerCase().replace(/[^a-z0-9]/g,"");   // keep digits, or "s3" never matches
+  if(!t) return null;
+  return Object.keys(CONNECTOR_SCOPE).find(k=>t.includes(k)) || null;
+};
+const scopeFor = (v) => CONNECTOR_SCOPE[connIdFrom(v)] || DEFAULT_CONNECTOR_SCOPE;
+
+
+
 const ADD_SERVICE_CONNECTORS = {
+  Discovery: {
+    color:"#12B76A", icon:"shield",
+    desc:"Sensitive-data discovery and classification tools. These contribute classifications and findings rather than assets of their own.",
+    connectors:[
+      {id:"bigid",      name:"BigID",        logo:"\ud83d\udd0d", color:"#12B76A", desc:"Sensitive-data discovery and classification"},
+    ],
+  },
   Database: {
     color:"#38bdf8", icon:"db",
     desc:"Relational databases and cloud data warehouses",
@@ -31317,12 +31517,79 @@ const ADD_SERVICE_CONNECTORS = {
   },
 };
 
+// What must already be true before any credential works. These are the steps connector
+// setups actually fail on, and they are quoted from each vendor's own documentation.
+const CONNECTOR_PREREQS = {
+  powerbi:[
+    "A Power BI Pro licence \u2014 the REST APIs are not available without one.",
+    "An Azure AD app registration (service principal) with API permission Dashboard.Read.All. Add Dataset.Read.All too, or datasets and lineage will be skipped.",
+    "Three Power BI tenant settings enabled by a Power BI admin: allow service principals to use Power BI APIs, allow them to use read-only admin APIs, and enhance admin API responses with detailed metadata.",
+    "The service principal added to each workspace you want crawled. A personal \u201cMy Workspace\u201d cannot be crawled.",
+    "Without workspace-level access the scanner API still works, but there is no Pages catalog and no column or measure lineage into pages.",
+  ],
+  glue:[
+    "An IAM principal with at least glue:GetDatabases and glue:GetTables.",
+    "Use an assume-role ARN for cross-account catalogs rather than long-lived keys.",
+    "If Lake Formation governs the catalog, grant the principal DESCRIBE on the databases and tables as well \u2014 Glue permissions alone are not enough.",
+    "Run dbt-style docs generation is not relevant here, but row counts come from table parameters, so a crawler must have run at least once.",
+  ],
+  bigid:[
+    "A BigID user token created in the BigID UI (valid up to 999 days). EDG exchanges it for a short-lived session token on every run.",
+    "The token\u2019s user needs read access to scan results and the data-source inventory.",
+    "At least one completed scan \u2014 EDG reads findings, it does not trigger scanning.",
+    "Classifications arrive as proposals. A steward accepts them before they become EDG classifications, so no scan can silently retag the catalog.",
+  ],
+  dbt:[
+    "For dbt Cloud: an API token with read access to the project, plus the account and project id.",
+    "For dbt Core: upload manifest.json, and run_results.json as well or no test outcomes are ingested.",
+    "catalog.json is optional \u2014 without it there are no row counts or column types.",
+  ],
+  tableau:[
+    "A personal access token (name + secret) rather than a password \u2014 passwords are blocked by default on Tableau Cloud.",
+    "The token owner needs at least Viewer with Download/Save permission on the projects to be crawled.",
+    "Prep flows cannot be crawled under JWT bearer auth; use a PAT if you need flows.",
+  ],
+};
+
 const CONNECTOR_FIELDS = {
   postgres:   [{k:"host",l:"Host",ph:"prod-db.company.com",type:"text"},{k:"port",l:"Port",ph:"5432",type:"text"},{k:"database",l:"Database",ph:"warehouse",type:"text"},{k:"username",l:"Username",ph:"solix_reader",type:"text"},{k:"password",l:"Password",ph:"••••••••",type:"password"},{k:"ssl",l:"Enable SSL",type:"toggle",val:true}],
   snowflake:  [{k:"account",l:"Account",ph:"company.us-east-1",type:"text"},{k:"warehouse",l:"Warehouse",ph:"COMPUTE_WH",type:"text"},{k:"database",l:"Database",ph:"PROD_DWH",type:"text"},{k:"schema",l:"Schema",ph:"PUBLIC",type:"text"},{k:"username",l:"Username",ph:"SOLIX_USER",type:"text"},{k:"password",l:"Password",ph:"••••••••",type:"password"},{k:"role",l:"Role",ph:"SOLIX_READER",type:"text"}],
   bigquery:   [{k:"project",l:"Project ID",ph:"my-gcp-project",type:"text"},{k:"dataset",l:"Default Dataset",ph:"production",type:"text"},{k:"keyfile",l:"Service Account JSON",ph:"Paste JSON key…",type:"textarea"}],
   kafka:      [{k:"bootstrap",l:"Bootstrap Servers",ph:"kafka.company.com:9092",type:"text"},{k:"schema_registry",l:"Schema Registry URL",ph:"http://schema-registry:8081",type:"text"},{k:"security",l:"Security Protocol",ph:"PLAINTEXT",type:"select",opts:["PLAINTEXT","SSL","SASL_PLAINTEXT","SASL_SSL"]}],
   dbt:        [{k:"deployment",l:"Deployment",ph:"dbt Cloud",type:"select",opts:["dbt Cloud (Discovery API)","dbt Core (manifest + run_results artifacts)"]},{k:"project_id",l:"Project ID",ph:"123456",type:"text"},{k:"account",l:"Account",ph:"company",type:"text"},{k:"api_key",l:"API Key",ph:"dbt_••••••••",type:"password"},{k:"environment",l:"Environment",ph:"production",type:"select",opts:["production","staging","development"]}],
+  powerbi:    [
+    {k:"tenantId",     l:"Azure tenant ID",      ph:"72f988bf-86f1-41af-91ab-2d7cd011db47", type:"text",     req:true, help:"Directory (tenant) ID from the app registration Overview page."},
+    {k:"clientId",     l:"Client ID",            ph:"a1b2c3d4-...",                          type:"text",     req:true, help:"Application (client) ID of the service principal."},
+    {k:"clientSecret", l:"Client secret",        ph:"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", type:"password", req:true, help:"From Certificates & secrets. Store the value at creation \u2014 Azure will not show it again."},
+    {k:"hostPort",     l:"Power BI URL",         ph:"https://app.powerbi.com",               type:"text",     req:true, help:"Change only for a sovereign or GCC cloud."},
+    {k:"scope",        l:"Scope",                ph:"https://analysis.windows.net/powerbi/api/.default", type:"text", req:true, help:"Leave as-is unless Microsoft changes the resource URI."},
+    {k:"authorityUri", l:"Authority URI",        ph:"https://login.microsoftonline.com/",    type:"text",              help:"Token authority. Defaults to global Azure AD."},
+    {k:"useAdminApis", l:"Use admin APIs",       type:"toggle", val:true,                              help:"On: every workspace in the tenant. Off: only workspaces the service principal is a member of."},
+    {k:"pageSize",     l:"Records per page",     ph:"100",                                    type:"text",              help:"Max 100. Lower it only if the tenant rate-limits."},
+    {k:"dashFilter",   l:"Dashboard filter",     ph:"^Finance_.*",                            type:"text",              help:"Optional include regex. Leave blank to crawl all."},
+    {k:"dbPrefix",     l:"Warehouse prefix",     ph:"SNOWFLAKE_PROD",                         type:"text",              help:"Lets EDG resolve a dataset back to the warehouse table it reads."},
+  ],
+  glue:       [
+    {k:"authMode",     l:"Authentication",       type:"select", opts:["Assume role (recommended)","Access key"], req:true, help:"A role avoids storing long-lived keys."},
+    {k:"awsRegion",    l:"AWS region",           ph:"us-east-1",                              type:"text",     req:true, help:"Region the Glue Data Catalog lives in."},
+    {k:"assumeRoleArn",l:"Assume role ARN",      ph:"arn:aws:iam::123456789012:role/SolixGlueReader", type:"text",      help:"Required for the role mode, including cross-account catalogs."},
+    {k:"accessKeyId",  l:"Access key ID",        ph:"AKIAIOSFODNN7EXAMPLE",                    type:"text",              help:"Access-key mode only."},
+    {k:"secretKey",    l:"Secret access key",    ph:"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", type:"password",          help:"Access-key mode only."},
+    {k:"sessionToken", l:"Session token",        ph:"optional",                               type:"password",          help:"Only for temporary STS credentials."},
+    {k:"catalogId",    l:"Catalog ID",           ph:"123456789012",                           type:"text",              help:"Defaults to the account you connect as. Set it for a shared catalog."},
+    {k:"endpointUrl",  l:"Endpoint URL",         ph:"optional",                               type:"text",              help:"For VPC endpoints or a non-standard partition."},
+    {k:"nestedDepth",  l:"Nested column depth",  ph:"15",                                     type:"text",              help:"How far to expand STRUCT and ARRAY types. 15 is the practical ceiling."},
+  ],
+  bigid:      [
+    {k:"host",         l:"BigID host",           ph:"https://bigid.jnj.internal",             type:"text",     req:true, help:"Base URL. EDG appends /api/v1 itself."},
+    {k:"authMode",     l:"Authentication",       type:"select", opts:["User token (recommended)","Username / password"], req:true, help:"A token avoids storing a person's password and survives their leaving."},
+    {k:"userToken",    l:"User token",           ph:"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", type:"password", req:true, help:"Created in the BigID UI, valid up to 999 days. Exchanged for a session token each run."},
+    {k:"username",     l:"Username",             ph:"svc_solix",                              type:"text",              help:"Username/password mode only."},
+    {k:"password",     l:"Password",             ph:"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", type:"password",          help:"Username/password mode only."},
+    {k:"minConfidence",l:"Minimum confidence",   ph:"70",                                     type:"text",              help:"Findings below this are ignored. The rejected National ID match in the demo scored 41."},
+    {k:"autoAccept",   l:"Auto-accept findings", type:"toggle", val:false,                              help:"Off by default, and worth keeping off: a finding should be a proposal a steward accepts."},
+    {k:"scanFilter",   l:"Scan filter",          ph:"weekly_pii_scan",                        type:"text",              help:"Optional. Restrict to named scans instead of every scan in the tenant."},
+  ],
   tableau:    [{k:"server",l:"Server URL",ph:"https://company.tableau.com",type:"text"},{k:"site",l:"Site Name",ph:"company",type:"text"},{k:"token_name",l:"Personal Access Token Name",ph:"solix-ingest",type:"text"},{k:"token",l:"Personal Access Token",ph:"••••••••",type:"password"}],
   looker:     [{k:"host",l:"Looker URL",ph:"https://company.looker.com",type:"text"},{k:"client_id",l:"Client ID",ph:"abc123",type:"text"},{k:"client_secret",l:"Client Secret",ph:"••••••••",type:"password"}],
   airflow:    [{k:"host",l:"Airflow URL",ph:"https://airflow.company.com",type:"text"},{k:"username",l:"Username",ph:"admin",type:"text"},{k:"password",l:"Password",ph:"••••••••",type:"password"}],
@@ -31339,30 +31606,6 @@ const AddServiceWizard = ({onClose, onDone}) => {
     {id:"filters",   label:"Filters"},
     {id:"review",    label:"Review"},
   ];
-
-  // Object types available per source category
-  const OBJECT_TYPES_BY_CATEGORY = {
-    "Databases":      ["Databases","Schemas","Tables","Views","Stored Procedures","Columns"],
-    "Cloud Storage":  ["Buckets","Prefixes / Paths","Files"],
-    "SaaS & APIs":    ["Projects","Datasets","Reports","Dashboards"],
-    "Streaming":      ["Topics","Consumer Groups","Schemas"],
-    "BI & Analytics": ["Projects","Models","Metrics","Dashboards","Explores"],
-    "File Systems":   ["Directories","Files"],
-  };
-
-  // Connection test phases (auth + discovery combined)
-  const TEST_PHASES = [
-    {s:"DNS Resolution",      d:"Resolving hostname to IP"},
-    {s:"TCP Connection",      d:"Opening port connection"},
-    {s:"TLS Handshake",       d:"Negotiating secure channel"},
-    {s:"Credential Check",    d:"Validating username & password"},
-    {s:"Permission Scan",     d:"Verifying read access"},
-    {s:"Schema Discovery",    d:"Sampling metadata structure"},
-    {s:"Asset Estimation",    d:"Counting tables, views, columns"},
-  ];
-
-  // Discovery result (simulated)
-  const DISCOVERY_RESULT = {databases:3, schemas:47, tables:1203, views:89, columns:14820};
 
   const [step,         setStep]        = useState(0);
   const [category,     setCategory]    = useState(null);
@@ -31395,19 +31638,40 @@ const AddServiceWizard = ({onClose, onDone}) => {
   const [discovery,    setDiscovery]   = useState(null);
   // Filters
   const [filterMode,   setFilterMode]  = useState("selection"); // selection|regex
-  const [inclSchemas,  setInclSchemas] = useState([]);
-  const [exclSchemas,  setExclSchemas] = useState([]);
-  const [inclTables,   setInclTables]  = useState([]);
-  const [exclTables,   setExclTables]  = useState([]);
+  // Filters are keyed by the connector's OWN dimension (workspace, scan, prefix, topic,
+  // schema...) instead of a fixed schema/table pair, so nothing warehouse-shaped can leak
+  // into a source that has no such concept.
+  const [dimFilters,   setDimFilters]  = useState({}); // {dimKey:{incl:[],excl:[],rxIn:"",rxEx:""}}
+  const dimVal = (k,f) => (dimFilters[k]&&dimFilters[k][f]) || (f==="incl"||f==="excl"?[]:"");
+  const setDim = (k,f,v) => setDimFilters(p=>({...p,[k]:{...(p[k]||{}),[f]:v}}));
   const timerRef = useRef(null);
   useEffect(() => () => clearTimeout(timerRef.current), []);
+
+  // What this connector contains, can be filtered by, and how it authenticates. Declared
+  // here rather than above the state, because it reads `connector`. The old map was keyed by
+  // category names the picker never used ("Databases" vs "Database"), so the lookup always
+  // missed and every source was offered Databases/Schemas/Tables/Views — Power BI included.
+  const scope = (connector && CONNECTOR_SCOPE[connector]) || DEFAULT_CONNECTOR_SCOPE;
+  const TEST_PHASES = testPhasesFor(scope);
+  const DISCOVERY_RESULT = scope.discovery || {};
 
   const catList  = Object.entries(ADD_SERVICE_CONNECTORS);
   const connList = category ? ADD_SERVICE_CONNECTORS[category].connectors : [];
   const connMeta = connector ? connList.find(c=>c.id===connector) : null;
-  const fieldDefs= CONNECTOR_FIELDS[connector] || CONNECTOR_FIELDS.default;
+  // Generic database credentials, used only for connectors with no definitions of their
+  // own. Anything in CONNECTOR_FIELDS overrides this, which is what makes the form tell an
+  // engineer exactly what to collect instead of asking every source for a host and a port.
+  const GENERIC_DB_FIELDS = [
+    {k:"host",     l:"Host / URL",  ph:"db.company.com", type:"text",     req:true, help:"Hostname or URL of the source."},
+    {k:"port",     l:"Port",        ph:"5432",           type:"text",               help:"Leave blank for the source's default."},
+    {k:"database", l:"Database",    ph:"warehouse",      type:"text",               help:"The database to crawl."},
+    {k:"username", l:"Username",    ph:"solix_reader",   type:"text",     req:true, help:"A read-only account is sufficient."},
+    {k:"password", l:"Password",    ph:"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", type:"password", req:true, help:"Stored encrypted; never shown again after saving."},
+    {k:"ssl",      l:"Enable SSL",  type:"toggle", val:true,                        help:"Leave on unless the source does not support TLS."},
+  ];
+  const fieldDefs = CONNECTOR_FIELDS[connector] || GENERIC_DB_FIELDS;
   const catMeta  = category ? ADD_SERVICE_CONNECTORS[category] : null;
-  const availObjTypes = category ? (OBJECT_TYPES_BY_CATEGORY[category] || OBJECT_TYPES_BY_CATEGORY["Databases"]) : [];
+  const availObjTypes = connector ? scope.objectTypes : [];
 
   const buildConnCron = () => {
     if(schedFreq==="once")   return "— run once —";
@@ -31770,16 +32034,9 @@ const AddServiceWizard = ({onClose, onDone}) => {
 
               </div>
 
-              {/* Row 2: Credentials — username / password only */}
+              {/* Row 2: Credentials — whatever THIS connector actually needs */}
               {(()=>{
-                const activeFields=[
-                  {k:"host",     l:"Host / URL",  ph:"db.company.com",   type:"text",req:true},
-                  {k:"port",     l:"Port",         ph:"5432",             type:"text"},
-                  {k:"database", l:"Database",     ph:"warehouse",        type:"text"},
-                  {k:"username", l:"Username",     ph:"solix_reader",     type:"text",req:true},
-                  {k:"password", l:"Password",     ph:"••••••••",         type:"password",req:true},
-                  {k:"ssl",      l:"Enable SSL",   type:"toggle",         val:true},
-                ];
+                const activeFields = fieldDefs;
                 return (
                   <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
@@ -31787,10 +32044,28 @@ const AddServiceWizard = ({onClose, onDone}) => {
                       <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Credentials</span>
                       <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>All fields encrypted at rest</span>
                     </div>
-                    {/* Auth method — shown as a normal tab (password-based auth) */}
+                    {/* Auth method. Several connectors authenticate with a token, a
+                        service principal or an assumed role rather than a password, and each
+                        exposes that choice as its own field, so this tab just names the set. */}
                     <div style={{display:"flex",borderBottom:`1px solid ${T.border}`,marginBottom:18}}>
                       <button type="button" style={{padding:"8px 16px",background:"transparent",border:"none",borderBottom:`2px solid ${T.accent}`,color:T.text,fontSize:13,fontWeight:600,cursor:"pointer",marginBottom:-1,whiteSpace:"nowrap"}}>Password</button>
                     </div>
+                    {/* What must be true BEFORE these credentials work. Permissions and
+                        tenant settings are where connector setups actually fail, and no
+                        placeholder can carry them. */}
+                    {CONNECTOR_PREREQS[connector]&&(
+                      <div style={{marginBottom:16,padding:"12px 14px",background:T.bgElevated,
+                        border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.accent}`,borderRadius:"0 9px 9px 0"}}>
+                        <div style={{fontSize:11,fontWeight:700,color:T.text,textTransform:"uppercase",letterSpacing:".07em",marginBottom:7}}>
+                          Before you connect
+                        </div>
+                        <ul style={{margin:0,paddingLeft:18,display:"flex",flexDirection:"column",gap:5}}>
+                          {CONNECTOR_PREREQS[connector].map((p,i)=>(
+                            <li key={i} style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>{p}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:13}}>
                       {activeFields.map(f=>(
                         <div key={f.k}>
@@ -31802,10 +32077,21 @@ const AddServiceWizard = ({onClose, onDone}) => {
                                 <Toggle on={fields[f.k]!==undefined?fields[f.k]:!!f.val} onChange={()=>setFields(p=>({...p,[f.k]:!(p[f.k]!==undefined?p[f.k]:f.val)}))}/>
                                 <span style={{fontSize:12,color:T.textSub}}>{(fields[f.k]!==undefined?fields[f.k]:!!f.val)?"Enabled":"Disabled"}</span>
                               </label>
+                            : f.type==="select"
+                            // A select used to fall through to <input>, so every
+                            // dropdown in this form rendered as a free-text box.
+                            ? <select value={fields[f.k]!==undefined?fields[f.k]:(f.opts&&f.opts[0])||""}
+                                onChange={e=>setFields(p=>({...p,[f.k]:e.target.value}))}
+                                style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+                                {(f.opts||[]).map(o=><option key={o} value={o}>{o}</option>)}
+                              </select>
                             : <input type={f.type||"text"} value={fields[f.k]||""} onChange={e=>setFields(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph}
                                 style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",transition:"border .15s",fontFamily:f.type==="password"?"'Geist Mono',monospace":"inherit"}}
                                 onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
                           }
+                          {/* Where the value comes from. The field-level answer to
+                              "what do I actually put here", so nobody needs a briefing. */}
+                          {f.help&&<div style={{fontSize:10.5,color:T.textMuted,lineHeight:1.5,marginTop:5}}>{f.help}</div>}
                         </div>
                       ))}
                     </div>
@@ -31908,7 +32194,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
                       {Object.entries(discovery).map(([k,v])=>(
                         <div key={k} style={{padding:"8px 14px",background:T.bgSurface,borderRadius:9,border:`1px solid ${T.border}`,textAlign:"center",minWidth:80}}>
                           <div style={{fontSize:16,fontWeight:800,color:T.text}}>{v.toLocaleString()}</div>
-                          <div style={{fontSize:10.5,color:T.textMuted,textTransform:"capitalize",marginTop:2}}>{k}</div>
+                          <div style={{fontSize:10.5,color:T.textMuted,marginTop:2}}>{k}</div>
                         </div>
                       ))}
                     </div>
@@ -31938,36 +32224,43 @@ const AddServiceWizard = ({onClose, onDone}) => {
                     ))}
                   </div>
                 </div>
-                <p style={{margin:"0 0 18px",fontSize:12.5,color:T.textMuted,lineHeight:1.6}}>Narrow ingestion scope. Leave blank to ingest everything discovered.</p>
+                <p style={{margin:"0 0 14px",fontSize:12.5,color:T.textMuted,lineHeight:1.6}}>Narrow ingestion scope. Leave blank to ingest everything discovered.</p>
+                {/* What THIS source can be filtered by. A warehouse has schemas and tables;
+                    Power BI has workspaces, datasets and reports; BigID has scans. */}
+                {scope.note&&(
+                  <div style={{margin:"0 0 16px",padding:"10px 13px",background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.accent}`,borderRadius:"0 8px 8px 0",fontSize:11.5,color:T.textSub,lineHeight:1.6}}>{scope.note}</div>
+                )}
 
-                {filterMode==="selection"?(
+                {scope.dims.length===0?(
+                  <div style={{padding:"24px 20px",textAlign:"center",background:T.bgSurface,border:`1px dashed ${T.border}`,borderRadius:10,fontSize:12.5,color:T.textSub,lineHeight:1.65}}>
+                    Nothing to filter here for this connector — scope it on the Configure step instead.
+                  </div>
+                ):filterMode==="selection"?(
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-                    {[
-                      {label:"Include Schemas",tags:inclSchemas,onAdd:t=>setInclSchemas(p=>[...p,t]),onRemove:t=>setInclSchemas(p=>p.filter(x=>x!==t)),ph:"public, analytics…",color:"#10b981"},
-                      {label:"Exclude Schemas",tags:exclSchemas,onAdd:t=>setExclSchemas(p=>[...p,t]),onRemove:t=>setExclSchemas(p=>p.filter(x=>x!==t)),ph:"pg_catalog, sys…",color:"#f87171"},
-                      {label:"Include Tables", tags:inclTables, onAdd:t=>setInclTables(p=>[...p,t]), onRemove:t=>setInclTables(p=>p.filter(x=>x!==t)), ph:"orders, users…",color:"#10b981"},
-                      {label:"Exclude Tables", tags:exclTables, onAdd:t=>setExclTables(p=>[...p,t]), onRemove:t=>setExclTables(p=>p.filter(x=>x!==t)), ph:"tmp_*, _bak…",color:"#f87171"},
-                    ].map(({label,tags,onAdd,onRemove,ph,color})=>(
+                    {scope.dims.flatMap(d=>[
+                      {label:"Include "+d.label,dim:d,f:"incl",ph:d.ph,color:"#10b981",hint:d.hint},
+                      {label:"Exclude "+d.label,dim:d,f:"excl",ph:d.ph,color:"#f87171",hint:null},
+                    ]).map(({label,dim,f,ph,color,hint})=>(
                       <div key={label}>
                         <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:600,color:T.textSub,marginBottom:7}}>
                           <span style={{width:8,height:8,borderRadius:2,background:color,display:"block",flexShrink:0}}/>
                           {label}
                         </label>
-                        <TagInput tags={tags} onAdd={onAdd} onRemove={onRemove} placeholder={ph} color={color}/>
+                        <TagInput tags={dimVal(dim.k,f)} onAdd={t=>setDim(dim.k,f,[...dimVal(dim.k,f),t])} onRemove={t=>setDim(dim.k,f,dimVal(dim.k,f).filter(x=>x!==t))} placeholder={ph} color={color}/>
+                        {hint&&<div style={{fontSize:10.5,color:T.textMuted,marginTop:5,lineHeight:1.5}}>{hint}</div>}
                       </div>
                     ))}
                   </div>
                 ):(
                   <div style={{display:"flex",flexDirection:"column",gap:13}}>
-                    {[
-                      {label:"Schema Include Pattern",ph:"^(?!pg_).*",hint:"Regex applied to schema names to include"},
-                      {label:"Schema Exclude Pattern",ph:"^(pg_catalog|information_schema)$",hint:"Regex applied to schema names to exclude"},
-                      {label:"Table Include Pattern", ph:"^(orders|users|products)$",hint:"Regex applied to table names to include"},
-                      {label:"Table Exclude Pattern", ph:"^(tmp_|_bak|test_)",hint:"Regex applied to table names to exclude"},
-                    ].map(({label,ph,hint})=>(
+                    {/* The same dimensions as selection mode, so the two can never disagree. */}
+                    {scope.dims.flatMap(d=>[
+                      {label:d.label+" include pattern",dim:d,f:"rxIn",ph:d.rxIn,hint:"Regex applied to "+d.label.toLowerCase()+" to include"},
+                      {label:d.label+" exclude pattern",dim:d,f:"rxEx",ph:d.rxEx,hint:"Regex applied to "+d.label.toLowerCase()+" to exclude"},
+                    ]).map(({label,dim,f,ph,hint})=>(
                       <div key={label}>
                         <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:4}}>{label}</label>
-                        <input placeholder={ph} style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box"}}
+                        <input value={dimVal(dim.k,f)} onChange={e=>setDim(dim.k,f,e.target.value)} placeholder={ph} style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box"}}
                           onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
                         <div style={{fontSize:10.5,color:T.textMuted,marginTop:3}}>{hint}</div>
                       </div>
@@ -32035,12 +32328,18 @@ const AddServiceWizard = ({onClose, onDone}) => {
                     ...(svcDesc&&svcDesc.trim()?[["Description", svcDesc.trim()]]:[]),
                     ["Object Types", objTypesStr],
                   ]},
-                  ...(discovery ? [{title:"Discovered", rows:Object.entries(discovery).map(([k,v])=>[k.charAt(0).toUpperCase()+k.slice(1), v.toLocaleString()])}] : []),
-                  {title:"Ingestion Filters", rows: filterMode==="regex" ? [["Mode","Regex patterns"]] : [
-                    ["Include Schemas", fmtList(inclSchemas)],
-                    ["Exclude Schemas", fmtList(exclSchemas)],
-                    ["Include Tables", fmtList(inclTables)],
-                    ["Exclude Tables", fmtList(exclTables)],
+                  ...(discovery&&Object.keys(discovery).length ? [{title:"Discovered", rows:Object.entries(discovery).map(([k,v])=>[k, v.toLocaleString()])}] : []),
+                  // Review echoes the dimensions the Filters step offered, so the summary
+                  // can never mention a schema for a source that has none.
+                  {title:"Ingestion Filters", rows: scope.dims.length===0 ? [["Scope","Set on Configure"]] : filterMode==="regex" ? [["Mode","Regex patterns"],
+                    ...scope.dims.flatMap(d=>[
+                      [d.label+" include", dimVal(d.k,"rxIn")||"—"],
+                      [d.label+" exclude", dimVal(d.k,"rxEx")||"—"],
+                    ])] : [
+                    ...scope.dims.flatMap(d=>[
+                      ["Include "+d.label, fmtList(dimVal(d.k,"incl"))],
+                      ["Exclude "+d.label, fmtList(dimVal(d.k,"excl"))],
+                    ]),
                   ]},
                   {title:"Ingestion Apps", rows:[["Enabled", apps]]},
                 ];
@@ -32147,10 +32446,12 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
   const [svcSchedObj,     setSvcSchedObj]     = useState(null);   // structured schedule for the shared ScheduleControl
   const [svcRunning,      setSvcRunning]      = useState(false);
   const [svcFilterMode,   setSvcFilterMode]   = useState("selection");
-  const [svcInclSchemas,  setSvcInclSchemas]  = useState([]);
-  const [svcExclSchemas,  setSvcExclSchemas]  = useState([]);
-  const [svcInclTables,   setSvcInclTables]   = useState([]);
-  const [svcExclTables,   setSvcExclTables]   = useState([]);
+  // Filters keyed by this source's own dimensions, resolved from the service name, so an
+  // existing Power BI connection is never asked about schemas either.
+  const scope = scopeFor(svc.name);
+  const [svcDims,         setSvcDims]         = useState({});
+  const dimVal = (k,f) => (svcDims[k]&&svcDims[k][f]) || (f==="incl"||f==="excl"?[]:"");
+  const setDim = (k,f,v) => setSvcDims(p=>({...p,[k]:{...(p[k]||{}),[f]:v}}));
   const SvcTagInput = ({tags, onAdd, onRemove, placeholder, color}) => {
     const [val, setSvcTagVal] = React.useState("");
     const add = () => { const t=val.trim(); if(t&&!tags.includes(t)) onAdd(t); setSvcTagVal(""); };
@@ -32552,34 +32853,34 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
                 ))}
               </div>
             </div>
-            {svcFilterMode==="selection"?(
+            {scope.dims.length===0?(
+              <div style={{padding:"20px 16px",textAlign:"center",background:T.bgSurface,border:`1px dashed ${T.border}`,borderRadius:9,fontSize:11.5,color:T.textSub,lineHeight:1.6}}>
+                Nothing to filter here for this source — scope it in Configuration instead.
+              </div>
+            ):svcFilterMode==="selection"?(
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                {[
-                  {label:"Include Schemas",tags:svcInclSchemas,onAdd:t=>setSvcInclSchemas(p=>[...p,t]),onRemove:t=>setSvcInclSchemas(p=>p.filter(x=>x!==t)),ph:"public, analytics…",color:"#10b981"},
-                  {label:"Exclude Schemas",tags:svcExclSchemas,onAdd:t=>setSvcExclSchemas(p=>[...p,t]),onRemove:t=>setSvcExclSchemas(p=>p.filter(x=>x!==t)),ph:"pg_catalog, sys…",color:"#f87171"},
-                  {label:"Include Tables", tags:svcInclTables, onAdd:t=>setSvcInclTables(p=>[...p,t]), onRemove:t=>setSvcInclTables(p=>p.filter(x=>x!==t)), ph:"orders, users…",color:"#10b981"},
-                  {label:"Exclude Tables", tags:svcExclTables, onAdd:t=>setSvcExclTables(p=>[...p,t]), onRemove:t=>setSvcExclTables(p=>p.filter(x=>x!==t)), ph:"tmp_*, _bak…",color:"#f87171"},
-                ].map(({label,tags,onAdd,onRemove,ph,color})=>(
+                {scope.dims.flatMap(d=>[
+                  {label:"Include "+d.label,dim:d,f:"incl",ph:d.ph,color:"#10b981"},
+                  {label:"Exclude "+d.label,dim:d,f:"excl",ph:d.ph,color:"#f87171"},
+                ]).map(({label,dim,f,ph,color})=>(
                   <div key={label}>
                     <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>
                       <span style={{width:7,height:7,borderRadius:2,background:color,display:"block",flexShrink:0}}/>
                       {label}
                     </label>
-                    <SvcTagInput tags={tags} onAdd={onAdd} onRemove={onRemove} placeholder={ph} color={color}/>
+                    <SvcTagInput tags={dimVal(dim.k,f)} onAdd={t=>setDim(dim.k,f,[...dimVal(dim.k,f),t])} onRemove={t=>setDim(dim.k,f,dimVal(dim.k,f).filter(x=>x!==t))} placeholder={ph} color={color}/>
                   </div>
                 ))}
               </div>
             ):(
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                {[
-                  {label:"Schema Include Pattern",ph:"^(?!pg_).*",hint:"Regex applied to schema names to include"},
-                  {label:"Schema Exclude Pattern",ph:"^(pg_catalog|information_schema)$",hint:"Regex applied to schema names to exclude"},
-                  {label:"Table Include Pattern", ph:"^(orders|users|products)$",hint:"Regex applied to table names to include"},
-                  {label:"Table Exclude Pattern", ph:"^(tmp_|_bak|test_)",hint:"Regex applied to table names to exclude"},
-                ].map(({label,ph,hint})=>(
+                {scope.dims.flatMap(d=>[
+                  {label:d.label+" include pattern",dim:d,f:"rxIn",ph:d.rxIn,hint:"Regex applied to "+d.label.toLowerCase()+" to include"},
+                  {label:d.label+" exclude pattern",dim:d,f:"rxEx",ph:d.rxEx,hint:"Regex applied to "+d.label.toLowerCase()+" to exclude"},
+                ]).map(({label,dim,f,ph,hint})=>(
                   <div key={label}>
                     <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:4}}>{label}</label>
-                    <input placeholder={ph} style={{width:"100%",padding:"8px 11px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:11.5,outline:"none",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box"}}
+                    <input value={dimVal(dim.k,f)} onChange={e=>setDim(dim.k,f,e.target.value)} placeholder={ph} style={{width:"100%",padding:"8px 11px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:11.5,outline:"none",fontFamily:"'Geist Mono',monospace",boxSizing:"border-box"}}
                       onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
                     <div style={{fontSize:10.5,color:T.textMuted,marginTop:3}}>{hint}</div>
                   </div>
@@ -41139,6 +41440,59 @@ const SettingsView = ({onToast})=>{
       stages:["Connect","Extract","Transform","Load","Done"],
       currentStage:null, progress:100,
       config:{projectId:"123456",environment:"production",generateLineage:true},
+    },
+    {
+      id:"s10", name:"powerbi_service", displayName:"Microsoft Power BI",
+      type:"BI", category:"BI / Dashboards", icon:"analytics", color:"#F2C811",
+      status:"connected", health:"healthy",
+      host:"app.powerbi.com", database:"workspace:Finance_Analytics",
+      lastRun:"12 min ago", nextRun:"In 3h 48m", schedule:"0 */4 * * *",
+      assets:{tables:0,views:9,pipelines:0,total:9},
+      runs:[
+        {id:"r1",ts:"Today 09:48",duration:"1m 52s",status:"success",records:9,errors:0,warnings:1,errorMsg:null},
+        {id:"r2",ts:"Today 05:48",duration:"1m 44s",status:"success",records:9,errors:0,warnings:1},
+        {id:"r3",ts:"Today 01:48",duration:"22s",   status:"failed", records:0,errors:1,warnings:0,errorMsg:"403 from the admin API. The tenant setting \u201callow service principals to use read-only Power BI admin APIs\u201d had been turned off by a tenant admin."},
+        {id:"r4",ts:"Yesterday 21:48",duration:"1m 49s",status:"success",records:9,errors:0,warnings:1},
+      ],
+      stages:["Authenticate","List workspaces","Crawl datasets","Crawl reports & dashboards","Resolve lineage","Done"],
+      currentStage:null, progress:100,
+      config:{tenantId:"72f988bf-\u2026-2d7cd011db47",useAdminApis:true,pageSize:100,dbPrefix:"SNOWFLAKE_PROD"},
+      note:"The recurring warning is Pages: they need workspace-level access, and the scanner API alone cannot catalog them.",
+    },
+    {
+      id:"s11", name:"aws_glue_catalog", displayName:"AWS Glue Data Catalog",
+      type:"Metastore", category:"Pipeline / ETL", icon:"refresh", color:"#8C4FFF",
+      status:"connected", health:"healthy",
+      host:"glue.us-east-1.amazonaws.com", database:"GLUE_LAKE",
+      lastRun:"55 min ago", nextRun:"In 5m", schedule:"0 * * * *",
+      assets:{tables:2,views:1,pipelines:0,total:5},
+      runs:[
+        {id:"r1",ts:"Today 09:05",duration:"48s",status:"success",records:5,errors:0,warnings:2,errorMsg:null},
+        {id:"r2",ts:"Today 08:05",duration:"51s",status:"success",records:5,errors:0,warnings:0},
+        {id:"r3",ts:"Today 07:05",duration:"3m 12s",status:"success",records:5,errors:0,warnings:1,errorMsg:null},
+        {id:"r4",ts:"Today 06:05",duration:"12s",status:"failed",records:0,errors:1,warnings:0,errorMsg:"AccessDeniedException on glue:GetTables. The assumed role had glue:GetDatabases only, so databases appeared with no tables inside them."},
+      ],
+      stages:["Assume role","List databases","List tables & columns","Expand nested types","Read job runs","Done"],
+      currentStage:null, progress:100,
+      config:{authMode:"Assume role",awsRegion:"us-east-1",assumeRoleArn:"arn:aws:iam::\u2026:role/SolixGlueReader",nestedDepth:15},
+      note:"The two warnings are schema drift the crawler found on raw_clickstream \u2014 payload.utm.source and payload.utm.campaign appeared mid-day.",
+    },
+    {
+      id:"s12", name:"bigid_discovery", displayName:"BigID",
+      type:"Discovery", category:"Discovery / Classification", icon:"shield", color:"#12B76A",
+      status:"connected", health:"healthy",
+      host:"bigid.jnj.internal", database:"scan:weekly_pii_scan",
+      lastRun:"3h ago", nextRun:"In 4d", schedule:"0 2 * * 0",
+      assets:{tables:0,views:0,pipelines:0,total:0},
+      runs:[
+        {id:"r1",ts:"Today 04:10",duration:"18m 40s",status:"success",records:7,errors:0,warnings:2,errorMsg:null},
+        {id:"r2",ts:"7d ago 04:10",duration:"17m 02s",status:"success",records:5,errors:0,warnings:0},
+        {id:"r3",ts:"14d ago 04:10",duration:"31s",status:"failed",records:0,errors:1,warnings:0,errorMsg:"401 exchanging the user token. The token had passed its 999-day life and needed reissuing in the BigID UI."},
+      ],
+      stages:["Exchange token","Read data sources","Read scan findings","Map classifiers","Raise proposals","Done"],
+      currentStage:null, progress:100,
+      config:{authMode:"User token",minConfidence:70,autoAccept:false,scanFilter:"weekly_pii_scan"},
+      note:"Creates no assets by design \u2014 the 7 records are classification findings. 2 are proposals waiting on a steward; nothing is applied automatically.",
     },
     {
       id:"s6", name:"tableau_cloud", displayName:"Tableau Cloud",
