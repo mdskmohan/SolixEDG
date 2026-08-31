@@ -10836,14 +10836,16 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                         <div style={{flex:1,height:1,background:T.border}}/>
                                       </div>
                                     )}
-                                    <div style={{background:T.bgElevated,borderRadius:9,border:`1.5px solid ${T.border}`}}>
-                                      {/* Header row: Rule N + scope badge */}
+                                    <div style={{background:soloRuleId?"transparent":T.bgElevated,borderRadius:9,border:soloRuleId?"none":`1.5px solid ${T.border}`}}>
+                                      {/* Header row: Rule N + scope badge. This is list chrome — in the solo
+                                          "Edit Rule" drawer there's only one rule, so it's hidden and just the
+                                          Validation / Enforcement toggle remains. */}
                                       <div style={{padding:"6px 11px 0",display:"flex",alignItems:"center",gap:6}}>
-                                        <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Rule {ri+1}</span>
-                                        <span style={{fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:10,background:`${scopeColor}18`,color:scopeColor,letterSpacing:"0.04em"}}>{scopeLabel}</span>
-                                        {!ruleIsObject&&fd.scope==="column"&&<span style={{fontSize:10,color:T.rose,marginLeft:2}}>column required</span>}
-                                        {!ruleIsObject&&fd.scope==="both"&&<span style={{fontSize:10,color:T.textMuted,marginLeft:2}}>column optional</span>}
-                                        {ruleIsObject&&<span style={{fontSize:10,color:T.textMuted,marginLeft:2}}>object-level</span>}
+                                        {!soloRuleId&&<span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Rule {ri+1}</span>}
+                                        {!soloRuleId&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:10,background:`${scopeColor}18`,color:scopeColor,letterSpacing:"0.04em"}}>{scopeLabel}</span>}
+                                        {!soloRuleId&&!ruleIsObject&&fd.scope==="column"&&<span style={{fontSize:10,color:T.rose,marginLeft:2}}>column required</span>}
+                                        {!soloRuleId&&!ruleIsObject&&fd.scope==="both"&&<span style={{fontSize:10,color:T.textMuted,marginLeft:2}}>column optional</span>}
+                                        {!soloRuleId&&ruleIsObject&&<span style={{fontSize:10,color:T.textMuted,marginLeft:2}}>object-level</span>}
                                         {/* ── Validation / Enforcement mode toggle. It drives which fields the
                                             dropdown offers: Enforcement → the three actions; Validation → detection
                                             fields. Switching modes resets the field to a valid one for that mode. ── */}
@@ -10913,7 +10915,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                         <SevBadge ruleId={r.id} sev={sev}/>
                                         {r.pendingUnhold
                                           ? <span style={{fontSize:9.5,fontWeight:700,padding:"3px 8px",borderRadius:10,background:`${T.amber}18`,color:T.amber,letterSpacing:"0.03em",flexShrink:0}}>PENDING UNHOLD</span>
-                                          : <button onClick={()=>removeRule(r.id)} title="Remove rule"
+                                          : !soloRuleId&&<button onClick={()=>removeRule(r.id)} title="Remove rule"
                                               style={{width:24,height:24,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15,lineHeight:1}}
                                               onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
                                               onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>×</button>}
