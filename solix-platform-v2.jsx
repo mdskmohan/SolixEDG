@@ -196,18 +196,18 @@ ASSETS.push(...HIERARCHY_ASSETS);
 //    plus Published/Embedded Data Sources, their Fields & Calculated Fields, Flows and Metrics.
 //    Presented as flat catalog assets so every object type is visible with its own detail + lineage. ──
 const TABLEAU_ASSETS = [
-  {id:6001,name:"Analytics",          type:"Site",             domain:"Platform", owner:"james.oh",  owners:["james.oh"],  steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:0,  usage:"", updated:"20m ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics", tier:1, rows:"—", size:"—", tags:[],                   description:"Tableau site (tenant boundary). Root container for all projects, workbooks and data sources.", slaFreshness:"20m"},
-  {id:6002,name:"Finance",            type:"Project",          domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",   stewards:["alex.wu"],   cert:"Approved",  quality:0,  usage:"", updated:"1h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance", tier:1, rows:"—", size:"—", tags:[],           description:"Top-level Tableau project grouping Finance workbooks and published data sources. Nests recursively.", slaFreshness:"1h"},
-  {id:6003,name:"Revenue_Analytics",  type:"Workbook",         domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:0,  usage:"High", updated:"1h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics", tier:1, rows:"—", size:"—", tags:["KPI"], description:"Published workbook containing the revenue dashboard, its worksheets and an embedded data source. Excluded from lineage traversal (container).", slaFreshness:"1h"},
-  {id:6004,name:"Revenue_Dashboard",  type:"Dashboard",        domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:0, usage:"High", updated:"1h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics / Revenue_Dashboard", tier:1, rows:"—", size:"—", tags:["KPI","Board reporting"], description:"Executive revenue dashboard assembled from the Revenue_by_Region worksheet. Consumer end of Tableau lineage.", slaFreshness:"1h"},
-  {id:6005,name:"Revenue_by_Region",  type:"Worksheet",        domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:0, usage:"High", updated:"1h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics / Revenue_by_Region", tier:2, rows:"—", size:"—", tags:["KPI"], description:"Worksheet (view) plotting revenue by region. The middle hop between data source and dashboard.", slaFreshness:"1h"},
+  {id:6001,name:"Analytics",          type:"Site",             domain:"Platform", owner:"james.oh",  owners:["james.oh"],  steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:0,  usage:"", updated:"20m ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics", tier:1, rows:"—", size:"—", tags:[],                   description:"Tableau site (tenant boundary). Root container for all projects, workbooks and data sources."},
+  {id:6002,name:"Finance",            type:"Project",          domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",   stewards:["alex.wu"],   cert:"Approved",  quality:0,  usage:"", updated:"1h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance", tier:1, rows:"—", size:"—", tags:[],           description:"Top-level Tableau project grouping Finance workbooks and published data sources. Nests recursively."},
+  {id:6003,name:"Revenue_Analytics",  type:"Workbook",         domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:0,  usage:"High", updated:"1h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics", tier:1, rows:"—", size:"—", tags:["KPI"], description:"Published workbook containing the revenue dashboard, its worksheets and an embedded data source. Excluded from lineage traversal (container)."},
+  {id:6004,name:"Revenue_Dashboard",  type:"Dashboard",        domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:0, usage:"High", updated:"1h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics / Revenue_Dashboard", tier:1, rows:"—", size:"—", tags:["KPI","Board reporting"], description:"Executive revenue dashboard assembled from the Revenue_by_Region worksheet. Consumer end of Tableau lineage."},
+  {id:6005,name:"Revenue_by_Region",  type:"Worksheet",        domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:0, usage:"High", updated:"1h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics / Revenue_by_Region", tier:2, rows:"—", size:"—", tags:["KPI"], description:"Worksheet (view) plotting revenue by region. The middle hop between data source and dashboard."},
   {id:6006,name:"Orders_Certified",   type:"Data Source",      domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Approved",  quality:0, usage:"High", updated:"2h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Orders_Certified", tier:1, rows:"—", size:"—", tags:["revenue","KPI"], description:"Published data source (reusable, owned, certified). Pulls from Snowflake ORDERS_FACT via custom SQL — the governed data surface.", slaFreshness:"2h"},
   {id:6007,name:"Revenue_Extract",    type:"Data Source",      domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh",  stewards:["james.oh"],  cert:"Draft",     quality:0, usage:"",  updated:"1h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics / Revenue_Extract", tier:2, rows:"—", size:"420 MB", tags:[], description:"Embedded data source (lives inside the Revenue_Analytics workbook). Same shape as a published source, minus ownership & popularity. Has a materialized extract.", slaFreshness:"1h"},
   // NOTE: Datasource fields & calculated fields are NOT separate catalog rows — like table columns,
   // they live inside their parent's profile (Data Source → Fields tab, see TABLEAU_FIELDS). This keeps
   // fields/columns consistent across DB and BI sources.
-  {id:6010,name:"Orders_Prep_Flow",   type:"Flow",             domain:"Commerce", owner:"james.oh",  owners:["james.oh"],  steward:"maya.chen", stewards:["maya.chen"], cert:"Approved",  quality:0,  usage:"",  updated:"6h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Orders_Prep_Flow", tier:2, rows:"—", size:"—", tags:["etl"], description:"Tableau Prep flow shaping order data before it reaches the data source. No lineage yet; unavailable under JWT bearer auth.", slaFreshness:"6h"},
-  {id:6011,name:"Daily_Revenue",      type:"Metric",           domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",   stewards:["alex.wu"],   cert:"Deprecated",quality:0,  usage:"",  updated:"3w ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Daily_Revenue", tier:3, rows:"—", size:"—", tags:[], description:"Legacy standalone KPI metric. Retired by Tableau in API 3.22+ — crawled only from older servers.", slaFreshness:"—"},
+  {id:6010,name:"Orders_Prep_Flow",   type:"Flow",             domain:"Commerce", owner:"james.oh",  owners:["james.oh"],  steward:"maya.chen", stewards:["maya.chen"], cert:"Approved",  quality:0,  usage:"",  updated:"6h ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Orders_Prep_Flow", tier:2, rows:"—", size:"—", tags:["etl"], description:"Tableau Prep flow shaping order data before it reaches the data source. No lineage yet; unavailable under JWT bearer auth."},
+  {id:6011,name:"Daily_Revenue",      type:"Metric",           domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",   stewards:["alex.wu"],   cert:"Deprecated",quality:0,  usage:"",  updated:"3w ago",  service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Daily_Revenue", tier:3, rows:"—", size:"—", tags:[], description:"Legacy standalone KPI metric. Retired by Tableau in API 3.22+ — crawled only from older servers."},
 ];
 // -- Tableau objects the connector also crawls beyond the originals.
 //    NOTE ON FIELDS: Atlan (TableauDatasourceField / TableauCalculatedField), Collibra
@@ -218,8 +218,8 @@ const TABLEAU_ASSETS = [
 //    Fields tab instead (see TABLEAU_FIELDS), which keeps DB and BI sources consistent.
 //    A Story is a Tableau view type that Collibra ingests; it belongs in the hierarchy. --
 const TABLEAU_EXTRA_ASSETS = [
-  {id:6013,name:"Revenue_Reporting",              type:"Project",          domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",  stewards:["alex.wu"],  cert:"Approved", quality:0, usage:"",     updated:"2h ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Reporting", tier:2, rows:"—", size:"—", tags:[], description:"Nested project inside Finance. Tableau projects nest recursively, and permissions are inherited down the tree unless a child locks them.", slaFreshness:"2h"},
-  {id:6012,name:"Revenue_Story",                  type:"Story",            domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved", quality:0, usage:"Med",  updated:"1h ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics / Revenue_Story", tier:2, rows:"—", size:"—", tags:["Board reporting"], description:"Story sequencing the revenue worksheets into a narrative for the board pack. A view type in its own right, alongside worksheets and dashboards.", slaFreshness:"1h"},
+  {id:6013,name:"Revenue_Reporting",              type:"Project",          domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",  stewards:["alex.wu"],  cert:"Approved", quality:0, usage:"",     updated:"2h ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Reporting", tier:2, rows:"—", size:"—", tags:[], description:"Nested project inside Finance. Tableau projects nest recursively, and permissions are inherited down the tree unless a child locks them."},
+  {id:6012,name:"Revenue_Story",                  type:"Story",            domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved", quality:0, usage:"Med",  updated:"1h ago", service:"tableau", connectionLabel:"Tableau Cloud", db:"Analytics / Finance / Revenue_Analytics / Revenue_Story", tier:2, rows:"—", size:"—", tags:["Board reporting"], description:"Story sequencing the revenue worksheets into a narrative for the board pack. A view type in its own right, alongside worksheets and dashboards."},
 ];
 ASSETS.push(...TABLEAU_ASSETS, ...TABLEAU_EXTRA_ASSETS);
 
@@ -229,15 +229,15 @@ ASSETS.push(...TABLEAU_ASSETS, ...TABLEAU_EXTRA_ASSETS);
 //    columns do. Quality is 0 everywhere because Power BI reports no quality score, and
 //    popularity is set only on reports and dashboards, which are what it counts views for. --
 const POWERBI_ASSETS = [
-  {id:6300,name:"Finance_Insights",   type:"Power BI App",        domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved",  quality:0, usage:"",     updated:"2h ago", service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Insights", tier:1, rows:"—", size:"—", tags:["Board reporting"], description:"Published Power BI app - the read-only package of reports and dashboards that business users actually open. Container only.", slaFreshness:"2h"},
-  {id:6301,name:"Finance_Analytics",  type:"Power BI Workspace",  domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",  stewards:["alex.wu"],  cert:"Approved",  quality:0, usage:"",     updated:"2h ago", service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Analytics", tier:1, rows:"—", size:"—", tags:[], description:"Workspace holding the finance datasets, dataflows, reports and dashboards. The permission boundary in Power BI.", slaFreshness:"2h"},
-  {id:6308,name:"Snowflake_COMMERCE", type:"Power BI Datasource", domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",  stewards:["alex.wu"],  cert:"Approved",  quality:0, usage:"",     updated:"40m ago",service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Analytics / Snowflake_COMMERCE", tier:2, rows:"—", size:"—", tags:[], description:"Gateway connection to SNOWFLAKE_PROD.COMMERCE. The physical hop between the warehouse and everything Power BI builds on top of it.", slaFreshness:"40m"},
+  {id:6300,name:"Finance_Insights",   type:"Power BI App",        domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved",  quality:0, usage:"",     updated:"2h ago", service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Insights", tier:1, rows:"—", size:"—", tags:["Board reporting"], description:"Published Power BI app - the read-only package of reports and dashboards that business users actually open. Container only."},
+  {id:6301,name:"Finance_Analytics",  type:"Power BI Workspace",  domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",  stewards:["alex.wu"],  cert:"Approved",  quality:0, usage:"",     updated:"2h ago", service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Analytics", tier:1, rows:"—", size:"—", tags:[], description:"Workspace holding the finance datasets, dataflows, reports and dashboards. The permission boundary in Power BI."},
+  {id:6308,name:"Snowflake_COMMERCE", type:"Power BI Datasource", domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",  stewards:["alex.wu"],  cert:"Approved",  quality:0, usage:"",     updated:"40m ago",service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Analytics / Snowflake_COMMERCE", tier:2, rows:"—", size:"—", tags:[], description:"Gateway connection to SNOWFLAKE_PROD.COMMERCE. The physical hop between the warehouse and everything Power BI builds on top of it."},
   {id:6307,name:"Orders_Prep",        type:"Power BI Dataflow",   domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",  stewards:["alex.wu"],  cert:"Approved",  quality:0, usage:"",     updated:"1h ago", service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Analytics / Orders_Prep", tier:2, rows:"48.2M", size:"3.4 GB", tags:["etl"], description:"Dataflow shaping order data in Power Query before it reaches the dataset. Refreshes on a schedule, so it is Power BI's equivalent of a transformation step.", slaFreshness:"1h", pbiEndorsement:"Promoted"},
   {id:6306,name:"Revenue_Model",      type:"Power BI Dataset",    domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"alex.wu",  stewards:["alex.wu"],  cert:"Approved",  quality:0, usage:"",     updated:"1h ago", service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Analytics / Revenue_Model", tier:1, rows:"48.2M", size:"5.1 GB", tags:["revenue","KPI"], description:"Semantic dataset every finance report binds to. Holds the DAX measures, which is business logic that exists nowhere but Power BI.", slaFreshness:"1h", pbiEndorsement:"Certified"},
-  {id:6303,name:"Revenue_Detail",     type:"Power BI Report",     domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved",  quality:0, usage:"High", updated:"1h ago", service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Analytics / Revenue_Detail", tier:1, rows:"—", size:"—", tags:["KPI"], description:"Multi-page report bound to the Revenue_Model dataset. The analytical surface finance works in.", slaFreshness:"1h", pbiEndorsement:"Certified"},
-  {id:6304,name:"Regional_Breakdown", type:"Power BI Page",       domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved",  quality:0, usage:"",     updated:"1h ago", service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Analytics / Revenue_Detail / Regional_Breakdown", tier:2, rows:"—", size:"—", tags:[], description:"Report page breaking revenue down by region. Pages are crawled only with workspace-level access, not by the scanner API alone.", slaFreshness:"1h"},
-  {id:6302,name:"Revenue_Overview",   type:"Power BI Dashboard",  domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved",  quality:0, usage:"High", updated:"1h ago", service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Analytics / Revenue_Overview", tier:1, rows:"—", size:"—", tags:["KPI","Board reporting"], description:"Executive dashboard of pinned tiles. Consumer end of the Power BI chain.", slaFreshness:"1h"},
-  {id:6305,name:"Revenue_KPI",        type:"Power BI Tile",       domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved",  quality:0, usage:"",     updated:"1h ago", service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Analytics / Revenue_Overview / Revenue_KPI", tier:2, rows:"—", size:"—", tags:["KPI"], description:"Tile pinned to the executive dashboard, showing Total Revenue from the Revenue_Model dataset.", slaFreshness:"1h"},
+  {id:6303,name:"Revenue_Detail",     type:"Power BI Report",     domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved",  quality:0, usage:"High", updated:"1h ago", service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Analytics / Revenue_Detail", tier:1, rows:"—", size:"—", tags:["KPI"], description:"Multi-page report bound to the Revenue_Model dataset. The analytical surface finance works in.", pbiEndorsement:"Certified"},
+  {id:6304,name:"Regional_Breakdown", type:"Power BI Page",       domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved",  quality:0, usage:"",     updated:"1h ago", service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Analytics / Revenue_Detail / Regional_Breakdown", tier:2, rows:"—", size:"—", tags:[], description:"Report page breaking revenue down by region. Pages are crawled only with workspace-level access, not by the scanner API alone."},
+  {id:6302,name:"Revenue_Overview",   type:"Power BI Dashboard",  domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved",  quality:0, usage:"High", updated:"1h ago", service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Analytics / Revenue_Overview", tier:1, rows:"—", size:"—", tags:["KPI","Board reporting"], description:"Executive dashboard of pinned tiles. Consumer end of the Power BI chain."},
+  {id:6305,name:"Revenue_KPI",        type:"Power BI Tile",       domain:"Finance",  owner:"alex.wu",   owners:["alex.wu"],   steward:"james.oh", stewards:["james.oh"], cert:"Approved",  quality:0, usage:"",     updated:"1h ago", service:"powerbi", connectionLabel:"Power BI Service", db:"Finance_Analytics / Revenue_Overview / Revenue_KPI", tier:2, rows:"—", size:"—", tags:["KPI"], description:"Tile pinned to the executive dashboard, showing Total Revenue from the Revenue_Model dataset."},
 ];
 ASSETS.push(...POWERBI_ASSETS);
 
@@ -251,8 +251,8 @@ ASSETS.push(...POWERBI_ASSETS);
 //    (glueJob / glueCrawler) with its run history on the table's profile. Jobs are
 //    orchestration, not data objects.
 const GLUE_ASSETS = [
-  {id:6400,name:"GLUE_LAKE",          type:"Database", domain:"Platform", owner:"james.oh",  owners:["james.oh"],  steward:"maya.chen", stewards:["maya.chen"], cert:"Approved", quality:0,  usage:"",     updated:"1h ago",  service:"glue", connectionLabel:"AWS Glue Data Catalog", db:"GLUE_LAKE", tier:1, rows:"—", size:"—", tags:[], description:"Glue Data Catalog database over the S3 data lake. A metastore, so it holds table definitions rather than the data itself.", slaFreshness:"1h", path:[], assetLevel:"database"},
-  {id:6401,name:"events",             type:"Schema",   domain:"Product",  owner:"james.oh",  owners:["james.oh"],  steward:"alex.wu",   stewards:["alex.wu"],   cert:"Approved", quality:0,  usage:"",     updated:"1h ago",  service:"glue", connectionLabel:"AWS Glue Data Catalog", db:"GLUE_LAKE / events", tier:2, rows:"—", size:"—", tags:[], description:"Glue schema holding the crawled event tables from the raw S3 prefix.", slaFreshness:"1h", path:["GLUE_LAKE"], parentId:6400, assetLevel:"schema"},
+  {id:6400,name:"GLUE_LAKE",          type:"Database", domain:"Platform", owner:"james.oh",  owners:["james.oh"],  steward:"maya.chen", stewards:["maya.chen"], cert:"Approved", quality:0,  usage:"",     updated:"1h ago",  service:"glue", connectionLabel:"AWS Glue Data Catalog", db:"GLUE_LAKE", tier:1, rows:"—", size:"—", tags:[], description:"Glue Data Catalog database over the S3 data lake. A metastore, so it holds table definitions rather than the data itself.", path:[], assetLevel:"database"},
+  {id:6401,name:"events",             type:"Schema",   domain:"Product",  owner:"james.oh",  owners:["james.oh"],  steward:"alex.wu",   stewards:["alex.wu"],   cert:"Approved", quality:0,  usage:"",     updated:"1h ago",  service:"glue", connectionLabel:"AWS Glue Data Catalog", db:"GLUE_LAKE / events", tier:2, rows:"—", size:"—", tags:[], description:"Glue schema holding the crawled event tables from the raw S3 prefix.", path:["GLUE_LAKE"], parentId:6400, assetLevel:"schema"},
   {id:6402,name:"raw_clickstream",    type:"Table",    domain:"Product",  owner:"james.oh",  owners:["james.oh"],  steward:"alex.wu",   stewards:["alex.wu"],   cert:"Draft",    quality:76, usage:"Med",  updated:"1h ago",  service:"glue", connectionLabel:"AWS Glue Data Catalog", db:"GLUE_LAKE / events / raw_clickstream", tier:3, rows:"1.8B", size:"940 GB", tags:["events","raw"], description:"Raw clickstream events on S3 in Parquet, table definition discovered by a Glue crawler. Nested payload, so its schema is not flat.", slaFreshness:"1h", path:["GLUE_LAKE","events"], parentId:6401, assetLevel:"table", glueCrawler:"clickstream_crawler", s3Location:"s3://jnj-data-lake-prod/raw/clickstream/"},
   {id:6403,name:"sessions_enriched",  type:"Table",    domain:"Product",  owner:"maya.chen", owners:["maya.chen"], steward:"alex.wu",   stewards:["alex.wu"],   cert:"Approved", quality:88, usage:"High", updated:"55m ago", service:"glue", connectionLabel:"AWS Glue Data Catalog", db:"GLUE_LAKE / events / sessions_enriched", tier:2, rows:"412M", size:"180 GB", tags:["events"], description:"Sessionised clickstream, written by a Glue ETL job. The job that builds it is an attribute here, not a separate asset.", slaFreshness:"1h", path:["GLUE_LAKE","events"], parentId:6401, assetLevel:"table", glueJob:"sessionize_clickstream", s3Location:"s3://jnj-data-lake-prod/curated/sessions/"},
   {id:6404,name:"vw_daily_sessions",  type:"View",     domain:"Product",  owner:"maya.chen", owners:["maya.chen"], steward:"alex.wu",   stewards:["alex.wu"],   cert:"Approved", quality:0,  usage:"Med",  updated:"55m ago", service:"glue", connectionLabel:"AWS Glue Data Catalog", db:"GLUE_LAKE / events / vw_daily_sessions", tier:3, rows:"—", size:"—", tags:[], description:"Athena view aggregating enriched sessions by day. Definition lives in the Glue Data Catalog.", slaFreshness:"1h", path:["GLUE_LAKE","events"], parentId:6401, assetLevel:"view"},
@@ -3140,6 +3140,11 @@ const CertBadge = ({cert})=>{
 };
 
 const QScore = ({score})=>{
+  // A quality score is something EDG computes by profiling data it can read. A BI report, a
+  // dbt model and a container have none, and the seeds say so with 0 - so a zero means "not
+  // scored", never "scored zero". Rendering it as a red 0 was the worst of both readings.
+  if(!Number.isFinite(score) || score<=0)
+    return <span style={{fontSize:11,color:T.textMuted}}>&mdash;</span>;
   const c = score>=90?"#16a34a":score>=70?"#d97706":"#dc2626";
   const bg = score>=90?"rgba(22,163,74,.1)":score>=70?"rgba(217,119,6,.1)":"rgba(220,38,38,.1)";
   return (
@@ -17859,7 +17864,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
     {key:"domain",  label:"Domain",  render:v=><span style={{fontSize:11.5,color:T.textSub}}>{v}</span>},
     {key:"owner",   label:"Owner",   render:v=><span style={{fontSize:11.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{v}</span>},
     {key:"cert",    label:"Cert",    render:(v,r)=>["Object","Blob","Folder"].includes(r.type)?<span style={{color:T.textMuted}}>—</span>:<CertBadge cert={v}/>},
-    {key:"quality", label:"Quality", render:(v,r)=>["Object","Blob","Bucket","Container","Folder"].includes(r.type)?<span style={{color:T.textMuted}}>—</span>:<QScore score={v}/>},
+    {key:"quality", label:"Quality", render:v=><QScore score={v}/>},
     {key:"size",    label:"Size",    render:(v,r)=>v&&v!=="—"?<span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{v}</span>:r.rows&&r.rows!=="—"?<span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{r.rows} rows</span>:<span style={{color:T.textMuted}}>—</span>},
     {key:"updated", label:"Updated", render:v=><span style={{fontSize:11,color:T.textMuted}}>{v}</span>},
   ];
@@ -17869,7 +17874,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
   );
 
   // child quality stats
-  const scoredChildren = children.filter(c=>typeof c.quality==="number");
+  const scoredChildren = children.filter(c=>Number.isFinite(c.quality)&&c.quality>0);
   const avgQuality = scoredChildren.length ? Math.round(scoredChildren.reduce((s,c)=>s+c.quality,0)/scoredChildren.length) : null;
   const childTypeCounts = children.reduce((acc,c)=>{ acc[c.type]=(acc[c.type]||0)+1; return acc; },{});
 
@@ -21024,21 +21029,23 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
         {/* DETAILS */}
         <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
           <MetaLabel>Details</MetaLabel>
-          {(isBI
-            ? [
-                ...(data.quality>0?[{l:"Quality",v:<QScore score={data.quality}/>}]:[]),
-                {l:"Last refresh", v:<span style={{fontSize:12,color:T.textSub}}>{data.slaFreshness&&data.slaFreshness!=="—"?data.slaFreshness:"—"}</span>},
-                {l:"Updated",      v:<span style={{fontSize:12,color:T.textMuted}}>{data.updated}</span>},
-              ]
-            : [
-                // Both of these are EDG's own metrics. dbt supplies neither a quality score
-                // nor a freshness SLA for a model, test, metric or exposure, so the row is
-                // dropped rather than shown empty or as a bare zero.
-                ...(data.quality>0?[{l:"Quality",v:<QScore score={data.quality}/>}]:[]),
-                ...(data.slaFreshness?[{l:"Freshness", v:<span style={{fontSize:12,color:T.textSub}}>{data.slaFreshness}</span>}]:[]),
-                {l:"Updated",   v:<span style={{fontSize:12,color:T.textMuted}}>{data.updated}</span>},
-              ]
-          ).map(m=>(
+          {(()=>{
+            // A quality score is EDG's own, from profiling data it can read - so it appears
+            // only where there is one. The time row is trickier: for a BI object it is the
+            // SOURCE's refresh, not an EDG SLA, and only some object types have one.
+            //   Power BI  datasets  GET /datasets/{id}/refreshes
+            //             dataflows GET /groups/{gid}/dataflows/{id}/transactions
+            //   Tableau   data sources  extractLastRefreshTime / extractLastUpdateTime
+            // A Power BI report and a Tableau workbook expose no refresh at all, so the
+            // seeds give them none and the row disappears rather than reading a dash.
+            const fresh = data.slaFreshness && data.slaFreshness!=="—" ? data.slaFreshness : null;
+            const isSourceRefresh = isBI || isPBI;
+            return [
+              ...(data.quality>0?[{l:"Quality",v:<QScore score={data.quality}/>}]:[]),
+              ...(fresh?[{l:isSourceRefresh?"Last refresh":"Freshness", v:<span style={{fontSize:12,color:T.textSub}}>{fresh}</span>}]:[]),
+              {l:"Updated", v:<span style={{fontSize:12,color:T.textMuted}}>{data.updated}</span>},
+            ];
+          })().map(m=>(
             <div key={m.l} style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,fontSize:12}}>
               <span style={{color:T.textMuted}}>{m.l}</span>
               {m.v}
@@ -21457,17 +21464,14 @@ const CatalogView = ({onAsset})=>{
   const [page, setPage] = useState(1);
   useEffect(()=>{ setPage(1); },[q,selConnTypes,selTypes,selDomains,selCerts,selTiers,selConns,selOwners,selTags,selGlossaryTerms,selStatus]);
   const DRILLABLE_TYPES = new Set(["Database","Catalog","Schema","Bucket","Container","Folder"]);
-  const CONN_TYPE_ASSET_TYPES = {
-    snowflake:  ["Database","Schema","Table","View"],
-    databricks: ["Catalog","Schema","Table","View"],
-    oracle:     ["Database","Schema","Table","View"],
-    postgres:   ["Database","Schema","Table","View"],
-    mysql:      ["Database","Table","View"],
-    s3:         ["Bucket","Folder","Object"],
-    azureblob:  ["Container","Blob"],
-    airflow:    ["Pipeline"],
-    tableau:    ["Site","Project","Workbook","Dashboard","Worksheet","Data Source","Flow","Metric"],
-  };
+  // Derived from the catalog rather than hand-listed. The hand-written map had no entry for
+  // Power BI, Glue, dbt, GCS, CDP or ECS, so choosing one of those emptied the Asset Type
+  // facet completely - and a new connector would have silently broken it again.
+  const CONN_TYPE_ASSET_TYPES = ASSETS.reduce((m,a)=>{
+    (m[a.service] = m[a.service] || []);
+    if(!m[a.service].includes(a.type)) m[a.service].push(a.type);
+    return m;
+  },{});
 
   const toggle = (setter, val) => setter(prev => { const next = new Set(prev); next.has(val)?next.delete(val):next.add(val); return next; });
   const sorts = [{v:"relevance",l:"Relevance"},{v:"quality",l:"Quality ↓"},{v:"name",l:"Name A–Z"},{v:"updated",l:"Recently Updated"},{v:"usage",l:"Popularity"}];
@@ -21515,14 +21519,17 @@ const CatalogView = ({onAsset})=>{
 
   const CERT_COLORS = {"Approved":"#16a34a","In Review":"#d97706","Draft":"#6b7280","Rejected":"#e11d48","Deprecated":"#7c3aed"};
   const TIER_META   = {"1":{color:"#ee2424",label:"Critical"},"2":{color:"#d97706",label:"Important"},"3":{color:"#4b4b60",label:"Exploratory"}};
-  const CONN_TYPE_LABELS = {cdp:"Solix CDP",ecs:"Solix ECS",snowflake:"Snowflake",databricks:"Databricks",oracle:"Oracle",postgres:"PostgreSQL",mysql:"MySQL",s3:"Amazon S3",azureblob:"Azure Blob",airflow:"Airflow",tableau:"Tableau"};
+  const CONN_TYPE_LABELS = {cdp:"Solix CDP",ecs:"Solix ECS",snowflake:"Snowflake",databricks:"Databricks",
+    oracle:"Oracle",postgres:"PostgreSQL",mysql:"MySQL",s3:"Amazon S3",azureblob:"Azure Blob",
+    gcs:"Google Cloud Storage",airflow:"Airflow",tableau:"Tableau",powerbi:"Power BI",
+    glue:"AWS Glue",dbt:"dbt",bigid:"BigID"};
   const allConnTypes = [...new Set(ASSETS.map(a=>a.service))];
   const visibleConns = selConnTypes.size===0 ? [...new Set(ASSETS.map(a=>a.connectionLabel))] : [...new Set(ASSETS.filter(a=>selConnTypes.has(a.service)).map(a=>a.connectionLabel))];
   const ALL_ASSET_TYPES = selConnTypes.size===0
     ? [...new Set(ASSETS.map(a=>a.type))]
     : [...new Set([...selConnTypes].flatMap(ct=>CONN_TYPE_ASSET_TYPES[ct]||[]))].filter(t=>ASSETS.some(a=>a.type===t));
 
-  const FacetGroup = ({id,label,icon,items,sel,onToggle,renderItem,headerNote}) => {
+  const FacetGroup = ({id,label,icon,items,sel,onToggle,renderItem,headerNote,emptyNote}) => {
     const open = openGroup[id];
     return (
       <div style={{borderBottom:`1px solid ${T.border}`}}>
@@ -21536,7 +21543,7 @@ const CatalogView = ({onAsset})=>{
         {open&&(
           <div style={{padding:"2px 0 6px"}}>
             {headerNote&&<div style={{padding:"3px 14px 5px",fontSize:10,color:T.textMuted,fontStyle:"italic"}}>{headerNote}</div>}
-            {items.length===0&&<div style={{padding:"4px 14px",fontSize:11,color:T.textMuted}}>No connections available</div>}
+            {items.length===0&&<div style={{padding:"4px 14px",fontSize:11,color:T.textMuted}}>{emptyNote||"Nothing to filter by"}</div>}
             {items.map(item=>{
               const active = sel.has(item.val);
               return (
@@ -21590,7 +21597,7 @@ const CatalogView = ({onAsset})=>{
     )},
     {key:"type",label:"Type",render:v=><TypeBadge type={v}/>},
     {key:"owner",label:"Owner",render:(v,r)=>{const ol=r.owners||[v];return(<div style={{display:"flex",alignItems:"center"}}>{ol.slice(0,3).map((o,i)=>(<div key={i} title={o} style={{width:24,height:24,borderRadius:"50%",background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:T.accent,marginLeft:i>0?-7:0,position:"relative",zIndex:3-i,border:`2px solid ${T.bgSurface}`,boxSizing:"border-box",flexShrink:0}}>{o.split(".").map(s=>s[0].toUpperCase()).join("")}</div>))}{ol.length>3&&<div title={`+${ol.length-3} more`} style={{width:24,height:24,borderRadius:"50%",background:T.bgElevated,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:T.textMuted,marginLeft:-7,border:`2px solid ${T.bgSurface}`,boxSizing:"border-box",flexShrink:0}}>+{ol.length-3}</div>}</div>);}},
-    {key:"quality",label:"Quality",render:(v,r)=>["Object","Blob","Bucket","Container","Folder"].includes(r.type)?<span style={{fontSize:11,color:T.textMuted}}>—</span>:<QScore score={v}/>},
+    {key:"quality",label:"Quality",render:v=><QScore score={v}/>},
     {key:"updated",label:"Updated",render:v=><span style={{fontSize:11,color:T.textMuted}}>{v}</span>},
   ];
 
@@ -21609,7 +21616,7 @@ const CatalogView = ({onAsset})=>{
               items={allConnTypes.map(v=>({val:v,label:CONN_TYPE_LABELS[v]||v}))}
               sel={selConnTypes} onToggle={(v,c)=>c?setSelConnTypes(new Set()):toggle(setSelConnTypes,v)}
               renderItem={item=><div style={{display:"flex",alignItems:"center",gap:6}}><ServiceIcon service={item.val} size={13}/><span style={{fontSize:11.5,color:T.textSub}}>{item.label}</span></div>}/>
-            <FacetGroup id="connection" label="Connection" icon={Ic.branches(11)}
+            <FacetGroup id="connection" label="Connection" icon={Ic.branches(11)} emptyNote="No connections available"
               items={visibleConns.map(v=>({val:v,label:v,svc:ASSETS.find(a=>a.connectionLabel===v)?.service}))}
               sel={selConns} onToggle={(v,c)=>c?setSelConns(new Set()):toggle(setSelConns,v)}
               renderItem={item=><div style={{display:"flex",alignItems:"center",gap:6}}><ServiceIcon service={item.svc} size={13}/><span style={{fontSize:11,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.label}</span></div>}
@@ -21732,7 +21739,7 @@ const CatalogView = ({onAsset})=>{
                           })()}
                         </div>
                         <div style={{display:"flex",alignItems:"center",gap:16,flexShrink:0}}>
-                          <div style={{textAlign:"center",width:40}}><div style={{fontSize:15,fontWeight:700,color:a.quality>=90?T.accent:a.quality>=70?T.amber:T.rose,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{a.quality}</div><div style={{fontSize:9,color:T.textMuted,marginTop:2}}>quality</div></div>
+                          <div style={{textAlign:"center",width:40}}><div style={{fontSize:15,fontWeight:700,color:a.quality>=90?T.accent:a.quality>=70?T.amber:T.rose,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{a.quality>0?a.quality:"\u2014"}</div><div style={{fontSize:9,color:T.textMuted,marginTop:2}}>quality</div></div>
                           <div style={{display:"flex",alignItems:"center"}}>
                             {(a.owners||[a.owner]).slice(0,3).map((o,i)=>(
                               <div key={i} title={o} style={{width:24,height:24,borderRadius:"50%",background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:T.accent,marginLeft:i>0?-7:0,position:"relative",zIndex:3-i,border:`2px solid ${T.bgSurface}`,boxSizing:"border-box",flexShrink:0}}>{o.split(".").map(s=>s[0].toUpperCase()).join("")}</div>
@@ -31299,6 +31306,7 @@ const CONNECTOR_SCOPE = {
       {k:"report",   label:"Reports",   ph:"Revenue_Detail\u2026",           rxIn:".*",           rxEx:"^(Draft|Test).*",      hint:"Dashboards are filtered separately \u2014 a dashboard can pin tiles from several reports."},
     ],
     auth:"Validating the Azure AD service principal",
+    authName:"Service principal",
     transport:"api",
     discover:"Reading the workspace scan result",
     discovery:{"Workspaces":4,"Datasets":11,"Reports":18,"Dashboards":6,"Datasource connections":9},
@@ -31312,6 +31320,7 @@ const CONNECTOR_SCOPE = {
       {k:"table",   label:"Tables",   ph:"raw_clickstream\u2026", rxIn:"^(raw|curated)_.*", rxEx:"^_tmp.*",      hint:"Applied to the table name inside the catalog."},
     ],
     auth:"Assuming the IAM role and calling glue:GetDatabases",
+    authName:"IAM role",
     transport:"api",
     discover:"Listing databases in the Glue Data Catalog",
     discovery:{"Databases":2,"Tables":36,"Columns":412,"Nested columns":58},
@@ -31324,6 +31333,7 @@ const CONNECTOR_SCOPE = {
       {k:"dsource",label:"Data sources", ph:"snowflake-prod\u2026",  rxIn:".*",         rxEx:"^dev-.*",   hint:"BigID's own name for the system it scanned, which EDG matches back to a connection."},
     ],
     auth:"Exchanging the user token for a session token",
+    authName:"User token",
     transport:"api",
     discover:"Reading completed scan results",
     discovery:{"Scans":3,"Data sources":4,"Columns classified":1284},
@@ -31336,6 +31346,7 @@ const CONNECTOR_SCOPE = {
       {k:"workbook",label:"Workbooks", ph:"Revenue_Analytics\u2026", rxIn:".*",         rxEx:"^(Draft|Personal).*", hint:"Excluding a workbook also excludes its worksheets, dashboards and embedded sources."},
     ],
     auth:"Signing in with the personal access token",
+    authName:"Personal access token",
     transport:"api",
     discover:"Querying the Metadata API",
     discovery:{"Sites":1,"Projects":6,"Workbooks":14,"Worksheets":41,"Dashboards":12,"Data sources":19},
@@ -31349,6 +31360,7 @@ const CONNECTOR_SCOPE = {
       {k:"tag",    label:"dbt tags",ph:"finance, pii\u2026",   rxIn:".*",          rxEx:"^deprecated$", hint:"Filter by the tags declared in the dbt project itself."},
     ],
     auth:"Validating the dbt Cloud API token",
+    authName:"API token",
     transport:"api",
     discover:"Reading the manifest of the latest applied run",
     discovery:{"Projects":1,"Sources":4,"Models":12,"Seeds":2,"Tests":34,"Exposures":3},
@@ -31361,6 +31373,7 @@ const CONNECTOR_SCOPE = {
       {k:"table",   label:"Tables",   ph:"orders, customers\u2026", rxIn:".*",             rxEx:"^(TMP_|_BAK)", hint:"Applied to table and view names alike."},
     ],
     auth:"Validating the Snowflake user and role",
+    authName:"User & role",
     transport:"db",
     discover:"Sampling INFORMATION_SCHEMA",
     discovery:{"Databases":3,"Schemas":47,"Tables":1203,"Views":89,"Columns":14820},
@@ -31373,6 +31386,7 @@ const CONNECTOR_SCOPE = {
       {k:"prefix",label:"Prefixes",ph:"raw/, curated/\u2026",     rxIn:"^(raw|curated)/", rxEx:"^_temp/", hint:"A trailing slash matters \u2014 prefixes are string matches, not directories."},
     ],
     auth:"Assuming the IAM role and listing the bucket",
+    authName:"IAM role",
     transport:"api",
     discover:"Listing objects under the configured prefixes",
     discovery:{"Buckets":2,"Prefixes":31,"Objects":18402},
@@ -31384,6 +31398,7 @@ const CONNECTOR_SCOPE = {
       {k:"topic",label:"Topics",ph:"orders.v1\u2026", rxIn:"^(orders|customers)\\..*", rxEx:"^(_|__consumer).*", hint:"Internal topics start with an underscore and are usually excluded."},
     ],
     auth:"Connecting to the bootstrap servers",
+    authName:"SASL",
     transport:"db",
     discover:"Reading topic metadata and the schema registry",
     discovery:{"Topics":24,"Consumer groups":9,"Schemas":24},
@@ -31394,6 +31409,7 @@ const CONNECTOR_SCOPE = {
       {k:"dag",label:"DAGs",ph:"etl_orders_pipeline\u2026", rxIn:".*", rxEx:"^example_.*", hint:"Airflow ships example DAGs; excluding them is usual."},
     ],
     auth:"Validating the Airflow API credentials",
+    authName:"API credentials",
     transport:"api",
     discover:"Reading the DAG list",
     discovery:{"DAGs":17,"Tasks":214},
@@ -31408,6 +31424,7 @@ const DEFAULT_CONNECTOR_SCOPE = {
     {k:"table", label:"Tables", ph:"orders, users\u2026",     rxIn:".*",         rxEx:"^(tmp_|_bak|test_)",               hint:"Regex applied to table and view names."},
   ],
   auth:"Validating the username and password",
+  authName:"Username & password",
   transport:"db",
   discover:"Sampling the metadata structure",
   discovery:{"Databases":3,"Schemas":47,"Tables":1203,"Views":89,"Columns":14820},
@@ -31654,6 +31671,16 @@ const AddServiceWizard = ({onClose, onDone}) => {
   const scope = (connector && CONNECTOR_SCOPE[connector]) || DEFAULT_CONNECTOR_SCOPE;
   const TEST_PHASES = testPhasesFor(scope);
   const DISCOVERY_RESULT = scope.discovery || {};
+
+  // Everything below this point belongs to ONE connector. Switching connector has to clear
+  // it, or the new source inherits the old one's verified banner, its discovery counts, its
+  // credentials, its object types and its filters - all of which describe a different
+  // product entirely.
+  useEffect(()=>{
+    clearTimeout(timerRef.current);
+    setTestState("idle"); setTestPhase(0); setDiscovery(null);
+    setFields({}); setObjTypes([]); setDimFilters({}); setFilterMode("selection");
+  },[connector]);
 
   const catList  = Object.entries(ADD_SERVICE_CONNECTORS);
   const connList = category ? ADD_SERVICE_CONNECTORS[category].connectors : [];
@@ -32044,11 +32071,11 @@ const AddServiceWizard = ({onClose, onDone}) => {
                       <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Credentials</span>
                       <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>All fields encrypted at rest</span>
                     </div>
-                    {/* Auth method. Several connectors authenticate with a token, a
-                        service principal or an assumed role rather than a password, and each
-                        exposes that choice as its own field, so this tab just names the set. */}
+                    {/* The method this connector actually uses. Saying "Password" above a
+                        form that asks for a tenant id and a client secret was the giveaway
+                        that this step had never been made connector-specific. */}
                     <div style={{display:"flex",borderBottom:`1px solid ${T.border}`,marginBottom:18}}>
-                      <button type="button" style={{padding:"8px 16px",background:"transparent",border:"none",borderBottom:`2px solid ${T.accent}`,color:T.text,fontSize:13,fontWeight:600,cursor:"pointer",marginBottom:-1,whiteSpace:"nowrap"}}>Password</button>
+                      <button type="button" style={{padding:"8px 16px",background:"transparent",border:"none",borderBottom:`2px solid ${T.accent}`,color:T.text,fontSize:13,fontWeight:600,cursor:"pointer",marginBottom:-1,whiteSpace:"nowrap"}}>{scope.authName||"Credentials"}</button>
                     </div>
                     {/* What must be true BEFORE these credentials work. Permissions and
                         tenant settings are where connector setups actually fail, and no
@@ -32105,14 +32132,26 @@ const AddServiceWizard = ({onClose, onDone}) => {
                   <div style={{width:3,height:16,borderRadius:2,background:"#10b981",flexShrink:0}}/>
                   <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Object Types to Extract</span>
                 </div>
-                <CatFieldDropdown
-                  label={null}
-                  placeholder="Select object types to extract…"
-                  options={availObjTypes}
-                  selected={objTypes}
-                  onChange={setObjTypes}
-                />
-                {objTypes.length===0&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:10}}>Leave empty to extract all object types from this source.</div>}
+                {/* A source that creates no assets of its own has nothing to pick here.
+                    An empty dropdown under "leave empty to extract all" would say the
+                    opposite of what actually happens. */}
+                {availObjTypes.length===0?(
+                  <div style={{padding:"14px 16px",background:T.bgSurface,border:`1px dashed ${T.border}`,
+                    borderRadius:10,fontSize:12,color:T.textSub,lineHeight:1.65}}>
+                    {scope.note||"This source creates no objects of its own."}
+                  </div>
+                ):(
+                  <>
+                    <CatFieldDropdown
+                      label={null}
+                      placeholder="Select object types to extract…"
+                      options={availObjTypes}
+                      selected={objTypes}
+                      onChange={setObjTypes}
+                    />
+                    {objTypes.length===0&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:10}}>Leave empty to extract all object types from this source.</div>}
+                  </>
+                )}
               </div>
 
               {/* Row 5: Test Connection */}
@@ -32231,11 +32270,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
                   <div style={{margin:"0 0 16px",padding:"10px 13px",background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.accent}`,borderRadius:"0 8px 8px 0",fontSize:11.5,color:T.textSub,lineHeight:1.6}}>{scope.note}</div>
                 )}
 
-                {scope.dims.length===0?(
-                  <div style={{padding:"24px 20px",textAlign:"center",background:T.bgSurface,border:`1px dashed ${T.border}`,borderRadius:10,fontSize:12.5,color:T.textSub,lineHeight:1.65}}>
-                    Nothing to filter here for this connector — scope it on the Configure step instead.
-                  </div>
-                ):filterMode==="selection"?(
+                {filterMode==="selection"?(
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
                     {scope.dims.flatMap(d=>[
                       {label:"Include "+d.label,dim:d,f:"incl",ph:d.ph,color:"#10b981",hint:d.hint},
@@ -32331,7 +32366,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
                   ...(discovery&&Object.keys(discovery).length ? [{title:"Discovered", rows:Object.entries(discovery).map(([k,v])=>[k, v.toLocaleString()])}] : []),
                   // Review echoes the dimensions the Filters step offered, so the summary
                   // can never mention a schema for a source that has none.
-                  {title:"Ingestion Filters", rows: scope.dims.length===0 ? [["Scope","Set on Configure"]] : filterMode==="regex" ? [["Mode","Regex patterns"],
+                  {title:"Ingestion Filters", rows: filterMode==="regex" ? [["Mode","Regex patterns"],
                     ...scope.dims.flatMap(d=>[
                       [d.label+" include", dimVal(d.k,"rxIn")||"—"],
                       [d.label+" exclude", dimVal(d.k,"rxEx")||"—"],
@@ -32853,11 +32888,7 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
                 ))}
               </div>
             </div>
-            {scope.dims.length===0?(
-              <div style={{padding:"20px 16px",textAlign:"center",background:T.bgSurface,border:`1px dashed ${T.border}`,borderRadius:9,fontSize:11.5,color:T.textSub,lineHeight:1.6}}>
-                Nothing to filter here for this source — scope it in Configuration instead.
-              </div>
-            ):svcFilterMode==="selection"?(
+            {svcFilterMode==="selection"?(
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                 {scope.dims.flatMap(d=>[
                   {label:"Include "+d.label,dim:d,f:"incl",ph:d.ph,color:"#10b981"},
