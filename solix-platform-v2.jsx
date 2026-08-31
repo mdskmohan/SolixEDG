@@ -701,6 +701,10 @@ const INITIAL_ASSIGNMENTS = {
 
 // Same-name mapping only: a source tag maps to the EDG tag of the SAME name. A source tag with
 // no same-named EDG tag stays 'unmapped' until sync auto-creates a new EDG tag of that name.
+// The connections EDG actually holds, for any field that has to point at one. Derived from
+// the catalog rather than listed, so a new connection appears without anyone editing this.
+const EDG_CONNECTIONS = [...new Set(ASSETS.map(a=>a.connectionLabel).filter(Boolean))].sort();
+
 // Connector ids are rendered in several places (tag sources, catalog facets, sync rows).
 // A raw id is never the right thing to show a steward.
 const CONN_DISPLAY_NAME = {
@@ -8580,17 +8584,13 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                           const enfStatus = r.enforce ? ((enfApprovalFor(p.id,r.id)||{}).status||"pending") : null;
                           const inactive = !!enfStatus && enfStatus!=="approved";
                           const inactiveColor = enfStatus==="rejected"?T.rose:T.amber;
-                          // ── One clean status per rule. Enforcement rules carry an approval lifecycle
-                          //    (pending → active / rejected); validation rules simply run. ──
-                          const status = !r.enforce
-                            ? {label:"Monitoring", color:T.textSub, dot:T.green}
-                            : r.pendingUnhold
-                              ? {label:"Releasing hold — pending approval", color:T.amber, dot:T.amber}
-                              : enfStatus==="approved"
-                                ? {label:(r.field==="legal_hold"?"Hold active":"Enforced"), color:T.green, dot:T.green}
-                                : enfStatus==="rejected"
-                                  ? {label:"Rejected by owner", color:T.rose, dot:T.rose}
-                                  : {label:"Pending owner approval", color:T.amber, dot:T.amber};
+                          // ── Status. Validation rules just run — nothing shown. Enforcement rules carry
+                          //    an approval lifecycle, kept to three simple states. ──
+                          const status = !r.enforce ? null
+                            : r.pendingUnhold ? {label:"Approval Pending", color:T.amber}
+                            : enfStatus==="approved" ? {label:"Approved", color:T.green}
+                            : enfStatus==="rejected" ? {label:"Rejected", color:T.rose}
+                            : {label:"Approval Pending", color:T.amber};
                           // Concise one-line descriptor: what the rule does, and where. No chip clutter.
                           // Guarded so seeded rules that carry only a name (no field) never read "undefined".
                           const typeLbl = FIELD_LBL[r.field]||r.field||"";
@@ -8604,7 +8604,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                           return (
                             <div key={r.id||ri} style={{padding:"12px 14px",border:`1px ${inactive?"dashed":"solid"} ${inactive?inactiveColor+"88":T.border}`,borderRadius:10,background:T.bgSurface}}>
                               <div style={{display:"flex",alignItems:"center",gap:9}}>
-                                <span style={{width:7,height:7,borderRadius:"50%",background:status.dot,flexShrink:0}}/>
+                                {status&&<span style={{width:7,height:7,borderRadius:"50%",background:status.color,flexShrink:0}}/>}
                                 <span style={{fontSize:13,fontWeight:600,color:T.text,flex:1,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fieldLabel}</span>
                                 <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:5,background:sevBg,color:sevClr,flexShrink:0}}>{r.severity||"Medium"}</span>
                                 <button onClick={()=>openEditRule(r)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"3px 5px",lineHeight:1,flexShrink:0,borderRadius:5,fontSize:11}} onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}} title="Edit rule">
@@ -8622,13 +8622,15 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                               </div>
                               {/* Subtle one-line summary — the gist, without the chip clutter. */}
                               {showSummary&&(
-                                <div style={{fontSize:11,color:T.textMuted,marginTop:4,marginLeft:16,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{summary}</div>
+                                <div style={{fontSize:11,color:T.textMuted,marginTop:4,marginLeft:status?16:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{summary}</div>
                               )}
-                              {/* Status pill — always visible for enforcement; the one thing the reader must see. */}
-                              <div style={{display:"inline-flex",alignItems:"center",gap:5,marginTop:8,marginLeft:16,padding:"3px 9px",borderRadius:99,background:`${status.color}14`,border:`1px solid ${status.color}30`}}>
-                                <span style={{width:5,height:5,borderRadius:"50%",background:status.dot,flexShrink:0}}/>
-                                <span style={{fontSize:10.5,fontWeight:700,color:status.color,letterSpacing:"0.02em"}}>{status.label}</span>
-                              </div>
+                              {/* Status pill — enforcement only: Approval Pending / Approved / Rejected. */}
+                              {status&&(
+                                <div style={{display:"inline-flex",alignItems:"center",gap:5,marginTop:8,marginLeft:16,padding:"3px 9px",borderRadius:99,background:`${status.color}14`,border:`1px solid ${status.color}30`}}>
+                                  <span style={{width:5,height:5,borderRadius:"50%",background:status.color,flexShrink:0}}/>
+                                  <span style={{fontSize:10.5,fontWeight:700,color:status.color,letterSpacing:"0.02em"}}>{status.label}</span>
+                                </div>
+                              )}
                             </div>
                           );
                         } else {
@@ -31423,7 +31425,7 @@ const CONNECTOR_SCOPE = {
   },
   bigid:{
     objectTypes:[],
-    note:"BigID creates no assets. It classifies columns of assets EDG already holds, so there is nothing here to select \u2014 scope it by scan instead.",
+    note:"BigID creates no assets. It classifies columns of assets EDG already holds, so there is nothing here to select \u2014 scope it by data source under Scope & options.",
     // No filters at all. BigID is scoped by choosing which of its data sources to read
     // and mapping each to an EDG connection, which is done on the Configure step - there is
     // nothing here to include or exclude.
@@ -31667,7 +31669,7 @@ const CONNECTOR_PREREQS = {
     "Use an assume-role ARN for cross-account catalogs rather than long-lived keys.",
     "If Lake Formation governs the catalog, grant the principal DESCRIBE on the databases and tables as well \u2014 Glue permissions alone are not enough.",
     "A Glue crawler must have run at least once — row counts come from table parameters, which only a crawler populates.",
-    "Check the permissions before you trust an empty result. When a Glue permission is missing or scoped too narrowly, the AWS APIs return empty lists rather than an error, so a crawl \"succeeds\" with 0 tables.",
+    "Check the permissions before you trust an empty result. When a Glue permission is missing or scoped too narrowly, the AWS APIs return empty lists rather than an error, so a crawl “succeeds” with 0 tables.",
   ],
   bigid:[
     "A BigID user token created in the BigID UI (valid up to 999 days). EDG exchanges it for a short-lived session token on every run.",
@@ -31694,43 +31696,45 @@ const CONNECTOR_FIELDS = {
   kafka:      [{k:"bootstrap",l:"Bootstrap Servers",ph:"kafka.company.com:9092",type:"text"},{k:"schema_registry",l:"Schema Registry URL",ph:"http://schema-registry:8081",type:"text"},{k:"security",l:"Security Protocol",ph:"PLAINTEXT",type:"select",opts:["PLAINTEXT","SSL","SASL_PLAINTEXT","SASL_SSL"]}],
   dbt:        [{k:"deployment",l:"Deployment",ph:"dbt Cloud",type:"select",opts:["dbt Cloud (Discovery API)","dbt Core (manifest + run_results artifacts)"]},{k:"project_id",l:"Project ID",ph:"123456",type:"text"},{k:"account",l:"Account",ph:"company",type:"text"},{k:"api_key",l:"API Key",ph:"dbt_••••••••",type:"password"},{k:"environment",l:"Environment",ph:"production",type:"select",opts:["production","staging","development"]}],
   powerbi:    [
-    {k:"extraction",   l:"Extraction method",    type:"select", opts:["Direct \u2014 EDG connects to the source","Agent \u2014 a self-deployed runtime extracts inside your network"], req:true, help:"Agent is for a source that must stay behind your firewall. It changes nothing about what is collected."},
-    {k:"tenantId",     l:"Azure tenant ID",      ph:"72f988bf-86f1-41af-91ab-2d7cd011db47", type:"text",     req:true, help:"Directory (tenant) ID from the app registration Overview page."},
-    {k:"clientId",     l:"Client ID",            ph:"a1b2c3d4-...",                          type:"text",     req:true, help:"Application (client) ID of the service principal."},
-    {k:"clientSecret", l:"Client secret",        ph:"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", type:"password", req:true, help:"From Certificates & secrets, the secret VALUE and not the secret ID \u2014 sending the id is the single most common setup failure. Azure shows the value only at creation."},
-    {k:"hostPort",     l:"Power BI URL",         ph:"https://app.powerbi.com",               type:"text",     req:true, help:"Change only for a sovereign or GCC cloud."},
-    {k:"scope",        l:"Scope",                ph:"https://analysis.windows.net/powerbi/api/.default", type:"text", req:true, help:"Leave as-is unless Microsoft changes the resource URI."},
-    {k:"authorityUri", l:"Authority URI",        ph:"https://login.microsoftonline.com/",    type:"text",              help:"Token authority. Defaults to global Azure AD."},
-    {k:"useAdminApis", l:"Use admin APIs",       type:"toggle", val:true,                              help:"On: every workspace in the tenant. Off: only workspaces the service principal is a member of."},
-    {k:"scannerOnly",  l:"Scanner APIs only",    type:"toggle", val:false,                             help:"Restricts EDG to the scanner API. It still catalogs workspaces, datasets, reports and dashboards, but there is no Pages catalog and no column or measure lineage into pages."},
-    {k:"incremental",  l:"Incremental extraction", type:"toggle", val:true,                            help:"Crawl only what changed since the last run. Leave on unless you are re-baselining the tenant."},
-    {k:"pageSize",     l:"Records per page",     ph:"100",                                    type:"text",              help:"Max 100. Lower it only if the tenant rate-limits."},
-    {k:"sourceConns",  l:"Source connections",   ph:"SNOWFLAKE_PROD, GLUE_LAKE",              type:"text",              help:"Which warehouse connections this tenant's datasets read from. Without it a dataset cannot be resolved back to the table behind it, and lineage stops at the dataset."},
-    {k:"dsnMapping",   l:"ODBC DSN mapping",     ph:"PROD_DSN=SNOWFLAKE_PROD",                type:"text",              help:"Only for datasets that connect through an ODBC DSN. Maps each DSN to the database name it points at, one pair per line."},
+    {k:"tenantId", grp:"auth",     l:"Azure tenant ID",      ph:"72f988bf-86f1-41af-91ab-2d7cd011db47", type:"text",     req:true, help:"Directory (tenant) ID from the app registration Overview page."},
+    {k:"clientId", grp:"auth",     l:"Client ID",            ph:"a1b2c3d4-...",                          type:"text",     req:true, help:"Application (client) ID of the service principal."},
+    {k:"clientSecret", grp:"auth", l:"Client secret",        ph:"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", type:"password", req:true, help:"From Certificates & secrets, the secret VALUE and not the secret ID \u2014 sending the id is the single most common setup failure. Azure shows the value only at creation."},
+    {k:"hostPort", grp:"conn",     l:"Power BI URL",         ph:"https://app.powerbi.com",               type:"text",     req:true, help:"Change only for a sovereign or GCC cloud."},
+    {k:"scope", grp:"auth",        l:"Scope",                ph:"https://analysis.windows.net/powerbi/api/.default", type:"text", req:true, help:"Leave as-is unless Microsoft changes the resource URI."},
+    {k:"authorityUri", grp:"auth", l:"Authority URI",        ph:"https://login.microsoftonline.com/",    type:"text",              help:"Token authority. Defaults to global Azure AD."},
+    // One decision, not two toggles that can be set to disagree.
+    {k:"accessMode",   l:"Workspace access",     type:"select", grp:"scope", req:true,
+      opts:["Tenant-wide \u2014 every workspace","Member workspaces only","Scanner API only"],
+      help:"Tenant-wide needs the admin tenant settings above. Member-only sees just the workspaces the service principal joined. Scanner API only needs the least permission, but gives no Pages and no lineage into a page."},
+    {k:"incremental",  l:"Incremental sync",     type:"toggle", val:true, grp:"scope",
+      help:"Sync only what changed since the last run. Turn it off to re-baseline the tenant on the next run."},
+    {k:"pageSize", grp:"scope",     l:"Records per page",     ph:"100",                                    type:"text",              help:"Max 100. Lower it only if the tenant rate-limits."},
+    {k:"sourceConns",  l:"Reads from",           type:"connrefs", grp:"scope",
+      help:"The EDG connections these datasets read from. Without it a dataset cannot be resolved back to the table behind it, and lineage stops at the dataset."},
   ],
   glue:       [
-    {k:"extraction",   l:"Extraction method",    type:"select", opts:["Direct \u2014 EDG connects to the source","Agent \u2014 a self-deployed runtime extracts inside your network"], req:true, help:"Agent is for a source that must stay behind your firewall. It changes nothing about what is collected."},
-    {k:"authMode",     l:"Authentication",       type:"select", opts:["IAM role (recommended)","IAM user access key"], req:true, help:"A role avoids storing long-lived keys."},
-    {k:"awsRegion",    l:"AWS region",           ph:"us-east-1",                              type:"text",     req:true, help:"Region the Glue Data Catalog lives in."},
-    {k:"assumeRoleArn",l:"Assume role ARN",      ph:"arn:aws:iam::123456789012:role/SolixGlueReader", type:"text",      help:"IAM role mode. Required for a cross-account catalog."},
-    {k:"externalId",   l:"External ID",          ph:"solix-edg-jnj",                          type:"text",              help:"IAM role mode. Put it in the role's trust policy so only EDG can assume it \u2014 without one, anyone who learns the ARN can try."},
-    {k:"accessKeyId",  l:"Access key ID",        ph:"AKIAIOSFODNN7EXAMPLE",                    type:"text",              help:"Access-key mode only."},
-    {k:"secretKey",    l:"Secret access key",    ph:"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", type:"password",          help:"Access-key mode only."},
-    {k:"sessionToken", l:"Session token",        ph:"optional",                               type:"password",          help:"Only for temporary STS credentials."},
-    {k:"catalogId",    l:"Catalog ID",           ph:"123456789012",                           type:"text",              help:"Defaults to the account you connect as. Set it for a shared catalog."},
-    {k:"endpointUrl",  l:"Endpoint URL",         ph:"optional",                               type:"text",              help:"For VPC endpoints or a non-standard partition."},
-    {k:"nestedDepth",  l:"Nested column depth",  ph:"15",                                     type:"text",              help:"How far to expand STRUCT and ARRAY types. 15 is the practical ceiling."},
+    {k:"authMode", grp:"auth",     l:"Credential type",      type:"select", opts:["IAM role (recommended)","IAM user access key"], req:true, help:"A role avoids storing long-lived keys."},
+    {k:"awsRegion", grp:"conn",    l:"AWS region",           ph:"us-east-1",                              type:"text",     req:true, help:"Region the Glue Data Catalog lives in."},
+    {k:"assumeRoleArn", grp:"auth",l:"Assume role ARN",      ph:"arn:aws:iam::123456789012:role/SolixGlueReader", type:"text",      help:"IAM role mode. Required for a cross-account catalog."},
+    {k:"externalId", grp:"auth",   l:"External ID",          ph:"solix-edg-jnj",                          type:"text",              help:"IAM role mode. Put it in the role's trust policy so only EDG can assume it \u2014 without one, anyone who learns the ARN can try."},
+    {k:"accessKeyId", grp:"auth",  l:"Access key ID",        ph:"AKIAIOSFODNN7EXAMPLE",                    type:"text",              help:"Access-key mode only."},
+    {k:"secretKey", grp:"auth",    l:"Secret access key",    ph:"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", type:"password",          help:"Access-key mode only."},
+    {k:"sessionToken", grp:"auth", l:"Session token",        ph:"optional",                               type:"password",          help:"Only for temporary STS credentials."},
+    {k:"catalogId", grp:"conn",    l:"Catalog ID",           ph:"123456789012",                           type:"text",              help:"Defaults to the account you connect as. Set it for a shared catalog."},
+    {k:"endpointUrl", grp:"conn",  l:"Endpoint URL",         ph:"optional",                               type:"text",              help:"For VPC endpoints or a non-standard partition."},
+    {k:"nestedDepth", grp:"scope",  l:"Nested column depth",  ph:"15",                                     type:"text",              help:"How far to expand STRUCT and ARRAY types. 15 is the practical ceiling."},
   ],
   bigid:      [
-    {k:"extraction",   l:"Extraction method",    type:"select", opts:["Direct \u2014 EDG connects to the source","Agent \u2014 a self-deployed runtime extracts inside your network"], req:true, help:"Agent is for a source that must stay behind your firewall. It changes nothing about what is collected."},
-    {k:"host",         l:"Host FQDN",            ph:"bigid.jnj.internal",                     type:"text",     req:true, help:"Domain name of the BigID instance. EDG adds the scheme and /api/v1 itself."},
-    {k:"userToken",    l:"Personal access token",ph:"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", type:"password", req:true, help:"The only authentication BigID exposes for this. Created in the BigID UI, valid up to 999 days, and exchanged for a short-lived session token on every run."},
-    {k:"sslCert",      l:"SSL certificate",      ph:"-----BEGIN CERTIFICATE-----",             type:"textarea",          help:"Only for a self-signed certificate. Paste the PEM value."},
-    {k:"datasources",  l:"BigID data sources",   ph:"snowflake-prod, postgres-crm",           type:"text",     req:true, help:"Which of BigID's data sources to read, by their exact BigID names. Each one is mapped to an EDG connection below."},
-    {k:"connMapping",  l:"Map to connections",   ph:"snowflake-prod=Snowflake DWH",           type:"text",     req:true, help:"One pair per line. This is what makes a finding land on the right asset \u2014 BigID names its own sources, and EDG has to know which connection each one is."},
-    {k:"minConfidence",l:"Minimum confidence",   ph:"70",                                     type:"text",              help:"Findings below this are ignored. The rejected National ID match in the demo scored 41."},
-    {k:"autoAccept",   l:"Auto-accept findings", type:"toggle", val:false,                              help:"Off by default, and worth keeping off: a finding should be a proposal a steward accepts."},
-    {k:"scanFilter",   l:"Scan filter",          ph:"weekly_pii_scan",                        type:"text",              help:"Optional. Restrict to named scans instead of every scan in the tenant."},
+    {k:"host", grp:"conn",         l:"Host FQDN",            ph:"bigid.jnj.internal",                     type:"text",     req:true, help:"Domain name of the BigID instance. EDG adds the scheme and /api/v1 itself."},
+    {k:"userToken", grp:"auth",    l:"Personal access token",ph:"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", type:"password", req:true, help:"The only authentication BigID exposes for this. Created in the BigID UI, valid up to 999 days, and exchanged for a short-lived session token on every run."},
+    {k:"sslCert", grp:"conn",      l:"SSL certificate",      ph:"-----BEGIN CERTIFICATE-----",             type:"textarea",          help:"Only for a self-signed certificate. Paste the PEM value."},
+    {k:"datasources",  l:"BigID data sources",   ph:"snowflake-prod, postgres-crm", type:"text", grp:"scope",
+      help:"Which of BigID's data sources to read, by their exact BigID names. Leave blank to read every one the token can see."},
+    {k:"connMapping",  l:"Findings land on",     type:"connrefs", req:true, grp:"scope",
+      help:"The EDG connections these scans cover. EDG matches each BigID data source to one of them by name, and raises anything it cannot match for a steward rather than guessing."},
+    {k:"minConfidence", grp:"scope",l:"Minimum confidence",   ph:"70",                                     type:"text",              help:"Findings below this are ignored. The rejected National ID match in the demo scored 41."},
+    {k:"autoAccept", grp:"scope",   l:"Auto-accept findings", type:"toggle", val:false,                              help:"Off by default, and worth keeping off: a finding should be a proposal a steward accepts."},
+    {k:"scanFilter", grp:"scope",   l:"Scan filter",          ph:"weekly_pii_scan",                        type:"text",              help:"Optional. Restrict to named scans instead of every scan in the tenant."},
   ],
   tableau:    [{k:"server",l:"Server URL",ph:"https://company.tableau.com",type:"text"},{k:"site",l:"Site Name",ph:"company",type:"text"},{k:"token_name",l:"Personal Access Token Name",ph:"solix-ingest",type:"text"},{k:"token",l:"Personal Access Token",ph:"••••••••",type:"password"}],
   looker:     [{k:"host",l:"Looker URL",ph:"https://company.looker.com",type:"text"},{k:"client_id",l:"Client ID",ph:"abc123",type:"text"},{k:"client_secret",l:"Client Secret",ph:"••••••••",type:"password"}],
@@ -32220,11 +32224,12 @@ const AddServiceWizard = ({onClose, onDone}) => {
                       <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Credentials</span>
                       <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>All fields encrypted at rest</span>
                     </div>
-                    {/* The method this connector actually uses. Saying "Password" above a
-                        form that asks for a tenant id and a client secret was the giveaway
-                        that this step had never been made connector-specific. */}
-                    <div style={{display:"flex",borderBottom:`1px solid ${T.border}`,marginBottom:18}}>
-                      <button type="button" style={{padding:"8px 16px",background:"transparent",border:"none",borderBottom:`2px solid ${T.accent}`,color:T.text,fontSize:13,fontWeight:600,cursor:"pointer",marginBottom:-1,whiteSpace:"nowrap"}}>{scope.authName||"Credentials"}</button>
+                    {/* The method this connector uses. This was a single tab with an accent
+                        underline, which looks clickable with nothing to click. It is a
+                        statement, so it reads as one. */}
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
+                      <span style={{fontSize:11.5,color:T.textMuted}}>Authenticates with</span>
+                      <span style={{fontSize:12,fontWeight:600,color:T.text,padding:"3px 10px",borderRadius:99,background:T.bgSurface,border:`1px solid ${T.border}`}}>{scope.authName||"Credentials"}</span>
                     </div>
                     {/* What must be true BEFORE these credentials work. Permissions and
                         tenant settings are where connector setups actually fail, and no
@@ -32242,9 +32247,21 @@ const AddServiceWizard = ({onClose, onDone}) => {
                         </ul>
                       </div>
                     )}
+                    {/* Where is it, how do I get in, how much of it do I want. A connector
+                        with no groups declared falls into one unnamed block and renders as
+                        it always did. */}
+                    {[{g:"conn",l:"Connection"},{g:"auth",l:"Authentication"},{g:"scope",l:"Scope & options"},{g:undefined,l:null}]
+                      .map(({g,l})=>{
+                        const inGroup = activeFields.filter(f=>(f.grp||undefined)===g);
+                        if(inGroup.length===0) return null;
+                        return (
+                    <div key={l||"ungrouped"} style={{marginBottom:16}}>
+                      {l&&(
+                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10,paddingBottom:6,borderBottom:`1px solid ${T.border}`}}>{l}</div>
+                      )}
                     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:13}}>
-                      {activeFields.map(f=>(
-                        <div key={f.k}>
+                      {inGroup.map(f=>(
+                        <div key={f.k} style={f.type==="connrefs"||f.type==="textarea"?{gridColumn:"1 / -1"}:undefined}>
                           <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>
                             {f.l}{f.req&&<span style={{color:"#ee2424",marginLeft:3}}>*</span>}
                           </label>
@@ -32261,6 +32278,17 @@ const AddServiceWizard = ({onClose, onDone}) => {
                                 style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
                                 {(f.opts||[]).map(o=><option key={o} value={o}>{o}</option>)}
                               </select>
+                            : f.type==="connrefs"
+                            // EDG knows its own connections. Asking someone to retype
+                            // "SNOWFLAKE_PROD" as free text invites a typo that silently
+                            // breaks the very lineage this field exists to enable.
+                            ? <CatFieldDropdown
+                                label={null}
+                                placeholder="Select EDG connections…"
+                                options={EDG_CONNECTIONS}
+                                selected={fields[f.k]||[]}
+                                onChange={v=>setFields(p=>({...p,[f.k]:v}))}
+                              />
                             : f.type==="textarea"
                             // A PEM certificate, a private key and a service-account JSON are
                             // all multi-line. This fell through to <input type="textarea">,
@@ -32278,6 +32306,9 @@ const AddServiceWizard = ({onClose, onDone}) => {
                         </div>
                       ))}
                     </div>
+                    </div>
+                        );
+                      })}
                   </div>
                 );
               })()}
