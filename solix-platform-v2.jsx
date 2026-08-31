@@ -7370,6 +7370,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
         const valStr=r.value?` ${r.value}`:"";
         name = `${fl} ${r.operator}${valStr}${tblStr}${colStr}`;
       }
+      // A user-given rule name always wins; the derived name is only the fallback.
+      if(r.name && r.name.trim()) name = r.name.trim();
       return {id:`r${i+1}-${Date.now()}`,type:"preset",field:r.field,operator:r.operator,value:r.value||"",table:r.table||"",column:r.column||"",severity:r.severity||"Medium",name,enforce:!!r.enforce,enf:r.enf||null,
         critType:r.critType||null, dateCol:r.dateCol||"", critText:r.critText||"",
         holdCriteria:r.holdCriteria||[], maskColumns:r.maskColumns||[],
@@ -7563,9 +7565,10 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
     const stewardArr = Array.isArray(pol.stewards)?pol.stewards:(pol.steward?[pol.steward]:[]);
     setNewPol({...pol, scope: normalizedScope, owner: ownerArr, stewards: stewardArr});
     // Convert existing rules back to wizard-compatible format
-    const presetBack = (pol.rules||[]).filter(r=>r.type==="preset"||(!r.type&&!r.sql)).map(r=>({id:r.id||`wr-${Date.now()}`,field:r.field||"certification",operator:r.operator||"is",value:r.value||"",table:r.table||"",column:r.column||"",severity:r.severity||"Medium",enforce:!!r.enforce,enf:r.enf||null,
+    const presetBack = (pol.rules||[]).filter(r=>r.type==="preset"||(!r.type&&!r.sql)).map(r=>({id:r.id||`wr-${Date.now()}`,name:r.name||"",field:r.field||"certification",operator:r.operator||"is",value:r.value||"",table:r.table||"",column:r.column||"",severity:r.severity||"Medium",enforce:!!r.enforce,enf:r.enf||null,
       critType:r.critType||null, dateCol:r.dateCol||"", critText:r.critText||"",
       holdCriteria:r.holdCriteria||[], maskColumns:r.maskColumns||[],
+      targetTags:r.targetTags||[], applyTo:r.applyTo||"asset", targetDomains:r.targetDomains||[], targetObjTypes:r.targetObjTypes||[],
       objPattern:r.objPattern||"", objDateBasis:r.objDateBasis||"", objDateOp:r.objDateOp||"", objDateVal:r.objDateVal||"", objDateVal2:r.objDateVal2||"",
       maskPatterns:r.maskPatterns||[], maskFileTypes:r.maskFileTypes||[], maskMethod:r.maskMethod||"", maskOutput:r.maskOutput||"", maskDest:r.maskDest||"",
       releasedKeys:r.releasedKeys||[],
@@ -8569,7 +8572,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                         const sevBg  = SEV_BG[r.severity]||T.bgElevated;
                         const sevClr = SEV_COLOR[r.severity]||T.textMuted;
                         if (!isSQL) {
-                          const fieldLabel = FIELD_LBL[r.field]||r.field||r.name||"—";
+                          // The rule's name leads (user-given or auto-derived); the field label is the fallback.
+                          const fieldLabel = r.name||FIELD_LBL[r.field]||r.field||"—";
                           // A rule with an enforcement action doesn't go live until the target table's
                           // owner approves it — show it visibly dimmed/inactive until then, not blended
                           // in with rules that are actually running.
@@ -10754,38 +10758,25 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                   ? matchedAssets.flatMap(a=>classifiedColumns(a.name,r.targetTags).map(c=>({asset:a.name,col:c,owner:a.owner})))
                                   : [];
                                 const matchOwners = [...new Set(matchedAssets.map(a=>a.owner))];
-                                // Label for the optional classification field, per action.
-                                const tagFieldLabel = isMaskRule ? "Mask columns classified — any of"
-                                  : fd.action?.verb==="Legal hold" ? "Hold objects classified — any of"
-                                  : "Retain objects classified — any of";
+                                const fieldLabelSt = {display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
                                 const tableColBlock = (showApprover)=>(
-                                  <div style={{borderTop:`1px solid ${T.border}`,padding:"10px 11px 11px",display:"flex",flexDirection:"column",gap:8,background:`${T.bgBase}88`}}>
-                                    {/* Target — a specific asset. Optional for the three enforcement actions
-                                        (a classification below can stand in); required for detection rules. */}
-                                    <div style={{display:"flex",alignItems:"center",gap:8}}>
-                                      <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0,minWidth:60}}>
-                                        <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/><line x1="1" y1="5" x2="13" y2="5" stroke="currentColor" strokeWidth="1"/><line x1="5" y1="5" x2="5" y2="13" stroke="currentColor" strokeWidth="1"/></svg>
-                                        <span style={{fontSize:11,fontWeight:600,color:T.textSub}}>{rulePickerNoun} {isEnfField?<span style={{color:T.textMuted,fontWeight:400}}>(opt)</span>:<span style={{color:T.rose}}>*</span>}</span>
-                                      </div>
+                                  <div style={{borderTop:`1px solid ${T.border}`,padding:"12px 11px",display:"flex",flexDirection:"column",gap:12,background:`${T.bgBase}88`}}>
+                                    {/* Target — a specific asset (optional for enforcement; a Classification can stand in). */}
+                                    <div>
+                                      <label style={fieldLabelSt}>Target {isEnfField?<span style={{color:T.textMuted,fontWeight:400}}>(optional)</span>:<span style={{color:T.rose}}>*</span>}</label>
                                       <TablePicker ruleId={r.id} value={r.table||""}/>
                                     </div>
-                                    {/* Column row — only for detection column/both rules (objects have no columns). */}
+                                    {/* Column — only for detection column/both rules (objects have no columns). */}
                                     {(fd.scope==="column"||fd.scope==="both")&&!isEnfField&&!ruleIsObject&&(
-                                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                                        <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0,minWidth:60}}>
-                                          <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/><line x1="1" y1="5" x2="13" y2="5" stroke="currentColor" strokeWidth="1"/><line x1="5" y1="1" x2="5" y2="13" stroke="currentColor" strokeWidth="1"/></svg>
-                                          <span style={{fontSize:11,fontWeight:600,color:fd.scope==="column"?T.textSub:T.textMuted}}>
-                                            Column{fd.scope==="column"?<span style={{color:T.rose}}> *</span>:<span style={{color:T.textMuted,fontWeight:400}}> (opt)</span>}
-                                          </span>
-                                        </div>
+                                      <div>
+                                        <label style={fieldLabelSt}>Column {fd.scope==="column"?<span style={{color:T.rose}}>*</span>:<span style={{color:T.textMuted,fontWeight:400}}>(optional)</span>}</label>
                                         <ColPicker ruleId={r.id} value={r.column||""} required={fd.scope==="column"} tableVal={r.table||""}/>
                                       </div>
                                     )}
-                                    {/* Optional classification target — the simple, production version: one tag
-                                        multi-select under Target. When set, the rule also applies to everything
-                                        in scope carrying those classifications. No tabs, no repeated facets. */}
+                                    {/* Classification — optional. When set, the rule also applies to everything in
+                                        scope carrying it (EDG resolves it to the CDP objects / columns). */}
                                     {isEnfField&&!ruleIsObject&&(
-                                      <CatFieldDropdown label={tagFieldLabel} options={POLICY_TAGS} selected={r.targetTags||[]}
+                                      <CatFieldDropdown label="Classification" options={POLICY_TAGS} selected={r.targetTags||[]}
                                         onChange={v=>updRule(r.id,"targetTags",v)} placeholder="Optional — search classifications…"
                                         renderOpt={(o,sel)=><><span style={{width:9,height:9,borderRadius:"50%",background:TAG_DOT(o),flexShrink:0}}/><span style={{flex:1,fontSize:12.5,color:sel?T.accent:T.text}}>{o}</span></>}
                                         renderChip={o=><span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:7,height:7,borderRadius:"50%",background:TAG_DOT(o)}}/>{o}</span>}/>
@@ -10877,14 +10868,22 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                           </div>
                                         )}
                                       </div>
-                                      {/* Condition row. In Validation mode this is the match: field + operator + value
-                                          (e.g. "Retention Period less than 2555"). In Enforcement mode the operator +
-                                          value are dropped — the field alone names the action, and the target + config
-                                          below define what it does. This is what removes the old backwards
-                                          "Legal Hold is false → set it true" double-negative. */}
+                                      {/* Rule name — every rule has one, validation or enforcement. Left blank,
+                                          it falls back to an auto-generated name when the policy is saved. */}
+                                      <div style={{padding:"8px 11px 0"}}>
+                                        <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Rule name</label>
+                                        <input type="text" value={r.name||""} onChange={e=>updRule(r.id,"name",e.target.value)}
+                                          placeholder={r.enforce?"e.g. PII retention — 7 years":"e.g. PII classification required"}
+                                          style={{width:"100%",padding:"8px 11px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"}}
+                                          onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                                      </div>
+                                      {/* Condition row. Validation → field + operator + value. Enforcement → the
+                                          field alone names the action; Target + config below define what it does. */}
                                       {(()=>{
                                         return (
-                                      <div style={{padding:"6px 11px 9px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                                      <div style={{padding:"10px 11px 9px"}}>
+                                        <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>{r.enforce?"Action":"Check"}</label>
+                                        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                                         <select value={r.field} onChange={e=>{
                                           const nfd=W_RULE_FIELDS.find(f=>f.id===e.target.value)||filteredRuleFields[0]||W_RULE_FIELDS[0];
                                           updRule(r.id,"field",e.target.value);
@@ -10919,6 +10918,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                               style={{width:24,height:24,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15,lineHeight:1}}
                                               onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.color=T.rose;e.currentTarget.style.borderColor=T.rose;}}
                                               onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.textMuted;e.currentTarget.style.borderColor=T.border;}}>×</button>}
+                                        </div>
                                       </div>
                                         );
                                       })()}
@@ -31418,42 +31418,55 @@ const CONNECTOR_SCOPE = {
     objectTypes:["Workspaces","Datasets","Dataflows","Reports","Pages","Tiles","Dashboards","Datasource connections"],
     note:"Power BI has no databases or schemas. Pages are only available with workspace-level access \u2014 the scanner API alone cannot catalog them.",
     dims:[
-      {k:"workspace",label:"Workspaces",ph:"Finance_Analytics, Sales\u2026", rxIn:"^Finance_.*",  rxEx:"^(Personal|Sandbox).*", hint:"The permission boundary in Power BI. Start here \u2014 it is the cheapest filter."},
-      {k:"dataset",  label:"Datasets",  ph:"Revenue_Model\u2026",            rxIn:"^Revenue.*",   rxEx:"^tmp_.*",              hint:"Skipping a dataset also skips its DAX measures and everything bound to it."},
-      {k:"report",   label:"Reports",   ph:"Revenue_Detail\u2026",           rxIn:".*",           rxEx:"^(Draft|Test).*",      hint:"Dashboards are filtered separately \u2014 a dashboard can pin tiles from several reports."},
+      {k:"workspace",label:"Workspaces",ph:"Finance_Analytics, Sales\u2026", rxIn:"^Finance_.*", rxEx:"^(Personal|Sandbox).*", hint:"The permission boundary in Power BI, and the cheapest filter. Leave blank for every workspace the service principal can see."},
+      // Atlan filters dashboards and reports together, and by pattern only - you cannot pick
+      // them from a list, because they are enumerated per workspace during the crawl.
+      {k:"dashreport",label:"Dashboards and reports",selectable:false,ph:"^Revenue_.*", rxIn:"^Revenue_.*", rxEx:"^(Draft|Test|Copy of).*", hint:"One pattern covers both. A dashboard can pin tiles from several reports, so filtering them apart would leave dangling tiles."},
     ],
     auth:"Validating the Azure AD service principal",
     authName:"Service principal",
     transport:"api",
     discover:"Reading the workspace scan result",
     discovery:{"Workspaces":4,"Datasets":11,"Reports":18,"Dashboards":6,"Datasource connections":9},
+    caps:{lineage:true, usage:true, profiling:false, tagSync:false, endorsements:true},
+    capsNote:"Dataset to report lineage comes from the scanner API. View counts are per report and per dashboard. Endorsements are read back from the tenant.",
+    lineageDesc:"Dataset to report lineage from the scanner API, plus the warehouse table a dataset reads. Pages need workspace-level access.",
+    usageDesc:"View counts per report and per dashboard, over the last 30 days.",
   },
   glue:{
     objectTypes:["Databases","Schemas","Tables","Views","Columns","Nested columns (STRUCT / ARRAY)"],
     note:"Glue is a metastore, so it uses the same database and table shape as a warehouse. Nested columns are the difference \u2014 expansion depth is set on the Configure step.",
     dims:[
-      {k:"database",label:"Databases",ph:"GLUE_LAKE\u2026",       rxIn:"^GLUE_.*",     rxEx:"^(temp|scratch)_.*", hint:"Glue database, not an RDBMS database \u2014 it holds table definitions, not data."},
-      {k:"schema",  label:"Schemas",  ph:"events, curated\u2026",  rxIn:".*",           rxEx:"^_.*",               hint:"The grouping EDG holds between a Glue database and its tables."},
-      {k:"table",   label:"Tables",   ph:"raw_clickstream\u2026", rxIn:"^(raw|curated)_.*", rxEx:"^_tmp.*",      hint:"Applied to the table name inside the catalog."},
+      {k:"database",label:"Databases",ph:"GLUE_LAKE\u2026", rxIn:"^GLUE_.*", rxEx:"^(temp|scratch)_.*", hint:"A Glue database, which is the level Glue filters at. It holds table definitions, not data."},
+      // Atlan exposes an exclude-table-regex, not a table picker: table names are only known
+      // once the databases have been listed.
+      {k:"table",label:"Tables",selectable:false,ph:"^(raw|curated)_.*", rxIn:"^(raw|curated)_.*", rxEx:"^(_tmp|staging_).*", hint:"Applied to table and view names inside the databases above."},
     ],
     auth:"Assuming the IAM role and calling glue:GetDatabases",
     authName:"IAM role",
     transport:"api",
     discover:"Listing databases in the Glue Data Catalog",
     discovery:{"Databases":2,"Tables":36,"Columns":412,"Nested columns":58},
+    caps:{lineage:true, usage:false, profiling:false, tagSync:false},
+    capsNote:"Glue reports the job and crawler that produced a table, which is lineage. It has no notion of who queried it, so there is no usage to collect.",
+    lineageDesc:"The Glue job or crawler that produced each table, which is what Glue actually records.",
   },
   bigid:{
     objectTypes:[],
     note:"BigID creates no assets. It classifies columns of assets EDG already holds, so there is nothing here to select \u2014 scope it by scan instead.",
-    dims:[
-      {k:"scan",   label:"Scans",        ph:"weekly_pii_scan\u2026", rxIn:"^weekly_.*", rxEx:"^adhoc_.*", hint:"Restrict to named scans. Leave blank to read every completed scan."},
-      {k:"dsource",label:"Data sources", ph:"snowflake-prod\u2026",  rxIn:".*",         rxEx:"^dev-.*",   hint:"BigID's own name for the system it scanned, which EDG matches back to a connection."},
-    ],
+    // No filters at all. BigID is scoped by choosing which of its data sources to read
+    // and mapping each to an EDG connection, which is done on the Configure step - there is
+    // nothing here to include or exclude.
+    dims:[],
+    scopedBy:"Scoped by data source on the Configure step, not by filters.",
     auth:"Exchanging the user token for a session token",
     authName:"User token",
     transport:"api",
     discover:"Reading completed scan results",
     discovery:{"Scans":3,"Data sources":4,"Columns classified":1284},
+    caps:{lineage:false, usage:false, profiling:false, tagSync:true},
+    capsNote:"BigID classifies columns. It has no lineage and no usage of its own, and its classifications arrive as proposals for a steward.",
+    tagSyncDesc:"Read completed scan results as classification proposals. A steward accepts each one; EDG never writes a classification back.",
   },
   tableau:{
     objectTypes:["Sites","Projects","Workbooks","Worksheets","Dashboards","Stories","Data Sources","Datasource fields","Flows","Metrics"],
@@ -31467,6 +31480,10 @@ const CONNECTOR_SCOPE = {
     transport:"api",
     discover:"Querying the Metadata API",
     discovery:{"Sites":1,"Projects":6,"Workbooks":14,"Worksheets":41,"Dashboards":12,"Data sources":19},
+    caps:{lineage:true, usage:true, profiling:false, tagSync:false},
+    capsNote:"The Metadata API reports table to worksheet lineage. View counts exist for views and workbooks, and popularity only for published data sources.",
+    lineageDesc:"Table to data source to worksheet to dashboard, from the Metadata API.",
+    usageDesc:"View counts for views and workbooks; popularity only for published data sources.",
   },
   dbt:{
     objectTypes:["Projects","Sources","Models","Seeds","Snapshots","Tests","Semantic models","Metrics","Exposures"],
@@ -31481,6 +31498,10 @@ const CONNECTOR_SCOPE = {
     transport:"api",
     discover:"Reading the manifest of the latest applied run",
     discovery:{"Projects":1,"Sources":4,"Models":12,"Seeds":2,"Tests":34,"Exposures":3},
+    caps:{lineage:true, usage:false, profiling:false, tagSync:true},
+    capsNote:"The manifest IS the lineage, at model and column level. dbt reports no usage and no quality score.",
+    lineageDesc:"The dbt manifest, at model and column level. This is the one source where lineage is declared rather than inferred.",
+    tagSyncDesc:"Pull the tags declared in the dbt project itself. Matched to EDG tags by exact name.",
   },
   snowflake:{
     objectTypes:["Databases","Schemas","Tables","Views","Materialized views","Stored procedures","Columns"],
@@ -31494,6 +31515,8 @@ const CONNECTOR_SCOPE = {
     transport:"db",
     discover:"Sampling INFORMATION_SCHEMA",
     discovery:{"Databases":3,"Schemas":47,"Tables":1203,"Views":89,"Columns":14820},
+    caps:{lineage:true, usage:true, profiling:true, tagSync:true},
+    capsNote:"Query history gives both column-level lineage and usage. EDG can profile the data because it can read it.",
   },
   s3:{
     objectTypes:["Buckets","Prefixes / paths","Objects"],
@@ -31507,6 +31530,8 @@ const CONNECTOR_SCOPE = {
     transport:"api",
     discover:"Listing objects under the configured prefixes",
     discovery:{"Buckets":2,"Prefixes":31,"Objects":18402},
+    caps:{lineage:false, usage:false, profiling:false, tagSync:false},
+    capsNote:"A storage path is not lineage - nothing in S3 says which job wrote an object. Object tags sync separately.",
   },
   kafka:{
     objectTypes:["Topics","Consumer groups","Schemas"],
@@ -31519,6 +31544,8 @@ const CONNECTOR_SCOPE = {
     transport:"db",
     discover:"Reading topic metadata and the schema registry",
     discovery:{"Topics":24,"Consumer groups":9,"Schemas":24},
+    caps:{lineage:false, usage:false, profiling:false, tagSync:false},
+    capsNote:"A broker knows topics, not where their data came from or went.",
   },
   airflow:{
     objectTypes:["DAGs","Tasks","Task runs"],
@@ -31530,6 +31557,8 @@ const CONNECTOR_SCOPE = {
     transport:"api",
     discover:"Reading the DAG list",
     discovery:{"DAGs":17,"Tasks":214},
+    caps:{lineage:true, usage:false, profiling:false, tagSync:false},
+    capsNote:"A DAG declares its inputs and outputs, which is pipeline lineage.",
   },
 };
 
@@ -31545,6 +31574,8 @@ const DEFAULT_CONNECTOR_SCOPE = {
   transport:"db",
   discover:"Sampling the metadata structure",
   discovery:{"Databases":3,"Schemas":47,"Tables":1203,"Views":89,"Columns":14820},
+  caps:{lineage:true, usage:true, profiling:true, tagSync:true},
+  capsNote:"A database EDG can query can report lineage, usage and a profile.",
 };
 
 // The connection test, told in the connector's own terms. A REST-only source has no port to
@@ -31692,21 +31723,26 @@ const CONNECTOR_FIELDS = {
   kafka:      [{k:"bootstrap",l:"Bootstrap Servers",ph:"kafka.company.com:9092",type:"text"},{k:"schema_registry",l:"Schema Registry URL",ph:"http://schema-registry:8081",type:"text"},{k:"security",l:"Security Protocol",ph:"PLAINTEXT",type:"select",opts:["PLAINTEXT","SSL","SASL_PLAINTEXT","SASL_SSL"]}],
   dbt:        [{k:"deployment",l:"Deployment",ph:"dbt Cloud",type:"select",opts:["dbt Cloud (Discovery API)","dbt Core (manifest + run_results artifacts)"]},{k:"project_id",l:"Project ID",ph:"123456",type:"text"},{k:"account",l:"Account",ph:"company",type:"text"},{k:"api_key",l:"API Key",ph:"dbt_••••••••",type:"password"},{k:"environment",l:"Environment",ph:"production",type:"select",opts:["production","staging","development"]}],
   powerbi:    [
+    {k:"extraction",   l:"Extraction method",    type:"select", opts:["Direct \u2014 EDG connects to the source","Agent \u2014 a self-deployed runtime extracts inside your network"], req:true, help:"Agent is for a source that must stay behind your firewall. It changes nothing about what is collected."},
     {k:"tenantId",     l:"Azure tenant ID",      ph:"72f988bf-86f1-41af-91ab-2d7cd011db47", type:"text",     req:true, help:"Directory (tenant) ID from the app registration Overview page."},
     {k:"clientId",     l:"Client ID",            ph:"a1b2c3d4-...",                          type:"text",     req:true, help:"Application (client) ID of the service principal."},
-    {k:"clientSecret", l:"Client secret",        ph:"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", type:"password", req:true, help:"From Certificates & secrets. Store the value at creation \u2014 Azure will not show it again."},
+    {k:"clientSecret", l:"Client secret",        ph:"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", type:"password", req:true, help:"From Certificates & secrets, the secret VALUE and not the secret ID \u2014 sending the id is the single most common setup failure. Azure shows the value only at creation."},
     {k:"hostPort",     l:"Power BI URL",         ph:"https://app.powerbi.com",               type:"text",     req:true, help:"Change only for a sovereign or GCC cloud."},
     {k:"scope",        l:"Scope",                ph:"https://analysis.windows.net/powerbi/api/.default", type:"text", req:true, help:"Leave as-is unless Microsoft changes the resource URI."},
     {k:"authorityUri", l:"Authority URI",        ph:"https://login.microsoftonline.com/",    type:"text",              help:"Token authority. Defaults to global Azure AD."},
     {k:"useAdminApis", l:"Use admin APIs",       type:"toggle", val:true,                              help:"On: every workspace in the tenant. Off: only workspaces the service principal is a member of."},
+    {k:"scannerOnly",  l:"Scanner APIs only",    type:"toggle", val:false,                             help:"Restricts EDG to the scanner API. It still catalogs workspaces, datasets, reports and dashboards, but there is no Pages catalog and no column or measure lineage into pages."},
+    {k:"incremental",  l:"Incremental extraction", type:"toggle", val:true,                            help:"Crawl only what changed since the last run. Leave on unless you are re-baselining the tenant."},
     {k:"pageSize",     l:"Records per page",     ph:"100",                                    type:"text",              help:"Max 100. Lower it only if the tenant rate-limits."},
-    {k:"dashFilter",   l:"Dashboard filter",     ph:"^Finance_.*",                            type:"text",              help:"Optional include regex. Leave blank to crawl all."},
-    {k:"dbPrefix",     l:"Warehouse prefix",     ph:"SNOWFLAKE_PROD",                         type:"text",              help:"Lets EDG resolve a dataset back to the warehouse table it reads."},
+    {k:"sourceConns",  l:"Source connections",   ph:"SNOWFLAKE_PROD, GLUE_LAKE",              type:"text",              help:"Which warehouse connections this tenant's datasets read from. Without it a dataset cannot be resolved back to the table behind it, and lineage stops at the dataset."},
+    {k:"dsnMapping",   l:"ODBC DSN mapping",     ph:"PROD_DSN=SNOWFLAKE_PROD",                type:"text",              help:"Only for datasets that connect through an ODBC DSN. Maps each DSN to the database name it points at, one pair per line."},
   ],
   glue:       [
-    {k:"authMode",     l:"Authentication",       type:"select", opts:["Assume role (recommended)","Access key"], req:true, help:"A role avoids storing long-lived keys."},
+    {k:"extraction",   l:"Extraction method",    type:"select", opts:["Direct \u2014 EDG connects to the source","Agent \u2014 a self-deployed runtime extracts inside your network"], req:true, help:"Agent is for a source that must stay behind your firewall. It changes nothing about what is collected."},
+    {k:"authMode",     l:"Authentication",       type:"select", opts:["IAM role (recommended)","IAM user access key"], req:true, help:"A role avoids storing long-lived keys."},
     {k:"awsRegion",    l:"AWS region",           ph:"us-east-1",                              type:"text",     req:true, help:"Region the Glue Data Catalog lives in."},
-    {k:"assumeRoleArn",l:"Assume role ARN",      ph:"arn:aws:iam::123456789012:role/SolixGlueReader", type:"text",      help:"Required for the role mode, including cross-account catalogs."},
+    {k:"assumeRoleArn",l:"Assume role ARN",      ph:"arn:aws:iam::123456789012:role/SolixGlueReader", type:"text",      help:"IAM role mode. Required for a cross-account catalog."},
+    {k:"externalId",   l:"External ID",          ph:"solix-edg-jnj",                          type:"text",              help:"IAM role mode. Put it in the role's trust policy so only EDG can assume it \u2014 without one, anyone who learns the ARN can try."},
     {k:"accessKeyId",  l:"Access key ID",        ph:"AKIAIOSFODNN7EXAMPLE",                    type:"text",              help:"Access-key mode only."},
     {k:"secretKey",    l:"Secret access key",    ph:"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", type:"password",          help:"Access-key mode only."},
     {k:"sessionToken", l:"Session token",        ph:"optional",                               type:"password",          help:"Only for temporary STS credentials."},
@@ -31715,11 +31751,12 @@ const CONNECTOR_FIELDS = {
     {k:"nestedDepth",  l:"Nested column depth",  ph:"15",                                     type:"text",              help:"How far to expand STRUCT and ARRAY types. 15 is the practical ceiling."},
   ],
   bigid:      [
-    {k:"host",         l:"BigID host",           ph:"https://bigid.jnj.internal",             type:"text",     req:true, help:"Base URL. EDG appends /api/v1 itself."},
-    {k:"authMode",     l:"Authentication",       type:"select", opts:["User token (recommended)","Username / password"], req:true, help:"A token avoids storing a person's password and survives their leaving."},
-    {k:"userToken",    l:"User token",           ph:"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", type:"password", req:true, help:"Created in the BigID UI, valid up to 999 days. Exchanged for a session token each run."},
-    {k:"username",     l:"Username",             ph:"svc_solix",                              type:"text",              help:"Username/password mode only."},
-    {k:"password",     l:"Password",             ph:"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", type:"password",          help:"Username/password mode only."},
+    {k:"extraction",   l:"Extraction method",    type:"select", opts:["Direct \u2014 EDG connects to the source","Agent \u2014 a self-deployed runtime extracts inside your network"], req:true, help:"Agent is for a source that must stay behind your firewall. It changes nothing about what is collected."},
+    {k:"host",         l:"Host FQDN",            ph:"bigid.jnj.internal",                     type:"text",     req:true, help:"Domain name of the BigID instance. EDG adds the scheme and /api/v1 itself."},
+    {k:"userToken",    l:"Personal access token",ph:"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", type:"password", req:true, help:"The only authentication BigID exposes for this. Created in the BigID UI, valid up to 999 days, and exchanged for a short-lived session token on every run."},
+    {k:"sslCert",      l:"SSL certificate",      ph:"-----BEGIN CERTIFICATE-----",             type:"textarea",          help:"Only for a self-signed certificate. Paste the PEM value."},
+    {k:"datasources",  l:"BigID data sources",   ph:"snowflake-prod, postgres-crm",           type:"text",     req:true, help:"Which of BigID's data sources to read, by their exact BigID names. Each one is mapped to an EDG connection below."},
+    {k:"connMapping",  l:"Map to connections",   ph:"snowflake-prod=Snowflake DWH",           type:"text",     req:true, help:"One pair per line. This is what makes a finding land on the right asset \u2014 BigID names its own sources, and EDG has to know which connection each one is."},
     {k:"minConfidence",l:"Minimum confidence",   ph:"70",                                     type:"text",              help:"Findings below this are ignored. The rejected National ID match in the demo scored 41."},
     {k:"autoAccept",   l:"Auto-accept findings", type:"toggle", val:false,                              help:"Off by default, and worth keeping off: a finding should be a proposal a steward accepts."},
     {k:"scanFilter",   l:"Scan filter",          ph:"weekly_pii_scan",                        type:"text",              help:"Optional. Restrict to named scans instead of every scan in the tenant."},
@@ -31788,6 +31825,30 @@ const AddServiceWizard = ({onClose, onDone}) => {
   const scope = (connector && CONNECTOR_SCOPE[connector]) || DEFAULT_CONNECTOR_SCOPE;
   const TEST_PHASES = testPhasesFor(scope);
   const DISCOVERY_RESULT = scope.discovery || {};
+
+  // One row per capability this source really has. Lineage and usage were declared in state
+  // and never rendered, so no connector could collect either.
+  // A level you can pick from a list, versus one you can only match by pattern.
+  const selectableDims  = (scope.dims||[]).filter(d=>d.selectable!==false);
+  const patternOnlyDims = (scope.dims||[]).filter(d=>d.selectable===false);
+  const caps = scope.caps || {};
+  const ingestionApps = [
+    caps.lineage&&{key:"lineage", label:"Lineage",
+      desc:scope.lineageDesc||"Build the lineage graph from what this source reports. Nothing is inferred from names or paths.",
+      value:enableLineage, setter:setEnableLineage},
+    caps.usage&&{key:"usage", label:"Usage analytics",
+      desc:scope.usageDesc||"Collect how often each object is used, where the source counts it.",
+      value:enableUsage, setter:setEnableUsage},
+    caps.profiling&&{key:"profiling", label:"Profiling & quality",
+      desc:"Sample the data to compute column statistics and a quality score. Requires read access to the data itself, not just its metadata.",
+      value:enableProfiling, setter:setEnableProfiling},
+    caps.tagSync&&{key:"tagsync", label:"Tag sync",
+      desc:scope.tagSyncDesc||"Pull classification tags from this source during ingestion. New source tags auto-create an EDG tag for review. Push / reverse sync is configured later in the connection's Tag sync tab.",
+      value:enableTagSync, setter:setEnableTagSync},
+    caps.endorsements&&{key:"endorsements", label:"Endorsements",
+      desc:"Read Promoted and Certified endorsements from the tenant. They stay read-only: EDG certification is separate and lives on the asset.",
+      value:enableTagSync, setter:setEnableTagSync},
+  ].filter(Boolean);
 
   // Everything below this point belongs to ONE connector. Switching connector has to clear
   // it, or the new source inherits the old one's verified banner, its discovery counts, its
@@ -32229,6 +32290,13 @@ const AddServiceWizard = ({onClose, onDone}) => {
                                 style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
                                 {(f.opts||[]).map(o=><option key={o} value={o}>{o}</option>)}
                               </select>
+                            : f.type==="textarea"
+                            // A PEM certificate, a private key and a service-account JSON are
+                            // all multi-line. This fell through to <input type="textarea">,
+                            // which browsers treat as a one-line text box.
+                            ? <textarea value={fields[f.k]||""} onChange={e=>setFields(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph} rows={4} spellCheck={false}
+                                style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",transition:"border .15s",fontFamily:"'Geist Mono',monospace",resize:"vertical",lineHeight:1.5}}
+                                onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
                             : <input type={f.type||"text"} value={fields[f.k]||""} onChange={e=>setFields(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph}
                                 style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",transition:"border .15s",fontFamily:f.type==="password"?"'Geist Mono',monospace":"inherit"}}
                                 onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
@@ -32365,7 +32433,9 @@ const AddServiceWizard = ({onClose, onDone}) => {
           {step===3&&(
             <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:20}}>
 
-              {/* Filter mode toggle */}
+              {/* A source with nothing to filter shows no filter card - not an empty one.
+                  BigID is scoped by picking its data sources, which happens on Configure. */}
+              {scope.dims.length>0&&(
               <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -32389,7 +32459,9 @@ const AddServiceWizard = ({onClose, onDone}) => {
 
                 {filterMode==="selection"?(
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-                    {scope.dims.flatMap(d=>[
+                    {/* Some levels can only be filtered by pattern, because their names are
+                        not known until the crawl has walked the level above. */}
+                    {selectableDims.flatMap(d=>[
                       {label:"Include "+d.label,dim:d,f:"incl",ph:d.ph,color:"#10b981",hint:d.hint},
                       {label:"Exclude "+d.label,dim:d,f:"excl",ph:d.ph,color:"#f87171",hint:null},
                     ]).map(({label,dim,f,ph,color,hint})=>(
@@ -32402,10 +32474,15 @@ const AddServiceWizard = ({onClose, onDone}) => {
                         {hint&&<div style={{fontSize:10.5,color:T.textMuted,marginTop:5,lineHeight:1.5}}>{hint}</div>}
                       </div>
                     ))}
+                    {patternOnlyDims.length>0&&(
+                      <div style={{gridColumn:"1 / -1",fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>
+                        {patternOnlyDims.map(d=>d.label.toLowerCase()).join(" and ")} can only be filtered by pattern \u2014 switch to Regex.
+                      </div>
+                    )}
                   </div>
                 ):(
                   <div style={{display:"flex",flexDirection:"column",gap:13}}>
-                    {/* The same dimensions as selection mode, so the two can never disagree. */}
+                    {/* Regex mode covers every level, including the pattern-only ones. */}
                     {scope.dims.flatMap(d=>[
                       {label:d.label+" include pattern",dim:d,f:"rxIn",ph:d.rxIn,hint:"Regex applied to "+d.label.toLowerCase()+" to include"},
                       {label:d.label+" exclude pattern",dim:d,f:"rxEx",ph:d.rxEx,hint:"Regex applied to "+d.label.toLowerCase()+" to exclude"},
@@ -32420,17 +32497,22 @@ const AddServiceWizard = ({onClose, onDone}) => {
                   </div>
                 )}
               </div>
+              )}
 
-              {/* Ingestion Apps */}
+              {/* What to collect */}
               <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
                   <div style={{width:3,height:16,borderRadius:2,background:"#8b5cf6",flexShrink:0}}/>
-                  <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Ingestion Apps</span>
+                  <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>What to collect</span>
                 </div>
+                {/* Only what this source can actually produce. A capability it does not have
+                    is not rendered at all - a disabled toggle still reads as "possible, but
+                    someone turned it off", which would be untrue. */}
+                {scope.capsNote&&(
+                  <div style={{margin:"0 0 14px",fontSize:11.5,color:T.textSub,lineHeight:1.6}}>{scope.capsNote}</div>
+                )}
                 <div style={{display:"flex",flexDirection:"column",gap:9}}>
-                  {[
-                    {key:"tagsync",  label:"Tag Sync",           desc:"Pull classification tags from this source during ingestion. New source tags auto-create an EDG tag for review. Push / reverse sync is configured later in the connection's Tag sync tab.", value:enableTagSync, setter:setEnableTagSync},
-                  ].map(app=>(
+                  {ingestionApps.map(app=>(
                     <div key={app.key} style={{display:"flex",alignItems:"center",gap:14,padding:"11px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
                       <Toggle on={app.value} onChange={app.disabled?undefined:()=>app.setter(v=>!v)} disabled={app.disabled}/>
                       <div style={{flex:1}}>
@@ -32467,7 +32549,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
               {(()=>{
                 const objTypesStr = objTypes.length>0 ? objTypes.join(", ") : "All object types";
                 const fmtList = arr => (arr&&arr.length) ? arr.join(", ") : "—";
-                const apps = enableTagSync ? "Tag Sync" : "None";
+                const apps = ingestionApps.filter(a=>a.value).map(a=>a.label).join(", ") || "None";
                 const cards = [
                   {title:"Source & Connector", rows:[
                     ["Category", category||"—"],
@@ -32483,16 +32565,17 @@ const AddServiceWizard = ({onClose, onDone}) => {
                   ...(discovery&&Object.keys(discovery).length ? [{title:"Discovered", rows:Object.entries(discovery).map(([k,v])=>[k, v.toLocaleString()])}] : []),
                   // Review echoes the dimensions the Filters step offered, so the summary
                   // can never mention a schema for a source that has none.
+                  ...(scope.dims.length===0?[]:[
                   {title:"Ingestion Filters", rows: filterMode==="regex" ? [["Mode","Regex patterns"],
                     ...scope.dims.flatMap(d=>[
                       [d.label+" include", dimVal(d.k,"rxIn")||"—"],
                       [d.label+" exclude", dimVal(d.k,"rxEx")||"—"],
                     ])] : [
-                    ...scope.dims.flatMap(d=>[
+                    ...selectableDims.flatMap(d=>[
                       ["Include "+d.label, fmtList(dimVal(d.k,"incl"))],
                       ["Exclude "+d.label, fmtList(dimVal(d.k,"excl"))],
                     ]),
-                  ]},
+                  ]}]),
                   {title:"Ingestion Apps", rows:[["Enabled", apps]]},
                 ];
                 return cards.map(sec=>(
@@ -33007,7 +33090,7 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
             </div>
             {svcFilterMode==="selection"?(
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                {scope.dims.flatMap(d=>[
+                {scope.dims.filter(d=>d.selectable!==false).flatMap(d=>[
                   {label:"Include "+d.label,dim:d,f:"incl",ph:d.ph,color:"#10b981"},
                   {label:"Exclude "+d.label,dim:d,f:"excl",ph:d.ph,color:"#f87171"},
                 ]).map(({label,dim,f,ph,color})=>(
