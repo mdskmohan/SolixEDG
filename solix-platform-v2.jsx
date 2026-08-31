@@ -8580,13 +8580,32 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                           const enfStatus = r.enforce ? ((enfApprovalFor(p.id,r.id)||{}).status||"pending") : null;
                           const inactive = !!enfStatus && enfStatus!=="approved";
                           const inactiveColor = enfStatus==="rejected"?T.rose:T.amber;
+                          // ── One clean status per rule. Enforcement rules carry an approval lifecycle
+                          //    (pending → active / rejected); validation rules simply run. ──
+                          const status = !r.enforce
+                            ? {label:"Monitoring", color:T.textSub, dot:T.green}
+                            : r.pendingUnhold
+                              ? {label:"Releasing hold — pending approval", color:T.amber, dot:T.amber}
+                              : enfStatus==="approved"
+                                ? {label:(r.field==="legal_hold"?"Hold active":"Enforced"), color:T.green, dot:T.green}
+                                : enfStatus==="rejected"
+                                  ? {label:"Rejected by owner", color:T.rose, dot:T.rose}
+                                  : {label:"Pending owner approval", color:T.amber, dot:T.amber};
+                          // Concise one-line descriptor: what the rule does, and where. No chip clutter.
+                          const typeLbl = FIELD_LBL[r.field]||r.field;
+                          const targetTxt = (r.targetTags||[]).length ? `classified ${r.targetTags.join(", ")}` : (r.table ? (r.column?`${r.table}.${r.column}`:r.table) : "policy scope");
+                          const summary = r.enforce
+                            ? `${typeLbl} · ${targetTxt}`
+                            : `${typeLbl} ${opLabel(r.operator)}${r.value?` ${r.value}`:""}${r.table?` · ${r.table}`:""}`;
+                          const showSummary = summary && summary.trim() !== fieldLabel.trim();
                           return (
-                            <div key={r.id||ri} style={{padding:"11px 13px",border:`1px ${inactive?"dashed":"solid"} ${inactive?inactiveColor:T.border}`,borderRadius:9,background:T.bgSurface,opacity:inactive?0.75:1}}>
-                              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                                <span style={{fontSize:12.5,fontWeight:600,color:T.text,flex:1,minWidth:0}}>{fieldLabel}</span>
-                                <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:5,background:sevBg,color:sevClr,flexShrink:0}}>{r.severity||"Medium"}</span>
-                                <button onClick={()=>openEditRule(r)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 4px",lineHeight:1,flexShrink:0,borderRadius:5,fontSize:11}} onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}} title="Edit rule">
-                                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            <div key={r.id||ri} style={{padding:"12px 14px",border:`1px ${inactive?"dashed":"solid"} ${inactive?inactiveColor+"88":T.border}`,borderRadius:10,background:T.bgSurface}}>
+                              <div style={{display:"flex",alignItems:"center",gap:9}}>
+                                <span style={{width:7,height:7,borderRadius:"50%",background:status.dot,flexShrink:0}}/>
+                                <span style={{fontSize:13,fontWeight:600,color:T.text,flex:1,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fieldLabel}</span>
+                                <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:5,background:sevBg,color:sevClr,flexShrink:0}}>{r.severity||"Medium"}</span>
+                                <button onClick={()=>openEditRule(r)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"3px 5px",lineHeight:1,flexShrink:0,borderRadius:5,fontSize:11}} onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}} title="Edit rule">
+                                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                                 </button>
                                 {r.field==="legal_hold" && r.enforce && enfStatus==="approved"
                                   ? (!r.pendingUnhold && (
@@ -8595,73 +8614,18 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                         onPartial={()=>setManageHold({policyId:p.id, ruleId:r.id})}/>
                                     ))
                                   : (
-                                      <button onClick={()=>handleRemoveRule(p.id,r.id)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:15,padding:"0 2px",lineHeight:1,flexShrink:0}} title="Remove rule">×</button>
+                                      <button onClick={()=>handleRemoveRule(p.id,r.id)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:16,padding:"0 3px",lineHeight:1,flexShrink:0}} title="Remove rule">×</button>
                                     )}
                               </div>
-                              {inactive&&(
-                                <div style={{display:"flex",alignItems:"center",gap:5,marginTop:6}}>
-                                  <span style={{width:5,height:5,borderRadius:"50%",background:inactiveColor,display:"inline-block",flexShrink:0}}/>
-                                  <span style={{fontSize:10.5,fontWeight:600,color:inactiveColor}}>{enfStatus==="rejected"?"Inactive — rejected by owner":"Inactive — pending owner approval"}</span>
-                                </div>
+                              {/* Subtle one-line summary — the gist, without the chip clutter. */}
+                              {showSummary&&(
+                                <div style={{fontSize:11,color:T.textMuted,marginTop:4,marginLeft:16,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{summary}</div>
                               )}
-                              {/* Legal-hold removal now lives on the header × (opens the full/partial
-                                  unhold menu). Once a full unhold is in flight, show its status here. */}
-                              {r.field==="legal_hold" && r.pendingUnhold && (
-                                <div style={{marginTop:8}}>
-                                  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:5}}>Full unhold in progress</div>
-                                  <UnholdStepper status={(enfApprovalFor(p.id,r.id+"-unhold")||{}).status||"pending"} variant="full" compact/>
-                                </div>
-                              )}
-                              {(r.operator||r.value)&&(
-                                <div style={{display:"flex",alignItems:"center",gap:6,marginTop:6,flexWrap:"wrap"}}>
-                                  {r.operator&&<span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",padding:"2px 7px",borderRadius:5,background:T.bgBase,color:T.textSub,border:`1px solid ${T.border}`}}>{opLabel(r.operator)}</span>}
-                                  {r.value&&<span style={{fontSize:11.5,color:T.text,fontWeight:500}}>{r.value}</span>}
-                                </div>
-                              )}
-                              {(r.table||r.column)&&(
-                                <div style={{display:"flex",alignItems:"center",gap:5,marginTop:6,flexWrap:"wrap"}}>
-                                  <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>Target:</span>
-                                  {r.table&&<span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",padding:"2px 8px",borderRadius:5,background:`${T.accent}10`,color:T.accent,border:`1px solid ${T.accent}28`,fontWeight:500}}>{r.table}</span>}
-                                  {r.column&&<span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",padding:"2px 8px",borderRadius:5,background:`${T.violet}12`,color:T.violet,border:`1px solid ${T.violet}28`,fontWeight:500}}>.{r.column}</span>}
-                                </div>
-                              )}
-                              {/* Enforcement criteria — Masking's selected columns, Legal Hold's sub-rule
-                                  criteria, Retention's criteria type — the detail beyond the main rule above,
-                                  only meaningful once "Enforce in place" is on. */}
-                              {r.enforce&&r.field==="masking_status"&&(r.maskColumns||[]).length>0&&(
-                                <div style={{display:"flex",alignItems:"center",gap:5,marginTop:6,flexWrap:"wrap"}}>
-                                  <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>Masks:</span>
-                                  {r.maskColumns.map(c=><span key={c} style={{fontSize:11,fontFamily:"'Geist Mono',monospace",padding:"2px 8px",borderRadius:5,background:`${T.violet}12`,color:T.violet,border:`1px solid ${T.violet}28`,fontWeight:500}}>.{c}</span>)}
-                                </div>
-                              )}
-                              {r.enforce&&r.field==="legal_hold"&&(r.holdCriteria||[]).filter(c=>c.column).length>0&&(
-                                <div style={{marginTop:6,display:"flex",flexDirection:"column",gap:3}}>
-                                  <span style={{fontSize:10,color:T.textMuted}}>Hold criteria:</span>
-                                  {r.holdCriteria.filter(c=>c.column).map((c,ci)=>(
-                                    <span key={ci} style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{c.column} {c.operator} {c.value||"…"}</span>
-                                  ))}
-                                </div>
-                              )}
-                              {r.enforce&&r.field==="retention_class"&&(r.dateCol||r.critText)&&(
-                                <div style={{marginTop:6,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
-                                  <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>Criteria:</span>
-                                  {r.dateCol&&<span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",padding:"2px 8px",borderRadius:5,background:`${T.violet}12`,color:T.violet,border:`1px solid ${T.violet}28`,fontWeight:500}}>by .{r.dateCol}</span>}
-                                  {r.critText&&<span style={{fontSize:11,color:T.textSub}}>{r.critText}</span>}
-                                </div>
-                              )}
-                              {/* Object-store scope (S3 / ADLS) — Datewise / Criteriawise at the bucket level. */}
-                              {r.enforce&&(r.field==="legal_hold"||r.field==="retention_class")&&(r.objPattern||r.objDateBasis||r.objDateVal)&&(()=>{
-                                const ct=r.critType||"date"; const isHold=r.field==="legal_hold";
-                                return (
-                                <div style={{marginTop:6,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
-                                  <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>Scope:</span>
-                                  {(ct==="date"||ct==="both")&&(isHold
-                                    ? (r.objDateVal&&<span style={{fontSize:11,color:T.textSub}}>{r.objDateOp||"before"} {r.objDateVal}{r.objDateOp==="between"&&r.objDateVal2?` – ${r.objDateVal2}`:""}</span>)
-                                    : (r.objDateBasis&&<span style={{fontSize:11,color:T.textSub}}>from {String(r.objDateBasis).split(" (")[0]}</span>))}
-                                  {(ct==="pattern"||ct==="both")&&r.objPattern&&<span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",padding:"2px 8px",borderRadius:5,background:`${T.green}12`,color:T.green,border:`1px solid ${T.green}28`,fontWeight:500}}>{r.objPattern}</span>}
-                                </div>
-                                );
-                              })()}
+                              {/* Status pill — always visible for enforcement; the one thing the reader must see. */}
+                              <div style={{display:"inline-flex",alignItems:"center",gap:5,marginTop:8,marginLeft:16,padding:"3px 9px",borderRadius:99,background:`${status.color}14`,border:`1px solid ${status.color}30`}}>
+                                <span style={{width:5,height:5,borderRadius:"50%",background:status.dot,flexShrink:0}}/>
+                                <span style={{fontSize:10.5,fontWeight:700,color:status.color,letterSpacing:"0.02em"}}>{status.label}</span>
+                              </div>
                             </div>
                           );
                         } else {
@@ -29614,7 +29578,7 @@ const OM_CONNECTORS = [
   {name:"Apache NiFi",     cat:"Pipeline",       logoUrl:SI("apachenifi","728E9B"),               desc:"Data flow automation and integration platform",       status:"Available",  assets:0,    lastSync:null},
   {name:"Apache Flink",    cat:"Pipeline",       logoUrl:SI("apacheflink","E6526F"),              desc:"Stateful stream and batch processing framework",     status:"Available",  assets:0,    lastSync:null},
   {name:"BigID",           cat:"Metadata",       logoUrl:null, color:"#12B76A",                 desc:"Sensitive-data discovery — contributes classifications and findings, not assets", status:"Connected",  assets:0,    lastSync:"3h ago"},
-  {name:"AWS Glue",        cat:"Database",       logoUrl:SI("amazonwebservices","FF9900"),        desc:"Glue Data Catalog — databases, tables and columns, plus the jobs that build them", status:"Connected",  assets:5,    lastSync:"55m ago"},
+  {name:"AWS Glue",        cat:"Pipeline",       logoUrl:SI("amazonwebservices","FF9900"),        desc:"Glue Data Catalog — databases, tables and columns, plus the jobs that build them", status:"Connected",  assets:5,    lastSync:"55m ago"},
   {name:"Spline",          cat:"Pipeline",       logoUrl:null, color:"#FF4500",                  desc:"Apache Spark data lineage tracking",                  status:"Available",  assets:0,    lastSync:null},
 
   // ── MESSAGING ──
@@ -31415,7 +31379,7 @@ const RunRow = ({run, onShowLogs}) => {
 // Object types, Filters, Review and the connection test is driven from here.
 const CONNECTOR_SCOPE = {
   powerbi:{
-    objectTypes:["Workspaces","Datasets","Dataflows","Reports","Pages","Tiles","Dashboards","Datasource connections"],
+    objectTypes:["Apps","Workspaces","Dataflows","Datasets","Reports","Pages","Dashboards","Tiles","Datasource connections"],
     note:"Power BI has no databases or schemas. Pages are only available with workspace-level access \u2014 the scanner API alone cannot catalog them.",
     dims:[
       {k:"workspace",label:"Workspaces",ph:"Finance_Analytics, Sales\u2026", rxIn:"^Finance_.*", rxEx:"^(Personal|Sandbox).*", hint:"The permission boundary in Power BI, and the cheapest filter. Leave blank for every workspace the service principal can see."},
@@ -31435,6 +31399,9 @@ const CONNECTOR_SCOPE = {
   },
   glue:{
     objectTypes:["Databases","Schemas","Tables","Views","Columns","Nested columns (STRUCT / ARRAY)"],
+    // Columns and nested columns are parts of a table rather than assets of their own, but
+    // they are still a crawl choice: expanding a deeply nested STRUCT is what makes a Glue
+    // crawl slow, so it stays switchable.
     note:"Glue is a metastore, so it uses the same database and table shape as a warehouse. Nested columns are the difference \u2014 expansion depth is set on the Configure step.",
     dims:[
       {k:"database",label:"Databases",ph:"GLUE_LAKE\u2026", rxIn:"^GLUE_.*", rxEx:"^(temp|scratch)_.*", hint:"A Glue database, which is the level Glue filters at. It holds table definitions, not data."},
@@ -31460,7 +31427,7 @@ const CONNECTOR_SCOPE = {
     dims:[],
     scopedBy:"Scoped by data source on the Configure step, not by filters.",
     auth:"Exchanging the user token for a session token",
-    authName:"User token",
+    authName:"Personal access token",
     transport:"api",
     discover:"Reading completed scan results",
     discovery:{"Scans":3,"Data sources":4,"Columns classified":1284},
@@ -31637,7 +31604,7 @@ const ADD_SERVICE_CONNECTORS = {
       {id:"airflow",    name:"Airflow",      logo:"🌬️", color:"#017cee", desc:"Apache workflow orchestration"},
       {id:"dbt",        name:"dbt",          logo:"🔄", color:"#ff6f44", desc:"Analytics engineering framework"},
       {id:"spark",      name:"Spark",        logo:"🔥", color:"#e25a1c", desc:"Unified analytics engine"},
-          {id:"glue",       name:"AWS Glue",     logo:"☁️", color:"#ff9900", desc:"Serverless data integration"},
+          {id:"glue",       name:"AWS Glue",     logo:"☁️", color:"#ff9900", desc:"Glue Data Catalog — databases, tables and columns"},
       {id:"prefect",    name:"Prefect",      logo:"🌊", color:"#024dfd", desc:"Modern workflow orchestration"},
     ],
   },
@@ -31696,7 +31663,8 @@ const CONNECTOR_PREREQS = {
     "An IAM principal with at least glue:GetDatabases and glue:GetTables.",
     "Use an assume-role ARN for cross-account catalogs rather than long-lived keys.",
     "If Lake Formation governs the catalog, grant the principal DESCRIBE on the databases and tables as well \u2014 Glue permissions alone are not enough.",
-    "Run dbt-style docs generation is not relevant here, but row counts come from table parameters, so a crawler must have run at least once.",
+    "A Glue crawler must have run at least once — row counts come from table parameters, which only a crawler populates.",
+    "Check the permissions before you trust an empty result. When a Glue permission is missing or scoped too narrowly, the AWS APIs return empty lists rather than an error, so a crawl \"succeeds\" with 0 tables.",
   ],
   bigid:[
     "A BigID user token created in the BigID UI (valid up to 999 days). EDG exchanges it for a short-lived session token on every run.",
@@ -32476,7 +32444,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
                     ))}
                     {patternOnlyDims.length>0&&(
                       <div style={{gridColumn:"1 / -1",fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>
-                        {patternOnlyDims.map(d=>d.label.toLowerCase()).join(" and ")} can only be filtered by pattern \u2014 switch to Regex.
+                        {patternOnlyDims.map(d=>d.label).join(" and ")} can only be filtered by pattern &mdash; switch to Regex. Their names are not known until the level above has been crawled.
                       </div>
                     )}
                   </div>
@@ -32547,7 +32515,10 @@ const AddServiceWizard = ({onClose, onDone}) => {
 
               {/* Summary cards */}
               {(()=>{
-                const objTypesStr = objTypes.length>0 ? objTypes.join(", ") : "All object types";
+                // "All object types" is wrong for a source that creates none — BigID
+                // contributes classifications onto assets EDG already holds.
+                const objTypesStr = scope.objectTypes.length===0 ? "None — this source creates no assets"
+                  : objTypes.length>0 ? objTypes.join(", ") : "All object types";
                 const fmtList = arr => (arr&&arr.length) ? arr.join(", ") : "—";
                 const apps = ingestionApps.filter(a=>a.value).map(a=>a.label).join(", ") || "None";
                 const cards = [
@@ -32576,7 +32547,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
                       ["Exclude "+d.label, fmtList(dimVal(d.k,"excl"))],
                     ]),
                   ]}]),
-                  {title:"Ingestion Apps", rows:[["Enabled", apps]]},
+                  {title:"What to collect", rows:[["Enabled", apps]]},
                 ];
                 return cards.map(sec=>(
                   <div key={sec.title} style={{background:T.bgElevated,borderRadius:12,border:`1px solid ${T.border}`,overflow:"hidden"}}>
