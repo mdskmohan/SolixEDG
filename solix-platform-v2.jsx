@@ -7078,6 +7078,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
   const [createStep,     setCreateStep]     = useState(1);
   const [wizardRules,    setWizardRules]    = useState([]);
   const [soloRuleId,     setSoloRuleId]     = useState(null); // when set, the wizard renders as a focused single-rule "Edit Rule" drawer
+  const [soloAdd,        setSoloAdd]        = useState(false); // true when the solo drawer is adding a brand-new rule (vs editing an existing one)
   const [wizardRuleTab,  setWizardRuleTab]  = useState("preset");
   const [wizardSqlRules, setWizardSqlRules] = useState([]);
   const [sevOpen,        setSevOpen]        = useState(null);
@@ -7235,7 +7236,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
     const isObj = a.type==="Bucket"||a.type==="Container"||a.type==="Object"||a.type==="Blob";
     return isObj ? ["Admin"] : [];
   };
-  const closeWizard = () => { setCreateOpen(false); setNewPol(EMPTY_POL); setCreateStep(1); setWizardRules([]); setWizardRuleTab("preset"); setWizardSqlRules([]); setSoloRuleId(null); setIsEditMode(false); };
+  const closeWizard = () => { setCreateOpen(false); setNewPol(EMPTY_POL); setCreateStep(1); setWizardRules([]); setWizardRuleTab("preset"); setWizardSqlRules([]); setSoloRuleId(null); setSoloAdd(false); setIsEditMode(false); };
 
   // Masking / Legal Hold / Retention are the only fields whose enforcement action actually
   // writes to the source — under combined (AND/OR) logic, silently dropping one of these from
@@ -7578,11 +7579,22 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
       releasedKeys:r.releasedKeys||[],
       pendingUnhold:!!r.pendingUnhold}));
     const sqlBack    = (pol.rules||[]).filter(r=>r.type==="sql"||r.sql).map(r=>({id:r.id||`wsql-${Date.now()}`,label:r.label||r.name||"",table:r.table||"",sql:r.sql||"",strategy:r.strategy||"BINARY",operator:r.operator||"",threshold:r.threshold||"",partitionExpr:r.partitionExpr||"",severity:r.severity||"Medium"}));
-    setWizardRules(presetBack);
+    // addBlank → append a fresh rule and open it solo, so "Add Rule" uses the SAME rich
+    // editor as "Edit rule". The existing rules ride along in wizardRules (hidden), so the
+    // save (handleCreate in edit mode) writes them all back — the new one merged in.
+    let rules = presetBack;
+    let solo   = opts.solo||null;
+    if(opts.addBlank){
+      const newId=`wr-${Date.now()}`;
+      rules=[...presetBack,{id:newId,name:"",field:"certification",operator:"is",value:"",table:"",column:"",severity:"Medium",enforce:false,enf:null,critType:null,dateCol:"",critText:"",holdCriteria:[],maskColumns:[],targetTags:[],applyTo:"asset",targetDomains:[],targetObjTypes:[],objPattern:"",objDateBasis:"",objDateOp:"",objDateVal:"",objDateVal2:"",maskPatterns:[],maskFileTypes:[],maskMethod:"",maskOutput:"",maskDest:"",releasedKeys:[],pendingUnhold:false}];
+      solo=newId;
+    }
+    setWizardRules(rules);
     setWizardSqlRules(sqlBack);
     setWizardRuleTab("preset");
     setCreateStep(opts.step||1);
-    setSoloRuleId(opts.solo||null);
+    setSoloRuleId(solo);
+    setSoloAdd(!!opts.addBlank);
     setIsEditMode(true);
     setCreateOpen(true);
   };
@@ -8671,7 +8683,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                 <span style={{fontSize:13,fontWeight:600,color:T.text}}>Rules</span>
                                 {totalRls>0&&<span style={{marginLeft:7,fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:99,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}30`}}>{totalRls}</span>}
                               </div>
-                              <button onClick={()=>{setRpTab("preset");setRpPreset({field:"certification",operator:"is",value:"",table:"",column:"",severity:"Medium"});setRpSql({label:"",table:"",sql:"",strategy:"BINARY",operator:"",threshold:"",partitionExpr:"",severity:"Medium"});setRulePanel({mode:"add",ruleId:null});}}
+                              <button onClick={()=>openEditWizard(p,{step:3,addBlank:true})}
                                 style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:7,background:T.accentDim,border:`1px solid ${T.accent}40`,color:T.accent,fontSize:11.5,fontWeight:600,cursor:"pointer",transition:"all .12s"}}
                                 onMouseEnter={e=>{e.currentTarget.style.background=T.accent;e.currentTarget.style.color="#fff";}}
                                 onMouseLeave={e=>{e.currentTarget.style.background=T.accentDim;e.currentTarget.style.color=T.accent;}}>
@@ -10004,8 +10016,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
               <div style={{display:"flex",alignItems:"center",gap:10}}>
                 <div style={{width:30,height:30,borderRadius:7,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent}}>{Ic.shield(14)}</div>
                 <div>
-                  <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{soloRuleId?"Edit Rule":isEditMode?"Edit Policy":"New Policy"}</div>
-                  <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{soloRuleId?"Edit this rule's fields and enforcement settings.":"Define what this policy governs and how it's enforced."}</div>
+                  <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{soloRuleId?(soloAdd?"Add Rule":"Edit Rule"):isEditMode?"Edit Policy":"New Policy"}</div>
+                  <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{soloRuleId?(soloAdd?"Define a new rule for this policy.":"Edit this rule's fields and enforcement settings."):"Define what this policy governs and how it's enforced."}</div>
                 </div>
               </div>
               <button onClick={closeWizard} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.x(12)}</button>
@@ -11397,7 +11409,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
               {soloRuleId ? (
                 <div style={{display:"flex",gap:8,marginLeft:"auto"}}>
                   <button onClick={closeWizard} style={{padding:"7px 16px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
-                  <button onClick={()=>handleCreate("draft")} style={{padding:"7px 22px",borderRadius:7,background:T.accent,border:`1px solid ${T.accent}`,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Save changes</button>
+                  <button onClick={()=>handleCreate("draft")} style={{padding:"7px 22px",borderRadius:7,background:T.accent,border:`1px solid ${T.accent}`,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>{soloAdd?"Add rule":"Save changes"}</button>
                 </div>
               ) : (<>
               <button onClick={()=>setCreateStep(s=>Math.max(1,s-1))} disabled={createStep===1}
