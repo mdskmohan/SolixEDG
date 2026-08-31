@@ -10272,10 +10272,15 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                     // ── Retention — table-level catalog metadata ──
                     {id:"last_accessed",   label:"Last Accessed (days ago)",scope:"table", type:"number",     ops:["greater than","less than","equals"],       vals:[],                                                        types:["Retention"],                       hint:"Snowflake / BigQuery only — not available in PostgreSQL / Oracle"},
                   ];
-                  // Policy Type no longer gates the rule catalog — every canonical field is available,
-                  // grouped by category in the field dropdown.
-                  const filteredRuleFields = W_RULE_FIELDS;
-                  const defaultField = filteredRuleFields[0]||W_RULE_FIELDS[0];
+                  // The rule's mode drives which fields the dropdown offers:
+                  //   Enforcement → only the three actions EDG enforces via CDP (Retention, Legal Hold, Masking).
+                  //   Validation  → only detection fields (no action) — the enforcement actions are removed.
+                  const ENF_FIELD_IDS       = ["retention_class","legal_hold","masking_status"];
+                  const ENFORCEMENT_FIELDS  = ENF_FIELD_IDS.map(id=>W_RULE_FIELDS.find(f=>f.id===id)).filter(Boolean);
+                  const VALIDATION_FIELDS   = W_RULE_FIELDS.filter(f=>!f.action);
+                  const fieldsForMode       = enf => enf ? ENFORCEMENT_FIELDS : VALIDATION_FIELDS;
+                  const filteredRuleFields  = W_RULE_FIELDS; // full set — used only for id→field lookups
+                  const defaultField        = VALIDATION_FIELDS[0]||W_RULE_FIELDS[0];
                   const addPresetRule = () => setWizardRules(prev=>[...prev,{id:`wr-${Date.now()}`,field:defaultField.id,operator:defaultField.ops[0],value:"",table:"",column:"",severity:"Medium"}]);
                   // Deleting a Legal Hold rule that's already approved & in effect doesn't unhold the
                   // table immediately — it fires a real "Unhold" approval request to the same approver
@@ -10731,16 +10736,17 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                 //   Enforcement → drop the match condition, go straight to action + target + config.
                                 // r.enforce is the source of truth for which mode the rule is in.
                                 const isActionRule = !!fd.action;
-                                // ── Tag mode: resolve the classification predicate → matched set ──
-                                // Bounded by the policy scope (availTables). Masking resolves to columns
-                                // (it acts on columns); Retention & Legal Hold resolve to whole objects.
-                                const isMaskRule = !!fd.action && fd.action.verb==="Mask";
-                                const tagMode = !!r.enforce && isEnfField && r.applyTo==="tag";
-                                const matchedAssets = (r.targetTags&&r.targetTags.length)
+                                // ── Optional classification targeting (enforcement fields only) ──
+                                // Masking resolves to columns (it acts on columns); Retention & Legal Hold
+                                // resolve to whole objects. Matching is bounded by the policy scope already
+                                // set in Step 2 (sources + object types + domains) — never re-asked here.
+                                const isMaskRule   = !!fd.action && fd.action.verb==="Mask";
+                                const tagTargeting = isEnfField && (r.targetTags||[]).length>0;
+                                const scopeDomains = newPol.scope?.domains||[];
+                                const matchedAssets = tagTargeting
                                   ? availTables.filter(a=>{
                                       if(!(a.tags||[]).some(t=>r.targetTags.includes(t))) return false;
-                                      if(r.targetDomains&&r.targetDomains.length&&!r.targetDomains.includes(a.domain)) return false;
-                                      if(r.targetObjTypes&&r.targetObjTypes.length&&!r.targetObjTypes.includes(a.type)) return false;
+                                      if(scopeDomains.length && !scopeDomains.includes(a.domain)) return false;
                                       return true;
                                     })
                                   : [];
@@ -10748,38 +10754,22 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                   ? matchedAssets.flatMap(a=>classifiedColumns(a.name,r.targetTags).map(c=>({asset:a.name,col:c,owner:a.owner})))
                                   : [];
                                 const matchOwners = [...new Set(matchedAssets.map(a=>a.owner))];
-                                const objTypeOpts = [...new Set(availTables.map(a=>a.type))];
+                                // Label for the optional classification field, per action.
+                                const tagFieldLabel = isMaskRule ? "Mask columns classified — any of"
+                                  : fd.action?.verb==="Legal hold" ? "Hold objects classified — any of"
+                                  : "Retain objects classified — any of";
                                 const tableColBlock = (showApprover)=>(
                                   <div style={{borderTop:`1px solid ${T.border}`,padding:"10px 11px 11px",display:"flex",flexDirection:"column",gap:8,background:`${T.bgBase}88`}}>
-                                    {/* ── Apply to — tabs (enforcement fields only): a hand-picked asset, or
-                                        every object/column carrying a classification. ── */}
-                                    {r.enforce&&isEnfField&&(
-                                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                                        <span style={{fontSize:11,fontWeight:600,color:T.textSub,flexShrink:0,minWidth:60}}>Apply to</span>
-                                        <div style={{display:"flex",border:`1px solid ${T.border}`,borderRadius:7,overflow:"hidden"}}>
-                                          {[["asset","Specific asset"],["tag","By classification"]].map(([m,lbl])=>{
-                                            const active=(r.applyTo||"asset")===m;
-                                            return <button key={m} onClick={()=>updRule(r.id,"applyTo",m)}
-                                              style={{padding:"4px 13px",fontSize:10.5,fontWeight:active?700:500,letterSpacing:"0.02em",border:"none",cursor:"pointer",background:active?T.accent:"transparent",color:active?"#fff":T.textMuted,transition:"all .1s"}}>{lbl}</button>;
-                                          })}
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* ── ASSET MODE (default) — hand-picked target + optional column + approver ── */}
-                                    {!tagMode&&<>
-                                    {/* Table row */}
+                                    {/* Target — a specific asset. Optional for the three enforcement actions
+                                        (a classification below can stand in); required for detection rules. */}
                                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                                       <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0,minWidth:60}}>
                                         <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/><line x1="1" y1="5" x2="13" y2="5" stroke="currentColor" strokeWidth="1"/><line x1="5" y1="5" x2="5" y2="13" stroke="currentColor" strokeWidth="1"/></svg>
-                                        <span style={{fontSize:11,fontWeight:600,color:T.textSub}}>{rulePickerNoun} <span style={{color:T.rose}}>*</span></span>
+                                        <span style={{fontSize:11,fontWeight:600,color:T.textSub}}>{rulePickerNoun} {isEnfField?<span style={{color:T.textMuted,fontWeight:400}}>(opt)</span>:<span style={{color:T.rose}}>*</span>}</span>
                                       </div>
                                       <TablePicker ruleId={r.id} value={r.table||""}/>
                                     </div>
-                                    {/* Column row — for Masking/Legal Hold/Retention, column selection now lives inside
-                                        "Enforce in place" (multi-select columns for Masking, hold criteria for Legal
-                                        Hold) since a single optional column here was redundant with that. Objects have
-                                        no columns, so the column row is suppressed entirely for object-scoped rules. */}
+                                    {/* Column row — only for detection column/both rules (objects have no columns). */}
                                     {(fd.scope==="column"||fd.scope==="both")&&!isEnfField&&!ruleIsObject&&(
                                       <div style={{display:"flex",alignItems:"center",gap:8}}>
                                         <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0,minWidth:60}}>
@@ -10791,67 +10781,47 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                         <ColPicker ruleId={r.id} value={r.column||""} required={fd.scope==="column"} tableVal={r.table||""}/>
                                       </div>
                                     )}
-                                    {showApprover&&(()=>{
-                                      const owners = r.table ? resolveTableOwners(r.table) : [];
+                                    {/* Optional classification target — the simple, production version: one tag
+                                        multi-select under Target. When set, the rule also applies to everything
+                                        in scope carrying those classifications. No tabs, no repeated facets. */}
+                                    {isEnfField&&!ruleIsObject&&(
+                                      <CatFieldDropdown label={tagFieldLabel} options={POLICY_TAGS} selected={r.targetTags||[]}
+                                        onChange={v=>updRule(r.id,"targetTags",v)} placeholder="Optional — search classifications…"
+                                        renderOpt={(o,sel)=><><span style={{width:9,height:9,borderRadius:"50%",background:TAG_DOT(o),flexShrink:0}}/><span style={{flex:1,fontSize:12.5,color:sel?T.accent:T.text}}>{o}</span></>}
+                                        renderChip={o=><span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:7,height:7,borderRadius:"50%",background:TAG_DOT(o)}}/>{o}</span>}/>
+                                    )}
+                                    {/* Compact preview — only once a classification is chosen. */}
+                                    {tagTargeting&&(()=>{
+                                      const cnt = isMaskRule?matchedCols.length:matchedAssets.length;
+                                      const noun = isMaskRule?"column":"object";
+                                      if(cnt===0) return <div style={{fontSize:11,color:T.amber}}>No {noun}s in scope carry that classification yet.</div>;
+                                      return (
+                                        <div style={{border:`1px solid ${T.accent}`,background:T.accentDim,borderRadius:9,padding:"9px 12px"}}>
+                                          <div style={{fontSize:11.5,color:T.textSub,fontWeight:600}}>
+                                            {cnt} {noun}{cnt>1?"s":""}{isMaskRule?` in ${matchedAssets.length} object${matchedAssets.length>1?"s":""}`:""} · approval from {matchOwners.length} owner{matchOwners.length>1?"s":""}
+                                          </div>
+                                          <div style={{marginTop:7,maxHeight:132,overflowY:"auto",display:"flex",flexDirection:"column",gap:3,borderTop:`1px solid ${T.border}`,paddingTop:7}}>
+                                            {isMaskRule
+                                              ? matchedCols.map((mc,i)=><div key={i} style={{fontSize:11,fontFamily:"'Geist Mono',monospace"}}><span style={{color:T.textMuted}}>{mc.asset}</span><span style={{color:T.violet,fontWeight:600}}>.{mc.col}</span></div>)
+                                              : matchedAssets.map(a=><div key={a.id} style={{fontSize:11,display:"flex",alignItems:"center",gap:8}}><span style={{fontFamily:"'Geist Mono',monospace",color:T.text}}>{a.name}</span><span style={{fontSize:9.5,color:T.textMuted}}>{a.type} · {a.domain}</span></div>)
+                                            }
+                                          </div>
+                                        </div>
+                                      );
+                                    })()}
+                                    {/* Approver — for a hand-picked asset target. */}
+                                    {showApprover&&r.table&&(()=>{
+                                      const owners = resolveTableOwners(r.table);
                                       return (
                                         <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                                           <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>Approver{owners.length>1?"s":""}:</span>
-                                          {!r.table&&<span style={{fontSize:10,color:T.textMuted,fontStyle:"italic"}}>Select a table to see who approves this rule</span>}
-                                          {r.table&&owners.length===0&&<span style={{fontSize:10,color:T.textMuted,fontStyle:"italic"}}>the domain owner</span>}
+                                          {owners.length===0&&<span style={{fontSize:10,color:T.textMuted,fontStyle:"italic"}}>the domain owner</span>}
                                           {owners.map(o=>(
                                             <span key={o} style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:10,background:`${T.accent}14`,color:T.accent}}>{o}</span>
                                           ))}
                                         </div>
                                       );
                                     })()}
-                                    </>}
-
-                                    {/* ── TAG MODE — classification predicate + live blast-radius preview ── */}
-                                    {tagMode&&<>
-                                      <CatFieldDropdown label={isMaskRule?"Mask columns classified — any of":"Tagged — any of these classifications"} required
-                                        options={POLICY_TAGS} selected={r.targetTags||[]}
-                                        onChange={v=>updRule(r.id,"targetTags",v)} placeholder="Search classifications…"
-                                        renderOpt={(o,sel)=><><span style={{width:9,height:9,borderRadius:"50%",background:TAG_DOT(o),flexShrink:0}}/><span style={{flex:1,fontSize:12.5,color:sel?T.accent:T.text}}>{o}</span></>}
-                                        renderChip={o=><span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:7,height:7,borderRadius:"50%",background:TAG_DOT(o)}}/>{o}</span>}/>
-                                      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                                        <div style={{flex:"1 1 170px"}}>
-                                          <CatFieldDropdown label="AND — Domain is one of" options={ALL_DOMAINS} selected={r.targetDomains||[]} onChange={v=>updRule(r.id,"targetDomains",v)} placeholder="Any domain"/>
-                                        </div>
-                                        <div style={{flex:"1 1 170px"}}>
-                                          <CatFieldDropdown label="AND — Object type is one of" options={objTypeOpts} selected={r.targetObjTypes||[]} onChange={v=>updRule(r.id,"targetObjTypes",v)} placeholder="Any type"/>
-                                        </div>
-                                      </div>
-                                      {/* Live preview — objects for Retention/Legal Hold, columns for Masking */}
-                                      {(()=>{
-                                        const zero = matchedAssets.length===0;
-                                        const noun = isMaskRule?"columns":"objects";
-                                        const cnt = isMaskRule?matchedCols.length:matchedAssets.length;
-                                        return (
-                                        <div style={{border:`1px solid ${zero?T.amber:T.accent}`,background:zero?`${T.amber}10`:T.accentDim,borderRadius:9,padding:"10px 12px"}}>
-                                          <div style={{display:"flex",alignItems:"center",gap:9}}>
-                                            <span style={{fontSize:19,fontWeight:800,color:zero?T.amber:T.accent,lineHeight:1}}>{cnt}</span>
-                                            <span style={{fontSize:12,color:T.textSub}}>{zero
-                                              ? `no ${noun} match right now — nothing to enforce`
-                                              : `${noun} match right now${isMaskRule?` across ${matchedAssets.length} object${matchedAssets.length>1?"s":""}`:""}`}</span>
-                                          </div>
-                                          {!zero&&(
-                                            <div style={{marginTop:9,maxHeight:150,overflowY:"auto",display:"flex",flexDirection:"column",gap:3,borderTop:`1px solid ${T.border}`,paddingTop:8}}>
-                                              {isMaskRule
-                                                ? matchedCols.map((mc,i)=><div key={i} style={{fontSize:11,display:"flex",alignItems:"center",gap:2,fontFamily:"'Geist Mono',monospace"}}><span style={{color:T.textMuted}}>{mc.asset}</span><span style={{color:T.violet,fontWeight:600}}>.{mc.col}</span></div>)
-                                                : matchedAssets.map(a=><div key={a.id} style={{fontSize:11,display:"flex",alignItems:"center",gap:8}}><span style={{fontFamily:"'Geist Mono',monospace",color:T.text}}>{a.name}</span><span style={{fontSize:9.5,color:T.textMuted}}>{a.type} · {a.domain}</span><span style={{marginLeft:"auto",display:"flex",gap:3,flexShrink:0}}>{(a.tags||[]).filter(t=>(r.targetTags||[]).includes(t)).map(t=><span key={t} style={{fontSize:9,fontWeight:700,padding:"0 5px",borderRadius:4,background:`${TAG_DOT(t)}22`,color:TAG_DOT(t)}}>{t}</span>)}</span></div>)
-                                              }
-                                            </div>
-                                          )}
-                                        </div>
-                                        );
-                                      })()}
-                                      <div style={{fontSize:10.5,color:T.textMuted,lineHeight:1.55}}>Tags propagate along lineage — {isMaskRule?"newly-classified columns":"newly-tagged objects"} raise their own approval when the policy next runs; never auto-applied.</div>
-                                      {matchedAssets.length>0&&(
-                                        <div style={{fontSize:10.5,color:T.textSub,padding:"7px 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.amber}`,lineHeight:1.5}}>
-                                          On save, requests approval from <b style={{color:T.text}}>{matchOwners.length} owner{matchOwners.length>1?"s":""}</b> across <b style={{color:T.text}}>{matchedAssets.length} object{matchedAssets.length>1?"s":""}</b>: {matchOwners.join(", ")}.
-                                        </div>
-                                      )}
-                                    </>}
                                   </div>
                                 );
                                 return (
@@ -10874,21 +10844,30 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                         {!ruleIsObject&&fd.scope==="column"&&<span style={{fontSize:10,color:T.rose,marginLeft:2}}>column required</span>}
                                         {!ruleIsObject&&fd.scope==="both"&&<span style={{fontSize:10,color:T.textMuted,marginLeft:2}}>column optional</span>}
                                         {ruleIsObject&&<span style={{fontSize:10,color:T.textMuted,marginLeft:2}}>object-level</span>}
-                                        {/* ── Validation / Enforcement mode toggle — only for action-capable fields.
-                                            Switching to Enforcement drops the match condition and configures the action
-                                            directly. Multiple enforced rules on one target are allowed now: a conflict
-                                            is surfaced as an advisory (most-restrictive wins), never a hard block. ── */}
-                                        {isActionRule&&(
+                                        {/* ── Validation / Enforcement mode toggle. It drives which fields the
+                                            dropdown offers: Enforcement → the three actions; Validation → detection
+                                            fields. Switching modes resets the field to a valid one for that mode. ── */}
+                                        {(
                                           <div style={{marginLeft:"auto",display:"flex",border:`1px solid ${T.border}`,borderRadius:7,overflow:"hidden"}}>
                                             {[["validate","Validation",false],["enforce","Enforcement",true]].map(([m,lbl,wantEnf])=>{
                                               const active=!!r.enforce===wantEnf;
                                               return (
                                                 <button key={m} onClick={()=>{
-                                                  if(wantEnf && !r.enforce && isEnfField){
-                                                    const conflict=findConflictingEnforcedPolicy(r.field,r.table);
-                                                    if(conflict){ onToast(`Note — '${conflict.name}' already enforces ${(ENF_LABEL[r.field]||"this action").toLowerCase()} on this target. Both will apply; the most-restrictive outcome wins.`,"info"); }
+                                                  const nextFields = fieldsForMode(wantEnf);
+                                                  const stillValid = nextFields.some(f=>f.id===r.field);
+                                                  const nextField  = stillValid ? r.field : (nextFields[0]||{}).id;
+                                                  if(wantEnf && !r.enforce && ENF_FIELD_IDS.includes(nextField)){
+                                                    const conflict=findConflictingEnforcedPolicy(nextField,r.table);
+                                                    if(conflict){ onToast(`Note — '${conflict.name}' already enforces ${(ENF_LABEL[nextField]||"this action").toLowerCase()} on this target. Both will apply; the most-restrictive outcome wins.`,"info"); }
                                                   }
                                                   updRule(r.id,"enforce",wantEnf);
+                                                  if(!stillValid){
+                                                    const nfd=W_RULE_FIELDS.find(f=>f.id===nextField)||{};
+                                                    updRule(r.id,"field",nextField);
+                                                    updRule(r.id,"operator",(nfd.ops||[""])[0]);
+                                                    updRule(r.id,"value","");
+                                                    updRule(r.id,"column","");
+                                                  }
                                                 }}
                                                 style={{padding:"3px 11px",fontSize:10,fontWeight:active?700:500,letterSpacing:"0.03em",border:"none",cursor:"pointer",background:active?(wantEnf?T.accent:T.textMuted+"22"):"transparent",color:active?(wantEnf?"#fff":T.text):T.textMuted,transition:"all .1s"}}>{lbl}</button>
                                               );
@@ -10914,7 +10893,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                           {(()=>{
                                             const GROUP_ORDER=["Governance","Security","Quality","Retention","Access","Privacy"];
                                             const grouped={};
-                                            filteredRuleFields.forEach(f=>{const g=(f.types&&f.types[0])||"Other";(grouped[g]=grouped[g]||[]).push(f);});
+                                            fieldsForMode(r.enforce).forEach(f=>{const g=(f.types&&f.types[0])||"Other";(grouped[g]=grouped[g]||[]).push(f);});
                                             const order=[...GROUP_ORDER.filter(g=>grouped[g]),...Object.keys(grouped).filter(g=>!GROUP_ORDER.includes(g))];
                                             return order.map(g=><optgroup key={g} label={g}>{grouped[g].map(f=><option key={f.id} value={f.id}>{f.label}</option>)}</optgroup>);
                                           })()}
@@ -11093,24 +11072,15 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                           {/* Mode is driven by the Validation / Enforcement toggle in the header —
                                               no separate "Enforce in place" checkbox. Validation mode shows a hint;
                                               Enforcement mode shows the action config below. */}
-                                          {!r.enforce
-                                            ? <div style={{fontSize:11,color:T.textSub,lineHeight:1.5}}>This field can <b style={{fontWeight:600,color:T.text}}>{fd.action.verb.toLowerCase()}</b>. Switch to <b style={{fontWeight:600,color:T.accent}}>Enforcement</b> above to configure and apply it — in Validation mode the rule only flags matches.</div>
-                                            : <div style={{fontSize:11,color:T.textSub,lineHeight:1.5}}>This rule will <b style={{fontWeight:600,color:T.text}}>{fd.action.verb.toLowerCase()}</b> the target below when the policy runs.</div>}
                                           {r.enforce&&(
-                                            <div style={{marginTop:8,paddingTop:8,borderTop:`1px dashed ${T.border}`}}>
-                                              <div style={{fontSize:9.5,color:T.textMuted,marginBottom:6,letterSpacing:".3px"}}>Enforcement settings — pre-filled, editable. Which engine actually applies this is resolved per-asset when the policy runs.</div>
+                                            <div>
                                               {!isEnfField&&(
                                                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}><span style={{fontSize:10.5,color:T.textMuted,width:120,flexShrink:0}}>Target</span><span style={{fontSize:11,color:T.text}}>{(r.table||"per policy scope")}{r.column?(" · "+r.column):""}</span></div>
                                               )}
-                                              {/* ── Mask: structured tables use a "columns to mask" picker; unstructured
-                                                  objects (S3 / ADLS) use the pattern-based content redaction editor. ── */}
+                                              {/* Mask: structured tables use a columns picker; object stores use the
+                                                  pattern editor. When a classification is set, columns come from it. */}
                                               {fd.action.verb==="Mask"&&ruleIsObject&&renderObjMaskEditor()}
-                                              {fd.action.verb==="Mask"&&!ruleIsObject&&r.applyTo==="tag"&&(
-                                                <div style={{marginBottom:8,fontSize:10.5,color:T.textMuted,lineHeight:1.55,padding:"7px 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`}}>
-                                                  Columns are resolved from the classification — see the matched <b style={{color:T.textSub}}>{(matchedCols||[]).length} column{(matchedCols||[]).length===1?"":"s"}</b> in the preview above. No manual column pick needed.
-                                                </div>
-                                              )}
-                                              {fd.action.verb==="Mask"&&!ruleIsObject&&r.applyTo!=="tag"&&(()=>{
+                                              {fd.action.verb==="Mask"&&!ruleIsObject&&!tagTargeting&&(()=>{
                                                 const cols = r.table ? (ASSET_COLUMNS[r.table]||[]) : [];
                                                 return (
                                                   <div style={{marginBottom:8}}>
