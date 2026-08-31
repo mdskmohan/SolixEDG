@@ -8592,12 +8592,15 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                   ? {label:"Rejected by owner", color:T.rose, dot:T.rose}
                                   : {label:"Pending owner approval", color:T.amber, dot:T.amber};
                           // Concise one-line descriptor: what the rule does, and where. No chip clutter.
-                          const typeLbl = FIELD_LBL[r.field]||r.field;
+                          // Guarded so seeded rules that carry only a name (no field) never read "undefined".
+                          const typeLbl = FIELD_LBL[r.field]||r.field||"";
                           const targetTxt = (r.targetTags||[]).length ? `classified ${r.targetTags.join(", ")}` : (r.table ? (r.column?`${r.table}.${r.column}`:r.table) : "policy scope");
-                          const summary = r.enforce
-                            ? `${typeLbl} · ${targetTxt}`
-                            : `${typeLbl} ${opLabel(r.operator)}${r.value?` ${r.value}`:""}${r.table?` · ${r.table}`:""}`;
-                          const showSummary = summary && summary.trim() !== fieldLabel.trim();
+                          const opPart = r.operator ? ` ${opLabel(r.operator)}` : "";
+                          const summary = !typeLbl ? ""
+                            : r.enforce
+                              ? `${typeLbl} · ${targetTxt}`
+                              : `${typeLbl}${opPart}${r.value?` ${r.value}`:""}${r.table?` · ${r.table}`:""}`;
+                          const showSummary = summary && summary.trim() && summary.trim() !== fieldLabel.trim();
                           return (
                             <div key={r.id||ri} style={{padding:"12px 14px",border:`1px ${inactive?"dashed":"solid"} ${inactive?inactiveColor+"88":T.border}`,borderRadius:10,background:T.bgSurface}}>
                               <div style={{display:"flex",alignItems:"center",gap:9}}>
