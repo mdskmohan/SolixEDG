@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Tag-based Enforcement — concept</title>
+<style>
+  :root{
+    --bg:#0e1116; --surface:#161b22; --elevated:#1c232d; --border:#2a323d;
+    --text:#e6edf3; --sub:#9aa7b4; --muted:#6b7684;
+    --accent:#4c8dff; --accentDim:rgba(76,141,255,.12);
+    --amber:#e2a336; --green:#12b76a; --rose:#ee4d4d; --violet:#a879ff;
+    --mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-size:14px;line-height:1.5;padding:28px}
+  .wrap{max-width:860px;margin:0 auto}
+  h1{font-size:18px;margin:0 0 4px}
+  .lede{color:var(--sub);font-size:13px;margin:0 0 22px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:visible}
+  .card-h{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .rule-title{font-weight:700;font-size:15px}
+  .rule-sub{color:var(--muted);font-size:12px}
+  .grow{flex:1}
+  .seg{display:inline-flex;background:var(--elevated);border:1px solid var(--border);border-radius:9px;padding:3px}
+  .seg button{border:0;background:transparent;color:var(--sub);font:inherit;font-size:12px;font-weight:600;
+    padding:6px 12px;border-radius:6px;cursor:pointer;transition:.12s}
+  .seg.enf button.on{background:var(--amber);color:#1a1200}
+  .body{padding:20px}
+  .lbl{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin:0 0 8px}
+  .section{margin-bottom:22px}
+  /* apply-to tabs */
+  .applyto{display:inline-flex;background:var(--elevated);border:1px solid var(--border);border-radius:9px;padding:3px}
+  .applyto button{border:0;background:transparent;color:var(--sub);font:inherit;font-size:12.5px;font-weight:600;
+    padding:7px 14px;border-radius:6px;cursor:pointer}
+  .applyto button.on{background:var(--accent);color:#fff}
+  .cond{background:var(--elevated);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+  .cond-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+  .cond-row:last-child{margin-bottom:0}
+  .cond-lead{font-size:12.5px;color:var(--sub);min-width:118px}
+  .cond-lead b{color:var(--text)}
+  .and-badge{font-size:10px;font-weight:800;color:var(--amber);background:rgba(226,163,54,.13);
+    border:1px solid rgba(226,163,54,.3);padding:2px 7px;border-radius:6px;letter-spacing:.05em}
+  .rm{background:transparent;border:1px dashed var(--border);color:var(--muted);border-radius:7px;
+    padding:5px 9px;font:inherit;font-size:11px;cursor:pointer}
+  .rm:hover{border-color:var(--rose);color:var(--rose)}
+  .addcond{margin-top:12px;background:transparent;border:1px dashed var(--border);color:var(--sub);
+    border-radius:8px;padding:8px 12px;font:inherit;font-size:12px;cursor:pointer;font-weight:600}
+  .addcond:hover{border-color:var(--accent);color:var(--text)}
+  /* ── searchable multi-select ── */
+  .ms{position:relative;flex:1;min-width:240px}
+  .ms-trigger{width:100%;min-height:38px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+    padding:6px 34px 6px 10px;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;
+    cursor:pointer;position:relative;transition:border .12s}
+  .ms-trigger.open{border-color:var(--accent)}
+  .ms-ph{color:var(--muted);font-size:12.5px}
+  .ms-chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;
+    padding:3px 6px 3px 8px;border-radius:6px;background:var(--elevated);border:1px solid var(--border)}
+  .ms-chip .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+  .ms-chip .x{cursor:pointer;color:var(--muted);font-size:13px;line-height:1;padding:0 1px}
+  .ms-chip .x:hover{color:var(--rose)}
+  .ms-caret{position:absolute;right:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:11px;pointer-events:none}
+  .ms-pop{position:absolute;top:calc(100% + 5px);left:0;width:100%;min-width:250px;z-index:50;
+    background:var(--surface);border:1.5px solid var(--border);border-radius:10px;
+    box-shadow:0 12px 34px rgba(0,0,0,.45);overflow:hidden;display:none}
+  .ms-pop.open{display:block}
+  .ms-search{padding:9px 10px;border-bottom:1px solid var(--border)}
+  .ms-search input{width:100%;background:var(--elevated);border:1.5px solid var(--border);border-radius:6px;
+    color:var(--text);font:inherit;font-size:12.5px;padding:6px 9px;outline:none}
+  .ms-search input:focus{border-color:var(--accent)}
+  .ms-list{max-height:230px;overflow-y:auto}
+  .ms-group{padding:8px 12px 4px;font-size:9.5px;font-weight:800;color:var(--muted);
+    text-transform:uppercase;letter-spacing:.06em;position:sticky;top:0;background:var(--bg)}
+  .ms-opt{display:flex;align-items:center;gap:9px;padding:8px 12px;cursor:pointer;font-size:12.5px}
+  .ms-opt:hover{background:var(--elevated)}
+  .ms-opt .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+  .ms-opt .ck{margin-left:auto;color:var(--accent);font-size:12px;visibility:hidden}
+  .ms-opt.sel{color:#fff}
+  .ms-opt.sel .ck{visibility:visible}
+  .ms-empty{padding:18px 12px;text-align:center;color:var(--muted);font-size:12px}
+  /* preview */
+  .preview{border:1px solid var(--accent);background:var(--accentDim);border-radius:11px;padding:14px 16px}
+  .preview.zero{border-color:var(--amber);background:rgba(226,163,54,.08)}
+  .preview-top{display:flex;align-items:center;gap:10px;cursor:pointer}
+  .count{font-size:20px;font-weight:800;color:var(--accent)}
+  .count.zero{color:var(--amber)}
+  .preview-sub{font-size:12.5px;color:var(--sub)}
+  .caret{margin-left:auto;color:var(--muted);transition:.15s;font-size:12px}
+  .caret.open{transform:rotate(180deg)}
+  table{width:100%;border-collapse:collapse;margin-top:12px;font-size:12.5px}
+  th{text-align:left;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em;
+    padding:6px 10px;border-bottom:1px solid var(--border);font-weight:700}
+  td{padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text)}
+  td.obj{font-family:var(--mono);font-size:12px}
+  .minitag{font-size:10px;font-weight:700;padding:1px 6px;border-radius:5px;margin-right:4px}
+  .via{font-size:10px;color:var(--violet);font-style:italic}
+  .note{font-size:12px;color:var(--muted);line-height:1.6;margin-top:12px}
+  .note b{color:var(--sub);font-weight:600}
+  .approval{margin-top:14px;padding:11px 14px;border-radius:9px;background:var(--elevated);
+    border:1px solid var(--border);border-left:3px solid var(--amber);font-size:12.5px;color:var(--sub)}
+  .approval b{color:var(--text)}
+  .val-hint{padding:12px 15px;border-radius:9px;background:var(--elevated);border:1px solid var(--border);
+    font-size:12.5px;color:var(--sub);line-height:1.6}
+  .hidden{display:none}
+  .footer{margin-top:18px;font-size:11.5px;color:var(--muted);text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Enforcement rule — targeting by tag</h1>
+  <p class="lede">Concept mockup. <b>Apply to</b> = tabs · tags = searchable multi-select dropdown. Pick tags and watch the blast-radius preview react. Not wired to the real prototype.</p>
+
+  <div class="card">
+    <div class="card-h">
+      <div>
+        <div class="rule-title">🕒 Retention — 7 years</div>
+        <div class="rule-sub">basis: creation time · auto-purge on</div>
+      </div>
+      <div class="grow"></div>
+      <div class="seg enf" id="modeSeg">
+        <button data-mode="validation">Validation</button>
+        <button data-mode="enforcement" class="on">Enforcement</button>
+      </div>
+    </div>
+
+    <div class="body">
+      <div id="valHint" class="val-hint hidden">
+        In <b style="color:var(--accent)">Validation</b> mode this rule only <b>flags</b> objects missing a retention class — it raises a violation, changes nothing. <b>Apply to</b> and the action config appear only in Enforcement mode.
+      </div>
+
+      <div id="enfConfig">
+        <!-- apply to (TABS) -->
+        <div class="section">
+          <p class="lbl">Apply to</p>
+          <div class="applyto" id="applySeg">
+            <button data-apply="asset">Specific asset</button>
+            <button data-apply="tag" class="on">By classification / tag</button>
+          </div>
+        </div>
+
+        <!-- asset mode -->
+        <div id="assetMode" class="section hidden">
+          <p class="lbl">Target asset</p>
+          <div class="ms" id="assetMs"></div>
+          <p class="note">The classic model — you name one object. Precise, but you must remember every place the data lives, and it never follows new data.</p>
+        </div>
+
+        <!-- tag mode -->
+        <div id="tagMode" class="section">
+          <p class="lbl">Which objects</p>
+          <div class="cond">
+            <div class="cond-row">
+              <span class="cond-lead">Tagged <b>any of</b></span>
+              <div class="ms" id="tagMs"></div>
+            </div>
+            <div class="cond-row hidden" id="domainRow">
+              <span class="and-badge">AND</span>
+              <span class="cond-lead">Domain is one of</span>
+              <div class="ms" id="domMs"></div>
+              <button class="rm" data-remove="domain">remove</button>
+            </div>
+            <div class="cond-row hidden" id="typeRow">
+              <span class="and-badge">AND</span>
+              <span class="cond-lead">Object type is one of</span>
+              <div class="ms" id="typeMs"></div>
+              <button class="rm" data-remove="type">remove</button>
+            </div>
+          </div>
+          <button class="addcond" id="addDomain">+ AND Domain</button>
+          <button class="addcond" id="addType">+ AND Object type</button>
+        </div>
+
+        <!-- preview -->
+        <div class="section" id="previewSection">
+          <div class="preview" id="preview">
+            <div class="preview-top" id="previewTop">
+              <span class="count" id="count">0</span>
+              <span class="preview-sub" id="previewSub">objects match right now</span>
+              <span class="caret" id="caret">▾</span>
+            </div>
+            <div id="previewList" class="hidden"></div>
+          </div>
+          <p class="note">
+            <b>Tags flow along lineage</b> — objects downstream of a tagged source are included automatically, and enforcement is <b>proposed</b> (not silently applied) as they start to match.
+          </p>
+          <div class="approval" id="approval"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="footer">Concept only · tabs for Apply to · searchable dropdown for tags · AND across rows, “any of” within a row</p>
+</div>
+
+<script>
+// ── data ──────────────────────────────────────────────────
+const TAG_COLORS={PII:"#ee4d4d",PHI:"#a879ff",PCI:"#e2a336",GDPR:"#4c8dff",HIPAA:"#4c8dff",CCPA:"#4c8dff",DPDP:"#4c8dff",Confidential:"#12b76a",Internal:"#6b7684"};
+// grouped tag catalog — intentionally larger than the demo objects carry, to show why search matters
+const TAG_CATALOG=[
+  {group:"Sensitivity", value:"PII",         label:"PII"},
+  {group:"Sensitivity", value:"PHI",         label:"PHI"},
+  {group:"Sensitivity", value:"PCI",         label:"PCI"},
+  {group:"Sensitivity", value:"Confidential",label:"Confidential"},
+  {group:"Sensitivity", value:"Internal",    label:"Internal"},
+  {group:"Regulatory",  value:"GDPR",        label:"GDPR"},
+  {group:"Regulatory",  value:"HIPAA",       label:"HIPAA"},
+  {group:"Regulatory",  value:"CCPA",        label:"CCPA"},
+  {group:"Regulatory",  value:"DPDP",        label:"DPDP"},
+];
+const DOMAINS=["Finance","Commerce","Marketing","ML","Engineering"];
+const TYPES=["Table","View","Object"];
+const CATALOG=[
+  {name:"customers",              type:"Table",  domain:"Commerce", tags:["PII","GDPR"],        owner:"maya.chen"},
+  {name:"payments",              type:"Table",  domain:"Finance",  tags:["PCI","PII"],         owner:"dev.patel"},
+  {name:"patient_events",        type:"Table",  domain:"Finance",  tags:["PHI","PII"],         owner:"rahul.m"},
+  {name:"orders",                type:"Table",  domain:"Commerce", tags:["PII"],               owner:"maya.chen"},
+  {name:"customer_360_view",     type:"View",   domain:"Commerce", tags:["PII","GDPR"], via:"lineage", owner:"maya.chen"},
+  {name:"s3://finance-lake/pii/",type:"Object", domain:"Finance",  tags:["PII"],               owner:"dev.patel"},
+  {name:"s3://health-lake/phi/", type:"Object", domain:"Finance",  tags:["PHI"],               owner:"rahul.m"},
+  {name:"revenue",               type:"Table",  domain:"Finance",  tags:[],                    owner:"sarah.kim"},
+  {name:"product_catalog",       type:"Table",  domain:"Marketing",tags:[],                    owner:"priya.nair"},
+  {name:"feature_store",         type:"View",   domain:"ML",       tags:["PII"], via:"lineage", owner:"priya.nair"},
+];
+const ASSET_OPTS=CATALOG.map(o=>({group:o.type,value:o.name,label:o.name}));
+
+// ── state ─────────────────────────────────────────────────
+const state={mode:"enforcement",apply:"tag",tags:["PII"],domainOn:false,domains:[],typeOn:false,types:[],asset:[]};
+
+// ── searchable multi-select factory ───────────────────────
+function MultiSelect(mount,{options,selected,onChange,placeholder,single=false,colored=false}){
+  let open=false,q="";
+  mount.innerHTML="";
+  const trigger=document.createElement("div"); trigger.className="ms-trigger";
+  const caret=document.createElement("span"); caret.className="ms-caret"; caret.textContent="▾";
+  const pop=document.createElement("div"); pop.className="ms-pop";
+  mount.appendChild(trigger); mount.appendChild(pop);
+
+  function paintTrigger(){
+    trigger.innerHTML="";
+    if(selected.length===0){
+      const ph=document.createElement("span"); ph.className="ms-ph"; ph.textContent=placeholder; trigger.appendChild(ph);
+    } else {
+      selected.forEach(v=>{
+        const opt=options.find(o=>o.value===v)||{value:v,label:v};
+        const chip=document.createElement("span"); chip.className="ms-chip";
+        if(colored){const d=document.createElement("span");d.className="dot";d.style.background=TAG_COLORS[v]||"var(--muted)";chip.appendChild(d);}
+        const t=document.createElement("span"); t.textContent=opt.label; chip.appendChild(t);
+        const x=document.createElement("span"); x.className="x"; x.textContent="×";
+        x.onclick=e=>{e.stopPropagation();selected=selected.filter(s=>s!==v);commit();};
+        chip.appendChild(x); trigger.appendChild(chip);
+      });
+    }
+    trigger.appendChild(caret);
+  }
+  function paintList(){
+    pop.innerHTML="";
+    const s=document.createElement("div"); s.className="ms-search";
+    const inp=document.createElement("input"); inp.placeholder="Search…"; inp.value=q;
+    inp.oninput=e=>{q=e.target.value;paintList();inp2focus();};
+    s.appendChild(inp); pop.appendChild(s);
+    const list=document.createElement("div"); list.className="ms-list";
+    const filt=options.filter(o=>o.label.toLowerCase().includes(q.toLowerCase()));
+    if(filt.length===0){const e=document.createElement("div");e.className="ms-empty";e.textContent="No matches";list.appendChild(e);}
+    let lastGroup=null;
+    filt.forEach(o=>{
+      if(o.group&&o.group!==lastGroup){lastGroup=o.group;const g=document.createElement("div");g.className="ms-group";g.textContent=o.group;list.appendChild(g);}
+      const row=document.createElement("div"); row.className="ms-opt"+(selected.includes(o.value)?" sel":"");
+      if(colored){const d=document.createElement("span");d.className="dot";d.style.background=TAG_COLORS[o.value]||"var(--muted)";row.appendChild(d);}
+      const lbl=document.createElement("span"); lbl.textContent=o.label; lbl.style.flex="1"; row.appendChild(lbl);
+      const ck=document.createElement("span"); ck.className="ck"; ck.textContent="✓"; row.appendChild(ck);
+      row.onclick=()=>{
+        if(single){selected=[o.value];open=false;render();}
+        else{selected=selected.includes(o.value)?selected.filter(s=>s!==o.value):[...selected,o.value];}
+        commit();
+      };
+      list.appendChild(row);
+    });
+    pop.appendChild(list);
+    function inp2focus(){setTimeout(()=>inp.focus(),0);}
+    inp2focus();
+  }
+  function render(){
+    trigger.classList.toggle("open",open);
+    pop.classList.toggle("open",open);
+    paintTrigger(); if(open) paintList();
+  }
+  function commit(){onChange([...selected]);paintTrigger();if(open)paintList();}
+  trigger.onclick=()=>{open=!open;render();};
+  document.addEventListener("mousedown",e=>{if(!mount.contains(e.target)&&open){open=false;render();}});
+  render();
+  return {setSelected(v){selected=v;render();}};
+}
+
+// ── matching ──────────────────────────────────────────────
+function matches(){
+  if(state.apply!=="tag") return [];
+  return CATALOG.filter(o=>{
+    if(!(state.tags.length>0 && o.tags.some(t=>state.tags.includes(t)))) return false;
+    if(state.domainOn && state.domains.length>0 && !state.domains.includes(o.domain)) return false;
+    if(state.typeOn && state.types.length>0 && !state.types.includes(o.type)) return false;
+    return true;
+  });
+}
+function recompute(){
+  const m=matches();
+  const zero=m.length===0;
+  const count=document.getElementById("count"),sub=document.getElementById("previewSub"),preview=document.getElementById("preview");
+  count.textContent=m.length; count.classList.toggle("zero",zero); preview.classList.toggle("zero",zero);
+  sub.textContent=zero?"no objects match — this rule would enforce nothing":"objects match right now";
+  const list=document.getElementById("previewList");
+  if(zero){list.innerHTML='<p class="note" style="margin-top:12px">Pick at least one tag that some object actually carries.</p>';}
+  else{
+    const rows=m.map(o=>{
+      const tg=o.tags.map(t=>`<span class="minitag" style="background:${TAG_COLORS[t]}22;color:${TAG_COLORS[t]}">${t}</span>`).join("");
+      const via=o.via==="lineage"?' <span class="via">via lineage</span>':"";
+      return `<tr><td class="obj">${o.name}${via}</td><td>${o.type}</td><td>${o.domain}</td><td>${tg}</td><td>${o.owner}</td></tr>`;
+    }).join("");
+    list.innerHTML=`<table><thead><tr><th>Object</th><th>Type</th><th>Domain</th><th>Tags</th><th>Owner</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+  const owners=[...new Set(m.map(o=>o.owner))];
+  const appr=document.getElementById("approval");
+  if(zero){appr.classList.add("hidden");}
+  else{appr.classList.remove("hidden");
+    appr.innerHTML=`On save, this requests <b>legal/retention approval from ${owners.length} owner${owners.length>1?"s":""}</b> across <b>${m.length} object${m.length>1?"s":""}</b>. Newly-tagged objects later raise their own proposal — never auto-applied.`;}
+}
+
+// ── wire the dropdowns ────────────────────────────────────
+MultiSelect(document.getElementById("tagMs"),{options:TAG_CATALOG,selected:state.tags,placeholder:"Search classifications…",colored:true,onChange:v=>{state.tags=v;recompute();}});
+MultiSelect(document.getElementById("domMs"),{options:DOMAINS.map(d=>({value:d,label:d})),selected:state.domains,placeholder:"Any domain…",onChange:v=>{state.domains=v;recompute();}});
+MultiSelect(document.getElementById("typeMs"),{options:TYPES.map(t=>({value:t,label:t})),selected:state.types,placeholder:"Any type…",onChange:v=>{state.types=v;recompute();}});
+MultiSelect(document.getElementById("assetMs"),{options:ASSET_OPTS,selected:state.asset,placeholder:"Search assets…",single:true,onChange:v=>{state.asset=v;}});
+
+// ── toggles ───────────────────────────────────────────────
+document.getElementById("modeSeg").addEventListener("click",e=>{
+  const b=e.target.closest("button"); if(!b)return;
+  state.mode=b.dataset.mode;
+  [...e.currentTarget.children].forEach(x=>x.classList.toggle("on",x===b));
+  document.getElementById("valHint").classList.toggle("hidden",state.mode!=="validation");
+  document.getElementById("enfConfig").classList.toggle("hidden",state.mode!=="enforcement");
+});
+document.getElementById("applySeg").addEventListener("click",e=>{
+  const b=e.target.closest("button"); if(!b)return;
+  state.apply=b.dataset.apply;
+  [...e.currentTarget.children].forEach(x=>x.classList.toggle("on",x===b));
+  document.getElementById("assetMode").classList.toggle("hidden",state.apply!=="asset");
+  document.getElementById("tagMode").classList.toggle("hidden",state.apply!=="tag");
+  document.getElementById("previewSection").classList.toggle("hidden",state.apply!=="tag");
+  recompute();
+});
+document.getElementById("addDomain").onclick=()=>{state.domainOn=true;document.getElementById("domainRow").classList.remove("hidden");document.getElementById("addDomain").classList.add("hidden");recompute();};
+document.getElementById("addType").onclick=()=>{state.typeOn=true;document.getElementById("typeRow").classList.remove("hidden");document.getElementById("addType").classList.add("hidden");recompute();};
+document.querySelectorAll("[data-remove]").forEach(b=>b.onclick=()=>{
+  const k=b.dataset.remove;
+  if(k==="domain"){state.domainOn=false;state.domains=[];document.getElementById("domainRow").classList.add("hidden");document.getElementById("addDomain").classList.remove("hidden");}
+  if(k==="type"){state.typeOn=false;state.types=[];document.getElementById("typeRow").classList.add("hidden");document.getElementById("addType").classList.remove("hidden");}
+  recompute();
+});
+
+recompute();
+</script>
+</body>
+</html>

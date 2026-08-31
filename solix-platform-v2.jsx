@@ -684,7 +684,7 @@ const INITIAL_ASSIGNMENTS = {
     { id:'a11', tagId:'t10', assetId:ASSETS[3].id, origin:'manual',              sourceSystem:null,        sourceSystems:[],                  status:'active',   appliedBy:'Priya K.',appliedAt:'2026-03-20T09:00:00Z', stewardNote:'', propagationChain:[]             },
   ],
   [ASSETS[4].id]: [
-    { id:'a12s',tagId:'t1',  assetId:ASSETS[4].id, origin:'synced',              sourceSystem:'Snowflake', sourceSystems:['Snowflake'],       status:'active',   appliedBy:'system',  appliedAt:'2026-04-20T09:00:00Z', stewardNote:'', propagationChain:[]             },
+    { id:'a12s',tagId:'t1',  assetId:ASSETS[4].id, origin:'synced',              sourceSystem:'Snowflake', sourceSystems:['Snowflake','BigID'], status:'active', appliedBy:'system',  appliedAt:'2026-04-20T09:00:00Z', stewardNote:'', propagationChain:[]             },
     { id:'a12', tagId:'t8',  assetId:ASSETS[4].id, origin:'propagated_hierarchy',sourceSystem:null,        sourceSystems:[],                  status:'active',   appliedBy:'system',  appliedAt:'2026-04-02T07:00:00Z', stewardNote:'', propagationChain:[]             },
     { id:'a13', tagId:'t9',  assetId:ASSETS[4].id, origin:'manual',              sourceSystem:null,        sourceSystems:[],                  status:'active',   appliedBy:'Rahul M.',appliedAt:'2026-04-05T10:00:00Z', stewardNote:'', propagationChain:[]             },
     { id:'a14', tagId:'t13', assetId:ASSETS[4].id, origin:'manual',              sourceSystem:null,        sourceSystems:[],                  status:'active',   appliedBy:'Analyst', appliedAt:'2026-04-19T16:00:00Z', stewardNote:'', propagationChain:[]             },
@@ -692,10 +692,25 @@ const INITIAL_ASSIGNMENTS = {
   12: [
     { id:'a20', tagId:'t1',  assetId:12,           origin:'synced',              sourceSystem:'Databricks',sourceSystems:['Databricks'],      status:'active',   appliedBy:'system',  appliedAt:'2026-04-20T08:00:00Z', stewardNote:'', propagationChain:[]             },
   ],
+  // BigID accepted two column findings here (email 99%, phone 96%), so PII is applied with
+  // BigID as the system it came from. A steward accepted them; BigID never applies silently.
+  [ASSETS[5].id]: [
+    { id:'ab1', tagId:'t1',  assetId:ASSETS[5].id, origin:'synced',              sourceSystem:'BigID',     sourceSystems:['BigID'],           status:'active',   appliedBy:'system',  appliedAt:'2026-08-27T04:10:00Z', stewardNote:'Accepted from the weekly_pii_scan: email (Email Address, 99%) and phone (Phone Number, 96%).', propagationChain:[] },
+  ],
 };
 
 // Same-name mapping only: a source tag maps to the EDG tag of the SAME name. A source tag with
 // no same-named EDG tag stays 'unmapped' until sync auto-creates a new EDG tag of that name.
+// Connector ids are rendered in several places (tag sources, catalog facets, sync rows).
+// A raw id is never the right thing to show a steward.
+const CONN_DISPLAY_NAME = {
+  cdp:'Solix CDP', ecs:'Solix ECS', snowflake:'Snowflake', databricks:'Databricks',
+  oracle:'Oracle', postgres:'PostgreSQL', mysql:'MySQL', s3:'Amazon S3',
+  azureblob:'Azure Blob', gcs:'Google Cloud Storage', airflow:'Airflow',
+  tableau:'Tableau', powerbi:'Power BI', glue:'AWS Glue', dbt:'dbt', bigid:'BigID',
+  bigquery:'BigQuery', kafka:'Kafka',
+};
+
 const INITIAL_CONNECTOR_CONFIGS = {
   snowflake:  { connectorId:'snowflake',  syncEnabled:true,  reverseSyncEnabled:true,  reverseSyncApproval:true,  conflictRule:'flag_always',  lastSyncAt:'2026-04-20T10:00:00Z', lastSyncStatus:'partial',  lastSyncNewTags:1, lastSyncConflicts:2,
     nameMappings:[
@@ -709,12 +724,22 @@ const INITIAL_CONNECTOR_CONFIGS = {
     ]},
   // BigID contributes CLASSIFICATIONS, which is what a tag is here. Reverse sync is off:
   // EDG never writes a classification back into a discovery tool - the classifier is theirs.
+  // contributes:'classifications' marks BigID as a different KIND of source. Snowflake,
+  // dbt, BigQuery and Databricks map source tags by EXACT NAME (PII -> PII), which is the
+  // finalised model. BigID has no tags to match: it reports a CLASSIFIER plus a confidence
+  // score per column, and mapping that classifier to a tag is a steward's decision. Rows
+  // from a classifier source are labelled as such, so "same-named source tag" still reads
+  // true for every source where it applies.
   bigid:      { connectorId:'bigid',      syncEnabled:true,  reverseSyncEnabled:false, reverseSyncApproval:false, conflictRule:'flag_always',  lastSyncAt:'2026-08-27T04:10:00Z', lastSyncStatus:'success',  lastSyncNewTags:2, lastSyncConflicts:0,
+    contributes:'classifications', neverWritesBack:true,
+    // One row per classifier - the global "this classifier means this tag" decision.
+    // Whether an individual column's finding has been accepted lives in BIGID_FINDINGS.
     nameMappings:[
-      { id:'mb1', sourceTagName:'Email Address',  edgTagId:'t1', reverseSyncAlias:'PII', status:'mapped' },
-      { id:'mb2', sourceTagName:'Phone Number',   edgTagId:'t1', reverseSyncAlias:'PII', status:'mapped' },
-      { id:'mb3', sourceTagName:'Date of Birth',  edgTagId:null, reverseSyncAlias:null,  status:'unmapped' },
-      { id:'mb4', sourceTagName:'Street Address', edgTagId:null, reverseSyncAlias:null,  status:'unmapped' },
+      { id:'mb1', sourceTagName:'Email Address',        edgTagId:'t1', reverseSyncAlias:null, status:'mapped',   classifier:true, onColumns:['customers.email'] },
+      { id:'mb2', sourceTagName:'Phone Number',         edgTagId:'t1', reverseSyncAlias:null, status:'mapped',   classifier:true, onColumns:['customers.phone'] },
+      { id:'mb5', sourceTagName:'Cross-reference to PII',edgTagId:'t1',reverseSyncAlias:null, status:'mapped',   classifier:true, onColumns:['orders.customer_id'] },
+      { id:'mb6', sourceTagName:'Street Address',       edgTagId:'t1', reverseSyncAlias:null, status:'mapped',   classifier:true, onColumns:['orders.shipping_address','customers.address'] },
+      { id:'mb3', sourceTagName:'Date of Birth',        edgTagId:null, reverseSyncAlias:null, status:'unmapped', classifier:true, onColumns:['customers.date_of_birth'] },
     ],
   },
   dbt:        { connectorId:'dbt',        syncEnabled:true,  reverseSyncEnabled:false, reverseSyncApproval:false, conflictRule:'flag_always',  lastSyncAt:'2026-04-20T09:42:00Z', lastSyncStatus:'success',  lastSyncNewTags:1, lastSyncConflicts:0,
@@ -742,6 +767,11 @@ const INITIAL_INBOX = [
   { id:'i3', type:'pending_approval',  tagName:'GDPR',               assetId:ASSETS[0].id, assetName:'orders.customer_email',   domain:'Commerce', sourceSystem:null,         note:'Applied by Rahul M. with note: "found raw email stored here." Propagation mode is Lineage — would cascade to 8 downstream assets. Requires steward approval.',                         metadata:{ appliedBy:'Rahul M.', propagationMode:'lineage', downstreamCount:8 },        createdAt:'2026-04-20T08:15:00Z', resolvedAt:null, resolvedBy:null, resolution:null },
   { id:'i4', type:'sync_conflict',     tagName:'restricted',         assetId:ASSETS[1].id, assetName:'customer_profile',        domain:'Commerce', sourceSystem:'Snowflake', note:'Name collision: Snowflake "restricted" means access-controlled. No matching EDG tag. Needs disambiguation — create a separate tag or map to an existing one.',                        metadata:{ conflictType:'ambiguous_name', connectorId:'snowflake' },                    createdAt:'2026-04-20T10:00:00Z', resolvedAt:null, resolvedBy:null, resolution:null },
   { id:'i5', type:'propagation_review',tagName:'PHI',                assetId:ASSETS[3].id, assetName:'clinical_trials_master',  domain:'Clinical', sourceSystem:null,         note:'PHI tag applied. Propagation (H+L) will affect 23 downstream assets including 3 BI dashboards and 2 external reports. Review before confirming.',                                   metadata:{ downstreamCount:23, hierarchyCount:14, lineageCount:9 },                    createdAt:'2026-04-19T15:30:00Z', resolvedAt:null, resolvedBy:null, resolution:null },
+  // BigID's two unmapped classifiers. They are proposals, which is the whole point: a scan
+  // may not retag the catalog on its own. Accepting mb3/mb4 is what closes the loop from
+  // the BigID tab on an asset to a tag in the Classifications section.
+  { id:'ib1', type:'new_source_tag', tagName:'Date of Birth',  assetId:2, assetName:'customers.date_of_birth', domain:'Commerce', sourceSystem:'BigID', note:'BigID classified this column as Date of Birth at 93% confidence in weekly_pii_scan. No EDG classification is mapped to that classifier yet. Map it to an existing tag, promote it to a new Sensitivity tag, or discard the proposal.', metadata:{ affectedAssets:1, connectorId:'bigid', confidence:93, classifier:true },  createdAt:'2026-08-27T04:10:00Z', resolvedAt:null, resolvedBy:null, resolution:null },
+  { id:'ib2', type:'pending_approval', tagName:'PII',           assetId:2, assetName:'customers.address',       domain:'Commerce', sourceSystem:'BigID', note:'BigID classified this column as Street Address at 88% confidence. That classifier is already mapped to PII, so accepting this finding applies PII to customers.address. Below the 90% threshold, so it needs a steward.', metadata:{ affectedAssets:1, connectorId:'bigid', confidence:88, classifier:true, classifierName:'Street Address' },  createdAt:'2026-08-27T04:10:00Z', resolvedAt:null, resolvedBy:null, resolution:null },
 ];
 
 const INBOX_DATA = [
@@ -7345,6 +7375,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
         holdCriteria:r.holdCriteria||[], maskColumns:r.maskColumns||[],
         objPattern:r.objPattern||"", objDateBasis:r.objDateBasis||"", objDateOp:r.objDateOp||"", objDateVal:r.objDateVal||"", objDateVal2:r.objDateVal2||"",
         maskPatterns:r.maskPatterns||[], maskFileTypes:r.maskFileTypes||[], maskMethod:r.maskMethod||"", maskOutput:r.maskOutput||"", maskDest:r.maskDest||"",
+        applyTo:r.applyTo||"asset", targetTags:r.targetTags||[], targetDomains:r.targetDomains||[], targetObjTypes:r.targetObjTypes||[],
         releasedKeys:r.releasedKeys||[],
         pendingUnhold:!!r.pendingUnhold};
     });
@@ -10300,6 +10331,32 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                     const typeOk   = allowedTypes.size===0 || allowedTypes.has(a.type);
                     return svcMatch && typeOk && (isObjAssetType(a.type) || !!ASSET_COLUMNS[a.name]);
                   });
+                  // ── Tag-based enforcement targeting (grounded in CDP) ─────────────────────────
+                  // CDP already targets these three by criteria, not just a hand-picked object:
+                  // Legal Hold is rule/criteria-based (AND/OR), Retention is Criteriawise, and Data
+                  // Discovery drives Masking off PII/PHI/PCI classifications. EDG lifts that decision
+                  // into the catalog and resolves a tag predicate → the concrete object set (or, for
+                  // Masking, the concrete column set — masking acts on columns, not whole objects).
+                  const TAG_DOT = t => ({PII:T.rose,PHI:T.violet,PCI:T.amber,GDPR:T.blue,regulated:T.blue,financial:T.amber,sensitive:T.rose,healthcare:T.violet,"customer-data":T.accent,confidential:T.green,internal:T.textMuted,public:T.textMuted}[t]||T.textMuted);
+                  // Which columns of a table carry a given classification. A name heuristic stands in
+                  // for real column-level tags (EDG tags do propagate to columns); honest for a proto.
+                  const CLASSIFY_HINTS = {
+                    PII:/email|phone|first_name|last_name|full_name|(^|_)name|address|dob|date_of_birth|national_id|ssn|ip_address/i,
+                    PHI:/patient|health|diagnos|mrn|national_id|date_of_birth|dob/i,
+                    healthcare:/patient|health|diagnos|mrn/i,
+                    financial:/amount|salary|revenue|cost|price|account|iban|card|payment|exchange_rate|counterparty/i,
+                    sensitive:/password|token|secret|national_id|ssn|salary/i,
+                    "customer-data":/customer|email|phone|address|(^|_)name/i,
+                    confidential:/salary|password|secret|national_id/i,
+                  };
+                  const classifiedColumns = (tableName,tags) => {
+                    const cols = ASSET_COLUMNS[tableName]||[];
+                    if(!tags||!tags.length) return [];
+                    const hit = cols.filter(c=>tags.some(t=>CLASSIFY_HINTS[t]&&CLASSIFY_HINTS[t].test(c)));
+                    // Table carries the classification but no column name matched → fall back to the
+                    // obvious identifier columns so a masking rule is never silently empty.
+                    return hit.length?hit:cols.filter(c=>/email|phone|(^|_)name|_id$|^id$/i.test(c)).slice(0,3);
+                  };
                   // Scope-level flags for labelling the picker (Bucket/Container vs Table) and hiding column inputs.
                   const OBJ_SCOPE_TYPES = new Set(["Bucket","Container","Object","Blob"]);
                   const scopeIsObjectOnly = assetTypes2.length>0 && assetTypes2.every(t=>OBJ_SCOPE_TYPES.has(t));
@@ -10674,8 +10731,43 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                 //   Enforcement → drop the match condition, go straight to action + target + config.
                                 // r.enforce is the source of truth for which mode the rule is in.
                                 const isActionRule = !!fd.action;
+                                // ── Tag mode: resolve the classification predicate → matched set ──
+                                // Bounded by the policy scope (availTables). Masking resolves to columns
+                                // (it acts on columns); Retention & Legal Hold resolve to whole objects.
+                                const isMaskRule = !!fd.action && fd.action.verb==="Mask";
+                                const tagMode = !!r.enforce && isEnfField && r.applyTo==="tag";
+                                const matchedAssets = (r.targetTags&&r.targetTags.length)
+                                  ? availTables.filter(a=>{
+                                      if(!(a.tags||[]).some(t=>r.targetTags.includes(t))) return false;
+                                      if(r.targetDomains&&r.targetDomains.length&&!r.targetDomains.includes(a.domain)) return false;
+                                      if(r.targetObjTypes&&r.targetObjTypes.length&&!r.targetObjTypes.includes(a.type)) return false;
+                                      return true;
+                                    })
+                                  : [];
+                                const matchedCols = isMaskRule
+                                  ? matchedAssets.flatMap(a=>classifiedColumns(a.name,r.targetTags).map(c=>({asset:a.name,col:c,owner:a.owner})))
+                                  : [];
+                                const matchOwners = [...new Set(matchedAssets.map(a=>a.owner))];
+                                const objTypeOpts = [...new Set(availTables.map(a=>a.type))];
                                 const tableColBlock = (showApprover)=>(
                                   <div style={{borderTop:`1px solid ${T.border}`,padding:"10px 11px 11px",display:"flex",flexDirection:"column",gap:8,background:`${T.bgBase}88`}}>
+                                    {/* ── Apply to — tabs (enforcement fields only): a hand-picked asset, or
+                                        every object/column carrying a classification. ── */}
+                                    {r.enforce&&isEnfField&&(
+                                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                                        <span style={{fontSize:11,fontWeight:600,color:T.textSub,flexShrink:0,minWidth:60}}>Apply to</span>
+                                        <div style={{display:"flex",border:`1px solid ${T.border}`,borderRadius:7,overflow:"hidden"}}>
+                                          {[["asset","Specific asset"],["tag","By classification"]].map(([m,lbl])=>{
+                                            const active=(r.applyTo||"asset")===m;
+                                            return <button key={m} onClick={()=>updRule(r.id,"applyTo",m)}
+                                              style={{padding:"4px 13px",fontSize:10.5,fontWeight:active?700:500,letterSpacing:"0.02em",border:"none",cursor:"pointer",background:active?T.accent:"transparent",color:active?"#fff":T.textMuted,transition:"all .1s"}}>{lbl}</button>;
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* ── ASSET MODE (default) — hand-picked target + optional column + approver ── */}
+                                    {!tagMode&&<>
                                     {/* Table row */}
                                     <div style={{display:"flex",alignItems:"center",gap:8}}>
                                       <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0,minWidth:60}}>
@@ -10712,6 +10804,54 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                         </div>
                                       );
                                     })()}
+                                    </>}
+
+                                    {/* ── TAG MODE — classification predicate + live blast-radius preview ── */}
+                                    {tagMode&&<>
+                                      <CatFieldDropdown label={isMaskRule?"Mask columns classified — any of":"Tagged — any of these classifications"} required
+                                        options={POLICY_TAGS} selected={r.targetTags||[]}
+                                        onChange={v=>updRule(r.id,"targetTags",v)} placeholder="Search classifications…"
+                                        renderOpt={(o,sel)=><><span style={{width:9,height:9,borderRadius:"50%",background:TAG_DOT(o),flexShrink:0}}/><span style={{flex:1,fontSize:12.5,color:sel?T.accent:T.text}}>{o}</span></>}
+                                        renderChip={o=><span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:7,height:7,borderRadius:"50%",background:TAG_DOT(o)}}/>{o}</span>}/>
+                                      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                                        <div style={{flex:"1 1 170px"}}>
+                                          <CatFieldDropdown label="AND — Domain is one of" options={ALL_DOMAINS} selected={r.targetDomains||[]} onChange={v=>updRule(r.id,"targetDomains",v)} placeholder="Any domain"/>
+                                        </div>
+                                        <div style={{flex:"1 1 170px"}}>
+                                          <CatFieldDropdown label="AND — Object type is one of" options={objTypeOpts} selected={r.targetObjTypes||[]} onChange={v=>updRule(r.id,"targetObjTypes",v)} placeholder="Any type"/>
+                                        </div>
+                                      </div>
+                                      {/* Live preview — objects for Retention/Legal Hold, columns for Masking */}
+                                      {(()=>{
+                                        const zero = matchedAssets.length===0;
+                                        const noun = isMaskRule?"columns":"objects";
+                                        const cnt = isMaskRule?matchedCols.length:matchedAssets.length;
+                                        return (
+                                        <div style={{border:`1px solid ${zero?T.amber:T.accent}`,background:zero?`${T.amber}10`:T.accentDim,borderRadius:9,padding:"10px 12px"}}>
+                                          <div style={{display:"flex",alignItems:"center",gap:9}}>
+                                            <span style={{fontSize:19,fontWeight:800,color:zero?T.amber:T.accent,lineHeight:1}}>{cnt}</span>
+                                            <span style={{fontSize:12,color:T.textSub}}>{zero
+                                              ? `no ${noun} match right now — nothing to enforce`
+                                              : `${noun} match right now${isMaskRule?` across ${matchedAssets.length} object${matchedAssets.length>1?"s":""}`:""}`}</span>
+                                          </div>
+                                          {!zero&&(
+                                            <div style={{marginTop:9,maxHeight:150,overflowY:"auto",display:"flex",flexDirection:"column",gap:3,borderTop:`1px solid ${T.border}`,paddingTop:8}}>
+                                              {isMaskRule
+                                                ? matchedCols.map((mc,i)=><div key={i} style={{fontSize:11,display:"flex",alignItems:"center",gap:2,fontFamily:"'Geist Mono',monospace"}}><span style={{color:T.textMuted}}>{mc.asset}</span><span style={{color:T.violet,fontWeight:600}}>.{mc.col}</span></div>)
+                                                : matchedAssets.map(a=><div key={a.id} style={{fontSize:11,display:"flex",alignItems:"center",gap:8}}><span style={{fontFamily:"'Geist Mono',monospace",color:T.text}}>{a.name}</span><span style={{fontSize:9.5,color:T.textMuted}}>{a.type} · {a.domain}</span><span style={{marginLeft:"auto",display:"flex",gap:3,flexShrink:0}}>{(a.tags||[]).filter(t=>(r.targetTags||[]).includes(t)).map(t=><span key={t} style={{fontSize:9,fontWeight:700,padding:"0 5px",borderRadius:4,background:`${TAG_DOT(t)}22`,color:TAG_DOT(t)}}>{t}</span>)}</span></div>)
+                                              }
+                                            </div>
+                                          )}
+                                        </div>
+                                        );
+                                      })()}
+                                      <div style={{fontSize:10.5,color:T.textMuted,lineHeight:1.55}}>Tags propagate along lineage — {isMaskRule?"newly-classified columns":"newly-tagged objects"} raise their own approval when the policy next runs; never auto-applied.</div>
+                                      {matchedAssets.length>0&&(
+                                        <div style={{fontSize:10.5,color:T.textSub,padding:"7px 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.amber}`,lineHeight:1.5}}>
+                                          On save, requests approval from <b style={{color:T.text}}>{matchOwners.length} owner{matchOwners.length>1?"s":""}</b> across <b style={{color:T.text}}>{matchedAssets.length} object{matchedAssets.length>1?"s":""}</b>: {matchOwners.join(", ")}.
+                                        </div>
+                                      )}
+                                    </>}
                                   </div>
                                 );
                                 return (
@@ -10965,7 +11105,12 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                               {/* ── Mask: structured tables use a "columns to mask" picker; unstructured
                                                   objects (S3 / ADLS) use the pattern-based content redaction editor. ── */}
                                               {fd.action.verb==="Mask"&&ruleIsObject&&renderObjMaskEditor()}
-                                              {fd.action.verb==="Mask"&&!ruleIsObject&&(()=>{
+                                              {fd.action.verb==="Mask"&&!ruleIsObject&&r.applyTo==="tag"&&(
+                                                <div style={{marginBottom:8,fontSize:10.5,color:T.textMuted,lineHeight:1.55,padding:"7px 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                                                  Columns are resolved from the classification — see the matched <b style={{color:T.textSub}}>{(matchedCols||[]).length} column{(matchedCols||[]).length===1?"":"s"}</b> in the preview above. No manual column pick needed.
+                                                </div>
+                                              )}
+                                              {fd.action.verb==="Mask"&&!ruleIsObject&&r.applyTo!=="tag"&&(()=>{
                                                 const cols = r.table ? (ASSET_COLUMNS[r.table]||[]) : [];
                                                 return (
                                                   <div style={{marginBottom:8}}>
@@ -18987,8 +19132,8 @@ const BIGID_FINDINGS = {
     columns:[
       {col:"email",         classifier:"Email Address",  confidence:99, samples:1000, matched:998, status:"accepted", tag:"PII",       note:""},
       {col:"phone",         classifier:"Phone Number",   confidence:96, samples:1000, matched:961, status:"accepted", tag:"PII",       note:""},
-      {col:"date_of_birth", classifier:"Date of Birth",  confidence:93, samples:1000, matched:930, status:"proposed", tag:"sensitive", note:"No EDG classification mapped yet \u2014 waiting on a steward."},
-      {col:"address",       classifier:"Street Address", confidence:88, samples:1000, matched:884, status:"proposed", tag:"PII",       note:"No EDG classification mapped yet \u2014 waiting on a steward."},
+      {col:"date_of_birth", classifier:"Date of Birth",  confidence:93, samples:1000, matched:930, status:"proposed", tag:null,        note:"No EDG classification mapped yet \u2014 waiting on a steward in the Inbox."},
+      {col:"address",       classifier:"Street Address", confidence:88, samples:1000, matched:884, status:"proposed", tag:"PII",       note:"The Street Address classifier is mapped to PII, so this is the tag it would apply \u2014 a steward still has to accept the finding on this column."},
       {col:"customer_id",   classifier:"National ID",    confidence:41, samples:1000, matched:412, status:"rejected", tag:null,        note:"Rejected by priya.nair \u2014 the pattern matches an internal surrogate key, not a national ID. Low confidence was the tell."},
     ],
     policies:[
@@ -44236,7 +44381,7 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                               <span style={{color:T.accent,display:'flex',flexShrink:0}}>{Ic.tag(15)}</span>
                               <div style={{flex:1,minWidth:0}}>
                                 <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{tagSyncRows.length===0?'No source tags mapped':`Mapped in ${tagConnIds.length} source${tagConnIds.length!==1?'s':''}`}</div>
-                                <div style={{fontSize:11.5,color:T.textMuted}}>{tagSyncRows.length===0?'This tag is not yet named in any connected source.':`${tagSyncRows.length} source tag${tagSyncRows.length!==1?'s':''} · ${onCount} syncing back to source`}</div>
+                                <div style={{fontSize:11.5,color:T.textMuted}}>{tagSyncRows.length===0?'This tag is not yet named in any connected source.':`${tagConnIds.map(c=>CONN_DISPLAY_NAME[c]||c.charAt(0).toUpperCase()+c.slice(1)).join(', ')} · ${onCount} syncing back`}</div>
                               </div>
                               <span style={{fontSize:11,fontWeight:600,color:T.accent,display:'inline-flex',alignItems:'center',gap:4,flexShrink:0}}>Sources &amp; Sync
                                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -44446,15 +44591,30 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                             {tagSyncRows.map(({connId,m},i)=>{ const canPush=canPushOf(connId); const on=isOn(connId,m); const ps=pushSummaryForTag(selTag.id,connId); return (
                               <div key={m.id} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 14px',borderBottom:i<tagSyncRows.length-1?`1px solid ${T.border}`:'none'}}>
                                 <span title={nice(connId)} style={{flexShrink:0,display:'flex'}}><ServiceIcon service={connId} size={20}/></span>
+                                {/* Name the source. On PII this list is six rows, five of
+                                    them reading "PII", and an icon alone cannot tell them
+                                    apart - least of all a connector with no logo. */}
+                                <div style={{minWidth:104,flexShrink:0}}>
+                                  <div style={{fontSize:12,color:T.text,fontWeight:600}}>{CONN_DISPLAY_NAME[connId]||nice(connId)}</div>
+                                  <div style={{fontSize:10,color:T.textMuted}}>{m.classifier?'classifier':'source tag'}</div>
+                                </div>
                                 <span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.text,fontWeight:500}}>{m.sourceTagName}</span>
+                                {m.classifier&&(m.onColumns||[]).length>0&&(
+                                  <span title={(m.onColumns||[]).join(', ')} style={{fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:99,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`,flexShrink:0}}>{m.onColumns.length} column{m.onColumns.length!==1?'s':''}</span>
+                                )}
                                 {on&&<span style={{fontSize:10.5,color:T.accent}}>↗ writes back</span>}
                                 <span style={{flex:1}}/>
                                 {on&&ps.lastAt&&<span style={{fontSize:10,color:T.textMuted}} title={`${ps.objects} object write(s) logged`}>pushed {relTime(ps.lastAt)}</span>}
-                                {!canPush&&<span title="Enable push on this connection's Tag sync tab" style={{fontSize:10.5,color:T.textMuted}}>push disabled</span>}
+                                {/* A discovery tool is not "push disabled" pending a setting:
+                                    EDG never writes a classification back into it. */}
+                                {!canPush&&(connectorConfigs[connId]?.neverWritesBack
+                                  ? <span title="EDG never writes a classification back into a discovery tool - the classifier is theirs" style={{fontSize:10.5,color:T.textMuted}}>read-only source</span>
+                                  : <span title="Enable push on this connection's Tag sync tab" style={{fontSize:10.5,color:T.textMuted}}>push disabled</span>)}
+                                {!connectorConfigs[connId]?.neverWritesBack&&
                                 <div onClick={()=>toggleRS(connId,m)} title={canPush?'Reverse sync this source tag':'Connection push is disabled'}
                                   style={{width:34,height:19,borderRadius:10,background:on?T.accent:T.border,position:'relative',cursor:canPush?'pointer':'not-allowed',opacity:canPush?1:0.45,transition:'background .2s',flexShrink:0}}>
                                   <div style={{position:'absolute',top:3,left:on?18:3,width:13,height:13,borderRadius:'50%',background:'#fff',transition:'left .2s'}}/>
-                                </div>
+                                </div>}
                               </div>
                             );})}
                           </div>
