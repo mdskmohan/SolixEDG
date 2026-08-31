@@ -13112,6 +13112,7 @@ function buildLinEdges(hiddenNodes,edgesDef=LINEAGE_EDGES_DEF){
 //   back to the physical Snowflake table.
 // ═══════════════════════════════════════════════════════════════════════════
 const TABLEAU_NODE_META={
+  tb_dbt:{assetType:"dbt Model",   service:"dbt",      db:"jnj_analytics / models / marts / fct_revenue", domain:"Commerce",owner:"maya.chen",steward:"dev.patel",quality:0,cert:"Approved",tags:["revenue"],description:"The dbt model that materializes orders_fact. Declared in the manifest, so this hop is reported rather than inferred.", cols:[{n:"order_id",t:"bigint"},{n:"revenue",t:"decimal"},{n:"region",t:"varchar"},{n:"order_date",t:"date"}]},
   tb_tbl:{assetType:"Table",       service:"snowflake",db:"SNOWFLAKE_PROD / COMMERCE / orders_fact", domain:"Commerce",owner:"maya.chen",steward:"dev.patel",quality:94,cert:"Approved",tags:["PII","revenue"],description:"Snowflake fact table. Physical source the Tableau data source pulls from via custom SQL.", cols:[{n:"order_id",t:"bigint"},{n:"customer_id",t:"bigint"},{n:"revenue",t:"decimal"},{n:"order_status",t:"varchar"},{n:"order_date",t:"date"},{n:"region",t:"varchar"}]},
   tb_ds: {assetType:"Data Source", service:"tableau",  db:"Analytics / Finance / Orders_Certified",  domain:"Finance", owner:"alex.wu",  steward:"james.oh", quality:90,cert:"Approved",tags:["revenue","KPI"],description:"Published, certified Tableau data source. Reusable governed surface consumed by worksheets.", cols:[{n:"revenue",t:"field"},{n:"yoy_growth_pct",t:"calc"},{n:"region",t:"field"},{n:"order_date",t:"field"}]},
   tb_ws: {assetType:"Worksheet",   service:"tableau",  db:"Analytics / Finance / Revenue_by_Region", domain:"Finance", owner:"alex.wu",  steward:"james.oh", quality:86,cert:"Approved",tags:["KPI"],          description:"Worksheet (view) plotting revenue by region. Middle hop between data source and dashboard.", cols:[{n:"revenue",t:"measure"},{n:"region",t:"dim"}]},
@@ -13121,19 +13122,23 @@ const TABLEAU_NODE_META={
   tb_ext:{assetType:"Data Source", service:"tableau",  db:"Analytics / Finance / Revenue_Analytics / Revenue_Extract", domain:"Finance", owner:"alex.wu", steward:"james.oh", quality:0, cert:"Draft", tags:[], description:"Embedded data source inside the Revenue_Analytics workbook, with its own materialized extract off the same Snowflake table.", cols:[{n:"order_amount",t:"field"},{n:"region",t:"field"}]},
 };
 const TABLEAU_TOPO={
-  tb_tbl:{x:0,  y:160,label:"orders_fact",       upstream:[],        downstream:["tb_ds","tb_ext"]},
+  // Same seam as Power BI: the dbt model that builds the table both BI tools read.
+  tb_dbt:{x:-330,y:160,label:"fct_revenue",      upstream:[],        downstream:["tb_tbl"]},
+  tb_tbl:{x:0,  y:160,label:"orders_fact",       upstream:["tb_dbt"],downstream:["tb_ds","tb_ext"]},
   tb_ds: {x:310,y:160,label:"Orders_Certified",  upstream:["tb_tbl"],downstream:["tb_ws"]},
   tb_ws: {x:620,y:160,label:"Revenue_by_Region", upstream:["tb_ds"], downstream:["tb_db"]},
   tb_db: {x:930,y:160,label:"Revenue_Dashboard", upstream:["tb_ws"], downstream:[]},
   tb_ext:{x:310,y:340,label:"Revenue_Extract",   upstream:["tb_tbl"],downstream:[]},
 };
 const TABLEAU_EDGES_DEF=[
+  {id:"tle0",s:"tb_dbt",t:"tb_tbl",tk:"Materializes"},
   {id:"tle1",s:"tb_tbl",t:"tb_ds",tk:"Custom SQL"},
   {id:"tle2",s:"tb_ds", t:"tb_ws",tk:"Direct"},
   {id:"tle3",s:"tb_ws", t:"tb_db",tk:"Direct"},
   {id:"tle4",s:"tb_tbl",t:"tb_ext",tk:"Extract"},
 ];
 const TABLEAU_COL_MAPS=[
+  {s:"tb_dbt",t:"tb_tbl",cols:[{sc:"revenue",tc:"revenue"},{sc:"region",tc:"region"},{sc:"order_date",tc:"order_date"},{sc:"order_id",tc:"order_id"}]},
   {s:"tb_tbl",t:"tb_ds",cols:[{sc:"revenue",tc:"revenue"},{sc:"revenue",tc:"yoy_growth_pct"},{sc:"order_date",tc:"yoy_growth_pct"},{sc:"order_date",tc:"order_date"},{sc:"region",tc:"region"}]},
   {s:"tb_ds", t:"tb_ws",cols:[{sc:"revenue",tc:"revenue"},{sc:"region",tc:"region"}]},
   {s:"tb_ws", t:"tb_db",cols:[{sc:"revenue",tc:"total_revenue"},{sc:"region",tc:"region"}]},
@@ -13147,6 +13152,8 @@ const TABLEAU_COL_MAPS=[
 // paths inside one STRUCT column, and they flow into flat columns downstream.
 // ===========================================================================
 const GLUE_NODE_META={
+  gl_s3:   {assetType:"Prefix", service:"s3", db:"jnj-data-lake-prod / raw/clickstream/", domain:"Product", owner:"james.oh", steward:"alex.wu", quality:0, cert:"Approved", tags:["raw"], description:"S3 prefix holding the raw Parquet. The clickstream_crawler reads it and writes the table definition into the Glue Data Catalog.",
+            cols:[{n:"event_id",t:"string"},{n:"event_ts",t:"timestamp"},{n:"user_id",t:"string"},{n:"device",t:"struct"},{n:"payload",t:"struct"}]},
   gl_raw:  {assetType:"Table", service:"glue", db:"GLUE_LAKE / events / raw_clickstream",   domain:"Product", owner:"james.oh",  steward:"alex.wu", quality:76, cert:"Draft",    tags:["events","raw"], description:"Raw clickstream on S3 in Parquet, schema discovered by a crawler. Nested payload.",
             cols:[{n:"event_id",t:"string"},{n:"event_ts",t:"timestamp"},{n:"user_id",t:"string"},{n:"device.type",t:"struct"},{n:"payload.page",t:"struct"},{n:"payload.utm.source",t:"struct"}]},
   gl_sess: {assetType:"Table", service:"glue", db:"GLUE_LAKE / events / sessions_enriched",  domain:"Product", owner:"maya.chen", steward:"alex.wu", quality:88, cert:"Approved", tags:["events"],       description:"Sessionised clickstream, written by the sessionize_clickstream Glue job.",
@@ -13155,15 +13162,24 @@ const GLUE_NODE_META={
             cols:[{n:"session_date",t:"date"},{n:"sessions",t:"bigint"},{n:"users",t:"bigint"},{n:"avg_events_per_session",t:"double"}]},
 };
 const GLUE_TOPO={
-  gl_raw: {x:0,  y:170,label:"raw_clickstream",   upstream:[],          downstream:["gl_sess"]},
+  // The S3 prefix the crawler read. Cross-source, and reported by GLUE: a table's
+  // StorageDescriptor names its location, and glueCrawler names what discovered it. S3
+  // itself still reports no lineage - nothing in a bucket says who wrote an object.
+  gl_s3:  {x:-330,y:170,label:"raw/clickstream/", upstream:[],          downstream:["gl_raw"]},
+  gl_raw: {x:0,  y:170,label:"raw_clickstream",   upstream:["gl_s3"],   downstream:["gl_sess"]},
   gl_sess:{x:310,y:170,label:"sessions_enriched", upstream:["gl_raw"],  downstream:["gl_view"]},
   gl_view:{x:620,y:170,label:"vw_daily_sessions", upstream:["gl_sess"], downstream:[]},
 };
 const GLUE_EDGES_DEF=[
+  {id:"gle0",s:"gl_s3",  t:"gl_raw", tk:"Crawler"},
   {id:"gle1",s:"gl_raw", t:"gl_sess",tk:"Glue job"},
   {id:"gle2",s:"gl_sess",t:"gl_view",tk:"Athena view"},
 ];
 const GLUE_COL_MAPS=[
+  // The crawler maps a file's columns onto the table's, STRUCTs included.
+  {s:"gl_s3", t:"gl_raw",cols:[
+    {sc:"event_id",tc:"event_id"},{sc:"event_ts",tc:"event_ts"},{sc:"user_id",tc:"user_id"},
+    {sc:"device",tc:"device.type"},{sc:"payload",tc:"payload.page"},{sc:"payload",tc:"payload.utm.source"}]},
   {s:"gl_raw", t:"gl_sess",cols:[
     {sc:"user_id",tc:"user_id"},{sc:"event_ts",tc:"started_at"},{sc:"event_id",tc:"event_count"},
     {sc:"device.type",tc:"device_type"},{sc:"payload.utm.source",tc:"utm_source"},{sc:"payload.page",tc:"landing_page"}]},
@@ -13182,6 +13198,8 @@ const GLUE_NODE_BY_ASSET={
 // with the Dataset also feeding a pinned Tile on the Dashboard.
 // ===========================================================================
 const POWERBI_NODE_META={
+  pb_dbt: {assetType:"dbt Model", service:"dbt", db:"jnj_analytics / models / marts / fct_revenue", domain:"Commerce", owner:"maya.chen", steward:"dev.patel", quality:0, cert:"Approved", tags:["revenue"], description:"The dbt model that materializes orders_fact. Declared in the manifest, so this hop is reported rather than inferred.",
+            cols:[{n:"order_id",t:"bigint"},{n:"revenue",t:"decimal"},{n:"region",t:"varchar"},{n:"order_date",t:"date"}]},
   pb_tbl: {assetType:"Table",               service:"snowflake",db:"SNOWFLAKE_PROD / COMMERCE / orders_fact",          domain:"Commerce",owner:"maya.chen",steward:"dev.patel",quality:94,cert:"Approved",tags:["PII","revenue"],description:"The Snowflake table Power BI connects to. Built by the fct_revenue dbt model.", cols:[{n:"revenue",t:"decimal"},{n:"region",t:"varchar"},{n:"order_date",t:"date"},{n:"order_id",t:"bigint"}]},
   pb_src: {assetType:"Power BI Datasource",  service:"powerbi",  db:"Finance_Analytics / Snowflake_COMMERCE",           domain:"Finance", owner:"sarah.kim",steward:"alex.wu",  quality:0, cert:"Approved",tags:[],                description:"Gateway connection to Snowflake. The physical hop into Power BI.", cols:[{n:"revenue",t:"decimal"},{n:"region",t:"text"},{n:"order_date",t:"date"},{n:"order_id",t:"int64"}]},
   pb_flow:{assetType:"Power BI Dataflow",    service:"powerbi",  db:"Finance_Analytics / Orders_Prep",                  domain:"Finance", owner:"sarah.kim",steward:"alex.wu",  quality:0, cert:"Approved",tags:["etl"],           description:"Power Query dataflow shaping orders before the dataset loads them.", cols:[{n:"revenue",t:"decimal"},{n:"region",t:"text"},{n:"order_date",t:"date"},{n:"order_id",t:"int64"}]},
@@ -13192,7 +13210,10 @@ const POWERBI_NODE_META={
   pb_dash:{assetType:"Power BI Dashboard",   service:"powerbi",  db:"Finance_Analytics / Revenue_Overview",             domain:"Finance", owner:"alex.wu",  steward:"james.oh", quality:0, cert:"Approved",tags:["KPI","Board reporting"],description:"Executive dashboard of pinned tiles. Consumer end of the chain.", cols:[{n:"Total Revenue",t:"measure"}]},
 };
 const POWERBI_TOPO={
-  pb_tbl: {x:0,   y:170,label:"orders_fact",        upstream:[],           downstream:["pb_src"]},
+  // What builds the table Power BI reads. The dbt manifest says fct_revenue materializes
+  // it, so the chain is dbt -> Snowflake -> Power BI rather than starting mid-air.
+  pb_dbt: {x:-330,y:170,label:"fct_revenue",        upstream:[],           downstream:["pb_tbl"]},
+  pb_tbl: {x:0,   y:170,label:"orders_fact",        upstream:["pb_dbt"],   downstream:["pb_src"]},
   pb_src: {x:310, y:170,label:"Snowflake_COMMERCE", upstream:["pb_tbl"],   downstream:["pb_flow"]},
   pb_flow:{x:620, y:170,label:"Orders_Prep",        upstream:["pb_src"],   downstream:["pb_ds"]},
   pb_ds:  {x:930, y:170,label:"Revenue_Model",      upstream:["pb_flow"],  downstream:["pb_rpt","pb_tile"]},
@@ -13202,6 +13223,7 @@ const POWERBI_TOPO={
   pb_dash:{x:1550,y:290,label:"Revenue_Overview",   upstream:["pb_tile"],  downstream:[]},
 };
 const POWERBI_EDGES_DEF=[
+  {id:"ple0",s:"pb_dbt", t:"pb_tbl", tk:"Materializes"},
   {id:"ple1",s:"pb_tbl", t:"pb_src", tk:"Gateway connection"},
   {id:"ple2",s:"pb_src", t:"pb_flow",tk:"Power Query"},
   {id:"ple3",s:"pb_flow",t:"pb_ds",  tk:"Loads entity"},
@@ -13211,6 +13233,7 @@ const POWERBI_EDGES_DEF=[
   {id:"ple7",s:"pb_tile",t:"pb_dash",tk:"Pinned to"},
 ];
 const POWERBI_COL_MAPS=[
+  {s:"pb_dbt", t:"pb_tbl", cols:[{sc:"revenue",tc:"revenue"},{sc:"region",tc:"region"},{sc:"order_date",tc:"order_date"},{sc:"order_id",tc:"order_id"}]},
   {s:"pb_tbl", t:"pb_src", cols:[{sc:"revenue",tc:"revenue"},{sc:"region",tc:"region"},{sc:"order_date",tc:"order_date"},{sc:"order_id",tc:"order_id"}]},
   {s:"pb_src", t:"pb_flow",cols:[{sc:"revenue",tc:"revenue"},{sc:"region",tc:"region"},{sc:"order_date",tc:"order_date"},{sc:"order_id",tc:"order_id"}]},
   {s:"pb_flow",t:"pb_ds",  cols:[{sc:"revenue",tc:"revenue"},{sc:"region",tc:"region"},{sc:"order_date",tc:"order_date"}]},
@@ -13287,6 +13310,12 @@ const DBT_DAG_NODES = {
   tb_ds:        {asset:"Orders_Certified",       cols:[{n:"revenue",t:"field"},{n:"yoy_growth_pct",t:"calc"},{n:"region",t:"field"},{n:"order_date",t:"field"}]},
   tb_ws:        {asset:"Revenue_by_Region",      cols:[{n:"revenue",t:"measure"},{n:"region",t:"dim"}]},
   tb_db:        {asset:"Revenue_Dashboard",      cols:[{n:"total_revenue",t:"decimal"},{n:"region",t:"dim"}]},
+  // The DAG fed Tableau but stopped there, though Power BI reads the same table. Reported by
+  // Power BI's own scan, the same way the Tableau tail is reported by Tableau's.
+  pb_src2:      {asset:"Snowflake_COMMERCE",     cols:[{n:"revenue",t:"decimal"},{n:"region",t:"text"},{n:"order_date",t:"date"}]},
+  pb_flow2:     {asset:"Orders_Prep",            cols:[{n:"revenue",t:"decimal"},{n:"region",t:"text"},{n:"order_date",t:"date"}]},
+  pb_ds2:       {asset:"Revenue_Model",          cols:[{n:"revenue",t:"column"},{n:"region",t:"column"},{n:"Total Revenue",t:"DAX"}]},
+  pb_rpt2:      {asset:"Revenue_Detail",         cols:[{n:"Total Revenue",t:"measure"},{n:"region",t:"dim"}]},
 };
 
 const DBT_DAG_EDGES = [
@@ -13315,6 +13344,10 @@ const DBT_DAG_EDGES = [
   {id:"de25",s:"sf_fact",     t:"tb_ds",      tk:"Custom SQL"},
   {id:"de26",s:"tb_ds",       t:"tb_ws",      tk:"Direct"},
   {id:"de27",s:"tb_ws",       t:"tb_db",      tk:"Direct"},
+  {id:"de29",s:"sf_fact",     t:"pb_src2",    tk:"Gateway connection"},
+  {id:"de30",s:"pb_src2",     t:"pb_flow2",   tk:"Power Query"},
+  {id:"de31",s:"pb_flow2",    t:"pb_ds2",     tk:"Loads entity"},
+  {id:"de32",s:"pb_ds2",      t:"pb_rpt2",    tk:"Dataset binding"},
 ];
 
 const idm = (...names)=>names.map(n=>({sc:n,tc:n}));
@@ -13532,6 +13565,34 @@ function collapseDbtNodes(G){
   return {topo,meta:G.meta,colMaps:colMaps.filter(m=>live.has(m.s+">"+m.t)),edges};
 }
 
+// Narrow a graph to one source. Everything the asset's own connector reported stays; hops
+// into another product are dropped, along with any edge or column map that touched them.
+// The asset's own node always survives, so the graph can never come back empty.
+function inSourceOnly(G, service, activeId){
+  if(!service) return G;
+  const keep = new Set(Object.keys(G.topo).filter(id =>
+    id===activeId || !G.meta[id] || G.meta[id].service===service));
+  if(keep.size===0) return G;
+  const topo={};
+  Object.entries(G.topo).forEach(([id,t])=>{
+    if(!keep.has(id)) return;
+    topo[id]={...t,
+      upstream:  (t.upstream  ||[]).filter(u=>keep.has(u)),
+      downstream:(t.downstream||[]).filter(d=>keep.has(d))};
+  });
+  return {...G, topo,
+    edges:   (G.edges  ||[]).filter(e=>keep.has(e.s)&&keep.has(e.t)),
+    colMaps: (G.colMaps||[]).filter(m=>keep.has(m.s)&&keep.has(m.t))};
+}
+
+// How many hops in a graph belong to another source. Drives the control's label, and tells
+// the honest story when the answer is none.
+function crossSourceCount(G, service){
+  if(!service) return 0;
+  return Object.entries(G.topo||{}).filter(([id]) =>
+    G.meta[id] && G.meta[id].service && G.meta[id].service!==service).length;
+}
+
 // Resolve which lineage graph an asset's Lineage tab renders. dbt assets (and the Snowflake
 // table a dbt model materializes) get the full Postgres -> dbt -> Snowflake -> Tableau path;
 // Tableau assets get the BI path; everything else keeps the default graph. The matching node
@@ -13582,7 +13643,14 @@ const AssetLineageFull=({asset})=>{
   // Stable per asset. On a dbt graph the model layer can be collapsed out - see below.
   const _Graw=useMemo(()=>pickLineageGraph(asset),[asset]);
   const [showDbt,setShowDbt]=useState(true);
-  const _G=useMemo(()=>(_Graw.hasDbt&&!showDbt)?collapseDbtNodes(_Graw):_Graw,[_Graw,showDbt]);
+  // "all" spans every source that reported a hop; "source" keeps only this connector's own.
+  const [lineageScope,setLineageScope]=useState("all");
+  const _Gdbt=useMemo(()=>(_Graw.hasDbt&&!showDbt)?collapseDbtNodes(_Graw):_Graw,[_Graw,showDbt]);
+  const _activeId=useMemo(()=>Object.entries(_Gdbt.topo||{}).find(([,t])=>t.active)?.[0]||null,[_Gdbt]);
+  const _crossCount=useMemo(()=>crossSourceCount(_Gdbt,asset?.service),[_Gdbt,asset]);
+  const _G=useMemo(()=>lineageScope==="source"
+    ? inSourceOnly(_Gdbt,asset?.service,_activeId)
+    : _Gdbt,[_Gdbt,lineageScope,asset,_activeId]);
   const LINEAGE_TOPO=_G.topo, LINEAGE_NODE_META=_G.meta, LINEAGE_COL_MAPS=_G.colMaps, LINEAGE_EDGES_DEF=_G.edges;
   const aName=asset?.name||"orders_fact";
   const [hiddenNodes,  setHiddenNodes] =useState(new Set());
@@ -13746,6 +13814,23 @@ const AssetLineageFull=({asset})=>{
           <span style={{width:14,height:14,borderRadius:3,background:"#fff",border:"1.5px solid #8b5cf6",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#8b5cf6",fontWeight:700,lineHeight:1}}>+</span>
           downstream&nbsp;·&nbsp;click node for details
         </span>
+        {/* Scope. Only offered when the graph actually leaves this source — a control that
+            cannot change anything is worse than no control. */}
+        {_crossCount>0&&(
+          <div style={{display:"inline-flex",border:"1px solid #e2e8f0",borderRadius:6,overflow:"hidden"}}>
+            {[{k:"all",l:`All sources (+${_crossCount})`,t:`Include the ${_crossCount} hop(s) another source reported`},
+              {k:"source",l:"This source",t:"Only what this connector reported"}].map(o=>(
+              <button key={o.k} onClick={()=>setLineageScope(o.k)} title={o.t}
+                style={{padding:"4px 10px",background:lineageScope===o.k?"rgba(99,102,241,.1)":"#fff",
+                  border:"none",borderRight:o.k==="all"?"1px solid #e2e8f0":"none",
+                  color:lineageScope===o.k?"#4338ca":"#64748b",
+                  fontSize:11.5,fontWeight:lineageScope===o.k?600:400,cursor:"pointer",
+                  fontFamily:"inherit",whiteSpace:"nowrap"}}>
+                {o.l}
+              </button>
+            ))}
+          </div>
+        )}
         {/* dbt layer toggle — read the graph as engineering flow (every model drawn) or
             as business flow (models collapsed, source wired straight to target). */}
         {_Graw.hasDbt&&(
