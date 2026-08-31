@@ -8615,9 +8615,14 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                           const showSummary = summary && summary.trim() && summary.trim() !== fieldLabel.trim();
                           return (
                             <div key={r.id||ri} style={{padding:"12px 14px",border:`1px ${inactive?"dashed":"solid"} ${inactive?inactiveColor+"88":T.border}`,borderRadius:10,background:T.bgSurface}}>
-                              <div style={{display:"flex",alignItems:"center",gap:9}}>
-                                {status&&<span style={{width:7,height:7,borderRadius:"50%",background:status.color,flexShrink:0}}/>}
+                              <div style={{display:"flex",alignItems:"center",gap:8}}>
                                 <span style={{fontSize:13,fontWeight:600,color:T.text,flex:1,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fieldLabel}</span>
+                                {status&&(
+                                  <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 8px",borderRadius:99,background:`${status.color}14`,border:`1px solid ${status.color}30`,flexShrink:0}}>
+                                    <span style={{width:5,height:5,borderRadius:"50%",background:status.color,flexShrink:0}}/>
+                                    <span style={{fontSize:10,fontWeight:700,color:status.color,letterSpacing:"0.02em",whiteSpace:"nowrap"}}>{status.label}</span>
+                                  </span>
+                                )}
                                 <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:5,background:sevBg,color:sevClr,flexShrink:0}}>{r.severity||"Medium"}</span>
                                 <button onClick={()=>openEditRule(r)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"3px 5px",lineHeight:1,flexShrink:0,borderRadius:5,fontSize:11}} onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}} title="Edit rule">
                                   <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -8634,14 +8639,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                               </div>
                               {/* Subtle one-line summary — the gist, without the chip clutter. */}
                               {showSummary&&(
-                                <div style={{fontSize:11,color:T.textMuted,marginTop:4,marginLeft:status?16:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{summary}</div>
-                              )}
-                              {/* Status pill — enforcement only: Approval Pending / Approved / Rejected. */}
-                              {status&&(
-                                <div style={{display:"inline-flex",alignItems:"center",gap:5,marginTop:8,marginLeft:16,padding:"3px 9px",borderRadius:99,background:`${status.color}14`,border:`1px solid ${status.color}30`}}>
-                                  <span style={{width:5,height:5,borderRadius:"50%",background:status.color,flexShrink:0}}/>
-                                  <span style={{fontSize:10.5,fontWeight:700,color:status.color,letterSpacing:"0.02em"}}>{status.label}</span>
-                                </div>
+                                <div style={{fontSize:11,color:T.textMuted,marginTop:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{summary}</div>
                               )}
                             </div>
                           );
