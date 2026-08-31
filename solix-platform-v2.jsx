@@ -44580,7 +44580,10 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                         <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Source tags</div>
                         {tagSyncRows.length>0&&<span style={{fontSize:10.5,fontWeight:700,padding:'1px 8px',borderRadius:99,background:onCount>0?'rgba(22,163,74,.12)':T.bgElevated,color:onCount>0?'#16a34a':T.textMuted}}>{onCount} of {tagSyncRows.length} syncing back</span>}
                       </div>
-                      <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>How this tag is named in each source system — toggle reverse sync to mirror it back to that source. Push is gated by each connection's Tag sync settings.</div>
+                      {/* Two kinds of row live here: a same-named source tag, which can be
+                          mirrored back, and a classifier from a discovery tool, which
+                          cannot — so the copy has to cover both. */}
+                      <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>Where this tag comes from. A <strong style={{color:T.textSub,fontWeight:600}}>source tag</strong> is the same name in a source system and can be mirrored back, gated by that connection's Tag sync settings. A <strong style={{color:T.textSub,fontWeight:600}}>classifier</strong> is a detection from a discovery tool, mapped to this tag by a steward and never written back.</div>
                       {tagSyncRows.length===0
                         ? <div style={{padding:'40px 24px',textAlign:'center',border:`1px solid ${T.border}`,borderRadius:10,background:T.bgSurface}}>
                             <div style={{fontSize:26,marginBottom:10,opacity:.25}}>⇄</div>
