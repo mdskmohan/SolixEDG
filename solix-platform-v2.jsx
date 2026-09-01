@@ -35936,7 +35936,12 @@ let _cpDefs = [
 const _cpDefSubs = new Set();
 const cpDefsSet = (u)=>{ _cpDefs = typeof u==="function"?u(_cpDefs):u; _cpDefSubs.forEach(f=>f()); };
 const upsertPropDef = (def)=>cpDefsSet(prev=>{ const i=prev.findIndex(d=>d.id===def.id); if(i<0) return [...prev,{...def,id:def.id||("cp"+Date.now())}]; const n=[...prev]; n[i]={...def}; return n; });
-const deletePropDef = (id)=>cpDefsSet(prev=>prev.filter(d=>d.id!==id));
+const archivePropDef = (id)=>cpDefsSet(prev=>prev.map(d=>d.id===id?{...d,archived:true}:d));   // soft-delete: hidden from objects, values kept, restorable
+const restorePropDef = (id)=>cpDefsSet(prev=>prev.map(d=>d.id===id?{...d,archived:false}:d));
+const deletePropDef  = (id)=>{ // permanent purge: remove the definition AND every value captured for it
+  cpDefsSet(prev=>prev.filter(d=>d.id!==id));
+  const nv={}; for(const k of Object.keys(_cpVals)){ const {[id]:_drop, ...rest}=_cpVals[k]; nv[k]=rest; } _cpVals=nv; _cpValSubs.forEach(f=>f());
+};
 const useCustomPropDefs = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_cpDefSubs.add(fn);return()=>{_cpDefSubs.delete(fn);};},[]); return _cpDefs; };
 
 // values keyed by `${entity}::${objectId}` → { [defId]: value }
@@ -35958,6 +35963,19 @@ const useCustomPropReqs = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=
 const cpIsEmpty = (v)=> v==null || v==="" || (Array.isArray(v)&&v.length===0);
 // A stored value is invalid if its option was later removed from the definition's allowed values.
 const cpValueValid = (def,v)=>{ if(cpIsEmpty(v)) return true; if(def.type==="enum") return (def.vals||[]).includes(v); if(def.type==="enumMulti"){ const arr=Array.isArray(v)?v:String(v).split(",").map(s=>s.trim()).filter(Boolean); return arr.every(x=>(def.vals||[]).includes(x)); } return true; };
+// Level-2 format validation, checked on Save — catches paste / edge values the typed control can't.
+// Returns an error string, or null when the value is fine (empty is allowed; Required is separate & advisory).
+const cpValidate = (def,v)=>{
+  if(cpIsEmpty(v)) return null;
+  const s=String(v).trim();
+  if(def.type==="integer") return /^-?\d+$/.test(s) ? null : "Enter a whole number.";
+  if(def.type==="number")  return (s!=="" && !isNaN(Number(s))) ? null : "Enter a valid number.";
+  if(def.type==="email")   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) ? null : "Enter a valid email address.";
+  if(def.type==="date")    return isNaN(Date.parse(s)) ? "Enter a valid date (YYYY-MM-DD)." : null;
+  if(def.type==="enum")      return (def.vals||[]).includes(s) ? null : "Select a value from the list.";
+  if(def.type==="enumMulti"){ const arr=Array.isArray(v)?v:s.split(",").map(x=>x.trim()).filter(Boolean); return arr.every(x=>(def.vals||[]).includes(x)) ? null : "Remove options that are no longer allowed."; }
+  return null;
+};
 const cpInitials = (h)=> String(h||"").split(/[.\s_@]/).filter(Boolean).map(x=>x[0]).slice(0,2).join("").toUpperCase();
 
 // Read-only, formatted display of a value (chips / avatar / text) — no form controls.
@@ -35973,9 +35991,9 @@ const CPValueDisplay = ({def,value})=>{
 };
 
 // Editable, typed control for one value.
-const CPValueInput = ({def,value,onChange})=>{
-  const baseS={width:"100%",maxWidth:340,padding:"8px 11px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
-  const onF=e=>e.target.style.borderColor=T.accent, onB=e=>e.target.style.borderColor=T.border;
+const CPValueInput = ({def,value,onChange,invalid})=>{
+  const baseS={width:"100%",maxWidth:340,padding:"8px 11px",background:T.bgElevated,border:`1.5px solid ${invalid?T.rose:T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
+  const onF=e=>e.target.style.borderColor=T.accent, onB=e=>e.target.style.borderColor=invalid?T.rose:T.border;
   if(def.type==="enum"){
     const stale = value && !(def.vals||[]).includes(value);
     return <select value={value||""} onChange={e=>onChange(e.target.value)} style={{...baseS,cursor:"pointer",appearance:"auto",color:value?T.text:T.textMuted}} onFocus={onF} onBlur={onB}><option value="">Select…</option>{stale&&<option value={value}>{value} (no longer allowed)</option>}{(def.vals||[]).map(v=><option key={v} value={v}>{v}</option>)}</select>;
@@ -35999,21 +36017,24 @@ const CustomPropsPanel = ({entity,objectId,objectName,owners=[],stewards=[],onTo
   const reqs=useCustomPropReqs();
   const {role:cpRole,roleCfg:cpCfg}=useRole();
   const me=((cpCfg&&cpCfg.email)||"you@jnj").split("@")[0];
-  const defs=allDefs.filter(d=>d.entity===entity);
+  const defs=allDefs.filter(d=>d.entity===entity && !d.archived);
   const key=entity+"::"+objectId;
   const stored=vals[key]||{};
   const isOwner  = cpRole==="admin" || owners.includes(me) || owners[0]===me;
   const isSteward= stewards.includes(me);
   const readOnly = !isOwner && !isSteward;
   const [draft,setDraft]=useState(stored);
+  const [showErrors,setShowErrors]=useState(false);
   const storedKey=JSON.stringify(stored);
-  useEffect(()=>{ setDraft(vals[key]||{}); },[key,storedKey]); // resync when object changes or a value is approved
+  useEffect(()=>{ setDraft(vals[key]||{}); setShowErrors(false); },[key,storedKey]); // resync when object changes or a value is approved
   const setField=(id,v)=>setDraft(d=>({...d,[id]:v}));
   const same=(a,b)=>JSON.stringify(a??"")===JSON.stringify(b??"");
   const pendingFor=(id)=>reqs.find(r=>r.status==="pending"&&r.entity===entity&&r.targetId===objectId&&r.propId===id);
   const changed=defs.filter(d=>!pendingFor(d.id)&&!same(draft[d.id],stored[d.id]));
-  const saveDirect=()=>{ changed.forEach(d=>setPropValue(entity,objectId,d.id,draft[d.id])); onToast&&onToast(`Saved ${changed.length} propert${changed.length===1?"y":"ies"}`,"success"); };
-  const sendRequests=()=>{ changed.forEach(d=>{ requestPropChange({entity,targetId:objectId,name:objectName,propId:d.id,propName:d.name,requestedValue:draft[d.id],requestedBy:me,note:"Requested via detail page",owner:owners[0]||null}); pushNotif({category:"Property",type:"field_updated",title:`Property change requested · ${objectName}`,body:`${me} requested ${d.name} → ${Array.isArray(draft[d.id])?draft[d.id].join(", "):draft[d.id]}`,nav:entity==="Tag"?"tags":entity==="Domain"?"domains":"catalog"}); }); onToast&&onToast(`Sent ${changed.length} change${changed.length===1?"":"s"} to the owner's Inbox`,"success"); setDraft(stored); };
+  const errorFor=(d)=>cpValidate(d,draft[d.id]);
+  const blockedByErrors=()=>{ if(changed.some(d=>errorFor(d))){ setShowErrors(true); onToast&&onToast("Some values need fixing before saving","error"); return true; } return false; };
+  const saveDirect=()=>{ if(blockedByErrors())return; changed.forEach(d=>setPropValue(entity,objectId,d.id,draft[d.id])); setShowErrors(false); onToast&&onToast(`Saved ${changed.length} propert${changed.length===1?"y":"ies"}`,"success"); };
+  const sendRequests=()=>{ if(blockedByErrors())return; changed.forEach(d=>{ requestPropChange({entity,targetId:objectId,name:objectName,propId:d.id,propName:d.name,requestedValue:draft[d.id],requestedBy:me,note:"Requested via detail page",owner:owners[0]||null}); pushNotif({category:"Property",type:"field_updated",title:`Property change requested · ${objectName}`,body:`${me} requested ${d.name} → ${Array.isArray(draft[d.id])?draft[d.id].join(", "):draft[d.id]}`,nav:entity==="Tag"?"tags":entity==="Domain"?"domains":"catalog"}); }); onToast&&onToast(`Sent ${changed.length} change${changed.length===1?"":"s"} to the owner's Inbox`,"success"); setDraft(stored); setShowErrors(false); };
   const gate = readOnly
     ? {c:T.textMuted, ic:Ic.lock?Ic.lock(13):"🔒", txt:`Read-only — you're neither an owner nor a steward of this ${entity.toLowerCase()}.`}
     : isOwner
@@ -36046,9 +36067,10 @@ const CustomPropsPanel = ({entity,objectId,objectName,owners=[],stewards=[],onTo
           </div>
           <div style={{minWidth:0,paddingTop:1}}>
             {editable
-              ? <CPValueInput def={d} value={draft[d.id]} onChange={v=>setField(d.id,v)}/>
+              ? <CPValueInput def={d} value={draft[d.id]} onChange={v=>setField(d.id,v)} invalid={showErrors&&!!errorFor(d)}/>
               : <CPValueDisplay def={d} value={stored[d.id]}/>}
-            {editable&&d.required&&empty&&<div style={{fontSize:10.5,color:T.rose,marginTop:5}}>This field is required.</div>}
+            {editable&&showErrors&&errorFor(d)&&<div style={{fontSize:10.5,color:T.rose,marginTop:5}}>{errorFor(d)}</div>}
+            {editable&&d.required&&empty&&!(showErrors&&errorFor(d))&&<div style={{fontSize:10.5,color:T.rose,marginTop:5}}>This field is required.</div>}
             {!cpValueValid(d, editable?draft[d.id]:stored[d.id])&&<div style={{fontSize:10.5,color:T.rose,marginTop:5}}>Value is no longer an allowed option — please reselect.</div>}
             {pend&&<div style={{fontSize:10.5,color:T.amber,marginTop:5}}>A change to “{Array.isArray(pend.requestedValue)?pend.requestedValue.join(", "):pend.requestedValue}” is awaiting owner approval.</div>}
           </div>
@@ -41616,7 +41638,9 @@ const SettingsView = ({onToast})=>{
   const tagCtx = useTagCtx();
   const propDefs = useCustomPropDefs();               // Custom Properties — definition store (Layer 1)
   const [propEditor, setPropEditor] = useState(null); // null (closed) | "new" | <def to edit>
-  const [propDelete, setPropDelete] = useState(null); // <def pending delete-confirm>
+  const [propDelete, setPropDelete] = useState(null); // <def pending PERMANENT delete-confirm>
+  const [propArchive, setPropArchive] = useState(null); // <def pending archive-confirm>
+  const [propTab, setPropTab] = useState("active"); // active | archived
   const [rsJobOpen, setRsJobOpen] = useState(null);   // selected run id (detail view inside drawer)
   const [rsPanelOpen, setRsPanelOpen] = useState(false); // reverse-sync job drawer open
   const [rsSearch, setRsSearch] = useState("");        // run-list search (tag / object)
@@ -43343,35 +43367,55 @@ const SettingsView = ({onToast})=>{
             </>}
 
             {/* ══ CUSTOM PROPERTIES ══ */}
-            {section==="custom_props"&&<>
+            {section==="custom_props"&&(()=>{
+              const activeDefs=propDefs.filter(p=>!p.archived), archivedDefs=propDefs.filter(p=>p.archived);
+              const rows = propTab==="active" ? activeDefs : archivedDefs;
+              return <>
               <SettSH icon={Ic.props(16)} title="Custom Properties" desc="Define typed fields once on an object type — they appear on every asset, tag, or domain of that type for stewards & owners to fill in."
-                action={<AddBtn label="Add" onClick={()=>setPropEditor("new")}/>}/>
+                action={propTab==="active"?<AddBtn label="Add" onClick={()=>setPropEditor("new")}/>:null}/>
+              <div style={{display:"flex",gap:6,marginBottom:14}}>
+                {[{k:"active",l:"Active",n:activeDefs.length},{k:"archived",l:"Archived",n:archivedDefs.length}].map(t=>(
+                  <button key={t.k} onClick={()=>setPropTab(t.k)} style={{padding:"6px 13px",borderRadius:8,border:`1px solid ${propTab===t.k?T.accent:T.border}`,background:propTab===t.k?T.accentDim:T.bgSurface,color:propTab===t.k?T.accent:T.textSub,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>{t.l} <span style={{opacity:.6}}>({t.n})</span></button>
+                ))}
+              </div>
               <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
                 <table style={{width:"100%",borderCollapse:"collapse"}}>
                   <thead><tr style={{borderBottom:`1px solid ${T.border}`,background:T.bgElevated}}>{["Property","Type","Applies to","Required","Allowed Values",""].map(h=><th key={h} style={{padding:"9px 14px",textAlign:"left",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</th>)}</tr></thead>
-                  <tbody>{propDefs.map((p,i)=>(
-                    <tr key={p.id} className="row-hover" style={{borderBottom:i<propDefs.length-1?`1px solid ${T.border}`:"none"}}>
+                  <tbody>{rows.map((p,i)=>(
+                    <tr key={p.id} className="row-hover" style={{borderBottom:i<rows.length-1?`1px solid ${T.border}`:"none",opacity:p.archived?0.72:1}}>
                       <td style={{padding:"11px 14px"}}><div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{p.name}</div><div style={{fontFamily:"'Geist Mono',monospace",fontSize:11,color:T.textMuted}}>{p.machine}</div></td>
                       <td style={{padding:"11px 14px"}}><Badge>{CP_TYPE_LABEL[p.type]||p.type}</Badge></td>
                       <td style={{padding:"11px 14px"}}><span style={{fontSize:12,color:T.textSub}}>{p.entity}</span></td>
                       <td style={{padding:"11px 14px"}}>{p.required?<span style={{fontSize:11,color:T.accent,fontWeight:600}}>Yes</span>:<span style={{fontSize:11,color:T.textMuted}}>No</span>}</td>
                       <td style={{padding:"11px 14px"}}><span style={{fontSize:11,color:T.textMuted}}>{(p.vals&&p.vals.length)?p.vals.join(", "):"—"}</span></td>
-                      <td style={{padding:"11px 14px",textAlign:"right"}}><div style={{display:"flex",gap:5,justifyContent:"flex-end"}}><Btn small ghost onClick={()=>setPropEditor(p)}>Edit</Btn><Btn small variant="danger" onClick={()=>setPropDelete(p)}>Delete</Btn></div></td>
+                      <td style={{padding:"11px 14px",textAlign:"right"}}><div style={{display:"flex",gap:5,justifyContent:"flex-end"}}>
+                        {propTab==="active"
+                          ? <><Btn small ghost onClick={()=>setPropEditor(p)}>Edit</Btn><Btn small variant="danger" onClick={()=>setPropArchive(p)}>Delete</Btn></>
+                          : <><Btn small ghost onClick={()=>{restorePropDef(p.id);onToast(`${p.name} restored`,"success");}}>Restore</Btn><Btn small variant="danger" onClick={()=>setPropDelete(p)}>Delete permanently</Btn></>}
+                      </div></td>
                     </tr>
                   ))}
-                  {propDefs.length===0&&<tr><td colSpan={6} style={{padding:"34px 14px",textAlign:"center",color:T.textMuted,fontSize:12.5}}>No custom properties yet. Click <b style={{color:T.textSub}}>Add Property</b> to define one.</td></tr>}
+                  {rows.length===0&&<tr><td colSpan={6} style={{padding:"34px 14px",textAlign:"center",color:T.textMuted,fontSize:12.5}}>{propTab==="active"?<>No custom properties yet. Click <b style={{color:T.textSub}}>Add</b> to define one.</>:"No archived properties."}</td></tr>}
                   </tbody>
                 </table>
               </div>
               {propEditor!==null&&<CustomPropDefEditor editing={propEditor==="new"?null:propEditor} onClose={()=>setPropEditor(null)} onToast={onToast}/>}
-              {propDelete&&<Modal open={true} onClose={()=>setPropDelete(null)} title="Delete custom property" width={440}>
-                <div style={{fontSize:13,color:T.textSub,lineHeight:1.65}}>Delete <b style={{color:T.text}}>{propDelete.name}</b>? This removes the field from every <b style={{color:T.textSub}}>{propDelete.entity}</b> and permanently deletes any values captured for it. This can't be undone.</div>
+              {propArchive&&<Modal open={true} onClose={()=>setPropArchive(null)} title="Delete custom property" width={450}>
+                <div style={{fontSize:13,color:T.textSub,lineHeight:1.65}}>Delete <b style={{color:T.text}}>{propArchive.name}</b>? It moves to <b style={{color:T.text}}>Archived</b> — hidden from every <b style={{color:T.textSub}}>{propArchive.entity}</b>, but its captured values are kept and you can restore it anytime. To remove it and its values for good, use <b style={{color:T.textSub}}>Delete permanently</b> in the Archived tab.</div>
                 <div style={{display:"flex",gap:9,marginTop:22,justifyContent:"flex-end"}}>
-                  <Btn ghost onClick={()=>setPropDelete(null)}>Cancel</Btn>
-                  <Btn variant="danger" onClick={()=>{deletePropDef(propDelete.id);onToast(`${propDelete.name} deleted`,"success");setPropDelete(null);}}>Delete property</Btn>
+                  <Btn ghost onClick={()=>setPropArchive(null)}>Cancel</Btn>
+                  <Btn variant="danger" onClick={()=>{archivePropDef(propArchive.id);onToast(`${propArchive.name} archived`,"success");setPropArchive(null);}}>Delete</Btn>
                 </div>
               </Modal>}
-            </>}
+              {propDelete&&<Modal open={true} onClose={()=>setPropDelete(null)} title="Delete permanently" width={450}>
+                <div style={{fontSize:13,color:T.textSub,lineHeight:1.65}}>Permanently delete <b style={{color:T.text}}>{propDelete.name}</b>? This removes the property and <b style={{color:T.textSub}}>every value captured for it</b>, for good. This can't be undone.</div>
+                <div style={{display:"flex",gap:9,marginTop:22,justifyContent:"flex-end"}}>
+                  <Btn ghost onClick={()=>setPropDelete(null)}>Cancel</Btn>
+                  <Btn variant="danger" onClick={()=>{deletePropDef(propDelete.id);onToast(`${propDelete.name} permanently deleted`,"success");setPropDelete(null);}}>Delete permanently</Btn>
+                </div>
+              </Modal>}
+              </>;
+            })()}
 
             {/* ══ TAG POLICIES ══ */}
             {section==="tag_policies"&&<TagPoliciesSection onToast={onToast}/>}
