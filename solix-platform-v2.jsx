@@ -6541,10 +6541,10 @@ const CatFieldDropdown = ({label, required, options, selected, onChange, placeho
             </div>
             <div style={{maxHeight:200,overflowY:"auto"}}>
               {filtered.length===0&&<div style={{padding:"12px 14px",fontSize:12,color:T.textMuted,textAlign:"center",fontStyle:"italic"}}>No results</div>}
-              {filtered.map(o=>{
+              {filtered.map((o,oi)=>{
                 const isSel=selArr.includes(o);
                 return (
-                  <button key={o} onClick={()=>handleSelect(o)}
+                  <button key={`${o}__${oi}`} onClick={()=>handleSelect(o)}
                     style={{width:"100%",padding:"9px 12px",background:isSel?T.bgElevated:"transparent",border:"none",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:9,transition:"background .1s"}}
                     onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
                     {renderOpt?renderOpt(o,isSel):<span style={{flex:1,fontSize:12.5,color:T.text}}>{o}</span>}
@@ -10316,11 +10316,20 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   const allowedTypes = new Set(assetTypes2.flatMap(t=>OBJTYPE_ASSET_TYPES[t]||[t]));
                   // Assets in scope for rule-level targeting. Tables/views need a column fixture (for the column
                   // picker); objects have no columns, so they're pickable on source + type match alone.
-                  const availTables = ASSETS.filter(a=>{
-                    const svcMatch = scopeSrcs2.length===0 || scopeSrcs2.some(s=>(SRC_SVC2[s]||[]).includes((a.service||"").toLowerCase()));
-                    const typeOk   = allowedTypes.size===0 || allowedTypes.has(a.type);
-                    return svcMatch && typeOk && (isObjAssetType(a.type) || !!ASSET_COLUMNS[a.name]);
-                  });
+                  const availTables = (()=>{
+                    // ASSETS has HIERARCHY_ASSETS pushed into it, which can repeat a name (e.g. two
+                    // Databricks `user_events`). Dedupe by name so every picker built on availTables
+                    // gets unique keys — no React duplicate-key warnings, no ambiguous rows.
+                    const seen = new Set();
+                    return ASSETS.filter(a=>{
+                      const svcMatch = scopeSrcs2.length===0 || scopeSrcs2.some(s=>(SRC_SVC2[s]||[]).includes((a.service||"").toLowerCase()));
+                      const typeOk   = allowedTypes.size===0 || allowedTypes.has(a.type);
+                      if(!(svcMatch && typeOk && (isObjAssetType(a.type) || !!ASSET_COLUMNS[a.name]))) return false;
+                      if(seen.has(a.name)) return false;
+                      seen.add(a.name);
+                      return true;
+                    });
+                  })();
                   // ── Tag-based enforcement targeting (grounded in CDP) ─────────────────────────
                   // CDP already targets these three by criteria, not just a hand-picked object:
                   // Legal Hold is rule/criteria-based (AND/OR), Retention is Criteriawise, and Data
@@ -10386,11 +10395,11 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                             <div style={{overflowY:"auto",flex:1}}>
                               {filtered.length===0
                                 ? <div style={{padding:"18px 12px",fontSize:11.5,color:T.textMuted,textAlign:"center"}}>{emptyMsg||"No results"}</div>
-                                : filtered.map(it=>{
-                                    if(it.header) return <div key={it.key} style={{padding:"7px 12px 3px",fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".05em",background:T.bgBase,position:"sticky",top:0}}>{it.label}</div>;
+                                : filtered.map((it,itIdx)=>{
+                                    if(it.header) return <div key={`${it.key}__${itIdx}`} style={{padding:"7px 12px 3px",fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".05em",background:T.bgBase,position:"sticky",top:0}}>{it.label}</div>;
                                     const sel=value===it.key;
                                     return (
-                                      <div key={it.key} onClick={()=>{onChange(it.key);setOpen(false);setQ("");}}
+                                      <div key={`${it.key}__${itIdx}`} onClick={()=>{onChange(it.key);setOpen(false);setQ("");}}
                                         style={{padding:"8px 12px",fontSize:11.5,color:sel?T.accent:T.text,fontWeight:sel?600:400,cursor:"pointer",background:sel?T.accentDim:"transparent",display:"flex",alignItems:"center",gap:8,transition:"background .08s"}}
                                         onMouseEnter={e=>e.currentTarget.style.background=sel?T.accentDim:T.bgHover}
                                         onMouseLeave={e=>e.currentTarget.style.background=sel?T.accentDim:"transparent"}>
