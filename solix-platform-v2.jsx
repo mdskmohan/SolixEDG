@@ -10747,7 +10747,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                 // all the single-table logic (cloud detection, conflict, approval routing).
                                 const ruleTargets = (r.targets&&r.targets.length) ? r.targets : (r.table?[r.table]:[]);
                                 const enfCols     = [...new Set(ruleTargets.flatMap(t=>ASSET_COLUMNS[t]||[]))];
-                                const assetOptions= availTables.map(a=>a.name);
+                                const assetOptions= [...new Set(availTables.map(a=>a.name))]; // dedupe — catalog has some same-named assets
                                 const setTargets  = (v)=>{ updRule(r.id,"targets",v); updRule(r.id,"table",v[0]||""); };
                                 const fieldLabelSt = {display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
                                 const tableColBlock = (showApprover)=>(
