@@ -7382,7 +7382,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
         holdCriteria:r.holdCriteria||[], maskColumns:r.maskColumns||[],
         objPattern:r.objPattern||"", objDateBasis:r.objDateBasis||"", objDateOp:r.objDateOp||"", objDateVal:r.objDateVal||"", objDateVal2:r.objDateVal2||"",
         maskPatterns:r.maskPatterns||[], maskFileTypes:r.maskFileTypes||[], maskMethod:r.maskMethod||"", maskOutput:r.maskOutput||"", maskDest:r.maskDest||"",
-        applyTo:r.applyTo||"asset", targetTags:r.targetTags||[], targetDomains:r.targetDomains||[], targetObjTypes:r.targetObjTypes||[],
+        applyTo:r.applyTo||"asset", targets:r.targets||[], targetTags:r.targetTags||[], targetDomains:r.targetDomains||[], targetObjTypes:r.targetObjTypes||[],
         releasedKeys:r.releasedKeys||[],
         pendingUnhold:!!r.pendingUnhold};
     });
@@ -7573,7 +7573,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
     const presetBack = (pol.rules||[]).filter(r=>r.type==="preset"||(!r.type&&!r.sql)).map(r=>({id:r.id||`wr-${Date.now()}`,name:r.name||"",field:r.field||"certification",operator:r.operator||"is",value:r.value||"",table:r.table||"",column:r.column||"",severity:r.severity||"Medium",enforce:!!r.enforce,enf:r.enf||null,
       critType:r.critType||null, dateCol:r.dateCol||"", critText:r.critText||"",
       holdCriteria:r.holdCriteria||[], maskColumns:r.maskColumns||[],
-      targetTags:r.targetTags||[], applyTo:r.applyTo||"asset", targetDomains:r.targetDomains||[], targetObjTypes:r.targetObjTypes||[],
+      targetTags:r.targetTags||[], applyTo:r.applyTo||"asset", targets:r.targets||[], targetDomains:r.targetDomains||[], targetObjTypes:r.targetObjTypes||[],
       objPattern:r.objPattern||"", objDateBasis:r.objDateBasis||"", objDateOp:r.objDateOp||"", objDateVal:r.objDateVal||"", objDateVal2:r.objDateVal2||"",
       maskPatterns:r.maskPatterns||[], maskFileTypes:r.maskFileTypes||[], maskMethod:r.maskMethod||"", maskOutput:r.maskOutput||"", maskDest:r.maskDest||"",
       releasedKeys:r.releasedKeys||[],
@@ -7586,7 +7586,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
     let solo   = opts.solo||null;
     if(opts.addBlank){
       const newId=`wr-${Date.now()}`;
-      rules=[...presetBack,{id:newId,name:"",field:"certification",operator:"is",value:"",table:"",column:"",severity:"Medium",enforce:false,enf:null,critType:null,dateCol:"",critText:"",holdCriteria:[],maskColumns:[],targetTags:[],applyTo:"asset",targetDomains:[],targetObjTypes:[],objPattern:"",objDateBasis:"",objDateOp:"",objDateVal:"",objDateVal2:"",maskPatterns:[],maskFileTypes:[],maskMethod:"",maskOutput:"",maskDest:"",releasedKeys:[],pendingUnhold:false}];
+      rules=[...presetBack,{id:newId,name:"",field:"certification",operator:"is",value:"",table:"",column:"",severity:"Medium",enforce:false,enf:null,critType:null,dateCol:"",critText:"",holdCriteria:[],maskColumns:[],targetTags:[],applyTo:"asset",targets:[],targetDomains:[],targetObjTypes:[],objPattern:"",objDateBasis:"",objDateOp:"",objDateVal:"",objDateVal2:"",maskPatterns:[],maskFileTypes:[],maskMethod:"",maskOutput:"",maskDest:"",releasedKeys:[],pendingUnhold:false}];
       solo=newId;
     }
     setWizardRules(rules);
@@ -8606,7 +8606,9 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                           // Concise one-line descriptor: what the rule does, and where. No chip clutter.
                           // Guarded so seeded rules that carry only a name (no field) never read "undefined".
                           const typeLbl = FIELD_LBL[r.field]||r.field||"";
-                          const targetTxt = (r.targetTags||[]).length ? `classified ${r.targetTags.join(", ")}` : (r.table ? (r.column?`${r.table}.${r.column}`:r.table) : "policy scope");
+                          const targetTxt = (r.targetTags||[]).length ? `classified ${r.targetTags.join(", ")}`
+                            : (r.targets||[]).length>1 ? `${r.targets.length} assets`
+                            : (r.table ? (r.column?`${r.table}.${r.column}`:r.table) : "policy scope");
                           const opPart = r.operator ? ` ${opLabel(r.operator)}` : "";
                           const summary = !typeLbl ? ""
                             : r.enforce
@@ -10724,7 +10726,11 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                 // resolve to whole objects. Matching is bounded by the policy scope already
                                 // set in Step 2 (sources + object types + domains) — never re-asked here.
                                 const isMaskRule   = !!fd.action && fd.action.verb==="Mask";
-                                const tagTargeting = isEnfField && (r.targetTags||[]).length>0;
+                                // Enforcement rules choose HOW they pick what to act on — these are mutually
+                                // exclusive because the approver model differs: one asset → one owner; a
+                                // classification (or several assets) → several owners.
+                                const applyMode    = r.applyTo||"asset";  // "asset" | "tag"
+                                const tagTargeting = isEnfField && applyMode==="tag" && (r.targetTags||[]).length>0;
                                 const scopeDomains = newPol.scope?.domains||[];
                                 const matchedAssets = tagTargeting
                                   ? availTables.filter(a=>{
@@ -10737,61 +10743,87 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                   ? matchedAssets.flatMap(a=>classifiedColumns(a.name,r.targetTags).map(c=>({asset:a.name,col:c,owner:a.owner})))
                                   : [];
                                 const matchOwners = [...new Set(matchedAssets.map(a=>a.owner))];
+                                // Specific-assets mode: one OR MORE picked objects. r.table mirrors the first for
+                                // all the single-table logic (cloud detection, conflict, approval routing).
+                                const ruleTargets = (r.targets&&r.targets.length) ? r.targets : (r.table?[r.table]:[]);
+                                const enfCols     = [...new Set(ruleTargets.flatMap(t=>ASSET_COLUMNS[t]||[]))];
+                                const assetOptions= availTables.map(a=>a.name);
+                                const setTargets  = (v)=>{ updRule(r.id,"targets",v); updRule(r.id,"table",v[0]||""); };
                                 const fieldLabelSt = {display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
                                 const tableColBlock = (showApprover)=>(
                                   <div style={{borderTop:`1px solid ${T.border}`,padding:"12px 11px",display:"flex",flexDirection:"column",gap:12,background:`${T.bgBase}88`}}>
-                                    {/* Target — a specific asset (optional for enforcement; a Classification can stand in). */}
-                                    <div>
-                                      <label style={fieldLabelSt}>Target {isEnfField?<span style={{color:T.textMuted,fontWeight:400}}>(optional)</span>:<span style={{color:T.rose}}>*</span>}</label>
-                                      <TablePicker ruleId={r.id} value={r.table||""}/>
-                                    </div>
-                                    {/* Column — only for detection column/both rules (objects have no columns). */}
-                                    {(fd.scope==="column"||fd.scope==="both")&&!isEnfField&&!ruleIsObject&&(
+                                    {isEnfField&&!ruleIsObject ? (<>
+                                      {/* ── Apply to — tabs, mutually exclusive ── */}
                                       <div>
-                                        <label style={fieldLabelSt}>Column {fd.scope==="column"?<span style={{color:T.rose}}>*</span>:<span style={{color:T.textMuted,fontWeight:400}}>(optional)</span>}</label>
-                                        <ColPicker ruleId={r.id} value={r.column||""} required={fd.scope==="column"} tableVal={r.table||""}/>
+                                        <label style={fieldLabelSt}>Apply to</label>
+                                        <div style={{display:"flex",border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden",width:"fit-content"}}>
+                                          {[["asset","Specific assets"],["tag","By classification"]].map(([m,lbl])=>{
+                                            const active=applyMode===m;
+                                            return <button key={m} onClick={()=>updRule(r.id,"applyTo",m)}
+                                              style={{padding:"6px 15px",fontSize:11.5,fontWeight:active?700:500,border:"none",cursor:"pointer",background:active?T.accent:"transparent",color:active?"#fff":T.textMuted,transition:"all .1s"}}>{lbl}</button>;
+                                          })}
+                                        </div>
                                       </div>
-                                    )}
-                                    {/* Classification — optional. When set, the rule also applies to everything in
-                                        scope carrying it (EDG resolves it to the CDP objects / columns). */}
-                                    {isEnfField&&!ruleIsObject&&(
-                                      <CatFieldDropdown label="Classification" options={POLICY_TAGS} selected={r.targetTags||[]}
-                                        onChange={v=>updRule(r.id,"targetTags",v)} placeholder="Optional — search classifications…"
-                                        renderOpt={(o,sel)=><><span style={{width:9,height:9,borderRadius:"50%",background:TAG_DOT(o),flexShrink:0}}/><span style={{flex:1,fontSize:12.5,color:sel?T.accent:T.text}}>{o}</span></>}
-                                        renderChip={o=><span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:7,height:7,borderRadius:"50%",background:TAG_DOT(o)}}/>{o}</span>}/>
-                                    )}
-                                    {/* Compact preview — only once a classification is chosen. */}
-                                    {tagTargeting&&(()=>{
-                                      const cnt = isMaskRule?matchedCols.length:matchedAssets.length;
-                                      const noun = isMaskRule?"column":"object";
-                                      if(cnt===0) return <div style={{fontSize:11,color:T.amber}}>No {noun}s in scope carry that classification yet.</div>;
-                                      return (
-                                        <div style={{border:`1px solid ${T.accent}`,background:T.accentDim,borderRadius:9,padding:"9px 12px"}}>
-                                          <div style={{fontSize:11.5,color:T.textSub,fontWeight:600}}>
-                                            {cnt} {noun}{cnt>1?"s":""}{isMaskRule?` in ${matchedAssets.length} object${matchedAssets.length>1?"s":""}`:""} · approval from {matchOwners.length} owner{matchOwners.length>1?"s":""}
-                                          </div>
-                                          <div style={{marginTop:7,maxHeight:132,overflowY:"auto",display:"flex",flexDirection:"column",gap:3,borderTop:`1px solid ${T.border}`,paddingTop:7}}>
-                                            {isMaskRule
-                                              ? matchedCols.map((mc,i)=><div key={i} style={{fontSize:11,fontFamily:"'Geist Mono',monospace"}}><span style={{color:T.textMuted}}>{mc.asset}</span><span style={{color:T.violet,fontWeight:600}}>.{mc.col}</span></div>)
-                                              : matchedAssets.map(a=><div key={a.id} style={{fontSize:11,display:"flex",alignItems:"center",gap:8}}><span style={{fontFamily:"'Geist Mono',monospace",color:T.text}}>{a.name}</span><span style={{fontSize:9.5,color:T.textMuted}}>{a.type} · {a.domain}</span></div>)
-                                            }
-                                          </div>
+                                      {applyMode==="asset" ? (<>
+                                        {/* Multiple objects for one policy — each carries its own owner/approver. */}
+                                        <CatFieldDropdown label="Assets" required options={assetOptions} selected={ruleTargets}
+                                          onChange={setTargets} placeholder="Search assets to enforce on…"
+                                          renderChip={o=><span style={{fontFamily:"'Geist Mono',monospace"}}>{o}</span>}/>
+                                        {ruleTargets.length===0
+                                          ? <div style={{fontSize:10.5,color:T.rose}}>Select at least one asset.</div>
+                                          : (
+                                            <div>
+                                              <label style={fieldLabelSt}>Approver{ruleTargets.length>1?"s":""} <span style={{color:T.textMuted,fontWeight:400}}>— the owner of each asset</span></label>
+                                              <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                                                {ruleTargets.map(t=>{const ow=resolveTableOwners(t); return (
+                                                  <div key={t} style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
+                                                    <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.text,minWidth:130}}>{t}</span>
+                                                    <span style={{fontSize:10,color:T.textMuted}}>→</span>
+                                                    {ow.length===0
+                                                      ? <span style={{fontSize:10,color:T.textMuted,fontStyle:"italic"}}>domain owner</span>
+                                                      : ow.map(o=><span key={o} style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:10,background:`${T.accent}14`,color:T.accent}}>{o}</span>)}
+                                                  </div>
+                                                );})}
+                                              </div>
+                                            </div>
+                                          )}
+                                      </>) : (<>
+                                        <CatFieldDropdown label="Classification" required options={POLICY_TAGS} selected={r.targetTags||[]}
+                                          onChange={v=>updRule(r.id,"targetTags",v)} placeholder="Search classifications…"
+                                          renderOpt={(o,sel)=><><span style={{width:9,height:9,borderRadius:"50%",background:TAG_DOT(o),flexShrink:0}}/><span style={{flex:1,fontSize:12.5,color:sel?T.accent:T.text}}>{o}</span></>}
+                                          renderChip={o=><span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:7,height:7,borderRadius:"50%",background:TAG_DOT(o)}}/>{o}</span>}/>
+                                        {tagTargeting&&(()=>{
+                                          const cnt = isMaskRule?matchedCols.length:matchedAssets.length;
+                                          const noun = isMaskRule?"column":"object";
+                                          if(cnt===0) return <div style={{fontSize:11,color:T.amber}}>No {noun}s in scope carry that classification yet.</div>;
+                                          return (
+                                            <div style={{border:`1px solid ${T.accent}`,background:T.accentDim,borderRadius:9,padding:"9px 12px"}}>
+                                              <div style={{fontSize:11.5,color:T.textSub,fontWeight:600}}>
+                                                {cnt} {noun}{cnt>1?"s":""}{isMaskRule?` in ${matchedAssets.length} object${matchedAssets.length>1?"s":""}`:""} · approval from {matchOwners.length} owner{matchOwners.length>1?"s":""}
+                                              </div>
+                                              <div style={{marginTop:7,maxHeight:132,overflowY:"auto",display:"flex",flexDirection:"column",gap:3,borderTop:`1px solid ${T.border}`,paddingTop:7}}>
+                                                {isMaskRule
+                                                  ? matchedCols.map((mc,i)=><div key={i} style={{fontSize:11,fontFamily:"'Geist Mono',monospace"}}><span style={{color:T.textMuted}}>{mc.asset}</span><span style={{color:T.violet,fontWeight:600}}>.{mc.col}</span></div>)
+                                                  : matchedAssets.map(a=><div key={a.id} style={{fontSize:11,display:"flex",alignItems:"center",gap:8}}><span style={{fontFamily:"'Geist Mono',monospace",color:T.text}}>{a.name}</span><span style={{fontSize:9.5,color:T.textMuted}}>{a.type} · {a.domain}</span><span style={{marginLeft:"auto",fontSize:9.5,color:T.textMuted}}>{a.owner}</span></div>)
+                                                }
+                                              </div>
+                                            </div>
+                                          );
+                                        })()}
+                                      </>)}
+                                    </>) : (<>
+                                      {/* Validation & object-store rules: a single Target + optional column. */}
+                                      <div>
+                                        <label style={fieldLabelSt}>Target {isEnfField?<span style={{color:T.textMuted,fontWeight:400}}>(optional)</span>:<span style={{color:T.rose}}>*</span>}</label>
+                                        <TablePicker ruleId={r.id} value={r.table||""}/>
+                                      </div>
+                                      {(fd.scope==="column"||fd.scope==="both")&&!isEnfField&&!ruleIsObject&&(
+                                        <div>
+                                          <label style={fieldLabelSt}>Column {fd.scope==="column"?<span style={{color:T.rose}}>*</span>:<span style={{color:T.textMuted,fontWeight:400}}>(optional)</span>}</label>
+                                          <ColPicker ruleId={r.id} value={r.column||""} required={fd.scope==="column"} tableVal={r.table||""}/>
                                         </div>
-                                      );
-                                    })()}
-                                    {/* Approver — for a hand-picked asset target. */}
-                                    {showApprover&&r.table&&(()=>{
-                                      const owners = resolveTableOwners(r.table);
-                                      return (
-                                        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                                          <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>Approver{owners.length>1?"s":""}:</span>
-                                          {owners.length===0&&<span style={{fontSize:10,color:T.textMuted,fontStyle:"italic"}}>the domain owner</span>}
-                                          {owners.map(o=>(
-                                            <span key={o} style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:10,background:`${T.accent}14`,color:T.accent}}>{o}</span>
-                                          ))}
-                                        </div>
-                                      );
-                                    })()}
+                                      )}
+                                    </>)}
                                   </div>
                                 );
                                 return (
@@ -11061,13 +11093,13 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                               {/* Mask: structured tables use a columns picker; object stores use the
                                                   pattern editor. When a classification is set, columns come from it. */}
                                               {fd.action.verb==="Mask"&&ruleIsObject&&renderObjMaskEditor()}
-                                              {fd.action.verb==="Mask"&&!ruleIsObject&&!tagTargeting&&(()=>{
-                                                const cols = r.table ? (ASSET_COLUMNS[r.table]||[]) : [];
+                                              {fd.action.verb==="Mask"&&!ruleIsObject&&applyMode!=="tag"&&(()=>{
+                                                const cols = enfCols;  // union of columns across all selected assets
                                                 return (
                                                   <div style={{marginBottom:8}}>
                                                     <RuleMultiSelect label="Columns to mask" flat={cols} selected={r.maskColumns||[]}
                                                       onChange={v=>updRule(r.id,"maskColumns",v)}
-                                                      placeholder={r.table?"Select columns…":"Select a table first"} mono/>
+                                                      placeholder={ruleTargets.length?"Select columns…":"Select an asset first"} mono/>
                                                   </div>
                                                 );
                                               })()}
@@ -11078,7 +11110,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                               {/* Object-store legal hold — bucket-level; freeze objects by date range / prefix. */}
                                               {fd.action.verb==="Legal hold"&&ruleIsObject&&renderObjCritType(true)}
                                               {fd.action.verb==="Legal hold"&&!ruleIsObject&&(()=>{
-                                                const cols = r.table ? (ASSET_COLUMNS[r.table]||[]) : [];
+                                                const cols = enfCols;  // union of columns across all selected assets
                                                 const crit = r.holdCriteria&&r.holdCriteria.length ? r.holdCriteria : [{id:"hc0",column:"",operator:"=",dataType:"Text",value:""}];
                                                 const setCrit = (list)=>updRule(r.id,"holdCriteria",list);
                                                 const updCrit = (cid,k,v)=>setCrit(crit.map(c=>c.id===cid?{...c,[k]:v}:c));
@@ -11136,7 +11168,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                               {fd.action.verb==="Set disposition"&&ruleIsObject&&renderObjCritType(false)}
                                               {fd.action.verb==="Set disposition"&&!ruleIsObject&&(()=>{
                                                 const critType = r.critType||"date";
-                                                const cols = r.table ? (ASSET_COLUMNS[r.table]||[]) : [];
+                                                const cols = enfCols;  // union of columns across all selected assets
                                                 return (
                                                   <div style={{marginBottom:8}}>
                                                     <div style={{fontSize:10.5,color:T.textMuted,marginBottom:5}}>Criteria type</div>
@@ -23521,16 +23553,11 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
               {key:"documentation",label:"Overview"},
               {key:"dataproducts",label:`Data Products (${domainProducts.length})`},
               {key:"assets",label:`Assets (${domainAssets.length})`},
-              {key:"customprops",label:"Custom Properties"},
               {key:"activity",label:"Audit Logs"},
             ]} active={domainTab} onChange={setDomainTab}/>
           </div>
 
           <div style={{padding:28}}>
-            {/* CUSTOM PROPERTIES TAB */}
-            {domainTab==="customprops"&&(
-              <CustomPropsPanel entity="Domain" objectId={dm.id} objectName={dm.displayName} owners={dm.owners||[]} stewards={dm.stewards||[]} onToast={onToast}/>
-            )}
             {/* DOCUMENTATION TAB */}
             {domainTab==="documentation"&&(
               <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,280px)",gap:24}}>
@@ -35914,11 +35941,11 @@ const CP_TYPE_LABEL = Object.fromEntries(CP_TYPES.map(x=>[x.t,x.label]));
 // Each maps to a detail surface that renders the value panel: Tables/Views/Pipelines →
 // AssetDetailFull; Databases/Schemas/Containers/Buckets/Folders → ContainerAssetDetail;
 // Objects/Blobs → FileAssetDetail; plus Tag & Domain.
+// Scope this sprint: catalog ASSETS only. Tags, Domains & Glossary Terms are planned for a later sprint.
 const CP_ENTITY_GROUPS = [
   {group:"Tables & views",       items:["Table","View","Pipeline"]},
   {group:"Databases & schemas",  items:["Database","Schema"]},
   {group:"Object storage",       items:["Container","Bucket","Folder","Object"]},
-  {group:"Governance",           items:["Tag","Domain"]},
 ];
 const CP_ENTITIES = CP_ENTITY_GROUPS.flatMap(g=>g.items);
 const cpSlug = s => (s||"").toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
@@ -35928,8 +35955,7 @@ let _cpDefs = [
   {id:"cp2", name:"Retention Days",        machine:"retention_days",       type:"integer",   entity:"Table",     required:true,  vals:[], refTarget:"", desc:"How long records are kept before archival."},
   {id:"cp3", name:"PII Reviewed By",       machine:"pii_reviewed_by",      type:"user",      entity:"Table",     required:false, vals:[], refTarget:"Steward", desc:"Who signed off on the PII review."},
   {id:"cp4", name:"Cost Center",           machine:"cost_center",          type:"string",    entity:"Table",     required:false, vals:[], refTarget:"", desc:"Chargeback code for this asset."},
-  {id:"cp5", name:"Regulatory Scope",      machine:"regulatory_scope",     type:"enumMulti", entity:"Tag",       required:false, vals:["GDPR","HIPAA","CCPA","SOX"], refTarget:"", desc:"Regulations this classification maps to."},
-  {id:"cp6", name:"Business Criticality",  machine:"business_criticality", type:"enum",      entity:"Domain",    required:false, vals:["Low","Medium","High","Critical"], refTarget:"", desc:"How critical this domain is to the business."},
+  {id:"cp5", name:"Data Domain",           machine:"data_domain",          type:"enum",      entity:"View",      required:false, vals:["Commerce","Finance","Product","Marketing"], refTarget:"", desc:"Business domain this view serves."},
   {id:"cp7", name:"Encryption",            machine:"encryption",           type:"enum",      entity:"Bucket",    required:false, vals:["SSE-S3","SSE-KMS","None"], refTarget:"", desc:"At-rest encryption applied to this bucket."},
   {id:"cp8", name:"Environment",           machine:"environment",          type:"enum",      entity:"Database",  required:false, vals:["Prod","Staging","Dev"], refTarget:"", desc:"Deployment environment for this database."},
 ];
@@ -43366,7 +43392,7 @@ const SettingsView = ({onToast})=>{
               const activeDefs=propDefs.filter(p=>!p.archived), archivedDefs=propDefs.filter(p=>p.archived);
               const rows = propTab==="active" ? activeDefs : archivedDefs;
               return <>
-              <SettSH icon={Ic.props(16)} title="Custom Properties" desc="Define typed fields once on an object type — they appear on every asset, tag, or domain of that type for stewards & owners to fill in."
+              <SettSH icon={Ic.props(16)} title="Custom Properties" desc="Define typed fields once on an asset type — they appear on every asset of that type for stewards & owners to fill in."
                 action={propTab==="active"?<AddBtn label="Add" onClick={()=>setPropEditor("new")}/>:null}/>
               <div style={{display:"flex",gap:6,marginBottom:14}}>
                 {[{k:"active",l:"Active",n:activeDefs.length},{k:"archived",l:"Archived",n:archivedDefs.length}].map(t=>(
@@ -44555,7 +44581,6 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                       {key:'overview',   label:'Overview'},
                       {key:'assets',     label:'Linked Assets', count:affectedAssets.length},
                       {key:'sources',    label:'Sources & Sync', count:tagConnIds.length},
-                      {key:'customprops',label:'Custom Properties'},
                       {key:'activity',   label:'Audit Logs',   count:tagActivity.length},
                     ].map(({key:t,label,count})=>(
                       <button key={t} onClick={()=>setDetailTab(t)}
@@ -44571,12 +44596,6 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
                 </div>
 
                 {/* ── Tab content ── */}
-
-                {detailTab==='customprops'&&(
-                  <div style={{flex:1,overflowY:'auto',padding:'24px 28px'}}>
-                    <CustomPropsPanel entity="Tag" objectId={selTag.id} objectName={selTag.name} owners={tagOwners} stewards={tagStewards} onToast={onToast}/>
-                  </div>
-                )}
 
                 {/* Overview — two-column layout like Business Glossary */}
                 {detailTab==='overview'&&(
