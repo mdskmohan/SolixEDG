@@ -36095,7 +36095,7 @@ const CustomPropDefEditor = ({editing,onClose,onToast})=>{
   const [d,setD]=useState(editing?{...editing,vals:editing.vals||[]}:newCPDraft());
   useEffect(()=>{ setD(editing?{...editing,vals:editing.vals||[]}:newCPDraft()); },[editing]);
   const set=(k,v)=>setD(p=>({...p,[k]:v}));
-  const setName=v=>setD(p=>({...p,name:v,machine:(editing?p.machine:cpSlug(v))}));
+  const setName=v=>set("name",v);
   const isEnum=d.type==="enum"||d.type==="enumMulti";
   const inp={width:"100%",padding:"8px 11px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
   const selS={...inp,cursor:"pointer",appearance:"auto"};
@@ -36103,13 +36103,12 @@ const CustomPropDefEditor = ({editing,onClose,onToast})=>{
   const opt={fontWeight:400,textTransform:"none",color:T.textMuted,fontSize:10.5};
   const onF=e=>e.target.style.borderColor=T.accent, onB=e=>e.target.style.borderColor=T.border;
   const save=()=>{
-    if(!d.name.trim()){ onToast&&onToast("Give the property a name","error"); return; }
-    const machine = d.machine || cpSlug(d.name);
-    if(!machine){ onToast&&onToast("Enter a valid machine name (letters or numbers)","error"); return; }
-    if(_cpDefs.some(x=>x.id!==d.id && x.entity===d.entity && x.machine===machine)){ onToast&&onToast(`A property "${machine}" already exists for ${d.entity}`,"error"); return; }
+    const name = d.name.trim();
+    if(!name){ onToast&&onToast("Give the property a name","error"); return; }
+    if(_cpDefs.some(x=>x.id!==d.id && x.entity===d.entity && (x.name||"").trim().toLowerCase()===name.toLowerCase())){ onToast&&onToast(`A property "${name}" already exists for ${d.entity}`,"error"); return; }
     const vals = isEnum ? Array.from(new Set((Array.isArray(d.vals)?d.vals:String(d.vals).split(",")).map(s=>s.trim()).filter(Boolean))) : [];
     if(isEnum && vals.length===0){ onToast&&onToast("Add at least one allowed value","error"); return; }
-    const def = {...d, id:d.id||("cp"+Date.now()), machine, vals, refTarget:d.type==="user"?d.refTarget:""};
+    const def = {...d, id:d.id||("cp"+Date.now()), name, machine:cpSlug(name), vals, refTarget:d.type==="user"?d.refTarget:""};
     upsertPropDef(def);
     onToast&&onToast(editing?"Property updated":"Property added","success");
     onClose();
@@ -36132,12 +36131,8 @@ const CustomPropDefEditor = ({editing,onClose,onToast})=>{
       {/* Body */}
       <div style={{flex:1,overflowY:"auto",minHeight:0,padding:"20px 22px"}}>
         <div style={{marginBottom:16}}>
-          <label style={lbl}>Display name <span style={{color:T.rose}}>*</span></label>
+          <label style={lbl}>Name <span style={{color:T.rose}}>*</span></label>
           <input value={d.name} onChange={e=>setName(e.target.value)} autoFocus placeholder="e.g. Data Retention Class" style={inp} onFocus={onF} onBlur={onB}/>
-        </div>
-        <div style={{marginBottom:16}}>
-          <label style={lbl}>Machine name <span style={opt}>· used in API &amp; storage</span></label>
-          <input value={d.machine} onChange={e=>set("machine",cpSlug(e.target.value))} placeholder="data_retention_class" style={{...inp,fontFamily:"'Geist Mono',monospace"}} onFocus={onF} onBlur={onB}/>
         </div>
         <div style={{marginBottom:16}}>
           <label style={lbl}>Applies to {editing&&<span style={opt}>· locked after creation</span>}</label>
@@ -43383,7 +43378,7 @@ const SettingsView = ({onToast})=>{
                   <thead><tr style={{borderBottom:`1px solid ${T.border}`,background:T.bgElevated}}>{["Property","Type","Applies to","Required","Allowed Values",""].map(h=><th key={h} style={{padding:"9px 14px",textAlign:"left",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{h}</th>)}</tr></thead>
                   <tbody>{rows.map((p,i)=>(
                     <tr key={p.id} className="row-hover" style={{borderBottom:i<rows.length-1?`1px solid ${T.border}`:"none",opacity:p.archived?0.72:1}}>
-                      <td style={{padding:"11px 14px"}}><div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{p.name}</div><div style={{fontFamily:"'Geist Mono',monospace",fontSize:11,color:T.textMuted}}>{p.machine}</div></td>
+                      <td style={{padding:"11px 14px"}}><div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{p.name}</div></td>
                       <td style={{padding:"11px 14px"}}><Badge>{CP_TYPE_LABEL[p.type]||p.type}</Badge></td>
                       <td style={{padding:"11px 14px"}}><span style={{fontSize:12,color:T.textSub}}>{p.entity}</span></td>
                       <td style={{padding:"11px 14px"}}>{p.required?<span style={{fontSize:11,color:T.accent,fontWeight:600}}>Yes</span>:<span style={{fontSize:11,color:T.textMuted}}>No</span>}</td>
