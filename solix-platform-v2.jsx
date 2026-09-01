@@ -10750,6 +10750,35 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                 const assetOptions= [...new Set(availTables.map(a=>a.name))]; // dedupe — catalog has some same-named assets
                                 const setTargets  = (v)=>{ updRule(r.id,"targets",v); updRule(r.id,"table",v[0]||""); };
                                 const fieldLabelSt = {display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
+                                // Shared objects→approvers list — used identically by BOTH tabs (Specific assets
+                                // and By classification) so the two read the same. objects: {name, owners, cols?}.
+                                const objectApproverList = (objects, noun)=>{
+                                  const owners=[...new Set(objects.flatMap(o=>o.owners))];
+                                  const totalCols = objects.reduce((n,o)=>n+((o.cols||[]).length),0);
+                                  return (
+                                    <div>
+                                      <label style={fieldLabelSt}>{objects.length} {noun}{objects.length>1?"s":""}{totalCols?` · ${totalCols} column${totalCols>1?"s":""}`:""} · {owners.length} approver{owners.length>1?"s":""} <span style={{color:T.textMuted,fontWeight:400}}>— owner of each {noun}</span></label>
+                                      <div style={{display:"flex",flexDirection:"column",gap:7,maxHeight:180,overflowY:"auto",border:`1px solid ${T.border}`,borderRadius:8,padding:"9px 11px",background:T.bgSurface}}>
+                                        {objects.map(o=>(
+                                          <div key={o.name}>
+                                            <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
+                                              <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.text,minWidth:130}}>{o.name}</span>
+                                              <span style={{fontSize:10,color:T.textMuted}}>→</span>
+                                              {o.owners.length===0
+                                                ? <span style={{fontSize:10,color:T.textMuted,fontStyle:"italic"}}>domain owner</span>
+                                                : o.owners.map(ow=><span key={ow} style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:10,background:`${T.accent}14`,color:T.accent}}>{ow}</span>)}
+                                            </div>
+                                            {(o.cols||[]).length>0&&(
+                                              <div style={{marginLeft:6,marginTop:4,display:"flex",flexWrap:"wrap",gap:4}}>
+                                                {o.cols.map(c=><span key={c} style={{fontSize:10,fontFamily:"'Geist Mono',monospace",color:T.violet,background:`${T.violet}12`,border:`1px solid ${T.violet}28`,borderRadius:4,padding:"1px 6px"}}>.{c}</span>)}
+                                              </div>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  );
+                                };
                                 const tableColBlock = (showApprover)=>(
                                   <div style={{borderTop:`1px solid ${T.border}`,padding:"12px 11px",display:"flex",flexDirection:"column",gap:12,background:`${T.bgBase}88`}}>
                                     {isEnfField&&!ruleIsObject ? (<>
@@ -10771,44 +10800,17 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                           renderChip={o=><span style={{fontFamily:"'Geist Mono',monospace"}}>{o}</span>}/>
                                         {ruleTargets.length===0
                                           ? <div style={{fontSize:10.5,color:T.rose}}>Select at least one asset.</div>
-                                          : (
-                                            <div>
-                                              <label style={fieldLabelSt}>Approver{ruleTargets.length>1?"s":""} <span style={{color:T.textMuted,fontWeight:400}}>— the owner of each asset</span></label>
-                                              <div style={{display:"flex",flexDirection:"column",gap:5}}>
-                                                {ruleTargets.map(t=>{const ow=resolveTableOwners(t); return (
-                                                  <div key={t} style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
-                                                    <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.text,minWidth:130}}>{t}</span>
-                                                    <span style={{fontSize:10,color:T.textMuted}}>→</span>
-                                                    {ow.length===0
-                                                      ? <span style={{fontSize:10,color:T.textMuted,fontStyle:"italic"}}>domain owner</span>
-                                                      : ow.map(o=><span key={o} style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:10,background:`${T.accent}14`,color:T.accent}}>{o}</span>)}
-                                                  </div>
-                                                );})}
-                                              </div>
-                                            </div>
-                                          )}
+                                          : objectApproverList(ruleTargets.map(t=>({name:t, owners:resolveTableOwners(t), cols:isMaskRule?(r.maskColumns||[]):[]})), "asset")}
                                       </>) : (<>
                                         <CatFieldDropdown label="Classification" required options={POLICY_TAGS} selected={r.targetTags||[]}
                                           onChange={v=>updRule(r.id,"targetTags",v)} placeholder="Search classifications…"
                                           renderOpt={(o,sel)=><><span style={{width:9,height:9,borderRadius:"50%",background:TAG_DOT(o),flexShrink:0}}/><span style={{flex:1,fontSize:12.5,color:sel?T.accent:T.text}}>{o}</span></>}
                                           renderChip={o=><span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:7,height:7,borderRadius:"50%",background:TAG_DOT(o)}}/>{o}</span>}/>
                                         {tagTargeting&&(()=>{
-                                          const cnt = isMaskRule?matchedCols.length:matchedAssets.length;
-                                          const noun = isMaskRule?"column":"object";
-                                          if(cnt===0) return <div style={{fontSize:11,color:T.amber}}>No {noun}s in scope carry that classification yet.</div>;
-                                          return (
-                                            <div style={{border:`1px solid ${T.accent}`,background:T.accentDim,borderRadius:9,padding:"9px 12px"}}>
-                                              <div style={{fontSize:11.5,color:T.textSub,fontWeight:600}}>
-                                                {cnt} {noun}{cnt>1?"s":""}{isMaskRule?` in ${matchedAssets.length} object${matchedAssets.length>1?"s":""}`:""} · approval from {matchOwners.length} owner{matchOwners.length>1?"s":""}
-                                              </div>
-                                              <div style={{marginTop:7,maxHeight:132,overflowY:"auto",display:"flex",flexDirection:"column",gap:3,borderTop:`1px solid ${T.border}`,paddingTop:7}}>
-                                                {isMaskRule
-                                                  ? matchedCols.map((mc,i)=><div key={i} style={{fontSize:11,fontFamily:"'Geist Mono',monospace"}}><span style={{color:T.textMuted}}>{mc.asset}</span><span style={{color:T.violet,fontWeight:600}}>.{mc.col}</span></div>)
-                                                  : matchedAssets.map(a=><div key={a.id} style={{fontSize:11,display:"flex",alignItems:"center",gap:8}}><span style={{fontFamily:"'Geist Mono',monospace",color:T.text}}>{a.name}</span><span style={{fontSize:9.5,color:T.textMuted}}>{a.type} · {a.domain}</span><span style={{marginLeft:"auto",fontSize:9.5,color:T.textMuted}}>{a.owner}</span></div>)
-                                                }
-                                              </div>
-                                            </div>
-                                          );
+                                          if(matchedAssets.length===0) return <div style={{fontSize:11,color:T.amber}}>No {isMaskRule?"columns":"objects"} in scope carry that classification yet.</div>;
+                                          // Same objects→approvers list as the assets tab; masking nests the matched columns.
+                                          const objs = matchedAssets.map(a=>({name:a.name, owners:resolveTableOwners(a.name), cols:isMaskRule?classifiedColumns(a.name,r.targetTags):[]}));
+                                          return objectApproverList(objs, "object");
                                         })()}
                                       </>)}
                                     </>) : (<>
