@@ -13316,6 +13316,12 @@ const DBT_DAG_NODES = {
   pb_flow2:     {asset:"Orders_Prep",            cols:[{n:"revenue",t:"decimal"},{n:"region",t:"text"},{n:"order_date",t:"date"}]},
   pb_ds2:       {asset:"Revenue_Model",          cols:[{n:"revenue",t:"column"},{n:"region",t:"column"},{n:"Total Revenue",t:"DAX"}]},
   pb_rpt2:      {asset:"Revenue_Detail",         cols:[{n:"Total Revenue",t:"measure"},{n:"region",t:"dim"}]},
+  // The leaves. Without these the unified graph could not be the single answer for every
+  // Power BI and Tableau object, and a tile would still have fallen back to a smaller graph.
+  pb_page2:     {asset:"Regional_Breakdown",     cols:[{n:"Total Revenue",t:"visual"},{n:"region",t:"axis"}]},
+  pb_tile2:     {asset:"Revenue_KPI",            cols:[{n:"Total Revenue",t:"measure"}]},
+  pb_dash2:     {asset:"Revenue_Overview",       cols:[{n:"Total Revenue",t:"measure"}]},
+  tb_ext2:      {asset:"Revenue_Extract",        cols:[{n:"order_amount",t:"field"},{n:"region",t:"field"}]},
 };
 
 const DBT_DAG_EDGES = [
@@ -13348,6 +13354,12 @@ const DBT_DAG_EDGES = [
   {id:"de30",s:"pb_src2",     t:"pb_flow2",   tk:"Power Query"},
   {id:"de31",s:"pb_flow2",    t:"pb_ds2",     tk:"Loads entity"},
   {id:"de32",s:"pb_ds2",      t:"pb_rpt2",    tk:"Dataset binding"},
+  {id:"de33",s:"pb_rpt2",     t:"pb_page2",   tk:"Report page"},
+  {id:"de34",s:"pb_ds2",      t:"pb_tile2",   tk:"Pinned from"},
+  {id:"de35",s:"pb_tile2",    t:"pb_dash2",   tk:"Pinned to"},
+  // The embedded extract is a second consumer of the same table, not downstream of the
+  // certified data source - the duplication worth seeing from either end.
+  {id:"de36",s:"sf_fact",     t:"tb_ext2",    tk:"Extract"},
 ];
 
 const idm = (...names)=>names.map(n=>({sc:n,tc:n}));
@@ -13598,8 +13610,19 @@ function crossSourceCount(G, service){
 // Tableau assets get the BI path; everything else keeps the default graph. The matching node
 // is marked CURRENT.
 function pickLineageGraph(asset){
-  // Tableau objects keep their BI-connector path (the dbt DAG carries the same tail,
-  // but Sites/Projects/Workbooks/Flows have no place in it).
+  // The unified graph FIRST, wherever the asset appears in it. It spans Snowflake sources ->
+  // dbt models -> the table they materialize -> the Tableau and Power BI objects that read
+  // it, so a Power BI dataset and the dbt model that feeds it now answer with the same
+  // chain. Resolving the connector graph first was the whole bug: it returned a nine-node
+  // slice with one stub node standing in for everything upstream.
+  if(asset){
+    const byAsset = dbtNodeByAsset();
+    const nodeId = byAsset[asset.name] || (asset.dbtTestOn ? byAsset[asset.dbtTestOn] : null);
+    if(nodeId) return dbtFocusedGraph(nodeId);
+  }
+  // Below here: objects the unified graph has no node for, which fall back to their own
+  // connector's graph. Glue is an island - S3 prefix -> crawled table -> job -> view, with
+  // no hop into the warehouse - so it lives here by nature rather than as a fallback.
   if(asset&&asset.service==="glue"){
     const activeId=GLUE_NODE_BY_ASSET[asset.name];
     // Databases and schemas are containers and are absent from the map.
@@ -13623,14 +13646,6 @@ function pickLineageGraph(asset){
     const topo={};
     Object.entries(TABLEAU_TOPO).forEach(([id,t])=>{ topo[id]={...t,active:id===activeId}; });
     return {topo,meta:TABLEAU_NODE_META,colMaps:TABLEAU_COL_MAPS,edges:TABLEAU_EDGES_DEF};
-  }
-  // Anything in the dbt DAG - every dbt object, and every Snowflake table or view that
-  // dbt builds or declares as a source - gets its own focused slice of that graph. A dbt
-  // Test is not a node, so it borrows the lineage of the object it guards.
-  if(asset){
-    const byAsset = dbtNodeByAsset();
-    const nodeId = byAsset[asset.name] || (asset.dbtTestOn ? byAsset[asset.dbtTestOn] : null);
-    if(nodeId) return dbtFocusedGraph(nodeId);
   }
   // No connector has contributed lineage for this asset. Say that, rather than drawing
   // a chain that belongs to something else.
