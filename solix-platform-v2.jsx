@@ -26398,57 +26398,179 @@ const klKeyExclusions = (graphs, ids, entity) => {
   return Object.values(out);
 };
 
-// ── The AKG's own 10 steps, unchanged. `uses` = the EDG object that now feeds the step. ──
+// ── Policies are INHERITED, not linked ──────────────────────────────────────
+// There is no step where a user attaches a policy to a graph, and there should not be. A
+// policy in EDG already targets a classification, so the moment a column is classified the
+// policy governs it. What the builder owes the user is not a linking step but VISIBILITY:
+// which policies now apply, and where one of them conflicts with what the graph is doing.
+//
+// The conflict is real and specific. Matching reads the RAW value of a match key, so a
+// masking policy over that column either blocks the read or compares mask characters against
+// mask characters and merges everything. In practice the resolver runs as a service identity
+// with an explicit, audited exemption — so a masking policy is only a problem when that
+// exemption has NOT been granted. An access policy is never a problem: restricting who may
+// see a value does not stop the resolver comparing it.
+const KL_COL_POLICIES = [
+  {name:"Vendor Data Protection", cls:"Tax ID",    effect:"mask",   resolverExempt:true,
+   exempt:"Resolver exempted by alex.rivera on 2026-08-12",
+   d:"Tax identifiers are masked for roles without Vendor Data access."},
+  {name:"Customer PII",           cls:"PII",       effect:"mask",   resolverExempt:true,
+   exempt:"Resolver exempted by alex.rivera on 2026-08-12",
+   d:"Personal data is masked outside the owning domain."},
+  {name:"Contact Data Handling",  cls:"Email",     effect:"mask",   resolverExempt:false,
+   d:"Contact details are masked outside the owning domain."},
+  {name:"Asset Register Controls",cls:"Asset Tag", effect:"access", resolverExempt:false,
+   d:"Asset identifiers are readable only by Finance."},
+];
+// Policies already governing one identifier column, resolved through its classifications.
+const klColPolicies = c => KL_COL_POLICIES.filter(p => ((c && c.cls) || []).includes(p.cls));
+// Every policy governing any identifier column on this master, de-duplicated, with the
+// columns each one reaches — this is the "what now applies" answer.
+const klMasterPolicies = m => {
+  const seen = {};
+  klIdCols(m).forEach(c => klColPolicies(c).forEach(p => {
+    const e = seen[p.name] || (seen[p.name] = {...p, cols:[]});
+    if (!e.cols.includes(c.c)) e.cols.push(c.c);
+  }));
+  return Object.values(seen);
+};
+// A match key the resolver is not permitted to read. One finding per key, not per policy,
+// because the steward has one decision to make about that key.
+const klPolicyConflicts = m => {
+  const out = {};
+  klCrossCols(m).forEach(c => klColPolicies(c)
+    .filter(p => p.effect === "mask" && !p.resolverExempt)
+    .forEach(p => { if (!out[c.key]) out[c.key] = {key:c.key, col:c.c, policy:p.name,
+      why:`${p.name} masks ${c.c} and the resolver has no exemption. Matching reads the raw value, so this key cannot be used until an administrator grants one.`}; }));
+  return Object.values(out);
+};
+const klBlockedKeys = m => klPolicyConflicts(m).map(x => x.key);
+// The keys that are both declared AND readable. This is what cross-source matching may use.
+const klUsableKeys  = m => { const b = klBlockedKeys(m); return klMatchKeys(m).filter(k => !b.includes(k)); };
+
+// Profiling proposes an entity and identifier roles per connection, in that connection's own
+// shape. A Salesforce Account, a Workday Worker and a Mongo document do not look alike, and
+// pretending otherwise is how a builder ends up asking for warehouse columns from a CRM.
+const KL_ID_PROPOSAL = {
+  "Salesforce": [
+    {table:"Account", entity:"Customer", idCols:[
+      {c:"Id",              role:"technical_key", fill:100, distinct:100, cls:[],                    by:"pk"},
+      {c:"Tax_ID__c",       role:"natural_key", key:"Tax ID",        fill:52,  distinct:100, cls:["Tax ID","PII"], by:"class"},
+      {c:"Name",            role:"name",        key:"Legal Name",    fill:100, distinct:89,  cls:["Legal Name"],   by:"term"},
+      {c:"AccountNumber",   role:"local_code",  key:"Account Number",fill:94,  distinct:100, cls:[],               by:"profile"},
+      {c:"Website",         role:"contact",     key:"Website",       fill:63,  distinct:97,  cls:[],               by:"name"}]}],
+  "Snowflake Prod": [
+    {table:"DIM_CUSTOMER", entity:"Customer", idCols:[
+      {c:"CUSTOMER_SK",   role:"technical_key", fill:100, distinct:100, cls:[],                    by:"pk"},
+      {c:"TAX_ID",        role:"natural_key", key:"Tax ID",     fill:81,  distinct:100, cls:["Tax ID","PII"], by:"class"},
+      {c:"CUSTOMER_NAME", role:"name",        key:"Legal Name", fill:100, distinct:93,  cls:["Legal Name"],   by:"term"},
+      {c:"SOURCE_CUST_ID",role:"local_code",  key:"Source Customer ID", fill:100, distinct:100, cls:[],       by:"profile"},
+      {c:"EMAIL",         role:"contact",     key:"Email",      fill:88,  distinct:99,  cls:["PII","Email"],  by:"class"}]}],
+  "Workday": [
+    {table:"Worker", entity:"Employee", idCols:[
+      {c:"Worker_WID",  role:"technical_key", fill:100, distinct:100, cls:[],                by:"pk"},
+      {c:"National_ID", role:"natural_key", key:"National ID", fill:74,  distinct:100, cls:["PII"], by:"class"},
+      {c:"Legal_Name",  role:"name",        key:"Legal Name",  fill:100, distinct:96,  cls:["PII"], by:"term"},
+      {c:"Employee_ID", role:"local_code",  key:"Employee ID", fill:100, distinct:100, cls:[],      by:"profile"},
+      {c:"Work_Email",  role:"contact",     key:"Email",       fill:97,  distinct:100, cls:["PII","Email"], by:"class"}]}],
+  "MongoDB Atlas": [
+    {table:"vendors", entity:"Supplier", idCols:[
+      {c:"_id",        role:"technical_key", fill:100, distinct:100, cls:[],                    by:"pk"},
+      {c:"taxId",      role:"natural_key", key:"Tax ID",     fill:44,  distinct:100, cls:["Tax ID"], by:"class"},
+      {c:"legalName",  role:"name",        key:"Legal Name", fill:98,  distinct:91,  cls:[],         by:"name"},
+      {c:"vendorCode", role:"local_code",  key:"Vendor Code",fill:100, distinct:100, cls:[],         by:"profile"}]}],
+};
+
+// ── The AKG's ten stages, names and order unchanged, plus one EDG addition (stage 7).
+// The rule we are holding to: do not disturb the AKG flow. So every stage keeps its name, its
+// position and its AI. What changes is what each stage declares about itself:
+//
+//   decide  does a person actually have to do something here? A stage that completes on its
+//           own stays visible and inspectable, but the flow does not stop and wait on it.
+//   auto / needs   how much was accepted automatically versus how much is queued for a person.
+//   uses    which governed EDG objects the stage READS.
+//   writes  which governed EDG object it PROPOSES into. Nothing is created silently; every
+//           proposal goes through the normal approval flow. This is what lets the builder
+//           bootstrap a thin glossary instead of only being able to consume a complete one.
+//
+// The one addition is stage 7. Everything else here can be inferred from the catalog; which
+// table represents a business entity, and which of its columns identify it, cannot be. It is
+// also the only thing cross-source matching depends on, so it gets its own stage rather than
+// being buried inside classification.
 const KL_SRC_STEPS = [
-  {t:"Connect & Load", mode:"you", uses:"your existing Connections",
+  {t:"Connect & Load", mode:"you", decide:true, auto:0, needs:2, uses:"your existing Connections", writes:null,
    d:"Select a connected system and the scope to map. Connection details, credentials and scan history are inherited from the catalog.",
-   note:["Connections are managed in Catalog \u203a Connections."]},
-  {t:"Profile & Classify", mode:"auto", uses:"your Classifications & Tags",
-   d:"Profiling runs automatically. Review the suggested classification for each column. Suggestions are drawn only from your existing taxonomy.",
-   rows:[{nm:"VENDOR_TAX_NUM", chip:"Tax ID", kind:"exist", cf:"Matched to existing tag · 98%", acts:"cc"},
-         {nm:"VENDOR_EMAIL",   chip:"PII · Email", kind:"exist", cf:"Matched to existing tag · 97%", acts:"cc"},
-         {nm:"VNDR_NM_1",      chip:"Legal Name", kind:"exist", cf:"71% — review recommended", acts:"cc"}],
-   note:["Classifications come from your taxonomy. New values are never created here."]},
-  {t:"Discover Relationships", mode:"auto", uses:"your existing Lineage",
-   d:"Relationships are read from Lineage. Confirm the existing ones, and add any newly detected relationship to Lineage.",
-   rows:[{nm:"VENDOR_ALL_V → PO_HEADER", chip:"Already in Lineage", kind:"exist", cf:"Confirm to keep", acts:"c"},
-         {nm:"PO_HEADER → PO_LINES",     chip:"Already in Lineage", kind:"exist", cf:"Confirm to keep", acts:"c"},
-         {nm:"VENDOR_SITES → VENDOR_ALL_V", chip:"Newly detected", kind:"new", cf:"Not yet in Lineage", acts:"lineage"}],
-   note:["Confirmed relationships are written back to Lineage."]},
-  {t:"Add Context", mode:"you", uses:"Glossary · Data Contracts · Custom Properties",
-   d:"Business context is taken from governed objects that already exist. There are no documents to upload.",
-   rows:[{nm:"Business glossary",  chip:"214 certified terms", kind:"exist", cf:"In use"},
-         {nm:"Data contracts",     chip:"8 contracts on these tables", kind:"exist", cf:"In use"},
-         {nm:"Custom properties",  chip:"12 defined fields", kind:"exist", cf:"In use"}],
-   note:["Updating the glossary or a data contract updates this graph."]},
-  {t:"AI Enrichment", mode:"auto", uses:"your Glossary",
-   d:"Each table is matched to a certified business term. Where no term matches, propose a new one for glossary approval.",
-   rows:[{nm:"VENDOR_ALL_V", chip:"Supplier", kind:"exist", cf:"Certified term · 96%", acts:"cc"},
-         {nm:"PO_HEADER",    chip:"Purchase Order", kind:"exist", cf:"Certified term · 94%", acts:"cc"},
-         {nm:"SPEND_AMT",    chip:"Vendor Spend (new term)", kind:"new", cf:"No match — approval required", acts:"approve"}],
-   note:["Existing terms are reused wherever possible. New terms follow the standard approval flow."]},
-  {t:"Synonyms", mode:"auto", uses:"Glossary synonyms",
-   d:"Alternative names are stored as synonyms on the glossary term.",
-   rows:[{nm:"vendor, payee, creditor", chip:"synonyms of Supplier", kind:"exist", cf:"Stored on the glossary term", acts:"cc"},
-         {nm:"PO, order",               chip:"synonyms of Purchase Order", kind:"exist", cf:"Stored on the glossary term", acts:"cc"}],
-   note:["Synonyms are held on the term, so search and this graph stay consistent."]},
-  {t:"Curate & Review", mode:"you", uses:"your Inbox and approval flow",
-   d:"Items above your confidence threshold are accepted automatically. The remainder are queued for review, ranked by impact.",
-   rows:[{nm:"Confirmed automatically", chip:"198 of 214 tables", kind:"exist", cf:"Above confidence threshold"},
-         {nm:"Waiting on you",          chip:"16 items in your Inbox", kind:"new", cf:"Ranked by impact", acts:"inbox"},
-         {nm:"New terms proposed",      chip:"12 awaiting approval", kind:"new", cf:"Standard glossary approval", acts:"review"}],
-   note:["Review items appear in your Inbox alongside other governance tasks."]},
-  {t:"Build Index", mode:"auto", uses:null,
-   d:"The search index is rebuilt in the background. No input is required.",
-   rows:[{nm:"Search index",      chip:"Rebuilding — 68%", kind:"plain", cf:"Started 4 minutes ago"},
-         {nm:"Run history",       chip:"Settings › Background Jobs", kind:"plain", cf:"Status and retries"}],
-   note:["Full run history is available in Settings \u203a Background Jobs."]},
-  {t:"Validate", mode:"auto", uses:null,
-   d:"Confirm the graph answers representative questions correctly before publishing.",
-   rows:[{nm:"“Top 10 suppliers by spend”",   chip:"Answered correctly", kind:"exist", cf:"Verified by steward"},
-         {nm:"“Suppliers missing a tax ID”",  chip:"Answered correctly", kind:"exist", cf:"Verified by steward"}],
+   note:["Connections are managed in Catalog › Connections."]},
+
+  {t:"Profile & Classify", mode:"auto", decide:true, auto:198, needs:16,
+   uses:"Classifications & Tags, column profiling", writes:"Classification",
+   d:"Profiling runs automatically. Columns above your confidence threshold are classified without you; the rest are queued. Where a pattern is found that no existing classification covers, a new one is proposed for approval.",
+   rows:[{nm:"STCD1",       chip:"Tax ID", kind:"exist", cf:"Matched an existing classification · 98%", acts:"cc"},
+         {nm:"SMTP_ADDR",   chip:"PII · Email", kind:"exist", cf:"Matched an existing classification · 97%", acts:"cc"},
+         {nm:"NAME1",       chip:"Legal Name", kind:"exist", cf:"71% — review recommended", acts:"cc"},
+         {nm:"ZZ_LEI_CODE", chip:"Legal Entity Identifier (new)", kind:"new", cf:"No existing classification matches — approval required", acts:"approve"}],
+   note:["An existing classification is reused wherever one matches. A genuinely new one is proposed, never created silently."]},
+
+  {t:"Discover Relationships", mode:"auto", decide:true, auto:44, needs:1,
+   uses:"your existing Lineage", writes:"Lineage relationship",
+   d:"Relationships are read from Lineage, which already holds table and column level relationships within this source. Confirm the existing ones, and add any newly detected relationship back to Lineage.",
+   rows:[{nm:"EKKO → VENDOR_MASTER", chip:"Already in Lineage", kind:"exist", cf:"Confirm to keep", acts:"c"},
+         {nm:"EKPO → EKKO",          chip:"Already in Lineage", kind:"exist", cf:"Confirm to keep", acts:"c"},
+         {nm:"RBKP → VENDOR_MASTER", chip:"Newly detected", kind:"new", cf:"Not yet in Lineage", acts:"lineage"}],
+   note:["Confirmed relationships are written back to Lineage, so there is one relationship picture rather than two."]},
+
+  {t:"Add Context", mode:"auto", decide:false, auto:4, needs:0,
+   uses:"Glossary · Data Contracts · Custom Properties · Policies", writes:null,
+   d:"Business context is taken from governed objects that already exist. There are no documents to upload, and nothing to attach by hand — a policy already targets a classification, so it governs these columns the moment they are classified.",
+   rows:[{nm:"Business glossary", chip:"214 certified terms", kind:"exist", cf:"In use"},
+         {nm:"Data contracts",    chip:"8 contracts on these tables", kind:"exist", cf:"In use"},
+         {nm:"Custom properties", chip:"12 defined fields", kind:"exist", cf:"In use"},
+         {nm:"Policies",          chip:"3 policies now govern these columns", kind:"exist", cf:"Inherited through classifications"}],
+   note:["Updating the glossary, a data contract or a policy updates this graph. Which policies apply, and whether any of them block matching, is shown at Entity & Identity."]},
+
+  {t:"AI Enrichment", mode:"auto", decide:true, auto:400, needs:12,
+   uses:"your Glossary", writes:"Business term",
+   d:"Each table is matched to a certified business term. Where no term matches, a new one is proposed with a drafted definition, and it goes through glossary approval before the graph can use it.",
+   rows:[{nm:"VENDOR_MASTER",  chip:"Supplier", kind:"exist", cf:"Certified term · 96%", acts:"cc"},
+         {nm:"EKKO",           chip:"Purchase Order", kind:"exist", cf:"Certified term · 94%", acts:"cc"},
+         {nm:"V_VENDOR_SPEND", chip:"Vendor Spend (new term)", kind:"new", cf:"No term matches — approval required", acts:"approve"}],
+   note:["A proposed term carries a drafted definition, so the steward approves wording rather than filling in a blank."]},
+
+  {t:"Synonyms", mode:"auto", decide:false, auto:26, needs:0,
+   uses:"Glossary synonyms", writes:"Glossary synonym",
+   d:"Alternative names are added as synonyms on the certified term, so search, Data Ask and this graph all resolve the same words.",
+   rows:[{nm:"vendor, payee, creditor", chip:"Added to Supplier", kind:"exist", cf:"Stored on the glossary term"},
+         {nm:"PO, order",               chip:"Added to Purchase Order", kind:"exist", cf:"Stored on the glossary term"}],
+   note:["Synonyms live on the term, never in a list belonging to this graph."]},
+
+  {t:"Entity & Identity", mode:"you", decide:true, auto:0, needs:3, edgNew:true,
+   uses:"Business Entities · column profiling · Classifications · Policies", writes:"Identifier role",
+   d:"Which table represents a business entity, and which of its columns identify it. The catalog cannot infer this, and cross-source matching depends entirely on it. A role is proposed from five signals — the declared primary key, profiling, any classification on the column, the naming convention, and any bound term — and you confirm or overrule it.",
+   note:["A classification says what the data is; an identifier role says what the column can be used for. Neither implies the other.",
+         "A local code is unique inside this system only, so it can never be matched across sources. A technical primary key is never a match key."]},
+
+  {t:"Curate & Review", mode:"you", decide:true, auto:198, needs:16,
+   uses:"your Inbox and approval flow", writes:null,
+   d:"Everything still open arrives here, ranked by the impact of getting it wrong. Items above your confidence threshold were already accepted and are listed for the record.",
+   rows:[{nm:"Accepted automatically", chip:"198 of 214 tables", kind:"exist", cf:"Above your confidence threshold"},
+         {nm:"Waiting on you",         chip:"16 items in your Inbox", kind:"new", cf:"Ranked by impact", acts:"inbox"},
+         {nm:"Proposed for approval",  chip:"12 new terms · 1 new classification", kind:"new", cf:"Standard approval flow", acts:"review"}],
+   note:["Review items appear in your Inbox alongside your other governance tasks, not in a queue that belongs only to this graph."]},
+
+  {t:"Build Index", mode:"auto", decide:false, auto:1, needs:0, uses:null, writes:null,
+   d:"The search index is rebuilt in the background. Nothing is required from you.",
+   rows:[{nm:"Search index", chip:"Rebuilt", kind:"plain", cf:"Completed in 4 minutes"},
+         {nm:"Run history",  chip:"Settings › Background Jobs", kind:"plain", cf:"Status, duration and retries"}],
+   note:["Full run history is in Settings › Background Jobs."]},
+
+  {t:"Validate", mode:"auto", decide:false, auto:2, needs:0, uses:null, writes:null,
+   d:"Representative questions are run against the graph to confirm it answers correctly before it is published.",
+   rows:[{nm:"“Top 10 suppliers by spend”",  chip:"Answered correctly", kind:"exist", cf:"Verified by steward"},
+         {nm:"“Suppliers missing a tax ID”", chip:"Answered correctly", kind:"exist", cf:"Verified by steward"}],
    note:["Validation results are recorded against this version of the graph."]},
-  {t:"Publish", mode:"you", uses:"your owners and approval flow",
+
+  {t:"Publish", mode:"you", decide:true, auto:0, needs:1,
+   uses:"your owners and approval flow", writes:null,
    d:"Publishing requires owner sign-off. Once published, this graph can be joined into a Cross-Source Knowledge Graph.",
    note:["Published graphs are available to Data Ask and eligible for cross-source matching."]},
 ];
@@ -27273,7 +27395,9 @@ const KLStepRail = ({steps,cur,onPick,doneSet}) => (
           <span style={{flex:1,minWidth:0}}>
             <span style={{display:"block"}}>{s.t}</span>
             <span style={{display:"block",fontSize:9.5,fontWeight:700,letterSpacing:"0.05em",textTransform:"uppercase",marginTop:3,
-              color:s.mode==="auto"?T.blue:T.textMuted}}>{s.mode==="auto"?"Automatic":"Requires input"}</span>
+              color:s.decide===false?T.green:s.mode==="auto"?T.blue:T.textMuted}}>
+              {s.decide===false ? "Automatic" : s.needs ? `${s.needs} waiting on you` : "Requires input"}
+            </span>
           </span>
         </button>
       );
@@ -28345,6 +28469,12 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
     const last = step===steps.length-1;
     const canAI = !!s.uses;
     const readySrc = srcGraphs.filter(g=>g.status==="Published");
+    // A stage that completes on its own stays in the rail and stays inspectable, but the flow
+    // does not stop and wait on it. "Next" jumps to the next stage that actually needs a person
+    // and says where it is going, so nobody clicks through four screens that had nothing to ask.
+    const needsInput = steps.map((x,i)=>x.decide!==false?i:-1).filter(i=>i>=0);
+    const autoCount  = steps.length - needsInput.length;
+    const nextInput  = needsInput.find(i=>i>step);
     const blocked = (wiz==="cross" && step===0 && wSrcIds.length<2)
                  || (wiz==="cross" && step===1 && wKeys.length===0)
                  || (wiz==="src" && !wConn);
@@ -28378,9 +28508,36 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                   </>) : <span style={{fontSize:11.5,color:T.textMuted}}>Not applicable</span>}
                 </div>
               </div>
-              <div style={{fontSize:11,fontWeight:700,color:s.uses?T.green:T.textMuted,marginBottom:10}}>
-                {s.uses ? `Governed inputs: ${s.uses}` : "No governed inputs required"}
+              <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:10}}>
+                <span style={{fontSize:11,fontWeight:700,color:s.uses?T.green:T.textMuted}}>
+                  {s.uses ? `Reads: ${s.uses}` : "No governed inputs required"}
+                </span>
+                {s.writes && (
+                  <span style={{fontSize:11,fontWeight:700,color:T.violet}}>Proposes into: {s.writes}</span>
+                )}
               </div>
+              {s.decide===false && (
+                <div style={{display:"flex",gap:9,alignItems:"center",padding:"9px 12px",marginBottom:12,borderRadius:9,
+                  background:T.green+"12",border:`1px solid ${T.green}33`,fontSize:12.2,color:T.textSub}}>
+                  <span style={{color:T.green,fontWeight:700}}>&#10003;</span>
+                  <div>Completed automatically. Shown so you can inspect it — nothing here is waiting on a decision.</div>
+                </div>
+              )}
+              {s.edgNew && (
+                <div style={{display:"flex",gap:9,alignItems:"baseline",padding:"9px 12px",marginBottom:12,borderRadius:9,
+                  background:T.accentDim,border:`1px solid ${T.accent}33`,fontSize:12.2,color:T.text,lineHeight:1.6}}>
+                  <b style={{whiteSpace:"nowrap"}}>New in EDG</b>
+                  <div>The source builder has no equivalent stage. This is the one thing the catalog cannot
+                    infer, and the only thing cross-source matching depends on.</div>
+                </div>
+              )}
+              {(s.auto>0 || s.needs>0) && (
+                <div style={{display:"flex",gap:18,flexWrap:"wrap",padding:"8px 12px",marginBottom:14,borderRadius:9,
+                  background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.8}}>
+                  <span style={{color:T.textSub}}><b style={{color:T.green,fontFamily:"'Geist Mono',monospace"}}>{s.auto}</b> accepted automatically</span>
+                  <span style={{color:T.textSub}}><b style={{color:s.needs?T.amber:T.green,fontFamily:"'Geist Mono',monospace"}}>{s.needs}</b> waiting on you</span>
+                </div>
+              )}
               <div style={{fontSize:12.8,color:T.textSub,lineHeight:1.65,maxWidth:760,marginBottom:16}}>{s.d}</div>
 
               {wiz==="src" && step===0 && (
@@ -28562,7 +28719,125 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 </div>
               )}
 
-              {wiz==="src" && step===9 && (
+              {wiz==="src" && step===6 && (()=>{
+                const props = KL_ID_PROPOSAL[wConn] || [];
+                if(!props.length) return (
+                  <KLNote tone="quiet">Profiling has not proposed an entity for this connection yet. Complete
+                    Profile &amp; Classify first, then return here.</KLNote>
+                );
+                return (
+                  <div style={{maxWidth:900}}>
+                    {props.map(ms=>{
+                      const keys = klMatchKeys(ms), usable = klUsableKeys(ms);
+                      const ex = klExcluded(ms).filter(c=>c.key), pol = klMasterPolicies(ms), con = klPolicyConflicts(ms);
+                      const weakest = keys.map(k=>klFill(ms,k)).filter(v=>v!=null).sort((a,b)=>a-b)[0];
+                      return (
+                        <Card2 key={ms.table} style={{padding:15,marginBottom:12}}>
+                          <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:12}}>
+                            <span style={{fontSize:12.8,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{ms.table}</span>
+                            <span style={{color:T.textMuted}}>&rarr;</span>
+                            <KLChip kind="exist">{ms.entity}</KLChip>
+                            <span style={{marginLeft:"auto",fontSize:11,fontWeight:700,color:usable.length?T.green:T.amber}}>
+                              {usable.length
+                                ? `Matchable on ${usable.join(", ")}`
+                                : "Not matchable across sources"}
+                            </span>
+                          </div>
+                          <div style={{overflowX:"auto"}}>
+                            <table style={{width:"100%",borderCollapse:"collapse"}}>
+                              <thead><tr style={{background:T.bgElevated}}>
+                                {["Column","Identifier role","Identifies","Populated","Distinct","Classification","Proposed from"].map(h=>(
+                                  <th key={h} style={{padding:"7px 10px",fontSize:10,fontWeight:700,color:T.textMuted,textAlign:"left",
+                                    textTransform:"uppercase",letterSpacing:"0.06em",borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>{h}</th>
+                                ))}
+                              </tr></thead>
+                              <tbody>
+                                {klIdCols(ms).map(c=>{
+                                  const r = KL_ID_ROLES[c.role]||{};
+                                  const ok = r.cross && c.key;
+                                  const weak = c.fill!=null && c.fill<80;
+                                  return (
+                                    <tr key={c.c}>
+                                      <td style={{padding:"8px 10px",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.text,borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>{c.c}</td>
+                                      <td style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}>
+                                        <select defaultValue={c.role} title={r.hint}
+                                          onChange={e=>toast(`${c.c} set to ${(KL_ID_ROLES[e.target.value]||{}).l} — match keys recalculated`)}
+                                          style={{padding:"3px 7px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>
+                                          {Object.entries(KL_ID_ROLES).map(([k,v])=><option key={k} value={k}>{v.l}</option>)}
+                                        </select>
+                                      </td>
+                                      <td style={{padding:"8px 10px",fontSize:11.5,borderBottom:`1px solid ${T.border}`,
+                                        color:ok?T.green:T.textMuted,fontWeight:ok?600:400,whiteSpace:"nowrap"}}>{c.key||"—"}</td>
+                                      <td style={{padding:"8px 10px",fontSize:11.5,borderBottom:`1px solid ${T.border}`,fontFamily:"'Geist Mono',monospace",
+                                        color:weak?T.amber:T.textSub,fontWeight:weak?700:400}}>{c.fill!=null?c.fill+"%":"—"}</td>
+                                      <td style={{padding:"8px 10px",fontSize:11.5,borderBottom:`1px solid ${T.border}`,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{c.distinct!=null?c.distinct+"%":"—"}</td>
+                                      <td style={{padding:"8px 10px",fontSize:11.5,borderBottom:`1px solid ${T.border}`}}>
+                                        {(c.cls||[]).length
+                                          ? (c.cls||[]).map(t=><Badge key={t} bg={T.amber+"1a"} color={T.amber} border={T.amber+"44"}>{t}</Badge>)
+                                          : <span style={{color:T.textMuted}}>none</span>}
+                                      </td>
+                                      <td style={{padding:"8px 10px",fontSize:10.5,borderBottom:`1px solid ${T.border}`,color:T.textMuted,whiteSpace:"nowrap"}}>
+                                        {((KL_ID_SIGNALS.find(x=>x.k===c.by))||{}).l||"—"}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+
+                          {ex.length>0 && (
+                            <div style={{marginTop:11,padding:"9px 12px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                              <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>
+                                Held back from cross-source matching
+                              </div>
+                              {ex.map(c=>(
+                                <div key={c.c} style={{fontSize:11.5,color:T.textSub,lineHeight:1.65}}>
+                                  <b style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{c.c}</b>
+                                  <span style={{color:T.textMuted}}> as {c.key} &mdash; {c.why}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {pol.length>0 && (
+                            <div style={{marginTop:9,fontSize:11.5,color:T.textSub,lineHeight:1.75}}>
+                              <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Policies already governing these columns</span>
+                              {pol.map(p=>(
+                                <div key={p.name}>
+                                  <b style={{color:T.text}}>{p.name}</b>
+                                  <span style={{color:T.textMuted}}> on {p.cols.join(", ")} &mdash; {p.d}
+                                    {p.resolverExempt && p.exempt ? ` ${p.exempt}.` : ""}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {con.map(c=>(
+                            <div key={c.key} style={{display:"flex",gap:9,alignItems:"baseline",padding:"10px 12px",marginTop:9,borderRadius:9,
+                              background:T.amberDim,border:`1px solid ${T.amber}44`,fontSize:12,color:T.text,lineHeight:1.65}}>
+                              <b style={{color:T.amber,whiteSpace:"nowrap"}}>{c.key} blocked</b>
+                              <div>{c.why}</div>
+                            </div>
+                          ))}
+
+                          {weakest!=null && weakest<80 && (
+                            <KLNote>The weakest key on this table is populated {weakest}% of the time. A key that is
+                              blank will not match, and every row it misses arrives as an exception for someone to clear
+                              by hand — so it is worth fixing here rather than in the worklist later.</KLNote>
+                          )}
+                        </Card2>
+                      );
+                    })}
+                    <KLNote tone="quiet">A role is proposed from five signals: {KL_ID_SIGNALS.map(x=>x.l).join(" · ")}.
+                      A classification is one of those signals, not the answer — a vendor code identifies a supplier
+                      while carrying no classification at all, and a Tax ID classification says the column is sensitive,
+                      not that it is safe to match on.</KLNote>
+                  </div>
+                );
+              })()}
+
+              {wiz==="src" && step===10 && (
                 <div style={{maxWidth:780}}>
                   <KLRow nm="Owner"      chip="Alex Rivera" kind="exist" cf="Sign-off required"/>
                   <KLRow nm="Domain"     chip="Procurement" kind="exist" cf="From Domains" acts="cc" onAct={()=>toast("Domain confirmed")}/>
@@ -28593,13 +28868,21 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               {wiz==="cross" && step===0 && wSrcIds.length<2 && <span style={{fontSize:11,color:T.textMuted}}>Pick at least two source graphs</span>}
               {wiz==="cross" && step===1 && wKeys.length===0 && <span style={{fontSize:11,color:T.textMuted}}>Select at least one match key</span>}
               {wiz==="src" && !wConn && <span style={{fontSize:11,color:T.textMuted}}>No unmapped connection available</span>}
-              <span style={{fontSize:11,color:T.textMuted}}>Step {step+1} of {steps.length}</span>
+              <span style={{fontSize:11,color:T.textMuted}}>
+                Stage {step+1} of {steps.length}{autoCount?` · ${autoCount} automatic`:""}
+              </span>
               <Btn small variant="primary" disabled={blocked}
                 onClick={()=>{
-                  setDoneSet(d=>new Set([...d,step]));
-                  if(!last) { setStep(step+1); return; }
+                  // every automatic stage we jump over is genuinely complete, so mark it done
+                  const target = nextInput!=null ? nextInput : steps.length;
+                  setDoneSet(d=>{ const n=new Set(d); for(let i=step;i<target;i++) n.add(i); return n; });
+                  if(nextInput!=null) { setStep(nextInput); return; }
                   wiz==="src" ? finishSrc() : finishCross();
-                }}>{last?"Publish":"Next →"}</Btn>
+                }}>
+                {nextInput!=null
+                  ? (nextInput===step+1 ? "Next →" : `Next: ${steps[nextInput].t} →`)
+                  : "Publish"}
+              </Btn>
             </div>
           </div>
         </div>
