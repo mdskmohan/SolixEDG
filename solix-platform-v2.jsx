@@ -10752,12 +10752,9 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                   ? matchedAssets.flatMap(a=>classifiedColumns(a.name,r.targetTags).map(c=>({asset:a.name,col:c,owner:a.owner})))
                                   : [];
                                 const matchOwners = [...new Set(matchedAssets.map(a=>a.owner))];
-                                // Specific-assets mode: one OR MORE picked objects. r.table mirrors the first for
-                                // all the single-table logic (cloud detection, conflict, approval routing).
-                                const ruleTargets = (r.targets&&r.targets.length) ? r.targets : (r.table?[r.table]:[]);
-                                const enfCols     = [...new Set(ruleTargets.flatMap(t=>ASSET_COLUMNS[t]||[]))];
-                                const assetOptions= [...new Set(availTables.map(a=>a.name))]; // dedupe — catalog has some same-named assets
-                                const setTargets  = (v)=>{ updRule(r.id,"targets",v); updRule(r.id,"table",v[0]||""); };
+                                // Specific-asset mode: a single named object (multi-select removed for now). Its
+                                // schema is known, so per-object criteria (date column, hold criteria, columns) is valid.
+                                const enfCols     = ASSET_COLUMNS[r.table]||[];
                                 const fieldLabelSt = {display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
                                 // Shared objects→approvers list — used identically by BOTH tabs (Specific assets
                                 // and By classification) so the two read the same. objects: {name, owners, cols?}.
@@ -10803,13 +10800,14 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                         </div>
                                       </div>
                                       {applyMode==="asset" ? (<>
-                                        {/* Multiple objects for one policy — each carries its own owner/approver. */}
-                                        <CatFieldDropdown label="Assets" required options={assetOptions} selected={ruleTargets}
-                                          onChange={setTargets} placeholder="Search assets to enforce on…"
-                                          renderChip={o=><span style={{fontFamily:"'Geist Mono',monospace"}}>{o}</span>}/>
-                                        {ruleTargets.length===0
-                                          ? <div style={{fontSize:10.5,color:T.rose}}>Select at least one asset.</div>
-                                          : objectApproverList(ruleTargets.map(t=>({name:t, owners:resolveTableOwners(t), cols:isMaskRule?(r.maskColumns||[]):[]})), "asset")}
+                                        {/* A single named object — its schema is known, so per-object criteria works. */}
+                                        <div>
+                                          <label style={fieldLabelSt}>Asset <span style={{color:T.rose}}>*</span></label>
+                                          <TablePicker ruleId={r.id} value={r.table||""}/>
+                                        </div>
+                                        {!r.table
+                                          ? <div style={{fontSize:10.5,color:T.rose}}>Select an asset.</div>
+                                          : objectApproverList([{name:r.table, owners:resolveTableOwners(r.table), cols:isMaskRule?(r.maskColumns||[]):[]}], "asset")}
                                       </>) : (<>
                                         <CatFieldDropdown label="Classification" required options={POLICY_TAGS} selected={r.targetTags||[]}
                                           onChange={v=>updRule(r.id,"targetTags",v)} placeholder="Search classifications…"
