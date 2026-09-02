@@ -26579,9 +26579,10 @@ const KL_X_STEPS = [
   {t:"Entity & sources", mode:"you", uses:"Business Entities, published Source Graphs",
    d:"Select the business entity to master and the published source graphs to join. Source graphs that are not ready show the reason.",
    note:["A cross-source graph reads only from source graphs. If a source is missing something, correct it in that source graph."]},
-  {t:"Matching rules", mode:"you", uses:"Classifications & Tags, your precedence decisions",
-   d:"Match keys are derived from the columns you have already classified — review them rather than author them. Below, set which source takes precedence when values disagree.",
-   note:["A missing match key means the column is not yet classified in that source graph."]},
+  {t:"Matching rules", mode:"you", uses:"Identifier roles from each source graph, your precedence decisions",
+   d:"A match key is a business concept, such as Tax ID, bound to a different column in every system. The candidates below come from the identifier roles confirmed in each source graph — not from classifications, which say whether data is sensitive rather than whether it identifies anything. Choose the keys to match on, then set which source wins when values disagree.",
+   note:["A key is only as strong as its weakest source: if a column is blank in one system, every row it misses becomes an exception for someone to clear by hand.",
+         "A key missing here was excluded on purpose, and the reason is shown. Correct it in that source graph at Entity & Identity, not here."]},
   {t:"Publish", mode:"you", uses:"Domains, Policies, Owners, audit log",
    d:"Ownership and policy are inherited from the entity's domain. Choose whether to publish the model only, or also scan data to resolve records.",
    note:["Publishing without a scan still produces a complete entity-level graph. Records can be resolved later."]},
@@ -28348,12 +28349,14 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
   const aiOn    = ai[aiKey] !== false;
   const toast   = m => onToast && onToast(m);
 
+  // Candidate keys are the identifier concepts the source graphs agreed on, each carrying the
+  // per-source column it binds to and how populated that column is. A concept present in only
+  // one source is still listed, because being alone IS the reason it is a weak choice.
+  const keyEvidence = (ids, entity) => klKeyEvidence(srcGraphs, ids, entity);
+  const keyExclusions = (ids, entity) => klKeyExclusions(srcGraphs, ids, entity);
   const keyCounts = (ids, entity) => {
     const c = {};
-    ids.forEach(id=>{
-      const m = srcGraphs.find(g=>g.id===id)?.masters.find(x=>x.entity===entity && x.ready);
-      (m?.keys||[]).forEach(k=>{ c[k] = (c[k]||0)+1; });
-    });
+    keyEvidence(ids, entity).forEach(e => { c[e.key] = e.sources.length; });
     return c;
   };
   const defaultKeys = (ids, entity) => {
@@ -28498,7 +28501,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
             <KLStepRail steps={steps} cur={step} onPick={setStep} doneSet={doneSet}/>
             <div style={{flex:1,overflowY:"auto",padding:"22px 26px"}}>
               <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:6}}>
-                <div style={{fontSize:16,fontWeight:700,color:T.text}}>Step {step+1} · {s.t}</div>
+                <div style={{fontSize:16,fontWeight:700,color:T.text}}>Stage {step+1} · {s.t}</div>
                 <KLModeTag mode={s.mode}/>
                 <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:9}}>
                   {canAI ? (<>
@@ -28585,7 +28588,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                         <ServiceIcon service={g.service} size={16}/>
                         <span style={{fontSize:12.5,fontWeight:600,color:T.text,minWidth:120}}>{g.name}</span>
                         <KLChip kind={ok?"exist":"new"}>{ok?`Ready · ${m.table}`:`Not ready · no ${wEntity} columns classified`}</KLChip>
-                        <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>{ok?`Match keys: ${m.keys.join(", ")}`:"Resolve in that source graph"}</span>
+                        <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>{ok?`Matchable on ${klUsableKeys(m).join(", ")||"nothing yet"}`:"Resolve in that source graph"}</span>
                       </div>
                     );
                   })}
@@ -28608,28 +28611,76 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               )}
 
               {wiz==="cross" && step===1 && (()=>{
-                const counts = keyCounts(wSrcIds, wEntity);
-                const cands  = Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+                const ev = keyEvidence(wSrcIds, wEntity);
+                const ex = keyExclusions(wSrcIds, wEntity);
                 return (
-                  <div style={{maxWidth:780}}>
-                    {cands.length===0 && <div style={{fontSize:12.5,color:T.amber}}>No identifying columns are tagged on the chosen source graphs yet.</div>}
-                    {cands.map(([k,n])=>{
-                      const on = wKeys.includes(k);
+                  <div style={{maxWidth:820}}>
+                    {ev.length===0 && (
+                      <div style={{fontSize:12.5,color:T.amber,lineHeight:1.7}}>
+                        No identifier roles have been confirmed for {wEntity} on the chosen source graphs.
+                        Open each source graph at Entity &amp; Identity and declare which columns identify it.
+                      </div>
+                    )}
+                    {ev.map(e=>{
+                      const on   = wKeys.includes(e.key);
+                      const all  = e.sources.length===wSrcIds.length;
+                      const weak = e.minFill<80;
+                      const role = KL_ID_ROLES[e.role]||{};
                       return (
-                        <div key={k} style={{display:"flex",alignItems:"center",gap:11,flexWrap:"wrap",padding:"10px 12px",marginBottom:8,
-                          background:T.bgSurface,border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:9}}>
-                          <span style={{fontSize:12,fontWeight:600,color:T.text,minWidth:150,fontFamily:"'Geist Mono',monospace"}}>{k}</span>
-                          <span style={{color:T.textMuted,fontSize:13}}>→</span>
-                          <KLChip kind="exist">{n===wSrcIds.length?`In all ${n} sources`:`In ${n} of ${wSrcIds.length} sources`}</KLChip>
-                          <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>{n===wSrcIds.length?"Strongest key":"Fallback when others are blank"}</span>
-                          <Btn small variant={on?"primary":undefined} ghost={!on}
-                            onClick={()=>setWKeys(ks=>on?ks.filter(x=>x!==k):[...ks,k])}>{on?"Using":"Use"}</Btn>
+                        <div key={e.key} style={{padding:"11px 13px",marginBottom:9,background:T.bgSurface,
+                          border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:9}}>
+                          <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                            <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{e.key}</span>
+                            <Badge bg={T.bgElevated} color={T.textSub} border={T.border}>{role.l}</Badge>
+                            <Badge bg={T.bgElevated} color={T.textSub} border={T.border}>{role.match} match</Badge>
+                            <KLChip kind={all?"exist":"new"}>{all?`In all ${e.sources.length} sources`:`In ${e.sources.length} of ${wSrcIds.length} sources`}</KLChip>
+                            <span style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:10}}>
+                              <span style={{fontSize:11,fontWeight:700,color:weak?T.amber:T.green,fontFamily:"'Geist Mono',monospace"}}>
+                                {e.minFill}% at its weakest
+                              </span>
+                              <Btn small variant={on?"primary":undefined} ghost={!on}
+                                onClick={()=>setWKeys(ks=>on?ks.filter(x=>x!==e.key):[...ks,e.key])}>{on?"Using":"Use"}</Btn>
+                            </span>
+                          </div>
+                          <div style={{display:"flex",gap:16,flexWrap:"wrap",marginTop:8}}>
+                            {e.sources.map(x=>(
+                              <span key={x.srcId} style={{fontSize:11,color:T.textMuted}}>
+                                {x.src} <b style={{color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{x.col}</b>
+                                <span style={{color:x.fill<80?T.amber:T.textMuted,fontFamily:"'Geist Mono',monospace"}}> {x.fill}%</span>
+                              </span>
+                            ))}
+                          </div>
+                          {!all && (
+                            <div style={{fontSize:11,color:T.textMuted,marginTop:7,lineHeight:1.6}}>
+                              Only {e.sources.map(x=>x.src).join(" and ")} can be matched on this key. Rows in the
+                              remaining source will fall through to whichever other key you select.
+                            </div>
+                          )}
+                          {all && weak && (
+                            <div style={{fontSize:11,color:T.amber,marginTop:7,lineHeight:1.6}}>
+                              Blank in roughly {100-e.minFill}% of rows in its weakest source, so this key alone will not
+                              reach every record. Pair it with a second key rather than relying on it.
+                            </div>
+                          )}
                         </div>
                       );
                     })}
                     <div style={{fontSize:11.5,color:wKeys.length?T.textMuted:T.amber,marginTop:4}}>
                       {wKeys.length?`${wKeys.length} match key${wKeys.length===1?"":"s"} selected`:"Select at least one match key"}
                     </div>
+                    {ex.length>0 && (
+                      <div style={{marginTop:16,padding:"11px 13px",borderRadius:9,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                        <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>
+                          Not available as match keys
+                        </div>
+                        {ex.map(e=>(
+                          <div key={e.key} style={{fontSize:11.5,color:T.textSub,lineHeight:1.7,marginBottom:4}}>
+                            <b style={{color:T.text}}>{e.key}</b>
+                            <span style={{color:T.textMuted}}> — {(KL_ID_ROLES[e.role]||{}).l} in {e.sources.map(x=>`${x.src} (${x.col})`).join(", ")}. {e.why}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -29334,7 +29385,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
             <>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
                 <Card2 style={{padding:18}}>
-                  <SH title="Match keys" sub="Columns used to identify the same entity across sources."/>
+                  <SH title="Match keys" sub="The business concepts this graph matches on. Each one binds to a different column in every source."/>
                   {xg.keys.length===0
                     ? <div style={{fontSize:12.5,color:T.textMuted}}>No match keys recorded for this graph.</div>
                     : xg.keys.map(k=><KLRow key={k} nm={k} chip="In use" kind="exist" cf="From your classifications"/>)}
