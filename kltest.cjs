@@ -15,7 +15,9 @@ const sandbox = {};
 const fn = new Function(block + `
   return {KL_SRC_SEED, KL_X_SEED, klExceptions, klScore, klWorklist, klDialPreview,
           klReadiness, klMoney, klMoneyFull, KL_MEASURES, klBuildIR, klCompile,
-          klDiff, klLineDiff, klRuleSQL, klSlug, KL_CUSTOM_OPEN, KL_CUSTOM_CLOSE, klOpen:
+          klDiff, klLineDiff, klRuleSQL, klSlug, KL_CUSTOM_OPEN, KL_CUSTOM_CLOSE,
+          KL_ID_ROLES, KL_ID_SIGNALS, klMatchKeys, klExcluded, klMatchable, klBinding,
+          klFill, klCrossCols, klKeyEvidence, klKeyExclusions, klOpen:
           (x)=>[...(x.conflicts||[]),...(x.unmatched||[])].filter(r=>(r.state||"open")==="open").length};
 `);
 const M = fn();
@@ -26,6 +28,83 @@ const ok = (name, cond, extra) => {
   else { fail++; console.log("  FAIL  " + name + (extra !== undefined ? "  → " + JSON.stringify(extra) : "")); }
 };
 
+console.log("\n-- Identifier roles: a classification is not a match key --");
+const sapV = M.KL_SRC_SEED[0].masters.find(m => m.table === "VENDOR_MASTER");
+const ebsV = M.KL_SRC_SEED[1].masters.find(m => m.table === "AP_SUPPLIERS");
+const fusV = M.KL_SRC_SEED[2].masters.find(m => m.table === "POZ_SUPPLIERS");
+
+// The bug this whole model exists to prevent. SAP's vendor number and Fusion's SEGMENT1 are
+// both "the vendor code" and mean nothing to each other, so matching on it merges unrelated
+// suppliers. Typing the role has to make that impossible, not merely unlikely.
+ok("a local code is never a cross-source match key",
+   [sapV, ebsV, fusV].every(m => !M.klMatchKeys(m).includes("Vendor Code")),
+   [sapV, ebsV, fusV].map(m => M.klMatchKeys(m)));
+ok("the local code is still declared, and its exclusion carries a reason",
+   M.klExcluded(fusV).some(c => c.c === "SEGMENT1" && /inside this system only/.test(c.why || "")));
+ok("no published cross-source graph matches on an excluded role",
+   M.KL_X_SEED.every(x => x.srcIds.every(id => {
+     const g = M.KL_SRC_SEED.find(y => y.id === id);
+     const m = g && g.masters.find(y => y.entity === x.entity && y.ready);
+     if (!m) return true;
+     return (x.keys || []).every(k => {
+       const c = (m.idCols || []).find(y => y.key === k);
+       return !c || M.KL_ID_ROLES[c.role].cross;
+     });
+   })), M.KL_X_SEED.map(x => [x.key, x.keys]));
+
+// A primary key identifies a row, not a business entity.
+ok("a technical primary key is never a match key",
+   M.KL_SRC_SEED.every(g => g.masters.every(m =>
+     !(m.idCols || []).some(c => c.role === "technical_key" && M.klMatchKeys(m).includes(c.key)))));
+ok("every master's declared PK is typed as a technical or natural key",
+   M.KL_SRC_SEED.every(g => g.masters.every(m => {
+     if (!m.rule || !(m.idCols || []).length) return true;
+     const c = m.idCols.find(y => y.c === m.rule.pk);
+     return !c || c.role === "technical_key" || c.role === "natural_key";
+   })));
+
+// Classification and identifier role are independent concepts. Both directions have to hold,
+// or the two have quietly been collapsed back into one.
+ok("a column can identify without carrying any classification",
+   (fusV.idCols.find(c => c.c === "SEGMENT1") || {}).cls.length === 0);
+ok("a classification alone does not make a column a key",
+   M.klExcluded(sapV).some(c => (c.cls || []).length > 0) ||
+   M.KL_ID_ROLES[sapV.idCols.find(c => c.c === "SMTP_ADDR").role].hint.includes("Supporting evidence"));
+
+console.log("\n-- Match keys are derived, never authored twice --");
+ok("every ready master's key list equals its derived keys",
+   M.KL_SRC_SEED.every(g => g.masters.every(m =>
+     !(m.idCols || []).length || JSON.stringify(m.keys) === JSON.stringify(M.klMatchKeys(m)))),
+   M.KL_SRC_SEED.flatMap(g => g.masters.map(m => [m.table, m.keys])));
+ok("a master with no declared identity is honestly not matchable",
+   !M.klMatchable(M.KL_SRC_SEED[1].masters.find(m => m.table === "MTL_SYSTEM_ITEMS_B")));
+ok("every published cross-source key exists in every source it joins",
+   M.KL_X_SEED.filter(x => x.status === "Published").every(x =>
+     x.keys.every(k => x.srcIds.every(id => {
+       const g = M.KL_SRC_SEED.find(y => y.id === id);
+       const m = g && g.masters.find(y => y.entity === x.entity && y.ready);
+       return !m || M.klMatchKeys(m).includes(k);
+     }))),
+   M.KL_X_SEED.map(x => [x.key, x.keys]));
+
+console.log("\n-- Profiling is the evidence, and the weakest binding decides --");
+const ev = M.klKeyEvidence(M.KL_SRC_SEED, ["sg1", "sg2", "sg3"], "Supplier");
+const tax = ev.find(e => e.key === "Tax ID");
+ok("a key's strength is its worst source, not its best", tax.minFill === 61, tax);
+ok("the binding is per-source, because the column name differs in every system",
+   tax.sources.map(x => x.col).join(",") === "STCD1,NUM_1099,TAXPAYER_ID", tax.sources.map(x => x.col));
+ok("the weak binding is the one the unmatched rows already blame",
+   /blank in Oracle EBS/.test(JSON.stringify(M.KL_X_SEED[0].unmatched || [])));
+ok("a key present in only one source is not a shared key",
+   ev.find(e => e.key === "Email").sources.length === 1);
+ok("excluded keys are reported to the builder with their reason",
+   M.klKeyExclusions(M.KL_SRC_SEED, ["sg1", "sg2", "sg3"], "Supplier")
+    .some(e => e.key === "Vendor Code" && e.sources.length === 3),
+   M.klKeyExclusions(M.KL_SRC_SEED, ["sg1", "sg2", "sg3"], "Supplier"));
+ok("every proposed role names the signal that proposed it",
+   M.KL_SRC_SEED.every(g => g.masters.every(m => (m.idCols || []).every(c =>
+     M.KL_ID_SIGNALS.some(sg => sg.k === c.by)))));
+console.log("     Supplier keys:", ev.map(e => e.key + " min " + e.minFill + "% in " + e.sources.length + " src").join(" | "));
 console.log("\n── Worklist ranking (C3) ──");
 const wl = M.klWorklist(M.KL_X_SEED);
 ok("every exception surfaces across all graphs", wl.length === 10, wl.length);

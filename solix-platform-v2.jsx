@@ -26101,13 +26101,27 @@ const KL_SRC_SEED = [
    opEntity:"Interiors Division",
    env:{by:"ai", src:"Data Sense · AKG builder", conf:0.96, state:"published"},
    bind:{tags:38, termed:412, proposed:0, invented:0},
-   masters:[{table:"VENDOR_MASTER", entity:"Supplier",    keys:["Tax ID","Legal Name","Vendor Code"], ready:true,
+   masters:[{table:"VENDOR_MASTER",
+             idCols:[{c:"LIFNR",     role:"technical_key", fill:100, distinct:100, cls:[],                    by:"pk"},
+                     {c:"STCD1",     role:"natural_key",  key:"Tax ID",     fill:98,  distinct:100, cls:["Tax ID","PII"], by:"class"},
+                     {c:"NAME1",     role:"name",         key:"Legal Name", fill:100, distinct:94,  cls:["Legal Name"],   by:"term"},
+                     {c:"VENDOR_CODE",role:"local_code",  key:"Vendor Code",fill:100, distinct:100, cls:[],               by:"profile"},
+                     {c:"SMTP_ADDR", role:"contact",      key:"Email",      fill:71,  distinct:99,  cls:["PII","Email"],  by:"class"}], entity:"Supplier",    keys:["Tax ID","Legal Name","Email"], ready:true,
              rule:{pk:"LIFNR", name:"NAME1", tax:"STCD1", code:"LIFNR", cls:"party", by:"ai:heuristic-v1.1", conf:0.94}},
-            {table:"KNA1",          entity:"Customer",    keys:["Tax ID","Name"],                     ready:true,
+            {table:"KNA1",
+             idCols:[{c:"KUNNR", role:"technical_key", fill:100, distinct:100, cls:[],                    by:"pk"},
+                     {c:"STCD1", role:"natural_key", key:"Tax ID",     fill:88,  distinct:100, cls:["Tax ID","PII"], by:"class"},
+                     {c:"NAME1", role:"name",        key:"Legal Name", fill:100, distinct:96,  cls:["Legal Name"],   by:"term"}],          entity:"Customer",    keys:["Tax ID","Legal Name"],               ready:true,
              rule:{pk:"KUNNR", name:"NAME1", tax:"STCD1", cls:"party", by:"ai:heuristic-v1.1", conf:0.93}},
-            {table:"MARA",          entity:"Material",    keys:["Material Number"],                   ready:true,
+            {table:"MARA",
+             idCols:[{c:"MATNR", role:"natural_key", key:"Material Number", fill:100, distinct:100, cls:[], by:"pk"},
+                     {c:"MAKTX", role:"name",        key:"Material Name",   fill:99,  distinct:87,  cls:[], by:"name"}],          entity:"Material",    keys:["Material Number","Material Name"],   ready:true,
              rule:{pk:"MATNR", name:"MAKTX", cls:"item", by:"ai:heuristic-v1.1", conf:0.88}},
-            {table:"ASSET_REG",     entity:"Fixed Asset", keys:["Asset Tag","Serial Number"],         ready:true,
+            {table:"ASSET_REG",
+             idCols:[{c:"ANLN1", role:"technical_key", fill:100, distinct:100, cls:[],             by:"pk"},
+                     {c:"INVNR", role:"natural_key", key:"Asset Tag",     fill:83, distinct:100, cls:["Asset Tag"], by:"class"},
+                     {c:"SERNR", role:"natural_key", key:"Serial Number", fill:76, distinct:100, cls:[],            by:"name"},
+                     {c:"TXT50", role:"name",        key:"Asset Name",    fill:97, distinct:71,  cls:[],            by:"name"}],     entity:"Fixed Asset", keys:["Asset Tag","Serial Number"],         ready:true,
              rule:{pk:"ANLN1", name:"TXT50", serial:"SERNR", tag:"INVNR", cls:"asset", by:"ai:heuristic-v1.1", conf:0.81,
                    guard:"MANDT rejected as PK — the client column is identical on every row, so the generator fell back to the natural key ANLN1"}}],
    assets:[{n:"VENDOR_MASTER", t:"Table", role:"master",      entity:"Supplier", term:"Supplier",       cols:64, tags:["Tax ID","PII"]},
@@ -26135,11 +26149,18 @@ const KL_SRC_SEED = [
    opEntity:"US Operations",
    env:{by:"ai", src:"Data Sense · AKG builder", conf:0.94, state:"published"},
    bind:{tags:31, termed:388, proposed:0, invented:0},
-   masters:[{table:"AP_SUPPLIERS", entity:"Supplier", keys:["Tax ID","Legal Name"], ready:true,
+   masters:[{table:"AP_SUPPLIERS",
+             idCols:[{c:"VENDOR_ID",      role:"technical_key", fill:100, distinct:100, cls:[],                    by:"pk"},
+                     {c:"NUM_1099",       role:"natural_key", key:"Tax ID",     fill:61,  distinct:100, cls:["Tax ID","PII"], by:"class"},
+                     {c:"VENDOR_NAME",    role:"name",        key:"Legal Name", fill:100, distinct:92,  cls:["Legal Name"],   by:"term"},
+                     {c:"SEGMENT1",       role:"local_code",  key:"Vendor Code",fill:100, distinct:100, cls:[],               by:"profile"}], entity:"Supplier", keys:["Tax ID","Legal Name"], ready:true,
              rule:{pk:"VENDOR_ID", name:"VENDOR_NAME", tax:"NUM_1099", cls:"party", by:"ai:heuristic-v1.1", conf:0.92}},
-            {table:"HZ_PARTIES",   entity:"Customer", keys:["Tax ID","Name"],       ready:true,
+            {table:"HZ_PARTIES",
+             idCols:[{c:"PARTY_ID",        role:"technical_key", fill:100, distinct:100, cls:[],                    by:"pk"},
+                     {c:"JGZZ_FISCAL_CODE",role:"natural_key", key:"Tax ID",     fill:74, distinct:100, cls:["Tax ID","PII"], by:"class"},
+                     {c:"PARTY_NAME",      role:"name",        key:"Legal Name", fill:100, distinct:95, cls:["Legal Name"],   by:"term"}],   entity:"Customer", keys:["Tax ID","Legal Name"], ready:true,
              rule:{pk:"PARTY_ID", name:"PARTY_NAME", tax:"JGZZ_FISCAL_CODE", cls:"party", by:"ai:heuristic-v1.1", conf:0.90}},
-            {table:"MTL_SYSTEM_ITEMS_B", entity:"Material", keys:[], ready:false, rule:null,
+            {table:"MTL_SYSTEM_ITEMS_B", entity:"Material", keys:[], ready:false, rule:null, idCols:[],
              blocked:"Composite primary key (INVENTORY_ITEM_ID + ORGANIZATION_ID). Composite-key masters are not generatable in this release — declare the identity attributes by hand, or wait for the next generator version."}],
    assets:[{n:"AP_SUPPLIERS",      t:"Table", role:"master",      entity:"Supplier", term:"Supplier",       cols:52, tags:["Tax ID","PII"]},
            {n:"HZ_PARTIES",        t:"Table", role:"master",      entity:"Customer", term:"Customer",       cols:66, tags:["Tax ID","PII"]},
@@ -26161,9 +26182,17 @@ const KL_SRC_SEED = [
    opEntity:"Canada Operations",
    env:{by:"ai", src:"EDG · Knowledge Layer builder", conf:0.88, state:"needs_review"},
    bind:{tags:29, termed:280, proposed:12, invented:0},
-   masters:[{table:"POZ_SUPPLIERS", entity:"Supplier", keys:["Tax ID","Vendor Code"], ready:true,
+   masters:[{table:"POZ_SUPPLIERS",
+             idCols:[{c:"VENDOR_ID",   role:"technical_key", fill:100, distinct:100, cls:[],                    by:"pk"},
+                     {c:"TAXPAYER_ID", role:"natural_key", key:"Tax ID",     fill:94,  distinct:100, cls:["Tax ID"],     by:"class"},
+                     {c:"VENDOR_NAME", role:"name",        key:"Legal Name", fill:100, distinct:91,  cls:["Legal Name"], by:"term"},
+                     {c:"SEGMENT1",    role:"local_code",  key:"Vendor Code",fill:100, distinct:100, cls:[],             by:"profile"}], entity:"Supplier", keys:["Tax ID","Legal Name"], ready:true,
              rule:{pk:"VENDOR_ID", name:"VENDOR_NAME", tax:"TAXPAYER_ID", code:"SEGMENT1", cls:"party", by:"ai:heuristic-v1.1", conf:0.91}},
-            {table:"FA_ADDITIONS",  entity:"Fixed Asset", keys:["Asset Tag","Serial Number"], ready:true,
+            {table:"FA_ADDITIONS",
+             idCols:[{c:"ASSET_ID",     role:"technical_key", fill:100, distinct:100, cls:[],             by:"pk"},
+                     {c:"TAG_NUMBER",   role:"natural_key", key:"Asset Tag",     fill:79, distinct:100, cls:["Asset Tag"], by:"class"},
+                     {c:"SERIAL_NUMBER",role:"natural_key", key:"Serial Number", fill:68, distinct:100, cls:[],            by:"name"},
+                     {c:"DESCRIPTION",  role:"description", key:null,            fill:96, distinct:64,  cls:[],            by:"name"}],  entity:"Fixed Asset", keys:["Asset Tag","Serial Number"], ready:true,
              rule:{pk:"ASSET_ID", name:"DESCRIPTION", serial:"SERIAL_NUMBER", tag:"TAG_NUMBER", cls:"asset", by:"ai:heuristic-v1.1", conf:0.79,
                    guard:"DESCRIPTION demoted from identity — asset-class entities match on serial/tag-grade identifiers, never on a description"}}],
    assets:[{n:"POZ_SUPPLIERS",  t:"Table", role:"master",      entity:"Supplier", term:"Supplier", cols:48, tags:["Tax ID"]},
@@ -26191,7 +26220,7 @@ const KL_X_SEED = [
    env:{by:"ai", src:"EDG resolver", conf:0.97, state:"published"},
    // reading rows is a separate, consented act — records stay hidden until this says done
    scan:{state:"done", mode:"full", at:"2026-08-19", rows:184200, approvedBy:"maya.chen", stale:false},
-   keys:["Tax ID","Legal Name","Vendor Code"],
+   keys:["Tax ID","Legal Name"],
    beliefs:[{f:"Tax ID",s:"SAP ECC"},{f:"Legal Name",s:"Oracle EBS"},{f:"Vendor Code",s:"SAP ECC"},{f:"Address",s:"Most recently updated"}],
    conflicts:[
      {id:"c1", n:"TAMKO Building", conf:0.64, cls:"name-variant", governs:1840220.55, state:"open",
@@ -26232,7 +26261,7 @@ const KL_X_SEED = [
    domain:"Sales", built:"2026-08-14", version:"v1", policy:"Customer PII",
    env:{by:"ai", src:"EDG resolver", conf:0.99, state:"published"},
    scan:{state:"done", mode:"sample", at:"2026-08-14", rows:5000, approvedBy:"priya.nair", stale:true},
-   keys:["Tax ID","Name"],
+   keys:["Tax ID","Legal Name"],
    beliefs:[{f:"Tax ID",s:"SAP ECC"},{f:"Name",s:"Oracle EBS"}],
    conflicts:[], unmatched:[],
    history:[
@@ -26273,6 +26302,101 @@ const KL_X_SEED = [
      {at:"2026-08-23 08:31", by:"maya.chen",    kind:"human", action:"Data scan approved", detail:"Sample · 5,000 rows per source"},
      {at:"2026-08-23 08:20", by:"EDG",          kind:"ai",    action:"Resolution rules generated", detail:"ASSET_REG and FA_ADDITIONS — asset class, identity on serial/tag"}]},
 ];
+
+// ═══════════════════════════════════════════════════════════════════════════
+// IDENTIFIER ROLES — why a column may (or may not) be matched across sources.
+//
+// A classification and an identifier role are different things and answer different
+// questions. A classification says what the data IS ("this column holds a Tax ID, so it is
+// sensitive"). An identifier role says what the column can be USED FOR ("this column
+// identifies the supplier, and it is valid outside this system"). Neither implies the other:
+//   · VENDOR_CODE identifies a supplier but carries no classification at all.
+//   · A Tax ID classification says the column is sensitive — not that it should be matched on.
+// So a classification is one signal that PROPOSES a role, never the role itself.
+//
+// `cross` is the load-bearing flag. A local code is unique inside one system only, so
+// matching on it across systems merges unrelated records: SAP's LIFNR and Fusion's SEGMENT1
+// are both "the vendor number", and they have nothing to do with each other. Typing the role
+// is what makes that false merge unrepresentable rather than merely discouraged.
+const KL_ID_ROLES = {
+  natural_key:   {l:"Natural key",   match:"Exact", cross:true,
+                  hint:"A business identifier issued outside this system, so the same value means the same thing everywhere. Strongest evidence."},
+  name:          {l:"Name",          match:"Fuzzy", cross:true,
+                  hint:"Matched after normalising case, punctuation and legal suffixes. Corroborates a key; too weak to match on alone."},
+  contact:       {l:"Contact",       match:"Exact", cross:true,
+                  hint:"Supporting evidence only. Shared mailboxes and reused addresses make it unsafe as a sole key."},
+  local_code:    {l:"Local code",    match:null,    cross:false,
+                  hint:"Unique inside this system only. Cannot be matched across sources — the same code means different things in different systems."},
+  technical_key: {l:"Technical key", match:null,    cross:false,
+                  hint:"A primary key or surrogate with no meaning outside its own table. Never a match key."},
+  description:   {l:"Description",   match:null,    cross:false,
+                  hint:"Free text. Describes the record rather than identifying it."},
+};
+
+// The five signals that propose a role. Shown so a steward can see WHY a role was suggested
+// and overrule it — a proposal the steward cannot interrogate is a proposal they cannot trust.
+const KL_ID_SIGNALS = [
+  {k:"pk",      l:"Declared primary key"},
+  {k:"profile", l:"Profiling — uniqueness and format"},
+  {k:"class",   l:"Classification on the column"},
+  {k:"name",    l:"Column naming convention"},
+  {k:"term",    l:"Bound business term"},
+];
+
+const klIdCols    = m => (m && m.idCols) || [];
+// A match key is a CONCEPT ("Tax ID"), bound to a different physical column in each system
+// (STCD1 / NUM_1099 / TAXPAYER_ID). Matching compares the concept; the binding says which
+// column to read. Both conditions must hold: the role must be cross-valid AND the column must
+// be bound to a shared concept.
+const klCrossCols = m => klIdCols(m).filter(c => KL_ID_ROLES[c.role] && KL_ID_ROLES[c.role].cross && c.key);
+const klMatchKeys = m => klCrossCols(m).map(c => c.key);
+// Which physical column implements a given concept in this master table.
+const klBinding   = (m, key) => klIdCols(m).find(c => c.key===key) || null;
+// How populated that column is. A key that is blank half the time will not match, and this is
+// data the catalog already profiles — so the steward sees it before choosing, not after.
+const klFill      = (m, key) => { const b = klBinding(m, key); return b && b.fill!=null ? b.fill : null; };
+// Identifier columns deliberately held back from cross-source matching, each with its reason.
+const klExcluded  = m => klIdCols(m)
+  .filter(c => !(KL_ID_ROLES[c.role] && KL_ID_ROLES[c.role].cross && c.key))
+  .map(c => ({...c, why: (KL_ID_ROLES[c.role]||{}).hint}));
+const klMatchable = m => klMatchKeys(m).length > 0;
+
+// Match keys are DERIVED, never authored twice. Declaring the roles is the only input; the
+// key list is a consequence. This is what stops a local code being typed as excluded in one
+// place and still used as a key in another.
+KL_SRC_SEED.forEach(g => g.masters.forEach(m => { if (m.idCols) m.keys = klMatchKeys(m); }));
+
+// The weakest link across the sources being joined: a key is only as good as its worst
+// binding, so this is the number that decides whether it will actually work.
+const klKeyEvidence = (graphs, ids, entity) => {
+  const out = {};
+  ids.forEach(id => {
+    const g = graphs.find(x => x.id===id); if (!g) return;
+    const m = g.masters.find(x => x.entity===entity && x.ready); if (!m) return;
+    klCrossCols(m).forEach(c => {
+      const e = out[c.key] || (out[c.key] = {key:c.key, role:c.role, sources:[], minFill:100});
+      e.sources.push({src:g.name, srcId:g.id, col:c.c, fill:c.fill});
+      if (c.fill!=null && c.fill < e.minFill) e.minFill = c.fill;
+    });
+  });
+  return Object.values(out).sort((a,b) => b.sources.length-a.sources.length || b.minFill-a.minFill);
+};
+
+// Identifier columns that LOOK like keys but are excluded, gathered across the joined sources.
+// Shown in the cross-source builder so the exclusion is visible and explained, rather than
+// the key simply being absent for reasons the user cannot see.
+const klKeyExclusions = (graphs, ids, entity) => {
+  const out = {};
+  ids.forEach(id => {
+    const g = graphs.find(x => x.id===id); if (!g) return;
+    const m = g.masters.find(x => x.entity===entity && x.ready); if (!m) return;
+    klExcluded(m).filter(c => c.key).forEach(c => {
+      const e = out[c.key] || (out[c.key] = {key:c.key, role:c.role, why:c.why, sources:[]});
+      e.sources.push({src:g.name, col:c.c});
+    });
+  });
+  return Object.values(out);
+};
 
 // ── The AKG's own 10 steps, unchanged. `uses` = the EDG object that now feeds the step. ──
 const KL_SRC_STEPS = [
