@@ -7382,7 +7382,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
         holdCriteria:r.holdCriteria||[], maskColumns:r.maskColumns||[],
         objPattern:r.objPattern||"", objDateBasis:r.objDateBasis||"", objDateOp:r.objDateOp||"", objDateVal:r.objDateVal||"", objDateVal2:r.objDateVal2||"",
         maskPatterns:r.maskPatterns||[], maskFileTypes:r.maskFileTypes||[], maskMethod:r.maskMethod||"", maskOutput:r.maskOutput||"", maskDest:r.maskDest||"",
-        applyTo:r.applyTo||"asset", targets:r.targets||[], targetTags:r.targetTags||[], targetDomains:r.targetDomains||[], targetObjTypes:r.targetObjTypes||[],
+        applyTo:r.applyTo||"asset", targets:r.targets||[], targetTags:r.targetTags||[], tagCriteria:r.tagCriteria||{}, targetDomains:r.targetDomains||[], targetObjTypes:r.targetObjTypes||[],
         releasedKeys:r.releasedKeys||[],
         pendingUnhold:!!r.pendingUnhold};
     });
@@ -7573,7 +7573,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
     const presetBack = (pol.rules||[]).filter(r=>r.type==="preset"||(!r.type&&!r.sql)).map(r=>({id:r.id||`wr-${Date.now()}`,name:r.name||"",field:r.field||"certification",operator:r.operator||"is",value:r.value||"",table:r.table||"",column:r.column||"",severity:r.severity||"Medium",enforce:!!r.enforce,enf:r.enf||null,
       critType:r.critType||null, dateCol:r.dateCol||"", critText:r.critText||"",
       holdCriteria:r.holdCriteria||[], maskColumns:r.maskColumns||[],
-      targetTags:r.targetTags||[], applyTo:r.applyTo||"asset", targets:r.targets||[], targetDomains:r.targetDomains||[], targetObjTypes:r.targetObjTypes||[],
+      targetTags:r.targetTags||[], applyTo:r.applyTo||"asset", targets:r.targets||[], tagCriteria:r.tagCriteria||{}, targetDomains:r.targetDomains||[], targetObjTypes:r.targetObjTypes||[],
       objPattern:r.objPattern||"", objDateBasis:r.objDateBasis||"", objDateOp:r.objDateOp||"", objDateVal:r.objDateVal||"", objDateVal2:r.objDateVal2||"",
       maskPatterns:r.maskPatterns||[], maskFileTypes:r.maskFileTypes||[], maskMethod:r.maskMethod||"", maskOutput:r.maskOutput||"", maskDest:r.maskDest||"",
       releasedKeys:r.releasedKeys||[],
@@ -7586,7 +7586,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
     let solo   = opts.solo||null;
     if(opts.addBlank){
       const newId=`wr-${Date.now()}`;
-      rules=[...presetBack,{id:newId,name:"",field:"certification",operator:"is",value:"",table:"",column:"",severity:"Medium",enforce:false,enf:null,critType:null,dateCol:"",critText:"",holdCriteria:[],maskColumns:[],targetTags:[],applyTo:"asset",targets:[],targetDomains:[],targetObjTypes:[],objPattern:"",objDateBasis:"",objDateOp:"",objDateVal:"",objDateVal2:"",maskPatterns:[],maskFileTypes:[],maskMethod:"",maskOutput:"",maskDest:"",releasedKeys:[],pendingUnhold:false}];
+      rules=[...presetBack,{id:newId,name:"",field:"certification",operator:"is",value:"",table:"",column:"",severity:"Medium",enforce:false,enf:null,critType:null,dateCol:"",critText:"",holdCriteria:[],maskColumns:[],targetTags:[],applyTo:"asset",targets:[],tagCriteria:{},targetDomains:[],targetObjTypes:[],objPattern:"",objDateBasis:"",objDateOp:"",objDateVal:"",objDateVal2:"",maskPatterns:[],maskFileTypes:[],maskMethod:"",maskOutput:"",maskDest:"",releasedKeys:[],pendingUnhold:false}];
       solo=newId;
     }
     setWizardRules(rules);
@@ -10785,6 +10785,60 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                     </div>
                                   );
                                 };
+                                // Per-object criteria grid (classification tab) — mirrors CDP: a tag resolves to a
+                                // LIST of objects, and each object gets its OWN criteria (columns / date basis /
+                                // hold rule). The action (period, algorithm, hold type) stays shared above.
+                                const setTagCrit = (obj,k,v)=>updRule(r.id,"tagCriteria",{...(r.tagCriteria||{}), [obj]:{...((r.tagCriteria||{})[obj]||{}), [k]:v}});
+                                const perObjectGrid = (objects)=>{
+                                  const isMask=r.field==="masking_status", isRet=r.field==="retention_class", isHold=r.field==="legal_hold";
+                                  const per = isMask?"columns to mask":isHold?"hold rule":"retention basis";
+                                  return (
+                                    <div>
+                                      <label style={fieldLabelSt}>{objects.length} object{objects.length>1?"s":""} — set the {per} for each</label>
+                                      <div style={{display:"flex",flexDirection:"column",gap:9,maxHeight:250,overflowY:"auto",border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 11px",background:T.bgSurface}}>
+                                        {objects.map(a=>{
+                                          const cols=ASSET_COLUMNS[a.name]||[]; const crit=(r.tagCriteria||{})[a.name]||{}; const owners=resolveTableOwners(a.name);
+                                          return (
+                                            <div key={a.name} style={{display:"flex",flexDirection:"column",gap:5,paddingBottom:9,borderBottom:`1px solid ${T.border}`}}>
+                                              <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
+                                                <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600}}>{a.name}</span>
+                                                <span style={{fontSize:9.5,color:T.textMuted}}>{a.type} · {a.domain}</span>
+                                                <span style={{marginLeft:"auto",display:"flex",gap:3}}>{owners.map(o=><span key={o} style={{fontSize:9.5,fontWeight:600,padding:"1px 7px",borderRadius:10,background:`${T.accent}14`,color:T.accent}}>{o}</span>)}</span>
+                                              </div>
+                                              {isMask&&(()=>{ const sel=crit.cols||classifiedColumns(a.name,r.targetTags); return (
+                                                <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                                                  {cols.map(c=>{const on=sel.includes(c); return <span key={c} onClick={()=>setTagCrit(a.name,"cols",on?sel.filter(x=>x!==c):[...sel,c])}
+                                                    style={{fontSize:10,fontFamily:"'Geist Mono',monospace",cursor:"pointer",padding:"1px 7px",borderRadius:4,border:`1px solid ${on?T.violet+"66":T.border}`,background:on?`${T.violet}18`:"transparent",color:on?T.violet:T.textMuted}}>.{c}</span>;})}
+                                                </div>
+                                              );})()}
+                                              {isRet&&(
+                                                <div style={{display:"flex",alignItems:"center",gap:7}}>
+                                                  <span style={{fontSize:10,color:T.textMuted,minWidth:64}}>Retain by</span>
+                                                  <select value={crit.dateCol||""} onChange={e=>setTagCrit(a.name,"dateCol",e.target.value)} style={{...sel_s,flex:1,maxWidth:280}}>
+                                                    <option value="">Whole object · creation date</option>
+                                                    {cols.map(c=><option key={c} value={c}>{c}</option>)}
+                                                  </select>
+                                                </div>
+                                              )}
+                                              {isHold&&(
+                                                <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                                                  <select value={crit.holdCol||""} onChange={e=>setTagCrit(a.name,"holdCol",e.target.value)} style={{...sel_s,flex:"1 1 140px",minWidth:120}}>
+                                                    <option value="">Hold entire object</option>
+                                                    {cols.map(c=><option key={c} value={c}>{c}</option>)}
+                                                  </select>
+                                                  {crit.holdCol&&<>
+                                                    <select value={crit.holdOp||"="} onChange={e=>setTagCrit(a.name,"holdOp",e.target.value)} style={{...sel_s,flex:"0 0 auto"}}>{["=","!=","in",">","<"].map(op=><option key={op} value={op}>{op}</option>)}</select>
+                                                    <input value={crit.holdVal||""} onChange={e=>setTagCrit(a.name,"holdVal",e.target.value)} placeholder="value" style={{...sel_s,flex:"1 1 90px",cursor:"text"}}/>
+                                                  </>}
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  );
+                                };
                                 const tableColBlock = (showApprover)=>(
                                   <div style={{borderTop:`1px solid ${T.border}`,padding:"12px 11px",display:"flex",flexDirection:"column",gap:12,background:`${T.bgBase}88`}}>
                                     {isEnfField&&!ruleIsObject ? (<>
@@ -10814,10 +10868,9 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                           renderOpt={(o,sel)=><><span style={{width:9,height:9,borderRadius:"50%",background:TAG_DOT(o),flexShrink:0}}/><span style={{flex:1,fontSize:12.5,color:sel?T.accent:T.text}}>{o}</span></>}
                                           renderChip={o=><span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:7,height:7,borderRadius:"50%",background:TAG_DOT(o)}}/>{o}</span>}/>
                                         {tagTargeting&&(()=>{
-                                          if(matchedAssets.length===0) return <div style={{fontSize:11,color:T.amber}}>No {isMaskRule?"columns":"objects"} in scope carry that classification yet.</div>;
-                                          // Same objects→approvers list as the assets tab; masking nests the matched columns.
-                                          const objs = matchedAssets.map(a=>({name:a.name, owners:resolveTableOwners(a.name), cols:isMaskRule?classifiedColumns(a.name,r.targetTags):[]}));
-                                          return objectApproverList(objs, "object");
+                                          if(matchedAssets.length===0) return <div style={{fontSize:11,color:T.amber}}>No objects in scope carry that classification yet.</div>;
+                                          // CDP-faithful: the tag resolves to a list of objects, each with its own criteria.
+                                          return perObjectGrid(matchedAssets);
                                         })()}
                                       </>)}
                                     </>) : (<>
@@ -11118,8 +11171,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                                   Search-based / Progressive Hold — rule-based only. ── */}
                                               {/* Object-store legal hold — bucket-level; freeze objects by date range / prefix. */}
                                               {fd.action.verb==="Legal hold"&&ruleIsObject&&renderObjCritType(true)}
-                                              {fd.action.verb==="Legal hold"&&!ruleIsObject&&(()=>{
-                                                const cols = enfCols;  // union of columns across all selected assets
+                                              {fd.action.verb==="Legal hold"&&!ruleIsObject&&applyMode!=="tag"&&(()=>{
+                                                const cols = enfCols;  // the single selected asset's columns
                                                 const crit = r.holdCriteria&&r.holdCriteria.length ? r.holdCriteria : [{id:"hc0",column:"",operator:"=",dataType:"Text",value:""}];
                                                 const setCrit = (list)=>updRule(r.id,"holdCriteria",list);
                                                 const updCrit = (cid,k,v)=>setCrit(crit.map(c=>c.id===cid?{...c,[k]:v}:c));
@@ -11175,9 +11228,9 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                                   control. Datewise = date basis the clock counts from; Criteriawise = prefix.
                                                   Duration (Years/Months/Days) & Auto Purge come from the disposition fields below. */}
                                               {fd.action.verb==="Set disposition"&&ruleIsObject&&renderObjCritType(false)}
-                                              {fd.action.verb==="Set disposition"&&!ruleIsObject&&(()=>{
+                                              {fd.action.verb==="Set disposition"&&!ruleIsObject&&applyMode!=="tag"&&(()=>{
                                                 const critType = r.critType||"date";
-                                                const cols = enfCols;  // union of columns across all selected assets
+                                                const cols = enfCols;  // the single selected asset's columns
                                                 return (
                                                   <div style={{marginBottom:8}}>
                                                     <div style={{fontSize:10.5,color:T.textMuted,marginBottom:5}}>Criteria type</div>
