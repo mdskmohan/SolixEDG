@@ -26862,6 +26862,19 @@ const KL_ID_ROLES = {
 
 // The five signals that propose a role. Shown so a steward can see WHY a role was suggested
 // and overrule it — a proposal the steward cannot interrogate is a proposal they cannot trust.
+// The shape of the value behind each concept. THIS, not the column name, is what makes two
+// differently-named columns recognisable as the same identifier: SAP's STCD1 and Oracle's
+// NUM_1099 share a format and a value space, and share nothing else.
+const KL_KEY_FORMAT = {
+  "Tax ID":          "NN-NNNNNNN \u00b7 issued by the tax authority, so the same value means the same company in every system",
+  "Legal Name":      "Free text \u00b7 compared after normalising case, punctuation and legal suffixes",
+  "Email":           "local@domain",
+  "Material Number": "Alphanumeric, left-padded",
+  "Material Name":   "Free text",
+  "Asset Tag":       "Alphanumeric, prefixed per plant",
+  "Serial Number":   "Vendor-specific alphanumeric",
+};
+
 const KL_ID_SIGNALS = [
   {k:"pk",      l:"Declared primary key"},
   {k:"profile", l:"Profiling — uniqueness and format"},
@@ -26902,7 +26915,7 @@ const klKeyEvidence = (graphs, ids, entity) => {
     const m = g.masters.find(x => x.entity===entity && x.ready); if (!m) return;
     klCrossCols(m).forEach(c => {
       const e = out[c.key] || (out[c.key] = {key:c.key, role:c.role, sources:[], minFill:100});
-      e.sources.push({src:g.name, srcId:g.id, col:c.c, fill:c.fill});
+      e.sources.push({src:g.name, srcId:g.id, col:c.c, fill:c.fill, distinct:c.distinct, by:c.by});
       if (c.fill!=null && c.fill < e.minFill) e.minFill = c.fill;
     });
   });
@@ -28648,6 +28661,9 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
   const [wDomain,   setWDomain]   = useState("Procurement");
   const [wTags,     setWTags]     = useState([]);
   const [wTerms,    setWTerms]    = useState([]);
+  // Which key's evidence is open. One at a time: the profile matters while a steward weighs
+  // ONE key, and printing it under all of them is what made this screen unreadable.
+  const [wOpenKey,  setWOpenKey]  = useState(null);
 
   // ── Who is looking, and what they may decide (C10 / §12.1) ──
   // Curation is the steward's job. Materialisation is the engineer's. The dial and the
@@ -29214,24 +29230,70 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                         const all = e.sources.length===wSrcIds.length;
                         const weak = e.minFill<80;
                         const role = KL_ID_ROLES[e.role]||{};
+                        const open = wOpenKey===e.key;
+                        const sigOf = k => (KL_ID_SIGNALS.find(x=>x.k===k)||{}).l || k || "—";
                         return (
-                          <div key={e.key} onClick={()=>setWKeys(ks=>on?ks.filter(x=>x!==e.key):[...ks,e.key])}
-                            style={{padding:"10px 12px",marginBottom:7,cursor:"pointer",background:on?T.accentDim:T.bgSurface,
-                              border:`1px solid ${on?T.accent+"66":T.border}`,borderRadius:9}}>
-                            <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                          <div key={e.key}
+                            style={{marginBottom:7,background:on?T.accentDim:T.bgSurface,
+                              border:`1px solid ${on?T.accent+"66":T.border}`,borderRadius:9,overflow:"hidden"}}>
+                            <div onClick={()=>setWKeys(ks=>on?ks.filter(x=>x!==e.key):[...ks,e.key])}
+                              style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 12px",cursor:"pointer"}}>
                               <span style={{width:16,height:16,borderRadius:4,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10.5,color:"#fff",
                                 background:on?T.accent:"transparent",border:`1.5px solid ${on?T.accent:T.borderLight}`}}>{on?"\u2713":""}</span>
                               <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{e.key}</span>
                               <span style={{fontSize:11,color:T.textMuted}}>{role.l} · {role.match} match</span>
                               {!all && <KLChip kind="new">In {e.sources.length} of {wSrcIds.length}</KLChip>}
+                              {weak && all && <KLChip kind="new">Needs a second key</KLChip>}
                               <span style={{marginLeft:"auto",fontSize:11,fontWeight:700,fontFamily:"'Geist Mono',monospace",
-                                color:weak?T.amber:T.green}}>{e.minFill}% at its weakest</span>
+                                color:weak?T.amber:T.green}}>{e.minFill}%</span>
+                              {/* The profile belongs to one key at a time. Under every row it was noise. */}
+                              <button title="Where this key comes from"
+                                onClick={ev=>{ev.stopPropagation(); setWOpenKey(open?null:e.key);}}
+                                style={{display:"flex",alignItems:"center",justifyContent:"center",width:22,height:22,flexShrink:0,
+                                  borderRadius:6,cursor:"pointer",background:open?T.accent+"22":"transparent",
+                                  border:`1px solid ${open?T.accent+"66":T.border}`,color:open?T.accent:T.textMuted}}>
+                                {Ic.info(12)}
+                              </button>
                             </div>
-                            <div style={{fontSize:10.5,color:T.textMuted,marginTop:5,paddingLeft:26,lineHeight:1.5}}>
-                              {e.sources.map(x=>`${x.src} ${x.col} ${x.fill}%`).join("  \u00b7  ")}
-                              {weak && all && `  \u00b7  blank in ~${100-e.minFill}% of rows somewhere, so pair it with a second key`}
-                              {!all && `  \u00b7  rows in the other source fall through to another key`}
-                            </div>
+                            {open && (
+                              <div style={{borderTop:`1px solid ${T.border}`,padding:"11px 13px",background:T.bgElevated}}>
+                                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".07em",marginBottom:8}}>
+                                  Bound to
+                                </div>
+                                <div style={{display:"grid",gridTemplateColumns:"1.1fr 1fr .6fr .6fr 1.3fr",gap:6,fontSize:10.5}}>
+                                  {["System","Column","Filled","Distinct","Proposed by"].map(h=>(
+                                    <span key={h} style={{color:T.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:".05em",paddingBottom:4,borderBottom:`1px solid ${T.border}`}}>{h}</span>
+                                  ))}
+                                  {e.sources.map(x=>[
+                                    <span key={x.srcId+"s"} style={{color:T.textSub,padding:"5px 0"}}>{x.src}</span>,
+                                    <span key={x.srcId+"c"} style={{color:T.text,fontFamily:"'Geist Mono',monospace",padding:"5px 0"}}>{x.col}</span>,
+                                    <span key={x.srcId+"f"} style={{color:x.fill<80?T.amber:T.textSub,fontFamily:"'Geist Mono',monospace",padding:"5px 0"}}>{x.fill==null?"—":x.fill+"%"}</span>,
+                                    <span key={x.srcId+"d"} style={{color:T.textSub,fontFamily:"'Geist Mono',monospace",padding:"5px 0"}}>{x.distinct==null?"—":x.distinct+"%"}</span>,
+                                    <span key={x.srcId+"b"} style={{color:T.textMuted,padding:"5px 0"}}>{sigOf(x.by)}</span>,
+                                  ])}
+                                </div>
+                                {KL_KEY_FORMAT[e.key] && (
+                                  <div style={{fontSize:11,color:T.textSub,marginTop:10,lineHeight:1.6}}>
+                                    <b style={{color:T.textMuted,fontWeight:700}}>Value shape:</b> {KL_KEY_FORMAT[e.key]}
+                                  </div>
+                                )}
+                                {/* The question this panel exists to answer. */}
+                                <div style={{fontSize:10.8,color:T.textMuted,marginTop:9,lineHeight:1.65,
+                                  paddingTop:9,borderTop:`1px solid ${T.border}`}}>
+                                  Column names are never compared. {e.sources.map(x=>x.col).join(" and ")}
+                                  {e.sources.length>1?" have nothing in common" : " is matched on its value alone"} —
+                                  the binding above is what makes them one key, proposed from the profile and confirmed
+                                  on each graph. Whether the values themselves overlap is measured when you scan, because
+                                  that means reading rows from every system.
+                                </div>
+                                {weak && (
+                                  <div style={{fontSize:10.8,color:T.amber,marginTop:8,lineHeight:1.6}}>
+                                    Blank in roughly {100-e.minFill}% of rows in its weakest source. Rows it misses fall
+                                    through to whichever other key you select, or arrive as exceptions.
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
