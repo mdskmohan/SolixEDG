@@ -26228,7 +26228,7 @@ const KL_SRC_SEED = [
 
   {id:"sg3", key:"SKG-1003", name:"Oracle Fusion", service:"oracle", connection:"fusion-erp",
    domain:"Procurement", tables:292, cols:2140, words:88, entities:["Supplier","Fixed Asset"],
-   drift:0, status:"In review", owner:"maya.chen", stewards:[], from:"EDG",
+   drift:0, status:"In review", owner:"maya.chen", stewards:[], from:"Data Sense",
    step:7, built:"2026-08-22", version:"v1",
    opEntity:"Canada Operations",
    env:{by:"ai", src:"EDG · Knowledge Layer builder", conf:0.88, state:"needs_review"},
@@ -28432,10 +28432,12 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
     return {entity:e, ready, mastered: xGraphs.some(x=>x.entity===e)};
   });
 
-  const openWizard = kind => {
+  const openWizard = (kind, entity) => {
     setWiz(kind); setStep(0); setAi({}); setDoneSet(new Set()); setSelSrc(null); setSelX(null);
     if(kind==="cross"){
-      const e = KL_ENTITIES.find(x=>KL_READY_FOR(srcGraphs,x).length>=2) || KL_ENTITIES[0];
+      // The entity the caller clicked wins. Falling straight through to "first entity with
+      // two sources" meant every door opened on the same one, whichever was clicked.
+      const e = entity || KL_ENTITIES.find(x=>KL_READY_FOR(srcGraphs,x).length>=2) || KL_ENTITIES[0];
       setWEntity(e); reseed(KL_READY_FOR(srcGraphs,e), e); setWScan("later");
     } else {
       const free = KL_UNMAPPED.filter(c => !srcGraphs.some(g=>g.name===c));
@@ -28649,8 +28651,10 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                       <span style={{width:17,flexShrink:0}}/>
                       <ServiceIcon service={g.service} size={16}/>
                       <span style={{fontSize:12.5,fontWeight:600,color:T.text,minWidth:120}}>{g.name}</span>
-                      <KLChip kind="plain">In progress · step {g.step} of 10</KLChip>
-                      <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>Publish to make available</span>
+                      {/* A graph EDG did not build has no build step to report. The reason it
+                          cannot be joined is that Data Sense has not published it. */}
+                      <KLChip kind="plain">Draft in Data Sense</KLChip>
+                      <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>Publish it in Data Sense to join it here</span>
                     </div>
                   ))}
                   <div style={{fontSize:11.5,color:wSrcIds.length>=2?T.textMuted:T.amber,marginTop:4}}>
@@ -29535,10 +29539,15 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+      {/* EDG does not build source knowledge graphs. Data Sense does, and they arrive
+          through the Solix EAI connector - so the action on that tab is to go and connect
+          it, never to open a builder. The one thing created in this module is the
+          cross-source master, which is EDG's own work: deciding that records held in
+          different systems are the same real-world thing. */}
       <Topbar breadcrumb={[{label:"Knowledge Layer"}]} actions={
-        <Btn variant="primary" small icon={Ic.plus(11)} onClick={()=>openWizard(tab==="cross"?"cross":"src")}>
-          {tab==="cross"?"New Cross-Source Graph":"New Source Graph"}
-        </Btn>
+        tab==="sources"
+          ? <Btn variant="primary" small icon={Ic.plus(11)} onClick={()=>onNav&&onNav("settings")}>Import from Solix EAI</Btn>
+          : <Btn variant="primary" small icon={Ic.plus(11)} onClick={()=>openWizard("cross")}>New Cross-Source Graph</Btn>
       }/>
       <div style={{flex:1,overflowY:"auto",padding:24}}>
         <Tabs2 tabs={[
@@ -29600,7 +29609,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 <SH title="How the Knowledge Layer is built" sub="Each layer builds on the one before it."/>
                 {[
                   {n:"1", c:T.green,  h:"Governed vocabulary",  s:"Classifications, glossary terms, domains and owners already defined in EDG.", v:"38 tags · 214 terms"},
-                  {n:"2", c:T.blue,   h:"Source Knowledge Graphs", s:"One per connection. Maps a single system using the governed vocabulary.", v:`${totals.published} published`},
+                  {n:"2", c:T.blue,   h:"Source Knowledge Graphs", s:"One per application, built in Data Sense and imported through the Solix EAI connector. EDG governs it and watches it for change; it never edits it.", v:`${totals.published} imported`},
                   {n:"3", c:T.accent, h:"Cross-Source Knowledge Graphs", s:"Joins two or more source graphs into one trusted record per real-world entity.", v:`${xGraphs.length} graphs`},
                 ].map((r,i)=>(
                   <div key={r.n} style={{display:"flex",gap:11,padding:"10px 0",borderTop:i?`1px solid ${T.border}`:"none"}}>
@@ -29631,7 +29640,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                     {e.mastered
                       ? <Badge bg={T.green+"1a"} color={T.green} border={T.green+"55"}>Mastered</Badge>
                       : e.ready.length>=2
-                        ? <Btn small ghost onClick={()=>{setWEntity(e.entity);openWizard("cross");}}>Create graph</Btn>
+                        ? <Btn small ghost onClick={()=>{setTab("cross");openWizard("cross", e.entity);}}>Create graph</Btn>
                         : <span style={{fontSize:10.5,color:T.textMuted}}>{e.ready.length} of 2 required</span>}
                   </div>
                 ))}
@@ -29878,7 +29887,73 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               sortOpts={[{v:"name",l:"Sort: Name"},{v:"tables",l:"Sort: Most tables"},{v:"built",l:"Sort: Recently built"}]}
               shown={srcFiltered.length} total={srcGraphs.length}
               onClear={()=>{setSq("");setSStatus("all");}}/>
-            {srcFiltered.length===0
+            {/* Ready to master. Two or more imported graphs describing the same entity, and
+                nothing joining them yet - which means the estate holds two or more separate
+                supplier lists and nobody has said which rows are the same company. */}
+            {(()=>{
+              // An entity is worth mentioning when more than one imported graph describes it
+              // and nothing joins them - which means the estate holds two or more separate
+              // lists of the same real-world thing. Both answers matter: the ones that can be
+              // mastered now, and the ones that cannot, with the reason. A row that only says
+              // "not ready" and makes someone go hunting for why is the version of this screen
+              // that gets ignored.
+              const rows = KL_ENTITIES.map(en=>{
+                // A graph "describes" an entity when it carries a master table for it. The
+                // summary entities list is a display field and can lag: Oracle EBS holds an
+                // MTL_SYSTEM_ITEMS_B master for Material but does not list Material, which
+                // is exactly the case this row exists to surface.
+                const inGraphs = srcGraphs.filter(g=>
+                  (g.masters||[]).some(m=>m.entity===en) || (g.entities||[]).includes(en));
+                if(inGraphs.length<2 || xGraphs.some(x=>x.entity===en)) return null;
+                const ready = KL_READY_FOR(srcGraphs, en);
+                if(ready.length>=2) return {en, inGraphs, ready, why:null};
+                const why = inGraphs.filter(g=>!ready.includes(g.id)).map(g=>{
+                  if(g.status!=="Published") return `${g.name} is still a draft in Data Sense`;
+                  const m = (g.masters||[]).find(m=>m.entity===en);
+                  if(m&&m.blocked)  return `${g.name}: ${m.blocked}`;
+                  if(!m)            return `${g.name} declares ${en} but has no master table for it`;
+                  return `${g.name} has no identifier for ${en} that is valid outside its own system`;
+                });
+                return {en, inGraphs, ready, why};
+              }).filter(Boolean);
+              if(rows.length===0) return null;
+              const list = gs => {
+                const ns = gs.map(g=>g.name);
+                return ns.length<2 ? ns.join("") : ns.slice(0,-1).join(", ")+" and "+ns[ns.length-1];
+              };
+              return (
+                <Card2 style={{padding:"14px 16px",marginBottom:14,borderLeft:`3px solid ${T.accent}`}}>
+                  <SH title="Described in more than one system, not yet joined"
+                    sub="Each of these is one real-world thing held as separate lists. Joining them is what a cross-source master does."/>
+                  {rows.map((r,i)=>(
+                    <div key={r.en} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"10px 0",
+                      borderTop:i?`1px solid ${T.border}`:"none"}}>
+                      <div style={{minWidth:0,flex:1}}>
+                        <span style={{fontSize:12.6,color:T.textSub,lineHeight:1.6}}>
+                          <strong style={{color:T.text,fontWeight:700}}>{r.en}</strong> appears in {list(r.inGraphs)}.
+                          {" "}Nothing connects them, so the estate holds {r.inGraphs.length} separate lists.
+                        </span>
+                        {r.why && r.why.map((w,j)=>(
+                          <div key={j} style={{fontSize:11.3,color:T.textMuted,lineHeight:1.55,marginTop:5,
+                            paddingLeft:10,borderLeft:`2px solid ${T.amber}66`}}>{w}</div>
+                        ))}
+                      </div>
+                      {r.why
+                        ? <Badge bg={T.amber+"1a"} color={T.amber} border={T.amber+"55"}>Cannot be joined yet</Badge>
+                        : <Btn small variant="primary"
+                            onClick={()=>{setSelSrc(null);setTab("cross");openWizard("cross", r.en);}}>
+                            Create cross-source master
+                          </Btn>}
+                    </div>
+                  ))}
+                </Card2>
+              );
+            })()}
+            {srcGraphs.length===0
+              ? <KLEmpty icon={Ic.knowledge(34)} title="No knowledge graphs imported yet"
+                  sub="Data Sense builds a knowledge graph per application. Connect Solix EAI to import them as governed objects."
+                  action={<Btn small variant="primary" onClick={()=>onNav&&onNav("settings")}>Import from Solix EAI</Btn>}/>
+              : srcFiltered.length===0
               ? <KLEmpty icon={Ic.knowledge(34)} title="No source graphs match your search"
                   action={<Btn small ghost onClick={()=>{setSq("");setSStatus("all");}}>Clear filters</Btn>}/>
               : <DataTable
@@ -29897,10 +29972,14 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                     {key:"drift",  label:"Freshness", render:v=>v>0
                       ? <span style={{color:T.amber,fontSize:11.5,fontWeight:600}}>{v} columns added</span>
                       : <span style={{color:T.green,fontSize:11.5}}>Current</span>},
-                    {key:"from",   label:"Created in", render:v=><span style={{fontSize:11.5,fontWeight:v==="EDG"?700:400,color:v==="EDG"?T.accent:T.textSub}}>{v}</span>},
+                    {key:"from",   label:"Imported from", render:(v,r)=>(
+                      <span style={{fontSize:11.5,color:T.textSub}}>Solix EAI<span style={{color:T.textMuted}}> · {r.version}</span></span>)},
+                    // A graph EDG did not build has no build step to report. What matters is
+                    // whether Data Sense has published it - a draft is still being edited
+                    // upstream, so anything resolved against it would move underneath.
                     {key:"status", label:"Status", render:(v,r)=>v==="Published"
                       ? <Badge bg={T.green+"1a"} color={T.green} border={T.green+"55"}>Published</Badge>
-                      : <Badge bg={T.amber+"1a"} color={T.amber} border={T.amber+"55"}>{`Step ${r.step} of 10`}</Badge>},
+                      : <Badge bg={T.amber+"1a"} color={T.amber} border={T.amber+"55"}>Draft upstream</Badge>},
                   ]}
                   rows={srcFiltered} onRowClick={r=>openSrc(r.id)}/>}
             {unmapped.length>0 && (
