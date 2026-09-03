@@ -10776,7 +10776,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                             </div>
                                             {(o.cols||[]).length>0&&(
                                               <div style={{marginLeft:6,marginTop:4,display:"flex",flexWrap:"wrap",gap:4}}>
-                                                {o.cols.map(c=><span key={c} style={{fontSize:10,fontFamily:"'Geist Mono',monospace",color:T.violet,background:`${T.violet}12`,border:`1px solid ${T.violet}28`,borderRadius:4,padding:"1px 6px"}}>.{c}</span>)}
+                                                {o.cols.map(c=><span key={c} style={{fontSize:10,fontFamily:"'Geist Mono',monospace",color:T.violet,background:`${T.violet}12`,border:`1px solid ${T.violet}28`,borderRadius:4,padding:"1px 6px"}}>{c}</span>)}
                                               </div>
                                             )}
                                           </div>
@@ -10795,6 +10795,18 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                   return (
                                     <div>
                                       <label style={fieldLabelSt}>{objects.length} object{objects.length>1?"s":""} — set the {per} for each</label>
+                                      {isRet&&(
+                                        <div style={{marginBottom:9}}>
+                                          <div style={{fontSize:10.5,color:T.textMuted,marginBottom:5}}>Criteria type <span style={{fontStyle:"italic"}}>— same for all; the value below is per object</span></div>
+                                          <div style={{display:"flex",gap:6}}>
+                                            {[["date","Datewise"],["text","Criteriawise"],["both","Both"]].map(([v,l])=>{
+                                              const sel=(r.critType||"date")===v;
+                                              return <button key={v} onClick={()=>updRule(r.id,"critType",v)}
+                                                style={{flex:1,padding:"7px 4px",borderRadius:7,border:`1.5px solid ${sel?T.accent:T.border}`,background:sel?T.accentDim:T.bgElevated,color:sel?T.accent:T.textSub,fontSize:11.5,fontWeight:sel?700:400,cursor:"pointer",transition:"all .1s"}}>{l}</button>;
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
                                       <div style={{display:"flex",flexDirection:"column",gap:9,maxHeight:250,overflowY:"auto",border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 11px",background:T.bgSurface}}>
                                         {objects.map(a=>{
                                           const cols=ASSET_COLUMNS[a.name]||[]; const crit=(r.tagCriteria||{})[a.name]||{}; const owners=resolveTableOwners(a.name);
@@ -10808,18 +10820,28 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                               {isMask&&(()=>{ const sel=crit.cols||classifiedColumns(a.name,r.targetTags); return (
                                                 <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
                                                   {cols.map(c=>{const on=sel.includes(c); return <span key={c} onClick={()=>setTagCrit(a.name,"cols",on?sel.filter(x=>x!==c):[...sel,c])}
-                                                    style={{fontSize:10,fontFamily:"'Geist Mono',monospace",cursor:"pointer",padding:"1px 7px",borderRadius:4,border:`1px solid ${on?T.violet+"66":T.border}`,background:on?`${T.violet}18`:"transparent",color:on?T.violet:T.textMuted}}>.{c}</span>;})}
+                                                    style={{fontSize:10,fontFamily:"'Geist Mono',monospace",cursor:"pointer",padding:"1px 7px",borderRadius:4,border:`1px solid ${on?T.violet+"66":T.border}`,background:on?`${T.violet}18`:"transparent",color:on?T.violet:T.textMuted}}>{c}</span>;})}
                                                 </div>
                                               );})()}
-                                              {isRet&&(
-                                                <div style={{display:"flex",alignItems:"center",gap:7}}>
-                                                  <span style={{fontSize:10,color:T.textMuted,minWidth:64}}>Retain by</span>
-                                                  <select value={crit.dateCol||""} onChange={e=>setTagCrit(a.name,"dateCol",e.target.value)} style={{...sel_s,flex:1,maxWidth:280}}>
-                                                    <option value="">Whole object · creation date</option>
-                                                    {cols.map(c=><option key={c} value={c}>{c}</option>)}
-                                                  </select>
+                                              {isRet&&(()=>{ const ct=r.critType||"date"; return (
+                                                <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                                                  {(ct==="date"||ct==="both")&&(
+                                                    <div style={{display:"flex",alignItems:"center",gap:7}}>
+                                                      <span style={{fontSize:10,color:T.textMuted,minWidth:64}}>Retain by</span>
+                                                      <select value={crit.dateCol||""} onChange={e=>setTagCrit(a.name,"dateCol",e.target.value)} style={{...sel_s,flex:1,maxWidth:280}}>
+                                                        <option value="">Whole object · creation date</option>
+                                                        {cols.map(c=><option key={c} value={c}>{c}</option>)}
+                                                      </select>
+                                                    </div>
+                                                  )}
+                                                  {(ct==="text"||ct==="both")&&(
+                                                    <div style={{display:"flex",alignItems:"center",gap:7}}>
+                                                      <span style={{fontSize:10,color:T.textMuted,minWidth:64}}>Where</span>
+                                                      <input value={crit.critText||""} onChange={e=>setTagCrit(a.name,"critText",e.target.value)} placeholder="e.g. status = 'closed'" style={{...sel_s,flex:1,cursor:"text"}}/>
+                                                    </div>
+                                                  )}
                                                 </div>
-                                              )}
+                                              );})()}
                                               {isHold&&(
                                                 <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                                                   <select value={crit.holdCol||""} onChange={e=>setTagCrit(a.name,"holdCol",e.target.value)} style={{...sel_s,flex:"1 1 140px",minWidth:120}}>
@@ -10983,7 +11005,6 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                         )}
                                         {!r.enforce&&needsVal&&(fd.vals||[]).length===0&&<input type="text" value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} placeholder="value…" style={{...sel_s,flex:"1 1 110px"}}/>}
                                         {!r.enforce&&needsNum&&<input type="number" value={r.value} onChange={e=>updRule(r.id,"value",e.target.value)} placeholder="value" style={{...sel_s,flex:"0 0 80px",width:80}}/>}
-                                        {r.enforce&&<span style={{fontSize:10.5,color:T.accent,fontWeight:600,padding:"3px 9px",borderRadius:20,background:`${T.accent}14`,letterSpacing:"0.03em"}}>enforced action</span>}
                                         <SevBadge ruleId={r.id} sev={sev}/>
                                         {r.pendingUnhold
                                           ? <span style={{fontSize:9.5,fontWeight:700,padding:"3px 8px",borderRadius:10,background:`${T.amber}18`,color:T.amber,letterSpacing:"0.03em",flexShrink:0}}>PENDING UNHOLD</span>
@@ -26145,7 +26166,7 @@ const KL_UNMAPPED = ["Salesforce","Snowflake Prod","Workday","MongoDB Atlas"];
 // A Source Knowledge Graph is one connection's map. `assets` + `rels` are what the graph canvas
 // renders; `masters` carry the identity columns that make an entity matchable across sources.
 const KL_SRC_SEED = [
-  {id:"sg1", key:"SKG-1001", name:"SAP ECC", service:"sap", connection:"sap-ecc-prod",
+  {id:"sg1", key:"SKG-1001", name:"SAP ECC", service:"sap", connection:"sap-ecc-prod", srcConnected:true,
    domain:"Procurement", tables:412, cols:3318, words:100, entities:["Supplier","Customer","Material"],
    drift:0, status:"Published", owner:"maya.chen", stewards:["priya.nair"], from:"Data Sense",
    step:10, built:"2026-08-18", version:"v4",
@@ -26193,7 +26214,7 @@ const KL_SRC_SEED = [
      {at:"2026-08-18 08:30", by:"priya.nair", kind:"human", action:"Classification confirmed", detail:"VNDR_NM_1 to Legal Name — steward overrode the AI suggestion at 0.71"},
      {at:"2026-08-17 16:02", by:"Data Sense", kind:"ai",    action:"Profiled and classified", detail:"412 tables · 3,318 columns · 38 classifications matched"}]},
 
-  {id:"sg2", key:"SKG-1002", name:"Oracle EBS", service:"oracle", connection:"ebs-prod",
+  {id:"sg2", key:"SKG-1002", name:"Oracle EBS", service:"oracle", connection:"ebs-prod", srcConnected:true,
    domain:"Procurement", tables:388, cols:2904, words:100, entities:["Supplier","Customer"],
    drift:3, status:"Published", owner:"priya.nair", stewards:["maya.chen"], from:"Data Sense",
    step:10, built:"2026-08-11", version:"v3",
@@ -26226,7 +26247,7 @@ const KL_SRC_SEED = [
      {at:"2026-08-11 11:20", by:"priya.nair",  kind:"human", action:"Published", detail:"Version v3 signed off by the owner"},
      {at:"2026-08-11 10:44", by:"Data Sense",  kind:"ai",    action:"Resolution rules generated", detail:"2 of 3 master tables — MTL_SYSTEM_ITEMS_B reported as not generatable"}]},
 
-  {id:"sg3", key:"SKG-1003", name:"Oracle Fusion", service:"oracle", connection:"fusion-erp",
+  {id:"sg3", key:"SKG-1003", name:"Oracle Fusion", service:"oracle", connection:"fusion-erp", srcConnected:false,
    domain:"Procurement", tables:292, cols:2140, words:88, entities:["Supplier","Fixed Asset"],
    drift:0, status:"In review", owner:"maya.chen", stewards:[], from:"Data Sense",
    step:7, built:"2026-08-22", version:"v1",
@@ -26627,16 +26648,13 @@ const KL_SRC_STEPS = [
 ];
 
 const KL_X_STEPS = [
-  {t:"Entity & sources", mode:"you", uses:"Business Entities, published Source Graphs",
-   d:"Select the business entity to master and the published source graphs to join. Source graphs that are not ready show the reason.",
-   note:["A cross-source graph reads only from source graphs. If a source is missing something, correct it in that source graph."]},
-  {t:"Matching rules", mode:"you", uses:"Identifier roles from each source graph, your precedence decisions",
-   d:"A match key is a business concept, such as Tax ID, bound to a different column in every system. The candidates below come from the identifier roles confirmed in each source graph — not from classifications, which say whether data is sensitive rather than whether it identifies anything. Choose the keys to match on, then set which source wins when values disagree.",
-   note:["A key is only as strong as its weakest source: if a column is blank in one system, every row it misses becomes an exception for someone to clear by hand.",
-         "A key missing here was excluded on purpose, and the reason is shown. Correct it in that source graph at Entity & Identity, not here."]},
-  {t:"Publish", mode:"you", uses:"Domains, Policies, Owners, audit log",
-   d:"Ownership and policy are inherited from the entity's domain. Choose whether to publish the model only, or also scan data to resolve records.",
-   note:["Publishing without a scan still produces a complete entity-level graph. Records can be resolved later."]},
+  {t:"Sources", mode:"you", uses:"Imported knowledge graphs",
+   d:"Choose the systems to join, then the knowledge graphs imported from them."},
+  {t:"Matching rules", mode:"you", uses:"Identifier roles confirmed in each graph",
+   d:"Pick what to master and how the same record is recognised in each system.",
+   note:["A key is only as strong as its weakest source. Rows it misses become exceptions for a person to clear."]},
+  {t:"Governance", mode:"you", uses:"Owners, stewards, domains, tags, glossary terms",
+   d:"A cross-source graph is a governed asset. Give it an owner, a domain and its business context, then choose what to publish."},
 ];
 
 const KL_READY_FOR = (graphs, entity) =>
@@ -28128,6 +28146,11 @@ const KLBuildPane = ({xg, build, srcGraphs, measures, canApprove, canGenerate,
   );
 };
 
+// Who can be named an owner or steward here. The same list the rest of the product uses.
+const KL_PEOPLE = ["maya.chen","priya.nair","dev.patel","sarah.kim","alex.wu","lisa.ray","james.oh"];
+const KL_DOMAINS = [...new Set(["Procurement","Sales","Finance","Supply Chain","HR",
+  ...DOMAIN_LIST_DATA.map(d=>d.name)])];
+
 const KnowledgeLayerView = ({onToast, onNav}) => {
   const klS = useKLStore();
   const srcGraphs = klS.src, xGraphs = klS.x, measures = klS.measures,
@@ -28159,6 +28182,15 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
   const [wScan,     setWScan]     = useState("later");        // later | sample | full
   const [wKeys,     setWKeys]     = useState([]);
   const [wBeliefs,  setWBeliefs]  = useState({});
+  // Sources are chosen before anything else: which systems, then which of their imported
+  // graphs. The entity comes after, on the stage where its match keys are, because the keys
+  // belong to the entity and choosing one without seeing the other is guesswork.
+  const [wSystems,  setWSystems]  = useState([]);
+  const [wOwners,   setWOwners]   = useState([]);
+  const [wStewards, setWStewards] = useState([]);
+  const [wDomain,   setWDomain]   = useState("Procurement");
+  const [wTags,     setWTags]     = useState([]);
+  const [wTerms,    setWTerms]    = useState([]);
 
   // ── Who is looking, and what they may decide (C10 / §12.1) ──
   // Curation is the steward's job. Materialisation is the engineer's. The dial and the
@@ -28416,6 +28448,10 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
     return all.length ? all : Object.keys(c);
   };
   const reseed = (ids, entity) => { setWSrcIds(ids); setWKeys(defaultKeys(ids, entity)); setWBeliefs({}); };
+  // A cross-source graph is governed like any other asset, so it draws on the same
+  // classification and glossary vocabularies the rest of EDG uses.
+  const klTagNames  = (useTagCtx().tagDefs||[]).map(t=>t.name);
+  const klTermNames = GLOSSARY_TERMS.map(t=>t.term);
 
   const totals = {
     published: srcGraphs.filter(s=>s.status==="Published").length,
@@ -28438,7 +28474,10 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
       // The entity the caller clicked wins. Falling straight through to "first entity with
       // two sources" meant every door opened on the same one, whichever was clicked.
       const e = entity || KL_ENTITIES.find(x=>KL_READY_FOR(srcGraphs,x).length>=2) || KL_ENTITIES[0];
-      setWEntity(e); reseed(KL_READY_FOR(srcGraphs,e), e); setWScan("later");
+      const ids = KL_READY_FOR(srcGraphs,e);
+      setWEntity(e); reseed(ids, e); setWScan("later");
+      setWSystems([...new Set(ids.map(i=>srcGraphs.find(g=>g.id===i)?.name).filter(Boolean))]);
+      setWOwners([me]); setWStewards([]); setWDomain("Procurement"); setWTags([]); setWTerms([e]);
     } else {
       const free = KL_UNMAPPED.filter(c => !srcGraphs.some(g=>g.name===c));
       setWConn(free[0] || "");
@@ -28503,8 +28542,9 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
     const name = dupes ? `${base} (${dupes+1})` : base;
     const fallback = srcById(wSrcIds[0])?.name || "—";
     setXGraphs(g=>[...g,{id, key:"XKG-"+(2003+g.length), name, entity:wEntity, srcIds:[...wSrcIds],
-      records:0, autoApplied:0, clean:0, owner:me, stewards:[], status:"Published",
-      domain:"Procurement", built:stamp().slice(0,10), version:"v1", policy:null,
+      records:0, autoApplied:0, clean:0, owner:wOwners[0]||me, owners:[...wOwners], stewards:[...wStewards],
+      status:"Published", tags:[...wTags], terms:[...wTerms],
+      domain:wDomain, built:stamp().slice(0,10), version:"v1", policy:null,
       env:{by:"human", src:"EDG · Knowledge Layer builder", conf:1, state:"published"},
       conflicts:[], unmatched:[],
       history:[{at:stamp(), by:me, kind:"human", action:"Cross-source graph published",
@@ -28531,7 +28571,11 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
     const needsInput = steps.map((x,i)=>x.decide!==false?i:-1).filter(i=>i>=0);
     const autoCount  = steps.length - needsInput.length;
     const nextInput  = needsInput.find(i=>i>step);
-    const blocked = (wiz==="cross" && step===0 && wSrcIds.length<2)
+    // A scan reads rows, so every system in scope has to be connected in EDG before one
+    // can be chosen. Publishing the model only needs no connection at all.
+    const scanBlockers = wSrcIds.map(id=>srcById(id)).filter(g=>g&&g.srcConnected===false);
+    const blocked = (wiz==="cross" && step===2 && (wOwners.length===0 || (wScan!=="later" && scanBlockers.length>0)))
+                 || (wiz==="cross" && step===0 && wSrcIds.length<2)
                  || (wiz==="cross" && step===1 && wKeys.length===0)
                  || (wiz==="src" && !wConn);
     return createPortal(
@@ -28615,191 +28659,204 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 </div>
               )}
 
-              {wiz==="cross" && step===0 && (
+              {wiz==="cross" && step===0 && (()=>{
+                const sysOpts   = [...new Set(srcGraphs.map(g=>g.name))];
+                const sysGraphs = srcGraphs.filter(g=>wSystems.includes(g.name));
+                const pickSys = v => {
+                  setWSystems(v);
+                  // Dropping a system drops its graphs with it, or the selection would keep
+                  // a graph the user can no longer see.
+                  const keep = srcGraphs.filter(g=>v.includes(g.name)).map(g=>g.id);
+                  setWSrcIds(ids=>ids.filter(i=>keep.includes(i)));
+                };
+                return (
                 <div style={{maxWidth:800}}>
-                  <div style={{fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Business Entity</div>
-                  <select value={wEntity} onChange={e=>{const v=e.target.value; setWEntity(v); reseed(KL_READY_FOR(srcGraphs,v), v);}}
-                    style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,cursor:"pointer",marginBottom:14}}>
-                    {KL_ENTITIES.map(c=>{
-                      const n = KL_READY_FOR(srcGraphs,c).length;
-                      return <option key={c} value={c}>{c}{n>=2?` · ${n} source graphs ready`:n===1?" · only 1 source graph ready":" · no source graphs ready"}</option>;
-                    })}
-                  </select>
-                  <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"16px 0 7px"}}>
-                    Source graphs to join
+                  <div style={{fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Source systems</div>
+                  <CatFieldDropdown label={null} placeholder="Select the systems to join\u2026"
+                    options={sysOpts} selected={wSystems} onChange={pickSys}/>
+                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:5,lineHeight:1.5}}>
+                    Only systems with a knowledge graph imported from Data Sense appear here.
                   </div>
-                  {readySrc.map(g=>{
-                    const on = wSrcIds.includes(g.id);
-                    const m  = g.masters.find(x=>x.entity===wEntity && x.ready);
-                    const ok = !!m;
-                    return (
-                      <div key={g.id} onClick={()=>ok&&reseed(on?wSrcIds.filter(i=>i!==g.id):[...wSrcIds,g.id], wEntity)}
-                        style={{display:"flex",alignItems:"center",gap:11,flexWrap:"wrap",padding:"11px 12px",marginBottom:8,cursor:ok?"pointer":"default",
-                          background:T.bgSurface,border:`1px solid ${on?T.accent+"66":T.border}`,borderRadius:9,opacity:ok?1:.6}}>
-                        <span style={{width:17,height:17,borderRadius:5,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#fff",
-                          background:on?T.accent:"transparent",border:`1.5px solid ${on?T.accent:T.borderLight}`}}>{on?"✓":""}</span>
-                        <ServiceIcon service={g.service} size={16}/>
-                        <span style={{fontSize:12.5,fontWeight:600,color:T.text,minWidth:120}}>{g.name}</span>
-                        <KLChip kind={ok?"exist":"new"}>{ok?`Ready · ${m.table}`:`Not ready · no ${wEntity} columns classified`}</KLChip>
-                        <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>{ok?`Matchable on ${klUsableKeys(m).join(", ")||"nothing yet"}`:"Resolve in that source graph"}</span>
-                      </div>
-                    );
-                  })}
-                  {srcGraphs.filter(g=>g.status!=="Published").map(g=>(
-                    <div key={g.id} style={{display:"flex",alignItems:"center",gap:11,padding:"11px 12px",marginBottom:8,opacity:.55,
-                      background:T.bgSurface,border:`1px dashed ${T.border}`,borderRadius:9}}>
-                      <span style={{width:17,flexShrink:0}}/>
-                      <ServiceIcon service={g.service} size={16}/>
-                      <span style={{fontSize:12.5,fontWeight:600,color:T.text,minWidth:120}}>{g.name}</span>
-                      {/* A graph EDG did not build has no build step to report. The reason it
-                          cannot be joined is that Data Sense has not published it. */}
-                      <KLChip kind="plain">Draft in Data Sense</KLChip>
-                      <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>Publish it in Data Sense to join it here</span>
-                    </div>
-                  ))}
+
+                  <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"18px 0 7px"}}>
+                    Knowledge graphs to join
+                  </div>
+                  {wSystems.length===0
+                    ? <div style={{fontSize:12,color:T.textMuted,padding:"12px 0"}}>Choose a system above to see its graphs.</div>
+                    : sysGraphs.map(g=>{
+                        const on = wSrcIds.includes(g.id);
+                        const ok = g.status==="Published";
+                        const ents = [...new Set((g.masters||[]).map(m=>m.entity))];
+                        return (
+                          <div key={g.id} onClick={()=>ok&&setWSrcIds(ids=>on?ids.filter(i=>i!==g.id):[...ids,g.id])}
+                            style={{display:"flex",alignItems:"center",gap:11,flexWrap:"wrap",padding:"11px 12px",marginBottom:8,
+                              cursor:ok?"pointer":"default",background:T.bgSurface,
+                              border:`1px ${ok?"solid":"dashed"} ${on?T.accent+"66":T.border}`,borderRadius:9,opacity:ok?1:.55}}>
+                            <span style={{width:17,height:17,borderRadius:5,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#fff",
+                              background:on?T.accent:"transparent",border:`1.5px solid ${on?T.accent:T.borderLight}`}}>{on?"\u2713":""}</span>
+                            <ServiceIcon service={g.service} size={16}/>
+                            <span style={{fontSize:12.5,fontWeight:600,color:T.text,minWidth:118}}>{g.name}</span>
+                            <span style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{g.key} \u00b7 {g.version}</span>
+                            {ok
+                              ? <span style={{fontSize:10.5,color:T.textMuted}}>{ents.join(" \u00b7 ")}</span>
+                              : <KLChip kind="plain">Draft in Data Sense</KLChip>}
+                            <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>
+                              {ok?`${g.tables} tables`:"Publish it in Data Sense to join it here"}
+                            </span>
+                          </div>
+                        );
+                      })}
                   <div style={{fontSize:11.5,color:wSrcIds.length>=2?T.textMuted:T.amber,marginTop:4}}>
                     {wSrcIds.length>=2
-                      ? `${wSrcIds.length} source graphs selected`
+                      ? `${wSrcIds.length} knowledge graphs selected`
                       : "Select at least two. A single source cannot be cross-referenced."}
                   </div>
                 </div>
-              )}
+                );
+              })()}
 
               {wiz==="cross" && step===1 && (()=>{
+                // Entities the CHOSEN graphs actually carry. Offering the full vocabulary here
+                // would invite someone to pick one no selected graph describes.
+                const offered = [...new Set(wSrcIds.flatMap(id=>(srcById(id)?.masters||[]).map(m=>m.entity)))];
+                const opts    = offered.length ? offered : KL_ENTITIES;
+                const readyIn = en => wSrcIds.filter(id=>{
+                  const g = srcById(id); return g && g.masters.some(m=>m.entity===en && m.ready);
+                }).length;
                 const ev = keyEvidence(wSrcIds, wEntity);
                 const ex = keyExclusions(wSrcIds, wEntity);
+                const pickEntity = v => { setWEntity(v); setWKeys(defaultKeys(wSrcIds, v)); setWBeliefs({}); };
                 return (
-                  <div style={{maxWidth:820}}>
-                    {ev.length===0 && (
-                      <div style={{fontSize:12.5,color:T.amber,lineHeight:1.7}}>
-                        No identifier roles have been confirmed for {wEntity} on the chosen source graphs.
-                        Open each source graph at Entity &amp; Identity and declare which columns identify it.
+                  <div style={{maxWidth:760}}>
+                    <div style={{fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>What to master</div>
+                    <select value={wEntity} onChange={e=>pickEntity(e.target.value)}
+                      style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,cursor:"pointer"}}>
+                      {opts.map(c=>{
+                        const n = readyIn(c);
+                        return <option key={c} value={c}>{c}{n>=2?` \u00b7 ready in ${n} of ${wSrcIds.length}`:n===1?" \u00b7 ready in only 1 graph":" \u00b7 not ready in any"}</option>;
+                      })}
+                    </select>
+
+                    {ev.length===0 ? (
+                      <div style={{fontSize:12.5,color:T.amber,lineHeight:1.7,marginTop:16}}>
+                        No identifier roles are confirmed for {wEntity} on the graphs you chose, so there is
+                        nothing to match on. Declare them on the graph, not here.
                       </div>
-                    )}
-                    {ev.map(e=>{
-                      const on   = wKeys.includes(e.key);
-                      const all  = e.sources.length===wSrcIds.length;
-                      const weak = e.minFill<80;
-                      const role = KL_ID_ROLES[e.role]||{};
-                      return (
-                        <div key={e.key} style={{padding:"11px 13px",marginBottom:9,background:T.bgSurface,
-                          border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:9}}>
-                          <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                            <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{e.key}</span>
-                            <Badge bg={T.bgElevated} color={T.textSub} border={T.border}>{role.l}</Badge>
-                            <Badge bg={T.bgElevated} color={T.textSub} border={T.border}>{role.match} match</Badge>
-                            <KLChip kind={all?"exist":"new"}>{all?`In all ${e.sources.length} sources`:`In ${e.sources.length} of ${wSrcIds.length} sources`}</KLChip>
-                            <span style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:10}}>
-                              <span style={{fontSize:11,fontWeight:700,color:weak?T.amber:T.green,fontFamily:"'Geist Mono',monospace"}}>
-                                {e.minFill}% at its weakest
-                              </span>
-                              <Btn small variant={on?"primary":undefined} ghost={!on}
-                                onClick={()=>setWKeys(ks=>on?ks.filter(x=>x!==e.key):[...ks,e.key])}>{on?"Using":"Use"}</Btn>
-                            </span>
-                          </div>
-                          <div style={{display:"flex",gap:16,flexWrap:"wrap",marginTop:8}}>
-                            {e.sources.map(x=>(
-                              <span key={x.srcId} style={{fontSize:11,color:T.textMuted}}>
-                                {x.src} <b style={{color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{x.col}</b>
-                                <span style={{color:x.fill<80?T.amber:T.textMuted,fontFamily:"'Geist Mono',monospace"}}> {x.fill}%</span>
-                              </span>
-                            ))}
-                          </div>
-                          {!all && (
-                            <div style={{fontSize:11,color:T.textMuted,marginTop:7,lineHeight:1.6}}>
-                              Only {e.sources.map(x=>x.src).join(" and ")} can be matched on this key. Rows in the
-                              remaining source will fall through to whichever other key you select.
-                            </div>
-                          )}
-                          {all && weak && (
-                            <div style={{fontSize:11,color:T.amber,marginTop:7,lineHeight:1.6}}>
-                              Blank in roughly {100-e.minFill}% of rows in its weakest source, so this key alone will not
-                              reach every record. Pair it with a second key rather than relying on it.
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                    <div style={{fontSize:11.5,color:wKeys.length?T.textMuted:T.amber,marginTop:4}}>
-                      {wKeys.length?`${wKeys.length} match key${wKeys.length===1?"":"s"} selected`:"Select at least one match key"}
-                    </div>
-                    {ex.length>0 && (
-                      <div style={{marginTop:16,padding:"11px 13px",borderRadius:9,background:T.bgElevated,border:`1px solid ${T.border}`}}>
-                        <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>
-                          Not available as match keys
-                        </div>
-                        {ex.map(e=>(
-                          <div key={e.key} style={{fontSize:11.5,color:T.textSub,lineHeight:1.7,marginBottom:4}}>
-                            <b style={{color:T.text}}>{e.key}</b>
-                            <span style={{color:T.textMuted}}> — {(KL_ID_ROLES[e.role]||{}).l} in {e.sources.map(x=>`${x.src} (${x.col})`).join(", ")}. {e.why}</span>
-                          </div>
-                        ))}
+                    ) : (
+                    <>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"20px 0 4px"}}>
+                        Match on
                       </div>
-                    )}
+                      <div style={{fontSize:11.5,color:T.textMuted,marginBottom:9,lineHeight:1.5}}>
+                        A key is a business concept bound to a different column in each system. Tick the ones to match on.
+                      </div>
+                      {/* One tick-able row per key. The affordance is the row, not a button at the
+                          far right of it - selection was there before and nobody found it. */}
+                      {ev.map(e=>{
+                        const on = wKeys.includes(e.key);
+                        const all = e.sources.length===wSrcIds.length;
+                        const weak = e.minFill<80;
+                        const role = KL_ID_ROLES[e.role]||{};
+                        return (
+                          <div key={e.key} onClick={()=>setWKeys(ks=>on?ks.filter(x=>x!==e.key):[...ks,e.key])}
+                            style={{padding:"10px 12px",marginBottom:7,cursor:"pointer",background:on?T.accentDim:T.bgSurface,
+                              border:`1px solid ${on?T.accent+"66":T.border}`,borderRadius:9}}>
+                            <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                              <span style={{width:16,height:16,borderRadius:4,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10.5,color:"#fff",
+                                background:on?T.accent:"transparent",border:`1.5px solid ${on?T.accent:T.borderLight}`}}>{on?"\u2713":""}</span>
+                              <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{e.key}</span>
+                              <span style={{fontSize:11,color:T.textMuted}}>{role.l} \u00b7 {role.match} match</span>
+                              {!all && <KLChip kind="new">In {e.sources.length} of {wSrcIds.length}</KLChip>}
+                              <span style={{marginLeft:"auto",fontSize:11,fontWeight:700,fontFamily:"'Geist Mono',monospace",
+                                color:weak?T.amber:T.green}}>{e.minFill}% at its weakest</span>
+                            </div>
+                            <div style={{fontSize:10.5,color:T.textMuted,marginTop:5,paddingLeft:26,lineHeight:1.5}}>
+                              {e.sources.map(x=>`${x.src} ${x.col} ${x.fill}%`).join("  \u00b7  ")}
+                              {weak && all && `  \u00b7  blank in ~${100-e.minFill}% of rows somewhere, so pair it with a second key`}
+                              {!all && `  \u00b7  rows in the other source fall through to another key`}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div style={{fontSize:11.5,color:wKeys.length?T.textMuted:T.amber,marginTop:2}}>
+                        {wKeys.length?`${wKeys.length} key${wKeys.length===1?"":"s"} selected`:"Select at least one key"}
+                      </div>
+                      {ex.length>0 && (
+                        <div style={{fontSize:11,color:T.textMuted,marginTop:10,lineHeight:1.6}}>
+                          <b style={{color:T.textSub}}>Held back:</b> {ex.map(x=>x.key).join(", ")} \u2014 valid inside one
+                          system only, so matching on them would merge unrelated records. Change that on the graph.
+                        </div>
+                      )}
+
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"22px 0 4px"}}>
+                        When sources disagree
+                      </div>
+                      <div style={{fontSize:11.5,color:T.textMuted,marginBottom:9}}>
+                        The one thing metadata cannot answer: which system do we believe.
+                      </div>
+                      {wKeys.length===0
+                        ? <div style={{fontSize:12,color:T.textMuted}}>Select a key first \u2014 those are the fields that can disagree.</div>
+                        : [...wKeys,"Address"].map(f=>{
+                            const val = wBeliefs[f] ?? (srcById(wSrcIds[0])?.name||"");
+                            return (
+                              <div key={f} style={{display:"flex",alignItems:"center",gap:11,padding:"8px 12px",marginBottom:6,
+                                background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
+                                <span style={{fontSize:12,fontWeight:600,color:T.text,minWidth:120}}>{f}</span>
+                                <select value={val} onChange={e=>setWBeliefs(b=>({...b,[f]:e.target.value}))}
+                                  style={{marginLeft:"auto",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,cursor:"pointer"}}>
+                                  {wSrcIds.map(id=><option key={id} value={srcById(id)?.name}>{srcById(id)?.name}</option>)}
+                                  <option value="Most recently updated">Most recently updated</option>
+                                </select>
+                              </div>
+                            );
+                          })}
+                    </>)}
                   </div>
                 );
               })()}
 
-              {wiz==="cross" && step===1 && (
-                <div style={{maxWidth:820,marginTop:22}}>
-                  <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>
-                    Precedence when values disagree
-                  </div>
-                  <div style={{fontSize:12,color:T.textMuted,marginBottom:10}}>
-                    Set per field. This cannot be derived from metadata.
-                  </div>
-                  {[...wKeys,"Address"].map(f=>{
-                    const val = wBeliefs[f] ?? (srcById(wSrcIds[0])?.name||"");
-                    return (
-                      <div key={f} style={{display:"flex",alignItems:"center",gap:11,flexWrap:"wrap",padding:"10px 12px",marginBottom:8,
-                        background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
-                        <span style={{fontSize:12,fontWeight:600,color:T.text,minWidth:120}}>{f}</span>
-                        <span style={{fontSize:11.5,color:T.textMuted}}>Preferred source</span>
-                        <select value={val} onChange={e=>setWBeliefs(b=>({...b,[f]:e.target.value}))}
-                          style={{padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,cursor:"pointer"}}>
-                          {wSrcIds.map(id=><option key={id} value={srcById(id)?.name}>{srcById(id)?.name}</option>)}
-                          <option value="Most recently updated">Most recently updated</option>
-                        </select>
-                        <span style={{fontSize:10.5,color:T.textMuted,marginLeft:"auto"}}>{f==="Address"?"Rule-based rather than a fixed source":"Steward decision"}</span>
-                      </div>
-                    );
-                  })}
-                  {wKeys.length===0 && <div style={{fontSize:12,color:T.textMuted}}>Select match keys first. Those are the fields that can disagree.</div>}
-                </div>
-              )}
-
               {wiz==="cross" && step===2 && (
                 <div style={{maxWidth:800}}>
-                  <KLRow nm="Owner"         chip="Alex Rivera"            kind="exist" cf="Sign-off required"/>
-                  <KLRow nm="Policy"        chip="Vendor Data Protection" kind="exist" cf="From Policy Manager"/>
-                  <KLRow nm="Business term" chip={wEntity}                kind="exist" cf="Certified in your glossary"/>
-                  <KLRow nm="Domain"        chip="Procurement"            kind="exist" cf="From Domains"/>
-                  <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"18px 0 7px"}}>
-                    Data in scope for a scan
+                  {/* A cross-source graph is a governed asset like any other, so it is named,
+                      owned, placed in a domain and given its business context here. */}
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
+                    <div>
+                      <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Owners <span style={{color:"#ee2424"}}>*</span></label>
+                      <CatFieldDropdown label={null} placeholder="Select owners\u2026" options={KL_PEOPLE} selected={wOwners} onChange={setWOwners}/>
+                      <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>Accountable for the master. Approves merges above the trust threshold.</div>
+                    </div>
+                    <div>
+                      <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Stewards</label>
+                      <CatFieldDropdown label={null} placeholder="Select stewards\u2026" options={KL_PEOPLE} selected={wStewards} onChange={setWStewards}/>
+                      <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>Clear the exceptions the resolver holds back.</div>
+                    </div>
+                    <div>
+                      <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Domain</label>
+                      <select value={wDomain} onChange={e=>setWDomain(e.target.value)}
+                        style={{width:"100%",padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,cursor:"pointer",boxSizing:"border-box"}}>
+                        {KL_DOMAINS.map(d=><option key={d} value={d}>{d}</option>)}
+                      </select>
+                      <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>Where this master rolls up for reporting and access.</div>
+                    </div>
+                    <div>
+                      <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Classifications</label>
+                      <CatFieldDropdown label={null} placeholder="Select classifications\u2026" options={klTagNames} selected={wTags} onChange={setWTags}/>
+                      <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>Policies already targeting these apply to the master automatically.</div>
+                    </div>
+                    <div style={{gridColumn:"1 / -1"}}>
+                      <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Glossary terms</label>
+                      <CatFieldDropdown label={null} placeholder="Select terms\u2026" options={klTermNames} selected={wTerms} onChange={setWTerms}/>
+                      <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>What this master means in business language. Certified terms carry their definition with them.</div>
+                    </div>
                   </div>
-                  {wSrcIds.map(id=>{
-                    const g=srcById(id); if(!g) return null;
-                    const m=g.masters.find(x=>x.entity===wEntity);
-                    const pii=(g.assets||[]).find(a=>a.n===m?.table)?.tags||[];
-                    return (
-                      <div key={id} style={{display:"flex",alignItems:"center",gap:9,padding:"9px 11px",marginBottom:6,
-                        background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
-                        <ServiceIcon service={g.service} size={15}/>
-                        <span style={{fontSize:12.5,fontWeight:600,color:T.text,minWidth:110}}>{g.name}</span>
-                        <span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{m?m.table:"—"}</span>
-                        <span style={{marginLeft:"auto",display:"flex",gap:4}}>
-                          {pii.map(t=><Badge key={t} bg={T.amber+"1a"} color={T.amber} border={T.amber+"44"}>{t}</Badge>)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                  <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"15px 0 7px"}}>
+
+                  <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"20px 0 7px"}}>
                     On publish
                   </div>
                   {[
-                    {v:"later",  l:"Publish the model only (recommended)", d:"Produces the governed entity-level graph. No data is read. Records can be resolved later."},
+                    {v:"later",  l:"Publish the model only (recommended)", d:"The governed entity-level graph. No data is read. Records can be resolved later."},
                     {v:"sample", l:"Scan a sample (5,000 rows per source)", d:"Validates matching with minimal data exposure."},
-                    {v:"full",   l:"Scan all rows",                         d:"Produces complete records. Longer runtime, and reads all rows including PII."},
+                    {v:"full",   l:"Scan all rows",                         d:"Complete records. Longer runtime, and reads every row including PII."},
                   ].map(o=>(
                     <div key={o.v} onClick={()=>setWScan(o.v)}
                       style={{display:"flex",gap:10,padding:"10px 12px",marginBottom:6,cursor:"pointer",borderRadius:9,
@@ -28815,11 +28872,23 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                       </span>
                     </div>
                   ))}
-                  {wScan!=="later" && (
-                    <div style={{display:"flex",gap:9,alignItems:"center",padding:"10px 13px",marginTop:8,borderRadius:9,
+                  {/* The check that used to be asked at connect time, asked where it can
+                      actually be answered: against the systems this master will read. */}
+                  {wScan!=="later" && scanBlockers.length>0 && (
+                    <div style={{display:"flex",gap:9,alignItems:"flex-start",padding:"11px 13px",marginTop:8,borderRadius:9,
                       background:T.amberDim,border:`1px solid ${T.amber}44`,fontSize:12,color:T.text,lineHeight:1.6}}>
-                      <span style={{color:T.amber,display:"flex"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,marginTop:1}}><path d="M8 2.2l6 11.6H2L8 2.2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M8 6.6v3.2M8 11.6v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg></span>
-                      <div>Approved as <b>alex.rivera</b>. Runs as a background job and is recorded in the audit log.</div>
+                      <span style={{color:T.amber,display:"flex"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,marginTop:2}}><path d="M8 2.2l6 11.6H2L8 2.2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M8 6.6v3.2M8 11.6v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg></span>
+                      <div>
+                        A scan reads rows, and {scanBlockers.map(g=>g.name).join(" and ")} {scanBlockers.length===1?"is":"are"} not
+                        connected in EDG \u2014 the knowledge graph was imported, but the data behind it was not.
+                        {" "}<b>Connect {scanBlockers.length===1?"it":"them"} first, or publish the model only.</b>
+                      </div>
+                    </div>
+                  )}
+                  {wScan!=="later" && scanBlockers.length===0 && (
+                    <div style={{fontSize:11.5,color:T.textMuted,marginTop:8,lineHeight:1.6}}>
+                      Reads {wSrcIds.map(id=>srcById(id)?.name).filter(Boolean).join(", ")} through their EDG connections.
+                      Approved as <b style={{color:T.textSub}}>{me}</b>, run as a background job, recorded in the audit log.
                     </div>
                   )}
                 </div>
@@ -28971,7 +29040,8 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgSurface}}>
             <Btn small ghost onClick={()=>step>0?setStep(step-1):closeWizard()}>{step>0?"← Back":"Cancel"}</Btn>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
-              {wiz==="cross" && step===0 && wSrcIds.length<2 && <span style={{fontSize:11,color:T.textMuted}}>Pick at least two source graphs</span>}
+              {wiz==="cross" && step===0 && wSrcIds.length<2 && <span style={{fontSize:11,color:T.textMuted}}>Pick at least two knowledge graphs</span>}
+              {wiz==="cross" && step===2 && wOwners.length===0 && <span style={{fontSize:11,color:T.textMuted}}>Name an owner</span>}
               {wiz==="cross" && step===1 && wKeys.length===0 && <span style={{fontSize:11,color:T.textMuted}}>Select at least one match key</span>}
               {wiz==="src" && !wConn && <span style={{fontSize:11,color:T.textMuted}}>No unmapped connection available</span>}
               <span style={{fontSize:11,color:T.textMuted}}>
@@ -29206,7 +29276,9 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
             {key:"graph",    label:"Knowledge Graph"},
             {key:"records",  label:klOpen(xg)?`Trusted records (${klOpen(xg)})`:"Trusted records"},
             {key:"rules",    label:"Rules"},
-            {key:"build",    label:builds[xg.id]?.proposed ? "Governed Build · 1 proposed" : "Governed Build"},
+            // Mode 2 (generate the governed build) is parked. The scope is producing a
+            // trustworthy master; materialising it into dbt/DLT comes after that is right.
+            // KLBuildPane and its logic stay in place, reachable again by restoring this tab.
           ]} active={xTab} onChange={setXTab}/>
 
           {xTab==="build" && (
