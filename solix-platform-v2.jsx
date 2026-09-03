@@ -28589,7 +28589,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>
                 {wiz==="src"
                   ? "Ten steps. Each one draws on vocabulary already governed in EDG"
-                  : <>Built on top of {wSrcIds.length} published source graph{wSrcIds.length===1?"":"s"} · entity <span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{wEntity}</span></>}
+                  : <>{wSrcIds.length} knowledge graph{wSrcIds.length===1?"":"s"}{step>0?<> · <span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{wEntity}</span></>:null}</>}
               </div>
             </div>
             <button onClick={closeWizard} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.x(12)}</button>
@@ -28672,7 +28672,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 return (
                 <div style={{maxWidth:800}}>
                   <div style={{fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Source systems</div>
-                  <CatFieldDropdown label={null} placeholder="Select the systems to join\u2026"
+                  <CatFieldDropdown label={null} placeholder="Select the systems to join…"
                     options={sysOpts} selected={wSystems} onChange={pickSys}/>
                   <div style={{fontSize:10.5,color:T.textMuted,marginTop:5,lineHeight:1.5}}>
                     Only systems with a knowledge graph imported from Data Sense appear here.
@@ -28696,7 +28696,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                               background:on?T.accent:"transparent",border:`1.5px solid ${on?T.accent:T.borderLight}`}}>{on?"\u2713":""}</span>
                             <ServiceIcon service={g.service} size={16}/>
                             <span style={{fontSize:12.5,fontWeight:600,color:T.text,minWidth:118}}>{g.name}</span>
-                            <span style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{g.key} \u00b7 {g.version}</span>
+                            <span style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{g.key} · {g.version}</span>
                             {ok
                               ? <span style={{fontSize:10.5,color:T.textMuted}}>{ents.join(" \u00b7 ")}</span>
                               : <KLChip kind="plain">Draft in Data Sense</KLChip>}
@@ -28765,7 +28765,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                               <span style={{width:16,height:16,borderRadius:4,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10.5,color:"#fff",
                                 background:on?T.accent:"transparent",border:`1.5px solid ${on?T.accent:T.borderLight}`}}>{on?"\u2713":""}</span>
                               <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{e.key}</span>
-                              <span style={{fontSize:11,color:T.textMuted}}>{role.l} \u00b7 {role.match} match</span>
+                              <span style={{fontSize:11,color:T.textMuted}}>{role.l} · {role.match} match</span>
                               {!all && <KLChip kind="new">In {e.sources.length} of {wSrcIds.length}</KLChip>}
                               <span style={{marginLeft:"auto",fontSize:11,fontWeight:700,fontFamily:"'Geist Mono',monospace",
                                 color:weak?T.amber:T.green}}>{e.minFill}% at its weakest</span>
@@ -28783,7 +28783,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                       </div>
                       {ex.length>0 && (
                         <div style={{fontSize:11,color:T.textMuted,marginTop:10,lineHeight:1.6}}>
-                          <b style={{color:T.textSub}}>Held back:</b> {ex.map(x=>x.key).join(", ")} \u2014 valid inside one
+                          <b style={{color:T.textSub}}>Held back:</b> {ex.map(x=>x.key).join(", ")} — valid inside one
                           system only, so matching on them would merge unrelated records. Change that on the graph.
                         </div>
                       )}
@@ -28795,7 +28795,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                         The one thing metadata cannot answer: which system do we believe.
                       </div>
                       {wKeys.length===0
-                        ? <div style={{fontSize:12,color:T.textMuted}}>Select a key first \u2014 those are the fields that can disagree.</div>
+                        ? <div style={{fontSize:12,color:T.textMuted}}>Select a key first — those are the fields that can disagree.</div>
                         : [...wKeys,"Address"].map(f=>{
                             const val = wBeliefs[f] ?? (srcById(wSrcIds[0])?.name||"");
                             return (
@@ -28822,12 +28822,12 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:13}}>
                     <div>
                       <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Owners <span style={{color:"#ee2424"}}>*</span></label>
-                      <CatFieldDropdown label={null} placeholder="Select owners\u2026" options={KL_PEOPLE} selected={wOwners} onChange={setWOwners}/>
+                      <CatFieldDropdown label={null} placeholder="Select owners…" options={KL_PEOPLE} selected={wOwners} onChange={setWOwners}/>
                       <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>Accountable for the master. Approves merges above the trust threshold.</div>
                     </div>
                     <div>
                       <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Stewards</label>
-                      <CatFieldDropdown label={null} placeholder="Select stewards\u2026" options={KL_PEOPLE} selected={wStewards} onChange={setWStewards}/>
+                      <CatFieldDropdown label={null} placeholder="Select stewards…" options={KL_PEOPLE} selected={wStewards} onChange={setWStewards}/>
                       <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>Clear the exceptions the resolver holds back.</div>
                     </div>
                     <div>
@@ -28840,12 +28840,12 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                     </div>
                     <div>
                       <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Classifications</label>
-                      <CatFieldDropdown label={null} placeholder="Select classifications\u2026" options={klTagNames} selected={wTags} onChange={setWTags}/>
+                      <CatFieldDropdown label={null} placeholder="Select classifications…" options={klTagNames} selected={wTags} onChange={setWTags}/>
                       <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>Policies already targeting these apply to the master automatically.</div>
                     </div>
                     <div style={{gridColumn:"1 / -1"}}>
                       <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Glossary terms</label>
-                      <CatFieldDropdown label={null} placeholder="Select terms\u2026" options={klTermNames} selected={wTerms} onChange={setWTerms}/>
+                      <CatFieldDropdown label={null} placeholder="Select terms…" options={klTermNames} selected={wTerms} onChange={setWTerms}/>
                       <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>What this master means in business language. Certified terms carry their definition with them.</div>
                     </div>
                   </div>
@@ -29034,7 +29034,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                   The available options are unchanged.
                 </KLNote>
               )}
-              <KLNote>{s.note[0]}</KLNote>
+              {s.note && s.note[0] && <KLNote>{s.note[0]}</KLNote>}
             </div>
           </div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgSurface}}>
