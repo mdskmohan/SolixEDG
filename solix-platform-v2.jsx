@@ -26657,6 +26657,8 @@ const KL_X_STEPS = [
    note:["A key is only as strong as its weakest source. Rows it misses become exceptions for a person to clear."]},
   {t:"Governance", mode:"you", uses:"Owners, stewards, domains, tags, glossary terms",
    d:"A cross-source graph is a governed asset. Give it an owner, a domain and its business context, then choose what to publish."},
+  {t:"Review", mode:"you",
+   d:"Everything this master will be, on one screen. Jump back to any stage on the left to change it."},
 ];
 
 const KL_READY_FOR = (graphs, entity) =>
@@ -28895,6 +28897,75 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                   )}
                 </div>
               )}
+
+              {wiz==="cross" && step===3 && (()=>{
+                const ev   = keyEvidence(wSrcIds, wEntity);
+                const ex   = keyExclusions(wSrcIds, wEntity);
+                const dash = "—";
+                const list = a => (a&&a.length) ? a.join(", ") : dash;
+                const graphs = wSrcIds.map(id=>srcById(id)).filter(Boolean);
+                const scanLbl = wScan==="later" ? "Model only · no data is read"
+                              : wScan==="sample" ? "Sample · 5,000 rows per source"
+                              : "All rows · includes PII";
+                const cards = [
+                  {title:"What it masters", rows:[
+                    ["Name",             `${wEntity} Master`],
+                    ["Entity",           wEntity],
+                    ["Systems",          list(graphs.map(g=>g.name))],
+                    ["Knowledge graphs", list(graphs.map(g=>`${g.key} · ${g.version}`))],
+                  ]},
+                  {title:"How records are recognised", rows:[
+                    ["Match keys", wKeys.length?wKeys.join(", "):dash],
+                    ...ev.filter(e=>wKeys.includes(e.key)).map(e=>[
+                      e.key, `${e.sources.map(x=>`${x.src} ${x.col}`).join(" · ")} — ${e.minFill}% at its weakest`]),
+                    ["Held back", ex.length?ex.map(x=>x.key).join(", "):"nothing"],
+                  ]},
+                  {title:"When sources disagree", rows:
+                    wKeys.length
+                      ? [...wKeys,"Address"].map(f=>[f, wBeliefs[f] ?? (graphs[0]?.name||dash)])
+                      : [["Precedence", dash]]},
+                  {title:"Governance", rows:[
+                    ["Owners",          list(wOwners)],
+                    ["Stewards",        list(wStewards)],
+                    ["Domain",          wDomain||dash],
+                    ["Classifications", list(wTags)],
+                    ["Glossary terms",  list(wTerms)],
+                  ]},
+                  {title:"On publish", rows:[
+                    ["Data scan", scanLbl],
+                    ...(wScan!=="later" ? [["Reads", list(graphs.map(g=>g.name))], ["Approved as", me]] : []),
+                  ]},
+                ];
+                return (
+                  <div style={{maxWidth:820,display:"flex",flexDirection:"column",gap:13}}>
+                    <div style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",borderRadius:12,
+                      background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                      <span style={{color:T.accent,display:"flex"}}>{Ic.knowledge(20)}</span>
+                      <div style={{minWidth:0,flex:1}}>
+                        <div style={{fontSize:13.5,fontWeight:700,color:T.text}}>{wEntity} Master</div>
+                        <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>
+                          Cross-source knowledge graph · {graphs.length} graphs · {wKeys.length} match key{wKeys.length===1?"":"s"}
+                        </div>
+                      </div>
+                      <Badge bg={T.green+"1a"} color={T.green} border={T.green+"55"}>Ready to publish</Badge>
+                    </div>
+                    {cards.map(sec=>(
+                      <div key={sec.title} style={{background:T.bgElevated,borderRadius:12,border:`1px solid ${T.border}`,overflow:"hidden"}}>
+                        <div style={{padding:"9px 16px",borderBottom:`1px solid ${T.border}`,background:T.bgSurface}}>
+                          <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{sec.title}</span>
+                        </div>
+                        {sec.rows.map(([k,v],i)=>(
+                          <div key={k+i} style={{display:"flex",gap:14,padding:"9px 16px",
+                            borderTop:i?`1px solid ${T.border}`:"none"}}>
+                            <span style={{fontSize:11.5,color:T.textMuted,minWidth:132,flexShrink:0}}>{k}</span>
+                            <span style={{fontSize:11.5,color:T.textSub,textAlign:"right",marginLeft:"auto",lineHeight:1.55}}>{v}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
 
               {wiz==="src" && step===6 && (()=>{
                 const props = KL_ID_PROPOSAL[wConn] || [];
@@ -33150,22 +33221,6 @@ const AddServiceWizard = ({onClose, onDone}) => {
                       <span style={{fontSize:11.5,color:T.textMuted}}>Authenticates with</span>
                       <span style={{fontSize:12,fontWeight:600,color:T.text,padding:"3px 10px",borderRadius:99,background:T.bgSurface,border:`1px solid ${T.border}`}}>{scope.authName||"Credentials"}</span>
                     </div>
-                    {/* What must be true BEFORE these credentials work. Permissions and
-                        tenant settings are where connector setups actually fail, and no
-                        placeholder can carry them. */}
-                    {CONNECTOR_PREREQS[connector]&&(
-                      <div style={{marginBottom:16,padding:"12px 14px",background:T.bgElevated,
-                        border:`1px solid ${T.border}`,borderLeft:`3px solid ${T.accent}`,borderRadius:"0 9px 9px 0"}}>
-                        <div style={{fontSize:11,fontWeight:700,color:T.text,textTransform:"uppercase",letterSpacing:".07em",marginBottom:7}}>
-                          Before you connect
-                        </div>
-                        <ul style={{margin:0,paddingLeft:18,display:"flex",flexDirection:"column",gap:5}}>
-                          {CONNECTOR_PREREQS[connector].map((p,i)=>(
-                            <li key={i} style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>{p}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
                     {/* Where is it, how do I get in, how much of it do I want. A connector
                         with no groups declared falls into one unnamed block and renders as
                         it always did. */}
@@ -33178,12 +33233,34 @@ const AddServiceWizard = ({onClose, onDone}) => {
                       {l&&(
                         <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10,paddingBottom:6,borderBottom:`1px solid ${T.border}`}}>{l}</div>
                       )}
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:13}}>
+                    <div style={{display:"grid",
+                      gridTemplateColumns:inGroup.length===1?"1fr":"repeat(auto-fill,minmax(220px,1fr))",gap:13}}>
                       {inGroup.map(renderField)}
                     </div>
                     </div>
                         );
                       })}
+                    {CONNECTOR_PREREQS[connector]&&(
+                      <div style={{marginTop:2,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>
+                        <button onClick={()=>setPrereqOpen(o=>!o)}
+                          style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"9px 13px",background:T.bgSurface,
+                            border:"none",cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
+                          <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".07em"}}>
+                            Before you connect
+                          </span>
+                          <span style={{fontSize:10.5,color:T.textMuted}}>{CONNECTOR_PREREQS[connector].length} things to have ready</span>
+                          <span style={{marginLeft:"auto",fontSize:10,color:T.textMuted,transform:prereqOpen?"rotate(180deg)":"none",transition:"transform .15s"}}>▾</span>
+                        </button>
+                        {prereqOpen&&(
+                          <ul style={{margin:0,padding:"11px 16px 13px 32px",display:"flex",flexDirection:"column",gap:6,
+                            borderTop:`1px solid ${T.border}`}}>
+                            {CONNECTOR_PREREQS[connector].map((p,i)=>(
+                              <li key={i} style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>{p}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -33201,14 +33278,6 @@ const AddServiceWizard = ({onClose, onDone}) => {
                   <div style={{padding:"14px 16px",background:T.bgSurface,border:`1px dashed ${T.border}`,
                     borderRadius:10,fontSize:12,color:T.textSub,lineHeight:1.65}}>
                     {scope.note||"This source creates no objects of its own."}
-                  </div>
-                ):availObjTypes.length===1?(
-                  /* One object type is not a choice. A picker offering a single option asks
-                     someone to decide something that was never theirs to decide. */
-                  <div style={{padding:"14px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,
-                    borderRadius:10,fontSize:12,color:T.textSub,lineHeight:1.65}}>
-                    <b style={{color:T.text}}>{availObjTypes[0]}</b> — the only object type this source produces.
-                    {scope.note&&<div style={{marginTop:6,color:T.textMuted,fontSize:11.5}}>{scope.note}</div>}
                   </div>
                 ):(
                   <>
