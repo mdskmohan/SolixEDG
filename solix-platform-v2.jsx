@@ -30248,6 +30248,7 @@ const CONN_CONFIG_FIELDS = {
 
 // Inline SVG logo render functions — called inside components, zero CDN dependency
 const CONNECTOR_LOGOS = {
+  eai:          s=><svg width={s} height={s} viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="9" fill="#8b5cf6"/><path d="M20 13.5L12 25.5M20 13.5l8 12M13.5 25.5h13" stroke="white" strokeWidth="1.9" strokeLinecap="round" opacity=".85"/><circle cx="20" cy="12" r="3.4" fill="white"/><circle cx="11.6" cy="26.6" r="3.4" fill="white"/><circle cx="28.4" cy="26.6" r="3.4" fill="white"/></svg>,
   postgres:     s=><svg width={s} height={s} viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="9" fill="#336791"/><text x="20" y="26" textAnchor="middle" fill="white" fontSize="11" fontWeight="700" fontFamily="monospace">PG</text></svg>,
   snowflake:    s=><svg width={s} height={s} viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="9" fill="#29b5e8"/><path d="M20 8v24M8 20h24M11.5 11.5l17 17M28.5 11.5l-17 17" stroke="white" strokeWidth="2.5" strokeLinecap="round"/></svg>,
   bigquery:     s=><svg width={s} height={s} viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="9" fill="#4285f4"/><circle cx="20" cy="19" r="7" stroke="white" strokeWidth="1.8" fill="none" opacity=".6"/><circle cx="20" cy="19" r="3" fill="white"/><path d="M24 23l4 4" stroke="white" strokeWidth="2.5" strokeLinecap="round"/></svg>,
@@ -30286,6 +30287,7 @@ const CONNECTOR_LOGOS = {
 
 // Map connector display names → logo key
 const LOGO_KEY_MAP = {
+  "Solix EAI":"eai",
   "PostgreSQL":"postgres","MySQL":"mysql","Microsoft SQL":"mssql","Oracle":"oracle",
   "Snowflake":"snowflake","Google BigQuery":"bigquery","Amazon Redshift":"redshift",
   "Databricks":"databricks","Apache Airflow":"airflow","dbt":"dbt","dbt Cloud":"dbt",
@@ -31987,6 +31989,30 @@ const RunRow = ({run, onShowLogs}) => {
 // and a Postgres schema are not the same kind of thing. Everything the wizard shows in
 // Object types, Filters, Review and the connection test is driven from here.
 const CONNECTOR_SCOPE = {
+  // Data Sense builds a knowledge graph per application (the AKG). EDG imports it as a
+  // governed object; it does not build one and never writes back. So the object types here
+  // are units of MEANING - what a table represents, how it identifies a business entity -
+  // not units of storage. The one thing this connector deliberately does NOT bring is a
+  // link between two applications: deciding that two supplier rows are the same company is
+  // a steward's judgement, made in the Knowledge Layer, never an import side effect.
+  eai:{
+    objectTypes:["Knowledge graphs","Business entities","Master tables","Identity columns","Relationships","Business terms","Synonyms"],
+    note:"Data Sense builds one knowledge graph per application. EDG imports them as governed objects \u2014 it does not build or edit them, and never writes back. What arrives is meaning, not data: the rows stay in the source system.",
+    dims:[
+      {k:"application",label:"Applications",ph:"SAP ECC, Oracle EBS\u2026", rxIn:"^(SAP|Oracle).*", rxEx:"^(Sandbox|Test|Demo).*", hint:"One application, one knowledge graph. This is the cheapest filter and the one most tenants use \u2014 excluding an application leaves its whole map out."},
+      {k:"entity",label:"Business entities",ph:"Supplier, Customer\u2026", rxIn:".*", rxEx:"^(Temp|Scratch).*", hint:"Import only the entities you intend to govern. Excluding one leaves its master tables and identity columns behind with it."},
+      {k:"table",label:"Tables",selectable:false,ph:"^(VENDOR|KNA|AP_).*", rxIn:".*", rxEx:"^(Z_TMP|TEST_).*", hint:"Applied to table names inside the graph. They are only known once the graph itself has been read, so there is nothing to pick from a list."},
+    ],
+    auth:"Validating the EAI service account",
+    authName:"Service account",
+    transport:"api",
+    discover:"Listing published knowledge graphs",
+    discovery:{"Knowledge graphs":3,"Business entities":4,"Master tables":9,"Relationships":214,"Business terms":126},
+    caps:{lineage:true, usage:false, profiling:false, tagSync:true},
+    capsNote:"A knowledge graph declares how tables relate inside its own application, which is lineage, and carries the classifications Data Sense assigned. It reports no usage, and EDG does not profile through it \u2014 the column statistics arrive with the map.",
+    lineageDesc:"The relationships the graph declares between tables inside ONE application. Links across applications are never imported \u2014 those are decided by a steward in the Knowledge Layer.",
+    tagSyncDesc:"Pull the classifications Data Sense assigned while profiling. They arrive as proposals for a steward, like any other discovery source \u2014 EDG never writes a classification back to Data Sense.",
+  },
   powerbi:{
     objectTypes:["Apps","Workspaces","Dataflows","Datasets","Reports","Pages","Dashboards","Tiles","Datasource connections"],
     note:"Power BI has no databases or schemas. Pages are only available with workspace-level access \u2014 the scanner API alone cannot catalog them.",
@@ -32185,6 +32211,13 @@ const scopeFor = (v) => CONNECTOR_SCOPE[connIdFrom(v)] || DEFAULT_CONNECTOR_SCOP
 
 
 const ADD_SERVICE_CONNECTORS = {
+  Knowledge: {
+    color:"#8b5cf6", icon:"knowledge",
+    desc:"Knowledge maps built elsewhere. These bring meaning \u2014 what a table represents, and how it identifies a business entity \u2014 rather than assets of their own.",
+    connectors:[
+      {id:"eai",        name:"Solix EAI",    logo:"\ud83e\udde9", color:"#8b5cf6", desc:"Application knowledge graphs built in Data Sense"},
+    ],
+  },
   Discovery: {
     color:"#12B76A", icon:"shield",
     desc:"Sensitive-data discovery and classification tools. These contribute classifications and findings rather than assets of their own.",
@@ -32261,6 +32294,13 @@ const ADD_SERVICE_CONNECTORS = {
 // What must already be true before any credential works. These are the steps connector
 // setups actually fail on, and they are quoted from each vendor's own documentation.
 const CONNECTOR_PREREQS = {
+  eai:[
+    "At least one application published in Data Sense. EDG imports published graphs \u2014 it does not build them and cannot trigger a build.",
+    "A service account with read access to the applications and their metadata. Write access is never needed: EDG does not edit a graph, and nothing it decides is written back.",
+    "The source systems those applications describe should also be connected in EDG. The graph carries the meaning; mastering records still reads the rows, and that happens through the source connection \u2014 not through this one.",
+    "A graph whose master table has no identifier that works outside its own system can still be imported. It arrives marked not yet masterable, with the reason, rather than failing the run.",
+    "Classifications and terms arrive as proposals a steward accepts, so an import can never silently retag the catalog.",
+  ],
   powerbi:[
     "A Power BI Pro licence \u2014 the REST APIs are not available without one.",
     "An Azure AD app registration (service principal) with API permission Dashboard.Read.All. Add Dataset.Read.All too, or datasets and lineage will be skipped.",
@@ -32294,6 +32334,23 @@ const CONNECTOR_PREREQS = {
 };
 
 const CONNECTOR_FIELDS = {
+  eai:[
+    {k:"host", grp:"conn",          l:"EAI URL",             ph:"https://eai.company.solix.com", type:"text", req:true, help:"The Data Sense / EAI instance the knowledge graphs were built in."},
+    {k:"customer", grp:"conn",      l:"Customer",            ph:"J&J North America",             type:"text", req:true, help:"EAI scopes applications under a customer. EDG imports the graphs belonging to this one."},
+    {k:"authMode", grp:"auth",      l:"Credential type",     type:"select", opts:["Service account (recommended)","API token"], req:true, help:"A service account outlives the person who set it up. Use a token only for a short-lived trial."},
+    {k:"clientId", grp:"auth",      l:"Service account ID",  ph:"edg-akg-reader",                type:"text", req:true, help:"Needs read access to published applications. It never needs write access."},
+    {k:"clientSecret", grp:"auth",  l:"Secret",              ph:"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", type:"password", req:true, help:"Stored encrypted; never shown again after saving."},
+    // A draft graph is still being edited upstream. Governing one means governing a map
+    // that changes under you, so the default is to leave drafts alone.
+    {k:"publishedOnly", grp:"scope",l:"Published graphs only", type:"toggle", val:true, help:"On by default. A draft graph is still being built in Data Sense \u2014 importing one means governing a map that moves under you."},
+    {k:"versionPolicy", grp:"scope",l:"Version to track",    type:"select", opts:["Latest published version","Pin to the version in use"], help:"Latest keeps the map current and raises a review when it changes. Pin freezes it, which is what you want while a master is being resolved against that version."},
+    {k:"incremental", grp:"scope",  l:"Incremental sync",    type:"toggle", val:true, help:"Sync only what changed since the last run. Turn it off to re-import every graph from scratch."},
+    {k:"driftReview", grp:"scope",  l:"Raise a review on change", type:"toggle", val:true, help:"When an imported graph changes \u2014 a new table, a reclassified entity, an identity column that moved \u2014 send it to a steward instead of applying it silently."},
+    // The honest half of the story. A map alone cannot master a record: matching reads
+    // real rows, and rows come from the source system, not from EAI.
+    {k:"sourceConns", l:"Source systems", type:"connrefs", grp:"scope", req:true,
+      help:"The EDG connections holding the data these applications describe. The graph gives you the meaning; building a master record still reads the rows, and that happens through these connections. Without them the graphs are visible and governable, but no master can be built from them."},
+  ],
   postgres:   [{k:"host",l:"Host",ph:"prod-db.company.com",type:"text"},{k:"port",l:"Port",ph:"5432",type:"text"},{k:"database",l:"Database",ph:"warehouse",type:"text"},{k:"username",l:"Username",ph:"solix_reader",type:"text"},{k:"password",l:"Password",ph:"••••••••",type:"password"},{k:"ssl",l:"Enable SSL",type:"toggle",val:true}],
   snowflake:  [{k:"account",l:"Account",ph:"company.us-east-1",type:"text"},{k:"warehouse",l:"Warehouse",ph:"COMPUTE_WH",type:"text"},{k:"database",l:"Database",ph:"PROD_DWH",type:"text"},{k:"schema",l:"Schema",ph:"PUBLIC",type:"text"},{k:"username",l:"Username",ph:"SOLIX_USER",type:"text"},{k:"password",l:"Password",ph:"••••••••",type:"password"},{k:"role",l:"Role",ph:"SOLIX_READER",type:"text"}],
   bigquery:   [{k:"project",l:"Project ID",ph:"my-gcp-project",type:"text"},{k:"dataset",l:"Default Dataset",ph:"production",type:"text"},{k:"keyfile",l:"Service Account JSON",ph:"Paste JSON key…",type:"textarea"}],
