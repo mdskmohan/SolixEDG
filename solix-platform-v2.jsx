@@ -303,6 +303,159 @@ const DBT_ASSETS = [
 ];
 ASSETS.push(...DBT_ASSETS);
 
+// ═══════════════════════════════════════════════════════════════════════════
+// APACHE ICEBERG
+// ═══════════════════════════════════════════════════════════════════════════
+// Two shapes, because Iceberg genuinely means two different things depending on where
+// it lives:
+//
+//   WAREHOUSE (Snowflake / Databricks / BigQuery / Glue) - an Iceberg table is still a
+//   TABLE. It keeps type:"Table" and carries tableFormat:"Iceberg", so every policy,
+//   contract and quality test already scoped to "Table" keeps working. See FORMAT_META.
+//
+//   OBJECT STORE (S3 / ADLS / GCS) - an Iceberg table is a NEW asset type. Without it,
+//   one table is 18,000 Objects in the catalog and the only governable handle is a prefix
+//   string. With it, the lake gets its first assets that have real columns, which is what
+//   makes column-level masking on object storage expressible at all.
+//
+// The catalog is what makes an Iceberg table discoverable, and it is also what decides
+// whether EDG can ENFORCE or only OBSERVE: nothing can write to a table whose catalog it
+// does not own. `managed:false` is the read-only case, and the profile says so.
+const ICEBERG_ASSETS = [
+  // -- Warehouse Iceberg: still Tables, marked by format --
+  {id:7301,name:"sales_transactions", type:"Table", tableFormat:"Iceberg", domain:"Finance", owner:"sarah.kim", owners:["sarah.kim"], steward:"dev.patel", stewards:["dev.patel"], cert:"Approved", quality:93, usage:"High", updated:"40m ago", service:"snowflake", connectionLabel:"Snowflake DWH", db:"SNOWFLAKE_PROD / FINANCE / sales_transactions", tier:1, rows:"612M", size:"148 GB", tags:["revenue","finance"], description:"Transaction-level sales fact, stored as a Snowflake-managed Iceberg table on the finance lake.", slaFreshness:"1h"},
+  {id:7302,name:"customer_consent",   type:"Table", tableFormat:"Iceberg", domain:"Commerce", owner:"maya.chen", owners:["maya.chen"], steward:"sarah.kim", stewards:["sarah.kim"], cert:"Approved", quality:89, usage:"Med", updated:"3h ago", service:"snowflake", connectionLabel:"Snowflake DWH", db:"SNOWFLAKE_PROD / COMMERCE / customer_consent", tier:1, rows:"31M", size:"9.4 GB", tags:["PII","GDPR"], description:"Marketing consent state per customer. Iceberg table registered in an EXTERNAL AWS Glue catalog - Snowflake reads it but does not own it.", slaFreshness:"6h"},
+  {id:7303,name:"clickstream_events", type:"Table", tableFormat:"Iceberg", domain:"Product", owner:"alex.wu", owners:["alex.wu"], steward:"priya.nair", stewards:["priya.nair"], cert:"Approved", quality:87, usage:"High", updated:"25m ago", service:"databricks", connectionLabel:"Databricks Unity", db:"unity_catalog / analytics / clickstream_events", tier:2, rows:"4.1B", size:"860 GB", tags:["events"], description:"Raw product clickstream, Unity Catalog managed Iceberg.", slaFreshness:"30m"},
+  {id:7304,name:"campaign_spend",     type:"Table", tableFormat:"Iceberg", domain:"Marketing", owner:"lisa.ray", owners:["lisa.ray"], steward:"lisa.ray", stewards:["lisa.ray"], cert:"In Review", quality:76, usage:"Med", updated:"1d ago", service:"bigquery", connectionLabel:"BigQuery Analytics", db:"jnj-analytics / marketing / campaign_spend", tier:2, rows:"84M", size:"21 GB", tags:["marketing"], description:"Paid-media spend by campaign and channel. BigQuery table for Apache Iceberg.", slaFreshness:"24h"},
+  {id:7305,name:"web_sessions",       type:"Table", tableFormat:"Iceberg", domain:"Product", owner:"alex.wu", owners:["alex.wu"], steward:"alex.wu", stewards:["alex.wu"], cert:"Approved", quality:84, usage:"Med", updated:"2h ago", service:"glue", connectionLabel:"AWS Glue Data Catalog", db:"GLUE_LAKE / events / web_sessions", tier:2, rows:"920M", size:"210 GB", tags:["events"], description:"Sessionised web events. Iceberg table registered in the Glue Data Catalog over S3.", slaFreshness:"3h"},
+
+  // -- Object-store Iceberg: a new asset type, one table per prefix --
+  {id:7311,name:"lake_orders",        type:"Iceberg Table", tableFormat:"Iceberg", domain:"Commerce", owner:"maya.chen", owners:["maya.chen"], steward:"dev.patel", stewards:["dev.patel"], cert:"Approved", quality:81, usage:"High", updated:"55m ago", service:"s3", connectionLabel:"AWS S3 Data Lake", db:"jnj-data-lake-prod / curated/orders_iceberg", tier:1, rows:"1.2B", size:"402 GB", tags:["PII","revenue"], description:"Curated order history on the S3 lake. One Iceberg table over ~18k parquet files, discovered through the Glue catalog.", slaFreshness:"1h"},
+  {id:7312,name:"telemetry_events",   type:"Iceberg Table", tableFormat:"Iceberg", domain:"Engineering", owner:"james.oh", owners:["james.oh"], steward:"james.oh", stewards:["james.oh"], cert:"Draft", quality:0, usage:"Med", updated:"4h ago", service:"gcs", connectionLabel:"Google Cloud Storage", db:"gcs-raw-events / iceberg/telemetry", tier:3, rows:"7.8B", size:"1.1 TB", tags:["events"], description:"Device telemetry landed on GCS. Registered in an Iceberg REST catalog - GCS has no native metastore.", slaFreshness:"2h"},
+  {id:7313,name:"patient_encounters", type:"Iceberg Table", tableFormat:"Iceberg", domain:"Finance", owner:"sarah.kim", owners:["sarah.kim"], steward:"priya.nair", stewards:["priya.nair"], cert:"Approved", quality:90, usage:"Low", updated:"1d ago", service:"azureblob", connectionLabel:"Azure Blob Storage", db:"raw-ingestion / iceberg/encounters", tier:1, rows:"96M", size:"64 GB", tags:["PII","confidential"], description:"Encounter records on ADLS Gen2, catalogued through Unity Catalog.", slaFreshness:"24h"},
+];
+ASSETS.push(...ICEBERG_ASSETS);
+
+// Iceberg's own metadata, keyed by asset name. Snapshots, partition spec and the metadata
+// pointer are the things an Iceberg table has that a plain table does not - they are what
+// make time travel, partition evolution and "which files does this table actually own"
+// answerable. Folded into the existing Overview, Schema and Data Quality tabs rather than
+// given a tab of its own.
+const ICEBERG_META = {
+  sales_transactions:{
+    catalog:"Snowflake", catalogType:"Snowflake-managed", managed:true, formatVersion:2,
+    storage:"s3://jnj-finance-lake/iceberg/sales_transactions/",
+    metadataLocation:"s3://jnj-finance-lake/iceberg/sales_transactions/metadata/00214-8f3c1a.metadata.json",
+    dataFiles:8412, manifests:34, snapshotId:"7418902334125881190", lastCommit:"2026-09-03 07:15",
+    partitionSpec:[{col:"txn_date",transform:"day"},{col:"region",transform:"identity"}],
+    specEvolution:[
+      {v:2, ts:"2026-05-02", change:"Added region (identity)", by:"sarah.kim"},
+      {v:1, ts:"2025-11-14", change:"Initial spec - txn_date (day)", by:"sarah.kim"},
+    ],
+    snapshots:[
+      {id:"7418902334125881190", ts:"2026-09-03 07:15", op:"append",    added:412,  removed:0,   rows:"612.4M"},
+      {id:"5290117744019823001", ts:"2026-09-03 01:15", op:"append",    added:388,  removed:0,   rows:"612.0M"},
+      {id:"3112884590221740447", ts:"2026-09-02 19:15", op:"overwrite", added:1204, removed:1198,rows:"611.6M"},
+      {id:"9004471120388554120", ts:"2026-09-02 13:15", op:"append",    added:401,  removed:0,   rows:"610.9M"},
+    ],
+  },
+  customer_consent:{
+    catalog:"AWS Glue Data Catalog", catalogType:"External (AWS Glue)", managed:false, formatVersion:2,
+    storage:"s3://jnj-data-lake-prod/consent/",
+    metadataLocation:"s3://jnj-data-lake-prod/consent/metadata/00087-2b91ff.metadata.json",
+    dataFiles:1140, manifests:9, snapshotId:"2210447719003115882", lastCommit:"2026-09-03 04:40",
+    partitionSpec:[{col:"consent_date",transform:"month"}],
+    specEvolution:[{v:1, ts:"2026-01-08", change:"Initial spec - consent_date (month)", by:"maya.chen"}],
+    snapshots:[
+      {id:"2210447719003115882", ts:"2026-09-03 04:40", op:"append", added:22, removed:0,  rows:"31.2M"},
+      {id:"8871290034411287740", ts:"2026-09-02 22:40", op:"delete", added:0,  removed:14, rows:"31.1M"},
+      {id:"4419028855120033471", ts:"2026-09-02 16:40", op:"append", added:19, removed:0,  rows:"31.1M"},
+    ],
+  },
+  clickstream_events:{
+    catalog:"Databricks Unity Catalog", catalogType:"Unity Catalog (managed)", managed:true, formatVersion:2,
+    storage:"abfss://lake@jnjunity.dfs.core.windows.net/clickstream_events/",
+    metadataLocation:"abfss://lake@jnjunity.dfs.core.windows.net/clickstream_events/metadata/01998-7cc410.metadata.json",
+    dataFiles:41880, manifests:212, snapshotId:"6620013344871209934", lastCommit:"2026-09-03 07:31",
+    partitionSpec:[{col:"event_ts",transform:"hour"},{col:"platform",transform:"identity"}],
+    specEvolution:[
+      {v:2, ts:"2026-03-21", change:"event_ts day to hour", by:"alex.wu"},
+      {v:1, ts:"2025-08-30", change:"Initial spec - event_ts (day)", by:"alex.wu"},
+    ],
+    snapshots:[
+      {id:"6620013344871209934", ts:"2026-09-03 07:31", op:"append", added:1840, removed:0, rows:"4.11B"},
+      {id:"1180994477320011845", ts:"2026-09-03 06:31", op:"append", added:1792, removed:0, rows:"4.10B"},
+      {id:"7730118844002991230", ts:"2026-09-03 05:31", op:"append", added:1811, removed:0, rows:"4.10B"},
+    ],
+  },
+  campaign_spend:{
+    catalog:"BigQuery", catalogType:"BigQuery-managed", managed:true, formatVersion:2,
+    storage:"gs://jnj-analytics-iceberg/campaign_spend/",
+    metadataLocation:"gs://jnj-analytics-iceberg/campaign_spend/metadata/00041-19aa04.metadata.json",
+    dataFiles:602, manifests:7, snapshotId:"3341229900184471223", lastCommit:"2026-09-02 23:05",
+    partitionSpec:[{col:"spend_date",transform:"day"},{col:"channel",transform:"identity"}],
+    specEvolution:[{v:1, ts:"2026-02-17", change:"Initial spec - spend_date (day), channel", by:"lisa.ray"}],
+    snapshots:[
+      {id:"3341229900184471223", ts:"2026-09-02 23:05", op:"overwrite", added:41, removed:38, rows:"84.2M"},
+      {id:"9911002234481120043", ts:"2026-09-01 23:05", op:"overwrite", added:40, removed:36, rows:"83.9M"},
+    ],
+  },
+  web_sessions:{
+    catalog:"AWS Glue Data Catalog", catalogType:"Glue (table_type=ICEBERG)", managed:true, formatVersion:2,
+    storage:"s3://jnj-data-lake-prod/events/web_sessions/",
+    metadataLocation:"s3://jnj-data-lake-prod/events/web_sessions/metadata/00760-4ad11c.metadata.json",
+    dataFiles:12904, manifests:88, snapshotId:"5510338821004477190", lastCommit:"2026-09-03 06:02",
+    partitionSpec:[{col:"session_date",transform:"day"}],
+    specEvolution:[{v:1, ts:"2025-10-02", change:"Initial spec - session_date (day)", by:"alex.wu"}],
+    snapshots:[
+      {id:"5510338821004477190", ts:"2026-09-03 06:02", op:"append", added:288, removed:0, rows:"920.4M"},
+      {id:"2280449910033718820", ts:"2026-09-03 00:02", op:"append", added:301, removed:0, rows:"919.8M"},
+    ],
+  },
+  lake_orders:{
+    catalog:"AWS Glue Data Catalog", catalogType:"Glue (table_type=ICEBERG)", managed:true, formatVersion:2,
+    storage:"s3://jnj-data-lake-prod/curated/orders_iceberg/",
+    metadataLocation:"s3://jnj-data-lake-prod/curated/orders_iceberg/metadata/01340-06fe2b.metadata.json",
+    dataFiles:18220, manifests:141, snapshotId:"8890114477203399120", lastCommit:"2026-09-03 06:58",
+    partitionSpec:[{col:"order_date",transform:"day"},{col:"region",transform:"identity"}],
+    specEvolution:[
+      {v:3, ts:"2026-06-11", change:"Added region (identity)", by:"dev.patel"},
+      {v:2, ts:"2026-01-19", change:"order_date month to day", by:"maya.chen"},
+      {v:1, ts:"2025-07-04", change:"Initial spec - order_date (month)", by:"maya.chen"},
+    ],
+    snapshots:[
+      {id:"8890114477203399120", ts:"2026-09-03 06:58", op:"append",    added:640,  removed:0,   rows:"1.204B"},
+      {id:"4471190033882201447", ts:"2026-09-03 00:58", op:"overwrite", added:2210, removed:2188,rows:"1.203B"},
+      {id:"1120884471903355210", ts:"2026-09-02 18:58", op:"append",    added:612,  removed:0,   rows:"1.201B"},
+    ],
+  },
+  telemetry_events:{
+    catalog:"Iceberg REST catalog", catalogType:"REST (Polaris)", managed:false, formatVersion:2,
+    storage:"gs://gcs-raw-events/iceberg/telemetry/",
+    metadataLocation:"gs://gcs-raw-events/iceberg/telemetry/metadata/02910-bb4471.metadata.json",
+    dataFiles:64110, manifests:390, snapshotId:"7001284471190033882", lastCommit:"2026-09-03 03:44",
+    partitionSpec:[{col:"ingest_ts",transform:"hour"},{col:"device_type",transform:"bucket[16]"}],
+    specEvolution:[{v:1, ts:"2026-04-02", change:"Initial spec - ingest_ts (hour), device_type (bucket[16])", by:"james.oh"}],
+    snapshots:[
+      {id:"7001284471190033882", ts:"2026-09-03 03:44", op:"append", added:3120, removed:0, rows:"7.81B"},
+      {id:"3388220114477190033", ts:"2026-09-02 21:44", op:"append", added:3088, removed:0, rows:"7.78B"},
+    ],
+  },
+  patient_encounters:{
+    catalog:"Databricks Unity Catalog", catalogType:"Unity Catalog (foreign)", managed:false, formatVersion:2,
+    storage:"abfss://raw-ingestion@jnjadls.dfs.core.windows.net/iceberg/encounters/",
+    metadataLocation:"abfss://raw-ingestion@jnjadls.dfs.core.windows.net/iceberg/encounters/metadata/00512-cd7180.metadata.json",
+    dataFiles:2980, manifests:26, snapshotId:"2299018844711900332", lastCommit:"2026-09-02 20:10",
+    partitionSpec:[{col:"encounter_date",transform:"month"}],
+    specEvolution:[{v:1, ts:"2026-02-01", change:"Initial spec - encounter_date (month)", by:"priya.nair"}],
+    snapshots:[
+      {id:"2299018844711900332", ts:"2026-09-02 20:10", op:"append", added:44, removed:0,  rows:"96.2M"},
+      {id:"8844711900332229901", ts:"2026-09-01 20:10", op:"delete", added:0,  removed:12, rows:"96.1M"},
+    ],
+  },
+};
+const icebergMetaFor = a => (a && ICEBERG_META[a.name]) || null;
+
 // ─────────────────────────────────────────────
 // COLUMN METADATA (keyed by asset name)
 // ─────────────────────────────────────────────
@@ -1090,6 +1243,97 @@ Object.assign(SCHEMA,{
     {name:"created_at",  type:"DATETIME",      desc:"Account creation time",            pii:false,nullable:false,quality:"NOT NULL",  pk:false},
     {name:"plan",        type:"ENUM",          desc:"free / starter / pro / enterprise",pii:false,nullable:false,quality:"Value in set",pk:false},
   ],
+});
+
+// ── Iceberg tables. `part` carries the Iceberg partition transform for that column, which
+//    is why the Schema tab can badge partition columns: in Iceberg partitioning is a
+//    property of the table spec, not a separate DDL clause, and it can change over time
+//    without rewriting data (see ICEBERG_META.specEvolution). ──
+Object.assign(SCHEMA,{
+  sales_transactions:[
+    {name:"txn_id",       type:"BIGINT",        desc:"Unique transaction identifier",       pii:false,nullable:false,quality:"NOT NULL",     pk:true},
+    {name:"txn_date",     type:"DATE",          desc:"Transaction date",                    pii:false,nullable:false,quality:"Freshness",    pk:false,part:"day"},
+    {name:"region",       type:"STRING",        desc:"Sales region code",                   pii:false,nullable:false,quality:"Value in set", pk:false,part:"identity"},
+    {name:"customer_id",  type:"BIGINT",        desc:"Reference to customers.customer_id",  pii:true, nullable:false,quality:"FK valid",     pk:false},
+    {name:"amount",       type:"DECIMAL(15,2)", desc:"Transaction amount in USD",           pii:false,nullable:false,quality:"> 0",          pk:false},
+    {name:"currency",     type:"STRING",        desc:"ISO 4217 currency code",              pii:false,nullable:false,quality:"Value in set", pk:false},
+    {name:"channel",      type:"STRING",        desc:"Sales channel",                       pii:false,nullable:true, quality:"Value in set", pk:false},
+    {name:"updated_at",   type:"TIMESTAMP",     desc:"Last modification",                   pii:false,nullable:false,quality:"Freshness",    pk:false},
+  ],
+  customer_consent:[
+    {name:"consent_id",   type:"BIGINT",    desc:"Unique consent record",                 pii:false,nullable:false,quality:"NOT NULL",     pk:true},
+    {name:"customer_id",  type:"BIGINT",    desc:"Reference to customers.customer_id",    pii:true, nullable:false,quality:"FK valid",     pk:false},
+    {name:"email",        type:"STRING",    desc:"Email the consent was captured against", pii:true, nullable:true, quality:"Format valid", pk:false},
+    {name:"consent_date", type:"DATE",      desc:"Date consent was given or withdrawn",   pii:false,nullable:false,quality:"Freshness",    pk:false,part:"month"},
+    {name:"channel",      type:"STRING",    desc:"Where consent was captured",            pii:false,nullable:false,quality:"Value in set", pk:false},
+    {name:"opted_in",     type:"BOOLEAN",   desc:"Current consent state",                 pii:false,nullable:false,quality:"NOT NULL",     pk:false},
+    {name:"withdrawn_at", type:"TIMESTAMP", desc:"When consent was withdrawn, if it was", pii:false,nullable:true, quality:"—",            pk:false},
+  ],
+  clickstream_events:[
+    {name:"event_id",    type:"STRING",    desc:"Unique event identifier",         pii:false,nullable:false,quality:"NOT NULL",     pk:true},
+    {name:"event_ts",    type:"TIMESTAMP", desc:"Event timestamp (UTC)",           pii:false,nullable:false,quality:"Freshness",    pk:false,part:"hour"},
+    {name:"platform",    type:"STRING",    desc:"web / ios / android",             pii:false,nullable:false,quality:"Value in set", pk:false,part:"identity"},
+    {name:"user_id",     type:"BIGINT",    desc:"Signed-in user, null if anonymous",pii:true, nullable:true, quality:"FK valid",    pk:false},
+    {name:"session_id",  type:"STRING",    desc:"Session the event belongs to",    pii:false,nullable:false,quality:"NOT NULL",     pk:false},
+    {name:"page_url",    type:"STRING",    desc:"Page the event fired on",         pii:false,nullable:true, quality:"Format valid", pk:false},
+    {name:"ip_address",  type:"STRING",    desc:"Client IP at event time",         pii:true, nullable:true, quality:"Format valid", pk:false},
+  ],
+  campaign_spend:[
+    {name:"spend_id",    type:"BIGINT",        desc:"Unique spend row",              pii:false,nullable:false,quality:"NOT NULL",     pk:true},
+    {name:"spend_date",  type:"DATE",          desc:"Date the spend was booked",     pii:false,nullable:false,quality:"Freshness",    pk:false,part:"day"},
+    {name:"channel",     type:"STRING",        desc:"Paid media channel",            pii:false,nullable:false,quality:"Value in set", pk:false,part:"identity"},
+    {name:"campaign_id", type:"STRING",        desc:"Campaign identifier",           pii:false,nullable:false,quality:"NOT NULL",     pk:false},
+    {name:"impressions", type:"BIGINT",        desc:"Impressions delivered",         pii:false,nullable:true, quality:">= 0",         pk:false},
+    {name:"clicks",      type:"BIGINT",        desc:"Clicks delivered",              pii:false,nullable:true, quality:">= 0",         pk:false},
+    {name:"cost",        type:"DECIMAL(12,2)", desc:"Spend in USD",                  pii:false,nullable:false,quality:">= 0",         pk:false},
+  ],
+  web_sessions:[
+    {name:"session_id",   type:"STRING",    desc:"Unique session identifier",   pii:false,nullable:false,quality:"NOT NULL",  pk:true},
+    {name:"session_date", type:"DATE",      desc:"Session start date",          pii:false,nullable:false,quality:"Freshness", pk:false,part:"day"},
+    {name:"user_id",      type:"BIGINT",    desc:"Signed-in user, if any",      pii:true, nullable:true, quality:"FK valid",  pk:false},
+    {name:"started_at",   type:"TIMESTAMP", desc:"Session start time",          pii:false,nullable:false,quality:"NOT NULL",  pk:false},
+    {name:"duration_s",   type:"INT",       desc:"Session duration in seconds", pii:false,nullable:true, quality:">= 0",      pk:false},
+    {name:"page_views",   type:"INT",       desc:"Pages viewed in the session", pii:false,nullable:true, quality:">= 0",      pk:false},
+  ],
+  lake_orders:[
+    {name:"order_id",         type:"BIGINT",        desc:"Unique order identifier",            pii:false,nullable:false,quality:"NOT NULL",     pk:true},
+    {name:"order_date",       type:"DATE",          desc:"Order placement date",               pii:false,nullable:false,quality:"Freshness",    pk:false,part:"day"},
+    {name:"region",           type:"STRING",        desc:"Fulfilment region",                  pii:false,nullable:false,quality:"Value in set", pk:false,part:"identity"},
+    {name:"customer_id",      type:"BIGINT",        desc:"Reference to customers.customer_id", pii:true, nullable:false,quality:"FK valid",     pk:false},
+    {name:"email",            type:"STRING",        desc:"Customer email at order time",       pii:true, nullable:true, quality:"Format valid", pk:false},
+    {name:"shipping_address", type:"STRING",        desc:"Shipping address",                   pii:true, nullable:true, quality:"—",            pk:false},
+    {name:"amount",           type:"DECIMAL(12,2)", desc:"Order total in USD",                 pii:false,nullable:false,quality:"> 0",          pk:false},
+    {name:"status",           type:"STRING",        desc:"Order lifecycle status",             pii:false,nullable:false,quality:"Value in set", pk:false},
+  ],
+  telemetry_events:[
+    {name:"event_id",    type:"STRING",    desc:"Unique telemetry event",     pii:false,nullable:false,quality:"NOT NULL",     pk:true},
+    {name:"ingest_ts",   type:"TIMESTAMP", desc:"Ingestion timestamp (UTC)",  pii:false,nullable:false,quality:"Freshness",    pk:false,part:"hour"},
+    {name:"device_type", type:"STRING",    desc:"Device class",               pii:false,nullable:false,quality:"Value in set", pk:false,part:"bucket[16]"},
+    {name:"device_id",   type:"STRING",    desc:"Hardware identifier",        pii:true, nullable:false,quality:"NOT NULL",     pk:false},
+    {name:"metric",      type:"STRING",    desc:"Metric name",                pii:false,nullable:false,quality:"Value in set", pk:false},
+    {name:"value",       type:"DOUBLE",    desc:"Metric value",               pii:false,nullable:true, quality:"—",            pk:false},
+  ],
+  patient_encounters:[
+    {name:"encounter_id",   type:"STRING",  desc:"Unique encounter identifier", pii:false,nullable:false,quality:"NOT NULL",     pk:true},
+    {name:"encounter_date", type:"DATE",    desc:"Date of encounter",           pii:false,nullable:false,quality:"Freshness",    pk:false,part:"month"},
+    {name:"patient_id",     type:"STRING",  desc:"Patient identifier",          pii:true, nullable:false,quality:"NOT NULL",     pk:false},
+    {name:"mrn",            type:"STRING",  desc:"Medical record number",       pii:true, nullable:false,quality:"Format valid", pk:false},
+    {name:"provider_id",    type:"STRING",  desc:"Treating provider",           pii:false,nullable:true, quality:"FK valid",     pk:false},
+    {name:"encounter_type", type:"STRING",  desc:"Inpatient / outpatient / ER", pii:false,nullable:false,quality:"Value in set", pk:false},
+  ],
+});
+// The column picker in the policy rule builder reads ASSET_COLUMNS, not SCHEMA. Without
+// these, an Iceberg table would be invisible to rule-level targeting — which is exactly
+// the column-level masking the object-store type exists to make possible.
+Object.assign(ASSET_COLUMNS,{
+  sales_transactions:["txn_id","txn_date","region","customer_id","amount","currency","channel","updated_at"],
+  customer_consent:  ["consent_id","customer_id","email","consent_date","channel","opted_in","withdrawn_at"],
+  clickstream_events:["event_id","event_ts","platform","user_id","session_id","page_url","ip_address"],
+  campaign_spend:    ["spend_id","spend_date","channel","campaign_id","impressions","clicks","cost"],
+  web_sessions:      ["session_id","session_date","user_id","started_at","duration_s","page_views"],
+  lake_orders:       ["order_id","order_date","region","customer_id","email","shipping_address","amount","status"],
+  telemetry_events:  ["event_id","ingest_ts","device_type","device_id","metric","value"],
+  patient_encounters:["encounter_id","encounter_date","patient_id","mrn","provider_id","encounter_type"],
 });
 
 // Column-level profile stats (used in column sidenav)
@@ -3155,10 +3399,48 @@ const TYPE_META = {
   // -- dbt semantic layer (MetricFlow). The semantic model is a DAG node; its
   //    entities, measures and dimensions are components of it, not nodes. --
   "dbt Semantic Model": {c:"#7c3aed", bg:"rgba(124,58,237,.11)", icon:"◈"},
+  // -- Apache Iceberg ON OBJECT STORAGE. This one IS its own asset type, and only here.
+  //    On S3/ADLS/GCS an Iceberg table is not a file - it is a metadata/ folder plus
+  //    thousands of parquet data files under one prefix. Cataloguing those as Objects
+  //    would give a steward 4,000 meaningless rows instead of one governable table with
+  //    a schema. In a WAREHOUSE the opposite is true: see FORMAT_META below.
+  "Iceberg Table": {c:"#1FA8DE", bg:"rgba(31,168,222,.12)", icon:"◮"},
 };
 const TypeBadge = ({type})=>{
   const s = TYPE_META[type]||{c:T.textMuted,bg:T.bgHover,icon:"▪"};
   return <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:s.bg,color:s.c,border:`1px solid ${s.c}33`,display:"inline-flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}><span style={{fontSize:9.5}}>{s.icon}</span>{type}</span>;
+};
+
+// ─────────────────────────────────────────────
+// TABLE FORMAT — Iceberg / Delta on a warehouse table
+// ─────────────────────────────────────────────
+// Apache Iceberg is a table FORMAT, not a source and not an asset type. A Snowflake
+// Iceberg table is still a table: same columns, same owner, same policies, same quality
+// score. So it keeps type:"Table" and carries the format as an attribute instead.
+//
+// This is not a cosmetic choice. Policy scope maps a source to ["Table","View"] and then
+// OBJTYPE_ASSET_TYPES maps "Table" -> ["Table"]. Had Iceberg become its own type here,
+// every Iceberg table would have silently dropped out of every retention, masking and
+// legal-hold rule already scoped to "Snowflake / Table" - and nobody would have noticed
+// until an audit. The Iceberg mark rides alongside the type badge instead.
+const FORMAT_META = {
+  Iceberg: {c:"#1FA8DE", bg:"rgba(31,168,222,.12)", label:"Iceberg"},
+  Delta:   {c:"#00ADD4", bg:"rgba(0,173,212,.12)",  label:"Delta"},
+  Hudi:    {c:"#20A9C4", bg:"rgba(32,169,196,.12)", label:"Hudi"},
+};
+// The Iceberg mark: a peak above the waterline, the larger mass below it.
+const IcebergMark = ({size=11,color="#1FA8DE"})=>(
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" style={{flexShrink:0}}>
+    <path d="M8 1.6L11.6 7.4H4.4L8 1.6z" fill={color}/>
+    <path d="M3 9h10l-1.6 4.2a1 1 0 01-.94.65H5.54a1 1 0 01-.94-.65L3 9z" fill={color} opacity=".45"/>
+    <path d="M1.5 8.2h13" stroke={color} strokeWidth="1.1" strokeLinecap="round" opacity=".8"/>
+  </svg>
+);
+const FormatBadge = ({format,size=11})=>{
+  const s = FORMAT_META[format];
+  if(!s) return null;
+  return <span title={`Apache ${s.label} table format`} style={{fontSize:size,fontWeight:600,padding:"2px 8px 2px 6px",borderRadius:4,background:s.bg,color:s.c,border:`1px solid ${s.c}33`,display:"inline-flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}>
+    {format==="Iceberg"?<IcebergMark size={size-1} color={s.c}/>:<span style={{fontSize:9.5}}>◆</span>}{s.label}</span>;
 };
 
 const CertBadge = ({cert})=>{
@@ -10104,10 +10386,15 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   // Object types EDG can enforce policies on, per source. Structured sources → Table/View.
                   // Unstructured governs at the bucket/container level (retention & legal hold attach there):
                   // S3 → Bucket, ADLS → Container, GCS → Bucket.
-                  const SOURCE_OBJECT_TYPES = {"CDP":["Table","View"],"ECS":["Table","View"],"Snowflake":["Table","View"],"Databricks":["Table","View"],"PostgreSQL":["Table","View"],"Oracle":["Table","View"],"BigQuery":["Table","View"],"Redshift":["Table","View"],"Amazon S3":["Bucket"],"ADLS":["Container"],"Google Cloud Storage":["Bucket"]};
+                  // Iceberg deliberately does NOT appear for the structured sources: a Snowflake or
+                  // Databricks Iceberg table is catalogued as a Table, so "Table" already targets it
+                  // and adding a separate entry here would split one concept in two. On object
+                  // storage it IS separate, because an Iceberg table is the only thing there with
+                  // columns - which is what makes a column-level mask on a lake expressible.
+                  const SOURCE_OBJECT_TYPES = {"CDP":["Table","View"],"ECS":["Table","View"],"Snowflake":["Table","View"],"Databricks":["Table","View"],"PostgreSQL":["Table","View"],"Oracle":["Table","View"],"BigQuery":["Table","View"],"Redshift":["Table","View"],"Amazon S3":["Bucket","Iceberg Table"],"ADLS":["Container","Iceberg Table"],"Google Cloud Storage":["Bucket","Iceberg Table"]};
                   const UNSTRUCT_SET = new Set(UNSTRUCT_SOURCES);
-                  const OBJ_ORDER = ["Table","View","Bucket","Container","Object"];
-                  const OBJ_ICON  = {"Table":"📋","View":"👁️","Bucket":"🪣","Container":"🗂️","Object":"📦"};
+                  const OBJ_ORDER = ["Table","View","Iceberg Table","Bucket","Container","Object"];
+                  const OBJ_ICON  = {"Table":"📋","View":"👁️","Iceberg Table":"🧊","Bucket":"🪣","Container":"🗂️","Object":"📦"};
                   // Union of enforceable object types across the selected sources (Table, View, Object order preserved)
                   const availAssetTypes = [...new Set(scopeSrcs.flatMap(s=>SOURCE_OBJECT_TYPES[s]||["Table","View"]))].sort((a,b)=>OBJ_ORDER.indexOf(a)-OBJ_ORDER.indexOf(b));
                   const hasUnstruct = scopeSrcs.some(s=>UNSTRUCT_SET.has(s));
@@ -10186,7 +10473,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                         {scopeSrcs.length===0
                           ? <div style={{fontSize:11,color:T.textMuted,marginTop:6,lineHeight:1.6}}>Showing all object types — pick a <strong>Source</strong> above to narrow this to what that source exposes.</div>
                           : hasUnstruct
-                            ? <div style={{fontSize:11,color:T.textMuted,marginTop:6,lineHeight:1.6}}>Filtered by your sources. Unstructured sources govern at the <strong>Bucket</strong> (S3) / <strong>Container</strong> (ADLS) level — retention &amp; legal hold attach there.</div>
+                            ? <div style={{fontSize:11,color:T.textMuted,marginTop:6,lineHeight:1.6}}>Filtered by your sources. Unstructured sources govern at the <strong>Bucket</strong> (S3) / <strong>Container</strong> (ADLS) level — retention &amp; legal hold attach there. An <strong>Iceberg Table</strong> is the exception: it has columns, so a rule can target them the way it would on a warehouse table.</div>
                             : <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Filtered by your sources. Tables are base data — use Views for derived or aggregated datasets.</div>}
                         {scopeAssetTypes.length===0&&<div style={{fontSize:10.5,color:T.rose,marginTop:6}}>Select at least one object type to continue.</div>}
                       </div>
@@ -10295,7 +10582,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   const SRC_ICON2   = {"cdp":"🗄️","ecs":"📁","snowflake":"❄️","databricks":"🧱","postgres":"🐘","postgresql":"🐘","oracle":"🔴","bigquery":"🔷","redshift":"🌀","s3":"🪣","adls":"🟦","azureblob":"🟦","gcs":"🟨","gcp":"🟨"};
                   // Scope object types → concrete catalog asset types. Unstructured governs at bucket level:
                   // S3 "Bucket" → Bucket assets, ADLS "Container" → Container assets. ("Object" kept for back-compat.)
-                  const OBJTYPE_ASSET_TYPES = {"Table":["Table"],"View":["View"],"Bucket":["Bucket"],"Container":["Container"],"Object":["Object","Blob"]};
+                  const OBJTYPE_ASSET_TYPES = {"Table":["Table"],"View":["View"],"Iceberg Table":["Iceberg Table"],"Bucket":["Bucket"],"Container":["Container"],"Object":["Object","Blob"]};
                   // Unstructured / no-column asset types — pickable on source+type alone, drive the object rule editor.
                   const isObjAssetType = t => t==="Bucket"||t==="Container"||t==="Object"||t==="Blob";
                   // ── Object-store governance metadata — retention & legal hold on unstructured (S3 / ADLS).
@@ -12827,6 +13114,132 @@ const StewardshipView = ({onToast, initialTab}) => {
 // ─────────────────────────────────────────────
 // ASSET DETAIL — sub-tab components
 // ─────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// ICEBERG PANEL — folded into the Overview tab
+// ─────────────────────────────────────────────
+// Everything here is something an Iceberg table has that a plain table does not: a
+// catalog that owns it, a metadata pointer, a partition spec that can change without a
+// rewrite, and a snapshot log. It sits inside Overview rather than in a tab of its own,
+// because a steward opening this asset should meet these facts alongside the description
+// and the governing policies, not behind another click.
+//
+// The one operational fact on this card is `managed`. An Iceberg table registered in a
+// catalog EDG does not own is READ-ONLY: EDG can catalogue it, classify it and raise a
+// violation against it, but it cannot execute a retention delete or write a mask. Saying
+// that on the profile is the difference between a policy that works and one that quietly
+// does nothing.
+const IcebergPanel = ({asset})=>{
+  const ice = icebergMetaFor(asset);
+  if(!ice) return null;
+  const C = FORMAT_META.Iceberg.c;
+  const OP_C = {append:T.green, overwrite:T.amber, delete:T.rose, replace:T.blue};
+  const stat = (l,v,mono)=>(
+    <div style={{flex:"1 1 120px",minWidth:110}}>
+      <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>{l}</div>
+      <div style={{fontSize:13,color:T.text,fontWeight:600,fontFamily:mono?"'Geist Mono',monospace":"inherit",wordBreak:"break-all"}}>{v}</div>
+    </div>
+  );
+  return (
+    <Card2>
+      <div style={{padding:"14px 16px"}}>
+        <SH title="Apache Iceberg"/>
+
+        {/* Catalog — and what owning it does or does not let EDG do. */}
+        <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 12px",borderRadius:8,marginBottom:14,
+          background:ice.managed?`${T.green}0d`:`${T.amber}0d`,border:`1px solid ${ice.managed?T.green:T.amber}30`}}>
+          <IcebergMark size={15} color={ice.managed?T.green:T.amber}/>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:12.5,color:T.text,fontWeight:600,marginBottom:2}}>
+              {ice.catalogType} · {ice.managed?"EDG can enforce":"Read-only for EDG"}
+            </div>
+            <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.6}}>
+              {ice.managed
+                ? `This table's catalog is ${ice.catalog}, which this connection owns. Retention, masking and legal-hold rules commit against it directly.`
+                : `This table is registered in ${ice.catalog}, which this connection does not own. EDG catalogues, classifies and monitors it, but cannot write to it — enforcement rules targeting it run in monitor-only mode.`}
+            </div>
+          </div>
+        </div>
+
+        {/* The numbers that only exist because it is Iceberg. */}
+        <div style={{display:"flex",flexWrap:"wrap",gap:16,padding:"12px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:14}}>
+          {stat("Format version","v"+ice.formatVersion)}
+          {stat("Data files", ice.dataFiles.toLocaleString())}
+          {stat("Manifests", ice.manifests.toLocaleString())}
+          {stat("Current snapshot", <span title={ice.snapshotId}>{ice.snapshotId.slice(0,10)}&hellip;</span>, true)}
+          {stat("Last commit", ice.lastCommit, true)}
+        </div>
+
+        {/* Where the table actually lives. The metadata pointer is the table's identity:
+            it is what makes the same table arriving from Glue and from Snowflake one asset
+            rather than two. */}
+        <div style={{marginBottom:14}}>
+          {[{l:"Storage location",v:ice.storage},{l:"Metadata pointer",v:ice.metadataLocation}].map(r=>(
+            <div key={r.l} style={{marginBottom:8}}>
+              <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:3}}>{r.l}</div>
+              <div style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace",wordBreak:"break-all",lineHeight:1.6}}>{r.v}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Partition spec + how it got there. Iceberg partitioning is hidden — a query does
+            not name the partition column — and it can evolve without rewriting old data,
+            which is why the history matters as much as the current spec. */}
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:7}}>Partition spec</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
+            {ice.partitionSpec.map(ps=>(
+              <span key={ps.col} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"3px 9px",borderRadius:6,background:`${C}12`,color:C,border:`1px solid ${C}30`,fontFamily:"'Geist Mono',monospace"}}>
+                {ps.col}<span style={{opacity:.65}}>· {ps.transform}</span>
+              </span>
+            ))}
+          </div>
+          <div style={{position:"relative",paddingLeft:16}}>
+            {ice.specEvolution.map((e,i,arr)=>(
+              <div key={e.v} style={{position:"relative",paddingBottom:i<arr.length-1?10:0}}>
+                <div style={{position:"absolute",left:-12,top:4,width:7,height:7,borderRadius:"50%",background:i===0?C:T.textMuted,border:`2px solid ${T.bgSurface}`}}/>
+                {i<arr.length-1&&<div style={{position:"absolute",left:-9.5,top:12,bottom:0,width:1,background:T.border}}/>}
+                <div style={{fontSize:12,color:T.text}}>Spec v{e.v} — {e.change}</div>
+                <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{e.ts} · <span style={{fontFamily:"'Geist Mono',monospace"}}>{e.by}</span></div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Snapshot log. This is Iceberg's audit trail of the DATA, next to EDG's audit
+            trail of the METADATA in the Audit Logs tab — every commit is a point you can
+            still time-travel to, which is why an expired snapshot is a retention question. */}
+        <div>
+          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:7}}>Recent snapshots</div>
+          <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead><tr>{["Snapshot","Committed","Operation","Files +/−","Rows"].map(h=>(
+                <th key={h} style={{padding:"7px 10px",fontSize:10,fontWeight:700,color:T.textMuted,textAlign:"left",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,textTransform:"uppercase",letterSpacing:"0.05em",whiteSpace:"nowrap"}}>{h}</th>))}</tr></thead>
+              <tbody>
+                {ice.snapshots.map((sn,i)=>{
+                  const oc = OP_C[sn.op]||T.textMuted;
+                  return (
+                    <tr key={sn.id} style={{borderBottom:i<ice.snapshots.length-1?`1px solid ${T.border}`:"none"}}>
+                      <td style={{padding:"8px 10px",fontSize:11,fontFamily:"'Geist Mono',monospace",color:sn.id===ice.snapshotId?C:T.textSub,fontWeight:sn.id===ice.snapshotId?700:400,whiteSpace:"nowrap"}}>
+                        {sn.id.slice(0,10)}…{sn.id===ice.snapshotId&&<span style={{fontSize:9,marginLeft:6,padding:"1px 5px",borderRadius:3,background:`${C}15`,border:`1px solid ${C}35`}}>current</span>}
+                      </td>
+                      <td style={{padding:"8px 10px",fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{sn.ts}</td>
+                      <td style={{padding:"8px 10px"}}><span style={{fontSize:10.5,fontWeight:700,padding:"1px 7px",borderRadius:99,background:`${oc}15`,color:oc,border:`1px solid ${oc}30`}}>{sn.op}</span></td>
+                      <td style={{padding:"8px 10px",fontSize:11,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>
+                        <span style={{color:T.green}}>+{sn.added}</span>{sn.removed>0&&<span style={{color:T.rose,marginLeft:6}}>−{sn.removed}</span>}
+                      </td>
+                      <td style={{padding:"8px 10px",fontSize:11,color:T.textSub,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{sn.rows}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </Card2>
+  );
+};
+
 const AssetOverview = ({asset,data,setData,onToast})=>{
   const navFn = useNav();
   const [editingDesc,setEditingDesc]=useState(false);
@@ -12855,6 +13268,8 @@ const AssetOverview = ({asset,data,setData,onToast})=>{
         }
       </div>
     </Card2>
+    {/* Apache Iceberg — only for Iceberg tables; renders nothing otherwise. */}
+    <IcebergPanel asset={asset}/>
     {/* Linked Assets */}
     <Card2>
       <div style={{padding:"14px 16px"}}>
@@ -12976,6 +13391,11 @@ const AssetOverview = ({asset,data,setData,onToast})=>{
 );}
 const AssetSchema = ({asset,selCol,onColClick,onToast})=>{
   const cols=SCHEMA[asset.name]||SCHEMA.orders||[];
+  // Iceberg partitioning is HIDDEN: a query never names the partition column, so a steward
+  // reading this schema has no other way to tell which columns the table is laid out by -
+  // which is exactly what decides whether a retention predicate prunes files or scans them all.
+  const ice=icebergMetaFor(asset);
+  const partCols=ice?new Map(ice.partitionSpec.map(p=>[p.col,p.transform])):null;
   const [schSearch,setSchSearch]=useState("");
   const filtered=cols.filter(c=>!schSearch||c.name.toLowerCase().includes(schSearch.toLowerCase())||c.desc?.toLowerCase().includes(schSearch.toLowerCase())||c.type?.toLowerCase().includes(schSearch.toLowerCase()));
   return <div className="fadeIn">
@@ -12988,7 +13408,8 @@ const AssetSchema = ({asset,selCol,onColClick,onToast})=>{
             onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=schSearch?T.accent:T.border}/>
           {schSearch&&<button onClick={()=>setSchSearch("")} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:15,lineHeight:1}}>×</button>}
         </div>
-        <span style={{fontSize:12,color:T.textMuted,whiteSpace:"nowrap"}}>{filtered.length} / {cols.length} columns · {cols.filter(c=>c.pk).length} PK</span>
+        <span style={{fontSize:12,color:T.textMuted,whiteSpace:"nowrap"}}>{filtered.length} / {cols.length} columns · {cols.filter(c=>c.pk).length} PK{partCols?` · ${partCols.size} partition`:""}</span>
+        {ice&&<span title={`Iceberg spec v${ice.specEvolution[0].v} — partitioning can change without rewriting data`} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:FORMAT_META.Iceberg.c,background:FORMAT_META.Iceberg.bg,padding:"2px 8px",borderRadius:99,border:`1px solid ${FORMAT_META.Iceberg.c}33`,whiteSpace:"nowrap"}}><IcebergMark size={10}/>Spec v{ice.specEvolution[0].v} · {ice.partitionSpec.map(p=>`${p.col}(${p.transform})`).join(", ")}</span>}
         {selCol&&<span style={{fontSize:11,color:T.accent,background:T.accentDim,padding:"2px 8px",borderRadius:99,border:`1px solid ${T.accent}33`}}>Viewing: {selCol.name}</span>}
       </div>
       <table style={{width:"100%",borderCollapse:"collapse"}}>
@@ -12998,7 +13419,7 @@ const AssetSchema = ({asset,selCol,onColClick,onToast})=>{
             const isSel=selCol?.name===c.name;
             return (
               <tr key={i} onClick={()=>onColClick(c)} className="row-hover" style={{borderBottom:i<filtered.length-1?`1px solid ${T.border}`:"none",background:isSel?T.accentDim:"transparent",cursor:"pointer",transition:"background .1s"}}>
-                <td style={{padding:"10px 14px"}}><div style={{display:"flex",alignItems:"center",gap:6}}>{c.pk&&<span style={{fontSize:9,color:T.amber,border:`1px solid ${T.amberDim}`,padding:"1px 5px",borderRadius:4,fontFamily:"'Geist Mono',monospace",fontWeight:700}}>PK</span>}<span style={{fontSize:13,fontFamily:"'Geist Mono',monospace",color:isSel?T.accent:T.text,fontWeight:500}}>{c.name}</span></div></td>
+                <td style={{padding:"10px 14px"}}><div style={{display:"flex",alignItems:"center",gap:6}}>{partCols&&partCols.has(c.name)&&<span title={`Iceberg partition column · ${partCols.get(c.name)} transform`} style={{fontSize:9,color:FORMAT_META.Iceberg.c,border:`1px solid ${FORMAT_META.Iceberg.c}40`,background:FORMAT_META.Iceberg.bg,padding:"1px 5px",borderRadius:4,fontFamily:"'Geist Mono',monospace",fontWeight:700,flexShrink:0}}>{partCols.get(c.name)}</span>}{c.pk&&<span style={{fontSize:9,color:T.amber,border:`1px solid ${T.amberDim}`,padding:"1px 5px",borderRadius:4,fontFamily:"'Geist Mono',monospace",fontWeight:700}}>PK</span>}<span style={{fontSize:13,fontFamily:"'Geist Mono',monospace",color:isSel?T.accent:T.text,fontWeight:500}}>{c.name}</span></div></td>
                 <td style={{padding:"10px 14px"}}><Badge color={T.blue} bg={T.blueDim}>{c.type}</Badge></td>
                 <td style={{padding:"10px 14px"}}><span style={{fontSize:11,color:c.nullable?T.textMuted:T.textSub}}>{c.nullable?"YES":"NOT NULL"}</span></td>
                 <td style={{padding:"10px 14px",fontSize:12,color:T.textSub,maxWidth:260}}>{c.desc}</td>
@@ -20783,6 +21204,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
       {/* type + db path */}
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
         <TypeBadge type={data.type}/>
+        {data.tableFormat&&data.type!=="Iceberg Table"&&<FormatBadge format={data.tableFormat}/>}
         <span style={{fontSize:11.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{data.db}</span>
       </div>
       {/* name + actions */}
@@ -21353,7 +21775,13 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
             // seeds give them none and the row disappears rather than reading a dash.
             const fresh = data.slaFreshness && data.slaFreshness!=="—" ? data.slaFreshness : null;
             const isSourceRefresh = isBI || isPBI;
+            // Iceberg's catalog decides whether EDG can WRITE. Nothing can enforce against a
+            // table whose catalog it does not own, so the sidebar names it here and the
+            // Overview panel spells out the consequence.
+            const ice = icebergMetaFor(asset);
             return [
+              ...(data.tableFormat?[{l:"Format",v:<FormatBadge format={data.tableFormat}/>}]:[]),
+              ...(ice?[{l:"Catalog",v:<span style={{fontSize:11.5,color:T.textSub,textAlign:"right"}}>{ice.catalog}</span>}]:[]),
               ...(data.quality>0?[{l:"Quality",v:<QScore score={data.quality}/>}]:[]),
               ...(fresh?[{l:isSourceRefresh?"Last refresh":"Freshness", v:<span style={{fontSize:12,color:T.textSub}}>{fresh}</span>}]:[]),
               {l:"Updated", v:<span style={{fontSize:12,color:T.textMuted}}>{data.updated}</span>},
@@ -21764,6 +22192,9 @@ const CatalogView = ({onAsset})=>{
   const [panelOpen, setPanelOpen] = useState(true);
   const [selConnTypes,setSelConnTypes]= useState(new Set());
   const [selTypes,   setSelTypes]   = useState(new Set());
+  // Table format is a separate axis from asset type on purpose: a warehouse Iceberg
+  // table stays type "Table", so "show me everything on Iceberg" is only answerable here.
+  const [selFormats, setSelFormats] = useState(new Set());
   const [selDomains, setSelDomains] = useState(new Set());
   const [selCerts,   setSelCerts]   = useState(new Set());
   const [selTiers,   setSelTiers]   = useState(new Set());
@@ -21772,10 +22203,10 @@ const CatalogView = ({onAsset})=>{
   const [selTags,          setSelTags]          = useState(new Set());
   const [selGlossaryTerms, setSelGlossaryTerms] = useState(new Set());
   const [selStatus,  setSelStatus]  = useState(new Set()); // source status: "Active" | "Archived". Empty = active only (archived hidden by default).
-  const [openGroup,  setOpenGroup]  = useState({conntype:true,connection:false,domain:true,type:true,cert:false,tier:false,owner:false,tags:false,glossary:false,status:false});
+  const [openGroup,  setOpenGroup]  = useState({conntype:true,connection:false,domain:true,type:true,format:false,cert:false,tier:false,owner:false,tags:false,glossary:false,status:false});
   const PAGE_SIZE = 25;
   const [page, setPage] = useState(1);
-  useEffect(()=>{ setPage(1); },[q,selConnTypes,selTypes,selDomains,selCerts,selTiers,selConns,selOwners,selTags,selGlossaryTerms,selStatus]);
+  useEffect(()=>{ setPage(1); },[q,selConnTypes,selTypes,selFormats,selDomains,selCerts,selTiers,selConns,selOwners,selTags,selGlossaryTerms,selStatus]);
   const DRILLABLE_TYPES = new Set(["Database","Catalog","Schema","Bucket","Container","Folder"]);
   // Derived from the catalog rather than hand-listed. The hand-written map had no entry for
   // Power BI, Glue, dbt, GCS, CDP or ECS, so choosing one of those emptied the Asset Type
@@ -21793,6 +22224,7 @@ const CatalogView = ({onAsset})=>{
     const mq  = !q || a.name.toLowerCase().includes(q.toLowerCase()) || (a.domain||"").toLowerCase().includes(q.toLowerCase()) || (a.tags||[]).some(t=>t.toLowerCase().includes(q.toLowerCase())) || (a.description||"").toLowerCase().includes(q.toLowerCase()) || (a.db||"").toLowerCase().includes(q.toLowerCase()) || (SCHEMA[a.name]||[]).some(c=>c.name.toLowerCase().includes(q.toLowerCase()));
     const mct = selConnTypes.size===0 || selConnTypes.has(a.service);
     const mt  = selTypes.size===0   || selTypes.has(a.type);
+    const mf  = selFormats.size===0 || selFormats.has(a.tableFormat||"Native");
     const md  = selDomains.size===0 || selDomains.has(a.domain);
     const mc  = selCerts.size===0   || selCerts.has(a.cert);
     const mti = selTiers.size===0   || selTiers.has(String(a.tier));
@@ -21802,7 +22234,7 @@ const CatalogView = ({onAsset})=>{
     const mGT = selGlossaryTerms.size===0 || GLOSSARY_TERMS.filter(t=>selGlossaryTerms.has(t.id)).some(t=>(t.linkedAssets||[]).some(la=>la.name===a.name));
     // Source status: archived assets (deleted from source) are hidden unless explicitly requested.
     const mSt = selStatus.size===0 ? !a.archived : ((selStatus.has("Archived")&&a.archived) || (selStatus.has("Active")&&!a.archived));
-    return mq&&mct&&mt&&md&&mc&&mti&&ms&&mo&&mTag&&mGT&&mSt;
+    return mq&&mct&&mt&&mf&&md&&mc&&mti&&ms&&mo&&mTag&&mGT&&mSt;
   }).sort((a,b)=>{
     if(sortBy==="quality") return b.quality-a.quality;
     if(sortBy==="name")    return a.name.localeCompare(b.name);
@@ -21812,8 +22244,8 @@ const CatalogView = ({onAsset})=>{
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const pagedRows  = filtered.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE);
 
-  const totalActive = selConnTypes.size+selTypes.size+selDomains.size+selCerts.size+selTiers.size+selConns.size+selOwners.size+selTags.size+selGlossaryTerms.size+selStatus.size;
-  const clearAll = () => { setSelConnTypes(new Set()); setSelTypes(new Set()); setSelDomains(new Set()); setSelCerts(new Set()); setSelTiers(new Set()); setSelConns(new Set()); setSelOwners(new Set()); setSelTags(new Set()); setSelGlossaryTerms(new Set()); setSelStatus(new Set()); };
+  const totalActive = selConnTypes.size+selTypes.size+selFormats.size+selDomains.size+selCerts.size+selTiers.size+selConns.size+selOwners.size+selTags.size+selGlossaryTerms.size+selStatus.size;
+  const clearAll = () => { setSelConnTypes(new Set()); setSelTypes(new Set()); setSelFormats(new Set()); setSelDomains(new Set()); setSelCerts(new Set()); setSelTiers(new Set()); setSelConns(new Set()); setSelOwners(new Set()); setSelTags(new Set()); setSelGlossaryTerms(new Set()); setSelStatus(new Set()); };
   const countFor = (field, val) => ASSETS.filter(a => {
     const mq = !q || a.name.toLowerCase().includes(q.toLowerCase());
     if(!mq) return false;
@@ -21821,6 +22253,7 @@ const CatalogView = ({onAsset})=>{
     if(a.archived) return false; // other facet counts reflect the default (active) view
     if(field==="conntype")   return a.service===val;
     if(field==="type")       return a.type===val;
+    if(field==="format")     return (a.tableFormat||"Native")===val;
     if(field==="domain")     return a.domain===val;
     if(field==="cert")       return a.cert===val;
     if(field==="tier")       return String(a.tier)===val;
@@ -21835,12 +22268,19 @@ const CatalogView = ({onAsset})=>{
   const CONN_TYPE_LABELS = {cdp:"Solix CDP",ecs:"Solix ECS",snowflake:"Snowflake",databricks:"Databricks",
     oracle:"Oracle",postgres:"PostgreSQL",mysql:"MySQL",s3:"Amazon S3",azureblob:"Azure Blob",
     gcs:"Google Cloud Storage",airflow:"Airflow",tableau:"Tableau",powerbi:"Power BI",
-    glue:"AWS Glue",dbt:"dbt",bigid:"BigID"};
+    glue:"AWS Glue",dbt:"dbt",bigid:"BigID",bigquery:"BigQuery"};
   const allConnTypes = [...new Set(ASSETS.map(a=>a.service))];
   const visibleConns = selConnTypes.size===0 ? [...new Set(ASSETS.map(a=>a.connectionLabel))] : [...new Set(ASSETS.filter(a=>selConnTypes.has(a.service)).map(a=>a.connectionLabel))];
   const ALL_ASSET_TYPES = selConnTypes.size===0
     ? [...new Set(ASSETS.map(a=>a.type))]
     : [...new Set([...selConnTypes].flatMap(ct=>CONN_TYPE_ASSET_TYPES[ct]||[]))].filter(t=>ASSETS.some(a=>a.type===t));
+  // Derived, like the type facet above — a new format in the seeds shows up on its own.
+  // "Native" is the absence of an open table format, and is listed last.
+  const ALL_TABLE_FORMATS = (()=>{
+    const pool = selConnTypes.size===0 ? ASSETS : ASSETS.filter(a=>selConnTypes.has(a.service));
+    const fmts = [...new Set(pool.map(a=>a.tableFormat).filter(Boolean))].sort();
+    return fmts.length ? [...fmts, "Native"] : [];
+  })();
 
   const FacetGroup = ({id,label,icon,items,sel,onToggle,renderItem,headerNote,emptyNote}) => {
     const open = openGroup[id];
@@ -21882,6 +22322,7 @@ const CatalogView = ({onAsset})=>{
     ...[...selStatus].map(v=>({label:v==="Archived"?"Archived":"Active",clear:()=>toggle(setSelStatus,v)})),
     ...[...selConnTypes].map(v=>({label:CONN_TYPE_LABELS[v]||v,clear:()=>toggle(setSelConnTypes,v)})),
     ...[...selTypes].map(v=>({label:v,clear:()=>toggle(setSelTypes,v)})),
+    ...[...selFormats].map(v=>({label:v,clear:()=>toggle(setSelFormats,v)})),
     ...[...selDomains].map(v=>({label:v,clear:()=>toggle(setSelDomains,v)})),
     ...[...selCerts].map(v=>({label:v,clear:()=>toggle(setSelCerts,v)})),
     ...[...selTiers].map(v=>({label:`Tier ${v}`,clear:()=>toggle(setSelTiers,v)})),
@@ -21908,7 +22349,9 @@ const CatalogView = ({onAsset})=>{
         </div>
       </div>
     )},
-    {key:"type",label:"Type",render:v=><TypeBadge type={v}/>},
+    // The format rides ALONGSIDE the type, never replacing it: an Iceberg table in a
+    // warehouse is still a Table, and a steward filtering "Tables" must still see it.
+    {key:"type",label:"Type",render:(v,r)=>(<div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}><TypeBadge type={v}/>{r.tableFormat&&r.type!=="Iceberg Table"&&<FormatBadge format={r.tableFormat}/>}</div>)},
     {key:"owner",label:"Owner",render:(v,r)=>{const ol=r.owners||[v];return(<div style={{display:"flex",alignItems:"center"}}>{ol.slice(0,3).map((o,i)=>(<div key={i} title={o} style={{width:24,height:24,borderRadius:"50%",background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:T.accent,marginLeft:i>0?-7:0,position:"relative",zIndex:3-i,border:`2px solid ${T.bgSurface}`,boxSizing:"border-box",flexShrink:0}}>{o.split(".").map(s=>s[0].toUpperCase()).join("")}</div>))}{ol.length>3&&<div title={`+${ol.length-3} more`} style={{width:24,height:24,borderRadius:"50%",background:T.bgElevated,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:T.textMuted,marginLeft:-7,border:`2px solid ${T.bgSurface}`,boxSizing:"border-box",flexShrink:0}}>+{ol.length-3}</div>}</div>);}},
     {key:"quality",label:"Quality",render:v=><QScore score={v}/>},
     {key:"updated",label:"Updated",render:v=><span style={{fontSize:11,color:T.textMuted}}>{v}</span>},
@@ -21938,6 +22381,15 @@ const CatalogView = ({onAsset})=>{
               items={ALL_ASSET_TYPES.sort().map(v=>({val:v,label:v}))}
               sel={selTypes} onToggle={(v,c)=>c?setSelTypes(new Set()):toggle(setSelTypes,v)}
               renderItem={item=><div style={{display:"flex",alignItems:"center",gap:5}}><TypeBadge type={item.val}/></div>}/>
+            {/* Table Format — the axis Asset Type cannot express, since an Iceberg table in
+                Snowflake is still a Table. "Native" means the warehouse's own storage. */}
+            <FacetGroup id="format" label="Table Format" icon={<IcebergMark size={11} color="currentColor"/>}
+              items={ALL_TABLE_FORMATS.map(v=>({val:v,label:v}))}
+              sel={selFormats} onToggle={(v,c)=>c?setSelFormats(new Set()):toggle(setSelFormats,v)}
+              emptyNote="No table formats in this selection"
+              renderItem={item=><div style={{display:"flex",alignItems:"center",gap:5}}>{item.val==="Native"
+                ? <span style={{fontSize:11,color:T.textSub}}>Native</span>
+                : <FormatBadge format={item.val}/>}</div>}/>
             <FacetGroup id="domain" label="Domain"
               icon={<svg width="11" height="11" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.2"/><path d="M6 1.5c-1.5 1.5-2 3-2 4.5s.5 3 2 4.5M6 1.5c1.5 1.5 2 3 2 4.5s-.5 3-2 4.5M1.5 6h9" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>}
               items={[...new Set(ASSETS.map(a=>a.domain))].filter(Boolean).sort().map(v=>({val:v,label:v}))}
@@ -22035,6 +22487,7 @@ const CatalogView = ({onAsset})=>{
                         </div>
                         <div style={{display:"flex",alignItems:"center",gap:6,flex:1,flexWrap:"wrap",minWidth:0}}>
                           <TypeBadge type={a.type}/>
+                          {a.tableFormat&&a.type!=="Iceberg Table"&&<FormatBadge format={a.tableFormat}/>}
                           {(()=>{
                             const asns = tagCtx ? tagCtx.getAssetAssignments(a.id).filter(x=>x.status!=='rejected') : [];
                             if(asns.length>0){
@@ -32318,11 +32771,11 @@ const CONNECTOR_SCOPE = {
     usageDesc:"View counts per report and per dashboard, over the last 30 days.",
   },
   glue:{
-    objectTypes:["Databases","Schemas","Tables","Views","Columns","Nested columns (STRUCT / ARRAY)"],
+    objectTypes:["Databases","Schemas","Tables","Views","Iceberg tables","Columns","Nested columns (STRUCT / ARRAY)"],
     // Columns and nested columns are parts of a table rather than assets of their own, but
     // they are still a crawl choice: expanding a deeply nested STRUCT is what makes a Glue
     // crawl slow, so it stays switchable.
-    note:"Glue is a metastore, so it uses the same database and table shape as a warehouse. Nested columns are the difference \u2014 expansion depth is set on the Configure step.",
+    note:"Glue is a metastore, so it uses the same database and table shape as a warehouse. Nested columns are the difference \u2014 expansion depth is set on the Configure step. Iceberg tables are the ones carrying table_type=ICEBERG; Glue is also the catalog that makes Iceberg tables on S3 discoverable at all, so crawling it here is what lets an S3 connection see them as tables rather than as thousands of parquet objects.",
     dims:[
       {k:"database",label:"Databases",ph:"GLUE_LAKE\u2026", rxIn:"^GLUE_.*", rxEx:"^(temp|scratch)_.*", hint:"A Glue database, which is the level Glue filters at. It holds table definitions, not data."},
       // Atlan exposes an exclude-table-regex, not a table picker: table names are only known
@@ -32333,7 +32786,7 @@ const CONNECTOR_SCOPE = {
     authName:"IAM role",
     transport:"api",
     discover:"Listing databases in the Glue Data Catalog",
-    discovery:{"Databases":2,"Tables":36,"Columns":412,"Nested columns":58},
+    discovery:{"Databases":2,"Tables":36,"Iceberg tables":8,"Columns":412,"Nested columns":58},
     caps:{lineage:true, usage:false, profiling:false, tagSync:false},
     capsNote:"Glue reports the job and crawler that produced a table, which is lineage. It has no notion of who queried it, so there is no usage to collect.",
     lineageDesc:"The Glue job or crawler that produced each table, which is what Glue actually records.",
@@ -32391,7 +32844,12 @@ const CONNECTOR_SCOPE = {
     tagSyncDesc:"Pull the tags declared in the dbt project itself. Matched to EDG tags by exact name.",
   },
   snowflake:{
-    objectTypes:["Databases","Schemas","Tables","Views","Materialized views","Stored procedures","Columns"],
+    objectTypes:["Databases","Schemas","Tables","Views","Materialized views","Iceberg tables","Stored procedures","Columns"],
+    // Iceberg is a storage format, not a separate kind of object: an Iceberg table is a
+    // BASE TABLE in Snowflake with IS_ICEBERG = YES, so it is catalogued as a Table and
+    // carries the format as an attribute. It stays switchable here only because reading
+    // the Iceberg metadata costs an extra call per table.
+    note:"Iceberg tables are catalogued as tables, marked with the Iceberg format. Whether EDG can ENFORCE on one depends on its catalog \u2014 Snowflake-managed tables are writable, tables registered in an external catalog (Glue or an Iceberg REST catalog) are read-only, and rules targeting them run in monitor-only mode.",
     dims:[
       {k:"database",label:"Databases",ph:"SNOWFLAKE_PROD\u2026", rxIn:"^(PROD|ANALYTICS).*", rxEx:"^DEV_.*", hint:"Applied first, so excluding a database skips everything inside it."},
       {k:"schema",  label:"Schemas",  ph:"COMMERCE, FINANCE\u2026", rxIn:".*",             rxEx:"^(INFORMATION_SCHEMA)$", hint:"Snowflake always exposes INFORMATION_SCHEMA; excluding it is usual."},
@@ -32401,13 +32859,19 @@ const CONNECTOR_SCOPE = {
     authName:"User & role",
     transport:"db",
     discover:"Sampling INFORMATION_SCHEMA",
-    discovery:{"Databases":3,"Schemas":47,"Tables":1203,"Views":89,"Columns":14820},
+    discovery:{"Databases":3,"Schemas":47,"Tables":1203,"Iceberg tables":26,"Views":89,"Columns":14820},
     caps:{lineage:true, usage:true, profiling:true, tagSync:true},
     capsNote:"Query history gives both column-level lineage and usage. EDG can profile the data because it can read it.",
   },
   s3:{
-    objectTypes:["Buckets","Prefixes / paths","Objects"],
-    note:"Object storage has no schema. Scope by prefix, which is what actually bounds a crawl.",
+    objectTypes:["Buckets","Prefixes / paths","Objects","Iceberg tables"],
+    // Iceberg is the ONE thing on object storage that has a schema, so it is the one
+    // object type here that is not a file. A table is a metadata/ folder plus its parquet
+    // data files under a single prefix; catalogued as objects it is tens of thousands of
+    // meaningless rows, and the only governable handle is a prefix string. As one Iceberg
+    // Table asset it has columns, which is what makes column-level masking on a lake
+    // expressible at all.
+    note:"Object storage has no schema \u2014 except for Iceberg. Scope by prefix, which is what actually bounds a crawl. An Iceberg table is discovered as ONE asset with columns, not as its underlying parquet objects, so pick a catalog below.",
     dims:[
       {k:"bucket",label:"Buckets", ph:"jnj-data-lake-prod\u2026", rxIn:".*",        rxEx:"^.*-logs$", hint:"Bucket names are global to the account."},
       {k:"prefix",label:"Prefixes",ph:"raw/, curated/\u2026",     rxIn:"^(raw|curated)/", rxEx:"^_temp/", hint:"A trailing slash matters \u2014 prefixes are string matches, not directories."},
@@ -32415,8 +32879,9 @@ const CONNECTOR_SCOPE = {
     auth:"Assuming the IAM role and listing the bucket",
     authName:"IAM role",
     transport:"api",
+    icebergCatalogs:["AWS Glue Data Catalog","Amazon S3 Tables","Iceberg REST catalog","Scan metadata paths"],
     discover:"Listing objects under the configured prefixes",
-    discovery:{"Buckets":2,"Prefixes":31,"Objects":18402},
+    discovery:{"Buckets":2,"Prefixes":31,"Objects":18402,"Iceberg tables":4},
     caps:{lineage:false, usage:false, profiling:false, tagSync:false},
     capsNote:"A storage path is not lineage - nothing in S3 says which job wrote an object. Object tags sync separately.",
   },
@@ -32446,6 +32911,82 @@ const CONNECTOR_SCOPE = {
     discovery:{"DAGs":17,"Tasks":214},
     caps:{lineage:true, usage:false, profiling:false, tagSync:false},
     capsNote:"A DAG declares its inputs and outputs, which is pipeline lineage.",
+  },
+  // Databricks, BigQuery, ADLS and GCS had no entry of their own and fell through to
+  // DEFAULT_CONNECTOR_SCOPE, which is the warehouse shape. For Databricks that was merely
+  // wrong in the details (Unity Catalog is Catalog > Schema > Table, not Database >
+  // Schema > Table); for ADLS and GCS it was flatly wrong, offering blob storage users
+  // "Databases, Schemas, Stored procedures". S3 escaped it only because it already had an
+  // entry. Adding Iceberg forces all four to be described honestly.
+  databricks:{
+    objectTypes:["Catalogs","Schemas","Tables","Views","Iceberg tables","Materialized views","Functions","Columns"],
+    note:"Unity Catalog is three-level: catalog, schema, table — there is no separate database. Iceberg tables are catalogued as tables carrying the Iceberg format; MANAGED Iceberg tables are writable, FOREIGN ones (registered from another catalog) are read-only, so enforcement on them runs in monitor-only mode.",
+    dims:[
+      {k:"catalog",label:"Catalogs",ph:"unity_catalog…", rxIn:".*", rxEx:"^(hive_metastore|samples)$", hint:"The top level in Unity Catalog. hive_metastore and samples are legacy or demo and usually excluded."},
+      {k:"schema", label:"Schemas", ph:"analytics, ml_features…", rxIn:".*", rxEx:"^(information_schema)$", hint:"Applied inside the catalogs above."},
+      {k:"table",  label:"Tables",  ph:"user_events…", rxIn:".*", rxEx:"^(_tmp|staging_)", hint:"Applied to table, view and Iceberg table names alike."},
+    ],
+    auth:"Validating the Databricks personal access token",
+    authName:"Personal access token",
+    transport:"api",
+    discover:"Querying system.information_schema",
+    discovery:{"Catalogs":2,"Schemas":18,"Tables":412,"Iceberg tables":31,"Views":54,"Columns":6180},
+    caps:{lineage:true, usage:true, profiling:true, tagSync:true},
+    capsNote:"Unity Catalog records table and column lineage and query history, and EDG can profile what it can read. Unity tags come back as classification proposals.",
+    lineageDesc:"Table and column lineage from Unity Catalog's own lineage system tables.",
+    usageDesc:"Query counts per table over the last 30 days, from system.query history.",
+  },
+  bigquery:{
+    objectTypes:["Projects","Datasets","Tables","Views","Iceberg tables","Materialized views","Routines","Columns"],
+    note:"BigQuery has projects and datasets, not databases and schemas. Two different Iceberg things exist here and they are not equivalent: BigQuery tables for Apache Iceberg are BigQuery-managed and writable, while BigLake external Iceberg tables are READ-ONLY — EDG catalogues and monitors those but cannot enforce on them.",
+    dims:[
+      {k:"project",label:"Projects",ph:"jnj-analytics…", rxIn:".*", rxEx:"^.*-sandbox$", hint:"The billing and permission boundary, and the cheapest filter."},
+      {k:"dataset",label:"Datasets",ph:"marketing, finance…", rxIn:".*", rxEx:"^(temp|_scratch).*", hint:"Datasets are region-bound, so a dataset filter also bounds where the crawl reads from."},
+    ],
+    auth:"Validating the service account key",
+    authName:"Service account",
+    transport:"api",
+    discover:"Reading INFORMATION_SCHEMA per dataset",
+    discovery:{"Projects":1,"Datasets":9,"Tables":268,"Iceberg tables":12,"Views":41,"Columns":3940},
+    caps:{lineage:true, usage:true, profiling:true, tagSync:true},
+    capsNote:"Lineage and usage both come from job history. Policy tags are read back as classification proposals.",
+    lineageDesc:"Table-level lineage reconstructed from BigQuery job history.",
+    usageDesc:"Query and byte counts per table over the last 30 days.",
+  },
+  adls:{
+    objectTypes:["Containers","Directories / paths","Blobs","Iceberg tables"],
+    // Same reasoning as S3: on blob storage an Iceberg table is the only thing with a
+    // schema. The difference is the catalog - Azure has no native equivalent of Glue, so
+    // an Iceberg table here is found through Unity Catalog, a REST catalog, or a path scan.
+    note:"ADLS Gen2 is hierarchical blob storage — containers and directories, no databases or schemas. Iceberg is the exception: a table is discovered as ONE asset with columns rather than as its parquet blobs. Azure has no native Iceberg metastore, so a catalog must be named below.",
+    dims:[
+      {k:"container",label:"Containers",ph:"raw-ingestion…", rxIn:".*", rxEx:"^.*-logs$", hint:"The top-level container in the storage account."},
+      {k:"directory",label:"Directories",ph:"iceberg/, curated/…", rxIn:".*", rxEx:"^_temp/", hint:"ADLS Gen2 has real directories, unlike flat blob storage, so this is a true subtree filter."},
+    ],
+    auth:"Validating the Azure AD service principal",
+    authName:"Service principal",
+    transport:"api",
+    icebergCatalogs:["Databricks Unity Catalog","Iceberg REST catalog","Scan metadata paths"],
+    discover:"Listing paths under the configured directories",
+    discovery:{"Containers":2,"Directories":24,"Blobs":9120,"Iceberg tables":3},
+    caps:{lineage:false, usage:false, profiling:false, tagSync:false},
+    capsNote:"A storage path is not lineage — nothing in ADLS says which job wrote a blob. Blob index tags sync separately.",
+  },
+  gcs:{
+    objectTypes:["Buckets","Prefixes / paths","Objects","Iceberg tables"],
+    note:"GCS is flat object storage — prefixes look like folders but are string matches. Iceberg is the exception: a table is discovered as ONE asset with columns rather than as its parquet objects. GCS has no native Iceberg metastore, so a catalog must be named below.",
+    dims:[
+      {k:"bucket",label:"Buckets", ph:"gcs-raw-events…", rxIn:".*", rxEx:"^.*-logs$", hint:"Bucket names are global to the project."},
+      {k:"prefix",label:"Prefixes",ph:"iceberg/, curated/…", rxIn:".*", rxEx:"^_temp/", hint:"A trailing slash matters — prefixes are string matches, not directories."},
+    ],
+    auth:"Validating the service account key",
+    authName:"Service account",
+    transport:"api",
+    icebergCatalogs:["BigLake Metastore","Iceberg REST catalog","Scan metadata paths"],
+    discover:"Listing objects under the configured prefixes",
+    discovery:{"Buckets":2,"Prefixes":17,"Objects":7430,"Iceberg tables":2},
+    caps:{lineage:false, usage:false, profiling:false, tagSync:false},
+    capsNote:"A storage path is not lineage — nothing in GCS says which job wrote an object. Object labels sync separately.",
   },
 };
 
@@ -32681,6 +33222,13 @@ const CONNECTOR_FIELDS = {
   airflow:    [{k:"host",l:"Airflow URL",ph:"https://airflow.company.com",type:"text"},{k:"username",l:"Username",ph:"admin",type:"text"},{k:"password",l:"Password",ph:"••••••••",type:"password"}],
   mlflow:     [{k:"tracking_uri",l:"Tracking URI",ph:"https://mlflow.company.com",type:"text"},{k:"registry_uri",l:"Model Registry URI",ph:"databricks",type:"text"}],
   s3:         [{k:"bucket",l:"Bucket Name",ph:"my-data-bucket",type:"text"},{k:"prefix",l:"Prefix (optional)",ph:"warehouse/",type:"text"},{k:"region",l:"AWS Region",ph:"us-east-1",type:"select",opts:["us-east-1","us-west-2","eu-west-1","ap-southeast-1"]}],
+  // Databricks, ADLS and GCS previously fell through to `default`, which asks for a host,
+  // a username and a password. None of the three authenticates that way, and now that each
+  // declares its real auth method in CONNECTOR_SCOPE the form has to match it - otherwise
+  // the step says "Service principal" above a password box.
+  databricks: [{k:"host",l:"Workspace URL",ph:"https://adb-1234567890.12.azuredatabricks.net",type:"text",req:true},{k:"httpPath",l:"SQL warehouse HTTP path",ph:"/sql/1.0/warehouses/abc123",type:"text",req:true,help:"Found on the SQL warehouse's Connection details tab. This is what EDG queries system.information_schema through."},{k:"catalog",l:"Catalog",ph:"unity_catalog",type:"text",help:"Optional. Leave blank to crawl every catalog the token can see."},{k:"token",l:"Personal access token",ph:"••••••••",type:"password",req:true,help:"Needs USE CATALOG and SELECT. Stored encrypted; never shown again after saving."}],
+  adls:       [{k:"account",l:"Storage account",ph:"jnjadls",type:"text",req:true},{k:"container",l:"Container",ph:"raw-ingestion",type:"text",req:true},{k:"directory",l:"Directory (optional)",ph:"iceberg/",type:"text",help:"ADLS Gen2 has real directories, so this bounds a subtree rather than matching a string prefix."},{k:"tenantId",l:"Tenant ID",ph:"00000000-0000-0000-0000-000000000000",type:"text",req:true},{k:"clientId",l:"Client ID",ph:"Application (client) ID",type:"text",req:true},{k:"clientSecret",l:"Client secret",ph:"••••••••",type:"password",req:true,help:"The service principal needs Storage Blob Data Reader. Stored encrypted; never shown again after saving."}],
+  gcs:        [{k:"project",l:"Project ID",ph:"jnj-analytics",type:"text",req:true},{k:"bucket",l:"Bucket",ph:"gcs-raw-events",type:"text",req:true},{k:"prefix",l:"Prefix (optional)",ph:"iceberg/",type:"text",help:"A trailing slash matters — GCS prefixes are string matches, not directories."},{k:"saKey",l:"Service account key",ph:"Paste the JSON key",type:"password",req:true,help:"Needs storage.objects.list and storage.objects.get. Stored encrypted; never shown again after saving."}],
   default:    [{k:"host",l:"Host / URL",ph:"https://…",type:"text"},{k:"username",l:"Username",ph:"username",type:"text"},{k:"password",l:"Password",ph:"••••••••",type:"password"}],
 };
 
@@ -32714,6 +33262,10 @@ const AddServiceWizard = ({onClose, onDone}) => {
   const [authType,     setAuthType]    = useState("userpass"); // userpass|oauth|keypair|token
   const [fields,       setFields]      = useState({});
   const [objTypes,     setObjTypes]    = useState([]);
+  // How Iceberg tables are FOUND on an object store. Not a filter: a bucket listing
+  // cannot tell an Iceberg table from a pile of parquet files, so without a catalog
+  // (or a metadata-path scan) there is nothing to extract. Object stores only.
+  const [iceCatalog,   setIceCatalog]  = useState("");
   const [enableLineage,   setEnableLineage]   = useState(true);
   const [enableProfiling, setEnableProfiling] = useState(false);
   const [enableUsage,     setEnableUsage]     = useState(false);
@@ -32773,7 +33325,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
   useEffect(()=>{
     clearTimeout(timerRef.current);
     setTestState("idle"); setTestPhase(0); setDiscovery(null);
-    setFields({}); setObjTypes([]); setDimFilters({}); setFilterMode("selection");
+    setFields({}); setObjTypes([]); setDimFilters({}); setFilterMode("selection"); setIceCatalog("");
   },[connector]);
 
   const catList  = Object.entries(ADD_SERVICE_CONNECTORS);
@@ -33289,6 +33841,24 @@ const AddServiceWizard = ({onClose, onDone}) => {
                       onChange={setObjTypes}
                     />
                     {objTypes.length===0&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:10}}>Leave empty to extract all object types from this source.</div>}
+                    {/* Iceberg on an object store needs a catalog to be discoverable at all.
+                        Shown only when Iceberg tables are actually in scope (explicitly, or
+                        because "extract all" is in force). */}
+                    {scope.icebergCatalogs&&(objTypes.length===0||objTypes.includes("Iceberg tables"))&&(
+                      <div style={{marginTop:16,paddingTop:16,borderTop:`1px dashed ${T.border}`}}>
+                        <label style={{display:"flex",alignItems:"center",gap:7,fontSize:12,fontWeight:600,color:T.textSub,marginBottom:8}}>
+                          <IcebergMark size={13}/>Iceberg catalog <span style={{color:T.rose}}>*</span>
+                        </label>
+                        <select value={iceCatalog} onChange={e=>setIceCatalog(e.target.value)}
+                          style={{width:"100%",padding:"9px 11px",background:T.bgSurface,border:`1.5px solid ${iceCatalog?T.border:T.amber+"66"}`,borderRadius:8,color:iceCatalog?T.text:T.textMuted,fontSize:12.5,outline:"none",boxSizing:"border-box",cursor:"pointer"}}>
+                          <option value="">Select how Iceberg tables are found…</option>
+                          {scope.icebergCatalogs.map(o=><option key={o} value={o}>{o}</option>)}
+                        </select>
+                        <div style={{fontSize:10.5,color:T.textMuted,lineHeight:1.55,marginTop:7}}>
+                          An Iceberg table is a metadata folder plus its data files under one prefix, so listing the bucket cannot find it. A catalog names the tables; <em>Scan metadata paths</em> walks for <span style={{fontFamily:"'Geist Mono',monospace"}}>**/metadata/*.metadata.json</span> instead, which is slower and also surfaces abandoned tables.
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -33539,6 +34109,10 @@ const AddServiceWizard = ({onClose, onDone}) => {
                     ...(svcAdmins.length?[["Connector Admins", svcAdmins.map(u=>u.name).join(", ")]]:[]),
                     ...(svcDesc&&svcDesc.trim()?[["Description", svcDesc.trim()]]:[]),
                     ["Object Types", objTypesStr],
+                    // Only meaningful where Iceberg is actually in scope; an unset value is
+                    // a real gap, so the review says so rather than showing a dash.
+                    ...(scope.icebergCatalogs&&(objTypes.length===0||objTypes.includes("Iceberg tables"))
+                      ? [["Iceberg catalog", iceCatalog || "Not set — Iceberg tables will not be discovered"]] : []),
                   ]},
                   ...(discovery&&Object.keys(discovery).length ? [{title:"Discovered", rows:Object.entries(discovery).map(([k,v])=>[k, v.toLocaleString()])}] : []),
                   // Review echoes the dimensions the Filters step offered, so the summary
