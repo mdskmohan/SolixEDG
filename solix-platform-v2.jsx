@@ -28927,6 +28927,28 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
   // and it is the reason the overlay is EDG's job rather than an upstream one: whether a
   // value means the same thing OUTSIDE its system is a cross-system judgement, and an AKG
   // only ever sees one system.
+  // The CONCEPT is what a cross-system role is for: a key is a concept bound to one column
+  // per system, so a cross-system role without a concept describes nothing and the resolver
+  // ignores it. Making the concept editable is what lets a steward promote a column properly
+  // instead of setting a role that silently does nothing.
+  const setIdConcept = (gid, table, col, key) => {
+    setSrcGraphs(gs => gs.map(g => {
+      if(g.id!==gid) return g;
+      const masters = (g.masters||[]).map(m => {
+        if(m.table!==table) return m;
+        const nm = {...m, idCols: klIdCols(m).map(c => c.c===col ? {...c, key: key||undefined} : c)};
+        nm.keys  = klMatchKeys(nm);
+        nm.ready = m.blocked ? false : klUsableKeys(nm).length>0;
+        return nm;
+      });
+      return {...g, masters, history:[
+        {at:stamp(), by:me, kind:"human", action:"Identifier concept changed",
+         detail:`${table}.${col} ${key?`now represents ${key}`:"no longer represents a concept"}`},
+        ...(g.history||[])]};
+    }));
+    toast(key ? `${col} now represents ${key}` : `${col} no longer represents a concept`);
+  };
+
   const setIdRole = (gid, table, col, role) => {
     setSrcGraphs(gs => gs.map(g => {
       if(g.id!==gid) return g;
@@ -28948,7 +28970,11 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
   };
   // A cross-source graph is governed like any other asset, so it draws on the same
   // classification and glossary vocabularies the rest of EDG uses.
-  const klTagNames  = (useTagCtx().tagDefs||[]).map(t=>t.name);
+  const _klTagDefs  = useTagCtx().tagDefs || [];
+  const klTagNames  = _klTagDefs.map(t=>t.name);
+  // A sensitivity classification says the data is protected, not that it identifies anything,
+  // so it is never an identifier concept.
+  const klSensNames = _klTagDefs.filter(t=>t.category==="sensitivity").map(t=>t.name);
   const klTermNames = GLOSSARY_TERMS.map(t=>t.term);
 
   const totals = {
@@ -29749,6 +29775,18 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               </Card2>
               {(sg.masters||[]).map(m=>{
                 const cols = klIdCols(m), usable = klUsableKeys(m), ex = klExcluded(m).filter(c=>c.key);
+                // Concepts a column may be said to represent: whatever it is already classified
+                // as, whatever this graph already uses, and the governed identifier vocabulary.
+                // All three come from EDG, which is the point - Data Sense reports the evidence,
+                // EDG names the thing.
+                const conceptOpts = [...new Set([
+                  ...cols.flatMap(c=>c.cls||[]),
+                  ...cols.map(c=>c.key).filter(Boolean),
+                  ...Object.keys(KL_KEY_FORMAT),
+                ])].filter(k=>!klSensNames.includes(k)).sort();
+                // A cross-system role with no concept is inert: klCrossCols requires both, so
+                // the resolver ignores it. Say so rather than showing a setting that does nothing.
+                const inert = cols.filter(c=>(KL_ID_ROLES[c.role]||{}).cross && !c.key);
                 const pol = klMasterPolicies(m), con = klPolicyConflicts(m);
                 return (
                   <Card2 key={m.table} style={{padding:16,marginBottom:14}}>
@@ -29767,22 +29805,37 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                       <div style={{fontSize:12,color:T.textMuted}}>No identifier columns were recorded for this table.</div>
                     ) : (
                       <div style={{display:"grid",gridTemplateColumns:"1.1fr 1fr 1.35fr .55fr .55fr 1.15fr",gap:7,fontSize:11}}>
-                        {["Column","Concept","May be used as","Filled","Distinct","Proposed by"].map(h=>(
+                        {["Column","Concept","May be used as","Filled","Distinct","Basis"].map(h=>(
                           <span key={h} style={{color:T.textMuted,fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:".05em",paddingBottom:5,borderBottom:`1px solid ${T.border}`}}>{h}</span>
                         ))}
                         {cols.map(c=>{
                           const r = KL_ID_ROLES[c.role]||{};
                           return [
                             <span key={c.c+"c"} style={{color:T.text,fontFamily:"'Geist Mono',monospace",padding:"7px 0",alignSelf:"center"}}>{c.c}</span>,
-                            <span key={c.c+"k"} style={{color:c.key?T.textSub:T.textMuted,padding:"7px 0",alignSelf:"center"}}>{c.key||"\u2014"}</span>,
+                            <span key={c.c+"k"} style={{padding:"4px 0",alignSelf:"center"}}>
+                              <select value={c.key||""} onChange={e=>setIdConcept(sg.id, m.table, c.c, e.target.value)}
+                                disabled={!canCurate}
+                                style={{width:"100%",padding:"5px 7px",background:T.bgElevated,
+                                  border:`1px solid ${c.key?T.border:T.borderLight}`,borderRadius:7,
+                                  color:c.key?T.text:T.textMuted,fontSize:11,
+                                  cursor:canCurate?"pointer":"not-allowed",boxSizing:"border-box"}}>
+                                <option value="">— none —</option>
+                                {conceptOpts.map(k=><option key={k} value={k}>{k}</option>)}
+                              </select>
+                            </span>,
                             <span key={c.c+"r"} style={{padding:"4px 0",alignSelf:"center"}}>
                               <select value={c.role} onChange={e=>setIdRole(sg.id, m.table, c.c, e.target.value)}
                                 disabled={!canCurate}
                                 title={r.hint||""}
                                 style={{width:"100%",padding:"5px 7px",background:T.bgElevated,border:`1px solid ${T.border}`,
                                   borderRadius:7,color:T.text,fontSize:11,cursor:canCurate?"pointer":"not-allowed",boxSizing:"border-box"}}>
+                                {/* A cross-system role needs a concept to be a key of. Offering it
+                                    without one lets a steward set something the resolver ignores. */}
                                 {Object.entries(KL_ID_ROLES).map(([k,v])=>(
-                                  <option key={k} value={k}>{v.l}{v.cross?" \u00b7 cross-system":" \u00b7 this system only"}</option>
+                                  <option key={k} value={k} disabled={v.cross && !c.key}>
+                                    {v.l}{v.cross?" \u00b7 cross-system":" \u00b7 this system only"}
+                                    {v.cross && !c.key ? " \u2014 needs a concept" : ""}
+                                  </option>
                                 ))}
                               </select>
                             </span>,
@@ -29796,6 +29849,14 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                           ];
                         })}
                       </div>
+                    )}
+                    {inert.length>0 && (
+                      <KLNote tone="warn">
+                        <b>{inert.map(c=>c.c).join(", ")} {inert.length===1?"has":"have"} a cross-system role but no concept</b>,
+                        so {inert.length===1?"it is":"they are"} ignored. A match key is a concept &mdash; Tax ID, say &mdash;
+                        bound to one column per system, so there is nothing for a role alone to match on. Give the
+                        column a concept, or set it back to a role that stays inside this system.
+                      </KLNote>
                     )}
                     {ex.length>0 && (
                       <div style={{fontSize:11,color:T.textMuted,marginTop:11,lineHeight:1.6}}>
