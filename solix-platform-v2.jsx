@@ -26623,7 +26623,7 @@ const KL_UNMAPPED = ["Salesforce","Snowflake Prod","Workday","MongoDB Atlas"];
 const KL_SRC_SEED = [
   {id:"sg1", key:"SKG-1001", name:"SAP ECC", service:"sap", connection:"sap-ecc-prod", srcConnected:true,
    domain:"Procurement", tables:412, cols:3318, words:100, entities:["Supplier","Customer","Material"],
-   drift:0, status:"Published", owner:"maya.chen", stewards:["priya.nair"], from:"Data Sense",
+   status:"Published", owner:"maya.chen", stewards:["priya.nair"], from:"Data Sense",
    step:10, built:"2026-08-18", version:"v4",
    opEntity:"Interiors Division",
    env:{by:"ai", src:"Data Sense · AKG builder", conf:0.96, state:"published"},
@@ -26671,7 +26671,7 @@ const KL_SRC_SEED = [
 
   {id:"sg2", key:"SKG-1002", name:"Oracle EBS", service:"oracle", connection:"ebs-prod", srcConnected:true,
    domain:"Procurement", tables:388, cols:2904, words:100, entities:["Supplier","Customer"],
-   drift:3, status:"Published", owner:"priya.nair", stewards:["maya.chen"], from:"Data Sense",
+   status:"Published", owner:"priya.nair", stewards:["maya.chen"], from:"Data Sense",
    step:10, built:"2026-08-11", version:"v3",
    opEntity:"US Operations",
    env:{by:"ai", src:"Data Sense · AKG builder", conf:0.94, state:"published"},
@@ -26698,13 +26698,12 @@ const KL_SRC_SEED = [
    rels:[["PO_HEADERS_ALL","AP_SUPPLIERS","vendor"],["PO_LINES_ALL","PO_HEADERS_ALL","header"],
          ["AP_INVOICES_ALL","AP_SUPPLIERS","vendor"]],
    history:[
-     {at:"2026-08-22 07:15", by:"EDG scanner", kind:"ai",    action:"Source drift detected", detail:"3 columns added to AP_SUPPLIERS since v3 was built"},
      {at:"2026-08-11 11:20", by:"priya.nair",  kind:"human", action:"Published", detail:"Version v3 signed off by the owner"},
      {at:"2026-08-11 10:44", by:"Data Sense",  kind:"ai",    action:"Resolution rules generated", detail:"2 of 3 master tables — MTL_SYSTEM_ITEMS_B reported as not generatable"}]},
 
   {id:"sg3", key:"SKG-1003", name:"Oracle Fusion", service:"oracle", connection:"fusion-erp", srcConnected:false,
    domain:"Procurement", tables:292, cols:2140, words:88, entities:["Supplier","Fixed Asset"],
-   drift:0, status:"In review", owner:"maya.chen", stewards:[], from:"Data Sense",
+   status:"In review", owner:"maya.chen", stewards:[], from:"Data Sense",
    step:7, built:"2026-08-22", version:"v1",
    opEntity:"Canada Operations",
    env:{by:"ai", src:"EDG · Knowledge Layer builder", conf:0.88, state:"needs_review"},
@@ -26746,7 +26745,7 @@ const KL_X_SEED = [
    domain:"Procurement", built:"2026-08-19", version:"v2", policy:"Vendor Data Protection",
    env:{by:"ai", src:"EDG resolver", conf:0.97, state:"published"},
    // reading rows is a separate, consented act — records stay hidden until this says done
-   scan:{state:"done", mode:"full", at:"2026-08-19", rows:184200, approvedBy:"maya.chen", stale:false},
+   scan:{state:"done", mode:"full", at:"2026-08-19", rows:184200, approvedBy:"maya.chen"},
    keys:["Tax ID","Legal Name"],
    beliefs:[{f:"Tax ID",s:"SAP ECC"},{f:"Legal Name",s:"Oracle EBS"},{f:"Vendor Code",s:"SAP ECC"},{f:"Address",s:"Most recently updated"}],
    conflicts:[
@@ -26787,12 +26786,11 @@ const KL_X_SEED = [
    records:3910, clean:3910, autoApplied:3910, owner:"priya.nair", stewards:[], status:"Published",
    domain:"Sales", built:"2026-08-14", version:"v1", policy:"Customer PII",
    env:{by:"ai", src:"EDG resolver", conf:0.99, state:"published"},
-   scan:{state:"done", mode:"sample", at:"2026-08-14", rows:5000, approvedBy:"priya.nair", stale:true},
+   scan:{state:"done", mode:"sample", at:"2026-08-14", rows:5000, approvedBy:"priya.nair"},
    keys:["Tax ID","Legal Name"],
    beliefs:[{f:"Tax ID",s:"SAP ECC"},{f:"Name",s:"Oracle EBS"}],
    conflicts:[], unmatched:[],
    history:[
-     {at:"2026-08-22 07:15", by:"EDG scanner",  kind:"ai",    action:"Marked out of date", detail:"Oracle EBS changed after this scan"},
      {at:"2026-08-14 09:14", by:"EDG resolver", kind:"ai",    action:"Resolution complete", detail:"3,910 records resolved · all above threshold"},
      {at:"2026-08-14 09:02", by:"priya.nair",   kind:"human", action:"Data scan approved", detail:"Sample · 5,000 rows per source"}]},
 
@@ -26801,7 +26799,7 @@ const KL_X_SEED = [
    records:842, clean:838, autoApplied:838, owner:"maya.chen", stewards:["priya.nair"], status:"Published",
    domain:"Procurement", built:"2026-08-23", version:"v1", policy:null,
    env:{by:"ai", src:"EDG resolver", conf:0.79, state:"published"},
-   scan:{state:"done", mode:"sample", at:"2026-08-23", rows:5000, approvedBy:"maya.chen", stale:false},
+   scan:{state:"done", mode:"sample", at:"2026-08-23", rows:5000, approvedBy:"maya.chen"},
    keys:["Asset Tag","Serial Number"],
    beliefs:[{f:"Asset Tag",s:"SAP ECC"},{f:"Serial Number",s:"SAP ECC"},{f:"Description",s:"Most recently updated"}],
    conflicts:[
@@ -28680,7 +28678,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
 
   // ── C1 · governed-object state ──
   const [hist,     setHist]     = useState(null); // {title, kicker, entries}
-  // worklist controls
+  // exception controls
   const [wSub,  setWSub]  = useState("decisions");
   const [wq,    setWq]    = useState("");
   const [wKind, setWKind] = useState("all");
@@ -28981,7 +28979,6 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
     published: srcGraphs.filter(s=>s.status==="Published").length,
     records:   xGraphs.reduce((n,x)=>n+x.records,0),
     review:    xGraphs.reduce((n,x)=>n+klOpen(x),0),
-    drift:     srcGraphs.filter(s=>s.drift>0).length,
     proposed:  srcGraphs.reduce((n,s)=>n+s.bind.proposed,0),
     invented:  srcGraphs.reduce((n,s)=>n+s.bind.invented,0),
     tables:    srcGraphs.reduce((n,s)=>n+s.tables,0),
@@ -29029,7 +29026,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
   const runScan = (id,mode) => {
     setXGraphs(gs=>gs.map(x=>x.id===id
       ? {...x, scan:{state:"done", mode, at:"2026-08-24", rows:mode==="full"?184200:5000,
-                     approvedBy:"alex.rivera", stale:false}}
+                     approvedBy:"alex.rivera"}}
       : x));
     setScanFor(null);
     toast(`Data scan queued (${mode}) — see Settings › Background Jobs`);
@@ -29041,7 +29038,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
     setSrcGraphs(g=>[...g,{id, key:"SKG-"+(1004+g.length), name:wConn, service:wConn.toLowerCase().includes("sales")?"salesforce":"postgres",
       connection:wConn.toLowerCase().replace(/[^a-z0-9]+/g,"-"), domain:"Procurement",
       tables:214, cols:1642, words:100, entities:["Supplier","Customer"],
-      drift:0, status:"Published", owner:me, stewards:[], from:"EDG", step:10,
+      status:"Published", owner:me, stewards:[], from:"EDG", step:10,
       built:stamp().slice(0,10), version:"v1", opEntity:null,
       env:{by:"human", src:"EDG · Knowledge Layer builder", conf:1, state:"published"},
       history:[{at:stamp(), by:me, kind:"human", action:"Source graph published",
@@ -29075,7 +29072,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 detail:`Entity ${wEntity} · ${wSrcIds.length} source graphs · match keys ${wKeys.join(", ")||"none"}`}],
       scan:{state:wScan==="later"?"none":"done", mode:wScan==="later"?null:wScan,
             at:wScan==="later"?null:"2026-08-24", rows:wScan==="full"?184200:wScan==="sample"?5000:0,
-            approvedBy:wScan==="later"?null:"alex.rivera", stale:false},
+            approvedBy:wScan==="later"?null:"alex.rivera"},
       keys:[...wKeys],
       beliefs:[...wKeys,"Address"].map(f=>({f, s:wBeliefs[f] ?? fallback})),
       golden:[]}]);
@@ -29638,7 +29635,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                           {weakest!=null && weakest<80 && (
                             <KLNote>The weakest key on this table is populated {weakest}% of the time. A key that is
                               blank will not match, and every row it misses arrives as an exception for someone to clear
-                              by hand — so it is worth fixing here rather than in the worklist later.</KLNote>
+                              by hand — so it is worth fixing here rather than on the graph later.</KLNote>
                           )}
                         </Card2>
                       );
@@ -29742,17 +29739,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               {l:"Columns",    v:sg.cols},
               {l:"Entities",   v:`${ready} matchable`},
               {l:"Last built", v:sg.built},
-              {l:"Freshness",  v:sg.drift>0?`${sg.drift} new columns`:"current", c:sg.drift>0?T.amber:T.green},
             ]}/>
-
-          {sg.drift>0 && (
-            <div style={{display:"flex",gap:9,alignItems:"center",padding:"11px 14px",marginBottom:16,borderRadius:9,
-              background:T.amberDim,border:`1px solid ${T.amber}44`,fontSize:12.5,color:T.text}}>
-              <span style={{color:T.amber,display:"flex"}}><svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{flexShrink:0,marginTop:1}}><path d="M8 2.2l6 11.6H2L8 2.2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/><path d="M8 6.6v3.2M8 11.6v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg></span>
-              <div><b>Source schema has changed.</b> {sg.drift} column{sg.drift===1?"":"s"} added since this graph was last built. Dependent graphs may be out of date.</div>
-              <Btn small variant="primary" onClick={()=>toast("Drift review opened in your Inbox")}>Review changes</Btn>
-            </div>
-          )}
 
           <Tabs2 tabs={[
             {key:"overview", label:"Overview"},
@@ -30024,8 +30011,8 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               {l:"Entity",          v:xg.entity},
               {l:"Built on",        v:`${xg.srcIds.length} source graphs`},
               {l:"Match keys",      v:xg.keys.length?xg.keys.join(", "):"—"},
-              {l:"Data scan",       v:xScanned?(xg.scan.stale?"Out of date":`${xg.scan.mode==="full"?"All rows":"Sample"} · ${xg.scan.at}`):"Not run",
-                                    c:xScanned?(xg.scan.stale?T.amber:T.green):T.textMuted},
+              {l:"Data scan",       v:xScanned?`${xg.scan.mode==="full"?"All rows":"Sample"} · ${xg.scan.at}`:"Not run",
+                                    c:xScanned?T.green:T.textMuted},
               {l:"Trusted records", v:xScanned?xg.records.toLocaleString():"—",
                                     c:xScanned?T.text:T.textMuted},
               {l:"Owner",           v:xg.owner},
@@ -30068,27 +30055,23 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               </div>
 
               {/* the metadata/data boundary, stated once, at the top of the profile */}
+              {/* the metadata/data boundary, stated once, at the top of the profile */}
               <div style={{display:"flex",gap:10,alignItems:"center",padding:"12px 14px",marginBottom:14,borderRadius:10,
-                background:xScanned?(xg.scan.stale?T.amberDim:T.bgSurface):T.bgElevated,
-                border:`1px solid ${xScanned?(xg.scan.stale?T.amber+"44":T.border):T.border}`}}>
-                <span style={{fontSize:15}}>{xScanned?(xg.scan.stale?"!":"✓"):"·"}</span>
+                background:xScanned?T.bgSurface:T.bgElevated,
+                border:`1px solid ${T.border}`}}>
+                <span style={{fontSize:15}}>{xScanned?"✓":"·"}</span>
                 <div style={{fontSize:12.4,color:T.textSub,lineHeight:1.6}}>
-                  {!xScanned && <>
+                  {xScanned ? <>
+                    <b style={{color:T.text}}>Records resolved.</b> {xg.scan.mode==="full"?"All rows":"Sample"} scan of{" "}
+                    {xg.scan.rows.toLocaleString()} rows on {xg.scan.at}, approved by <b>{xg.scan.approvedBy}</b>.
+                  </> : <>
                     <b style={{color:T.text}}>Model only.</b> This graph describes how {xg.entity} is represented in each
                     source, using metadata alone. Resolving individual records requires reading data, which needs an
                     approved data scan.
                   </>}
-                  {xScanned && !xg.scan.stale && <>
-                    <b style={{color:T.text}}>Records resolved.</b> {xg.scan.mode==="full"?"All rows":"Sample"} scan of{" "}
-                    {xg.scan.rows.toLocaleString()} rows on {xg.scan.at}, approved by <b>{xg.scan.approvedBy}</b>.
-                  </>}
-                  {xScanned && xg.scan.stale && <>
-                    <b style={{color:T.text}}>Records may be out of date.</b> A source has changed since the{" "}
-                    {xg.scan.mode==="full"?"all rows":"sample"} scan on {xg.scan.at}. Re-scan to refresh them.
-                  </>}
                 </div>
                 <div style={{marginLeft:"auto"}}>
-                  <Btn small variant={xScanned&&!xg.scan.stale?undefined:"primary"} ghost={xScanned&&!xg.scan.stale}
+                  <Btn small variant={xScanned?undefined:"primary"} ghost={xScanned}
                     onClick={()=>setScanFor(xg.id)}>{xScanned?"Re-scan":"Run data scan"}</Btn>
                 </div>
               </div>
@@ -30180,7 +30163,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                   </span>
                   {done.length>0&&<span style={{fontSize:12.8,color:T.textSub}}>· <b style={{color:T.text}}>{done.length}</b> you decided</span>}
                   <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>
-                    {xg.scan.mode==="full"?"All rows":"Sample"} scan · {xg.scan.at}{xg.scan.stale?" · may be out of date":""}
+                    {xg.scan.mode==="full"?"All rows":"Sample"} scan · {xg.scan.at}
                   </span>
                   <Btn small ghost onClick={()=>setScanFor(xg.id)}>Re-scan</Btn>
                 </div>
@@ -30193,7 +30176,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 {open.length>0 && (
                   <SH title={`Needs a decision (${open.length})`}
                     sub="Ranked by the money each decision governs. Records accepted automatically are not listed."
-                    action={<Btn small ghost onClick={()=>{setSelX(null);setTab("worklist");}}>See the whole estate →</Btn>}/>
+                    action={null}/>
                 )}
                 {open.map((it,i)=>(
                   <KLDecisionCard key={it.id} it={it} rank={i+1} srcById={srcById} canCurate={canCurate}
@@ -30352,7 +30335,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
     const q = sq.trim().toLowerCase();
     const hitQ = !q || [g.name,g.key,g.connection,g.owner,g.domain,...(g.entities||[])]
       .filter(Boolean).some(v=>String(v).toLowerCase().includes(q));
-    const hitS = sStatus==="all" || (sStatus==="drift" ? g.drift>0 : g.status===sStatus);
+    const hitS = sStatus==="all" || g.status===sStatus;
     return hitQ && hitS;
   }).sort((a,b)=> sSort==="name" ? a.name.localeCompare(b.name)
                 : sSort==="tables" ? b.tables-a.tables
@@ -30386,7 +30369,6 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
       <div style={{flex:1,overflowY:"auto",padding:24}}>
         <Tabs2 tabs={[
           {key:"overview", label:"Overview"},
-          {key:"worklist", label:`Worklist${(wlOpen.length+openMeasures.length)?` (${wlOpen.length+openMeasures.length})`:""}`},
           {key:"sources",  label:`Source Knowledge Graphs (${srcGraphs.length})`},
           {key:"cross",    label:`Cross-Source Knowledge Graphs (${xGraphs.length})`},
         ]} active={tab} onChange={setTab}/>
@@ -30398,14 +30380,8 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               const top = wlOpen[0];
               const nba = top
                 ? {h:`Decide ${top.name}`, s:`${klMoneyFull(top.governs)} of ${top.entity.toLowerCase()} value hangs on this one match, and the resolver is only ${top.conf.toFixed(2)} sure. It is the most expensive doubt in the estate.`,
-                   b:"Open the Worklist", go:()=>setTab("worklist")}
-                : openMeasures.length
-                ? {h:`Certify ${openMeasures[0].name}`, s:`${openMeasures.length} term${openMeasures.length===1?"":"s"} still answer differently depending on how the question is phrased. Certifying fixes one definition everywhere, including in generated builds.`,
-                   b:"Open Terms", go:()=>{setTab("worklist");setWSub("terms");}}
-                : totals.drift
-                ? {h:"Refresh a stale source graph", s:`${totals.drift} source${totals.drift===1?"":"s"} changed since their graphs were built. Dependent cross-source graphs may be answering from an old shape.`,
-                   b:"Open Source Graphs", go:()=>setTab("sources")}
-                : {h:"Nothing is waiting on you", s:"Every exception is decided, every term is certified and every source graph is current. Browse the model, or generate a governed build.",
+                   b:"Open the graph", go:()=>{setTab("cross"); openX(top.xgId);}}
+                                : {h:"Nothing is waiting on you", s:"Every exception is decided, every term is certified and every source graph is current. Browse the model, or generate a governed build.",
                    b:"Open Cross-Source Graphs", go:()=>setTab("cross")};
               return (
                 <Card2 style={{padding:"15px 18px",marginBottom:16,display:"flex",gap:14,alignItems:"center",flexWrap:"wrap",
@@ -30518,7 +30494,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
             </Card2>
 
             <SH title="Requires attention" sub="Items accepted automatically are not listed."/>
-            {(totals.review+totals.drift+totals.proposed+openMeasures.length)===0
+            {(totals.review+totals.proposed)===0
               ? <KLEmpty icon={Ic.check(34)} title="Nothing requires attention" sub="The Knowledge Layer is up to date."/>
               : <DataTable
                   cols={[
@@ -30533,180 +30509,20 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                       const open = klExceptions(x).filter(i=>i.state==="open");
                       return {kind:"Match decision", obj:x.name,
                         detail:`${open.length} open · ${klMoney(open.reduce((n,i)=>n+i.governs,0))} governed`,
-                        where:"Worklist", go:()=>setTab("worklist")};
+                        where:"Trusted records", go:()=>{setTab("cross"); openX(x.id);}};
                     }),
-                    ...openMeasures.map(m=>({kind:"Term to certify", obj:m.name,
-                      detail:`${(m.bindings||[]).length} candidate sources still disagree`,
-                      where:"Worklist › Terms", go:()=>{setTab("worklist");setWSub("terms");}})),
-                    ...srcGraphs.filter(s=>s.drift>0).map(s=>({kind:"Source drift", obj:s.name,
-                      detail:`${s.drift} columns added since last build`, where:"Source graph", go:()=>openSrc(s.id)})),
-                    ...srcGraphs.filter(s=>s.bind.proposed>0).map(s=>({kind:"Term approval", obj:s.name,
+                                        ...srcGraphs.filter(s=>s.bind.proposed>0).map(s=>({kind:"Term approval", obj:s.name,
                       detail:`${s.bind.proposed} new terms proposed`, where:"Glossary", go:()=>openSrc(s.id,"bindings")})),
                   ]}/>}
 
             <KLNote tone="quiet">
-              Confidence thresholds are set on the <b>Trust dial</b> at the top of the Worklist, where you can
-              see what a change would do before applying it. Refresh schedules live in
-              <b> Settings › Knowledge Layer</b>; run history in <b>Settings › Background Jobs</b>.
+              Every exception belongs to the graph that produced it, and is decided on that graph's
+              <b> Trusted records</b> tab. Refresh schedules live in <b>Settings › Knowledge Layer</b>;
+              run history in <b>Settings › Background Jobs</b>.
             </KLNote>
           </>
         )}
 
-        {/* ───────── WORKLIST — the "what needs me" surface ───────── */}
-        {tab==="worklist" && (
-          <>
-            {/* The one line that answers "what's done, what's pending, what's mine to decide". */}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(165px,1fr))",gap:12,marginBottom:14}}>
-              <Metric label="Auto-applied by the resolver" value={ready.autoApplied.toLocaleString()} color={T.green}
-                sub={`of ${ready.resolved.toLocaleString()} records resolved`}/>
-              <Metric label="Waiting on you" value={String(ready.waiting)} color={ready.waiting?T.amber:T.green}
-                sub={ready.waiting?`${klMoney(ready.waitingMoney)} governed`:"nothing outstanding"}/>
-              <Metric label="You decided" value={String(ready.decided)} sub="preserved across re-resolution"/>
-              <Metric label="Terms to certify" value={String(openMeasures.length)}
-                color={openMeasures.length?T.amber:T.green} sub={openMeasures.length?"answers still differ by phrasing":"one definition everywhere"}/>
-              <Metric label="Automation rate"
-                value={ready.resolved?`${Math.round(ready.autoApplied/ready.resolved*1000)/10}%`:"—"}
-                color={T.green} sub="the machine does the bulk"/>
-            </div>
-
-            <KLTrustDial trust={trust} setTrust={setTrust} items={wlAll} canApply={canDial}
-              onApply={applyDial} onRequest={requestDial}/>
-
-            <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:14}}>
-              <SegTabs tabs={[
-                {key:"decisions", label:`Decisions${wlOpen.length?` (${wlOpen.length})`:""}`},
-                {key:"terms",     label:`Terms${openMeasures.length?` (${openMeasures.length})`:""}`},
-              ]} active={wSub} onChange={setWSub}/>
-              <span style={{fontSize:11.5,color:T.textMuted,marginLeft:"auto"}}>
-                Ranked by the money the decision governs × how unsure the resolver is.
-              </span>
-              <Btn small ghost onClick={()=>setHist({title:"Knowledge Layer", kicker:"Layer settings · change history", entries:layerHist})}>
-                Layer history
-              </Btn>
-            </div>
-
-            {wSub==="decisions" && (<>
-              <div style={{display:"flex",gap:9,alignItems:"center",flexWrap:"wrap",marginBottom:11}}>
-                <div style={{flex:1,minWidth:220}}>
-                  <Input2 value={wq} onChange={e=>setWq(e.target.value)} icon={Ic.search(12)}
-                    placeholder="Search decisions by name, entity, graph or issue…"/>
-                </div>
-                <span style={{fontSize:11.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>
-                  {wlFiltered.length}/{wlAll.length}
-                </span>
-              </div>
-              {(()=>{
-                // The one line that explains why this surface is not a repeat of a graph's tab.
-                const byGraph = {};
-                wlOpen.forEach(i=>{ (byGraph[i.xgId]=byGraph[i.xgId]||{name:i.xgName,n:0,m:0}); byGraph[i.xgId].n++; byGraph[i.xgId].m+=i.governs||0; });
-                const gs = Object.entries(byGraph).sort((a,b)=>b[1].m-a[1].m);
-                if(gs.length===0) return null;
-                return (
-                  <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",padding:"10px 13px",marginBottom:12,
-                    borderRadius:9,background:T.bgElevated,border:`1px solid ${T.border}`}}>
-                    <span style={{fontSize:12,color:T.textSub}}>
-                      {wlOpen.length} open decision{wlOpen.length===1?"":"s"} across{" "}
-                      <b style={{color:T.text}}>{gs.length} cross-source graph{gs.length===1?"":"s"}</b> —
-                      ranked together so the most expensive doubt wins, whichever graph it sits in.
-                    </span>
-                    <span style={{marginLeft:"auto",display:"flex",gap:6,flexWrap:"wrap"}}>
-                      {gs.map(([id,g])=>(
-                        <button key={id} onClick={()=>openX(id,"records")}
-                          style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,padding:"4px 9px",borderRadius:6,cursor:"pointer",
-                            background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontFamily:"inherit"}}>
-                          {g.name}
-                          <b style={{fontFamily:"'Geist Mono',monospace",color:T.text}}>{g.n}</b>
-                          <span style={{fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{klMoney(g.m)}</span>
-                        </button>
-                      ))}
-                    </span>
-                  </div>
-                );
-              })()}
-
-              <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginBottom:14}}>
-                {[
-                  {v:"all",       l:"Needs a decision", n:wlOpen.length, c:T.amber},
-                  {v:"conflict",  l:"Conflicting values", n:wlOpen.filter(i=>i.kind==="conflict").length},
-                  {v:"unmatched", l:"Unmatched", n:wlOpen.filter(i=>i.kind==="unmatched").length},
-                  {v:"decided",   l:"You decided", n:wlAll.filter(i=>i.state!=="open").length, c:T.green},
-                ].map(f=>{
-                  const on = wKind===f.v;
-                  return (
-                    <button key={f.v} onClick={()=>setWKind(f.v)}
-                      style={{display:"inline-flex",alignItems:"center",gap:6,padding:"5px 13px",borderRadius:99,fontSize:11.5,cursor:"pointer",fontFamily:"inherit",
-                        fontWeight:on?700:500,border:`1px solid ${on?(f.c||T.accent):T.border}`,
-                        background:on?(f.c?f.c+"1a":T.accentDim):"transparent",color:on?(f.c||T.accent):T.textSub}}>
-                      {f.l}<span style={{fontSize:10,fontFamily:"'Geist Mono',monospace",opacity:.75}}>{f.n}</span>
-                    </button>
-                  );
-                })}
-                {(wq||wKind!=="all")&&<button onClick={()=>{setWq("");setWKind("all");}}
-                  style={{fontSize:11,color:T.textMuted,background:"none",border:"none",cursor:"pointer",marginLeft:2}}>Clear</button>}
-              </div>
-
-              {/* bulk — one transaction, one audit row */}
-              {canCurate && wSel.size>0 && (
-                <div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap",padding:"11px 15px",marginBottom:12,
-                  borderRadius:10,background:T.accentDim,border:`1px solid ${T.accent}44`}}>
-                  <span style={{fontSize:12.5,color:T.text}}>
-                    <b style={{fontFamily:"'Geist Mono',monospace"}}>{wSel.size}</b> selected ·{" "}
-                    <b style={{fontFamily:"'Geist Mono',monospace"}}>{klMoney(selItems.reduce((n,i)=>n+(i.governs||0),0))}</b> governed
-                  </span>
-                  <span style={{marginLeft:"auto",display:"flex",gap:7}}>
-                    <Btn small ghost onClick={()=>setWSel(new Set())}>Clear selection</Btn>
-                    <Btn small variant="primary" onClick={()=>bulkConfirm(selItems)}>Confirm all as one record each</Btn>
-                  </span>
-                </div>
-              )}
-              {canCurate && wSel.size===0 && wlFiltered.some(i=>i.state==="open") && (
-                <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:12}}>
-                  <Btn small ghost onClick={()=>setWSel(new Set(wlFiltered.filter(i=>i.state==="open").map(i=>i.id)))}>
-                    Select all shown
-                  </Btn>
-                  <Btn small ghost onClick={()=>setWSel(new Set(wlFiltered.filter(i=>i.state==="open"&&i.conf>=trust.match).map(i=>i.id)))}>
-                    Select everything above the dial ({wlFiltered.filter(i=>i.state==="open"&&i.conf>=trust.match).length})
-                  </Btn>
-                </div>
-              )}
-
-              {wlFiltered.length===0
-                ? <KLEmpty icon={Ic.check(34)}
-                    title={wKind==="decided"?"No decisions recorded yet":"Nothing is waiting on you"}
-                    sub={wKind==="decided"
-                      ? "Confirm, hold or reject something and it will be listed here — permanently."
-                      : "Every exception across every cross-source graph has been decided."}/>
-                : wlFiltered.map((it,i)=>(
-                    <KLDecisionCard key={it.id} it={it} rank={i+1} srcById={srcById}
-                      selected={wSel.has(it.id)} canCurate={canCurate}
-                      showGraph onOpenGraph={id=>openX(id,"records")}
-                      onSelect={id=>setWSel(s=>{const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n;})}
-                      onVerb={applyVerb}
-                      onHistory={item=>{
-                        const g = xGraphs.find(x=>x.id===item.xgId);
-                        setHist({title:item.name, kicker:`Decision · ${g?g.name:""}`,
-                          entries:(g?.history||[]).filter(h=>!h.detail||h.detail.includes(item.name)||h.action==="Resolution complete")});
-                      }}/>
-                  ))}
-            </>)}
-
-            {wSub==="terms" && (<>
-              <div style={{display:"flex",gap:9,padding:"11px 14px",marginBottom:14,borderRadius:10,
-                background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:12.3,color:T.textSub,lineHeight:1.65}}>
-                <span style={{color:T.violet,display:"flex",flexShrink:0,marginTop:1}}>{Ic.bot(13)}</span>
-                <div>Definitions and per-application bindings arrive <b style={{color:T.text}}>drafted</b>. Your
-                  verb is confirm or edit — never authoring from a blank form. Certifying changes what the live
-                  answer engine returns and compiles the definition into every generated build.</div>
-              </div>
-              {measures.map(m=>(
-                <KLTermCard key={m.id} m={m} srcById={srcById} canCertify={canCurate}
-                  onPick={pickBinding} onCertify={certifyMeasure}/>
-              ))}
-            </>)}
-          </>
-        )}
-
-        {/* ───────── SOURCE GRAPHS ───────── */}
         {tab==="sources" && (
           <>
             <KLToolbar q={sq} setQ={setSq} placeholder="Search by name, ID, connection, entity or owner…"
@@ -30714,7 +30530,6 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 {v:"all",       l:"All",         n:srcGraphs.length},
                 {v:"Published", l:"Published",   n:srcGraphs.filter(g=>g.status==="Published").length, c:T.green},
                 {v:"In review", l:"In review",   n:srcGraphs.filter(g=>g.status==="In review").length, c:T.amber},
-                {v:"drift",     l:"Needs attention", n:totals.drift, c:T.rose},
               ]}
               status={sStatus} setStatus={setSStatus}
               sort={sSort} setSort={setSSort}
@@ -30803,9 +30618,6 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                     {key:"tables", label:"Scope", render:(v,r)=><span style={{fontSize:11.5,color:T.textSub}}>{v} tables · {r.cols} columns</span>},
                     {key:"words",  label:"Governed", render:v=><Badge bg={(v===100?T.green:T.amber)+"1a"} color={v===100?T.green:T.amber} border={(v===100?T.green:T.amber)+"55"}>{v}%</Badge>},
                     {key:"entities", label:"Entities", render:v=>v.length?<span style={{fontSize:11.5,color:T.textSub}}>{v.join(" · ")}</span>:<span style={{color:T.textMuted}}>none yet</span>},
-                    {key:"drift",  label:"Freshness", render:v=>v>0
-                      ? <span style={{color:T.amber,fontSize:11.5,fontWeight:600}}>{v} columns added</span>
-                      : <span style={{color:T.green,fontSize:11.5}}>Current</span>},
                     {key:"from",   label:"Imported from", render:(v,r)=>(
                       <span style={{fontSize:11.5,color:T.textSub}}>Solix EAI<span style={{color:T.textMuted}}> · {r.version}</span></span>)},
                     // A graph EDG did not build has no build step to report. What matters is
