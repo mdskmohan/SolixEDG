@@ -26630,10 +26630,10 @@ const KL_SRC_SEED = [
    bind:{tags:38, termed:412, proposed:0, invented:0},
    masters:[{table:"VENDOR_MASTER",
              idCols:[{c:"LIFNR",     role:"technical_key", fill:100, distinct:100, cls:[],                    by:"pk"},
-                     {c:"STCD1",     role:"natural_key",  key:"Tax ID",     fill:98,  distinct:100, cls:["Tax ID","PII"], by:"class"},
-                     {c:"NAME1",     role:"name",         key:"Legal Name", fill:100, distinct:94,  cls:["Legal Name"],   by:"term"},
+                     {c:"STCD1",     role:"natural_key",  key:"Tax ID",     fill:98,  distinct:100, cls:["Tax ID","PII"], by:"class", fmt:"NN-NNNNNNN"},
+                     {c:"NAME1",     role:"name",         key:"Legal Name", fill:100, distinct:94,  cls:["Legal Name"],   by:"term", fmt:"Free text"},
                      {c:"VENDOR_CODE",role:"local_code",  key:"Vendor Code",fill:100, distinct:100, cls:[],               by:"profile"},
-                     {c:"SMTP_ADDR", role:"contact",      key:"Email",      fill:71,  distinct:99,  cls:["PII","Email"],  by:"class"}], entity:"Supplier",    keys:["Tax ID","Legal Name","Email"], ready:true,
+                     {c:"SMTP_ADDR", role:"contact",      key:"Email",      fill:71,  distinct:99,  cls:["PII","Email"],  by:"class", fmt:"local@domain"}], entity:"Supplier",    keys:["Tax ID","Legal Name","Email"], ready:true,
              rule:{pk:"LIFNR", name:"NAME1", tax:"STCD1", code:"LIFNR", cls:"party", by:"ai:heuristic-v1.1", conf:0.94}},
             {table:"KNA1",
              idCols:[{c:"KUNNR", role:"technical_key", fill:100, distinct:100, cls:[],                    by:"pk"},
@@ -26678,8 +26678,8 @@ const KL_SRC_SEED = [
    bind:{tags:31, termed:388, proposed:0, invented:0},
    masters:[{table:"AP_SUPPLIERS",
              idCols:[{c:"VENDOR_ID",      role:"technical_key", fill:100, distinct:100, cls:[],                    by:"pk"},
-                     {c:"NUM_1099",       role:"natural_key", key:"Tax ID",     fill:61,  distinct:100, cls:["Tax ID","PII"], by:"class"},
-                     {c:"VENDOR_NAME",    role:"name",        key:"Legal Name", fill:100, distinct:92,  cls:["Legal Name"],   by:"term"},
+                     {c:"NUM_1099",       role:"natural_key", key:"Tax ID",     fill:61,  distinct:100, cls:["Tax ID","PII"], by:"class", fmt:"NNNNNNNNN"},
+                     {c:"VENDOR_NAME",    role:"name",        key:"Legal Name", fill:100, distinct:92,  cls:["Legal Name"],   by:"term", fmt:"Free text"},
                      {c:"SEGMENT1",       role:"local_code",  key:"Vendor Code",fill:100, distinct:100, cls:[],               by:"profile"}], entity:"Supplier", keys:["Tax ID","Legal Name"], ready:true,
              rule:{pk:"VENDOR_ID", name:"VENDOR_NAME", tax:"NUM_1099", cls:"party", by:"ai:heuristic-v1.1", conf:0.92}},
             {table:"HZ_PARTIES",
@@ -26710,8 +26710,8 @@ const KL_SRC_SEED = [
    bind:{tags:29, termed:280, proposed:12, invented:0},
    masters:[{table:"POZ_SUPPLIERS",
              idCols:[{c:"VENDOR_ID",   role:"technical_key", fill:100, distinct:100, cls:[],                    by:"pk"},
-                     {c:"TAXPAYER_ID", role:"natural_key", key:"Tax ID",     fill:94,  distinct:100, cls:["Tax ID"],     by:"class"},
-                     {c:"VENDOR_NAME", role:"name",        key:"Legal Name", fill:100, distinct:91,  cls:["Legal Name"], by:"term"},
+                     {c:"TAXPAYER_ID", role:"natural_key", key:"Tax ID",     fill:94,  distinct:100, cls:["Tax ID"],     by:"class", fmt:"NN-NNNNNNN"},
+                     {c:"VENDOR_NAME", role:"name",        key:"Legal Name", fill:100, distinct:91,  cls:["Legal Name"], by:"term", fmt:"Free text"},
                      {c:"SEGMENT1",    role:"local_code",  key:"Vendor Code",fill:100, distinct:100, cls:[],             by:"profile"}], entity:"Supplier", keys:["Tax ID","Legal Name"], ready:true,
              rule:{pk:"VENDOR_ID", name:"VENDOR_NAME", tax:"TAXPAYER_ID", code:"SEGMENT1", cls:"party", by:"ai:heuristic-v1.1", conf:0.91}},
             {table:"FA_ADDITIONS",
@@ -27116,9 +27116,12 @@ const KL_SRC_STEPS = [
 const KL_X_STEPS = [
   {t:"Sources", mode:"you", uses:"Imported knowledge graphs",
    d:"Choose the systems to join, then the knowledge graphs imported from them."},
-  {t:"Matching rules", mode:"you", uses:"Identifier roles confirmed in each graph",
-   d:"Pick what to master and how the same record is recognised in each system.",
-   note:["A key is only as strong as its weakest source. Rows it misses become exceptions for a person to clear."]},
+  {t:"Entities", mode:"you", uses:"Entities each graph carries",
+   d:"Say which entity in each graph is the same real-world thing. The names do not have to agree."},
+  {t:"Columns to match", mode:"you", uses:"Identifier columns and their profiles",
+   d:"Connect the column in each system that carries the same identifier. Column names never have to agree \u2014 the row is what makes them one key."},
+  {t:"Validate", mode:"you", uses:"Profiling from each knowledge graph",
+   d:"What the profiles say about the keys you connected, before anything is built. No data is read."},
   {t:"Governance", mode:"you", uses:"Owners, stewards, domains, tags, glossary terms",
    d:"A cross-source graph is a governed asset. Give it an owner, a domain and its business context, then choose what to publish."},
   {t:"Review", mode:"you",
@@ -28661,7 +28664,13 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
   const [wTerms,    setWTerms]    = useState([]);
   // Which key's evidence is open. One at a time: the profile matters while a steward weighs
   // ONE key, and printing it under all of them is what made this screen unreadable.
-  const [wOpenKey,  setWOpenKey]  = useState(null);
+  // Which entity in each graph is the thing being mastered. SAP may call it Supplier and
+  // Oracle may call it Vendor; nothing joins them until someone says they are the same.
+  const [wEntMap,   setWEntMap]   = useState({});   // {srcId: entityName}
+  // The connection itself: concept -> {srcId: column}. This is the whole matching decision,
+  // and it is made here rather than inferred, because only a person knows that SAP's STCD1
+  // and Oracle's NUM_1099 hold the same identifier.
+  const [wBind,     setWBind]     = useState({});   // {key: {srcId: col}}
 
   // ── Who is looking, and what they may decide (C10 / §12.1) ──
   // Curation is the steward's job. Materialisation is the engineer's. The dial and the
@@ -28906,7 +28915,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
   // Candidate keys are the identifier concepts the source graphs agreed on, each carrying the
   // per-source column it binds to and how populated that column is. A concept present in only
   // one source is still listed, because being alone IS the reason it is a weak choice.
-  const keyEvidence = (ids, entity) => klKeyEvidence(srcGraphs, ids, entity);
+  const keyEvidence = (ids, entity) => klKeyEvidence(srcGraphs, ids, entity);   // used by keyCounts
   const keyExclusions = (ids, entity) => klKeyExclusions(srcGraphs, ids, entity);
   const keyCounts = (ids, entity) => {
     const c = {};
@@ -28918,62 +28927,77 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
     const all = Object.keys(c).filter(k=>c[k]===ids.length);
     return all.length ? all : Object.keys(c);
   };
-  const reseed = (ids, entity) => { setWSrcIds(ids); setWKeys(defaultKeys(ids, entity)); setWBeliefs({}); };
-
-  // Change what a column may be USED FOR on an imported graph. The graph itself is
-  // read-only - it belongs to Data Sense - so this writes only EDG's own identity overlay,
-  // and it is the reason the overlay is EDG's job rather than an upstream one: whether a
-  // value means the same thing OUTSIDE its system is a cross-system judgement, and an AKG
-  // only ever sees one system.
-  // The CONCEPT is what a cross-system role is for: a key is a concept bound to one column
-  // per system, so a cross-system role without a concept describes nothing and the resolver
-  // ignores it. Making the concept editable is what lets a steward promote a column properly
-  // instead of setting a role that silently does nothing.
-  const setIdConcept = (gid, table, col, key) => {
-    setSrcGraphs(gs => gs.map(g => {
-      if(g.id!==gid) return g;
-      const masters = (g.masters||[]).map(m => {
-        if(m.table!==table) return m;
-        const nm = {...m, idCols: klIdCols(m).map(c => c.c===col ? {...c, key: key||undefined} : c)};
-        nm.keys  = klMatchKeys(nm);
-        nm.ready = m.blocked ? false : klUsableKeys(nm).length>0;
-        return nm;
-      });
-      return {...g, masters, history:[
-        {at:stamp(), by:me, kind:"human", action:"Identifier concept changed",
-         detail:`${table}.${col} ${key?`now represents ${key}`:"no longer represents a concept"}`},
-        ...(g.history||[])]};
-    }));
-    toast(key ? `${col} now represents ${key}` : `${col} no longer represents a concept`);
-  };
-
-  const setIdRole = (gid, table, col, role) => {
-    setSrcGraphs(gs => gs.map(g => {
-      if(g.id!==gid) return g;
-      const masters = (g.masters||[]).map(m => {
-        if(m.table!==table) return m;
-        const nm = {...m, idCols: klIdCols(m).map(c => c.c===col ? {...c, role, by:"human"} : c)};
-        nm.keys  = klMatchKeys(nm);
-        // Demoting the last cross-source key genuinely makes the entity unmasterable, and
-        // the estate should say so rather than resolving on nothing.
-        nm.ready = m.blocked ? false : klUsableKeys(nm).length>0;
-        return nm;
-      });
-      return {...g, masters, history:[
-        {at:stamp(), by:me, kind:"human", action:"Identifier role changed",
-         detail:`${table}.${col} set to ${(KL_ID_ROLES[role]||{}).l||role}`},
-        ...(g.history||[])]};
-    }));
-    toast(`${col} is now ${(KL_ID_ROLES[role]||{}).l||role}`);
-  };
   // A cross-source graph is governed like any other asset, so it draws on the same
   // classification and glossary vocabularies the rest of EDG uses.
   const _klTagDefs  = useTagCtx().tagDefs || [];
   const klTagNames  = _klTagDefs.map(t=>t.name);
-  // A sensitivity classification says the data is protected, not that it identifies anything,
-  // so it is never an identifier concept.
+  // A sensitivity classification says the data is protected, not that it identifies
+  // anything, so it is never offered as an identifier concept.
   const klSensNames = _klTagDefs.filter(t=>t.category==="sensitivity").map(t=>t.name);
   const klTermNames = GLOSSARY_TERMS.map(t=>t.term);
+
+  // ── The cross-source build, as a set of explicit connections ──────────────
+  // Which entities a graph carries, which master table the chosen one resolves to, and the
+  // columns available on it. Everything the wizard shows is derived from these.
+  const entsOf   = g  => [...new Set(((g&&g.masters)||[]).map(m=>m.entity))];
+  const masterOf = id => { const g=srcById(id), en=(wEntMap||{})[id];
+                           return (g&&en) ? (g.masters||[]).find(m=>m.entity===en) : null; };
+  const colInfo  = (id,col) => { const m=masterOf(id); return m ? klIdCols(m).find(c=>c.c===col)||null : null; };
+
+  // Propose the connections from what each graph already recorded: a column carrying a
+  // concept binds to that concept. The steward changes any of it on the next stage.
+  const seedBind = (ids, entMap) => {
+    const b = {};
+    ids.forEach(id=>{
+      const g = srcById(id), en = entMap[id]; if(!g||!en) return;
+      const m = (g.masters||[]).find(x=>x.entity===en); if(!m) return;
+      klIdCols(m).forEach(c=>{ if(c.key && (KL_ID_ROLES[c.role]||{}).cross){ (b[c.key]=b[c.key]||{})[id]=c.c; } });
+    });
+    setWBind(b);
+    setWKeys(Object.keys(b).filter(k=>Object.keys(b[k]).length>=2));
+    setWBeliefs({});
+    return b;
+  };
+  // Propose the entity mapping by name, which is right whenever the graphs agree and is a
+  // starting point when they do not.
+  const seedEnts = (ids, entity) => {
+    const map = {};
+    ids.forEach(id=>{
+      const g = srcById(id); if(!g) return;
+      const es = entsOf(g);
+      map[id] = es.includes(entity) ? entity : (es[0]||"");
+    });
+    setWEntMap(map);
+    seedBind(ids, map);
+    return map;
+  };
+
+  // What the PROFILES say about a connected key. No rows are read: fill, uniqueness and the
+  // value pattern all come from the profiling each graph already carries. Whether the values
+  // themselves overlap is a different question, and only a scan can answer it.
+  const bindEvidence = () => Object.keys(wBind).map(key=>{
+    const sources = wSrcIds.map(id=>{
+      const col = (wBind[key]||{})[id]; if(!col) return null;
+      const ci = colInfo(id,col) || {};
+      return {srcId:id, src:srcById(id)?.name||id, col, fill:ci.fill, distinct:ci.distinct,
+              fmt:ci.fmt, role:ci.role};
+    }).filter(Boolean);
+    const nums = f => sources.map(x=>x[f]).filter(v=>v!=null);
+    const minFill = nums("fill").length ? Math.min(...nums("fill")) : null;
+    const minDist = nums("distinct").length ? Math.min(...nums("distinct")) : null;
+    const fmts    = [...new Set(sources.map(x=>x.fmt).filter(Boolean))];
+    const all     = sources.length===wSrcIds.length && wSrcIds.length>0;
+    // Ordered worst-first: a key nobody can compare is a bigger problem than a sparse one.
+    const issues = [];
+    if(sources.length<2)          issues.push({sev:"stop", t:"Connected in fewer than two systems, so it cannot match anything."});
+    if(!all && sources.length>=2) issues.push({sev:"warn", t:`Not connected in ${wSrcIds.length-sources.length} of the ${wSrcIds.length} systems. Records there fall through to another key.`});
+    if(fmts.length>1)             issues.push({sev:"stop", t:`The systems store this differently \u2014 ${fmts.join(" vs ")}. Identical identifiers will not compare equal until the values are normalised.`});
+    if(minFill!=null && minFill<80) issues.push({sev:"warn", t:`Blank in about ${100-minFill}% of rows in its weakest system, so this key alone will not reach every record.`});
+    if(minDist!=null && minDist<95) issues.push({sev:"warn", t:`Only ${minDist}% distinct at its weakest, so the same value sits on more than one record and matching on it would over-merge.`});
+    const verdict = issues.some(i=>i.sev==="stop") ? "stop"
+                  : issues.length ? "warn" : "ok";
+    return {key, sources, minFill, minDist, fmts, all, issues, verdict};
+  });
 
   const totals = {
     published: srcGraphs.filter(s=>s.status==="Published").length,
@@ -28996,7 +29020,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
       // two sources" meant every door opened on the same one, whichever was clicked.
       const e = entity || KL_ENTITIES.find(x=>KL_READY_FOR(srcGraphs,x).length>=2) || KL_ENTITIES[0];
       const ids = KL_READY_FOR(srcGraphs,e);
-      setWEntity(e); reseed(ids, e); setWScan("later");
+      setWEntity(e); setWSrcIds(ids); seedEnts(ids, e); setWScan("later");
       setWSystems([...new Set(ids.map(i=>srcGraphs.find(g=>g.id===i)?.name).filter(Boolean))]);
       setWOwners([me]); setWStewards([]); setWDomain("Procurement"); setWTags([]); setWTerms([e]);
     } else {
@@ -29095,9 +29119,10 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
     // A scan reads rows, so every system in scope has to be connected in EDG before one
     // can be chosen. Publishing the model only needs no connection at all.
     const scanBlockers = wSrcIds.map(id=>srcById(id)).filter(g=>g&&g.srcConnected===false);
-    const blocked = (wiz==="cross" && step===2 && (wOwners.length===0 || (wScan!=="later" && scanBlockers.length>0)))
+    const blocked = (wiz==="cross" && step===4 && (wOwners.length===0 || (wScan!=="later" && scanBlockers.length>0)))
                  || (wiz==="cross" && step===0 && wSrcIds.length<2)
-                 || (wiz==="cross" && step===1 && wKeys.length===0)
+                 || (wiz==="cross" && step===1 && wSrcIds.some(id=>!(wEntMap||{})[id]))
+                 || (wiz==="cross" && step===2 && wKeys.length===0)
                  || (wiz==="src" && !wConn);
     return createPortal(
       <div onClick={closeWizard} className="fadeIn" style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}>
@@ -29236,153 +29261,232 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 );
               })()}
 
+              {/* ── Stage 2 · Entities ── The names do not have to agree, and nothing joins
+                  them until a person says they are the same real-world thing. */}
               {wiz==="cross" && step===1 && (()=>{
-                // Entities the CHOSEN graphs actually carry. Offering the full vocabulary here
-                // would invite someone to pick one no selected graph describes.
-                const offered = [...new Set(wSrcIds.flatMap(id=>(srcById(id)?.masters||[]).map(m=>m.entity)))];
-                const opts    = offered.length ? offered : KL_ENTITIES;
-                const readyIn = en => wSrcIds.filter(id=>{
-                  const g = srcById(id); return g && g.masters.some(m=>m.entity===en && m.ready);
-                }).length;
-                const ev = keyEvidence(wSrcIds, wEntity);
-                const ex = keyExclusions(wSrcIds, wEntity);
-                const pickEntity = v => { setWEntity(v); setWKeys(defaultKeys(wSrcIds, v)); setWBeliefs({}); };
+                const all = [...new Set(wSrcIds.flatMap(id=>entsOf(srcById(id))))];
+                const pickCanon = v => { setWEntity(v); seedEnts(wSrcIds, v); };
+                const pickFor = (id,v) => {
+                  const map = {...(wEntMap||{}), [id]:v};
+                  setWEntMap(map); seedBind(wSrcIds, map);
+                };
                 return (
                   <div style={{maxWidth:760}}>
-                    <div style={{fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>What to master</div>
-                    <select value={wEntity} onChange={e=>pickEntity(e.target.value)}
+                    <div style={{fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>What are we mastering?</div>
+                    <select value={wEntity} onChange={e=>pickCanon(e.target.value)}
                       style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,cursor:"pointer"}}>
-                      {opts.map(c=>{
-                        const n = readyIn(c);
-                        return <option key={c} value={c}>{c}{n>=2?` \u00b7 ready in ${n} of ${wSrcIds.length}`:n===1?" \u00b7 ready in only 1 graph":" \u00b7 not ready in any"}</option>;
-                      })}
+                      {(all.length?all:KL_ENTITIES).map(c=><option key={c} value={c}>{c}</option>)}
                     </select>
+                    <div style={{fontSize:10.5,color:T.textMuted,marginTop:5,lineHeight:1.5}}>
+                      The name this master will carry in EDG. Each system can call it something else.
+                    </div>
 
-                    {ev.length===0 ? (
-                      <div style={{fontSize:12.5,color:T.amber,lineHeight:1.7,marginTop:16}}>
-                        No identifier roles are confirmed for {wEntity} on the graphs you chose, so there is
-                        nothing to match on. Declare them on the graph, not here.
-                      </div>
-                    ) : (
-                    <>
-                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"20px 0 4px"}}>
-                        Match on
-                      </div>
-                      <div style={{fontSize:11.5,color:T.textMuted,marginBottom:9,lineHeight:1.5}}>
-                        A key is a business concept bound to a different column in each system. Tick the ones to match on.
-                      </div>
-                      {/* One tick-able row per key. The affordance is the row, not a button at the
-                          far right of it - selection was there before and nobody found it. */}
-                      {ev.map(e=>{
-                        const on = wKeys.includes(e.key);
-                        const all = e.sources.length===wSrcIds.length;
-                        const weak = e.minFill<80;
-                        const role = KL_ID_ROLES[e.role]||{};
-                        const open = wOpenKey===e.key;
-                        const sigOf = k => (KL_ID_SIGNALS.find(x=>x.k===k)||{}).l || k || "—";
-                        return (
-                          <div key={e.key}
-                            style={{marginBottom:7,background:on?T.accentDim:T.bgSurface,
-                              border:`1px solid ${on?T.accent+"66":T.border}`,borderRadius:9,overflow:"hidden"}}>
-                            <div onClick={()=>setWKeys(ks=>on?ks.filter(x=>x!==e.key):[...ks,e.key])}
-                              style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 12px",cursor:"pointer"}}>
-                              <span style={{width:16,height:16,borderRadius:4,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10.5,color:"#fff",
-                                background:on?T.accent:"transparent",border:`1.5px solid ${on?T.accent:T.borderLight}`}}>{on?"\u2713":""}</span>
-                              <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{e.key}</span>
-                              <span style={{fontSize:11,color:T.textMuted}}>{role.l} · {role.match} match</span>
-                              {!all && <KLChip kind="new">In {e.sources.length} of {wSrcIds.length}</KLChip>}
-                              {weak && all && <KLChip kind="new">Needs a second key</KLChip>}
-                              <span style={{marginLeft:"auto",fontSize:11,fontWeight:700,fontFamily:"'Geist Mono',monospace",
-                                color:weak?T.amber:T.green}}>{e.minFill}%</span>
-                              {/* The profile belongs to one key at a time. Under every row it was noise. */}
-                              <button title="Where this key comes from"
-                                onClick={ev=>{ev.stopPropagation(); setWOpenKey(open?null:e.key);}}
-                                style={{display:"flex",alignItems:"center",justifyContent:"center",width:22,height:22,flexShrink:0,
-                                  borderRadius:6,cursor:"pointer",background:open?T.accent+"22":"transparent",
-                                  border:`1px solid ${open?T.accent+"66":T.border}`,color:open?T.accent:T.textMuted}}>
-                                {Ic.info(12)}
-                              </button>
-                            </div>
-                            {open && (
-                              <div style={{borderTop:`1px solid ${T.border}`,padding:"11px 13px",background:T.bgElevated}}>
-                                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".07em",marginBottom:8}}>
-                                  Bound to
-                                </div>
-                                <div style={{display:"grid",gridTemplateColumns:"1.1fr 1fr .6fr .6fr 1.3fr",gap:6,fontSize:10.5}}>
-                                  {["System","Column","Filled","Distinct","Proposed by"].map(h=>(
-                                    <span key={h} style={{color:T.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:".05em",paddingBottom:4,borderBottom:`1px solid ${T.border}`}}>{h}</span>
-                                  ))}
-                                  {e.sources.map(x=>[
-                                    <span key={x.srcId+"s"} style={{color:T.textSub,padding:"5px 0"}}>{x.src}</span>,
-                                    <span key={x.srcId+"c"} style={{color:T.text,fontFamily:"'Geist Mono',monospace",padding:"5px 0"}}>{x.col}</span>,
-                                    <span key={x.srcId+"f"} style={{color:x.fill<80?T.amber:T.textSub,fontFamily:"'Geist Mono',monospace",padding:"5px 0"}}>{x.fill==null?"—":x.fill+"%"}</span>,
-                                    <span key={x.srcId+"d"} style={{color:T.textSub,fontFamily:"'Geist Mono',monospace",padding:"5px 0"}}>{x.distinct==null?"—":x.distinct+"%"}</span>,
-                                    <span key={x.srcId+"b"} style={{color:T.textMuted,padding:"5px 0"}}>{sigOf(x.by)}</span>,
-                                  ])}
-                                </div>
-                                {KL_KEY_FORMAT[e.key] && (
-                                  <div style={{fontSize:11,color:T.textSub,marginTop:10,lineHeight:1.6}}>
-                                    <b style={{color:T.textMuted,fontWeight:700}}>Value shape:</b> {KL_KEY_FORMAT[e.key]}
-                                  </div>
-                                )}
-                                {/* The question this panel exists to answer. */}
-                                <div style={{fontSize:10.8,color:T.textMuted,marginTop:9,lineHeight:1.65,
-                                  paddingTop:9,borderTop:`1px solid ${T.border}`}}>
-                                  Column names are never compared. {e.sources.map(x=>x.col).join(" and ")}
-                                  {e.sources.length>1?" have nothing in common" : " is matched on its value alone"} —
-                                  the binding above is what makes them one key, proposed from the profile and confirmed
-                                  on each graph. Whether the values themselves overlap is measured when you scan, because
-                                  that means reading rows from every system.
-                                </div>
-                                {weak && (
-                                  <div style={{fontSize:10.8,color:T.amber,marginTop:8,lineHeight:1.6}}>
-                                    Blank in roughly {100-e.minFill}% of rows in its weakest source. Rows it misses fall
-                                    through to whichever other key you select, or arrive as exceptions.
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                      <div style={{fontSize:11.5,color:wKeys.length?T.textMuted:T.amber,marginTop:2}}>
-                        {wKeys.length?`${wKeys.length} key${wKeys.length===1?"":"s"} selected`:"Select at least one key"}
-                      </div>
-                      {ex.length>0 && (
-                        <div style={{fontSize:11,color:T.textMuted,marginTop:10,lineHeight:1.6}}>
-                          <b style={{color:T.textSub}}>Held back:</b> {ex.map(x=>x.key).join(", ")} — valid inside one
-                          system only, so matching on them would merge unrelated records. Change that on the graph.
+                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"20px 0 7px"}}>
+                      Which entity is that, in each system
+                    </div>
+                    {wSrcIds.map(id=>{
+                      const g = srcById(id); if(!g) return null;
+                      const es = entsOf(g), chosen = (wEntMap||{})[id];
+                      const m = masterOf(id);
+                      return (
+                        <div key={id} style={{display:"flex",alignItems:"center",gap:11,flexWrap:"wrap",padding:"10px 12px",marginBottom:7,
+                          background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
+                          <ServiceIcon service={g.service} size={16}/>
+                          <span style={{fontSize:12.5,fontWeight:600,color:T.text,minWidth:112}}>{g.name}</span>
+                          <select value={chosen||""} onChange={e=>pickFor(id, e.target.value)}
+                            style={{padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,cursor:"pointer",minWidth:150}}>
+                            <option value="">— not in this system —</option>
+                            {es.map(e2=><option key={e2} value={e2}>{e2}</option>)}
+                          </select>
+                          <span style={{marginLeft:"auto",fontSize:10.8,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>
+                            {m ? m.table : "no master table"}
+                          </span>
                         </div>
-                      )}
-
-                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"22px 0 4px"}}>
-                        When sources disagree
-                      </div>
-                      <div style={{fontSize:11.5,color:T.textMuted,marginBottom:9}}>
-                        The one thing metadata cannot answer: which system do we believe.
-                      </div>
-                      {wKeys.length===0
-                        ? <div style={{fontSize:12,color:T.textMuted}}>Select a key first — those are the fields that can disagree.</div>
-                        : [...wKeys,"Address"].map(f=>{
-                            const val = wBeliefs[f] ?? (srcById(wSrcIds[0])?.name||"");
-                            return (
-                              <div key={f} style={{display:"flex",alignItems:"center",gap:11,padding:"8px 12px",marginBottom:6,
-                                background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
-                                <span style={{fontSize:12,fontWeight:600,color:T.text,minWidth:120}}>{f}</span>
-                                <select value={val} onChange={e=>setWBeliefs(b=>({...b,[f]:e.target.value}))}
-                                  style={{marginLeft:"auto",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,cursor:"pointer"}}>
-                                  {wSrcIds.map(id=><option key={id} value={srcById(id)?.name}>{srcById(id)?.name}</option>)}
-                                  <option value="Most recently updated">Most recently updated</option>
-                                </select>
-                              </div>
-                            );
-                          })}
-                    </>)}
+                      );
+                    })}
+                    {[...new Set(wSrcIds.map(id=>(wEntMap||{})[id]).filter(Boolean))].length>1 && (
+                      <KLNote>Two systems call this different things. That is normal, and saying so here is
+                        exactly what lets them be joined — nothing matches on the entity's name.</KLNote>
+                    )}
                   </div>
                 );
               })()}
 
-              {wiz==="cross" && step===2 && (
+              {/* ── Stage 3 · Columns to match ── One row per key: the concept, and the column
+                  that carries it in each system. Names never have to agree; the row is what
+                  makes them one key. */}
+              {wiz==="cross" && step===2 && (()=>{
+                const keys = Object.keys(wBind);
+                const vocab = [...new Set([
+                  ...keys,
+                  ...wSrcIds.flatMap(id=>{ const m=masterOf(id); return m?klIdCols(m).map(c=>c.key).filter(Boolean):[]; }),
+                  ...klTermNames, ...klTagNames,
+                ])].filter(k=>!klSensNames.includes(k)).sort();
+                const setCell = (key, id, col) => setWBind(b=>{
+                  const row = {...(b[key]||{})};
+                  if(col) row[id] = col; else delete row[id];
+                  const nb = {...b, [key]:row};
+                  setWKeys(ks=>Object.keys(nb).filter(k=>ks.includes(k)||false).concat(
+                    Object.keys(row).length>=2 && !ks.includes(key) ? [key] : []));
+                  return nb;
+                });
+                const addKey = k => { if(!k||wBind[k]) return; setWBind(b=>({...b,[k]:{}})); };
+                const dropKey = k => { setWBind(b=>{const n={...b}; delete n[k]; return n;}); setWKeys(ks=>ks.filter(x=>x!==k)); };
+                const toggle = k => setWKeys(ks=>ks.includes(k)?ks.filter(x=>x!==k):[...ks,k]);
+                return (
+                  <div style={{maxWidth:860}}>
+                    <div style={{display:"grid",gridTemplateColumns:`26px 1.1fr repeat(${wSrcIds.length}, 1fr) 26px`,gap:7,fontSize:11,alignItems:"center"}}>
+                      <span/>
+                      <span style={{color:T.textMuted,fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:".05em",paddingBottom:5,borderBottom:`1px solid ${T.border}`}}>Concept</span>
+                      {wSrcIds.map(id=>(
+                        <span key={id} style={{color:T.textMuted,fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:".05em",paddingBottom:5,borderBottom:`1px solid ${T.border}`}}>
+                          {srcById(id)?.name}
+                        </span>
+                      ))}
+                      <span style={{borderBottom:`1px solid ${T.border}`}}/>
+                      {keys.map(k=>{
+                        const on = wKeys.includes(k), row = wBind[k]||{};
+                        const enough = Object.keys(row).length>=2;
+                        return [
+                          <span key={k+"x"} onClick={()=>enough&&toggle(k)}
+                            style={{width:16,height:16,borderRadius:4,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10.5,color:"#fff",
+                              cursor:enough?"pointer":"not-allowed",opacity:enough?1:.4,
+                              background:on?T.accent:"transparent",border:`1.5px solid ${on?T.accent:T.borderLight}`}}>{on?"✓":""}</span>,
+                          <span key={k+"k"} style={{fontSize:12,fontWeight:600,color:T.text,padding:"7px 0"}}>{k}</span>,
+                          ...wSrcIds.map(id=>{
+                            const m = masterOf(id), opts = m?klIdCols(m).map(c=>c.c):[];
+                            return (
+                              <span key={k+id} style={{padding:"4px 0"}}>
+                                <select value={row[id]||""} onChange={e=>setCell(k,id,e.target.value)}
+                                  style={{width:"100%",padding:"5px 7px",background:T.bgElevated,
+                                    border:`1px solid ${row[id]?T.border:T.borderLight}`,borderRadius:7,
+                                    color:row[id]?T.text:T.textMuted,fontSize:11,cursor:"pointer",boxSizing:"border-box",
+                                    fontFamily:row[id]?"'Geist Mono',monospace":"inherit"}}>
+                                  <option value="">— none —</option>
+                                  {opts.map(c=><option key={c} value={c}>{c}</option>)}
+                                </select>
+                              </span>
+                            );
+                          }),
+                          <span key={k+"d"} onClick={()=>dropKey(k)} title="Remove this key"
+                            style={{cursor:"pointer",color:T.textMuted,fontSize:14,textAlign:"center"}}>×</span>,
+                        ];
+                      })}
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:9,marginTop:12}}>
+                      <select value="" onChange={e=>addKey(e.target.value)}
+                        style={{padding:"6px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.textSub,fontSize:11.5,cursor:"pointer"}}>
+                        <option value="">+ Add a key…</option>
+                        {vocab.filter(k=>!wBind[k]).map(k=><option key={k} value={k}>{k}</option>)}
+                      </select>
+                      <span style={{fontSize:11.5,color:wKeys.length?T.textMuted:T.amber}}>
+                        {wKeys.length?`${wKeys.length} key${wKeys.length===1?"":"s"} will be used`:"Connect a key in at least two systems, then tick it"}
+                      </span>
+                    </div>
+                    <div style={{fontSize:10.8,color:T.textMuted,marginTop:9,lineHeight:1.6}}>
+                      The concept comes from your glossary and classifications. Column names are never
+                      compared — connecting <b style={{color:T.textSub}}>STCD1</b> to <b style={{color:T.textSub}}>NUM_1099</b> on
+                      one row is what makes them one key.
+                    </div>
+
+                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"22px 0 4px"}}>
+                      When sources disagree
+                    </div>
+                    <div style={{fontSize:11.5,color:T.textMuted,marginBottom:9}}>
+                      The one thing no profile can answer: which system do we believe.
+                    </div>
+                    {wKeys.length===0
+                      ? <div style={{fontSize:12,color:T.textMuted}}>Connect a key first — those are the fields that can disagree.</div>
+                      : [...wKeys,"Address"].map(f=>{
+                          const val = wBeliefs[f] ?? (srcById(wSrcIds[0])?.name||"");
+                          return (
+                            <div key={f} style={{display:"flex",alignItems:"center",gap:11,padding:"8px 12px",marginBottom:6,
+                              background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
+                              <span style={{fontSize:12,fontWeight:600,color:T.text,minWidth:120}}>{f}</span>
+                              <select value={val} onChange={e=>setWBeliefs(b=>({...b,[f]:e.target.value}))}
+                                style={{marginLeft:"auto",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,cursor:"pointer"}}>
+                                {wSrcIds.map(id=><option key={id} value={srcById(id)?.name}>{srcById(id)?.name}</option>)}
+                                <option value="Most recently updated">Most recently updated</option>
+                              </select>
+                            </div>
+                          );
+                        })}
+                  </div>
+                );
+              })()}
+
+              {/* ── Stage 4 · Validate ── Everything here comes from profiling the graphs
+                  already carry. No rows are read, so this cannot say whether the VALUES
+                  overlap - only whether the keys are capable of matching at all. */}
+              {wiz==="cross" && step===3 && (()=>{
+                const ev = bindEvidence().filter(e=>wKeys.includes(e.key));
+                const stop = ev.filter(e=>e.verdict==="stop").length;
+                const warn = ev.filter(e=>e.verdict==="warn").length;
+                const best = ev.filter(e=>e.verdict!=="stop")
+                               .reduce((n,e)=>Math.max(n, e.minFill==null?0:e.minFill), 0);
+                const tone = stop?T.rose:warn?T.amber:T.green;
+                return (
+                  <div style={{maxWidth:820}}>
+                    <div style={{display:"flex",gap:12,alignItems:"center",padding:"13px 15px",marginBottom:14,borderRadius:11,
+                      background:stop?T.roseDim:warn?T.amberDim:T.bgSurface,border:`1px solid ${tone}44`}}>
+                      <span style={{fontSize:17,color:tone}}>{stop?"!":warn?"!":"✓"}</span>
+                      <div style={{fontSize:12.4,color:T.textSub,lineHeight:1.6}}>
+                        <b style={{color:T.text}}>
+                          {stop ? `${stop} key${stop===1?"":"s"} cannot match as connected`
+                                : warn ? `Workable, with ${warn} thing${warn===1?"":"s"} to know`
+                                : "Nothing in the profiles argues against this"}
+                        </b>{" "}
+                        — {ev.length} key{ev.length===1?"":"s"} across {wSrcIds.length} systems, reaching at best{" "}
+                        {best}% of rows in the weakest system.
+                      </div>
+                    </div>
+
+                    {ev.map(e=>{
+                      const c = e.verdict==="stop"?T.rose:e.verdict==="warn"?T.amber:T.green;
+                      return (
+                        <Card2 key={e.key} style={{padding:14,marginBottom:11}}>
+                          <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:9}}>
+                            <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{e.key}</span>
+                            <Badge bg={c+"1a"} color={c} border={c+"55"}>
+                              {e.verdict==="stop"?"Will not match":e.verdict==="warn"?"Usable, with limits":"Good"}
+                            </Badge>
+                            <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>
+                              {e.sources.length} of {wSrcIds.length} systems
+                            </span>
+                          </div>
+                          <div style={{display:"grid",gridTemplateColumns:"1.1fr 1fr .6fr .6fr 1.2fr",gap:6,fontSize:10.5}}>
+                            {["System","Column","Filled","Distinct","Stored as"].map(h=>(
+                              <span key={h} style={{color:T.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:".05em",paddingBottom:4,borderBottom:`1px solid ${T.border}`}}>{h}</span>
+                            ))}
+                            {e.sources.map(x=>[
+                              <span key={x.srcId+"s"} style={{color:T.textSub,padding:"5px 0"}}>{x.src}</span>,
+                              <span key={x.srcId+"c"} style={{color:T.text,fontFamily:"'Geist Mono',monospace",padding:"5px 0"}}>{x.col}</span>,
+                              <span key={x.srcId+"f"} style={{color:(x.fill!=null&&x.fill<80)?T.amber:T.textSub,fontFamily:"'Geist Mono',monospace",padding:"5px 0"}}>{x.fill==null?"—":x.fill+"%"}</span>,
+                              <span key={x.srcId+"d"} style={{color:(x.distinct!=null&&x.distinct<95)?T.amber:T.textSub,fontFamily:"'Geist Mono',monospace",padding:"5px 0"}}>{x.distinct==null?"—":x.distinct+"%"}</span>,
+                              <span key={x.srcId+"p"} style={{color:e.fmts.length>1?T.amber:T.textSub,fontFamily:"'Geist Mono',monospace",padding:"5px 0"}}>{x.fmt||"—"}</span>,
+                            ])}
+                          </div>
+                          {e.issues.length===0
+                            ? <div style={{fontSize:11,color:T.green,marginTop:9}}>Present everywhere, well populated, and stored the same way in each system.</div>
+                            : e.issues.map((is,n)=>(
+                                <div key={n} style={{fontSize:11,marginTop:8,lineHeight:1.6,
+                                  color:is.sev==="stop"?T.rose:T.amber}}>{is.t}</div>
+                              ))}
+                        </Card2>
+                      );
+                    })}
+
+                    <KLNote tone="quiet">
+                      This is the profiling each knowledge graph already carries — no data was read. It can
+                      tell you whether these keys are <i>capable</i> of matching: present in both systems, populated
+                      enough to reach the rows, unique enough not to over-merge, and stored the same way. Whether the
+                      values actually overlap is a different question, and only a data scan can answer it.
+                    </KLNote>
+                  </div>
+                );
+              })()}
+
+              {wiz==="cross" && step===4 && (
                 <div style={{maxWidth:800}}>
                   {/* A cross-source graph is a governed asset like any other, so it is named,
                       owned, placed in a domain and given its business context here. */}
@@ -29461,8 +29565,8 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 </div>
               )}
 
-              {wiz==="cross" && step===3 && (()=>{
-                const ev   = keyEvidence(wSrcIds, wEntity);
+              {wiz==="cross" && step===5 && (()=>{
+                const ev   = bindEvidence();
                 const ex   = keyExclusions(wSrcIds, wEntity);
                 const dash = "—";
                 const list = a => (a&&a.length) ? a.join(", ") : dash;
@@ -29677,8 +29781,9 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
             <Btn small ghost onClick={()=>step>0?setStep(step-1):closeWizard()}>{step>0?"← Back":"Cancel"}</Btn>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               {wiz==="cross" && step===0 && wSrcIds.length<2 && <span style={{fontSize:11,color:T.textMuted}}>Pick at least two knowledge graphs</span>}
-              {wiz==="cross" && step===2 && wOwners.length===0 && <span style={{fontSize:11,color:T.textMuted}}>Name an owner</span>}
-              {wiz==="cross" && step===1 && wKeys.length===0 && <span style={{fontSize:11,color:T.textMuted}}>Select at least one match key</span>}
+              {wiz==="cross" && step===1 && wSrcIds.some(id=>!(wEntMap||{})[id]) && <span style={{fontSize:11,color:T.textMuted}}>Say what to master in every system</span>}
+              {wiz==="cross" && step===2 && wKeys.length===0 && <span style={{fontSize:11,color:T.textMuted}}>Connect at least one key</span>}
+              {wiz==="cross" && step===4 && wOwners.length===0 && <span style={{fontSize:11,color:T.textMuted}}>Name an owner</span>}
               {wiz==="src" && !wConn && <span style={{fontSize:11,color:T.textMuted}}>No unmapped connection available</span>}
               <span style={{fontSize:11,color:T.textMuted}}>
                 Stage {step+1} of {steps.length}{autoCount?` · ${autoCount} automatic`:""}
@@ -29744,132 +29849,9 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
           <Tabs2 tabs={[
             {key:"overview", label:"Overview"},
             {key:"graph",    label:"Knowledge Graph"},
-            {key:"identity", label:`Identity (${(sg.masters||[]).length})`},
             {key:"assets",   label:`Tables (${(sg.assets||[]).length})`},
             {key:"feeds",    label:`Used by (${usedBy.length})`},
           ]} active={srcTab} onChange={setSrcTab}/>
-
-          {srcTab==="identity" && (
-            <>
-              <Card2 style={{padding:"13px 15px",marginBottom:14,borderLeft:`3px solid ${T.accent}`}}>
-                <div style={{fontSize:12.3,color:T.textSub,lineHeight:1.65}}>
-                  Data Sense classified these columns and profiled them. What it cannot say is
-                  which of them may be <b style={{color:T.text}}>matched across systems</b> &mdash; that depends on
-                  whether a value means the same thing outside this system, and a graph of one
-                  application has no way to know. So the roles below are EDG&rsquo;s, proposed from the
-                  profile and yours to change. Nothing here is written back to Data Sense.
-                </div>
-              </Card2>
-              {(sg.masters||[]).map(m=>{
-                const cols = klIdCols(m), usable = klUsableKeys(m), ex = klExcluded(m).filter(c=>c.key);
-                // Concepts a column may be said to represent: whatever it is already classified
-                // as, whatever this graph already uses, and the governed identifier vocabulary.
-                // All three come from EDG, which is the point - Data Sense reports the evidence,
-                // EDG names the thing.
-                const conceptOpts = [...new Set([
-                  ...cols.flatMap(c=>c.cls||[]),
-                  ...cols.map(c=>c.key).filter(Boolean),
-                  ...Object.keys(KL_KEY_FORMAT),
-                ])].filter(k=>!klSensNames.includes(k)).sort();
-                // A cross-system role with no concept is inert: klCrossCols requires both, so
-                // the resolver ignores it. Say so rather than showing a setting that does nothing.
-                const inert = cols.filter(c=>(KL_ID_ROLES[c.role]||{}).cross && !c.key);
-                const pol = klMasterPolicies(m), con = klPolicyConflicts(m);
-                return (
-                  <Card2 key={m.table} style={{padding:16,marginBottom:14}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:12}}>
-                      <span style={{fontSize:13,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{m.table}</span>
-                      <KLChip kind="exist">{m.entity}</KLChip>
-                      {m.ready
-                        ? <Badge bg={T.green+"1a"} color={T.green} border={T.green+"55"}>Masterable</Badge>
-                        : <Badge bg={T.amber+"1a"} color={T.amber} border={T.amber+"55"}>Not masterable</Badge>}
-                      <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>
-                        {usable.length ? `Match keys: ${usable.join(", ")}` : "No key valid outside this system"}
-                      </span>
-                    </div>
-                    {m.blocked && <KLNote>{m.blocked}</KLNote>}
-                    {cols.length===0 ? (
-                      <div style={{fontSize:12,color:T.textMuted}}>No identifier columns were recorded for this table.</div>
-                    ) : (
-                      <div style={{display:"grid",gridTemplateColumns:"1.1fr 1fr 1.35fr .55fr .55fr 1.15fr",gap:7,fontSize:11}}>
-                        {["Column","Concept","May be used as","Filled","Distinct","Basis"].map(h=>(
-                          <span key={h} style={{color:T.textMuted,fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:".05em",paddingBottom:5,borderBottom:`1px solid ${T.border}`}}>{h}</span>
-                        ))}
-                        {cols.map(c=>{
-                          const r = KL_ID_ROLES[c.role]||{};
-                          return [
-                            <span key={c.c+"c"} style={{color:T.text,fontFamily:"'Geist Mono',monospace",padding:"7px 0",alignSelf:"center"}}>{c.c}</span>,
-                            <span key={c.c+"k"} style={{padding:"4px 0",alignSelf:"center"}}>
-                              <select value={c.key||""} onChange={e=>setIdConcept(sg.id, m.table, c.c, e.target.value)}
-                                disabled={!canCurate}
-                                style={{width:"100%",padding:"5px 7px",background:T.bgElevated,
-                                  border:`1px solid ${c.key?T.border:T.borderLight}`,borderRadius:7,
-                                  color:c.key?T.text:T.textMuted,fontSize:11,
-                                  cursor:canCurate?"pointer":"not-allowed",boxSizing:"border-box"}}>
-                                <option value="">— none —</option>
-                                {conceptOpts.map(k=><option key={k} value={k}>{k}</option>)}
-                              </select>
-                            </span>,
-                            <span key={c.c+"r"} style={{padding:"4px 0",alignSelf:"center"}}>
-                              <select value={c.role} onChange={e=>setIdRole(sg.id, m.table, c.c, e.target.value)}
-                                disabled={!canCurate}
-                                title={r.hint||""}
-                                style={{width:"100%",padding:"5px 7px",background:T.bgElevated,border:`1px solid ${T.border}`,
-                                  borderRadius:7,color:T.text,fontSize:11,cursor:canCurate?"pointer":"not-allowed",boxSizing:"border-box"}}>
-                                {/* A cross-system role needs a concept to be a key of. Offering it
-                                    without one lets a steward set something the resolver ignores. */}
-                                {Object.entries(KL_ID_ROLES).map(([k,v])=>(
-                                  <option key={k} value={k} disabled={v.cross && !c.key}>
-                                    {v.l}{v.cross?" \u00b7 cross-system":" \u00b7 this system only"}
-                                    {v.cross && !c.key ? " \u2014 needs a concept" : ""}
-                                  </option>
-                                ))}
-                              </select>
-                            </span>,
-                            <span key={c.c+"f"} style={{color:(c.fill!=null&&c.fill<80)?T.amber:T.textSub,fontFamily:"'Geist Mono',monospace",padding:"7px 0",alignSelf:"center"}}>{c.fill==null?"\u2014":c.fill+"%"}</span>,
-                            <span key={c.c+"d"} style={{color:T.textSub,fontFamily:"'Geist Mono',monospace",padding:"7px 0",alignSelf:"center"}}>{c.distinct==null?"\u2014":c.distinct+"%"}</span>,
-                            <span key={c.c+"b"} style={{color:T.textMuted,padding:"7px 0",alignSelf:"center"}}>
-                              {c.by==="human"
-                                ? <b style={{color:T.accent,fontWeight:600}}>Steward override</b>
-                                : ((KL_ID_SIGNALS.find(x=>x.k===c.by)||{}).l || "\u2014")}
-                            </span>,
-                          ];
-                        })}
-                      </div>
-                    )}
-                    {inert.length>0 && (
-                      <KLNote tone="warn">
-                        <b>{inert.map(c=>c.c).join(", ")} {inert.length===1?"has":"have"} a cross-system role but no concept</b>,
-                        so {inert.length===1?"it is":"they are"} ignored. A match key is a concept &mdash; Tax ID, say &mdash;
-                        bound to one column per system, so there is nothing for a role alone to match on. Give the
-                        column a concept, or set it back to a role that stays inside this system.
-                      </KLNote>
-                    )}
-                    {ex.length>0 && (
-                      <div style={{fontSize:11,color:T.textMuted,marginTop:11,lineHeight:1.6}}>
-                        <b style={{color:T.textSub}}>Not available across systems:</b>{" "}
-                        {ex.map(c=>`${c.key} (${c.c})`).join(", ")} — unique inside this system only, so
-                        the same value means something different elsewhere.
-                      </div>
-                    )}
-                    {pol.length>0 && (
-                      <div style={{fontSize:11,color:T.textMuted,marginTop:9,lineHeight:1.6}}>
-                        <b style={{color:T.textSub}}>Policies already applying:</b>{" "}
-                        {pol.map(p=>`${p.name} (${p.cols.join(", ")})`).join(" \u00b7 ")}
-                      </div>
-                    )}
-                    {con.map(c=>(
-                      <KLNote key={c.key} tone="warn">
-                        <b>{c.key} cannot be matched on.</b> {c.policy} masks {c.col}, and matching reads
-                        the raw value — so the resolver would either be refused the read or compare mask
-                        characters and merge everything. It needs an audited exemption before this key is usable.
-                      </KLNote>
-                    ))}
-                  </Card2>
-                );
-              })}
-            </>
-          )}
 
           {srcTab==="overview" && (
             <>
