@@ -32127,23 +32127,31 @@ const CONNECTOR_SCOPE = {
   // not units of storage. The one thing this connector deliberately does NOT bring is a
   // link between two applications: deciding that two supplier rows are the same company is
   // a steward's judgement, made in the Knowledge Layer, never an import side effect.
+  // Data Sense builds a knowledge graph per application (the AKG). EDG imports it as a
+  // governed object; it does not build one and never writes back. There is exactly one thing
+  // to import - the graph - and everything Data Sense recorded inside it (entity
+  // classifications, identity columns, table relationships, terms and synonyms) arrives with
+  // it as one object. Nothing to switch on separately, and nothing warehouse-shaped to pick.
+  //
+  // The one thing this connector deliberately does NOT bring is a link between two
+  // applications: deciding that two supplier rows are the same company is a steward's
+  // judgement made in the Knowledge Layer, never an import side effect.
   eai:{
-    objectTypes:["Knowledge graphs","Business entities","Master tables","Identity columns","Relationships","Business terms","Synonyms"],
-    note:"Data Sense builds one knowledge graph per application. EDG imports them as governed objects \u2014 it does not build or edit them, and never writes back. What arrives is meaning, not data: the rows stay in the source system.",
+    objectTypes:["Application Knowledge Graphs"],
+    note:"A knowledge graph is imported whole. The entity classifications, identity columns, table relationships and terms Data Sense recorded inside it all arrive as part of the graph, so there is nothing to select separately \u2014 and nothing warehouse-shaped to pick, because a knowledge graph has no databases, schemas or tables of its own.",
     dims:[
-      {k:"application",label:"Applications",ph:"SAP ECC, Oracle EBS\u2026", rxIn:"^(SAP|Oracle).*", rxEx:"^(Sandbox|Test|Demo).*", hint:"One application, one knowledge graph. This is the cheapest filter and the one most tenants use \u2014 excluding an application leaves its whole map out."},
-      {k:"entity",label:"Business entities",ph:"Supplier, Customer\u2026", rxIn:".*", rxEx:"^(Temp|Scratch).*", hint:"Import only the entities you intend to govern. Excluding one leaves its master tables and identity columns behind with it."},
-      {k:"table",label:"Tables",selectable:false,ph:"^(VENDOR|KNA|AP_).*", rxIn:".*", rxEx:"^(Z_TMP|TEST_).*", hint:"Applied to table names inside the graph. They are only known once the graph itself has been read, so there is nothing to pick from a list."},
+      {k:"application", label:"Knowledge graphs", opts:["SAP ECC","Oracle EBS","Oracle Fusion"],
+       ph:"Select knowledge graphs\u2026", rxIn:"^(SAP|Oracle).*", rxEx:"^(Sandbox|Test|Demo).*",
+       hint:"One application, one knowledge graph. Leave both lists empty to import every published graph this token can see."},
     ],
-    auth:"Validating the EAI service account",
-    authName:"Service account",
+    auth:"Validating the service token",
+    authName:"Service token",
     transport:"api",
     discover:"Listing published knowledge graphs",
     discovery:{"Knowledge graphs":3,"Business entities":4,"Master tables":9,"Relationships":214,"Business terms":126},
-    caps:{lineage:true, usage:false, profiling:false, tagSync:true},
-    capsNote:"A knowledge graph declares how tables relate inside its own application, which is lineage, and carries the classifications Data Sense assigned. It reports no usage, and EDG does not profile through it \u2014 the column statistics arrive with the map.",
-    lineageDesc:"The relationships the graph declares between tables inside ONE application. Links across applications are never imported \u2014 those are decided by a steward in the Knowledge Layer.",
-    tagSyncDesc:"Pull the classifications Data Sense assigned while profiling. They arrive as proposals for a steward, like any other discovery source \u2014 EDG never writes a classification back to Data Sense.",
+    // Nothing separately switchable. Lineage inside one application and the classifications
+    // Data Sense assigned are part of the graph, not optional extras alongside it.
+    caps:{},
   },
   powerbi:{
     objectTypes:["Apps","Workspaces","Dataflows","Datasets","Reports","Pages","Dashboards","Tiles","Datasource connections"],
@@ -32428,8 +32436,7 @@ const ADD_SERVICE_CONNECTORS = {
 const CONNECTOR_PREREQS = {
   eai:[
     "At least one application published in Data Sense. EDG imports published graphs \u2014 it does not build them and cannot trigger a build.",
-    "A service account with read access to the applications and their metadata. Write access is never needed: EDG does not edit a graph, and nothing it decides is written back.",
-    "The source systems those applications describe should also be connected in EDG. The graph carries the meaning; mastering records still reads the rows, and that happens through the source connection \u2014 not through this one.",
+    "A service-level token issued by EAI, scoped to read published knowledge graphs. No user account and no write access: EDG does not edit a graph, and nothing it decides is written back.",
     "A graph whose master table has no identifier that works outside its own system can still be imported. It arrives marked not yet masterable, with the reason, rather than failing the run.",
     "Classifications and terms arrive as proposals a steward accepts, so an import can never silently retag the catalog.",
   ],
@@ -32467,21 +32474,16 @@ const CONNECTOR_PREREQS = {
 
 const CONNECTOR_FIELDS = {
   eai:[
-    {k:"host", grp:"conn",          l:"EAI URL",             ph:"https://eai.company.solix.com", type:"text", req:true, help:"The Data Sense / EAI instance the knowledge graphs were built in."},
-    {k:"customer", grp:"conn",      l:"Customer",            ph:"J&J North America",             type:"text", req:true, help:"EAI scopes applications under a customer. EDG imports the graphs belonging to this one."},
-    {k:"authMode", grp:"auth",      l:"Credential type",     type:"select", opts:["Service account (recommended)","API token"], req:true, help:"A service account outlives the person who set it up. Use a token only for a short-lived trial."},
-    {k:"clientId", grp:"auth",      l:"Service account ID",  ph:"edg-akg-reader",                type:"text", req:true, help:"Needs read access to published applications. It never needs write access."},
-    {k:"clientSecret", grp:"auth",  l:"Secret",              ph:"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", type:"password", req:true, help:"Stored encrypted; never shown again after saving."},
+    {k:"host", grp:"conn",          l:"EAI URL",              ph:"https://eai.company.solix.com", type:"text", req:true, help:"The Data Sense / EAI instance the knowledge graphs were built in."},
+    // A service-level token carries its own scope, so EDG needs no user account, no password
+    // and no write access - it reads published graphs and nothing else.
+    {k:"serviceToken", grp:"auth",  l:"Service token",        ph:"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", type:"password", req:true, help:"Issued by EAI and scoped to read published knowledge graphs. Stored encrypted; never shown again after saving."},
     // A draft graph is still being edited upstream. Governing one means governing a map
     // that changes under you, so the default is to leave drafts alone.
     {k:"publishedOnly", grp:"scope",l:"Published graphs only", type:"toggle", val:true, help:"On by default. A draft graph is still being built in Data Sense \u2014 importing one means governing a map that moves under you."},
-    {k:"versionPolicy", grp:"scope",l:"Version to track",    type:"select", opts:["Latest published version","Pin to the version in use"], help:"Latest keeps the map current and raises a review when it changes. Pin freezes it, which is what you want while a master is being resolved against that version."},
-    {k:"incremental", grp:"scope",  l:"Incremental sync",    type:"toggle", val:true, help:"Sync only what changed since the last run. Turn it off to re-import every graph from scratch."},
+    {k:"versionPolicy", grp:"scope",l:"Version to track",     type:"select", opts:["Latest published version","Pin to the version in use"], help:"Latest keeps the map current and raises a review when it changes. Pin freezes it, which is what you want while a master is being resolved against that version."},
+    {k:"incremental", grp:"scope",  l:"Incremental sync",     type:"toggle", val:true, help:"Sync only what changed since the last run. Turn it off to re-import every graph from scratch."},
     {k:"driftReview", grp:"scope",  l:"Raise a review on change", type:"toggle", val:true, help:"When an imported graph changes \u2014 a new table, a reclassified entity, an identity column that moved \u2014 send it to a steward instead of applying it silently."},
-    // The honest half of the story. A map alone cannot master a record: matching reads
-    // real rows, and rows come from the source system, not from EAI.
-    {k:"sourceConns", l:"Source systems", type:"connrefs", grp:"scope", req:true,
-      help:"The EDG connections holding the data these applications describe. The graph gives you the meaning; building a master record still reads the rows, and that happens through these connections. Without them the graphs are visible and governable, but no master can be built from them."},
   ],
   postgres:   [{k:"host",l:"Host",ph:"prod-db.company.com",type:"text"},{k:"port",l:"Port",ph:"5432",type:"text"},{k:"database",l:"Database",ph:"warehouse",type:"text"},{k:"username",l:"Username",ph:"solix_reader",type:"text"},{k:"password",l:"Password",ph:"••••••••",type:"password"},{k:"ssl",l:"Enable SSL",type:"toggle",val:true}],
   snowflake:  [{k:"account",l:"Account",ph:"company.us-east-1",type:"text"},{k:"warehouse",l:"Warehouse",ph:"COMPUTE_WH",type:"text"},{k:"database",l:"Database",ph:"PROD_DWH",type:"text"},{k:"schema",l:"Schema",ph:"PUBLIC",type:"text"},{k:"username",l:"Username",ph:"SOLIX_USER",type:"text"},{k:"password",l:"Password",ph:"••••••••",type:"password"},{k:"role",l:"Role",ph:"SOLIX_READER",type:"text"}],
@@ -32643,6 +32645,55 @@ const AddServiceWizard = ({onClose, onDone}) => {
     {k:"ssl",      l:"Enable SSL",  type:"toggle", val:true,                        help:"Leave on unless the source does not support TLS."},
   ];
   const fieldDefs = CONNECTOR_FIELDS[connector] || GENERIC_DB_FIELDS;
+  // One field renderer, used by the Credentials card and by Scope & options on the Filters
+  // step. Scope is about WHAT to ingest, which is the filters question - it was sitting
+  // under Credentials, which is about how to get in.
+  const renderField = f => (
+                        <div key={f.k} style={f.type==="connrefs"||f.type==="textarea"?{gridColumn:"1 / -1"}:undefined}>
+                          <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>
+                            {f.l}{f.req&&<span style={{color:"#ee2424",marginLeft:3}}>*</span>}
+                          </label>
+                          {f.type==="toggle"
+                            ? <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",paddingTop:4}}>
+                                <Toggle on={fields[f.k]!==undefined?fields[f.k]:!!f.val} onChange={()=>setFields(p=>({...p,[f.k]:!(p[f.k]!==undefined?p[f.k]:f.val)}))}/>
+                                <span style={{fontSize:12,color:T.textSub}}>{(fields[f.k]!==undefined?fields[f.k]:!!f.val)?"Enabled":"Disabled"}</span>
+                              </label>
+                            : f.type==="select"
+                            // A select used to fall through to <input>, so every
+                            // dropdown in this form rendered as a free-text box.
+                            ? <select value={fields[f.k]!==undefined?fields[f.k]:(f.opts&&f.opts[0])||""}
+                                onChange={e=>setFields(p=>({...p,[f.k]:e.target.value}))}
+                                style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+                                {(f.opts||[]).map(o=><option key={o} value={o}>{o}</option>)}
+                              </select>
+                            : f.type==="connrefs"
+                            // EDG knows its own connections. Asking someone to retype
+                            // "SNOWFLAKE_PROD" as free text invites a typo that silently
+                            // breaks the very lineage this field exists to enable.
+                            ? <CatFieldDropdown
+                                label={null}
+                                placeholder="Select EDG connections…"
+                                options={EDG_CONNECTIONS}
+                                selected={fields[f.k]||[]}
+                                onChange={v=>setFields(p=>({...p,[f.k]:v}))}
+                              />
+                            : f.type==="textarea"
+                            // A PEM certificate, a private key and a service-account JSON are
+                            // all multi-line. This fell through to <input type="textarea">,
+                            // which browsers treat as a one-line text box.
+                            ? <textarea value={fields[f.k]||""} onChange={e=>setFields(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph} rows={4} spellCheck={false}
+                                style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",transition:"border .15s",fontFamily:"'Geist Mono',monospace",resize:"vertical",lineHeight:1.5}}
+                                onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
+                            : <input type={f.type||"text"} value={fields[f.k]||""} onChange={e=>setFields(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph}
+                                style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",transition:"border .15s",fontFamily:f.type==="password"?"'Geist Mono',monospace":"inherit"}}
+                                onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
+                          }
+                          {/* Where the value comes from. The field-level answer to
+                              "what do I actually put here", so nobody needs a briefing. */}
+                          {f.help&&<div style={{fontSize:10.5,color:T.textMuted,lineHeight:1.5,marginTop:5}}>{f.help}</div>}
+                        </div>
+  );
+
   const catMeta  = category ? ADD_SERVICE_CONNECTORS[category] : null;
   const availObjTypes = connector ? scope.objectTypes : [];
 
@@ -33043,7 +33094,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
                     {/* Where is it, how do I get in, how much of it do I want. A connector
                         with no groups declared falls into one unnamed block and renders as
                         it always did. */}
-                    {[{g:"conn",l:"Connection"},{g:"auth",l:"Authentication"},{g:"scope",l:"Scope & options"},{g:undefined,l:null}]
+                    {[{g:"conn",l:"Connection"},{g:"auth",l:"Authentication"},{g:undefined,l:null}]
                       .map(({g,l})=>{
                         const inGroup = activeFields.filter(f=>(f.grp||undefined)===g);
                         if(inGroup.length===0) return null;
@@ -33053,51 +33104,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
                         <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10,paddingBottom:6,borderBottom:`1px solid ${T.border}`}}>{l}</div>
                       )}
                     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:13}}>
-                      {inGroup.map(f=>(
-                        <div key={f.k} style={f.type==="connrefs"||f.type==="textarea"?{gridColumn:"1 / -1"}:undefined}>
-                          <label style={{display:"block",fontSize:12,fontWeight:600,color:T.textSub,marginBottom:6}}>
-                            {f.l}{f.req&&<span style={{color:"#ee2424",marginLeft:3}}>*</span>}
-                          </label>
-                          {f.type==="toggle"
-                            ? <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",paddingTop:4}}>
-                                <Toggle on={fields[f.k]!==undefined?fields[f.k]:!!f.val} onChange={()=>setFields(p=>({...p,[f.k]:!(p[f.k]!==undefined?p[f.k]:f.val)}))}/>
-                                <span style={{fontSize:12,color:T.textSub}}>{(fields[f.k]!==undefined?fields[f.k]:!!f.val)?"Enabled":"Disabled"}</span>
-                              </label>
-                            : f.type==="select"
-                            // A select used to fall through to <input>, so every
-                            // dropdown in this form rendered as a free-text box.
-                            ? <select value={fields[f.k]!==undefined?fields[f.k]:(f.opts&&f.opts[0])||""}
-                                onChange={e=>setFields(p=>({...p,[f.k]:e.target.value}))}
-                                style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
-                                {(f.opts||[]).map(o=><option key={o} value={o}>{o}</option>)}
-                              </select>
-                            : f.type==="connrefs"
-                            // EDG knows its own connections. Asking someone to retype
-                            // "SNOWFLAKE_PROD" as free text invites a typo that silently
-                            // breaks the very lineage this field exists to enable.
-                            ? <CatFieldDropdown
-                                label={null}
-                                placeholder="Select EDG connections…"
-                                options={EDG_CONNECTIONS}
-                                selected={fields[f.k]||[]}
-                                onChange={v=>setFields(p=>({...p,[f.k]:v}))}
-                              />
-                            : f.type==="textarea"
-                            // A PEM certificate, a private key and a service-account JSON are
-                            // all multi-line. This fell through to <input type="textarea">,
-                            // which browsers treat as a one-line text box.
-                            ? <textarea value={fields[f.k]||""} onChange={e=>setFields(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph} rows={4} spellCheck={false}
-                                style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",transition:"border .15s",fontFamily:"'Geist Mono',monospace",resize:"vertical",lineHeight:1.5}}
-                                onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
-                            : <input type={f.type||"text"} value={fields[f.k]||""} onChange={e=>setFields(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph}
-                                style={{width:"100%",padding:"9px 12px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",transition:"border .15s",fontFamily:f.type==="password"?"'Geist Mono',monospace":"inherit"}}
-                                onFocus={e=>e.target.style.borderColor="#ee2424"} onBlur={e=>e.target.style.borderColor=T.border}/>
-                          }
-                          {/* Where the value comes from. The field-level answer to
-                              "what do I actually put here", so nobody needs a briefing. */}
-                          {f.help&&<div style={{fontSize:10.5,color:T.textMuted,lineHeight:1.5,marginTop:5}}>{f.help}</div>}
-                        </div>
-                      ))}
+                      {inGroup.map(renderField)}
                     </div>
                     </div>
                         );
@@ -33119,6 +33126,14 @@ const AddServiceWizard = ({onClose, onDone}) => {
                   <div style={{padding:"14px 16px",background:T.bgSurface,border:`1px dashed ${T.border}`,
                     borderRadius:10,fontSize:12,color:T.textSub,lineHeight:1.65}}>
                     {scope.note||"This source creates no objects of its own."}
+                  </div>
+                ):availObjTypes.length===1?(
+                  /* One object type is not a choice. A picker offering a single option asks
+                     someone to decide something that was never theirs to decide. */
+                  <div style={{padding:"14px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,
+                    borderRadius:10,fontSize:12,color:T.textSub,lineHeight:1.65}}>
+                    <b style={{color:T.text}}>{availObjTypes[0]}</b> — the only object type this source produces.
+                    {scope.note&&<div style={{marginTop:6,color:T.textMuted,fontSize:11.5}}>{scope.note}</div>}
                   </div>
                 ):(
                   <>
@@ -33265,7 +33280,10 @@ const AddServiceWizard = ({onClose, onDone}) => {
                           <span style={{width:8,height:8,borderRadius:2,background:color,display:"block",flexShrink:0}}/>
                           {label}
                         </label>
-                        <TagInput tags={dimVal(dim.k,f)} onAdd={t=>setDim(dim.k,f,[...dimVal(dim.k,f),t])} onRemove={t=>setDim(dim.k,f,dimVal(dim.k,f).filter(x=>x!==t))} placeholder={ph} color={color}/>
+                        {dim.opts
+                          ? <CatFieldDropdown label={null} placeholder={ph} options={dim.opts}
+                              selected={dimVal(dim.k,f)} onChange={v=>setDim(dim.k,f,v)}/>
+                          : <TagInput tags={dimVal(dim.k,f)} onAdd={t=>setDim(dim.k,f,[...dimVal(dim.k,f),t])} onRemove={t=>setDim(dim.k,f,dimVal(dim.k,f).filter(x=>x!==t))} placeholder={ph} color={color}/>}
                         {hint&&<div style={{fontSize:10.5,color:T.textMuted,marginTop:5,lineHeight:1.5}}>{hint}</div>}
                       </div>
                     ))}
@@ -33294,10 +33312,27 @@ const AddServiceWizard = ({onClose, onDone}) => {
               </div>
               )}
 
-              {/* What to collect */}
+              {/* Scope & options. How much of the source to take and how to keep it current -
+                  the same question the filters above ask, so it belongs here rather than
+                  under Credentials, which is about how to get in. */}
+              {fieldDefs.some(f=>f.grp==="scope")&&(
+              <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                  <div style={{width:3,height:16,borderRadius:2,background:"#8b5cf6",flexShrink:0}}/>
+                  <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>Scope & options</span>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:13}}>
+                  {fieldDefs.filter(f=>f.grp==="scope").map(renderField)}
+                </div>
+              </div>
+              )}
+
+              {/* What to collect. A source with nothing separately collectable - where the
+                  objects arrive whole, as a knowledge graph does - gets no empty card. */}
+              {ingestionApps.length>0&&(
               <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:14,padding:"20px 22px"}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                  <div style={{width:3,height:16,borderRadius:2,background:"#8b5cf6",flexShrink:0}}/>
+                  <div style={{width:3,height:16,borderRadius:2,background:"#0ea5e9",flexShrink:0}}/>
                   <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>What to collect</span>
                 </div>
                 {/* Only what this source can actually produce. A capability it does not have
@@ -33319,6 +33354,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
                   ))}
                 </div>
               </div>
+              )}
 
             </div>
           )}
