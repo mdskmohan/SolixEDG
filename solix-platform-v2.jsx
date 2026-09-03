@@ -28921,6 +28921,31 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
     return all.length ? all : Object.keys(c);
   };
   const reseed = (ids, entity) => { setWSrcIds(ids); setWKeys(defaultKeys(ids, entity)); setWBeliefs({}); };
+
+  // Change what a column may be USED FOR on an imported graph. The graph itself is
+  // read-only - it belongs to Data Sense - so this writes only EDG's own identity overlay,
+  // and it is the reason the overlay is EDG's job rather than an upstream one: whether a
+  // value means the same thing OUTSIDE its system is a cross-system judgement, and an AKG
+  // only ever sees one system.
+  const setIdRole = (gid, table, col, role) => {
+    setSrcGraphs(gs => gs.map(g => {
+      if(g.id!==gid) return g;
+      const masters = (g.masters||[]).map(m => {
+        if(m.table!==table) return m;
+        const nm = {...m, idCols: klIdCols(m).map(c => c.c===col ? {...c, role, by:"human"} : c)};
+        nm.keys  = klMatchKeys(nm);
+        // Demoting the last cross-source key genuinely makes the entity unmasterable, and
+        // the estate should say so rather than resolving on nothing.
+        nm.ready = m.blocked ? false : klUsableKeys(nm).length>0;
+        return nm;
+      });
+      return {...g, masters, history:[
+        {at:stamp(), by:me, kind:"human", action:"Identifier role changed",
+         detail:`${table}.${col} set to ${(KL_ID_ROLES[role]||{}).l||role}`},
+        ...(g.history||[])]};
+    }));
+    toast(`${col} is now ${(KL_ID_ROLES[role]||{}).l||role}`);
+  };
   // A cross-source graph is governed like any other asset, so it draws on the same
   // classification and glossary vocabularies the rest of EDG uses.
   const klTagNames  = (useTagCtx().tagDefs||[]).map(t=>t.name);
@@ -29706,9 +29731,97 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
           <Tabs2 tabs={[
             {key:"overview", label:"Overview"},
             {key:"graph",    label:"Knowledge Graph"},
+            {key:"identity", label:`Identity (${(sg.masters||[]).length})`},
             {key:"assets",   label:`Tables (${(sg.assets||[]).length})`},
             {key:"feeds",    label:`Used by (${usedBy.length})`},
           ]} active={srcTab} onChange={setSrcTab}/>
+
+          {srcTab==="identity" && (
+            <>
+              <Card2 style={{padding:"13px 15px",marginBottom:14,borderLeft:`3px solid ${T.accent}`}}>
+                <div style={{fontSize:12.3,color:T.textSub,lineHeight:1.65}}>
+                  Data Sense classified these columns and profiled them. What it cannot say is
+                  which of them may be <b style={{color:T.text}}>matched across systems</b> &mdash; that depends on
+                  whether a value means the same thing outside this system, and a graph of one
+                  application has no way to know. So the roles below are EDG&rsquo;s, proposed from the
+                  profile and yours to change. Nothing here is written back to Data Sense.
+                </div>
+              </Card2>
+              {(sg.masters||[]).map(m=>{
+                const cols = klIdCols(m), usable = klUsableKeys(m), ex = klExcluded(m).filter(c=>c.key);
+                const pol = klMasterPolicies(m), con = klPolicyConflicts(m);
+                return (
+                  <Card2 key={m.table} style={{padding:16,marginBottom:14}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:12}}>
+                      <span style={{fontSize:13,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{m.table}</span>
+                      <KLChip kind="exist">{m.entity}</KLChip>
+                      {m.ready
+                        ? <Badge bg={T.green+"1a"} color={T.green} border={T.green+"55"}>Masterable</Badge>
+                        : <Badge bg={T.amber+"1a"} color={T.amber} border={T.amber+"55"}>Not masterable</Badge>}
+                      <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>
+                        {usable.length ? `Match keys: ${usable.join(", ")}` : "No key valid outside this system"}
+                      </span>
+                    </div>
+                    {m.blocked && <KLNote>{m.blocked}</KLNote>}
+                    {cols.length===0 ? (
+                      <div style={{fontSize:12,color:T.textMuted}}>No identifier columns were recorded for this table.</div>
+                    ) : (
+                      <div style={{display:"grid",gridTemplateColumns:"1.1fr 1fr 1.35fr .55fr .55fr 1.15fr",gap:7,fontSize:11}}>
+                        {["Column","Concept","May be used as","Filled","Distinct","Proposed by"].map(h=>(
+                          <span key={h} style={{color:T.textMuted,fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:".05em",paddingBottom:5,borderBottom:`1px solid ${T.border}`}}>{h}</span>
+                        ))}
+                        {cols.map(c=>{
+                          const r = KL_ID_ROLES[c.role]||{};
+                          return [
+                            <span key={c.c+"c"} style={{color:T.text,fontFamily:"'Geist Mono',monospace",padding:"7px 0",alignSelf:"center"}}>{c.c}</span>,
+                            <span key={c.c+"k"} style={{color:c.key?T.textSub:T.textMuted,padding:"7px 0",alignSelf:"center"}}>{c.key||"\u2014"}</span>,
+                            <span key={c.c+"r"} style={{padding:"4px 0",alignSelf:"center"}}>
+                              <select value={c.role} onChange={e=>setIdRole(sg.id, m.table, c.c, e.target.value)}
+                                disabled={!canCurate}
+                                title={r.hint||""}
+                                style={{width:"100%",padding:"5px 7px",background:T.bgElevated,border:`1px solid ${T.border}`,
+                                  borderRadius:7,color:T.text,fontSize:11,cursor:canCurate?"pointer":"not-allowed",boxSizing:"border-box"}}>
+                                {Object.entries(KL_ID_ROLES).map(([k,v])=>(
+                                  <option key={k} value={k}>{v.l}{v.cross?" \u00b7 cross-system":" \u00b7 this system only"}</option>
+                                ))}
+                              </select>
+                            </span>,
+                            <span key={c.c+"f"} style={{color:(c.fill!=null&&c.fill<80)?T.amber:T.textSub,fontFamily:"'Geist Mono',monospace",padding:"7px 0",alignSelf:"center"}}>{c.fill==null?"\u2014":c.fill+"%"}</span>,
+                            <span key={c.c+"d"} style={{color:T.textSub,fontFamily:"'Geist Mono',monospace",padding:"7px 0",alignSelf:"center"}}>{c.distinct==null?"\u2014":c.distinct+"%"}</span>,
+                            <span key={c.c+"b"} style={{color:T.textMuted,padding:"7px 0",alignSelf:"center"}}>
+                              {c.by==="human"
+                                ? <b style={{color:T.accent,fontWeight:600}}>Steward override</b>
+                                : ((KL_ID_SIGNALS.find(x=>x.k===c.by)||{}).l || "\u2014")}
+                            </span>,
+                          ];
+                        })}
+                      </div>
+                    )}
+                    {ex.length>0 && (
+                      <div style={{fontSize:11,color:T.textMuted,marginTop:11,lineHeight:1.6}}>
+                        <b style={{color:T.textSub}}>Not available across systems:</b>{" "}
+                        {ex.map(c=>`${c.key} (${c.c})`).join(", ")} — unique inside this system only, so
+                        the same value means something different elsewhere.
+                      </div>
+                    )}
+                    {pol.length>0 && (
+                      <div style={{fontSize:11,color:T.textMuted,marginTop:9,lineHeight:1.6}}>
+                        <b style={{color:T.textSub}}>Policies already applying:</b>{" "}
+                        {pol.map(p=>`${p.name} (${p.cols.join(", ")})`).join(" \u00b7 ")}
+                      </div>
+                    )}
+                    {con.map(c=>(
+                      <KLNote key={c.key} tone="warn">
+                        <b>{c.key} cannot be matched on.</b> {c.policy} masks {c.col}, and matching reads
+                        the raw value — so the resolver would either be refused the read or compare mask
+                        characters and merge everything. It needs an audited exemption before this key is usable.
+                      </KLNote>
+                    ))}
+                  </Card2>
+                );
+              })}
+            </>
+          )}
 
           {srcTab==="overview" && (
             <>
