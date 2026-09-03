@@ -10840,12 +10840,6 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                                       <input value={crit.critText||""} onChange={e=>setTagCrit(a.name,"critText",e.target.value)} placeholder="e.g. status = 'closed'" style={{...sel_s,flex:1,cursor:"text"}}/>
                                                     </div>
                                                   )}
-                                                  <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
-                                                    <span style={{fontSize:10,color:T.textMuted,minWidth:64}}>Execution date</span>
-                                                    <input type="date" value={crit.execDate||""} onChange={e=>setTagCrit(a.name,"execDate",e.target.value)} style={{...sel_s,flex:"1 1 130px",cursor:"text"}}/>
-                                                    <span style={{fontSize:10,color:T.textMuted}}>Sequence</span>
-                                                    <input type="number" value={crit.execSeq||""} onChange={e=>setTagCrit(a.name,"execSeq",e.target.value)} placeholder="1" style={{...sel_s,flex:"0 0 60px",width:60}}/>
-                                                  </div>
                                                 </div>
                                               );})()}
                                               {isHold&&(
@@ -32654,6 +32648,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
   const [enableUsage,     setEnableUsage]     = useState(false);
   const [enableTagSync,   setEnableTagSync]   = useState(true);
   // Test connection state (combined auth + discovery)
+  const [prereqOpen,   setPrereqOpen]  = useState(false);  // read once, then in the way
   const [testState,    setTestState]   = useState("idle"); // idle|running|success|error
   const [testPhase,    setTestPhase]   = useState(0);
   const [discovery,    setDiscovery]   = useState(null);
@@ -33490,7 +33485,14 @@ const AddServiceWizard = ({onClose, onDone}) => {
                       ["Exclude "+d.label, fmtList(dimVal(d.k,"excl"))],
                     ]),
                   ]}]),
-                  {title:"What to collect", rows:[["Enabled", apps]]},
+                  // Scope moved onto the Filters step, so the review has to echo it there too.
+                  ...(fieldDefs.some(f=>f.grp==="scope") ? [{title:"Scope & options",
+                    rows: fieldDefs.filter(f=>f.grp==="scope").map(f=>{
+                      const v = fields[f.k]!==undefined ? fields[f.k] : (f.type==="toggle" ? !!f.val : (f.opts&&f.opts[0]) || "—");
+                      return [f.l, typeof v==="boolean" ? (v?"Enabled":"Disabled") : String(v||"—")];
+                    })}] : []),
+                  // A source with nothing separately collectable gets no empty section.
+                  ...(ingestionApps.length ? [{title:"What to collect", rows:[["Enabled", apps]]}] : []),
                 ];
                 return cards.map(sec=>(
                   <div key={sec.title} style={{background:T.bgElevated,borderRadius:12,border:`1px solid ${T.border}`,overflow:"hidden"}}>
