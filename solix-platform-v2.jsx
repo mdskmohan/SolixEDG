@@ -28622,6 +28622,82 @@ const KL_PEOPLE = ["maya.chen","priya.nair","dev.patel","sarah.kim","alex.wu","l
 const KL_DOMAINS = [...new Set(["Procurement","Sales","Finance","Supply Chain","HR",
   ...DOMAIN_LIST_DATA.map(d=>d.name)])];
 
+const KLGovPanel = ({facts, status, statusTone, statusNote, owners, stewards, domain, tags, terms,
+                     people, domains, tagOpts, termOpts, canEdit, onPatch, action}) => {
+  const [open, setOpen] = useState(null);
+  const Sec = ({k, title, children, right}) => (
+    <div style={{padding:"12px 14px",borderTop:`1px solid ${T.border}`}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+        <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".07em"}}>{title}</span>
+        {right}
+        {canEdit && k && (
+          <button onClick={()=>setOpen(open===k?null:k)} title="Edit"
+            style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",color:open===k?T.accent:T.textMuted,
+              display:"flex",alignItems:"center",padding:0}}>{Ic.edit(12)}</button>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+  const Chips = ({vals, empty}) => vals && vals.length
+    ? <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{vals.map(v=><KLChip key={v} kind="exist">{v}</KLChip>)}</div>
+    : <span style={{fontSize:11.5,color:T.textMuted,fontStyle:"italic"}}>{empty}</span>;
+  return (
+    <Card2 style={{padding:0,overflow:"visible"}}>
+      <div style={{padding:"12px 14px"}}>
+        <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".07em"}}>Details</span>
+        <div style={{marginTop:9}}>
+          {facts.map(f=>(
+            <div key={f.l} style={{display:"flex",gap:10,padding:"5px 0",alignItems:"baseline"}}>
+              <span style={{fontSize:11.5,color:T.textMuted,minWidth:96}}>{f.l}</span>
+              <span style={{fontSize:11.5,color:f.c||T.textSub,marginLeft:"auto",textAlign:"right",
+                fontFamily:f.mono?"'Geist Mono',monospace":"inherit"}}>{f.v}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <Sec title="Status" right={action}>
+        <Badge bg={(statusTone||T.green)+"1a"} color={statusTone||T.green} border={(statusTone||T.green)+"55"}>{status}</Badge>
+        {statusNote && <div style={{fontSize:11,color:T.textMuted,marginTop:7,lineHeight:1.55}}>{statusNote}</div>}
+      </Sec>
+
+      <Sec k="owners" title="Owners">
+        {open==="owners"
+          ? <CatFieldDropdown label={null} placeholder="Select owners…" options={people}
+              selected={owners} onChange={v=>onPatch({owners:v, owner:v[0]||""})}/>
+          : <Chips vals={owners} empty="No owner assigned"/>}
+      </Sec>
+      <Sec k="stewards" title="Stewards">
+        {open==="stewards"
+          ? <CatFieldDropdown label={null} placeholder="Select stewards…" options={people}
+              selected={stewards} onChange={v=>onPatch({stewards:v})}/>
+          : <Chips vals={stewards} empty="None assigned"/>}
+      </Sec>
+      <Sec k="domain" title="Domain">
+        {open==="domain"
+          ? <select value={domain||""} onChange={e=>onPatch({domain:e.target.value})}
+              style={{width:"100%",padding:"7px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,cursor:"pointer",boxSizing:"border-box"}}>
+              {(domains||[]).map(d=><option key={d} value={d}>{d}</option>)}
+            </select>
+          : <Chips vals={domain?[domain]:[]} empty="Not set"/>}
+      </Sec>
+      <Sec k="tags" title="Classifications">
+        {open==="tags"
+          ? <CatFieldDropdown label={null} placeholder="Select classifications…" options={tagOpts}
+              selected={tags||[]} onChange={v=>onPatch({tags:v})}/>
+          : <Chips vals={tags} empty="None"/>}
+      </Sec>
+      <Sec k="terms" title="Business glossary">
+        {open==="terms"
+          ? <CatFieldDropdown label={null} placeholder="Select terms…" options={termOpts}
+              selected={terms||[]} onChange={v=>onPatch({terms:v})}/>
+          : <Chips vals={terms} empty="No terms linked"/>}
+      </Sec>
+    </Card2>
+  );
+};
+
 const KnowledgeLayerView = ({onToast, onNav}) => {
   const klS = useKLStore();
   const srcGraphs = klS.src, xGraphs = klS.x, measures = klS.measures,
@@ -28656,6 +28732,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
   // Sources are chosen before anything else: which systems, then which of their imported
   // graphs. The entity comes after, on the stage where its match keys are, because the keys
   // belong to the entity and choosing one without seeing the other is guesswork.
+  const [klMenu,    setKlMenu]    = useState(null);   // which object's ⋮ menu is open
   const [wSystems,  setWSystems]  = useState([]);
   const [wOwners,   setWOwners]   = useState([]);
   const [wStewards, setWStewards] = useState([]);
@@ -28936,6 +29013,55 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
   const klSensNames = _klTagDefs.filter(t=>t.category==="sensitivity").map(t=>t.name);
   const klTermNames = GLOSSARY_TERMS.map(t=>t.term);
 
+  // Every governed change writes who did it and what changed. The imported half of a graph
+  // is never touched: only EDG's own fields are patchable here.
+  // Archive is reversible and delete is not, so delete only becomes available once the
+  // object is already archived - the same two-step a domain uses.
+  const KLMenu = ({id, archived, onArchive, onRestore, onDelete}) => (
+    <div style={{position:"relative"}}>
+      <button onClick={e=>{e.stopPropagation(); setKlMenu(klMenu===id?null:id);}}
+        style={{width:30,height:30,borderRadius:8,background:klMenu===id?T.bgHover:"transparent",
+          border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <span style={{fontSize:15,lineHeight:1}}>⋮</span>
+      </button>
+      {klMenu===id && (
+        <>
+          <div onClick={()=>setKlMenu(null)} style={{position:"fixed",inset:0,zIndex:590}}/>
+          <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:600,minWidth:212,
+            background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,boxShadow:"0 12px 32px rgba(0,0,0,.22)",padding:5}}>
+            {archived ? (
+              <>
+                <button onClick={()=>{setKlMenu(null); onRestore();}} style={{width:"100%",display:"flex",gap:9,alignItems:"flex-start",padding:"9px 10px",background:"none",border:"none",cursor:"pointer",textAlign:"left",borderRadius:8,fontFamily:"inherit"}}>
+                  <span style={{marginTop:1,color:T.textMuted,display:"flex"}}>{Ic.refresh(13)}</span>
+                  <span><span style={{display:"block",fontSize:12,fontWeight:600,color:T.text}}>Restore</span>
+                    <span style={{display:"block",fontSize:10.5,color:T.textMuted,marginTop:1}}>Bring it back into the estate</span></span>
+                </button>
+                <button onClick={()=>{setKlMenu(null); onDelete();}} style={{width:"100%",display:"flex",gap:9,alignItems:"flex-start",padding:"9px 10px",background:"none",border:"none",cursor:"pointer",textAlign:"left",borderRadius:8,fontFamily:"inherit"}}>
+                  <span style={{marginTop:1,color:T.rose,display:"flex"}}>{Ic.trash(13)}</span>
+                  <span><span style={{display:"block",fontSize:12,fontWeight:600,color:T.rose}}>Delete permanently</span>
+                    <span style={{display:"block",fontSize:10.5,color:T.textMuted,marginTop:1}}>Cannot be undone</span></span>
+                </button>
+              </>
+            ) : (
+              <button onClick={()=>{setKlMenu(null); onArchive();}} style={{width:"100%",display:"flex",gap:9,alignItems:"flex-start",padding:"9px 10px",background:"none",border:"none",cursor:"pointer",textAlign:"left",borderRadius:8,fontFamily:"inherit"}}>
+                <span style={{marginTop:1,color:T.textMuted,display:"flex"}}>{Ic.trash(13)}</span>
+                <span><span style={{display:"block",fontSize:12,fontWeight:600,color:T.text}}>Archive</span>
+                  <span style={{display:"block",fontSize:10.5,color:T.textMuted,marginTop:1}}>Hidden from the estate, kept and restorable</span></span>
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  const klLabel = p => Object.entries(p).map(([k,v])=>
+    `${k} → ${Array.isArray(v)?(v.length?v.join(", "):"none"):(v||"none")}`).join(" · ");
+  const patchSrc = (id, p, action) => setSrcGraphs(gs=>gs.map(g=>g.id!==id?g:({...g, ...p,
+    history:[{at:stamp(), by:me, kind:"human", action:action||"Governance updated", detail:klLabel(p)}, ...(g.history||[])]})));
+  const patchX   = (id, p, action) => setXGraphs(xs=>xs.map(x=>x.id!==id?x:({...x, ...p,
+    history:[{at:stamp(), by:me, kind:"human", action:action||"Governance updated", detail:klLabel(p)}, ...(x.history||[])]})));
+
   // ── The cross-source build, as a set of explicit connections ──────────────
   // Which entities a graph carries, which master table the chosen one resolves to, and the
   // columns available on it. Everything the wizard shows is derived from these.
@@ -29100,11 +29226,11 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
     const fallback = srcById(wSrcIds[0])?.name || "—";
     setXGraphs(g=>[...g,{id, key:"XKG-"+(2003+g.length), name, entity:wEntity, srcIds:[...wSrcIds],
       records:0, autoApplied:0, clean:0, owner:wOwners[0]||me, owners:[...wOwners], stewards:[...wStewards],
-      status:"Published", tags:[...wTags], terms:[...wTerms],
+      status:"Draft", tags:[...wTags], terms:[...wTerms],
       domain:wDomain, built:stamp().slice(0,10), version:"v1", policy:null,
       env:{by:"human", src:"EDG · Knowledge Layer builder", conf:1, state:"published"},
       conflicts:[], unmatched:[],
-      history:[{at:stamp(), by:me, kind:"human", action:"Cross-source graph published",
+      history:[{at:stamp(), by:me, kind:"human", action:"Created as a draft",
                 detail:`Entity ${wEntity} · ${wSrcIds.length} source graphs · match keys ${wKeys.join(", ")||"none"}`}],
       scan:{state:wScan==="later"?"none":"done", mode:wScan==="later"?null:wScan,
             at:wScan==="later"?null:"2026-08-24", rows:wScan==="full"?184200:wScan==="sample"?5000:0,
@@ -29113,7 +29239,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
       beliefs:[...wKeys,"Address"].map(f=>({f, s:wBeliefs[f] ?? fallback})),
       golden:[]}]);
     closeWizard(); setTab("cross"); openX(id);
-    toast(`Cross-Source Knowledge Graph published — ${name}`);
+    toast(`${name} created as a draft — ${wOwners[0]||me} approves it before anything reads it`);
   };
 
   // ══════════════ CREATE WIZARD (drawer + section rail) ══════════════
@@ -29865,6 +29991,10 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
         ]} actions={<>
           <Btn ghost small icon={Ic.audit(12)} onClick={()=>setHist({title:sg.name, kicker:`Source Knowledge Graph · ${sg.key}`, entries:sg.history})}>History</Btn>
           <Btn ghost small icon={Ic.lineage(12)} onClick={()=>onNav&&onNav("catalog")}>Open in Lineage</Btn>
+          <KLMenu id={sg.id} archived={!!sg.archived}
+            onArchive={()=>{patchSrc(sg.id,{archived:true},"Archived"); setSelSrc(null); setTab("sources"); toast(`${sg.name} archived`);}}
+            onRestore={()=>{patchSrc(sg.id,{archived:false},"Restored"); toast(`${sg.name} restored`);}}
+            onDelete={()=>{setSrcGraphs(gs=>gs.filter(g=>g.id!==sg.id)); setSelSrc(null); setTab("sources"); toast(`${sg.name} deleted`);}}/>
           <Btn ghost small icon={Ic.refresh(12)} onClick={()=>toast("Re-scan queued — see Settings › Background Jobs")}>Re-scan</Btn>
         </>}/>
         <div style={{flex:1,overflowY:"auto",padding:24}}>
@@ -29920,6 +30050,26 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                   <Btn ghost small style={{marginTop:12}} onClick={()=>setSrcTab("graph")}>Open knowledge graph</Btn>
                 </Card2>
                 <div style={{display:"flex",flexDirection:"column",gap:14,minWidth:0}}>
+                <KLGovPanel
+                  facts={[
+                    {l:"Imported from", v:`Solix EAI · ${sg.version}`},
+                    {l:"Connection",    v:sg.connection, mono:true},
+                    {l:"Serves",        v:sg.opEntity||"unmapped"},
+                    {l:"Tables",        v:String(sg.tables), mono:true},
+                    {l:"Columns",       v:sg.cols.toLocaleString(), mono:true},
+                    {l:"Last built",    v:sg.built, mono:true},
+                  ]}
+                  status={sg.archived?"Archived":sg.status}
+                  statusTone={sg.archived?T.textMuted:sg.status==="Published"?T.green:T.amber}
+                  statusNote={sg.archived
+                    ? "Hidden from the estate. Restore it from the menu above."
+                    : sg.status==="Published"
+                      ? "Published in Data Sense. EDG governs it and never edits it."
+                      : "Still a draft in Data Sense, so it cannot be joined yet."}
+                  owners={sg.owners||(sg.owner?[sg.owner]:[])} stewards={sg.stewards||[]}
+                  domain={sg.domain} tags={sg.tags||[]} terms={sg.terms||[]}
+                  people={KL_PEOPLE} domains={KL_DOMAINS} tagOpts={klTagNames} termOpts={klTermNames}
+                  canEdit={canCurate} onPatch={p=>patchSrc(sg.id,p)}/>
                 <Card2 style={{padding:16}}>
                   <SH title="Resolution rules" sub="What makes each master matchable across sources."/>
                   {(sg.masters||[]).map(m=>(
@@ -29944,16 +30094,6 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                       silently skipped. {(sg.masters||[]).filter(m=>!m.ready).length} here.
                     </KLNote>
                   )}
-                </Card2>
-                <Card2 style={{padding:16}}>
-                  <SH title="Ownership"/>
-                  <div style={{fontSize:12.5,color:T.textSub,lineHeight:2}}>
-                    <div><b style={{color:T.text}}>Owner</b> · {sg.owner}</div>
-                    <div><b style={{color:T.text}}>Stewards</b> · {sg.stewards.length?sg.stewards.join(", "):"None assigned"}</div>
-                    <div><b style={{color:T.text}}>Domain</b> · {sg.domain}</div>
-                    <div><b style={{color:T.text}}>Created in</b> · {sg.from}</div>
-                    <div><b style={{color:T.text}}>Serves</b> · {sg.opEntity||"unmapped"}</div>
-                  </div>
                 </Card2>
                 </div>
               </div>
@@ -30019,7 +30159,16 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
           {label:xg.name},
         ]} actions={<>
           <Btn ghost small icon={Ic.audit(12)} onClick={()=>setHist({title:xg.name, kicker:`Cross-Source Knowledge Graph · ${xg.key}`, entries:xg.history})}>History</Btn>
+          {/* A draft is a proposal. Only the person accountable for the master can turn it
+              into something the rest of the estate is allowed to read. */}
+          {xg.status==="Draft" && (canApproveFor(xg)
+            ? <Btn small variant="primary" onClick={()=>patchX(xg.id,{status:"Published"},"Approved and published")}>Approve &amp; publish</Btn>
+            : <Btn small ghost onClick={()=>toast(`Only ${xg.owner} can approve this master`)}>Awaiting {xg.owner}</Btn>)}
           <Btn ghost small icon={Ic.refresh(12)} onClick={()=>reResolve(xg.id)}>Re-resolve</Btn>
+          <KLMenu id={xg.id} archived={!!xg.archived}
+            onArchive={()=>{patchX(xg.id,{archived:true},"Archived"); setSelX(null); setTab("cross"); toast(`${xg.name} archived`);}}
+            onRestore={()=>{patchX(xg.id,{archived:false},"Restored"); toast(`${xg.name} restored`);}}
+            onDelete={()=>{setXGraphs(xs=>xs.filter(x=>x.id!==xg.id)); setSelX(null); setTab("cross"); toast(`${xg.name} deleted`);}}/>
         </>}/>
         <div style={{flex:1,overflowY:"auto",padding:24}}>
           <KLProfileHead
@@ -30079,7 +30228,8 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                   color={xScanned&&klOpen(xg)?T.amber:xScanned?T.green:T.textMuted}/>
               </div>
 
-              {/* the metadata/data boundary, stated once, at the top of the profile */}
+              <div style={{display:"grid",gridTemplateColumns:"1.5fr 1fr",gap:14,alignItems:"start"}}>
+              <div style={{minWidth:0}}>
               {/* the metadata/data boundary, stated once, at the top of the profile */}
               <div style={{display:"flex",gap:10,alignItems:"center",padding:"12px 14px",marginBottom:14,borderRadius:10,
                 background:xScanned?T.bgSurface:T.bgElevated,
@@ -30143,6 +30293,31 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                   </Card2>
                 );
               })()}
+              </div>
+              <KLGovPanel
+                facts={[
+                  {l:"Entity",        v:xg.entity},
+                  {l:"Systems",       v:String(xg.srcIds.length), mono:true},
+                  {l:"Match keys",    v:xg.keys.join(", ")||"—"},
+                  {l:"Trusted records", v:xScanned?xg.records.toLocaleString():"not scanned", mono:xScanned},
+                  {l:"Version",       v:xg.version, mono:true},
+                  {l:"Built",         v:xg.built, mono:true},
+                ]}
+                status={xg.archived?"Archived":xg.status}
+                statusTone={xg.archived?T.textMuted:xg.status==="Published"?T.green:T.amber}
+                statusNote={xg.archived
+                  ? "Hidden from the estate. Restore it from the menu above."
+                  : xg.status==="Draft"
+                    ? `A draft is a proposal. ${xg.owner} approves it before anything downstream reads it.`
+                    : "Approved by its owner. Downstream may read it."}
+                action={xg.status==="Draft" && canApproveFor(xg)
+                  ? <Btn small variant="primary" onClick={()=>patchX(xg.id,{status:"Published"},"Approved and published")}>Approve</Btn>
+                  : null}
+                owners={xg.owners||(xg.owner?[xg.owner]:[])} stewards={xg.stewards||[]}
+                domain={xg.domain} tags={xg.tags||[]} terms={xg.terms||[]}
+                people={KL_PEOPLE} domains={KL_DOMAINS} tagOpts={klTagNames} termOpts={klTermNames}
+                canEdit={canCurate} onPatch={p=>patchX(xg.id,p)}/>
+              </div>
             </>
           )}
 
@@ -30360,7 +30535,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
     const q = sq.trim().toLowerCase();
     const hitQ = !q || [g.name,g.key,g.connection,g.owner,g.domain,...(g.entities||[])]
       .filter(Boolean).some(v=>String(v).toLowerCase().includes(q));
-    const hitS = sStatus==="all" || g.status===sStatus;
+    const hitS = sStatus==="archived" ? !!g.archived : (!g.archived && (sStatus==="all" || g.status===sStatus));
     return hitQ && hitS;
   }).sort((a,b)=> sSort==="name" ? a.name.localeCompare(b.name)
                 : sSort==="tables" ? b.tables-a.tables
@@ -30372,7 +30547,8 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
     const names = x.srcIds.map(i=>srcById(i)?.name).filter(Boolean);
     const hitQ = !q || [x.name,x.key,x.entity,x.owner,x.domain,...names]
       .filter(Boolean).some(v=>String(v).toLowerCase().includes(q));
-    const hitS = xStatus==="all" || (xStatus==="review" ? klOpen(x)>0 : x.status===xStatus);
+    const hitS = xStatus==="archived" ? !!x.archived
+               : !x.archived && (xStatus==="all" || (xStatus==="review" ? klOpen(x)>0 : x.status===xStatus));
     return hitQ && hitS;
   }).sort((a,b)=> xSort==="name" ? a.name.localeCompare(b.name)
                 : xSort==="records" ? b.records-a.records
@@ -30552,9 +30728,10 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
           <>
             <KLToolbar q={sq} setQ={setSq} placeholder="Search by name, ID, connection, entity or owner…"
               statuses={[
-                {v:"all",       l:"All",         n:srcGraphs.length},
-                {v:"Published", l:"Published",   n:srcGraphs.filter(g=>g.status==="Published").length, c:T.green},
-                {v:"In review", l:"In review",   n:srcGraphs.filter(g=>g.status==="In review").length, c:T.amber},
+                {v:"all",       l:"All",         n:srcGraphs.filter(g=>!g.archived).length},
+                {v:"Published", l:"Published",   n:srcGraphs.filter(g=>!g.archived&&g.status==="Published").length, c:T.green},
+                {v:"In review", l:"In review",   n:srcGraphs.filter(g=>!g.archived&&g.status==="In review").length, c:T.amber},
+                {v:"archived",  l:"Archived",    n:srcGraphs.filter(g=>g.archived).length, c:T.textMuted},
               ]}
               status={sStatus} setStatus={setSStatus}
               sort={sSort} setSort={setSSort}
@@ -30666,9 +30843,11 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
           <>
             <KLToolbar q={xq} setQ={setXq} placeholder="Search by name, ID, entity, owner or source…"
               statuses={[
-                {v:"all",       l:"All",           n:xGraphs.length},
-                {v:"Published", l:"Published",     n:xGraphs.filter(x=>x.status==="Published").length, c:T.green},
-                {v:"review",    l:"Needs decision",n:xGraphs.filter(x=>klOpen(x)>0).length, c:T.amber},
+                {v:"all",       l:"All",           n:xGraphs.filter(x=>!x.archived).length},
+                {v:"Draft",     l:"Draft",         n:xGraphs.filter(x=>!x.archived&&x.status==="Draft").length, c:T.amber},
+                {v:"Published", l:"Published",     n:xGraphs.filter(x=>!x.archived&&x.status==="Published").length, c:T.green},
+                {v:"review",    l:"Needs decision",n:xGraphs.filter(x=>!x.archived&&klOpen(x)>0).length, c:T.amber},
+                {v:"archived",  l:"Archived",      n:xGraphs.filter(x=>x.archived).length, c:T.textMuted},
               ]}
               status={xStatus} setStatus={setXStatus}
               sort={xSort} setSort={setXSort}
