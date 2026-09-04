@@ -11039,9 +11039,15 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                   ? matchedAssets.flatMap(a=>classifiedColumns(a.name,r.targetTags).map(c=>({asset:a.name,col:c,owner:a.owner})))
                                   : [];
                                 const matchOwners = [...new Set(matchedAssets.map(a=>a.owner))];
-                                // Specific-asset mode: a single named object (multi-select removed for now). Its
-                                // schema is known, so per-object criteria (date column, hold criteria, columns) is valid.
-                                const enfCols     = ASSET_COLUMNS[r.table]||[];
+                                // Specific-asset mode: one OR MORE picked objects, each routed through the SAME
+                                // per-object criteria grid as the classification tab.
+                                const ruleTargets = (r.targets&&r.targets.length) ? r.targets : (r.table?[r.table]:[]);
+                                const assetOptions= [...new Set(availTables.map(a=>a.name))];
+                                const setTargets  = (v)=>{ updRule(r.id,"targets",v); updRule(r.id,"table",v[0]||""); };
+                                const enfCols     = [...new Set(ruleTargets.flatMap(t=>ASSET_COLUMNS[t]||[]))];
+                                // Structured enforcement (either tab) sets criteria in the grid, so the old shared
+                                // single-criterion inputs in the action config are suppressed.
+                                const structuredGrid = isEnfField && !ruleIsObject;
                                 const fieldLabelSt = {display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
                                 // Shared objects→approvers list — used identically by BOTH tabs (Specific assets
                                 // and By classification) so the two read the same. objects: {name, owners, cols?}.
@@ -11165,14 +11171,14 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                         </div>
                                       </div>
                                       {applyMode==="asset" ? (<>
-                                        {/* A single named object — its schema is known, so per-object criteria works. */}
-                                        <div>
-                                          <label style={fieldLabelSt}>Asset <span style={{color:T.rose}}>*</span></label>
-                                          <TablePicker ruleId={r.id} value={r.table||""}/>
-                                        </div>
-                                        {!r.table
-                                          ? <div style={{fontSize:10.5,color:T.rose}}>Select an asset.</div>
-                                          : objectApproverList([{name:r.table, owners:resolveTableOwners(r.table), cols:isMaskRule?(r.maskColumns||[]):[]}], "asset")}
+                                        {/* One or more picked objects — each gets its own criteria in the grid,
+                                            exactly like the classification tab. */}
+                                        <CatFieldDropdown label="Assets" required options={assetOptions} selected={ruleTargets}
+                                          onChange={setTargets} placeholder="Search assets to enforce on…"
+                                          renderChip={o=><span style={{fontFamily:"'Geist Mono',monospace"}}>{o}</span>}/>
+                                        {ruleTargets.length===0
+                                          ? <div style={{fontSize:10.5,color:T.rose}}>Select at least one asset.</div>
+                                          : perObjectGrid(ruleTargets.map(t=>availTables.find(x=>x.name===t)||{name:t,type:"Table",domain:""}))}
                                       </>) : (<>
                                         <CatFieldDropdown label="Classification" required options={POLICY_TAGS} selected={r.targetTags||[]}
                                           onChange={v=>updRule(r.id,"targetTags",v)} placeholder="Search classifications…"
@@ -11465,7 +11471,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                               {/* Mask: structured tables use a columns picker; object stores use the
                                                   pattern editor. When a classification is set, columns come from it. */}
                                               {fd.action.verb==="Mask"&&ruleIsObject&&renderObjMaskEditor()}
-                                              {fd.action.verb==="Mask"&&!ruleIsObject&&applyMode!=="tag"&&(()=>{
+                                              {fd.action.verb==="Mask"&&!ruleIsObject&&!structuredGrid&&(()=>{
                                                 const cols = enfCols;  // union of columns across all selected assets
                                                 return (
                                                   <div style={{marginBottom:8}}>
@@ -11481,7 +11487,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                                   Search-based / Progressive Hold — rule-based only. ── */}
                                               {/* Object-store legal hold — bucket-level; freeze objects by date range / prefix. */}
                                               {fd.action.verb==="Legal hold"&&ruleIsObject&&renderObjCritType(true)}
-                                              {fd.action.verb==="Legal hold"&&!ruleIsObject&&applyMode!=="tag"&&(()=>{
+                                              {fd.action.verb==="Legal hold"&&!ruleIsObject&&!structuredGrid&&(()=>{
                                                 const cols = enfCols;  // the single selected asset's columns
                                                 const crit = r.holdCriteria&&r.holdCriteria.length ? r.holdCriteria : [{id:"hc0",column:"",operator:"=",dataType:"Text",value:""}];
                                                 const setCrit = (list)=>updRule(r.id,"holdCriteria",list);
@@ -11538,7 +11544,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                                   control. Datewise = date basis the clock counts from; Criteriawise = prefix.
                                                   Duration (Years/Months/Days) & Auto Purge come from the disposition fields below. */}
                                               {fd.action.verb==="Set disposition"&&ruleIsObject&&renderObjCritType(false)}
-                                              {fd.action.verb==="Set disposition"&&!ruleIsObject&&applyMode!=="tag"&&(()=>{
+                                              {fd.action.verb==="Set disposition"&&!ruleIsObject&&!structuredGrid&&(()=>{
                                                 const critType = r.critType||"date";
                                                 const cols = enfCols;  // the single selected asset's columns
                                                 return (
