@@ -28972,6 +28972,18 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
     return map;
   };
 
+  // The row's name is a LABEL, not a governed concept: it names the field on the golden
+  // record and in "when sources disagree", and has nothing to do with matching. Matching
+  // needs only the columns on the row. So it is free text, proposed from the column you
+  // picked, and renaming it renames the field everywhere it is referred to.
+  const renameKey = (oldK, newK) => {
+    const k = (newK||"").trim();
+    if(!k || k===oldK || wBind[k]) return;
+    setWBind(b=>{ const n={}; Object.keys(b).forEach(x=>{ n[x===oldK?k:x] = b[x]; }); return n; });
+    setWKeys(ks=>ks.map(x=>x===oldK?k:x));
+    setWBeliefs(bl=>{ const n={...bl}; if(oldK in n){ n[k]=n[oldK]; delete n[oldK]; } return n; });
+  };
+
   // What the PROFILES say about a connected key. No rows are read: fill, uniqueness and the
   // value pattern all come from the profiling each graph already carries. Whether the values
   // themselves overlap is a different question, and only a scan can answer it.
@@ -29317,27 +29329,37 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                   makes them one key. */}
               {wiz==="cross" && step===2 && (()=>{
                 const keys = Object.keys(wBind);
-                const vocab = [...new Set([
-                  ...keys,
-                  ...wSrcIds.flatMap(id=>{ const m=masterOf(id); return m?klIdCols(m).map(c=>c.key).filter(Boolean):[]; }),
-                  ...klTermNames, ...klTagNames,
-                ])].filter(k=>!klSensNames.includes(k)).sort();
-                const setCell = (key, id, col) => setWBind(b=>{
-                  const row = {...(b[key]||{})};
-                  if(col) row[id] = col; else delete row[id];
-                  const nb = {...b, [key]:row};
-                  setWKeys(ks=>Object.keys(nb).filter(k=>ks.includes(k)||false).concat(
-                    Object.keys(row).length>=2 && !ks.includes(key) ? [key] : []));
-                  return nb;
+                const setCell = (key, id, col) => {
+                  setWBind(b=>{
+                    const row = {...(b[key]||{})};
+                    if(col) row[id] = col; else delete row[id];
+                    // A key is usable once it is connected in two systems, and ticking it then
+                    // is what the person meant by connecting it.
+                    if(Object.keys(row).length>=2) setWKeys(ks=>ks.includes(key)?ks:[...ks,key]);
+                    return {...b, [key]:row};
+                  });
+                  // Name the row after whatever the column is already known as, the first time
+                  // a column is put on it. Typing over it is the point, not an exception.
+                  if(col && /^New field/.test(key)){
+                    const ci = colInfo(id,col)||{};
+                    // Whatever the column is already known as, falling back to its own name if
+                    // that is taken. A silent no-op would leave the row called "New field".
+                    const want = ci.key || (ci.cls||[]).find(x=>!klSensNames.includes(x)) || col;
+                    renameKey(key, wBind[want] ? col : want);
+                  }
+                };
+                const addKey = () => setWBind(b=>{
+                  let n = "New field", i = 2;
+                  while(b[n]){ n = `New field ${i++}`; }
+                  return {...b, [n]:{}};
                 });
-                const addKey = k => { if(!k||wBind[k]) return; setWBind(b=>({...b,[k]:{}})); };
                 const dropKey = k => { setWBind(b=>{const n={...b}; delete n[k]; return n;}); setWKeys(ks=>ks.filter(x=>x!==k)); };
                 const toggle = k => setWKeys(ks=>ks.includes(k)?ks.filter(x=>x!==k):[...ks,k]);
                 return (
                   <div style={{maxWidth:860}}>
                     <div style={{display:"grid",gridTemplateColumns:`26px 1.1fr repeat(${wSrcIds.length}, 1fr) 26px`,gap:7,fontSize:11,alignItems:"center"}}>
                       <span/>
-                      <span style={{color:T.textMuted,fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:".05em",paddingBottom:5,borderBottom:`1px solid ${T.border}`}}>Concept</span>
+                      <span style={{color:T.textMuted,fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:".05em",paddingBottom:5,borderBottom:`1px solid ${T.border}`}}>Field name</span>
                       {wSrcIds.map(id=>(
                         <span key={id} style={{color:T.textMuted,fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:".05em",paddingBottom:5,borderBottom:`1px solid ${T.border}`}}>
                           {srcById(id)?.name}
@@ -29352,7 +29374,16 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                             style={{width:16,height:16,borderRadius:4,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10.5,color:"#fff",
                               cursor:enough?"pointer":"not-allowed",opacity:enough?1:.4,
                               background:on?T.accent:"transparent",border:`1.5px solid ${on?T.accent:T.borderLight}`}}>{on?"✓":""}</span>,
-                          <span key={k+"k"} style={{fontSize:12,fontWeight:600,color:T.text,padding:"7px 0"}}>{k}</span>,
+                          <span key={k+"k"} style={{padding:"4px 0"}}>
+                            <input defaultValue={k} onBlur={e=>renameKey(k, e.target.value)}
+                              onKeyDown={e=>{ if(e.key==="Enter") e.target.blur(); }}
+                              style={{width:"100%",padding:"5px 7px",background:"transparent",
+                                border:`1px solid transparent`,borderRadius:7,color:T.text,fontSize:12,
+                                fontWeight:600,boxSizing:"border-box",fontFamily:"inherit"}}
+                              onFocus={e=>{e.target.style.background=T.bgElevated; e.target.style.borderColor=T.border;}}
+                              onMouseEnter={e=>{if(document.activeElement!==e.target) e.target.style.borderColor=T.borderLight;}}
+                              onMouseLeave={e=>{if(document.activeElement!==e.target) e.target.style.borderColor="transparent";}}/>
+                          </span>,
                           ...wSrcIds.map(id=>{
                             const m = masterOf(id), opts = m?klIdCols(m).map(c=>c.c):[];
                             return (
@@ -29374,19 +29405,16 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                       })}
                     </div>
                     <div style={{display:"flex",alignItems:"center",gap:9,marginTop:12}}>
-                      <select value="" onChange={e=>addKey(e.target.value)}
-                        style={{padding:"6px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.textSub,fontSize:11.5,cursor:"pointer"}}>
-                        <option value="">+ Add a key…</option>
-                        {vocab.filter(k=>!wBind[k]).map(k=><option key={k} value={k}>{k}</option>)}
-                      </select>
+                      <Btn small ghost onClick={addKey}>+ Add a row</Btn>
                       <span style={{fontSize:11.5,color:wKeys.length?T.textMuted:T.amber}}>
                         {wKeys.length?`${wKeys.length} key${wKeys.length===1?"":"s"} will be used`:"Connect a key in at least two systems, then tick it"}
                       </span>
                     </div>
                     <div style={{fontSize:10.8,color:T.textMuted,marginTop:9,lineHeight:1.6}}>
-                      The concept comes from your glossary and classifications. Column names are never
-                      compared — connecting <b style={{color:T.textSub}}>STCD1</b> to <b style={{color:T.textSub}}>NUM_1099</b> on
-                      one row is what makes them one key.
+                      Column names are never compared — putting <b style={{color:T.textSub}}>STCD1</b> and{" "}
+                      <b style={{color:T.textSub}}>NUM_1099</b> on one row is what makes them one key. The field
+                      name is only what this becomes on the golden record; it is proposed from the column and
+                      you can type over it.
                     </div>
 
                     <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"22px 0 4px"}}>
