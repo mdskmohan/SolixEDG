@@ -868,6 +868,42 @@ const CONN_DISPLAY_NAME = {
   bigquery:'BigQuery', kafka:'Kafka',
 };
 
+// BigID returns per-OBJECT attributes alongside its per-column classifiers: its own
+// sensitivity label, a risk score, when the object was last scanned, which of its data
+// sources the object came through. Those are facts ABOUT the asset rather than
+// classifications, so they belong in Custom Properties, not in the tag model. EDG does not
+// invent a parallel BigID field for each one - an admin maps a BigID field onto a property
+// the organisation already defines. That is why a mapped value stays editable, and why an
+// override has to be recorded rather than silently overwritten on the next scan.
+const BIGID_ATTRIBUTES = [
+  {field:"sensitivityLevel",  label:"Sensitivity classification", type:"enum",    vals:["Restricted","Confidential","Internal","Public"],
+   desc:"BigID's own sensitivity label for the object, from its Sensitivity Classification module."},
+  {field:"riskScore",         label:"Object risk score",          type:"number",  vals:[],
+   desc:"0-100. BigID's risk for the object, weighted by what the scan found and where the object sits."},
+  {field:"lastScanDate",      label:"Last scanned",               type:"date",    vals:[],
+   desc:"When the object was last covered by a BigID scan."},
+  {field:"bigidDataSource",   label:"BigID data source",          type:"string",  vals:[],
+   desc:"The BigID data source the object was read through - not the EDG connection name."},
+  {field:"piiAttributeCount", label:"Attributes found",           type:"integer", vals:[],
+   desc:"How many distinct attributes BigID matched on the object."},
+  {field:"policyHits",        label:"Open BigID policy hits",     type:"integer", vals:[],
+   desc:"Open hits against BigID's own policies for this object."},
+];
+const BIGID_ATTR = Object.fromEntries(BIGID_ATTRIBUTES.map(a=>[a.field,a]));
+// A mapping is only offered where the types agree - a date cannot fill an enum, and
+// silently coercing one into the other is how a governed field stops meaning anything.
+const BIGID_TYPE_FITS = {
+  enum:["enum","string"], number:["number","integer","string"], integer:["integer","number","string"],
+  date:["date","string"], string:["string","markdown"],
+};
+const bigidFits = (srcType,cpType)=>(BIGID_TYPE_FITS[srcType]||[]).includes(cpType);
+// What the last scan reported per object. The mapping decides which of these reach a
+// custom property; the rest stay unmapped and are shown as such.
+const BIGID_ATTR_VALUES = {
+  customers:{sensitivityLevel:"Restricted",   riskScore:87, lastScanDate:"2026-08-27", bigidDataSource:"snowflake-prod", piiAttributeCount:5, policyHits:1},
+  orders:   {sensitivityLevel:"Confidential", riskScore:62, lastScanDate:"2026-08-27", bigidDataSource:"snowflake-prod", piiAttributeCount:2, policyHits:1},
+};
+
 const INITIAL_CONNECTOR_CONFIGS = {
   snowflake:  { connectorId:'snowflake',  syncEnabled:true,  reverseSyncEnabled:true,  reverseSyncApproval:true,  conflictRule:'flag_always',  lastSyncAt:'2026-04-20T10:00:00Z', lastSyncStatus:'partial',  lastSyncNewTags:1, lastSyncConflicts:2,
     nameMappings:[
@@ -889,6 +925,18 @@ const INITIAL_CONNECTOR_CONFIGS = {
   // true for every source where it applies.
   bigid:      { connectorId:'bigid',      syncEnabled:true,  reverseSyncEnabled:false, reverseSyncApproval:false, conflictRule:'flag_always',  lastSyncAt:'2026-08-27T04:10:00Z', lastSyncStatus:'success',  lastSyncNewTags:2, lastSyncConflicts:0,
     contributes:'classifications', neverWritesBack:true,
+    contributesAttributes:true,
+    // One row per BigID attribute, mapped onto a custom property the org already defines.
+    // Unmapped is a real state, not a gap to hide: BigID reports six fields and this
+    // organisation has decided three of them are worth carrying.
+    attributeMappings:[
+      { id:'ba1', sourceField:'sensitivityLevel',  cpDefId:'cp1',  enabled:true,  status:'mapped'   },
+      { id:'ba2', sourceField:'riskScore',         cpDefId:'cp9',  enabled:true,  status:'mapped'   },
+      { id:'ba3', sourceField:'lastScanDate',      cpDefId:'cp10', enabled:true,  status:'mapped'   },
+      { id:'ba4', sourceField:'bigidDataSource',   cpDefId:null,   enabled:false, status:'unmapped' },
+      { id:'ba5', sourceField:'piiAttributeCount', cpDefId:null,   enabled:false, status:'unmapped' },
+      { id:'ba6', sourceField:'policyHits',        cpDefId:null,   enabled:false, status:'unmapped' },
+    ],
     // One row per classifier - the global "this classifier means this tag" decision.
     // Whether an individual column's finding has been accepted lives in BIGID_FINDINGS.
     nameMappings:[
@@ -917,6 +965,14 @@ const INITIAL_CONNECTOR_CONFIGS = {
       { id:'m17', sourceTagName:'crm-source',edgTagId:'t12',reverseSyncAlias:'crm-source',status:'mapped' },
     ]},
 };
+
+// Which connector a config modal is looking at, and whether that connector feeds custom
+// properties. Only a source that reports facts about an asset does; most report objects.
+const connAttrKey = (name)=>{
+  const n=String(name||"").toLowerCase().replace(/[^a-z]/g,"").replace("google","");
+  return Object.keys(INITIAL_CONNECTOR_CONFIGS).find(k=>n.includes(k)) || n;
+};
+const connContributesAttrs = (name)=>!!(INITIAL_CONNECTOR_CONFIGS[connAttrKey(name)]||{}).contributesAttributes;
 
 const INITIAL_INBOX = [
   { id:'i1', type:'new_source_tag',    tagName:'financial_forecast', assetId:ASSETS[0].id, assetName:'fact_revenue',            domain:'Finance',  sourceSystem:'dbt',       note:'Arrived during dbt sync at 09:42. No EDG mapping exists. Auto-scoped as dbt:financial_forecast on 6 assets. Map to an existing tag, promote to a Business tag, keep source-scoped, or discard.', metadata:{ affectedAssets:6, connectorId:'dbt' },                                    createdAt:'2026-04-20T09:42:00Z', resolvedAt:null, resolvedBy:null, resolution:null },
@@ -1110,6 +1166,21 @@ function TagProvider({ children }) {
     });
   };
 
+  // One BigID field -> one custom property definition. Clearing the property is a real
+  // choice (the org does not want that field), so it drops back to unmapped rather than
+  // being removed from the list.
+  const upsertAttrMapping = (connectorId, mapping) => {
+    setConnectorConfigs(prev=>{
+      const cfg=prev[connectorId]; if(!cfg) return prev;
+      const list=cfg.attributeMappings||[];
+      return {...prev,[connectorId]:{...cfg,attributeMappings:list.map(m=>{
+        if(m.id!==mapping.id) return m;
+        const merged={...m,...mapping};
+        return {...merged, status: merged.cpDefId ? 'mapped' : 'unmapped', enabled: merged.cpDefId ? merged.enabled : false};
+      })}};
+    });
+  };
+
   const updateTagPolicies = (patch) => setTagPolicies(prev=>({...prev,...patch}));
 
   // ── Propagation as a tracked background job ──
@@ -1176,7 +1247,7 @@ function TagProvider({ children }) {
   const setTagReverseSync = (tagId, enabled) => setTagDefs(prev=>prev.map(t=>t.id===tagId?{...t,reverseSyncEnabled:enabled}:t));
 
   return (
-    <TagContext.Provider value={{ tagDefs, assignments, connectorConfigs, inbox, tagPolicies, propagationJobs, reverseSyncRuns, unresolvedCount, conflictCount, pendingCount, getAssetAssignments, getTagDef, applyTag, removeTag, resolveInboxItem, createTagDef, updateTagDef, deleteTagDef, updateConnectorConfig, upsertNameMapping, updateTagPolicies, getPropagationJobs, startPropagation, setTagReverseSync, getReverseSyncRuns, pushSummaryForTag, logReverseSync }}>
+    <TagContext.Provider value={{ tagDefs, assignments, connectorConfigs, inbox, tagPolicies, propagationJobs, reverseSyncRuns, unresolvedCount, conflictCount, pendingCount, getAssetAssignments, getTagDef, applyTag, removeTag, resolveInboxItem, createTagDef, updateTagDef, deleteTagDef, updateConnectorConfig, upsertNameMapping, upsertAttrMapping, updateTagPolicies, getPropagationJobs, startPropagation, setTagReverseSync, getReverseSyncRuns, pushSummaryForTag, logReverseSync }}>
       {children}
     </TagContext.Provider>
   );
@@ -7007,6 +7078,11 @@ const POLICY_VIOLATIONS = [
   {id:"viol-4",policyId:"pol-4",assetName:"patient_events",assetType:"Table",domain:"Commerce",rule:"PHI quality gate",severity:"Critical",status:"Open",detectedAt:"2026-05-13",description:"patient_events contains PHI but quality score is 84 — below the required 90 threshold."},
   {id:"viol-5",policyId:"pol-4",assetName:"user_health_data",assetType:"Table",domain:"Finance",rule:"Access restriction",severity:"Critical",status:"Open",detectedAt:"2026-05-12",description:"user_health_data is accessible to roles without healthcare.phi_read scope. 2 roles in violation."},
   {id:"viol-6",policyId:"pol-4",assetName:"audit_records",assetType:"Table",domain:"Commerce",rule:"Audit logging",severity:"High",status:"Open",detectedAt:"2026-05-10",description:"audit_records retention period is set to 3 years; HIPAA requires immutable audit logs retained for 7 years."},
+  // Detected by BigID, not by an EDG policy run. A hit BigID found is a violation of a
+  // real rule against a real asset, so it belongs in the same store the Violations tab and
+  // the Inbox already read - source names who evaluated it so EDG never claims the finding.
+  {id:"viol-b1",policyId:"pol-bigid-1",assetName:"customers",assetType:"Table",domain:"Commerce",rule:"Special category data must be masked end to end",severity:"Critical",status:"Open",detectedAt:"2026-08-27",source:"BigID",sourceDetail:{scan:"weekly_pii_scan",column:"date_of_birth",classifier:"Date of Birth",confidence:93,externalId:"bigid-hit-90211"},description:"date_of_birth is unmasked in 2 downstream views. Masking is enforced on the table but not on the views built from it."},
+  {id:"viol-b2",policyId:"pol-bigid-2",assetName:"orders",assetType:"Table",domain:"Commerce",rule:"Retain only the personal data still needed",severity:"High",status:"Open",detectedAt:"2026-08-27",source:"BigID",sourceDetail:{scan:"weekly_pii_scan",column:"shipping_address",classifier:"Street Address",confidence:91,externalId:"bigid-hit-90212"},description:"shipping_address is retained on every historical order; only the most recent is needed downstream."},
 ];
 
 // ── Shared reactive store for policy violations ──
@@ -7251,6 +7327,70 @@ let _policiesStore = [
      {when:"2026-02-15",who:"priya.nair",action:"Policy deprecated — scope merged into ML Feature Readiness"},
      {when:"2025-12-01",who:"priya.nair",action:"Policy activated"},
      {when:"2025-11-01",who:"priya.nair",action:"Created draft v1"},
+   ]},
+  // -- Imported from BigID ------------------------------------------------------------
+  // BigID evaluates its OWN policies over what its scans find. Those hits used to live
+  // only on the asset's BigID tab, where a compliance officer working from Policy Manager
+  // never saw them. They arrive as read-only policy objects instead: origin names who
+  // authored and evaluated the rule, so EDG never claims it, and their hits can be real
+  // violations with a real remediation path. EDG does not run these - lastEvaluated is the
+  // scan time and runs are BigID scans, not EDG policy runs.
+  {id:"pol-bigid-1",name:"GDPR Art. 9 \u2014 special category data",fqn:"bigid.policies.gdpr_art9",version:1,
+   origin:{system:"BigID",connectorId:"bigid",externalId:"4471",importedAt:"2026-08-27",scan:"weekly_pii_scan",href:"https://bigid.jnj.internal/policies/4471"},readOnly:true,
+   category:"Data",severity:"Critical",lifecycle:"Active",cert:"Approved",owner:"maya.chen",stewards:["priya.nair"],tags:["PII","sensitive","regulated"],
+   created:"2026-08-27",updated:"2026-08-27",regulations:["GDPR"],
+   violations:1,compliancePct:null,lastEvaluated:"2026-08-27",assetsInScope:1,
+   scope:{domains:["Commerce"]},
+   criteria:["Special category data must not be readable in clear text by any downstream consumer, including views derived from the scanned table"],
+   description:"Authored and evaluated in BigID, held read-only here. Special category data found by a BigID scan must be masked everywhere it is readable, including views built on the scanned table. EDG imports the policy so its hits can be triaged and remediated alongside EDG's own violations \u2014 it does not re-evaluate the rule.",
+   rules:[
+     {id:"rb1-1",name:"Special category data must be masked end to end",criteria:"Any column BigID classifies as special category data must be masked in the table and in every view derived from it."},
+   ],
+   links:[{type:"Table",target:"customers",rel:"governs",assetId:2}],
+   runs:[
+     {id:"rb1a",ts:"2026-08-27 04:10",trigger:"BigID scan",duration:"18m 40s",assetsScanned:1,rulesEval:1,violationsNew:1,violationsResolved:0,status:"success",score:null},
+     {id:"rb1b",ts:"2026-08-20 04:10",trigger:"BigID scan",duration:"17m 12s",assetsScanned:1,rulesEval:1,violationsNew:0,violationsResolved:0,status:"success",score:null},
+   ],
+   history:[
+     {when:"2026-08-27",who:"bigid-sync",action:"Hit imported \u2014 customers.date_of_birth (Date of Birth, 93%)"},
+     {when:"2026-08-27",who:"bigid-sync",action:"Imported from BigID \u2014 policy 4471"},
+   ]},
+  {id:"pol-bigid-2",name:"GDPR Art. 5 \u2014 data minimisation",fqn:"bigid.policies.gdpr_art5",version:1,
+   origin:{system:"BigID",connectorId:"bigid",externalId:"4472",importedAt:"2026-08-27",scan:"weekly_pii_scan",href:"https://bigid.jnj.internal/policies/4472"},readOnly:true,
+   category:"Data",severity:"High",lifecycle:"Active",cert:"Approved",owner:"maya.chen",stewards:["priya.nair"],tags:["PII","regulated"],
+   created:"2026-08-27",updated:"2026-08-27",regulations:["GDPR"],
+   violations:1,compliancePct:null,lastEvaluated:"2026-08-27",assetsInScope:1,
+   scope:{domains:["Commerce"]},
+   criteria:["Personal data must not be retained on records that no longer need it"],
+   description:"Authored and evaluated in BigID, held read-only here. Personal data must not be carried on historical records that no longer need it.",
+   rules:[
+     {id:"rb2-1",name:"Retain only the personal data still needed",criteria:"A personal-data attribute must not be retained on historical records where only the most recent value is used downstream."},
+   ],
+   links:[{type:"Table",target:"orders",rel:"governs",assetId:1}],
+   runs:[
+     {id:"rb2a",ts:"2026-08-27 04:10",trigger:"BigID scan",duration:"18m 40s",assetsScanned:1,rulesEval:1,violationsNew:1,violationsResolved:0,status:"success",score:null},
+   ],
+   history:[
+     {when:"2026-08-27",who:"bigid-sync",action:"Hit imported \u2014 orders.shipping_address (Street Address, 91%)"},
+     {when:"2026-08-27",who:"bigid-sync",action:"Imported from BigID \u2014 policy 4472"},
+   ]},
+  {id:"pol-bigid-3",name:"Retention \u2014 contact data 7 years",fqn:"bigid.policies.contact_retention_7y",version:1,
+   origin:{system:"BigID",connectorId:"bigid",externalId:"4488",importedAt:"2026-08-27",scan:"weekly_pii_scan",href:"https://bigid.jnj.internal/policies/4488"},readOnly:true,
+   category:"Data",severity:"Medium",lifecycle:"Active",cert:"Approved",owner:"maya.chen",stewards:["priya.nair"],tags:["PII"],
+   created:"2026-08-27",updated:"2026-08-27",regulations:["GDPR"],
+   violations:0,compliancePct:null,lastEvaluated:"2026-08-27",assetsInScope:1,
+   scope:{domains:["Commerce"]},
+   criteria:["Contact data must not be held beyond seven years from collection"],
+   description:"Authored and evaluated in BigID, held read-only here. The last scan found no records outside the retention window \u2014 an imported policy with no hits is still worth holding, because a clean result is evidence.",
+   rules:[
+     {id:"rb3-1",name:"Contact data older than 7 years",criteria:"No contact-data record may be older than seven years from its collection date."},
+   ],
+   links:[{type:"Table",target:"customers",rel:"governs",assetId:2}],
+   runs:[
+     {id:"rb3a",ts:"2026-08-27 04:10",trigger:"BigID scan",duration:"18m 40s",assetsScanned:1,rulesEval:1,violationsNew:0,violationsResolved:0,status:"success",score:null},
+   ],
+   history:[
+     {when:"2026-08-27",who:"bigid-sync",action:"Imported from BigID \u2014 policy 4488"},
    ]},
 ];
 const _polSubs = new Set();
@@ -8285,6 +8425,12 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                             style={{flex:1,display:"flex",alignItems:"center",gap:7,padding:`5px 6px 5px ${isUncat?14:30}px`,background:"none",border:"none",cursor:"pointer",textAlign:"left",minWidth:0}}>
                             <span style={{width:8,height:8,borderRadius:"50%",background:catColor(p.category),flexShrink:0,display:"block"}}/>
                             <span style={{flex:1,fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+                            {p.origin&&(
+                              <span title={`Imported from ${p.origin.system} — read-only in EDG`}
+                                style={{flexShrink:0,fontSize:8.5,fontWeight:700,padding:"1px 5px",borderRadius:4,background:"rgba(18,183,106,.12)",color:"#12B76A",border:"1px solid rgba(18,183,106,.3)"}}>
+                                {p.origin.system}
+                              </span>
+                            )}
                             {openViolsForPol(p.id).length>0&&(
                               <span title={`${openViolsForPol(p.id).length} open violation${openViolsForPol(p.id).length>1?"s":""}`}
                                 style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:8,background:T.rose,color:"#fff",flexShrink:0,fontFamily:"'Geist Mono',monospace"}}>
@@ -8300,7 +8446,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                             </button>
                             {dotMenuOpen===p.id&&(
                               <div style={{position:"absolute",top:"100%",right:0,width:148,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 8px 24px rgba(0,0,0,.18)",zIndex:300,overflow:"hidden"}}>
-                                <button onMouseDown={e=>{e.stopPropagation();setSelPolicyId(p.id);setPdTab("overview");openEditWizard(p);setDotMenuOpen(null);}}
+                                <button onMouseDown={e=>{e.stopPropagation();setSelPolicyId(p.id);setPdTab("overview");setDotMenuOpen(null); if(p.readOnly){ onToast(`Imported from ${p.origin.system} — edit the rule there, not in EDG`,"info"); return; } openEditWizard(p);}}
                                   style={{width:"100%",padding:"9px 12px",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",fontSize:12,color:T.text,display:"flex",alignItems:"center",gap:8,borderBottom:`1px solid ${T.border}`}}
                                   onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                                   <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg> Edit
@@ -8347,6 +8493,16 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                     <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16}}>
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:17,fontWeight:700,color:T.text,lineHeight:1.3,marginBottom:4}}>{p.name}</div>
+                        {p.origin&&(
+                          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:2}}>
+                            <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:"rgba(18,183,106,.12)",color:"#12B76A",border:"1px solid rgba(18,183,106,.3)",textTransform:"uppercase",letterSpacing:".05em"}}>
+                              Imported {"\u00b7"} {p.origin.system}
+                            </span>
+                            <span style={{fontSize:11,color:T.textMuted}}>
+                              Policy {p.origin.externalId}, evaluated by {p.origin.system} in <span style={{fontFamily:"'Geist Mono',monospace"}}>{p.origin.scan}</span>. Read-only here.
+                            </span>
+                          </div>
+                        )}
                       </div>
                       <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
                         {p.severity&&(
@@ -8392,7 +8548,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                           {detailDotOpen&&(
                             <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,width:152,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:"0 8px 28px rgba(0,0,0,.2)",zIndex:400,overflow:"hidden"}}>
                               {[
-                                {label:"Edit",     icon:<svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>, action:()=>{openEditWizard(p);setDetailDotOpen(false);}},
+                                {label:"Edit",     icon:<svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>, action:()=>{setDetailDotOpen(false); if(p.readOnly){ onToast(`Imported from ${p.origin.system} — edit the rule there, not in EDG`,"info"); return; } openEditWizard(p);}},
                                 {label:"Delete",   icon:<svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 5l.5 5M8 5l-.5 5M3 3l.5 7h5L9 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>, danger:true, action:()=>{setDeleteConfPol(p);setDetailDotOpen(false);}},
                               ].map((item,i,arr)=>(
                                 <button key={item.label} onClick={item.action}
@@ -8786,6 +8942,12 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                           {/* ─ Evaluation ─ */}
                           <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
                             <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>Evaluation</div>
+                            {p.origin ? (
+                              <div style={{padding:"9px 11px",borderRadius:8,background:"rgba(18,183,106,.07)",border:"1px solid rgba(18,183,106,.25)",fontSize:11.5,color:T.textSub,lineHeight:1.6}}>
+                                {p.origin.system} evaluates this policy on its own schedule. EDG holds it read-only
+                                and never runs it {"\u2014"} the last result came from <span style={{fontFamily:"'Geist Mono',monospace"}}>{p.origin.scan}</span> on {p.lastEvaluated}.
+                              </div>
+                            ) : (<>
                             {/* Run Now button */}
                             <button
                               disabled={runningPolId===p.id}
@@ -8825,6 +8987,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                 <div style={{fontSize:10,color:T.textMuted,marginTop:3,fontFamily:"'Geist Mono',monospace"}}>{typeof p.schedule==="string"?p.schedule:""}</div>
                               </div>
                             )}
+                            </>)}
                           </div>
 
                           <div style={{padding:"16px"}}>
@@ -9654,7 +9817,10 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                   <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{v.assetType} · {v.domain}</div>
                                 </td>
                                 <td style={{padding:"10px 14px",maxWidth:220}}>
-                                  <div style={{fontSize:11.5,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>{pol?.name||v.policyId}</div>
+                                  <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+                                    <span style={{fontSize:11.5,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>{pol?.name||v.policyId}</span>
+                                    {v.source&&<span title={`Detected by ${v.source} — EDG did not evaluate this rule`} style={{flexShrink:0,fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:"rgba(18,183,106,.12)",color:"#12B76A",border:"1px solid rgba(18,183,106,.3)",letterSpacing:".04em"}}>{v.source}</span>}
+                                  </div>
                                   <div style={{fontSize:10.5,color:T.textMuted,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontStyle:"italic"}}>"{v.rule}"</div>
                                 </td>
                                 <td style={{padding:"10px 14px"}}>
@@ -9676,6 +9842,16 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                         {v.description
                                           ? <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.7}}>{v.description}</div>
                                           : <div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>Not yet provided.</div>}
+                                        {v.source&&v.sourceDetail&&(
+                                          <div style={{marginTop:11,padding:"9px 11px",borderRadius:8,background:"rgba(18,183,106,.07)",border:"1px solid rgba(18,183,106,.25)"}}>
+                                            <div style={{fontSize:10,fontWeight:700,color:"#12B76A",letterSpacing:.6,textTransform:"uppercase",marginBottom:5}}>Detected by {v.source}</div>
+                                            <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.65}}>
+                                              Scan <span style={{fontFamily:"'Geist Mono',monospace"}}>{v.sourceDetail.scan}</span> on <span style={{fontFamily:"'Geist Mono',monospace"}}>{v.assetName}.{v.sourceDetail.column}</span>, classifier {v.sourceDetail.classifier} at {v.sourceDetail.confidence}%.
+                                              EDG holds the policy read-only and did not evaluate the rule {"\u2014"} it tracks the hit so it can be worked and remediated here.
+                                            </div>
+                                            <div style={{fontSize:10.5,color:T.textMuted,marginTop:5,fontFamily:"'Geist Mono',monospace"}}>{v.sourceDetail.externalId}</div>
+                                          </div>
+                                        )}
                                       </div>
                                       <div style={{padding:"16px 20px"}}>
                                         <div style={{fontSize:10,fontWeight:700,color:v.status==="Resolved"?"#16a34a":T.textMuted,letterSpacing:.6,marginBottom:8,textTransform:"uppercase"}}>
@@ -19732,8 +19908,8 @@ const BIGID_FINDINGS = {
       {col:"customer_id",   classifier:"National ID",    confidence:41, samples:1000, matched:412, status:"rejected", tag:null,        note:"Rejected by priya.nair \u2014 the pattern matches an internal surrogate key, not a national ID. Low confidence was the tell."},
     ],
     policies:[
-      {name:"GDPR Art. 9 \u2014 special category data", status:"hit",   detail:"date_of_birth is unmasked in 2 downstream views. Masking is enforced on the table but not on the views built from it."},
-      {name:"Retention \u2014 contact data 7 years",     status:"clear", detail:"No records older than the retention window."},
+      {name:"GDPR Art. 9 \u2014 special category data", status:"hit",   policyId:"pol-bigid-1", detail:"date_of_birth is unmasked in 2 downstream views. Masking is enforced on the table but not on the views built from it."},
+      {name:"Retention \u2014 contact data 7 years",     status:"clear", policyId:"pol-bigid-3", detail:"No records older than the retention window."},
     ]},
   "orders":{
     scan:"weekly_pii_scan", lastScan:"3h ago", duration:"18m 40s", scanned:"48.6M rows sampled (1,000 per column)",
@@ -19742,7 +19918,7 @@ const BIGID_FINDINGS = {
       {col:"shipping_address", classifier:"Street Address",         confidence:91, samples:1000, matched:912, status:"accepted", tag:"PII", note:""},
     ],
     policies:[
-      {name:"GDPR Art. 5 \u2014 minimisation", status:"hit", detail:"shipping_address is retained on every historical order; only the latest is needed downstream."},
+      {name:"GDPR Art. 5 \u2014 minimisation", status:"hit", policyId:"pol-bigid-2", detail:"shipping_address is retained on every historical order; only the latest is needed downstream."},
     ]},
 };
 
@@ -19754,6 +19930,13 @@ const BIGID_STATUS_C = {
 
 // The BigID tab on a scanned asset.
 const BigIdOnAssetPanel = ({asset,onToast})=>{
+  // Hooks before the early return below — an unscanned asset may not change hook order.
+  const pols       = usePoliciesStore();
+  const [allViols] = usePolicyViolations();
+  const cpDefs     = useCustomPropDefs();
+  const cpVals     = useCustomPropVals();
+  const cpProv     = useCustomPropProv();
+  const bigidCtx   = useTagCtx() || {};
   const f=BIGID_FINDINGS[asset.name];
   if(!f) return <div className="fadeIn" style={{fontSize:12.5,color:T.textMuted}}>No BigID scan has covered this asset.</div>;
   const counts=["accepted","proposed","rejected"].map(k=>({k,n:f.columns.filter(c=>c.status===k).length}));
@@ -19777,6 +19960,59 @@ const BigIdOnAssetPanel = ({asset,onToast})=>{
           })}
         </div>
       </div></Card2>
+
+      {(()=>{
+        // The other half of what BigID contributes: per-OBJECT attributes. They are not
+        // classifications, so they do not go to the tag model — an admin maps each one onto
+        // a custom property the organisation already defines, and the value lands there.
+        const bcfg = (bigidCtx.connectorConfigs||{}).bigid;
+        const rows = ((bcfg&&bcfg.attributeMappings)||[]).filter(m=>m.status==="mapped"&&m.enabled);
+        const src  = BIGID_ATTR_VALUES[asset.name]||{};
+        const ent  = asset.type||"Table";
+        const stored = (cpVals[ent+"::"+asset.name])||{};
+        if(rows.length===0||Object.keys(src).length===0) return null;
+        return (
+          <Card2 style={{overflow:"hidden"}}>
+            <div style={{padding:"14px 16px 10px"}}>
+              <SH title="Attributes written to custom properties" sub="BigID's own fields about this object, mapped by an admin onto properties EDG already defines"/>
+            </div>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead><tr style={{background:T.bgElevated}}>
+                {["BigID field","Reported","Custom property","Value in EDG","State"].map(h=>(
+                  <th key={h} style={{padding:"8px 14px",textAlign:"left",fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",borderBottom:`1px solid ${T.border}`}}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {rows.map((m,i)=>{
+                  const def=cpDefs.find(d=>d.id===m.cpDefId);
+                  const meta=BIGID_ATTR[m.sourceField]||{label:m.sourceField};
+                  const pv=cpProvFor(cpProv,ent,asset.name,m.cpDefId);
+                  const over=!!(pv&&pv.overridden);
+                  return (
+                    <tr key={m.id} style={{borderBottom:i<rows.length-1?`1px solid ${T.border}`:"none"}}>
+                      <td style={{padding:"9px 14px",fontSize:11.5,color:T.text,fontWeight:600}}>{meta.label}
+                        <div style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace",marginTop:1}}>{m.sourceField}</div></td>
+                      <td style={{padding:"9px 14px",fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{String(src[m.sourceField])}</td>
+                      <td style={{padding:"9px 14px",fontSize:11.5,color:T.textSub}}>{def?def.name:<span style={{color:T.amber}}>definition removed</span>}</td>
+                      <td style={{padding:"9px 14px",fontSize:11.5,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{stored[m.cpDefId]!=null&&stored[m.cpDefId]!==""?String(stored[m.cpDefId]):"\u2014"}</td>
+                      <td style={{padding:"9px 14px",whiteSpace:"nowrap"}}>
+                        <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:5,textTransform:"uppercase",letterSpacing:".05em",
+                          background:over?`${T.amber}14`:"rgba(22,163,74,.1)",color:over?T.amber:"#16a34a",border:`1px solid ${over?T.amber:"#16a34a"}33`}}>
+                          {over?"Overridden":"In sync"}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div style={{padding:"10px 16px 13px",fontSize:10.5,color:T.textMuted,lineHeight:1.6,borderTop:`1px solid ${T.border}`}}>
+              Mapped under Connections {"\u203a"} BigID {"\u203a"} Attribute mapping. Values are editable on the
+              Custom Properties tab; a value a person changes is marked overridden and the next scan leaves it alone.
+            </div>
+          </Card2>
+        );
+      })()}
 
       <Card2 style={{overflow:"hidden"}}>
         <div style={{padding:"14px 16px 10px"}}>
@@ -19831,7 +20067,7 @@ const BigIdOnAssetPanel = ({asset,onToast})=>{
       </Card2>
 
       <Card2><div style={{padding:"14px 16px"}}>
-        <SH title="Policy findings" sub="BigID evaluates its own policies over what it found; EDG policies stay separate"/>
+        <SH title="Policy findings" sub="BigID evaluates these; EDG imports each policy read-only and tracks its hits as violations"/>
         <div style={{display:"flex",flexDirection:"column",gap:7}}>
           {f.policies.map(p=>{
             const hit=p.status==="hit";
@@ -19844,6 +20080,19 @@ const BigIdOnAssetPanel = ({asset,onToast})=>{
                 <div style={{minWidth:0}}>
                   <div style={{fontSize:12,fontWeight:600,color:T.text}}>{p.name}</div>
                   <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginTop:2}}>{p.detail}</div>
+                  {(()=>{
+                    const pol = pols.find(x=>x.id===p.policyId);
+                    if(!pol) return null;
+                    const vi = allViols.find(x=>x.policyId===p.policyId && x.assetName===asset.name);
+                    return (
+                      <div style={{fontSize:10.5,color:T.textMuted,marginTop:6,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                        <span>Policy Manager {"\u203a"} <span style={{color:T.textSub,fontWeight:600}}>{pol.name}</span></span>
+                        {vi
+                          ? <span style={{fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:4,background:`${T.rose}12`,color:T.rose,border:`1px solid ${T.rose}30`}}>{vi.status} violation</span>
+                          : <span style={{fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:4,background:"rgba(22,163,74,.1)",color:"#16a34a",border:"1px solid rgba(22,163,74,.25)"}}>No open violation</span>}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             );
@@ -19852,7 +20101,9 @@ const BigIdOnAssetPanel = ({asset,onToast})=>{
         <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${T.border}`,fontSize:10.5,color:T.textMuted,lineHeight:1.6}}>
           Ingested from BigID, not authored in EDG: scan results, classifier names and confidence scores.
           Accepted classifications flow into the EDG tag model with origin <span style={{fontFamily:"'Geist Mono',monospace"}}>synced</span> and
-          source <span style={{fontFamily:"'Geist Mono',monospace"}}>BigID</span>. Reverse sync is off — EDG never writes a classification back.
+          source <span style={{fontFamily:"'Geist Mono',monospace"}}>BigID</span>. Object attributes go to custom
+          properties through the admin's field mapping, and BigID's own policies are imported read-only so their
+          hits appear as violations. Reverse sync is off {"\u2014"} EDG never writes a classification back.
         </div>
       </div></Card2>
     </div>
@@ -31354,6 +31605,129 @@ const PREFLIGHT_STAGES = [
 ];
 
 // ─────────────────────────────────────────────
+// ATTRIBUTE MAPPING TAB — which of a source's own fields fill which custom property.
+// Deliberately NOT a locked "From BigID" block: the admin picks the destination, so the
+// property stays the organisation's field and stays editable. The cost of that choice is
+// that a human edit and the next scan can disagree, which is why every row states the
+// conflict rule rather than leaving it to be discovered the hard way.
+// ─────────────────────────────────────────
+const AttributeMappingTab = ({connectorId, connectorName}) => {
+  const { connectorConfigs, upsertAttrMapping } = useTagCtx();
+  const defs = useCustomPropDefs();
+  const cfg  = connectorConfigs[connectorId] || null;
+  const rows = (cfg && cfg.attributeMappings) || [];
+  const tableDefs = defs.filter(d=>d.entity==="Table" && !d.archived);
+  const takenBy = (defId,rowId)=>rows.find(r=>r.cpDefId===defId && r.id!==rowId);
+
+  if(!cfg || rows.length===0) return (
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
+      gap:10,padding:'44px 28px',textAlign:'center'}}>
+      <div style={{width:42,height:42,borderRadius:11,background:T.bgElevated,border:`1px solid ${T.border}`,
+        display:'flex',alignItems:'center',justifyContent:'center',color:T.textMuted}}>{Ic.tag(20)}</div>
+      <div style={{fontSize:14,fontWeight:600,color:T.text}}>{connectorName||'This connector'} reports no attributes</div>
+      <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65,maxWidth:430}}>
+        Attribute mapping is only offered for sources that report facts about an asset the
+        catalog already holds. This one contributes objects, not attributes.
+      </div>
+    </div>
+  );
+
+  const mapped = rows.filter(r=>r.status==='mapped').length;
+  return (
+    <div className="fadeIn" style={{display:'flex',flexDirection:'column',gap:18}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10}}>
+        {[
+          {label:'Fields reported', v:rows.length,             color:T.text},
+          {label:'Mapped',          v:mapped,                  color:mapped>0?T.green:T.textSub},
+          {label:'Not carried',     v:rows.length-mapped,      color:T.textMuted},
+        ].map(x=>(
+          <div key={x.label} style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,padding:'10px 12px'}}>
+            <div style={{fontSize:10,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:'0.06em'}}>{x.label}</div>
+            <div style={{fontSize:15,fontWeight:700,color:x.color}}>{x.v}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
+        <div style={{padding:'12px 14px 10px',borderBottom:`1px solid ${T.border}`}}>
+          <div style={{fontSize:12.5,fontWeight:700,color:T.text}}>{connectorName} field → custom property</div>
+          <div style={{fontSize:11,color:T.textMuted,marginTop:2,lineHeight:1.6}}>
+            Values land on the asset&apos;s Custom Properties tab, labelled with where they came from.
+            Only properties defined for Table are offered, and only where the types agree.
+          </div>
+        </div>
+        <table style={{width:'100%',borderCollapse:'collapse'}}>
+          <thead><tr style={{background:T.bgElevated}}>
+            {[connectorName+' field','Type','EDG custom property','Last value','Sync'].map(h=>(
+              <th key={h} style={{padding:'8px 14px',textAlign:'left',fontSize:10,fontWeight:700,color:T.textMuted,
+                textTransform:'uppercase',letterSpacing:'.06em',borderBottom:`1px solid ${T.border}`}}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {rows.map((r,i)=>{
+              const src = BIGID_ATTR[r.sourceField] || {label:r.sourceField,type:'string',desc:''};
+              const fits = tableDefs.filter(d=>bigidFits(src.type,d.type));
+              const sample = (BIGID_ATTR_VALUES.customers||{})[r.sourceField];
+              const last = i===rows.length-1;
+              return (
+                <tr key={r.id} style={{borderBottom:last?'none':`1px solid ${T.border}`}}>
+                  <td style={{padding:'10px 14px',verticalAlign:'top',maxWidth:200}}>
+                    <div style={{fontSize:12,fontWeight:600,color:T.text}}>{src.label}</div>
+                    <div style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace",marginTop:1}}>{r.sourceField}</div>
+                    {src.desc&&<div style={{fontSize:10.5,color:T.textMuted,marginTop:4,lineHeight:1.5}}>{src.desc}</div>}
+                  </td>
+                  <td style={{padding:'10px 14px',verticalAlign:'top'}}>
+                    <span style={{fontSize:9.5,fontWeight:700,textTransform:'uppercase',letterSpacing:'.04em',color:T.textMuted,
+                      background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:4,padding:'2px 6px'}}>{src.type}</span>
+                  </td>
+                  <td style={{padding:'10px 14px',verticalAlign:'top',minWidth:210}}>
+                    <select value={r.cpDefId||''} onChange={e=>upsertAttrMapping(connectorId,{id:r.id,cpDefId:e.target.value||null,enabled:!!e.target.value})}
+                      style={{width:'100%',maxWidth:230,padding:'6px 9px',background:T.bgElevated,border:`1px solid ${r.cpDefId?T.border:T.amber+'55'}`,
+                        borderRadius:7,color:r.cpDefId?T.text:T.textMuted,fontSize:11.5,outline:'none',cursor:'pointer',fontFamily:'inherit'}}>
+                      <option value="">Not carried</option>
+                      {fits.map(d=>{ const t=takenBy(d.id,r.id); return (
+                        <option key={d.id} value={d.id} disabled={!!t}>{d.name}{t?' — already mapped':''}</option>
+                      );})}
+                    </select>
+                    {fits.length===0&&(
+                      <div style={{fontSize:10.5,color:T.amber,marginTop:5,lineHeight:1.5}}>
+                        No Table property of a compatible type exists yet. An admin can add one in Settings › Custom Properties.
+                      </div>
+                    )}
+                  </td>
+                  <td style={{padding:'10px 14px',verticalAlign:'top',fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>
+                    {sample!=null?String(sample):'—'}
+                    <div style={{fontSize:10,color:T.textMuted,fontFamily:'inherit',marginTop:2}}>on customers</div>
+                  </td>
+                  <td style={{padding:'10px 14px',verticalAlign:'top'}}>
+                    {r.cpDefId
+                      ? <div onClick={()=>upsertAttrMapping(connectorId,{id:r.id,enabled:!r.enabled})}
+                          style={{width:32,height:18,borderRadius:10,background:r.enabled?T.accent:T.border,position:'relative',cursor:'pointer',transition:'background .2s'}}>
+                          <div style={{position:'absolute',top:3,left:r.enabled?14:3,width:12,height:12,borderRadius:'50%',background:'#fff',transition:'left .2s'}}/>
+                        </div>
+                      : <span style={{fontSize:11,color:T.textMuted}}>—</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{padding:'12px 14px',borderRadius:9,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+        <div style={{fontSize:11.5,fontWeight:700,color:T.text,marginBottom:5}}>Conflict rule: {cfg.conflictRule==='flag_always'?'flag, never overwrite':cfg.conflictRule}</div>
+        <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.65}}>
+          A mapped property stays editable, so a steward can correct what a scan reported. Once
+          they do, the value is marked overridden and {connectorName} stops writing to it — the
+          next scan records what it would have written instead of undoing the correction. Both
+          values are shown side by side on the asset, with a one-click revert.
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────
 // TAG SYNC TAB — used inside connector config modal
 // ─────────────────────────────────────────────
 const TagSyncTab = ({connectorId, connectorName}) => {
@@ -31749,7 +32123,7 @@ const IntegrationsView = ({onToast, deepLinkConnName})=>{
             </div>
             {/* Tabs */}
             <div style={{display:"flex"}}>
-              {["Connection","Preflight","Advanced","Tag sync"].map(tab=>(
+              {["Connection","Preflight","Advanced","Tag sync",...(connContributesAttrs(configTarget&&configTarget.name)?["Attribute mapping"]:[])].map(tab=>(
                 <button key={tab} onClick={()=>setConfigTab(tab)} style={{
                   padding:"8px 18px",background:"transparent",border:"none",marginBottom:-1,
                   borderBottom:`2px solid ${configTab===tab?T.accent:"transparent"}`,
@@ -31924,6 +32298,9 @@ const IntegrationsView = ({onToast, deepLinkConnName})=>{
             {/* ── Advanced tab ── */}
             {configTab==="Tag sync"&&configTarget&&(
               <TagSyncTab connectorId={configTarget.name.toLowerCase().replace(/[^a-z]/g,'').replace('google','')||'snowflake'} connectorName={configTarget.name}/>
+            )}
+            {configTab==="Attribute mapping"&&configTarget&&(
+              <AttributeMappingTab connectorId={connAttrKey(configTarget.name)} connectorName={configTarget.name}/>
             )}
             {configTab==="Advanced"&&(
               <div className="fadeIn">
@@ -34590,7 +34967,7 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
         </div>
         {/* tabs */}
         <div style={{display:"flex",gap:0}}>
-          {["overview","configuration","assets"].map(t=>(
+          {["overview","configuration","assets",...(connContributesAttrs(svc.name)?["attribute mapping"]:[])].map(t=>(
             <button key={t} onClick={()=>setCfgTab(t)} style={{padding:"7px 14px",background:"transparent",border:"none",marginBottom:-1,
               borderBottom:`2px solid ${cfgTab===t?T.accent:"transparent"}`,
               color:cfgTab===t?T.text:T.textSub,fontSize:12,fontWeight:cfgTab===t?600:400,cursor:"pointer",
@@ -34600,6 +34977,11 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
       </div>
 
       <div style={{flex:1,overflowY:"auto",padding:18}}>
+
+        {cfgTab==="attribute mapping"&&(
+          <AttributeMappingTab connectorId={connAttrKey(svc.name)}
+            connectorName={CONN_DISPLAY_NAME[connAttrKey(svc.name)]||svc.displayName||svc.name}/>
+        )}
 
         {/* ── OVERVIEW TAB ── */}
         {cfgTab==="overview"&&<>
@@ -37675,6 +38057,8 @@ let _cpDefs = [
   {id:"cp5", name:"Data Domain",           machine:"data_domain",          type:"enum",      entity:"View",      required:false, vals:["Commerce","Finance","Product","Marketing"], refTarget:"", desc:"Business domain this view serves."},
   {id:"cp7", name:"Encryption",            machine:"encryption",           type:"enum",      entity:"Bucket",    required:false, vals:["SSE-S3","SSE-KMS","None"], refTarget:"", desc:"At-rest encryption applied to this bucket."},
   {id:"cp8", name:"Environment",           machine:"environment",          type:"enum",      entity:"Database",  required:false, vals:["Prod","Staging","Dev"], refTarget:"", desc:"Deployment environment for this database."},
+  {id:"cp9", name:"Risk Score",             machine:"risk_score",           type:"number",    entity:"Table",     required:false, vals:[], refTarget:"", desc:"Aggregate sensitivity risk for this table, 0-100."},
+  {id:"cp10",name:"Last Sensitivity Scan",  machine:"last_sensitivity_scan",type:"date",      entity:"Table",     required:false, vals:[], refTarget:"", desc:"When this table was last scanned for sensitive data."},
 ];
 const _cpDefSubs = new Set();
 const cpDefsSet = (u)=>{ _cpDefs = typeof u==="function"?u(_cpDefs):u; _cpDefSubs.forEach(f=>f()); };
@@ -37689,11 +38073,52 @@ const useCustomPropDefs = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=
 
 // values keyed by `${entity}::${objectId}` → { [defId]: value }
 let _cpVals = {
-  "Table::customers": {cp1:"Confidential", cp4:"CC-4471"},
+  // customers.cp1 is the conflict story: BigID reported Restricted, a steward set
+  // Confidential, and that override stands until someone reverts it - see _cpProv.
+  "Table::customers": {cp1:"Confidential", cp4:"CC-4471", cp9:87, cp10:"2026-08-27"},
+  "Table::orders":    {cp1:"Confidential", cp9:62, cp10:"2026-08-27"},
 };
 const _cpValSubs = new Set();
 const setPropValue = (entity,objId,defId,val)=>{ const k=entity+"::"+objId; _cpVals={..._cpVals,[k]:{...(_cpVals[k]||{}),[defId]:val}}; _cpValSubs.forEach(f=>f()); };
 const useCustomPropVals = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_cpValSubs.add(fn);return()=>{_cpValSubs.delete(fn);};},[]); return _cpVals; };
+
+// -- Provenance for values a connector filled in --
+// A mapped property stays editable, because the admin chose the mapping: it is the
+// organisation's field, not BigID's. That makes a human edit and the next scan able to
+// disagree, so the source value is recorded ALONGSIDE the stored one. BigID's conflict
+// rule is flag_always, so sync leaves an overridden value alone and reports what it would
+// have written instead of quietly winning.
+let _cpProv = {
+  "Table::customers": {
+    cp1: {source:"BigID", field:"sensitivityLevel", at:"2026-08-27T04:10:00Z", sourceValue:"Restricted",   overridden:true,  overriddenBy:"priya.nair", overriddenAt:"2026-08-27T11:20:00Z", overrideNote:"Restricted is reserved for clinical data here, so Confidential is the correct tier."},
+    cp9: {source:"BigID", field:"riskScore",        at:"2026-08-27T04:10:00Z", sourceValue:87,             overridden:false},
+    cp10:{source:"BigID", field:"lastScanDate",     at:"2026-08-27T04:10:00Z", sourceValue:"2026-08-27",   overridden:false},
+  },
+  "Table::orders": {
+    cp1: {source:"BigID", field:"sensitivityLevel", at:"2026-08-27T04:10:00Z", sourceValue:"Confidential", overridden:false},
+    cp9: {source:"BigID", field:"riskScore",        at:"2026-08-27T04:10:00Z", sourceValue:62,             overridden:false},
+    cp10:{source:"BigID", field:"lastScanDate",     at:"2026-08-27T04:10:00Z", sourceValue:"2026-08-27",   overridden:false},
+  },
+};
+const _cpProvSubs = new Set();
+const cpProvSet = (u)=>{ _cpProv = typeof u==="function"?u(_cpProv):u; _cpProvSubs.forEach(f=>f()); };
+const useCustomPropProv = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_cpProvSubs.add(fn);return()=>{_cpProvSubs.delete(fn);};},[]); return _cpProv; };
+const cpProvFor = (prov,entity,objId,defId)=> ((prov||{})[entity+"::"+objId]||{})[defId] || null;
+const cpSameVal = (a,b)=> String(a==null?"":a)===String(b==null?"":b);
+// Called after a human saves a value a connector had filled in.
+const markPropOverride = (entity,objId,defId,by,newVal)=>cpProvSet(prev=>{
+  const k=entity+"::"+objId, cur=(prev[k]||{})[defId];
+  if(!cur) return prev;
+  const isOverride=!cpSameVal(newVal,cur.sourceValue);
+  return {...prev,[k]:{...prev[k],[defId]:{...cur,overridden:isOverride,
+    overriddenBy:isOverride?by:null, overriddenAt:isOverride?new Date().toISOString():null, overrideNote:isOverride?cur.overrideNote:null}}};
+});
+const revertPropToSource = (entity,objId,defId)=>{
+  const cur=cpProvFor(_cpProv,entity,objId,defId);
+  if(!cur) return;
+  setPropValue(entity,objId,defId,cur.sourceValue);
+  cpProvSet(prev=>{ const k=entity+"::"+objId; return {...prev,[k]:{...prev[k],[defId]:{...cur,overridden:false,overriddenBy:null,overriddenAt:null,overrideNote:null}}}; });
+};
 
 let _cpReqs = [];
 const _cpReqSubs = new Set();
@@ -37758,6 +38183,7 @@ const CustomPropsPanel = ({entity,objectId,objectName,owners=[],stewards=[],onTo
   const allDefs=useCustomPropDefs();
   const vals=useCustomPropVals();
   const reqs=useCustomPropReqs();
+  const prov=useCustomPropProv();
   const {role:cpRole,roleCfg:cpCfg}=useRole();
   const me=((cpCfg&&cpCfg.email)||"you@jnj").split("@")[0];
   const defs=allDefs.filter(d=>d.entity===entity && !d.archived);
@@ -37776,7 +38202,7 @@ const CustomPropsPanel = ({entity,objectId,objectName,owners=[],stewards=[],onTo
   const changed=defs.filter(d=>!pendingFor(d.id)&&!same(draft[d.id],stored[d.id]));
   const errorFor=(d)=>cpValidate(d,draft[d.id]);
   const blockedByErrors=()=>{ if(changed.some(d=>errorFor(d))){ setShowErrors(true); onToast&&onToast("Some values need fixing before saving","error"); return true; } return false; };
-  const saveDirect=()=>{ if(blockedByErrors())return; changed.forEach(d=>setPropValue(entity,objectId,d.id,draft[d.id])); setShowErrors(false); onToast&&onToast(`Saved ${changed.length} propert${changed.length===1?"y":"ies"}`,"success"); };
+  const saveDirect=()=>{ if(blockedByErrors())return; changed.forEach(d=>{ setPropValue(entity,objectId,d.id,draft[d.id]); markPropOverride(entity,objectId,d.id,me,draft[d.id]); }); setShowErrors(false); onToast&&onToast(`Saved ${changed.length} propert${changed.length===1?"y":"ies"}`,"success"); };
   const sendRequests=()=>{ if(blockedByErrors())return; changed.forEach(d=>{ requestPropChange({entity,targetId:objectId,name:objectName,propId:d.id,propName:d.name,requestedValue:draft[d.id],requestedBy:me,note:"Requested via detail page",owner:owners[0]||null}); pushNotif({category:"Property",type:"field_updated",title:`Property change requested · ${objectName}`,body:`${me} requested ${d.name} → ${Array.isArray(draft[d.id])?draft[d.id].join(", "):draft[d.id]}`,nav:entity==="Tag"?"tags":entity==="Domain"?"domains":"catalog"}); }); onToast&&onToast(`Sent ${changed.length} change${changed.length===1?"":"s"} to the owner's Inbox`,"success"); setDraft(stored); setShowErrors(false); };
   const gate = readOnly
     ? {c:T.textMuted, ic:Ic.lock?Ic.lock(13):"🔒", txt:`Read-only — you're neither an owner nor a steward of this ${entity.toLowerCase()}.`}
@@ -37795,7 +38221,7 @@ const CustomPropsPanel = ({entity,objectId,objectName,owners=[],stewards=[],onTo
       <span style={{fontSize:12.5,color:T.textSub}}>{gate.txt}</span>
     </div>
     <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,overflow:"hidden"}}>
-      {defs.map((d,idx)=>{ const pend=pendingFor(d.id); const editable=!readOnly&&!pend; const empty=cpIsEmpty(draft[d.id]); return (
+      {defs.map((d,idx)=>{ const pend=pendingFor(d.id); const editable=!readOnly&&!pend; const empty=cpIsEmpty(draft[d.id]); const pv=cpProvFor(prov,entity,objectId,d.id); return (
         <div key={d.id} style={{display:"grid",gridTemplateColumns:"220px 1fr",gap:20,padding:"15px 18px",borderBottom:idx<defs.length-1?`1px solid ${T.border}`:"none",alignItems:"start"}}>
           <div>
             <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
@@ -37805,6 +38231,8 @@ const CustomPropsPanel = ({entity,objectId,objectName,owners=[],stewards=[],onTo
             <div style={{display:"flex",alignItems:"center",gap:6,marginTop:5}}>
               <span style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.04em",color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:4,padding:"2px 6px"}}>{CP_TYPE_LABEL[d.type]||d.type}</span>
               {pend&&<span style={{fontSize:9,fontWeight:700,color:T.amber,background:`${T.amber}14`,border:`1px solid ${T.amber}33`,borderRadius:20,padding:"2px 7px"}}>PENDING</span>}
+              {pv&&<span title={`Filled by ${pv.source} from its ${pv.field} field`} style={{fontSize:9,fontWeight:700,color:"#12B76A",background:"rgba(18,183,106,.12)",border:"1px solid rgba(18,183,106,.32)",borderRadius:20,padding:"2px 7px",letterSpacing:".03em"}}>{pv.source}</span>}
+              {pv&&pv.overridden&&<span title="A person changed this after the source filled it" style={{fontSize:9,fontWeight:700,color:T.amber,background:`${T.amber}14`,border:`1px solid ${T.amber}33`,borderRadius:20,padding:"2px 7px"}}>OVERRIDDEN</span>}
             </div>
             {d.desc&&<div style={{fontSize:11,color:T.textMuted,marginTop:6,lineHeight:1.5}}>{d.desc}</div>}
           </div>
@@ -37816,6 +38244,23 @@ const CustomPropsPanel = ({entity,objectId,objectName,owners=[],stewards=[],onTo
             {editable&&d.required&&empty&&!(showErrors&&errorFor(d))&&<div style={{fontSize:10.5,color:T.rose,marginTop:5}}>This field is required.</div>}
             {!cpValueValid(d, editable?draft[d.id]:stored[d.id])&&<div style={{fontSize:10.5,color:T.rose,marginTop:5}}>Value is no longer an allowed option — please reselect.</div>}
             {pend&&<div style={{fontSize:10.5,color:T.amber,marginTop:5}}>A change to “{Array.isArray(pend.requestedValue)?pend.requestedValue.join(", "):pend.requestedValue}” is awaiting owner approval.</div>}
+            {pv&&(pv.overridden
+              ? <div style={{marginTop:8,padding:"8px 10px",borderRadius:8,background:`${T.amber}0d`,border:`1px solid ${T.amber}33`}}>
+                  <div style={{fontSize:10.5,fontWeight:700,color:T.amber}}>{pv.source} reports "{String(pv.sourceValue)}"</div>
+                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:3,lineHeight:1.55}}>
+                    Changed by {pv.overriddenBy||"a steward"}{pv.overrideNote?" — "+pv.overrideNote:"."} The next scan will not overwrite this value while the override stands.
+                  </div>
+                  {!readOnly&&(
+                    <button onClick={()=>{revertPropToSource(entity,objectId,d.id);onToast&&onToast(`${d.name} reverted to the ${pv.source} value`,"success");}}
+                      style={{marginTop:7,fontSize:10.5,fontWeight:600,padding:"3px 9px",borderRadius:6,background:"transparent",color:T.accent,border:`1px solid ${T.accent}55`,cursor:"pointer",fontFamily:"inherit"}}>
+                      Use the {pv.source} value
+                    </button>
+                  )}
+                </div>
+              : <div style={{fontSize:10.5,color:T.textMuted,marginTop:7,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                  <span style={{width:5,height:5,borderRadius:"50%",background:"#12B76A",display:"inline-block",flexShrink:0}}/>
+                  Filled by {pv.source} from <span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{pv.field}</span> {"\u00b7"} {_relAgo(pv.at)}
+                </div>)}
           </div>
         </div>
       );})}
