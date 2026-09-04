@@ -30008,47 +30008,60 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               {sg.from==="EDG" && <Badge bg={T.accentDim} color={T.accent} border={T.accent+"44"}>built in EDG</Badge>}
               <KLEnvelope env={sg.env}/>
             </>}
-            props={[
-              {l:"Connection",   v:sg.connection},
-              {l:"Serves",       v:sg.opEntity||"unmapped", c:sg.opEntity?T.text:T.amber},
-              {l:"Domain",     v:sg.domain},
-              {l:"Owner",      v:sg.owner},
-              {l:"Tables",     v:sg.tables},
-              {l:"Columns",    v:sg.cols},
-              {l:"Entities",   v:`${ready} matchable`},
-              {l:"Last built", v:sg.built},
-            ]}/>
+            props={[]}/>
 
           <Tabs2 tabs={[
             {key:"overview", label:"Overview"},
             {key:"graph",    label:"Knowledge Graph"},
-            {key:"assets",   label:`Tables (${(sg.assets||[]).length})`},
-            {key:"feeds",    label:`Used by (${usedBy.length})`},
+            {key:"matching", label:`Matching (${(sg.masters||[]).length})`},
+            {key:"feeds",    label:`Used in (${usedBy.length})`},
           ]} active={srcTab} onChange={setSrcTab}/>
 
           {srcTab==="overview" && (
             <>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:12,marginBottom:18}}>
-                <Metric label="Tables described" value={String(sg.tables)}/>
-                <Metric label="Using EDG words"  value={sg.words+"%"} color={sg.words===100?T.green:T.amber}/>
-                <Metric label="Labels invented"  value={String(sg.bind.invented)} color={T.green} sub="must stay zero"/>
-                <Metric label="Awaiting approval" value={String(sg.bind.proposed)} color={sg.bind.proposed?T.amber:T.text}/>
-                <Metric label="Feeds cross-source" value={String(usedBy.length)}/>
+                <Metric label="Can be mastered" value={String(ready)} color={ready?T.green:T.textMuted}
+                  sub={(sg.masters||[]).filter(m=>m.ready).map(m=>m.entity).join(" · ")||"nothing matchable yet"}/>
+                <Metric label="Blocked" value={String((sg.masters||[]).length-ready)}
+                  color={(sg.masters||[]).length-ready?T.amber:T.green}
+                  sub={(sg.masters||[]).filter(m=>!m.ready).map(m=>m.entity).join(" · ")||"nothing held back"}/>
+                <Metric label="Used in" value={String(usedBy.length)}
+                  sub={usedBy.length?usedBy.map(x=>x.name).join(" · "):"no master reads this graph yet"}/>
+                <Metric label="Scope" value={String(sg.tables)} sub={`tables · ${sg.cols.toLocaleString()} columns`}/>
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr",gap:14,alignItems:"start"}}>
+              <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,280px)",gap:24,alignItems:"start"}}>
+                <div style={{display:"flex",flexDirection:"column",gap:14,minWidth:0}}>
                 <Card2 style={{padding:16}}>
                   <SH title="Coverage" sub="What this graph describes, and how much of it is governed."/>
                   <KLRow nm="Business entities" chip={sg.entities.join(" · ")||"None"} kind={sg.entities.length?"exist":"plain"} cf="Available for cross-source matching"/>
                   <KLRow nm="Columns classified" chip={`${sg.cols} columns · ${sg.bind.tags} classifications`} kind="exist" cf="Classifications & Tags"/>
                   <KLRow nm="Tables given meaning" chip={`${sg.bind.termed} of ${sg.tables}`} kind="exist" cf="Business Glossary"/>
                   <KLRow nm="New terms proposed" chip={sg.bind.proposed?`${sg.bind.proposed} awaiting approval`:"None pending"} kind={sg.bind.proposed?"new":"exist"} cf="Standard glossary approval"/>
-                  <div style={{marginTop:14,paddingTop:13,borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"baseline",gap:12}}>
-                    <div style={{fontSize:28,fontWeight:800,color:T.green,fontFamily:"'Geist Mono',monospace"}}>{sg.bind.invented}</div>
-                    <div style={{fontSize:12,color:T.textSub}}>labels created outside EDG governance. Target: 0.<br/>
-                      <span style={{color:T.textMuted}}>A non-zero value means this graph has introduced vocabulary EDG does not govern.</span></div>
-                  </div>
                   <Btn ghost small style={{marginTop:12}} onClick={()=>setSrcTab("graph")}>Open knowledge graph</Btn>
                 </Card2>
+                <Card2 style={{padding:16}}>
+                  <SH title="What this graph describes"
+                    sub="Imported from Data Sense and read-only here — EDG governs these tables in the catalog, it does not edit the graph."/>
+                  <DataTable
+                    cols={[
+                      {key:"n",     label:"Table / View", render:v=><span style={{fontWeight:600,fontFamily:"'Geist Mono',monospace"}}>{v}</span>},
+                      {key:"t",     label:"Type", render:v=><TypeBadge type={v}/>},
+                      {key:"role",  label:"Role", render:v=><span style={{fontSize:11.5,color:T.textSub,textTransform:"capitalize"}}>{v||"—"}</span>},
+                      {key:"entity",label:"Entity", render:v=>v?<KLChip kind="exist">{v}</KLChip>:<span style={{color:T.textMuted}}>—</span>},
+                      {key:"term",  label:"Business term", render:v=>v?<span style={{fontSize:11.5,color:T.green,fontWeight:600}}>{v}</span>:<span style={{color:T.textMuted}}>—</span>},
+                      {key:"cols",  label:"Columns", render:v=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5}}>{v}</span>},
+                      {key:"tags",  label:"Classifications", render:v=>v.length?<span style={{display:"flex",gap:4,flexWrap:"wrap"}}>{v.map(t=><Badge key={t} bg={T.amber+"1a"} color={T.amber} border={T.amber+"44"}>{t}</Badge>)}</span>:<span style={{color:T.textMuted}}>—</span>},
+                      {key:"n2",    label:"Match keys", render:(v,r)=>{
+                        const m = sg.masters.find(x=>x.table===r.n);
+                        if(!m) return <span style={{color:T.textMuted}}>—</span>;
+                        return m.ready
+                          ? <span style={{fontSize:11,color:T.green,fontWeight:600}}>{m.keys.join(", ")}</span>
+                          : <span style={{fontSize:11,color:T.amber,fontWeight:600}}>None classified</span>;
+                      }},
+                    ]}
+                    rows={sg.assets||[]} emptyMsg="No tables mapped yet."/>
+                </Card2>
+                </div>
                 <div style={{display:"flex",flexDirection:"column",gap:14,minWidth:0}}>
                 <KLGovPanel
                   facts={[
@@ -30070,31 +30083,6 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                   domain={sg.domain} tags={sg.tags||[]} terms={sg.terms||[]}
                   people={KL_PEOPLE} domains={KL_DOMAINS} tagOpts={klTagNames} termOpts={klTermNames}
                   canEdit={canCurate} onPatch={p=>patchSrc(sg.id,p)}/>
-                <Card2 style={{padding:16}}>
-                  <SH title="Resolution rules" sub="What makes each master matchable across sources."/>
-                  {(sg.masters||[]).map(m=>(
-                    <div key={m.table} style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",padding:"9px 0",borderBottom:`1px solid ${T.border}`}}>
-                      <span style={{minWidth:0,flex:"1 1 120px"}}>
-                        <b style={{display:"block",fontSize:12,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{m.table}</b>
-                        <span style={{display:"block",fontSize:10.5,color:T.textMuted,marginTop:1}}>{m.entity}</span>
-                      </span>
-                      {m.ready
-                        ? <KLChip kind="exist">{m.keys.join(", ")}</KLChip>
-                        : <KLChip kind="new">Not resolvable yet</KLChip>}
-                      {m.rule
-                        ? <span style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{m.rule.by}</span>
-                        : <Btn small ghost onClick={()=>toast(m.blocked
-                            ? "Not generatable — see the reason on the Tables tab"
-                            : "Rule generated — this master can now be matched")}>Generate rule</Btn>}
-                    </div>
-                  ))}
-                  {(sg.masters||[]).some(m=>!m.ready)&&(
-                    <KLNote tone="quiet">
-                      A master with no rule is reported as <b>not resolvable, and why</b> — it is never
-                      silently skipped. {(sg.masters||[]).filter(m=>!m.ready).length} here.
-                    </KLNote>
-                  )}
-                </Card2>
                 </div>
               </div>
             </>
@@ -30105,25 +30093,36 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               emptyMsg="No tables mapped in this source graph yet."/>
           )}
 
-          {srcTab==="assets" && (
-            <DataTable
-              cols={[
-                {key:"n",     label:"Table / View", render:v=><span style={{fontWeight:600,fontFamily:"'Geist Mono',monospace"}}>{v}</span>},
-                {key:"t",     label:"Type", render:v=><TypeBadge type={v}/>},
-                {key:"role",  label:"Role", render:v=><span style={{fontSize:11.5,color:T.textSub,textTransform:"capitalize"}}>{v||"—"}</span>},
-                {key:"entity",label:"Entity", render:v=>v?<KLChip kind="exist">{v}</KLChip>:<span style={{color:T.textMuted}}>—</span>},
-                {key:"term",  label:"Business term", render:v=>v?<span style={{fontSize:11.5,color:T.green,fontWeight:600}}>{v}</span>:<span style={{color:T.textMuted}}>—</span>},
-                {key:"cols",  label:"Columns", render:v=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5}}>{v}</span>},
-                {key:"tags",  label:"Classifications", render:v=>v.length?<span style={{display:"flex",gap:4,flexWrap:"wrap"}}>{v.map(t=><Badge key={t} bg={T.amber+"1a"} color={T.amber} border={T.amber+"44"}>{t}</Badge>)}</span>:<span style={{color:T.textMuted}}>—</span>},
-                {key:"n2",    label:"Match keys", render:(v,r)=>{
-                  const m = sg.masters.find(x=>x.table===r.n);
-                  if(!m) return <span style={{color:T.textMuted}}>—</span>;
-                  return m.ready
-                    ? <span style={{fontSize:11,color:T.green,fontWeight:600}}>{m.keys.join(", ")}</span>
-                    : <span style={{fontSize:11,color:T.amber,fontWeight:600}}>None classified</span>;
-                }},
-              ]}
-              rows={sg.assets||[]} emptyMsg="No tables mapped yet."/>
+          {srcTab==="matching" && (
+            <>
+              <KLNote tone="quiet">What makes each master matchable outside its own system. A master with
+                no usable key is reported as <b>not resolvable, and why</b> — it is never silently skipped.</KLNote>
+              <Card2 style={{padding:16}}>
+                <SH title="Resolution rules" sub="What makes each master matchable across sources."/>
+                {(sg.masters||[]).map(m=>(
+                  <div key={m.table} style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",padding:"9px 0",borderBottom:`1px solid ${T.border}`}}>
+                    <span style={{minWidth:0,flex:"1 1 120px"}}>
+                      <b style={{display:"block",fontSize:12,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{m.table}</b>
+                      <span style={{display:"block",fontSize:10.5,color:T.textMuted,marginTop:1}}>{m.entity}</span>
+                    </span>
+                    {m.ready
+                      ? <KLChip kind="exist">{m.keys.join(", ")}</KLChip>
+                      : <KLChip kind="new">Not resolvable yet</KLChip>}
+                    {m.rule
+                      ? <span style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{m.rule.by}</span>
+                      : <Btn small ghost onClick={()=>toast(m.blocked
+                          ? "Not generatable — see the reason on the Tables tab"
+                          : "Rule generated — this master can now be matched")}>Generate rule</Btn>}
+                  </div>
+                ))}
+                {(sg.masters||[]).some(m=>!m.ready)&&(
+                  <KLNote tone="quiet">
+                    A master with no rule is reported as <b>not resolvable, and why</b> — it is never
+                    silently skipped. {(sg.masters||[]).filter(m=>!m.ready).length} here.
+                  </KLNote>
+                )}
+                </Card2>
+            </>
           )}
 
           {srcTab==="feeds" && (
@@ -30198,7 +30197,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
             {key:"overview", label:"Overview"},
             {key:"graph",    label:"Knowledge Graph"},
             {key:"records",  label:klOpen(xg)?`Trusted records (${klOpen(xg)})`:"Trusted records"},
-            {key:"rules",    label:"Rules"},
+            {key:"rules",    label:"Matching"},
             // Mode 2 (generate the governed build) is parked. The scope is producing a
             // trustworthy master; materialising it into dbt/DLT comes after that is right.
             // KLBuildPane and its logic stay in place, reachable again by restoring this tab.
@@ -30219,16 +30218,23 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
           {xTab==="overview" && (
             <>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:12,marginBottom:18}}>
-                <Metric label="Source graphs joined" value={String(xg.srcIds.length)}/>
-                <Metric label="Match keys" value={String(xg.keys.length)} sub={xg.keys.join(", ")}/>
                 <Metric label="Trusted records" value={xScanned?xg.records.toLocaleString():"—"}
-                  sub={xScanned?undefined:"Requires a data scan"} color={xScanned?T.text:T.textMuted}/>
-                <Metric label="Requires review" value={xScanned?String(klOpen(xg)):"—"}
-                  sub={xScanned?`${(xg.clean||0).toLocaleString()} resolved without conflict`:undefined}
+                  sub={xScanned?`across ${xg.srcIds.length} systems`:"requires a data scan"} color={xScanned?T.text:T.textMuted}/>
+                {/* The number that carries the whole argument: the machine does the bulk and a
+                    person adjudicates the tail. */}
+                <Metric label="Resolved automatically"
+                  value={xScanned&&xg.records?`${Math.round((xg.autoApplied||0)/xg.records*1000)/10}%`:"—"}
+                  color={T.green} sub={xScanned?`${(xg.autoApplied||0).toLocaleString()} of ${xg.records.toLocaleString()}`:undefined}/>
+                <Metric label="Needs a decision" value={xScanned?String(klOpen(xg)):"—"}
+                  sub={xScanned?(klOpen(xg)?klMoney(klExceptions(xg).filter(i=>i.state==="open").reduce((n,i)=>n+i.governs,0))+" governed":"nothing outstanding"):undefined}
                   color={xScanned&&klOpen(xg)?T.amber:xScanned?T.green:T.textMuted}/>
+                <Metric label="Reach of weakest key"
+                  value={(()=>{const f=xg.keys.map(k=>xg.srcIds.map(id=>{const g=srcById(id);const m=g&&g.masters.find(x=>x.entity===xg.entity);return m?klFill(m,k):null;}).filter(v=>v!=null)).flat();
+                    return f.length?Math.min(...f)+"%":"—";})()}
+                  sub="of rows in its weakest system"/>
               </div>
 
-              <div style={{display:"grid",gridTemplateColumns:"1.5fr 1fr",gap:14,alignItems:"start"}}>
+              <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,280px)",gap:24,alignItems:"start"}}>
               <div style={{minWidth:0}}>
               {/* the metadata/data boundary, stated once, at the top of the profile */}
               <div style={{display:"flex",gap:10,alignItems:"center",padding:"12px 14px",marginBottom:14,borderRadius:10,
