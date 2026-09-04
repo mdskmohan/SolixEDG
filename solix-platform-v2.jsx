@@ -27120,7 +27120,7 @@ const KL_X_STEPS = [
    d:"Say which entity in each graph is the same real-world thing. The names do not have to agree."},
   {t:"Columns to match", mode:"you", uses:"Identifier columns and their profiles",
    d:"Connect the column in each system that carries the same identifier. Column names never have to agree \u2014 the row is what makes them one key."},
-  {t:"Validate", mode:"you", uses:"Profiling from each knowledge graph",
+  {t:"Profile check", mode:"you", uses:"Profiling from each knowledge graph",
    d:"What the profiles say about the keys you connected, before anything is built. No data is read."},
   {t:"Governance", mode:"you", uses:"Owners, stewards, domains, tags, glossary terms",
    d:"A cross-source graph is a governed asset. Give it an owner, a domain and its business context, then choose what to publish."},
@@ -29357,9 +29357,18 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 const toggle = k => setWKeys(ks=>ks.includes(k)?ks.filter(x=>x!==k):[...ks,k]);
                 return (
                   <div style={{maxWidth:860}}>
-                    <div style={{display:"grid",gridTemplateColumns:`26px 1.1fr repeat(${wSrcIds.length}, 1fr) 26px`,gap:7,fontSize:11,alignItems:"center"}}>
-                      <span/>
-                      <span style={{color:T.textMuted,fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:".05em",paddingBottom:5,borderBottom:`1px solid ${T.border}`}}>Field name</span>
+                    <div style={{overflowX:"auto",paddingBottom:5}}>
+                    <div style={{display:"grid",minWidth:"max-content",
+                      gridTemplateColumns:`26px 168px repeat(${wSrcIds.length}, minmax(155px,1fr)) 26px`,
+                      gap:7,fontSize:11,alignItems:"center"}}>
+                      {/* alignSelf stretch, or the cell shrinks to its content height under the
+                          grid's alignItems:center and its background stops covering the row. */}
+                      <span style={{position:"sticky",left:0,zIndex:2,background:T.bgSurface,alignSelf:"stretch",
+                        paddingRight:7,marginRight:-7,paddingBottom:5,borderBottom:`1px solid ${T.border}`}}/>
+                      <span style={{position:"sticky",left:33,zIndex:2,background:T.bgSurface,alignSelf:"stretch",
+                        display:"flex",alignItems:"flex-end",
+                        paddingRight:7,marginRight:-7,
+                        color:T.textMuted,fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:".05em",paddingBottom:5,borderBottom:`1px solid ${T.border}`}}>Field name</span>
                       {wSrcIds.map(id=>(
                         <span key={id} style={{color:T.textMuted,fontWeight:700,fontSize:10,textTransform:"uppercase",letterSpacing:".05em",paddingBottom:5,borderBottom:`1px solid ${T.border}`}}>
                           {srcById(id)?.name}
@@ -29370,11 +29379,16 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                         const on = wKeys.includes(k), row = wBind[k]||{};
                         const enough = Object.keys(row).length>=2;
                         return [
-                          <span key={k+"x"} onClick={()=>enough&&toggle(k)}
-                            style={{width:16,height:16,borderRadius:4,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10.5,color:"#fff",
-                              cursor:enough?"pointer":"not-allowed",opacity:enough?1:.4,
-                              background:on?T.accent:"transparent",border:`1.5px solid ${on?T.accent:T.borderLight}`}}>{on?"✓":""}</span>,
-                          <span key={k+"k"} style={{padding:"4px 0"}}>
+                          <span key={k+"x"} style={{position:"sticky",left:0,zIndex:2,background:T.bgSurface,
+                            display:"flex",alignItems:"center",justifyContent:"center",
+                            padding:"4px 7px 4px 0",marginRight:-7,alignSelf:"stretch"}}>
+                            <span onClick={()=>enough&&toggle(k)}
+                              style={{width:16,height:16,borderRadius:4,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10.5,color:"#fff",
+                                cursor:enough?"pointer":"not-allowed",opacity:enough?1:.4,
+                                background:on?T.accent:"transparent",border:`1.5px solid ${on?T.accent:T.borderLight}`}}>{on?"✓":""}</span>
+                          </span>,
+                          <span key={k+"k"} style={{position:"sticky",left:33,zIndex:2,background:T.bgSurface,
+                            padding:"4px 7px 4px 0",marginRight:-7,alignSelf:"stretch",display:"flex",alignItems:"center"}}>
                             <input defaultValue={k} onBlur={e=>renameKey(k, e.target.value)}
                               onKeyDown={e=>{ if(e.key==="Enter") e.target.blur(); }}
                               style={{width:"100%",padding:"5px 7px",background:"transparent",
@@ -29403,6 +29417,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                             style={{cursor:"pointer",color:T.textMuted,fontSize:14,textAlign:"center"}}>×</span>,
                         ];
                       })}
+                    </div>
                     </div>
                     <div style={{display:"flex",alignItems:"center",gap:9,marginTop:12}}>
                       <Btn small ghost onClick={addKey}>+ Add a row</Btn>
@@ -29443,7 +29458,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 );
               })()}
 
-              {/* ── Stage 4 · Validate ── Everything here comes from profiling the graphs
+              {/* ── Stage 4 · Profile check ── Everything here comes from profiling the graphs
                   already carry. No rows are read, so this cannot say whether the VALUES
                   overlap - only whether the keys are capable of matching at all. */}
               {wiz==="cross" && step===3 && (()=>{
