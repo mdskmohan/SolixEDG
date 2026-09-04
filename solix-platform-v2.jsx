@@ -26624,6 +26624,7 @@ const KL_SRC_SEED = [
   {id:"sg1", key:"SKG-1001", name:"SAP ECC", service:"sap", connection:"sap-ecc-prod", srcConnected:true,
    domain:"Procurement", tables:412, cols:3318, words:100, entities:["Supplier","Customer","Material"],
    status:"Published", owner:"maya.chen", stewards:["priya.nair"], from:"Data Sense",
+   cert:"Approved", tags:["PII"], terms:["Supplier"],
    step:10, built:"2026-08-18", version:"v4",
    opEntity:"Interiors Division",
    env:{by:"ai", src:"Data Sense · AKG builder", conf:0.96, state:"published"},
@@ -26743,6 +26744,7 @@ const KL_X_SEED = [
   {id:"xg1", key:"XKG-2001", name:"Supplier Master", entity:"Supplier", srcIds:["sg1","sg2","sg3"],
    records:1204, clean:1198, autoApplied:1198, owner:"maya.chen", stewards:["priya.nair"], status:"Published",
    domain:"Procurement", built:"2026-08-19", version:"v2", policy:"Vendor Data Protection",
+   cert:"Approved", tags:["PII"], terms:["Supplier","Vendor Spend"],
    env:{by:"ai", src:"EDG resolver", conf:0.97, state:"published"},
    // reading rows is a separate, consented act — records stay hidden until this says done
    scan:{state:"done", mode:"full", at:"2026-08-19", rows:184200, approvedBy:"maya.chen"},
@@ -27504,7 +27506,7 @@ const KL_KIND = {
   golden:  {c:"#ee2424", label:"Golden record"},
   entity:  {c:"#0891b2", label:"Business entity"},
   term:    {c:"#16a34a", label:"Business term"},
-  tag:     {c:"#d97706", label:"Classification"},
+  tag:     {c:"#d97706", label:"Tag"},
   policy:  {c:"#9333ea", label:"Policy"},
   owner:   {c:"#64748b", label:"Owner"},
 };
@@ -27647,8 +27649,19 @@ function klBuildSourceGraph(sg, {showGov=true, focus=null}={}){
         E.push(klEdge("ast:"+a.n, id, "classified as"));
       });
     });
-    N.push({id:"own:"+sg.owner, rank:3, kind:"owner", label:sg.owner, sub:`owner · ${sg.domain}`, focused:false});
+    N.push({id:"own:"+sg.owner, rank:3, kind:"owner", label:sg.owner,
+            sub:`owner · ${sg.domain}${sg.cert?` · ${sg.cert}`:""}`, focused:false});
     E.push(klEdge(sysId, "own:"+sg.owner, "owned by"));
+    // Governance set on the object, drawn from the object - change it in the panel and the
+    // graph changes with it, because there is only one copy of it.
+    (sg.tags||[]).forEach(t=>{
+      N.push({id:"gtag:"+t, rank:3, kind:"tag", label:t, sub:"tag", focused:focus==="gtag:"+t});
+      E.push(klEdge(sysId, "gtag:"+t, "classified as"));
+    });
+    (sg.terms||[]).forEach(t=>{
+      N.push({id:"gterm:"+t, rank:3, kind:"term", label:t, sub:"glossary term", focused:focus==="gterm:"+t});
+      E.push(klEdge(sysId, "gterm:"+t, "means"));
+    });
   }
   return {nodes:klLayout(N), edges:E};
 }
@@ -27686,13 +27699,23 @@ function klBuildCrossGraph(xg, srcGraphs, {showGov=true, focus=null}={}){
           focused:focus===entId || !focus});
 
   if(showGov){
-    N.push({id:"term:"+xg.entity, rank:3, kind:"term", label:xg.entity, sub:"certified term", focused:focus==="term:"+xg.entity});
-    E.push(klEdge(entId, "term:"+xg.entity, "means"));
+    // The terms this master is bound to, as set on it - not a fixed node named after the
+    // entity, which claimed a binding nobody had made.
+    const gterms = (xg.terms&&xg.terms.length) ? xg.terms : [xg.entity];
+    gterms.forEach(t=>{
+      N.push({id:"term:"+t, rank:3, kind:"term", label:t, sub:"glossary term", focused:focus==="term:"+t});
+      E.push(klEdge(entId, "term:"+t, "means"));
+    });
+    (xg.tags||[]).forEach(t=>{
+      N.push({id:"gtag:"+t, rank:3, kind:"tag", label:t, sub:"tag", focused:focus==="gtag:"+t});
+      E.push(klEdge(entId, "gtag:"+t, "classified as"));
+    });
     if(xg.policy){
       N.push({id:"pol:"+xg.policy, rank:3, kind:"policy", label:xg.policy, sub:"enforced", focused:focus==="pol:"+xg.policy});
       E.push(klEdge(entId, "pol:"+xg.policy, "governed by"));
     }
-    N.push({id:"own:"+xg.owner, rank:3, kind:"owner", label:xg.owner, sub:`owner · ${xg.domain}`, focused:focus==="own:"+xg.owner});
+    N.push({id:"own:"+xg.owner, rank:3, kind:"owner", label:xg.owner,
+            sub:`owner · ${xg.domain}${xg.cert?` · ${xg.cert}`:""}`, focused:focus==="own:"+xg.owner});
     E.push(klEdge(entId, "own:"+xg.owner, "owned by"));
   }
   return {nodes:klLayout(N), edges:E};
@@ -28622,7 +28645,11 @@ const KL_PEOPLE = ["maya.chen","priya.nair","dev.patel","sarah.kim","alex.wu","l
 const KL_DOMAINS = [...new Set(["Procurement","Sales","Finance","Supply Chain","HR",
   ...DOMAIN_LIST_DATA.map(d=>d.name)])];
 
-const KLGovPanel = ({facts, status, statusTone, statusNote, owners, stewards, domain, tags, terms,
+// EDG's own certification vocabulary, the same one the catalog and glossary use.
+const KL_CERTS = ["Not certified","Draft","In review","Approved","Deprecated"];
+const KL_CERT_TONE = {"Approved":"#12B76A", "In review":"#f59e0b", "Draft":"#94a3b8", "Deprecated":"#ee2424"};
+
+const KLGovPanel = ({facts, status, statusTone, statusNote, cert, owners, stewards, domain, tags, terms,
                      people, domains, tagOpts, termOpts, canEdit, onPatch, action}) => {
   const [open, setOpen] = useState(null);
   const Sec = ({k, title, children, right}) => (
@@ -28662,6 +28689,15 @@ const KLGovPanel = ({facts, status, statusTone, statusNote, owners, stewards, do
         {statusNote && <div style={{fontSize:11,color:T.textMuted,marginTop:7,lineHeight:1.55}}>{statusNote}</div>}
       </Sec>
 
+      <Sec k="cert" title="Certification">
+        {open==="cert"
+          ? <select value={cert||"Not certified"} onChange={e=>onPatch({cert:e.target.value})}
+              style={{width:"100%",padding:"7px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,cursor:"pointer",boxSizing:"border-box"}}>
+              {KL_CERTS.map(c=><option key={c} value={c}>{c}</option>)}
+            </select>
+          : <Badge bg={(KL_CERT_TONE[cert]||T.textMuted)+"1a"} color={KL_CERT_TONE[cert]||T.textMuted}
+              border={(KL_CERT_TONE[cert]||T.textMuted)+"55"}>{cert||"Not certified"}</Badge>}
+      </Sec>
       <Sec k="owners" title="Owners">
         {open==="owners"
           ? <CatFieldDropdown label={null} placeholder="Select owners…" options={people}
@@ -28682,13 +28718,13 @@ const KLGovPanel = ({facts, status, statusTone, statusNote, owners, stewards, do
             </select>
           : <Chips vals={domain?[domain]:[]} empty="Not set"/>}
       </Sec>
-      <Sec k="tags" title="Classifications">
+      <Sec k="tags" title="Tags">
         {open==="tags"
-          ? <CatFieldDropdown label={null} placeholder="Select classifications…" options={tagOpts}
+          ? <CatFieldDropdown label={null} placeholder="Select tags…" options={tagOpts}
               selected={tags||[]} onChange={v=>onPatch({tags:v})}/>
           : <Chips vals={tags} empty="None"/>}
       </Sec>
-      <Sec k="terms" title="Business glossary">
+      <Sec k="terms" title="Glossary terms">
         {open==="terms"
           ? <CatFieldDropdown label={null} placeholder="Select terms…" options={termOpts}
               selected={terms||[]} onChange={v=>onPatch({terms:v})}/>
@@ -30079,7 +30115,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                     : sg.status==="Published"
                       ? "Published in Data Sense. EDG governs it and never edits it."
                       : "Still a draft in Data Sense, so it cannot be joined yet."}
-                  owners={sg.owners||(sg.owner?[sg.owner]:[])} stewards={sg.stewards||[]}
+                  cert={sg.cert} owners={sg.owners||(sg.owner?[sg.owner]:[])} stewards={sg.stewards||[]}
                   domain={sg.domain} tags={sg.tags||[]} terms={sg.terms||[]}
                   people={KL_PEOPLE} domains={KL_DOMAINS} tagOpts={klTagNames} termOpts={klTermNames}
                   canEdit={canCurate} onPatch={p=>patchSrc(sg.id,p)}/>
@@ -30319,7 +30355,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 action={xg.status==="Draft" && canApproveFor(xg)
                   ? <Btn small variant="primary" onClick={()=>patchX(xg.id,{status:"Published"},"Approved and published")}>Approve</Btn>
                   : null}
-                owners={xg.owners||(xg.owner?[xg.owner]:[])} stewards={xg.stewards||[]}
+                cert={xg.cert} owners={xg.owners||(xg.owner?[xg.owner]:[])} stewards={xg.stewards||[]}
                 domain={xg.domain} tags={xg.tags||[]} terms={xg.terms||[]}
                 people={KL_PEOPLE} domains={KL_DOMAINS} tagOpts={klTagNames} termOpts={klTermNames}
                 canEdit={canCurate} onPatch={p=>patchX(xg.id,p)}/>
