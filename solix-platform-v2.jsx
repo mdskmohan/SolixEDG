@@ -32827,10 +32827,10 @@ const canPerform = (action, resource, userRole, userDomain=null, resourceDomain=
 // whole reason a central plane is worth having: you are central because you are the
 // only one who can see every copy at once.
 const SL_CONF = {
-  conformant: {l:"Conformant", c:"#16a34a", bg:"rgba(22,163,74,.1)",  d:"Matches the EDG definition."},
-  drifted:    {l:"Drifted",    c:"#d97706", bg:"rgba(217,119,6,.1)",  d:"Matched once. Has since changed in the vendor without approval."},
-  divergent:  {l:"Divergent",  c:"#7c3aed", bg:"rgba(124,58,237,.1)", d:"Deliberately different, with a recorded reason and an owner."},
-  unmanaged:  {l:"Unmanaged",  c:"#9090a8", bg:"rgba(144,144,168,.12)",d:"Discovered in a vendor tool. Mapped to nothing, owned by nobody."},
+  conformant: {l:"Agrees",              c:"#16a34a", bg:"rgba(22,163,74,.1)",  d:"Matches the certified definition."},
+  drifted:    {l:"Disagrees",           c:"#d97706", bg:"rgba(217,119,6,.1)",  d:"Matched once. Has since changed in the tool without approval."},
+  divergent:  {l:"Different on purpose",c:"#7c3aed", bg:"rgba(124,58,237,.1)", d:"Deliberately different, with a recorded reason and an owner."},
+  unmanaged:  {l:"Unclaimed",           c:"#9090a8", bg:"rgba(144,144,168,.12)",d:"Found in a tool. Belongs to no metric and nobody owns it."},
 };
 
 const SL_TYPES = {
@@ -32849,13 +32849,19 @@ const SL_WINDOWS= ["quarter to date","year to date","month to date","trailing 12
 const SL_ENTITIES = [
   {id:"e_order", name:"Order", table:"orders", key:"order_id", domain:"Commerce", owner:"maya.chen",
    timeDims:["created_at","updated_at"], desc:"One row per placed order. The grain every revenue metric resolves to.",
-   evidence:"order_id · 100% distinct · 0% null over 48.2M rows"},
+   evidence:"order_id · 100% distinct · 0% null over 48.2M rows",
+   bindings:{snowflake:"SNOWFLAKE_PROD.COMMERCE.ORDERS", databricks:"main.commerce.orders",
+             dbt:"ref('fct_orders')", powerbi:"Orders", tableau:"Orders_Certified"}},
   {id:"e_customer", name:"Customer", table:"users", key:"user_id", domain:"Commerce", owner:"maya.chen",
    timeDims:["created_at","last_login"], desc:"One row per registered user account.",
-   evidence:"user_id · unique constraint · 0% null"},
+   evidence:"user_id · unique constraint · 0% null",
+   bindings:{snowflake:"SNOWFLAKE_PROD.COMMERCE.USERS", databricks:"main.commerce.users",
+             dbt:"ref('dim_customers')", powerbi:"Customers", tableau:"Customers"}},
   {id:"e_txn", name:"Transaction", table:"transactions", key:"txn_id", domain:"Finance", owner:"sarah.kim",
    timeDims:["txn_date","created_at"], desc:"One row per general-ledger transaction.",
-   evidence:"txn_id · primary key · 0% null"},
+   evidence:"txn_id · primary key · 0% null",
+   bindings:{snowflake:"ORACLE_FIN.GL.TRANSACTIONS", databricks:"main.finance.transactions",
+             dbt:"ref('fct_transactions')", powerbi:"Transactions", tableau:"—"}},
 ];
 
 // ── The register. Each metric is the semantic facet of a Glossary term (termId), or
@@ -32995,10 +33001,216 @@ const SL_VENDOR = [
    mappedTo:null, conformance:"unmanaged", note:"Looks like Customer Lifetime Value but is an average, not a prediction. Unmapped."},
 ];
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ESM — THE EDG SEMANTIC MODEL FORMAT
+// ───────────────────────────────────────────────────────────────────────────
+// The format has to outlive the five platforms we start with, so it is built in
+// three layers and only the bottom one is code:
+//
+//   1. CORE SPEC        — entities, relationships, dimensions, measures, metrics,
+//                         governance. Contains NO vendor concept whatsoever. Semver'd.
+//   2. CAPABILITY PROFILE — each platform declares what it can express, as DATA.
+//                         Compilability is computed by diffing a model against a
+//                         profile, so adding a platform means adding one object here
+//                         and every badge, warning and matrix in the UI works at once.
+//   3. ADAPTER          — renders the IR into that platform's syntax. The only code.
+//
+// The proof that this is genuinely extensible and not just claimed: `cube` below has a
+// full capability profile and NO adapter. The UI already reports what would and would
+// not survive a compile to it. Tomorrow's platform costs one profile plus one adapter.
+//
+// Two further rules that keep it portable:
+//   · STRUCTURED DESCRIPTORS ONLY. No free-form SQL is ever stored. Stored SQL is both
+//     an injection vector and unportable — each adapter renders its own dialect.
+//   · PHYSICAL NAMES ARE PER-PLATFORM. The same logical Order is a different object in
+//     every system, so bindings are an open map keyed by platform id.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const ESM_VERSION = "1.0";
+
+// Capability vocabulary — the closed set the core spec understands. A platform profile
+// answers these questions and nothing else, which is what keeps profiles cheap to write.
+const SL_CAP_DOCS = {
+  joins:            {q:"How are joins expressed?",        vals:{explicit:"Declared relationships", inferred:"Resolved from shared entity keys", none:"Single table only"}},
+  timeIntelligence: {q:"Period-over-period and running totals?", vals:{native:"First-class", window:"Emulated with window functions", none:"Not expressible"}},
+  semiAdditive:     {q:"Semi-additive measures (balances, distinct counts)?"},
+  metricTypes:      {q:"Which metric types are first-class?"},
+  filterDirection:  {q:"Does it need a filter-propagation direction on each relationship?"},
+  governanceCarry:  {q:"Where does our governance block survive?"},
+};
+
+const SL_PLATFORMS = {
+  dbt: {
+    label:"dbt", family:"declarative", adapter:"ready", order:1,
+    artifact:"semantic_models + metrics YAML",
+    caps:{joins:"inferred", timeIntelligence:"native", semiAdditive:true,
+          metricTypes:["simple","ratio","derived","cumulative"], filterDirection:false,
+          governanceCarry:"meta block + comments"},
+    note:"Closest match to the core spec. Joins are resolved from entity keys rather than declared, so relationships compile down to entity references."},
+  databricks: {
+    label:"Databricks", family:"declarative", adapter:"ready", order:2,
+    artifact:"Metric View YAML in Unity Catalog",
+    caps:{joins:"explicit", timeIntelligence:"window", semiAdditive:false,
+          metricTypes:["simple","ratio"], filterDirection:false,
+          governanceCarry:"UC comments + tags"},
+    note:"Dimensions and measures in one object, no separate metric layer — derived and cumulative metrics are emitted as window expressions and lose their declarative shape."},
+  snowflake: {
+    label:"Snowflake", family:"declarative", adapter:"ready", order:3,
+    artifact:"CREATE SEMANTIC VIEW",
+    caps:{joins:"explicit", timeIntelligence:"window", semiAdditive:false,
+          metricTypes:["simple","ratio"], filterDirection:false,
+          governanceCarry:"COMMENT + synonyms"},
+    note:"Logical tables, relationships, facts, dimensions and metrics map almost one-to-one. Time intelligence has to be rendered as window functions."},
+  powerbi: {
+    label:"Power BI", family:"bi", adapter:"ready", order:4,
+    artifact:"TMDL measures + relationships",
+    caps:{joins:"explicit", timeIntelligence:"native", semiAdditive:true,
+          metricTypes:["simple","ratio","derived","cumulative"], filterDirection:true,
+          governanceCarry:"description only"},
+    note:"Most expressive target and the least readable back. Needs a filter direction on every relationship and a marked date table. Generating DAX is safe; reading arbitrary DAX back into a declaration is not."},
+  tableau: {
+    label:"Tableau", family:"bi", adapter:"harvest_only", order:5,
+    artifact:"published data source (read)",
+    caps:{joins:"explicit", timeIntelligence:"none", semiAdditive:false,
+          metricTypes:["simple","ratio"], filterDirection:false,
+          governanceCarry:"none"},
+    note:"Harvest and compare only. The write path is the weakest of the five, so we read its definitions and report disagreement rather than pretending we can publish into it."},
+
+  // ── No adapter. Present to prove the format is extensible by DATA, not by code:
+  //    every compilability badge and warning below already works for it.
+  cube: {
+    label:"Cube", family:"declarative", adapter:"none", order:6,
+    artifact:"cube.js schema",
+    caps:{joins:"explicit", timeIntelligence:"window", semiAdditive:true,
+          metricTypes:["simple","ratio","derived"], filterDirection:false,
+          governanceCarry:"meta block"},
+    note:"Profile only, no adapter yet. Listed to show what adding a platform costs: one capability profile, and the whole product already reports against it."},
+};
+const SL_PLAT_LIST = Object.entries(SL_PLATFORMS).sort((a,b)=>a[1].order-b[1].order).map(([k,v])=>({k,...v}));
+
+// ── Relationships. The core spec carries BOTH entity keys and explicit cardinality +
+//    direction, because dbt infers joins from keys while Snowflake, Databricks and
+//    Power BI want them declared. Carry enough for the strictest target, drop what a
+//    looser one ignores — never the other way round.
+const SL_RELATIONSHIPS = [
+  {id:"r1", from:"e_order", to:"e_customer", fromKey:"customer_id", toKey:"user_id",
+   cardinality:"many_to_one", filterDirection:"single", fanOutSafe:true,
+   note:"Every order belongs to one customer. Safe to join — cannot fan out revenue."},
+  {id:"r2", from:"e_txn", to:"e_customer", fromKey:"account_id", toKey:"user_id",
+   cardinality:"many_to_one", filterDirection:"single", fanOutSafe:true,
+   note:"Ledger transactions roll up to the account holder."},
+];
+
+// ── Compilability is COMPUTED, never hand-maintained. Diff the model against a profile.
+//    This is why a new platform needs no changes here.
+const slCompilability = (m, platKey, rels) => {
+  const p = SL_PLATFORMS[platKey]; if(!p) return {level:"unsupported", notes:["Unknown platform."]};
+  const c = p.caps, notes = [];
+  let level = "full";
+  const degrade = (l) => { if(level==="full" || (l==="unsupported" && level==="partial")) level = l; };
+
+  if(!c.metricTypes.includes(m.type)){
+    if((m.type==="cumulative"||m.type==="derived") && c.timeIntelligence==="window"){
+      degrade("partial"); notes.push(`${SL_TYPES[m.type].l} metrics are emitted as window expressions — they lose their declarative shape.`);
+    } else {
+      degrade("unsupported"); notes.push(`${SL_TYPES[m.type].l} metrics are not expressible here.`);
+    }
+  }
+  const crosses = (rels||[]).some(r=>r.from===m.entity||r.to===m.entity);
+  if(crosses && c.joins==="none"){ degrade("unsupported"); notes.push("This platform cannot join across entities."); }
+  if(m.additive===false && !c.semiAdditive){ degrade("partial"); notes.push("Semi-additive behaviour is not preserved — the measure will sum across every dimension."); }
+  if(c.governanceCarry==="none"){ degrade("partial"); notes.push("No governance metadata survives — ownership and certification are dropped."); }
+  else if(c.governanceCarry==="description only"){ notes.push("Governance survives only as a description string."); }
+  if(c.joins==="inferred" && crosses) notes.push("Relationships compile to entity keys; cardinality is not carried.");
+  if(c.filterDirection) notes.push("A filter direction is emitted on every relationship.");
+  if(p.adapter==="harvest_only"){ degrade("unsupported"); notes.push("Harvest only — EDG does not publish into this platform."); }
+  if(p.adapter==="none"){ degrade("unsupported"); notes.push("Capability profile exists, adapter not built yet."); }
+  return {level, notes};
+};
+const SL_LEVELS = {
+  full:        {l:"Compiles fully",  c:"#16a34a", bg:"rgba(22,163,74,.1)"},
+  partial:     {l:"Partial",         c:"#d97706", bg:"rgba(217,119,6,.1)"},
+  unsupported: {l:"Not supported",   c:"#9090a8", bg:"rgba(144,144,168,.12)"},
+};
+
+// ── Serialise to the portable format. Shown in the UI so the format is a thing people
+//    can read and review, not an implementation detail buried in a compiler.
+const slToESM = (m, ents, rels) => {
+  const ent = ents.find(e=>e.id===m.entity);
+  const used = ent ? (rels||[]).filter(r=>r.from===ent.id||r.to===ent.id) : [];
+  const L = [];
+  L.push(`esm_version: "${ESM_VERSION}"`);
+  L.push(`metric: ${m.name.toLowerCase().replace(/[^a-z0-9]+/g,"_")}`);
+  L.push(`label: ${m.name}`);
+  L.push(`owner: ${m.owner||"—"}`, `domain: ${m.domain||"—"}`, "");
+  if(ent){
+    L.push("entities:", `  - name: ${ent.name.toLowerCase()}`, `    primary_key: ${ent.key}`,
+           `    time_dimension: ${m.timeDim||ent.timeDims[0]}`, "    bindings:");
+    Object.entries(ent.bindings||{}).forEach(([k,v])=>L.push(`      ${k}: ${v}`));
+    L.push("");
+  }
+  if(used.length){
+    L.push("relationships:");
+    used.forEach(r=>{
+      const f=ents.find(e=>e.id===r.from), t=ents.find(e=>e.id===r.to);
+      L.push(`  - from: ${f?f.name.toLowerCase():r.from}`, `    to: ${t?t.name.toLowerCase():r.to}`,
+             `    from_key: ${r.fromKey}`, `    to_key: ${r.toKey}`,
+             `    cardinality: ${r.cardinality}`, `    filter_direction: ${r.filterDirection}`);
+    });
+    L.push("");
+  }
+  if(m.type==="simple"){
+    L.push("measures:", `  - name: ${m.col}_${m.agg.replace(/ /g,"_")}`,
+           `    column: ${m.col}`, `    agg: ${m.agg}`, `    additive: ${m.additive!==false}`, "");
+  }
+  L.push("metrics:", `  - name: ${m.name.toLowerCase().replace(/[^a-z0-9]+/g,"_")}`, `    type: ${m.type}`);
+  if(m.type==="simple")     L.push(`    measure: ${m.col}_${m.agg.replace(/ /g,"_")}`);
+  if(m.type==="ratio")      L.push(`    numerator: ${m.numerator?m.numerator.label:"—"}`, `    denominator: ${m.denominator?m.denominator.label:"—"}`);
+  if(m.formula)             L.push(`    formula: "${m.formula}"`);
+  if(m.window)              L.push(`    window: ${m.window}`);
+  if((m.basedOn||[]).length)L.push(`    based_on: [${m.basedOn.map(id=>{const b=_slState.metrics.find(x=>x.id===id);return b?b.name.toLowerCase().replace(/[^a-z0-9]+/g,"_"):id;}).join(", ")}]`);
+  L.push(`    grain: ${m.timeGrain}`, `    unit: ${m.unit}`);
+  if((m.filters||[]).length){
+    L.push("    filters:");
+    m.filters.forEach(f=>L.push(`      - { dimension: ${f.col}, op: ${f.op.replace(/ /g,"_")}, value: ${f.val} }`));
+  }
+  if((m.dims||[]).length) L.push(`    dimensions: [${m.dims.join(", ")}]`);
+  L.push("", "governance:",
+         `  glossary_term: ${m.termId||"— not registered —"}`,
+         `  certification: ${m.status.toLowerCase().replace(/ /g,"_")}`,
+         `  certified_by: ${m.certifiedBy||"—"}`,
+         `  steward: ${m.steward||"—"}`,
+         `  gates: [grain, time_dimension, confirmed_binding]`);
+  return L.join("\n");
+};
+
+// ── Deterministic left-to-right layout for the model canvas. Computed in plain JS and
+//    drawn as inline SVG on purpose: a graph library that measures the DOM renders zero
+//    edges whenever the pane is hidden, which makes the canvas untestable. This does not.
+const slLayout = (ents, rels) => {
+  const hasOut = id => rels.some(r=>r.from===id);
+  const left = ents.filter(e=>hasOut(e.id));
+  const right = ents.filter(e=>!hasOut(e.id));
+  const NW=210, NH=88, GAPX=180, GAPY=34, PADX=30, PADY=26;
+  const col = (arr, x) => arr.map((e,i)=>({...e, x, y:PADY + i*(NH+GAPY), w:NW, h:NH}));
+  const nodes = [...col(left,PADX), ...col(right, PADX+NW+GAPX)];
+  const tallest = Math.max(left.length, right.length, 1);
+  // centre the shorter column so the diagram does not look top-heavy
+  const centre = (arr) => { const off=((tallest-arr.length)*(NH+GAPY))/2; arr.forEach(n=>{n.y+=off;}); };
+  centre(nodes.filter(n=>n.x===PADX)); centre(nodes.filter(n=>n.x!==PADX));
+  const byId = Object.fromEntries(nodes.map(n=>[n.id,n]));
+  const edges = rels.map(r=>{
+    const a=byId[r.from], b=byId[r.to]; if(!a||!b) return null;
+    return {...r, x1:a.x+a.w, y1:a.y+a.h/2, x2:b.x, y2:b.y+b.h/2};
+  }).filter(Boolean);
+  return {nodes, edges, width: PADX*2+NW*2+GAPX, height: PADY*2 + tallest*(NH+GAPY)};
+};
+
 // ── Governed state lives in a module store, not component state. A conformance decision
 //    that vanishes when the user visits the Glossary is not a durable decision.
 const _slSubs = new Set();
-let _slState = {metrics: SL_METRICS.map(m=>({...m})), vendor: SL_VENDOR.map(v=>({...v})), entities: SL_ENTITIES.map(e=>({...e}))};
+let _slState = {metrics: SL_METRICS.map(m=>({...m})), vendor: SL_VENDOR.map(v=>({...v})),
+                entities: SL_ENTITIES.map(e=>({...e})), rels: SL_RELATIONSHIPS.map(r=>({...r}))};
 const slSet = (updater) => { _slState = typeof updater==="function" ? updater(_slState) : updater; _slSubs.forEach(fn=>fn()); };
 const useSemanticLayer = () => {
   const [, force] = useState(0);
@@ -33191,6 +33403,87 @@ const SLSelect = ({value, onChange, options, placeholder}) => (
     {placeholder&&<option value="">{placeholder}</option>}
     {options.map(o=><option key={o.v!==undefined?o.v:o} value={o.v!==undefined?o.v:o}>{o.l!==undefined?o.l:o}</option>)}
   </select>
+);
+
+// ── The model canvas. Entities, their grain, and the relationships between them —
+//    drawn as inline SVG from a layout computed in JS, so it renders identically
+//    whether or not anything is measuring the DOM.
+const SLModelCanvas = ({entities, rels, metrics, selected, onSelect}) => {
+  const {nodes, edges, width, height} = slLayout(entities, rels);
+  return (
+    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,padding:16,overflowX:"auto"}}>
+      <svg width={width} height={height} style={{display:"block",minWidth:"100%"}}>
+        <defs>
+          <marker id="slArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,1 L8,4.5 L0,8" fill="none" stroke={T.textMuted} strokeWidth="1.3"/>
+          </marker>
+        </defs>
+
+        {edges.map(e=>{
+          const mx = (e.x1+e.x2)/2;
+          return (
+            <g key={e.id}>
+              <path d={`M${e.x1},${e.y1} C${mx},${e.y1} ${mx},${e.y2} ${e.x2},${e.y2}`}
+                fill="none" stroke={T.borderLight} strokeWidth="1.6" markerEnd="url(#slArrow)"/>
+              {/* crow's foot on the many side */}
+              <g stroke={T.textMuted} strokeWidth="1.3" fill="none">
+                <path d={`M${e.x1},${e.y1} l-9,-5`}/><path d={`M${e.x1},${e.y1} l-9,5`}/>
+              </g>
+              <rect x={mx-46} y={e.y1===e.y2?e.y1-9:(e.y1+e.y2)/2-9} width="92" height="18" rx="9"
+                fill={T.bgElevated} stroke={T.border}/>
+              <text x={mx} y={(e.y1===e.y2?e.y1:(e.y1+e.y2)/2)+4} textAnchor="middle"
+                style={{fontSize:9.5,fontWeight:600,fill:T.textMuted}}>many → one</text>
+            </g>
+          );
+        })}
+
+        {nodes.map(n=>{
+          const on = selected===n.id;
+          const count = metrics.filter(m=>m.entity===n.id).length;
+          return (
+            <g key={n.id} onClick={()=>onSelect&&onSelect(on?null:n.id)} style={{cursor:"pointer"}}>
+              <rect x={n.x} y={n.y} width={n.w} height={n.h} rx="10"
+                fill={on?T.bgActive:T.bgElevated} stroke={on?T.accent:T.border} strokeWidth={on?2:1.2}/>
+              <text x={n.x+14} y={n.y+24} style={{fontSize:13,fontWeight:700,fill:T.text}}>{n.name}</text>
+              <text x={n.x+14} y={n.y+43} style={{fontSize:10.5,fill:T.textMuted}}>one row per {n.key}</text>
+              <rect x={n.x+14} y={n.y+53} width={n.w-28} height="1" fill={T.border}/>
+              <text x={n.x+14} y={n.y+72} style={{fontSize:10.5,fill:T.textSub}}>{n.table}</text>
+              <circle cx={n.x+n.w-26} cy={n.y+66} r="10" fill={count?T.accentDim:"transparent"} stroke={count?`${T.accent}55`:T.border}/>
+              <text x={n.x+n.w-26} y={n.y+69.5} textAnchor="middle" style={{fontSize:10,fontWeight:700,fill:count?T.accent:T.textMuted}}>{count}</text>
+            </g>
+          );
+        })}
+      </svg>
+      <div style={{display:"flex",gap:18,marginTop:12,paddingTop:12,borderTop:`1px solid ${T.border}`,fontSize:10.5,color:T.textMuted,flexWrap:"wrap"}}>
+        <span>Click an entity to inspect it</span>
+        <span>· The number is how many metrics resolve to that grain</span>
+        <span>· Crow's foot marks the many side</span>
+      </div>
+    </div>
+  );
+};
+
+// ── Where a metric can go, and what it loses on the way. Computed from capability
+//    profiles, so this table needs no edit when a platform is added.
+const SLTargetMatrix = ({metric, rels, compact}) => (
+  <div style={{display:"flex",flexDirection:"column",gap:compact?5:7}}>
+    {SL_PLAT_LIST.map(p=>{
+      const r = slCompilability(metric, p.k, rels);
+      const L = SL_LEVELS[r.level];
+      return (
+        <div key={p.k} style={{display:"flex",gap:11,alignItems:"flex-start",padding:compact?"7px 10px":"10px 13px",
+          background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+          <span style={{fontSize:11.5,fontWeight:700,color:T.text,minWidth:84}}>{p.label}</span>
+          <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,background:L.bg,color:L.c,border:`1px solid ${L.c}33`,whiteSpace:"nowrap"}}>{L.l}</span>
+          <div style={{flex:1,minWidth:0}}>
+            {r.notes.length===0
+              ? <span style={{fontSize:11,color:T.textMuted}}>Nothing is lost.</span>
+              : r.notes.map((n,i)=><div key={i} style={{fontSize:11,color:T.textMuted,lineHeight:1.5}}>{n}</div>)}
+          </div>
+        </div>
+      );
+    })}
+  </div>
 );
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -33497,9 +33790,10 @@ const SemanticLayerView = ({onToast, onNav}) => {
   const {roleCfg} = useRole();
   const [store, setStore] = useSemanticLayer();
   const [gTerms] = useGlossaryTerms();
-  const {metrics, vendor, entities} = store;
+  const {metrics, vendor, entities, rels} = store;
 
-  const [tab, setTab]         = useState("overview");
+  const [tab, setTab]         = useState("model");
+  const [selEnt, setSelEnt]   = useState(null);
   const [selId, setSelId]     = useState(null);
   const [mTab, setMTab]       = useState("definition");
   const [q, setQ]             = useState("");
@@ -33527,10 +33821,9 @@ const SemanticLayerView = ({onToast, onNav}) => {
   };
 
   const TABS = [
-    {k:"overview", l:"Overview"},
-    {k:"metrics",  l:`Metrics · ${metrics.length}`},
-    {k:"vendor",   l:`Vendor definitions · ${vendor.length}`},
-    {k:"entities", l:`Entities · ${entities.length}`},
+    {k:"model",     l:"Model"},
+    {k:"metrics",   l:`Metrics · ${metrics.length}`},
+    {k:"alignment", l:`Alignment · ${vendor.length}`},
   ];
 
   // ── Metric profile ──
@@ -33539,7 +33832,8 @@ const SemanticLayerView = ({onToast, onNav}) => {
     const copies = vendor.filter(v=>v.mappedTo===sel.id);
     const term = sel.termId ? gTerms.find(t=>t.id===sel.termId) : null;
     const policy = slInheritedPolicy(sel);
-    const MT = [{k:"definition",l:"Definition"},{k:"bindings",l:`Bindings · ${(sel.bindings||[]).length}`},{k:"copies",l:`Vendor copies · ${copies.length}`},{k:"governance",l:"Governance"}];
+    const MT = [{k:"definition",l:"Definition"},{k:"bindings",l:`Bindings · ${(sel.bindings||[]).length}`},
+                {k:"copies",l:`In your tools · ${copies.length}`},{k:"portability",l:"Portability"},{k:"governance",l:"Governance"}];
     return (
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div style={{flexShrink:0,padding:"12px 24px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10,background:T.bgSurface}}>
@@ -33651,6 +33945,19 @@ const SemanticLayerView = ({onToast, onNav}) => {
             </SLSection>
           </>}
 
+          {mTab==="portability" && <>
+            <SLSection title="Where this metric can go"
+              note="Computed by diffing the metric against each platform's capability profile — never hand-maintained. A platform added tomorrow is one profile, and this table works for it with no code change.">
+              <SLTargetMatrix metric={sel} rels={rels}/>
+            </SLSection>
+            <SLSection title="The portable definition"
+              note={`ESM v${ESM_VERSION} — the platform-neutral format EDG stores. It carries no vendor concept: entity keys AND explicit cardinality (because dbt infers joins while Snowflake and Power BI declare them), physical names per platform, and a governance block no vendor format has.`}>
+              <pre style={{margin:0,fontFamily:"ui-monospace,monospace",fontSize:11.5,lineHeight:1.65,color:T.textSub,
+                background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"15px 17px",overflowX:"auto",whiteSpace:"pre"}}>
+{slToESM(sel, entities, rels)}</pre>
+            </SLSection>
+          </>}
+
           {mTab==="governance" && <>
             <SLSection title="Certification gates"><SLGateList metric={sel} metrics={metrics}/></SLSection>
             <SLSection title="Glossary term" note="A metric's identity lives on a term. The Semantic Layer holds the plumbing; it never holds the name.">
@@ -33695,7 +34002,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
           <div style={{maxWidth:760}}>
             <div style={{fontSize:17,fontWeight:700,color:T.text}}>Semantic Layer</div>
             <div style={{fontSize:12,color:T.textMuted,marginTop:3,lineHeight:1.55}}>
-              One definition of every number, and the truth about which tools agree. EDG holds the definition; dbt, Power BI and Tableau execute it.
+              One definition of every number, in a format that outlives the tools. EDG holds the definition; Snowflake, Databricks, dbt, Power BI and Tableau execute it.
             </div>
           </div>
           <Btn variant="primary" icon={Ic.plus(13)} onClick={()=>setBuilderOpen(true)}>Define a metric</Btn>
@@ -33710,57 +34017,99 @@ const SemanticLayerView = ({onToast, onNav}) => {
 
       <div style={{flex:1,overflowY:"auto",padding:"22px 28px"}}>
 
-        {tab==="overview" && <>
-          <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:24}}>
-            <SLStat label="Certified metrics" value={certified.length} sub={`of ${metrics.length} in the register`}/>
-            <SLStat label="Vendor definitions" value={vendor.length} sub="harvested from dbt, Power BI, Tableau"/>
-            <SLStat label="Disagreeing" value={drifted.length} tone={T.amber} sub="drifted from the EDG definition"/>
-            <SLStat label="Unmanaged" value={unmanaged.length} tone={T.textMuted} sub="no term, no owner, not reviewed"/>
-            <SLStat label="Metrics with no term" value={noTerm.length} tone={noTerm.length?T.amber:T.green} sub="not registered in the Glossary"/>
+        {tab==="model" && <>
+          <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:20}}>
+            <SLStat label="Metrics" value={metrics.length} sub={`${certified.length} certified`}/>
+            <SLStat label="Entities" value={entities.length} sub={`${rels.length} relationship${rels.length===1?"":"s"}`}/>
+            <SLStat label="Tools disagree" value={drifted.length} tone={drifted.length?T.amber:T.green} sub="definitions out of step"/>
+            <SLStat label="Unclaimed" value={unmanaged.length} tone={T.textMuted} sub="no owner, no term"/>
           </div>
 
-          <SLSection title="The inventory of disagreement"
-            note="Every number that more than one tool defines, and how many of those copies disagree with the certified definition. This is read-only — it needs no write access to any vendor, and it is the argument for a central plane in one table.">
-            <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-              {disagreements.map((r,i)=>(
-                <div key={r.metric.id} style={{borderBottom:i<disagreements.length-1?`1px solid ${T.border}`:"none"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:12,padding:"13px 16px",cursor:"pointer"}} onClick={()=>{setSelId(r.metric.id);setMTab("copies");}}>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap"}}>
-                        <span style={{fontSize:13,fontWeight:700,color:T.text}}>{r.metric.name}</span>
-                        <SLStatusChip status={r.metric.status}/>
+          <SLSection title="The model"
+            note="Entities are the things you count, and the grain says what one row means. Relationships are how they connect — a metric can only be sliced by a dimension it can reach. Carried in the format with cardinality and direction, so it survives to every platform.">
+            <SLModelCanvas entities={entities} rels={rels} metrics={metrics} selected={selEnt} onSelect={setSelEnt}/>
+          </SLSection>
+
+          {selEnt && (()=>{
+            const e = entities.find(x=>x.id===selEnt); if(!e) return null;
+            const used = metrics.filter(m=>m.entity===e.id);
+            const conn = rels.filter(r=>r.from===e.id||r.to===e.id);
+            return (
+              <SLSection title={e.name} note={e.desc}>
+                <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,padding:"16px 18px"}}>
+                  <div style={{display:"flex",gap:26,flexWrap:"wrap",marginBottom:14}}>
+                    {[["Grain",`one row per ${e.key}`],["Table",e.table],["Domain",e.domain],["Owner",e.owner],["Time columns",e.timeDims.join(", ")],["Metrics",String(used.length)]].map(([k,v])=>(
+                      <div key={k}><div style={{fontSize:10,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{k}</div>
+                      <div style={{fontSize:12.5,color:T.text,fontWeight:600,marginTop:3}}>{v}</div></div>
+                    ))}
+                  </div>
+                  <div style={{fontSize:11,color:T.green,marginBottom:14}}>✓ Key evidence — {e.evidence}</div>
+
+                  <div style={{fontSize:11.5,fontWeight:700,color:T.textSub,marginBottom:7}}>WHERE IT LIVES ON EACH PLATFORM</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:5,marginBottom:16}}>
+                    {Object.entries(e.bindings||{}).map(([k,v])=>(
+                      <div key={k} style={{display:"flex",gap:12,alignItems:"center",fontSize:11.5}}>
+                        <span style={{minWidth:84,fontWeight:600,color:T.text}}>{(SL_PLATFORMS[k]||{}).label||k}</span>
+                        <span style={{fontFamily:"ui-monospace,monospace",color:v==="—"?T.textMuted:T.textSub}}>{v}</span>
                       </div>
-                      <div style={{fontSize:11.5,color:T.textMuted,marginTop:3}}>
-                        {r.total} definition{r.total===1?"":"s"} across {new Set(r.defs.map(d=>d.system)).size} tool{new Set(r.defs.map(d=>d.system)).size===1?"":"s"}
-                        {r.disagree>0 && <span style={{color:T.amber,fontWeight:600}}> · {r.disagree} disagree{r.disagree===1?"s":""}</span>}
-                      </div>
+                    ))}
+                  </div>
+
+                  {conn.length>0 && <>
+                    <div style={{fontSize:11.5,fontWeight:700,color:T.textSub,marginBottom:7}}>RELATIONSHIPS</div>
+                    {conn.map(r=>{
+                      const f=entities.find(x=>x.id===r.from), t=entities.find(x=>x.id===r.to);
+                      return (
+                        <div key={r.id} style={{padding:"9px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6}}>
+                          <div style={{fontSize:12,fontWeight:600,color:T.text}}>{f&&f.name} → {t&&t.name} <span style={{color:T.textMuted,fontWeight:400}}>· {r.fromKey} = {r.toKey} · many to one</span></div>
+                          <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{r.note}</div>
+                        </div>
+                      );
+                    })}
+                  </>}
+
+                  {used.length>0 && <div style={{marginTop:14}}>
+                    <div style={{fontSize:11.5,fontWeight:700,color:T.textSub,marginBottom:7}}>METRICS AT THIS GRAIN</div>
+                    <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                      {used.map(m=><button key={m.id} onClick={()=>{setSelId(m.id);setMTab("definition");}}
+                        style={{fontSize:11.5,fontWeight:600,color:T.text,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,padding:"5px 10px",cursor:"pointer"}}>{m.name}</button>)}
                     </div>
-                    <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}}>
-                      {r.defs.map(d=><span key={d.id} style={{display:"flex",alignItems:"center",gap:5}}><SLSysChip system={d.system}/><SLConfChip state={d.conformance} small/></span>)}
-                    </div>
-                    <span style={{color:T.textMuted,flexShrink:0}}>{Ic.chevRight(13)}</span>
+                  </div>}
+                </div>
+              </SLSection>
+            );
+          })()}
+
+          <SLSection title="Platforms"
+            note="A platform is described to EDG as a capability profile — what it can and cannot express — not as code. That is what makes the format portable: adding a platform is one profile, and every warning, badge and matrix in this product starts working for it immediately.">
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {SL_PLAT_LIST.map(p=>(
+                <div key={p.k} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"13px 16px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",marginBottom:5}}>
+                    <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{p.label}</span>
+                    <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>{p.family==="bi"?"BI model":"Declarative"}</span>
+                    <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,
+                      background:p.adapter==="ready"?"rgba(22,163,74,.1)":p.adapter==="harvest_only"?T.amberDim:T.bgElevated,
+                      color:p.adapter==="ready"?T.green:p.adapter==="harvest_only"?T.amber:T.textMuted,
+                      border:`1px solid ${p.adapter==="ready"?T.green:p.adapter==="harvest_only"?T.amber:T.border}33`}}>
+                      {p.adapter==="ready"?"Publishes":p.adapter==="harvest_only"?"Reads only":"Profile only — no adapter"}</span>
+                    <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>{p.artifact}</span>
+                  </div>
+                  <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginBottom:7}}>{p.note}</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {[["joins", "Joins", SL_CAP_DOCS.joins.vals[p.caps.joins], SL_CAP_DOCS.joins.q],
+                      ["timeIntelligence", "Time intelligence", SL_CAP_DOCS.timeIntelligence.vals[p.caps.timeIntelligence], SL_CAP_DOCS.timeIntelligence.q],
+                      ["metricTypes", "Metric types", p.caps.metricTypes.join(", "), SL_CAP_DOCS.metricTypes.q],
+                      ["semiAdditive", "Semi-additive", p.caps.semiAdditive?"Preserved":"Lost", SL_CAP_DOCS.semiAdditive.q],
+                      ["governanceCarry", "Governance", p.caps.governanceCarry, SL_CAP_DOCS.governanceCarry.q],
+                     ].map(([k,label,val,q])=>(
+                      <span key={k} title={q} style={{fontSize:10.5,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:4,padding:"1px 7px",cursor:"help"}}>{label}: <b style={{color:T.textSub}}>{val}</b></span>
+                    ))}
                   </div>
                 </div>
               ))}
             </div>
           </SLSection>
-
-          {unmanaged.length>0 && <SLSection title="Unmanaged definitions"
-            note="Found in a vendor tool, mapped to nothing, owned by nobody. Each one is a number somebody is already reporting on.">
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {unmanaged.map(v=>(
-                <div key={v.id} style={{display:"flex",alignItems:"center",gap:11,padding:"12px 15px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10}}>
-                  <SLSysChip system={v.system}/>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12.5,fontWeight:700,color:T.text}}>{v.object}</div>
-                    <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{v.loc} · {v.objType}</div>
-                  </div>
-                  <span style={{fontSize:11.5,color:T.textSub,maxWidth:340,lineHeight:1.5}}>{v.note}</span>
-                  <Btn small onClick={()=>setMapFor(v)}>Map to a metric</Btn>
-                </div>
-              ))}
-            </div>
-          </SLSection>}
         </>}
 
         {tab==="metrics" && <>
@@ -33781,8 +34130,8 @@ const SemanticLayerView = ({onToast, onNav}) => {
                   <div style={{marginBottom:8}}><SLSentenceView metric={m} size={12.5}/></div>
                   <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                     {copies.length===0
-                      ? <span style={{fontSize:11,color:T.textMuted}}>No vendor copies</span>
-                      : <><span style={{fontSize:11,color:T.textMuted}}>{copies.length} vendor cop{copies.length===1?"y":"ies"}</span>
+                      ? <span style={{fontSize:11,color:T.textMuted}}>No tool defines this yet</span>
+                      : <><span style={{fontSize:11,color:T.textMuted}}>{copies.length} tool cop{copies.length===1?"y":"ies"}</span>
                           {bad>0 && <span style={{fontSize:11,fontWeight:600,color:T.amber}}>· {bad} disagree{bad===1?"s":""}</span>}
                           {copies.map(c=><SLSysChip key={c.id} system={c.system}/>)}</>}
                   </div>
@@ -33792,72 +34141,70 @@ const SemanticLayerView = ({onToast, onNav}) => {
           </div>
         </>}
 
-        {tab==="vendor" && <>
-          <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
-            <div style={{maxWidth:300,flex:1,minWidth:200}}><Input2 value={q} onChange={e=>setQ(e.target.value)} placeholder="Search vendor definitions…" icon={Ic.search(13)}/></div>
-            <div style={{display:"flex",gap:5}}>
-              {[{k:"all",l:"All"},...Object.entries(SL_CONF).map(([k,c])=>({k,l:c.l}))].map(f=>(
-                <button key={f.k} onClick={()=>setConfFilter(f.k)}
-                  style={{padding:"6px 11px",borderRadius:7,border:`1px solid ${confFilter===f.k?T.accent:T.border}`,background:confFilter===f.k?T.accentDim:T.bgSurface,color:confFilter===f.k?T.text:T.textSub,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-                  {f.l} {f.k!=="all" && <span style={{color:T.textMuted}}>{vendor.filter(v=>v.conformance===f.k).length}</span>}
-                </button>
+        {tab==="alignment" && <>
+          <SLSection title="Where the tools disagree"
+            note="Every number that more than one tool defines, and how many of those copies are out of step with the certified definition. Read-only — it needs no write access to anything.">
+            <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+              {disagreements.map((r,i)=>(
+                <div key={r.metric.id} style={{borderBottom:i<disagreements.length-1?`1px solid ${T.border}`:"none",display:"flex",alignItems:"center",gap:12,padding:"13px 16px",cursor:"pointer"}}
+                  onClick={()=>{setSelId(r.metric.id);setMTab("copies");}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap"}}>
+                      <span style={{fontSize:13,fontWeight:700,color:T.text}}>{r.metric.name}</span>
+                      <SLStatusChip status={r.metric.status}/>
+                    </div>
+                    <div style={{fontSize:11.5,color:T.textMuted,marginTop:3}}>
+                      {r.total} definition{r.total===1?"":"s"} across {new Set(r.defs.map(d=>d.system)).size} tool{new Set(r.defs.map(d=>d.system)).size===1?"":"s"}
+                      {r.disagree>0 && <span style={{color:T.amber,fontWeight:600}}> · {r.disagree} out of step</span>}
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}}>
+                    {r.defs.map(d=><span key={d.id} style={{display:"flex",alignItems:"center",gap:5}}><SLSysChip system={d.system}/><SLConfChip state={d.conformance} small/></span>)}
+                  </div>
+                  <span style={{color:T.textMuted,flexShrink:0}}>{Ic.chevRight(13)}</span>
+                </div>
               ))}
             </div>
-          </div>
-          <div style={{fontSize:11.5,color:T.textMuted,marginBottom:14,lineHeight:1.55,maxWidth:780}}>
-            Harvested from the semantic layers EDG already catalogues. Nothing here was authored by EDG — this is what is already out there. A definition is only <b style={{color:T.textSub}}>conformant</b> once someone has compared it to the certified definition and found it agrees.
-          </div>
-          <div style={{display:"flex",flexDirection:"column",gap:9}}>
-            {vendor.filter(v=>(confFilter==="all"||v.conformance===confFilter) && (!q||v.object.toLowerCase().includes(q.toLowerCase())||v.loc.toLowerCase().includes(q.toLowerCase()))).map(v=>{
-              const m = v.mappedTo ? metrics.find(x=>x.id===v.mappedTo) : null;
-              const e = v.mapKind==="entity" ? entities.find(x=>x.id===v.mappedTo) : null;
-              return (
-                <div key={v.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",marginBottom:7}}>
-                    <SLSysChip system={v.system}/>
-                    <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{v.object}</span>
-                    <span style={{fontSize:11,color:T.textMuted}}>{v.objType}</span>
-                    <SLConfChip state={v.conformance}/>
-                    <span style={{marginLeft:"auto",fontSize:10.5,color:T.textMuted}}>{v.loc} · seen {v.lastSeen}</span>
-                  </div>
-                  <div style={{fontFamily:"ui-monospace,monospace",fontSize:11.5,color:T.textSub,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,padding:"8px 11px",marginBottom:8,overflowX:"auto"}}>{v.expr}</div>
-                  <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                    <span style={{fontSize:11.5,color:T.textSub,flex:1,minWidth:240,lineHeight:1.55}}>{v.note}</span>
-                    {m && <button onClick={()=>{setSelId(m.id);setMTab("copies");}} style={{fontSize:11.5,fontWeight:600,color:T.accent,background:"transparent",border:"none",cursor:"pointer"}}>Mapped to {m.name} →</button>}
-                    {e && <span style={{fontSize:11.5,color:T.textMuted}}>Mapped to entity {e.name}</span>}
-                    {!v.mappedTo && <Btn small onClick={()=>setMapFor(v)}>Map to a metric</Btn>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </>}
+          </SLSection>
 
-        {tab==="entities" && <>
-          <div style={{fontSize:11.5,color:T.textMuted,marginBottom:16,lineHeight:1.55,maxWidth:780}}>
-            An entity declares the <b style={{color:T.textSub}}>grain</b> — what one row means. Every metric resolves to one. The key is proposed from column profiling: a column that is 100% distinct with no nulls is a candidate. A metric with no declared grain cannot be certified, because an ungrained number is what makes two dashboards disagree.
-          </div>
-          <div style={{display:"flex",flexDirection:"column",gap:9}}>
-            {entities.map(e=>{
-              const used = metrics.filter(m=>m.entity===e.id);
-              return (
-                <div key={e.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"15px 17px"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",marginBottom:6}}>
-                    <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>{e.name}</span>
-                    <span style={{fontSize:11,fontFamily:"ui-monospace,monospace",color:T.textSub,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:5,padding:"2px 8px"}}>one row per {e.key}</span>
-                    <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>{e.domain} · {e.owner}</span>
+          <SLSection title="Every definition found in a tool"
+            note="Harvested from the semantic layers EDG already catalogues. Nothing here was written by EDG — this is what is already out there.">
+            <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
+              <div style={{maxWidth:280,flex:1,minWidth:190}}><Input2 value={q} onChange={e=>setQ(e.target.value)} placeholder="Search…" icon={Ic.search(13)}/></div>
+              <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                {[{k:"all",l:"All"},...Object.entries(SL_CONF).map(([k,c])=>({k,l:c.l}))].map(f=>(
+                  <button key={f.k} onClick={()=>setConfFilter(f.k)}
+                    style={{padding:"6px 11px",borderRadius:7,border:`1px solid ${confFilter===f.k?T.accent:T.border}`,background:confFilter===f.k?T.accentDim:T.bgSurface,color:confFilter===f.k?T.text:T.textSub,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+                    {f.l} {f.k!=="all" && <span style={{color:T.textMuted}}>{vendor.filter(v=>v.conformance===f.k).length}</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:9}}>
+              {vendor.filter(v=>(confFilter==="all"||v.conformance===confFilter) && (!q||v.object.toLowerCase().includes(q.toLowerCase())||v.loc.toLowerCase().includes(q.toLowerCase()))).map(v=>{
+                const m = v.mappedTo ? metrics.find(x=>x.id===v.mappedTo) : null;
+                const e = v.mapKind==="entity" ? entities.find(x=>x.id===v.mappedTo) : null;
+                return (
+                  <div key={v.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",marginBottom:7}}>
+                      <SLSysChip system={v.system}/>
+                      <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{v.object}</span>
+                      <span style={{fontSize:11,color:T.textMuted}}>{v.objType}</span>
+                      <SLConfChip state={v.conformance}/>
+                      <span style={{marginLeft:"auto",fontSize:10.5,color:T.textMuted}}>{v.loc} · seen {v.lastSeen}</span>
+                    </div>
+                    <div style={{fontFamily:"ui-monospace,monospace",fontSize:11.5,color:T.textSub,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,padding:"8px 11px",marginBottom:8,overflowX:"auto"}}>{v.expr}</div>
+                    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                      <span style={{fontSize:11.5,color:T.textSub,flex:1,minWidth:240,lineHeight:1.55}}>{v.note}</span>
+                      {m && <button onClick={()=>{setSelId(m.id);setMTab("copies");}} style={{fontSize:11.5,fontWeight:600,color:T.accent,background:"transparent",border:"none",cursor:"pointer"}}>Mapped to {m.name} →</button>}
+                      {e && <span style={{fontSize:11.5,color:T.textMuted}}>Mapped to entity {e.name}</span>}
+                      {!v.mappedTo && <Btn small onClick={()=>setMapFor(v)}>Claim this</Btn>}
+                    </div>
                   </div>
-                  <div style={{fontSize:12,color:T.textSub,marginBottom:8,lineHeight:1.55}}>{e.desc}</div>
-                  <div style={{display:"flex",gap:20,flexWrap:"wrap",fontSize:11.5}}>
-                    <span style={{color:T.textMuted}}>Table <b style={{color:T.text,fontFamily:"ui-monospace,monospace"}}>{e.table}</b></span>
-                    <span style={{color:T.textMuted}}>Time dimensions <b style={{color:T.text}}>{e.timeDims.join(", ")}</b></span>
-                    <span style={{color:T.textMuted}}>Metrics <b style={{color:T.text}}>{used.length}</b></span>
-                  </div>
-                  <div style={{marginTop:8,fontSize:11,color:T.green}}>✓ Key evidence — {e.evidence}</div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          </SLSection>
         </>}
       </div>
 
