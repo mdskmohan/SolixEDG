@@ -33386,21 +33386,9 @@ const SLGateList = ({metric, metrics, authoring}) => {
   );
 };
 
-const SLStat = ({label, value, tone, sub}) => (
-  <div style={{flex:1,minWidth:150,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px"}}>
-    <div style={{fontSize:10.5,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{label}</div>
-    <div style={{fontSize:25,fontWeight:700,color:tone||T.text,marginTop:5,lineHeight:1}}>{value}</div>
-    {sub&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:5}}>{sub}</div>}
-  </div>
-);
-
 const SLSection = ({title, note, children, right}) => (
   <div style={{marginBottom:24}}>
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:note?4:10}}>
-      <div style={{fontSize:13,fontWeight:700,color:T.text}}>{title}</div>
-      {right}
-    </div>
-    {note&&<div style={{fontSize:11.5,color:T.textMuted,marginBottom:10,lineHeight:1.55,maxWidth:760}}>{note}</div>}
+    <SH title={title} sub={note} action={right}/>
     {children}
   </div>
 );
@@ -33934,39 +33922,35 @@ const SemanticLayerView = ({onToast, onNav}) => {
     const MT = [{k:"definition",l:"Definition"},{k:"bindings",l:`Bindings · ${(sel.bindings||[]).length}`},
                 {k:"copies",l:`In your tools · ${copies.length}`},{k:"portability",l:"Portability"},{k:"governance",l:"Governance"}];
     return (
-      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        <div style={{flexShrink:0,padding:"12px 24px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:8,background:T.bgSurface,flexWrap:"wrap"}}>
-          <button onClick={()=>{setSelId(null);setSelMdl(null);}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:12,padding:"4px 6px",borderRadius:6}}>Semantic Layer</button>
-          <span style={{color:T.border}}>›</span>
-          <button onClick={()=>{setSelId(null);setTab("metrics");}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:12,padding:"4px 6px",borderRadius:6}}>{mdl?mdl.name:"Model"}</button>
-          <span style={{color:T.border}}>›</span>
-          <span style={{fontSize:12,fontWeight:600,color:T.text}}>{sel.name}</span>
-        </div>
-
-        <div style={{flex:1,overflowY:"auto",padding:"22px 28px"}}>
-          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,padding:"18px 20px",marginBottom:18}}>
-            <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",marginBottom:8}}>
-              <span style={{fontSize:19,fontWeight:700,color:T.text}}>{sel.name}</span>
-              <SLStatusChip status={sel.status}/><SLTypeChip type={sel.type}/>
-              {!sel.termId && <span style={{fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:4,background:T.amberDim,color:T.amber,border:`1px solid ${T.amber}35`}}>No glossary term</span>}
+      <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+        <Topbar breadcrumb={[
+          {label:"Semantic Layer", onClick:()=>{setSelId(null);setSelMdl(null);}},
+          {label:mdl?mdl.name:"Model", onClick:()=>{setSelId(null);setTab("metrics");}},
+          {label:sel.name},
+        ]}/>
+        <div style={{flex:1,overflowY:"auto"}}>
+          <div style={{padding:"24px 28px 0"}}>
+            <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:20}}>
+              <div style={{width:56,height:56,borderRadius:16,background:T.violetDim,border:`2px solid ${T.violet}40`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:T.violet}}>{Ic.semantic(26)}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:"0 0 5px",lineHeight:1.2}}>{sel.name}</h1>
+                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                  <SLStatusChip status={sel.status}/><SLTypeChip type={sel.type}/>
+                  {!sel.termId && <span style={{fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:4,background:T.amberDim,color:T.amber,border:`1px solid ${T.amber}35`}}>No glossary term</span>}
+                  <span style={{fontSize:11,color:T.textMuted}}>{sel.domain} · {sel.owner}</span>
+                </div>
+              </div>
             </div>
-            <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6,maxWidth:820,marginBottom:12}}>{sel.definition}</div>
-            <div style={{display:"flex",gap:26,flexWrap:"wrap"}}>
-              {[["Domain",sel.domain],["Owner",sel.owner],["Steward",sel.steward],["Unit",sel.unit],
-                ["Grain",ent?`one row per ${ent.key}`:"—"],["Time grain",sel.timeGrain||"—"],
-                ["In your tools",`${copies.length}`],["Disagreeing",`${copies.filter(c=>c.conformance!=="conformant").length}`]].map(([k,v])=>(
-                <div key={k}><div style={{fontSize:10,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{k}</div>
-                <div style={{fontSize:12.5,color:T.text,fontWeight:600,marginTop:3}}>{v}</div></div>
-              ))}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+              <Metric label="Grain"         value={ent?ent.name:"—"} sub={ent?`one row per ${ent.key}`:"no entity"}/>
+              <Metric label="Time grain"    value={sel.timeGrain||"—"} sub={sel.timeDim||"no time dimension"}/>
+              <Metric label="Unit"          value={sel.unit||"—"} sub={`steward ${sel.steward||"—"}`}/>
+              <Metric label="In your tools" value={String(copies.length)} sub={`${copies.filter(c=>c.conformance!=="conformant").length} disagree`}
+                      color={copies.filter(c=>c.conformance!=="conformant").length?T.amber:T.text}/>
             </div>
+            <Tabs2 tabs={MT.map(t=>({key:t.k,label:t.l}))} active={mTab} onChange={setMTab}/>
           </div>
-
-          <div style={{display:"flex",gap:3,borderBottom:`1px solid ${T.border}`,marginBottom:18,flexWrap:"wrap"}}>
-            {MT.map(t=>(
-              <button key={t.k} onClick={()=>setMTab(t.k)}
-                style={{padding:"9px 14px",background:"transparent",border:"none",borderBottom:`2px solid ${mTab===t.k?T.accent:"transparent"}`,color:mTab===t.k?T.text:T.textMuted,fontSize:12.5,fontWeight:mTab===t.k?700:600,cursor:"pointer"}}>{t.l}</button>
-            ))}
-          </div>
+          <div style={{padding:"0 28px 28px"}}>
 
           {mTab==="definition" && <>
             <SLSection title="The definition" note="One sentence, in business language. This is what a business user authored and what every tool copy is measured against.">
@@ -34081,6 +34065,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
               <div style={{fontSize:12,color:T.textSub}}>Certified by <b style={{color:T.text}}>{sel.certifiedBy}</b> on {sel.certifiedAt}.</div>
             </SLSection>}
           </>}
+          </div>
         </div>
       </div>
     );
@@ -34098,52 +34083,46 @@ const SemanticLayerView = ({onToast, onNav}) => {
     const saveEdit  = () => { patchModel({name:draft.name,desc:draft.desc,domain:draft.domain,owner:draft.owner,steward:draft.steward,targets:draft.targets,entityIds:draft.entityIds}); setEditing(false); onToast&&onToast("Model updated","success"); };
 
     return (
-      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        <div style={{flexShrink:0,padding:"12px 24px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:8,background:T.bgSurface}}>
-          <button onClick={()=>{setSelMdl(null);setEditing(false);setSelEnt(null);}} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:12,padding:"4px 8px",borderRadius:6}}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M8 2L4 6l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-            All models
-          </button>
-          <span style={{color:T.border}}>›</span>
-          <span style={{fontSize:12,fontWeight:600,color:T.text}}>{mdl.name}</span>
-        </div>
-
-        {/* Model header */}
-        <div style={{flexShrink:0,padding:"18px 28px 0",background:T.bgSurface,borderBottom:`1px solid ${T.border}`}}>
-          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16,marginBottom:12}}>
-            <div style={{minWidth:0,maxWidth:820}}>
-              <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",marginBottom:5}}>
-                <span style={{fontSize:18,fontWeight:700,color:T.text}}>{mdl.name}</span>
-                <SLStatusChip status={mdl.status}/>
-                {mdl.lastPublished
-                  ? <span style={{fontSize:10.5,color:T.textMuted}}>published {mdl.lastPublished}</span>
-                  : <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>never published</span>}
+      <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+        <Topbar breadcrumb={[
+          {label:"Semantic Layer", onClick:()=>{setSelMdl(null);setEditing(false);setSelEnt(null);}},
+          {label:mdl.name},
+        ]}/>
+        <div style={{flex:1,overflowY:"auto"}}>
+          <div style={{padding:"24px 28px 0"}}>
+            <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:20}}>
+              <div style={{width:64,height:64,borderRadius:18,background:T.accentDim,border:`2.5px solid ${T.accent}50`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:T.accent}}>{Ic.semantic(30)}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:"0 0 5px",lineHeight:1.2}}>{mdl.name}</h1>
+                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:6}}>
+                  <SLStatusChip status={mdl.status}/>
+                  {mdl.lastPublished
+                    ? <span style={{fontSize:11,color:T.textMuted}}>published {mdl.lastPublished}</span>
+                    : <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>never published</span>}
+                  <span style={{fontSize:11,color:T.textMuted}}>{mdl.domain} · {mdl.owner}</span>
+                </div>
+                <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,maxWidth:720}}>{mdl.desc}</div>
               </div>
-              <div style={{fontSize:12,color:T.textSub,lineHeight:1.55}}>{mdl.desc}</div>
+              <div style={{display:"flex",gap:8,flexShrink:0,alignItems:"center"}}>
+                <button onClick={startEdit} title="Edit model"
+                  style={{width:34,height:34,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
+                  onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>{Ic.edit(14)}</button>
+                <button onClick={()=>setBuilderOpen(true)}
+                  style={{height:34,padding:"0 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>
+                  {Ic.plus(10)} Add Metric
+                </button>
+              </div>
             </div>
-            <div style={{display:"flex",gap:8,flexShrink:0}}>
-              <Btn ghost small icon={Ic.edit(12)} onClick={startEdit}>Edit</Btn>
-              <Btn variant="primary" small icon={Ic.plus(12)} onClick={()=>setBuilderOpen(true)}>Add metric</Btn>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+              <Metric label="Entities"      value={String(st.entities)} sub={`${mRels.length} relationship${mRels.length===1?"":"s"}`}/>
+              <Metric label="Metrics"       value={String(st.metrics)}  sub={`${st.certified} certified`} color={T.blue}/>
+              <Metric label="In your tools" value={String(st.copies)}   sub="definitions found"/>
+              <Metric label="Disagreeing"   value={String(st.disagree)} sub="out of step" color={st.disagree?T.amber:T.green}/>
             </div>
+            <Tabs2 tabs={TABS.map(t=>({key:t.k,label:t.l}))} active={tab} onChange={k=>{setTab(k);setQ("");}}/>
           </div>
-          <div style={{display:"flex",gap:26,flexWrap:"wrap",marginBottom:14}}>
-            {[["Domain",mdl.domain],["Owner",mdl.owner],["Steward",mdl.steward],
-              ["Entities",String(st.entities)],["Metrics",`${st.metrics} · ${st.certified} certified`],
-              ["Publishes to",(mdl.targets||[]).map(t=>(SL_PLATFORMS[t]||{}).label||t).join(", ")||"—"],
-              ["Tools disagree",String(st.disagree)]].map(([k,v])=>(
-              <div key={k}><div style={{fontSize:10,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{k}</div>
-              <div style={{fontSize:12.5,color:k==="Tools disagree"&&st.disagree?T.amber:T.text,fontWeight:600,marginTop:3}}>{v}</div></div>
-            ))}
-          </div>
-          <div style={{display:"flex",gap:3}}>
-            {TABS.map(t=>(
-              <button key={t.k} onClick={()=>{setTab(t.k);setQ("");}}
-                style={{padding:"9px 14px",background:"transparent",border:"none",borderBottom:`2px solid ${tab===t.k?T.accent:"transparent"}`,color:tab===t.k?T.text:T.textMuted,fontSize:12.5,fontWeight:tab===t.k?700:600,cursor:"pointer"}}>{t.l}</button>
-            ))}
-          </div>
-        </div>
 
-        <div style={{flex:1,overflowY:"auto",padding:"22px 28px"}}>
+        <div style={{padding:"0 28px 28px"}}>
 
           {tab==="overview" && <>
             <SLSection title="The model"
@@ -34341,6 +34320,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
             </SLSection>}
           </>}
         </div>
+        </div>
 
         {/* Edit the model */}
         {editing && draft && (
@@ -34423,48 +34403,75 @@ const SemanticLayerView = ({onToast, onNav}) => {
   // ─────────────────────────────────────────────────────────────
   // MODEL LIST — the front door
   // ─────────────────────────────────────────────────────────────
+  const shown = models.filter(m=>!q||m.name.toLowerCase().includes(q.toLowerCase())||(m.desc||"").toLowerCase().includes(q.toLowerCase()));
+  const allDisagree = vendor.filter(v=>v.conformance==="drifted").length;
   return (
-    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-      <div style={{flexShrink:0,padding:"18px 28px 16px",background:T.bgSurface,borderBottom:`1px solid ${T.border}`,
-        display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16,flexWrap:"wrap"}}>
-        <div style={{maxWidth:760}}>
-          <div style={{fontSize:17,fontWeight:700,color:T.text}}>Semantic Layer</div>
-          <div style={{fontSize:12,color:T.textMuted,marginTop:3,lineHeight:1.55}}>
-            One definition of every number, in a format that outlives the tools. EDG holds the definition; Snowflake, Databricks, dbt, Power BI and Tableau execute it.
+    <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+      <Topbar breadcrumb={[{label:"Semantic Layer"}]}/>
+      <div style={{flex:1,overflowY:"auto",padding:28}}>
+
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
+          <Metric label="Semantic Models"   value={String(models.length)}  sub="registered"        color={T.accent}/>
+          <Metric label="Metrics"           value={String(metrics.length)} sub="across all models" color={T.blue}/>
+          <Metric label="Definitions Found" value={String(vendor.length)}  sub="in your tools"/>
+          <Metric label="Disagreeing"       value={String(allDisagree)}    sub="out of step"       color={allDisagree?T.amber:T.green}/>
+        </div>
+
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+          <div style={{flex:1}}>
+            <Input2 placeholder="Search semantic models, descriptions, owners…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(12)}/>
           </div>
-        </div>
-        <Btn variant="primary" icon={Ic.plus(13)} onClick={()=>setNewMdlOpen(true)}>New model</Btn>
-      </div>
-
-      <div style={{flex:1,overflowY:"auto",padding:"22px 28px"}}>
-        <div style={{display:"flex",gap:10,marginBottom:16,alignItems:"center",flexWrap:"wrap"}}>
-          <div style={{maxWidth:320,flex:1,minWidth:200}}><Input2 value={q} onChange={e=>setQ(e.target.value)} placeholder="Search models…" icon={Ic.search(13)}/></div>
-          <span style={{fontSize:11.5,color:T.textMuted}}>{models.length} model{models.length===1?"":"s"}</span>
+          <button onClick={()=>setNewMdlOpen(true)}
+            style={{height:34,padding:"0 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap",flexShrink:0}}>
+            {Ic.plus(10)} New Semantic Model
+          </button>
         </div>
 
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          {models.filter(m=>!q||m.name.toLowerCase().includes(q.toLowerCase())||(m.desc||"").toLowerCase().includes(q.toLowerCase())).map(m=>{
+        <div style={{fontSize:12,color:T.textMuted,marginBottom:14}}>{shown.length} model{shown.length!==1?"s":""}</div>
+
+        {shown.length===0&&(
+          <div style={{padding:"60px 0",textAlign:"center"}}>
+            <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>No semantic models match</div>
+            <div style={{fontSize:12,color:T.textMuted}}>Try a different search, or create one</div>
+          </div>
+        )}
+
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:16}}>
+          {shown.map(m=>{
             const st = statsFor(m);
+            const hue = st.disagree>0 ? T.amber : m.status==="Draft" ? T.textMuted : T.accent;
             return (
               <div key={m.id} onClick={()=>{setSelMdl(m.id);setTab("overview");setSelEnt(null);}}
-                style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,padding:"16px 18px",cursor:"pointer"}}>
-                <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",marginBottom:6}}>
-                  <span style={{fontSize:14,fontWeight:700,color:T.text}}>{m.name}</span>
-                  <SLStatusChip status={m.status}/>
-                  {!m.lastPublished && <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>never published</span>}
-                  {st.disagree>0 && <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,background:T.amberDim,color:T.amber,border:`1px solid ${T.amber}35`}}>{st.disagree} tool{st.disagree===1?" disagrees":"s disagree"}</span>}
-                  <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>{m.domain} · {m.owner}</span>
-                </div>
-                <div style={{fontSize:12,color:T.textSub,lineHeight:1.55,marginBottom:11,maxWidth:820}}>{m.desc}</div>
-                <div style={{display:"flex",gap:22,flexWrap:"wrap",alignItems:"center"}}>
-                  {[["Entities",st.entities],["Metrics",st.metrics],["Certified",st.certified],["In your tools",st.copies]].map(([k,v])=>(
-                    <div key={k} style={{display:"flex",alignItems:"baseline",gap:5}}>
-                      <span style={{fontSize:14,fontWeight:700,color:T.text}}>{v}</span>
-                      <span style={{fontSize:11,color:T.textMuted}}>{k}</span>
+                style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,overflow:"hidden",cursor:"pointer",transition:"all .15s"}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor=hue;e.currentTarget.style.boxShadow=`0 4px 20px ${hue}20`;}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
+                <div style={{height:4,background:hue}}/>
+                <div style={{padding:"16px 18px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:7}}>
+                    <span style={{fontSize:14.5,fontWeight:700,color:T.text}}>{m.name}</span>
+                    <SLStatusChip status={m.status}/>
+                    {!m.lastPublished && <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>never published</span>}
+                  </div>
+                  <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginBottom:12,minHeight:36}}>{m.desc}</div>
+
+                  <div style={{display:"flex",gap:18,flexWrap:"wrap",alignItems:"baseline",paddingBottom:12,marginBottom:12,borderBottom:`1px solid ${T.border}`}}>
+                    {[["Entities",st.entities],["Metrics",st.metrics],["Certified",st.certified]].map(([k,v])=>(
+                      <div key={k}>
+                        <div style={{fontSize:17,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{v}</div>
+                        <div style={{fontSize:10.5,color:T.textMuted,marginTop:3}}>{k}</div>
+                      </div>
+                    ))}
+                    {st.disagree>0 && <div>
+                      <div style={{fontSize:17,fontWeight:700,color:T.amber,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{st.disagree}</div>
+                      <div style={{fontSize:10.5,color:T.amber,marginTop:3}}>disagree</div>
+                    </div>}
+                  </div>
+
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                    <span style={{fontSize:10.5,color:T.textMuted}}>{m.domain} · {m.owner}</span>
+                    <div style={{marginLeft:"auto",display:"flex",gap:4,flexWrap:"wrap"}}>
+                      {(m.targets||[]).map(t=><SLSysChip key={t} system={t}/>)}
                     </div>
-                  ))}
-                  <div style={{marginLeft:"auto",display:"flex",gap:5,flexWrap:"wrap"}}>
-                    {(m.targets||[]).map(t=><SLSysChip key={t} system={t}/>)}
                   </div>
                 </div>
               </div>
