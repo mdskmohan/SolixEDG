@@ -32864,10 +32864,25 @@ const SL_ENTITIES = [
              dbt:"ref('fct_transactions')", powerbi:"Transactions", tableau:"—"}},
 ];
 
+const SL_MODELS = [
+  {id:"mdl_commerce", name:"Commerce Revenue", domain:"Commerce", owner:"maya.chen", steward:"dev.patel",
+   status:"Approved", entityIds:["e_order","e_customer"], targets:["dbt","snowflake","powerbi"],
+   lastPublished:"2026-09-02", created:"2026-06-11",
+   desc:"Order-grain revenue and customer value for the commerce domain. The model every finance and growth dashboard should be reading from."},
+  {id:"mdl_product", name:"Product Engagement", domain:"Product", owner:"alex.wu", steward:"alex.wu",
+   status:"Approved", entityIds:["e_customer"], targets:["dbt","databricks"],
+   lastPublished:"2026-08-19", created:"2026-07-02",
+   desc:"Active-user and engagement measures at customer grain."},
+  {id:"mdl_finance", name:"Finance Ledger", domain:"Finance", owner:"sarah.kim", steward:"alex.wu",
+   status:"Draft", entityIds:["e_txn","e_customer"], targets:["snowflake"],
+   lastPublished:null, created:"2026-09-08",
+   desc:"General-ledger transaction grain for recurring revenue. Not yet published anywhere."},
+];
+
 // ── The register. Each metric is the semantic facet of a Glossary term (termId), or
 //    flags that no term exists yet — a governance gap we make visible rather than paper over.
 const SL_METRICS = [
-  {id:"m_rev", name:"Daily Revenue", type:"simple", status:"Approved", termId:null,
+  {id:"m_rev", model:"mdl_commerce", name:"Daily Revenue", type:"simple", status:"Approved", termId:null,
    domain:"Finance", owner:"sarah.kim", steward:"alex.wu", unit:"USD",
    entity:"e_order", agg:"sum", col:"amount", timeDim:"created_at", timeGrain:"day",
    filters:[{col:"status", op:"is not", val:"cancelled"}],
@@ -32877,7 +32892,7 @@ const SL_METRICS = [
               evidence:"Column amount · DECIMAL(12,2) · 0% null · avg $127.43 · classified `revenue`"}],
    certifiedBy:"alex.wu", certifiedAt:"2026-07-02"},
 
-  {id:"m_dau", name:"Daily Active Users", type:"simple", status:"Approved", termId:"t3",
+  {id:"m_dau", model:"mdl_product", name:"Daily Active Users", type:"simple", status:"Approved", termId:"t3",
    domain:"Product", owner:"alex.wu", steward:"alex.wu", unit:"users",
    entity:"e_customer", agg:"count distinct", col:"user_id", timeDim:"created_at", timeGrain:"day",
    filters:[], dims:["event_type"],
@@ -32886,7 +32901,7 @@ const SL_METRICS = [
               evidence:"Column user_id · 0% null · joins users.user_id · classified `identifier`"}],
    certifiedBy:"alex.wu", certifiedAt:"2026-02-20"},
 
-  {id:"m_mrr", name:"Monthly Recurring Revenue", type:"simple", status:"In Review", termId:"t2",
+  {id:"m_mrr", model:"mdl_finance", name:"Monthly Recurring Revenue", type:"simple", status:"In Review", termId:"t2",
    domain:"Commerce", owner:"sarah.kim", steward:"sarah.kim", unit:"USD",
    entity:"e_txn", agg:"sum", col:"amount", timeDim:"txn_date", timeGrain:"month",
    filters:[{col:"direction", op:"is", val:"CREDIT"}],
@@ -32895,7 +32910,7 @@ const SL_METRICS = [
    bindings:[{id:"b3", system:"snowflake", object:"ORACLE_FIN / GL / transactions", expr:"SUM(amount)", confirmed:false,
               evidence:"Column amount · DECIMAL(15,2) · 0% null — proposed, not yet confirmed by a steward"}]},
 
-  {id:"m_churn", name:"Churn Rate", type:"ratio", status:"Draft", termId:"t4",
+  {id:"m_churn", model:"mdl_commerce", name:"Churn Rate", type:"ratio", status:"Draft", termId:"t4",
    domain:"Commerce", owner:"maya.chen", steward:"dev.patel", unit:"%",
    entity:"e_customer", timeDim:"created_at", timeGrain:"month",
    numerator:{agg:"count distinct", col:"user_id", label:"customers who cancelled"},
@@ -32904,7 +32919,7 @@ const SL_METRICS = [
    definition:"Percentage of customers who cancel or do not renew within a period.",
    bindings:[]},
 
-  {id:"m_clv", name:"Customer Lifetime Value", type:"derived", status:"Approved", termId:"t1",
+  {id:"m_clv", model:"mdl_commerce", name:"Customer Lifetime Value", type:"derived", status:"Approved", termId:"t1",
    domain:"Commerce", owner:"maya.chen", steward:"dev.patel", unit:"USD",
    entity:"e_customer", timeDim:"created_at", timeGrain:"month",
    formula:"avg_order_value × purchase_frequency × avg_lifespan", basedOn:["m_rev"],
@@ -32914,7 +32929,7 @@ const SL_METRICS = [
               evidence:"Derived from Daily Revenue (certified) · no physical binding required"}],
    certifiedBy:"maya.chen", certifiedAt:"2026-03-15"},
 
-  {id:"m_yoy", name:"Revenue YoY Growth %", type:"derived", status:"In Review", termId:null,
+  {id:"m_yoy", model:"mdl_commerce", name:"Revenue YoY Growth %", type:"derived", status:"In Review", termId:null,
    domain:"Finance", owner:"sarah.kim", steward:"alex.wu", unit:"%",
    entity:"e_order", timeDim:"created_at", timeGrain:"month",
    formula:"(this period − same period last year) ÷ same period last year", basedOn:["m_rev"],
@@ -32923,7 +32938,7 @@ const SL_METRICS = [
    bindings:[{id:"b5", system:"snowflake", object:"derived from Daily Revenue", expr:"see formula", confirmed:true,
               evidence:"Based on a certified metric · inherits its grain and filters"}]},
 
-  {id:"m_revqtd", name:"Revenue QTD", type:"cumulative", status:"Draft", termId:null,
+  {id:"m_revqtd", model:"mdl_commerce", name:"Revenue QTD", type:"cumulative", status:"Draft", termId:null,
    domain:"Finance", owner:"sarah.kim", steward:"alex.wu", unit:"USD",
    entity:"e_order", timeDim:"created_at", timeGrain:"day",
    window:"quarter to date", basedOn:["m_rev"],
@@ -33209,7 +33224,7 @@ const slLayout = (ents, rels) => {
 // ── Governed state lives in a module store, not component state. A conformance decision
 //    that vanishes when the user visits the Glossary is not a durable decision.
 const _slSubs = new Set();
-let _slState = {metrics: SL_METRICS.map(m=>({...m})), vendor: SL_VENDOR.map(v=>({...v})),
+let _slState = {models: SL_MODELS.map(m=>({...m})), metrics: SL_METRICS.map(m=>({...m})), vendor: SL_VENDOR.map(v=>({...v})),
                 entities: SL_ENTITIES.map(e=>({...e})), rels: SL_RELATIONSHIPS.map(r=>({...r}))};
 const slSet = (updater) => { _slState = typeof updater==="function" ? updater(_slState) : updater; _slSubs.forEach(fn=>fn()); };
 const useSemanticLayer = () => {
@@ -33335,7 +33350,8 @@ const SLTypeChip = ({type}) => {
   return <span style={{fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:4,background:T.violetDim,color:T.violet,border:`1px solid ${T.violet}30`,whiteSpace:"nowrap"}}>{t.l}</span>;
 };
 const SLSysChip = ({system}) => {
-  const map = {dbt:{l:"dbt",c:"#ff694b"}, powerbi:{l:"Power BI",c:"#f2c811"}, tableau:{l:"Tableau",c:"#4e79a7"}, snowflake:{l:"Snowflake",c:"#29b5e8"}};
+  const map = {dbt:{l:"dbt",c:"#ff694b"}, powerbi:{l:"Power BI",c:"#f2c811"}, tableau:{l:"Tableau",c:"#4e79a7"},
+               snowflake:{l:"Snowflake",c:"#29b5e8"}, databricks:{l:"Databricks",c:"#ff3621"}, cube:{l:"Cube",c:"#a259ff"}};
   const s = map[system]||{l:system,c:T.textMuted};
   return <span style={{fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:4,background:`${s.c}18`,color:s.c,border:`1px solid ${s.c}35`,whiteSpace:"nowrap"}}>{s.l}</span>;
 };
@@ -33783,33 +33799,114 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, onToast}) => {
   );
 };
 
+// ── Create a semantic model. A model is the publishable bundle, so creating one is
+//    choosing a grain to work at and where it will eventually go — not a form to fill.
+const SLNewModelDrawer = ({open, onClose, onCreate, entities, onToast}) => {
+  const [d, setD] = useState(null);
+  useEffect(()=>{ if(open) setD({name:"",desc:"",domain:"Finance",owner:"",steward:"",entityIds:[],targets:["dbt"]}); },[open]);
+  if(!open || !d) return null;
+  const ready = d.name.trim() && d.owner && d.entityIds.length>0;
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.45)"}} onClick={onClose}>
+      <div className="slideInRight" onClick={e=>e.stopPropagation()}
+        style={{position:"absolute",top:0,right:0,bottom:0,width:520,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
+        <div style={{flexShrink:0,padding:"16px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div>
+            <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>New semantic model</div>
+            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>A set of agreed numbers over a shared grain.</div>
+          </div>
+          <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"18px 22px"}}>
+          <SLField label="Name" hint="Name it after the business area, not the tables underneath."><Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value})} placeholder="e.g. Commerce Revenue"/></SLField>
+          <SLField label="What it is for"><Input2 multiline rows={3} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})} placeholder="Order-grain revenue for the commerce domain."/></SLField>
+          <div style={{display:"flex",gap:12}}>
+            <div style={{flex:1}}><SLField label="Domain"><SLSelect value={d.domain} onChange={e=>setD({...d,domain:e.target.value})} options={["Finance","Commerce","Product","Marketing"]}/></SLField></div>
+            <div style={{flex:1}}><SLField label="Owner"><SLSelect value={d.owner} onChange={e=>setD({...d,owner:e.target.value})} placeholder="Select an owner" options={["sarah.kim","maya.chen","alex.wu","dev.patel","james.oh"]}/></SLField></div>
+          </div>
+          <SLField label="Steward"><SLSelect value={d.steward} onChange={e=>setD({...d,steward:e.target.value})} placeholder="Select a steward" options={["sarah.kim","maya.chen","alex.wu","dev.patel","james.oh"]}/></SLField>
+          <SLField label="Entities" hint="What this model counts and joins across. You can add more later.">
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {entities.map(e=>{
+                const on=d.entityIds.includes(e.id);
+                return <button key={e.id} onClick={()=>setD({...d, entityIds: on?d.entityIds.filter(x=>x!==e.id):[...d.entityIds,e.id]})}
+                  style={{display:"flex",alignItems:"center",gap:9,padding:"8px 11px",background:on?T.bgActive:T.bgElevated,border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:8,cursor:"pointer",textAlign:"left"}}>
+                  <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?T.accent:T.borderLight}`,background:on?T.accent:"transparent",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on?"✓":""}</span>
+                  <span style={{fontSize:12,fontWeight:600,color:T.text}}>{e.name}</span>
+                  <span style={{fontSize:11,color:T.textMuted}}>one row per {e.key}</span>
+                </button>;
+              })}
+            </div>
+          </SLField>
+          <SLField label="Publishes to" hint="Where it is compiled and sent. Always a reviewed change set, never a live write.">
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {SL_PLAT_LIST.filter(p=>p.adapter==="ready").map(p=>{
+                const on=d.targets.includes(p.k);
+                return <button key={p.k} onClick={()=>setD({...d, targets: on?d.targets.filter(x=>x!==p.k):[...d.targets,p.k]})}
+                  style={{display:"flex",alignItems:"center",gap:9,padding:"8px 11px",background:on?T.bgActive:T.bgElevated,border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:8,cursor:"pointer",textAlign:"left"}}>
+                  <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?T.accent:T.borderLight}`,background:on?T.accent:"transparent",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on?"✓":""}</span>
+                  <span style={{fontSize:12,fontWeight:600,color:T.text}}>{p.label}</span>
+                  <span style={{fontSize:11,color:T.textMuted}}>{p.artifact}</span>
+                </button>;
+              })}
+            </div>
+          </SLField>
+        </div>
+        <div style={{flexShrink:0,padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",background:T.bg}}>
+          <span style={{fontSize:11.5,color:T.textMuted}}>{ready?"Ready to create.":"Name, owner and at least one entity are required."}</span>
+          <div style={{display:"flex",gap:9}}>
+            <Btn ghost onClick={onClose}>Cancel</Btn>
+            <Btn variant="primary" disabled={!ready} onClick={()=>onCreate({
+              id:"mdl_"+Date.now(), name:d.name.trim(), desc:d.desc, domain:d.domain, owner:d.owner,
+              steward:d.steward||d.owner, status:"Draft", entityIds:d.entityIds, targets:d.targets,
+              lastPublished:null, created:new Date().toISOString().slice(0,10)})}>Create model</Btn>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 // ═══════════════════════════════════════════════════════════════════════════
 // THE SCREEN
+// A list of semantic models, and one model at a time. The model is the unit that
+// gets published, so it is also the unit you browse — three tabs, nothing else:
+// Overview (the model itself, editable) · Metrics · Alignment.
 // ═══════════════════════════════════════════════════════════════════════════
 const SemanticLayerView = ({onToast, onNav}) => {
-  const {roleCfg} = useRole();
   const [store, setStore] = useSemanticLayer();
   const [gTerms] = useGlossaryTerms();
-  const {metrics, vendor, entities, rels} = store;
+  const {models, metrics, vendor, entities, rels} = store;
 
-  const [tab, setTab]         = useState("model");
-  const [selEnt, setSelEnt]   = useState(null);
-  const [selId, setSelId]     = useState(null);
-  const [mTab, setMTab]       = useState("definition");
-  const [q, setQ]             = useState("");
+  const [selMdl,  setSelMdl]  = useState(null);   // semantic model
+  const [tab,     setTab]     = useState("overview");
+  const [selId,   setSelId]   = useState(null);   // metric, drilled from a model
+  const [mTab,    setMTab]    = useState("definition");
+  const [selEnt,  setSelEnt]  = useState(null);
+  const [q,       setQ]       = useState("");
   const [confFilter, setConfFilter] = useState("all");
-  const [builderOpen, setBuilderOpen] = useState(false);
-  const [mapFor, setMapFor]   = useState(null);   // vendor def being mapped
+  const [builderOpen,  setBuilderOpen]  = useState(false);
+  const [newMdlOpen,   setNewMdlOpen]   = useState(false);
+  const [mapFor,  setMapFor]  = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [draft,   setDraft]   = useState(null);
 
-  const sel = selId ? metrics.find(m=>m.id===selId) : null;
-  const disagreements = slDisagreements(vendor, metrics);
-  const unmanaged = vendor.filter(v=>v.conformance==="unmanaged");
-  const drifted   = vendor.filter(v=>v.conformance==="drifted");
-  const certified = metrics.filter(m=>m.status==="Approved");
-  const noTerm    = metrics.filter(m=>!m.termId);
+  // ── Everything below is scoped to one model, so derive the slice once.
+  const mdl      = selMdl ? models.find(m=>m.id===selMdl) : null;
+  const mMetrics = mdl ? metrics.filter(m=>m.model===mdl.id) : [];
+  const mEnts    = mdl ? entities.filter(e=>(mdl.entityIds||[]).includes(e.id)) : [];
+  const mRels    = mdl ? rels.filter(r=>(mdl.entityIds||[]).includes(r.from)&&(mdl.entityIds||[]).includes(r.to)) : [];
+  const mVendor  = mdl ? vendor.filter(v=>mMetrics.some(x=>x.id===v.mappedTo)) : [];
+  const sel      = selId ? metrics.find(m=>m.id===selId) : null;
+
+  const statsFor = (m) => {
+    const ms = metrics.filter(x=>x.model===m.id);
+    const vs = vendor.filter(v=>ms.some(x=>x.id===v.mappedTo));
+    return {metrics:ms.length, certified:ms.filter(x=>x.status==="Approved").length,
+            entities:(m.entityIds||[]).length, disagree:vs.filter(v=>v.conformance!=="conformant").length, copies:vs.length};
+  };
 
   const saveMetric = (m) => {
-    setStore(prev=>({...prev, metrics:[...prev.metrics, m]}));
+    setStore(prev=>({...prev, metrics:[...prev.metrics, {...m, model:selMdl}]}));
     setBuilderOpen(false);
     onToast && onToast(m.status==="In Review" ? `${m.name} published for approval` : `${m.name} saved as a draft`,"success");
   };
@@ -33817,16 +33914,18 @@ const SemanticLayerView = ({onToast, onNav}) => {
     setStore(prev=>({...prev, vendor:prev.vendor.map(v=>v.id===vId?{...v, mappedTo:metricId, conformance:"drifted",
       note:"Newly mapped. Differences against the EDG definition have not been reviewed yet."}:v)}));
     setMapFor(null);
-    onToast && onToast("Mapped. It now appears in the disagreement report until someone reviews it.","success");
+    onToast && onToast("Claimed. It stays flagged until someone compares the two definitions.","success");
+  };
+  const patchModel = (patch) => setStore(prev=>({...prev, models:prev.models.map(m=>m.id===selMdl?{...m,...patch}:m)}));
+  const createModel = (m) => {
+    setStore(prev=>({...prev, models:[...prev.models, m]}));
+    setNewMdlOpen(false); setSelMdl(m.id); setTab("overview");
+    onToast && onToast(`${m.name} created`,"success");
   };
 
-  const TABS = [
-    {k:"model",     l:"Model"},
-    {k:"metrics",   l:`Metrics · ${metrics.length}`},
-    {k:"alignment", l:`Alignment · ${vendor.length}`},
-  ];
-
-  // ── Metric profile ──
+  // ─────────────────────────────────────────────────────────────
+  // METRIC PROFILE — drilled from a model
+  // ─────────────────────────────────────────────────────────────
   if(sel){
     const ent = entities.find(e=>e.id===sel.entity);
     const copies = vendor.filter(v=>v.mappedTo===sel.id);
@@ -33836,17 +33935,15 @@ const SemanticLayerView = ({onToast, onNav}) => {
                 {k:"copies",l:`In your tools · ${copies.length}`},{k:"portability",l:"Portability"},{k:"governance",l:"Governance"}];
     return (
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        <div style={{flexShrink:0,padding:"12px 24px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10,background:T.bgSurface}}>
-          <button onClick={()=>setSelId(null)} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:12,padding:"4px 8px",borderRadius:6}}>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M8 2L4 6l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-            All metrics
-          </button>
+        <div style={{flexShrink:0,padding:"12px 24px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:8,background:T.bgSurface,flexWrap:"wrap"}}>
+          <button onClick={()=>{setSelId(null);setSelMdl(null);}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:12,padding:"4px 6px",borderRadius:6}}>Semantic Layer</button>
+          <span style={{color:T.border}}>›</span>
+          <button onClick={()=>{setSelId(null);setTab("metrics");}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:12,padding:"4px 6px",borderRadius:6}}>{mdl?mdl.name:"Model"}</button>
           <span style={{color:T.border}}>›</span>
           <span style={{fontSize:12,fontWeight:600,color:T.text}}>{sel.name}</span>
         </div>
 
         <div style={{flex:1,overflowY:"auto",padding:"22px 28px"}}>
-          {/* Header */}
           <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,padding:"18px 20px",marginBottom:18}}>
             <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",marginBottom:8}}>
               <span style={{fontSize:19,fontWeight:700,color:T.text}}>{sel.name}</span>
@@ -33857,14 +33954,14 @@ const SemanticLayerView = ({onToast, onNav}) => {
             <div style={{display:"flex",gap:26,flexWrap:"wrap"}}>
               {[["Domain",sel.domain],["Owner",sel.owner],["Steward",sel.steward],["Unit",sel.unit],
                 ["Grain",ent?`one row per ${ent.key}`:"—"],["Time grain",sel.timeGrain||"—"],
-                ["Vendor copies",`${copies.length}`],["Disagreeing",`${copies.filter(c=>c.conformance!=="conformant").length}`]].map(([k,v])=>(
+                ["In your tools",`${copies.length}`],["Disagreeing",`${copies.filter(c=>c.conformance!=="conformant").length}`]].map(([k,v])=>(
                 <div key={k}><div style={{fontSize:10,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{k}</div>
                 <div style={{fontSize:12.5,color:T.text,fontWeight:600,marginTop:3}}>{v}</div></div>
               ))}
             </div>
           </div>
 
-          <div style={{display:"flex",gap:3,borderBottom:`1px solid ${T.border}`,marginBottom:18}}>
+          <div style={{display:"flex",gap:3,borderBottom:`1px solid ${T.border}`,marginBottom:18,flexWrap:"wrap"}}>
             {MT.map(t=>(
               <button key={t.k} onClick={()=>setMTab(t.k)}
                 style={{padding:"9px 14px",background:"transparent",border:"none",borderBottom:`2px solid ${mTab===t.k?T.accent:"transparent"}`,color:mTab===t.k?T.text:T.textMuted,fontSize:12.5,fontWeight:mTab===t.k?700:600,cursor:"pointer"}}>{t.l}</button>
@@ -33872,7 +33969,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
           </div>
 
           {mTab==="definition" && <>
-            <SLSection title="The definition" note="One sentence, in business language. This is what a business user authored and what every vendor copy is measured against.">
+            <SLSection title="The definition" note="One sentence, in business language. This is what a business user authored and what every tool copy is measured against.">
               <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"18px 20px"}}><SLSentenceView metric={sel} size={14}/></div>
             </SLSection>
             {sel.formula && <SLSection title="Formula"><div style={{fontFamily:"ui-monospace,monospace",fontSize:12.5,color:T.text,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,padding:"12px 15px"}}>{sel.formula}</div></SLSection>}
@@ -33891,59 +33988,55 @@ const SemanticLayerView = ({onToast, onNav}) => {
             </SLSection>
           </>}
 
-          {mTab==="bindings" && <>
-            <SLSection title="Implementation bindings" note="Which physical column implements the metric. Authored by EDG, proposed by AI from column profiling and classifications, confirmed by a steward.">
-              {(sel.bindings||[]).length===0
-                ? <div style={{padding:"26px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>No binding confirmed yet. This metric cannot be certified until one is.</div>
-                : (sel.bindings||[]).map(b=>(
-                  <div key={b.id} style={{background:T.bgSurface,border:`1px solid ${b.confirmed?T.green+"45":T.amber+"45"}`,borderRadius:10,padding:"14px 16px",marginBottom:9}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:6}}>
-                      <span style={{fontSize:12.5,fontWeight:700,color:T.text,fontFamily:"ui-monospace,monospace"}}>{b.expr}</span>
-                      <span style={{fontSize:11,fontWeight:600,color:b.confirmed?T.green:T.amber}}>{b.confirmed?"✓ Confirmed by a steward":"⏳ Proposed — not confirmed"}</span>
-                    </div>
-                    <div style={{fontSize:11.5,color:T.textSub,marginBottom:5}}>{b.object}</div>
-                    <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.55}}>{b.evidence}</div>
+          {mTab==="bindings" && <SLSection title="Bindings" note="Which physical column implements the metric. Proposed by EDG from column profiling and classifications, confirmed by a steward.">
+            {(sel.bindings||[]).length===0
+              ? <div style={{padding:"26px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>No binding confirmed yet. This metric cannot be certified until one is.</div>
+              : (sel.bindings||[]).map(b=>(
+                <div key={b.id} style={{background:T.bgSurface,border:`1px solid ${b.confirmed?T.green+"45":T.amber+"45"}`,borderRadius:10,padding:"14px 16px",marginBottom:9}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:6,flexWrap:"wrap"}}>
+                    <span style={{fontSize:12.5,fontWeight:700,color:T.text,fontFamily:"ui-monospace,monospace"}}>{b.expr}</span>
+                    <span style={{fontSize:11,fontWeight:600,color:b.confirmed?T.green:T.amber}}>{b.confirmed?"✓ Confirmed by a steward":"⏳ Proposed — not confirmed"}</span>
                   </div>
-                ))}
-            </SLSection>
-          </>}
+                  <div style={{fontSize:11.5,color:T.textSub,marginBottom:5}}>{b.object}</div>
+                  <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.55}}>{b.evidence}</div>
+                </div>
+              ))}
+          </SLSection>}
 
-          {mTab==="copies" && <>
-            <SLSection title="Vendor copies" note="Conformance bindings — every definition of this number that already exists in a vendor tool, and whether it agrees. This is the reconciliation that makes a central plane worth having.">
-              {copies.length===0
-                ? <div style={{padding:"26px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>No vendor tool defines this metric yet.</div>
-                : copies.map(c=>(
-                  <div key={c.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",marginBottom:10}}>
-                    <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",marginBottom:7}}>
-                      <SLSysChip system={c.system}/>
-                      <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{c.object}</span>
-                      <span style={{fontSize:11,color:T.textMuted}}>{c.objType}</span>
-                      <SLConfChip state={c.conformance}/>
-                      <span style={{marginLeft:"auto",fontSize:10.5,color:T.textMuted}}>seen {c.lastSeen}</span>
-                    </div>
-                    <div style={{fontFamily:"ui-monospace,monospace",fontSize:11.5,color:T.textSub,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,padding:"8px 11px",marginBottom:8,overflowX:"auto"}}>{c.expr}</div>
-                    <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginBottom:c.diff?9:0}}>{c.note}</div>
-                    {c.diff && <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1.3fr 1.3fr",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
-                        {["","EDG definition",`${c.system} copy`].map((h,i)=><div key={i} style={{padding:"6px 11px",fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{h}</div>)}
-                      </div>
-                      {c.diff.map((d,i)=>{
-                        const same = d.edg===d.vendor;
-                        return <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1.3fr 1.3fr",borderBottom:i<c.diff.length-1?`1px solid ${T.border}`:"none"}}>
-                          <div style={{padding:"8px 11px",fontSize:11.5,color:T.textMuted}}>{d.f}</div>
-                          <div style={{padding:"8px 11px",fontSize:11.5,color:T.text,background:same?"transparent":"rgba(22,163,74,.06)"}}>{d.edg}</div>
-                          <div style={{padding:"8px 11px",fontSize:11.5,color:same?T.text:T.rose,fontWeight:same?400:600,background:same?"transparent":T.roseDim}}>{d.vendor}</div>
-                        </div>;
-                      })}
-                    </div>}
-                    {c.divergeReason && <div style={{marginTop:9,padding:"9px 12px",background:T.violetDim,border:`1px solid ${T.violet}35`,borderRadius:8}}>
-                      <div style={{fontSize:11,fontWeight:700,color:T.violet,marginBottom:2}}>ACCEPTED DIVERGENCE · {c.divergeOwner}</div>
-                      <div style={{fontSize:11.5,color:T.textSub}}>{c.divergeReason}</div>
-                    </div>}
+          {mTab==="copies" && <SLSection title="What your tools say" note="Every definition of this number that already exists in a tool, and whether it agrees.">
+            {copies.length===0
+              ? <div style={{padding:"26px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>No tool defines this metric yet.</div>
+              : copies.map(c=>(
+                <div key={c.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",marginBottom:10}}>
+                  <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",marginBottom:7}}>
+                    <SLSysChip system={c.system}/>
+                    <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{c.object}</span>
+                    <span style={{fontSize:11,color:T.textMuted}}>{c.objType}</span>
+                    <SLConfChip state={c.conformance}/>
+                    <span style={{marginLeft:"auto",fontSize:10.5,color:T.textMuted}}>seen {c.lastSeen}</span>
                   </div>
-                ))}
-            </SLSection>
-          </>}
+                  <div style={{fontFamily:"ui-monospace,monospace",fontSize:11.5,color:T.textSub,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,padding:"8px 11px",marginBottom:8,overflowX:"auto"}}>{c.expr}</div>
+                  <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginBottom:c.diff?9:0}}>{c.note}</div>
+                  {c.diff && <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1.3fr 1.3fr",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
+                      {["","EDG definition",`${c.system} copy`].map((h,i)=><div key={i} style={{padding:"6px 11px",fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{h}</div>)}
+                    </div>
+                    {c.diff.map((d,i)=>{
+                      const same = d.edg===d.vendor;
+                      return <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1.3fr 1.3fr",borderBottom:i<c.diff.length-1?`1px solid ${T.border}`:"none"}}>
+                        <div style={{padding:"8px 11px",fontSize:11.5,color:T.textMuted}}>{d.f}</div>
+                        <div style={{padding:"8px 11px",fontSize:11.5,color:T.text,background:same?"transparent":"rgba(22,163,74,.06)"}}>{d.edg}</div>
+                        <div style={{padding:"8px 11px",fontSize:11.5,color:same?T.text:T.rose,fontWeight:same?400:600,background:same?"transparent":T.roseDim}}>{d.vendor}</div>
+                      </div>;
+                    })}
+                  </div>}
+                  {c.divergeReason && <div style={{marginTop:9,padding:"9px 12px",background:T.violetDim,border:`1px solid ${T.violet}35`,borderRadius:8}}>
+                    <div style={{fontSize:11,fontWeight:700,color:T.violet,marginBottom:2}}>DIFFERENT ON PURPOSE · {c.divergeOwner}</div>
+                    <div style={{fontSize:11.5,color:T.textSub}}>{c.divergeReason}</div>
+                  </div>}
+                </div>
+              ))}
+          </SLSection>}
 
           {mTab==="portability" && <>
             <SLSection title="Where this metric can go"
@@ -33969,11 +34062,10 @@ const SemanticLayerView = ({onToast, onNav}) => {
                       <div style={{fontSize:11.5,color:T.textMuted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{term.definition}</div>
                     </div>
                     <SLStatusChip status={term.status}/>
-                    {term.conflictFlag&&<span style={{fontSize:10.5,fontWeight:600,color:T.amber}}>⚡ conflict flagged</span>}
                   </button>
                 : <div style={{padding:"13px 15px",background:T.amberDim,border:`1px solid ${T.amber}35`,borderRadius:10}}>
                     <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:3}}>This metric has no Glossary term.</div>
-                    <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>It is certified and in use, but the name is not registered anywhere a business user would look. A gap worth closing — visible rather than papered over.</div>
+                    <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>It is in use, but the name is not registered anywhere a business user would look. A gap worth closing — visible rather than papered over.</div>
                   </div>}
             </SLSection>
             {policy.length>0 && <SLSection title="Inherited policy" note="The metric touches governed columns, so it carries their policy.">
@@ -33994,243 +34086,394 @@ const SemanticLayerView = ({onToast, onNav}) => {
     );
   }
 
-  // ── List surfaces ──
-  return (
-    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-      <div style={{flexShrink:0,padding:"16px 24px 0",background:T.bgSurface,borderBottom:`1px solid ${T.border}`}}>
-        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16,marginBottom:14}}>
-          <div style={{maxWidth:760}}>
-            <div style={{fontSize:17,fontWeight:700,color:T.text}}>Semantic Layer</div>
-            <div style={{fontSize:12,color:T.textMuted,marginTop:3,lineHeight:1.55}}>
-              One definition of every number, in a format that outlives the tools. EDG holds the definition; Snowflake, Databricks, dbt, Power BI and Tableau execute it.
-            </div>
-          </div>
-          <Btn variant="primary" icon={Ic.plus(13)} onClick={()=>setBuilderOpen(true)}>Define a metric</Btn>
+  // ─────────────────────────────────────────────────────────────
+  // MODEL PROFILE — Overview · Metrics · Alignment
+  // ─────────────────────────────────────────────────────────────
+  if(mdl){
+    const st = statsFor(mdl);
+    const TABS = [{k:"overview",l:"Overview"},{k:"metrics",l:`Metrics · ${mMetrics.length}`},{k:"alignment",l:`Alignment · ${mVendor.length}`}];
+    const dis = slDisagreements(mVendor, mMetrics);
+    const unclaimed = vendor.filter(v=>v.conformance==="unmanaged");
+    const startEdit = () => { setDraft({...mdl}); setEditing(true); };
+    const saveEdit  = () => { patchModel({name:draft.name,desc:draft.desc,domain:draft.domain,owner:draft.owner,steward:draft.steward,targets:draft.targets,entityIds:draft.entityIds}); setEditing(false); onToast&&onToast("Model updated","success"); };
+
+    return (
+      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{flexShrink:0,padding:"12px 24px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:8,background:T.bgSurface}}>
+          <button onClick={()=>{setSelMdl(null);setEditing(false);setSelEnt(null);}} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:12,padding:"4px 8px",borderRadius:6}}>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M8 2L4 6l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            All models
+          </button>
+          <span style={{color:T.border}}>›</span>
+          <span style={{fontSize:12,fontWeight:600,color:T.text}}>{mdl.name}</span>
         </div>
-        <div style={{display:"flex",gap:3}}>
-          {TABS.map(t=>(
-            <button key={t.k} onClick={()=>{setTab(t.k);setQ("");}}
-              style={{padding:"9px 14px",background:"transparent",border:"none",borderBottom:`2px solid ${tab===t.k?T.accent:"transparent"}`,color:tab===t.k?T.text:T.textMuted,fontSize:12.5,fontWeight:tab===t.k?700:600,cursor:"pointer"}}>{t.l}</button>
-          ))}
-        </div>
-      </div>
 
-      <div style={{flex:1,overflowY:"auto",padding:"22px 28px"}}>
-
-        {tab==="model" && <>
-          <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:20}}>
-            <SLStat label="Metrics" value={metrics.length} sub={`${certified.length} certified`}/>
-            <SLStat label="Entities" value={entities.length} sub={`${rels.length} relationship${rels.length===1?"":"s"}`}/>
-            <SLStat label="Tools disagree" value={drifted.length} tone={drifted.length?T.amber:T.green} sub="definitions out of step"/>
-            <SLStat label="Unclaimed" value={unmanaged.length} tone={T.textMuted} sub="no owner, no term"/>
-          </div>
-
-          <SLSection title="The model"
-            note="Entities are the things you count, and the grain says what one row means. Relationships are how they connect — a metric can only be sliced by a dimension it can reach. Carried in the format with cardinality and direction, so it survives to every platform.">
-            <SLModelCanvas entities={entities} rels={rels} metrics={metrics} selected={selEnt} onSelect={setSelEnt}/>
-          </SLSection>
-
-          {selEnt && (()=>{
-            const e = entities.find(x=>x.id===selEnt); if(!e) return null;
-            const used = metrics.filter(m=>m.entity===e.id);
-            const conn = rels.filter(r=>r.from===e.id||r.to===e.id);
-            return (
-              <SLSection title={e.name} note={e.desc}>
-                <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,padding:"16px 18px"}}>
-                  <div style={{display:"flex",gap:26,flexWrap:"wrap",marginBottom:14}}>
-                    {[["Grain",`one row per ${e.key}`],["Table",e.table],["Domain",e.domain],["Owner",e.owner],["Time columns",e.timeDims.join(", ")],["Metrics",String(used.length)]].map(([k,v])=>(
-                      <div key={k}><div style={{fontSize:10,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{k}</div>
-                      <div style={{fontSize:12.5,color:T.text,fontWeight:600,marginTop:3}}>{v}</div></div>
-                    ))}
-                  </div>
-                  <div style={{fontSize:11,color:T.green,marginBottom:14}}>✓ Key evidence — {e.evidence}</div>
-
-                  <div style={{fontSize:11.5,fontWeight:700,color:T.textSub,marginBottom:7}}>WHERE IT LIVES ON EACH PLATFORM</div>
-                  <div style={{display:"flex",flexDirection:"column",gap:5,marginBottom:16}}>
-                    {Object.entries(e.bindings||{}).map(([k,v])=>(
-                      <div key={k} style={{display:"flex",gap:12,alignItems:"center",fontSize:11.5}}>
-                        <span style={{minWidth:84,fontWeight:600,color:T.text}}>{(SL_PLATFORMS[k]||{}).label||k}</span>
-                        <span style={{fontFamily:"ui-monospace,monospace",color:v==="—"?T.textMuted:T.textSub}}>{v}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {conn.length>0 && <>
-                    <div style={{fontSize:11.5,fontWeight:700,color:T.textSub,marginBottom:7}}>RELATIONSHIPS</div>
-                    {conn.map(r=>{
-                      const f=entities.find(x=>x.id===r.from), t=entities.find(x=>x.id===r.to);
-                      return (
-                        <div key={r.id} style={{padding:"9px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6}}>
-                          <div style={{fontSize:12,fontWeight:600,color:T.text}}>{f&&f.name} → {t&&t.name} <span style={{color:T.textMuted,fontWeight:400}}>· {r.fromKey} = {r.toKey} · many to one</span></div>
-                          <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{r.note}</div>
-                        </div>
-                      );
-                    })}
-                  </>}
-
-                  {used.length>0 && <div style={{marginTop:14}}>
-                    <div style={{fontSize:11.5,fontWeight:700,color:T.textSub,marginBottom:7}}>METRICS AT THIS GRAIN</div>
-                    <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
-                      {used.map(m=><button key={m.id} onClick={()=>{setSelId(m.id);setMTab("definition");}}
-                        style={{fontSize:11.5,fontWeight:600,color:T.text,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,padding:"5px 10px",cursor:"pointer"}}>{m.name}</button>)}
-                    </div>
-                  </div>}
-                </div>
-              </SLSection>
-            );
-          })()}
-
-          <SLSection title="Platforms"
-            note="A platform is described to EDG as a capability profile — what it can and cannot express — not as code. That is what makes the format portable: adding a platform is one profile, and every warning, badge and matrix in this product starts working for it immediately.">
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {SL_PLAT_LIST.map(p=>(
-                <div key={p.k} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"13px 16px"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",marginBottom:5}}>
-                    <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{p.label}</span>
-                    <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>{p.family==="bi"?"BI model":"Declarative"}</span>
-                    <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,
-                      background:p.adapter==="ready"?"rgba(22,163,74,.1)":p.adapter==="harvest_only"?T.amberDim:T.bgElevated,
-                      color:p.adapter==="ready"?T.green:p.adapter==="harvest_only"?T.amber:T.textMuted,
-                      border:`1px solid ${p.adapter==="ready"?T.green:p.adapter==="harvest_only"?T.amber:T.border}33`}}>
-                      {p.adapter==="ready"?"Publishes":p.adapter==="harvest_only"?"Reads only":"Profile only — no adapter"}</span>
-                    <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>{p.artifact}</span>
-                  </div>
-                  <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginBottom:7}}>{p.note}</div>
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                    {[["joins", "Joins", SL_CAP_DOCS.joins.vals[p.caps.joins], SL_CAP_DOCS.joins.q],
-                      ["timeIntelligence", "Time intelligence", SL_CAP_DOCS.timeIntelligence.vals[p.caps.timeIntelligence], SL_CAP_DOCS.timeIntelligence.q],
-                      ["metricTypes", "Metric types", p.caps.metricTypes.join(", "), SL_CAP_DOCS.metricTypes.q],
-                      ["semiAdditive", "Semi-additive", p.caps.semiAdditive?"Preserved":"Lost", SL_CAP_DOCS.semiAdditive.q],
-                      ["governanceCarry", "Governance", p.caps.governanceCarry, SL_CAP_DOCS.governanceCarry.q],
-                     ].map(([k,label,val,q])=>(
-                      <span key={k} title={q} style={{fontSize:10.5,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:4,padding:"1px 7px",cursor:"help"}}>{label}: <b style={{color:T.textSub}}>{val}</b></span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </SLSection>
-        </>}
-
-        {tab==="metrics" && <>
-          <div style={{marginBottom:14,maxWidth:340}}><Input2 value={q} onChange={e=>setQ(e.target.value)} placeholder="Search metrics…" icon={Ic.search(13)}/></div>
-          <div style={{display:"flex",flexDirection:"column",gap:9}}>
-            {metrics.filter(m=>!q||m.name.toLowerCase().includes(q.toLowerCase())||(m.definition||"").toLowerCase().includes(q.toLowerCase())).map(m=>{
-              const copies = vendor.filter(v=>v.mappedTo===m.id);
-              const bad = copies.filter(c=>c.conformance!=="conformant").length;
-              return (
-                <div key={m.id} onClick={()=>{setSelId(m.id);setMTab("definition");}}
-                  style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 17px",cursor:"pointer"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",marginBottom:6}}>
-                    <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>{m.name}</span>
-                    <SLStatusChip status={m.status}/><SLTypeChip type={m.type}/>
-                    {!m.termId && <span style={{fontSize:10.5,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.amberDim,color:T.amber,border:`1px solid ${T.amber}35`}}>no term</span>}
-                    <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>{m.domain} · {m.owner}</span>
-                  </div>
-                  <div style={{marginBottom:8}}><SLSentenceView metric={m} size={12.5}/></div>
-                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                    {copies.length===0
-                      ? <span style={{fontSize:11,color:T.textMuted}}>No tool defines this yet</span>
-                      : <><span style={{fontSize:11,color:T.textMuted}}>{copies.length} tool cop{copies.length===1?"y":"ies"}</span>
-                          {bad>0 && <span style={{fontSize:11,fontWeight:600,color:T.amber}}>· {bad} disagree{bad===1?"s":""}</span>}
-                          {copies.map(c=><SLSysChip key={c.id} system={c.system}/>)}</>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </>}
-
-        {tab==="alignment" && <>
-          <SLSection title="Where the tools disagree"
-            note="Every number that more than one tool defines, and how many of those copies are out of step with the certified definition. Read-only — it needs no write access to anything.">
-            <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-              {disagreements.map((r,i)=>(
-                <div key={r.metric.id} style={{borderBottom:i<disagreements.length-1?`1px solid ${T.border}`:"none",display:"flex",alignItems:"center",gap:12,padding:"13px 16px",cursor:"pointer"}}
-                  onClick={()=>{setSelId(r.metric.id);setMTab("copies");}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap"}}>
-                      <span style={{fontSize:13,fontWeight:700,color:T.text}}>{r.metric.name}</span>
-                      <SLStatusChip status={r.metric.status}/>
-                    </div>
-                    <div style={{fontSize:11.5,color:T.textMuted,marginTop:3}}>
-                      {r.total} definition{r.total===1?"":"s"} across {new Set(r.defs.map(d=>d.system)).size} tool{new Set(r.defs.map(d=>d.system)).size===1?"":"s"}
-                      {r.disagree>0 && <span style={{color:T.amber,fontWeight:600}}> · {r.disagree} out of step</span>}
-                    </div>
-                  </div>
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}}>
-                    {r.defs.map(d=><span key={d.id} style={{display:"flex",alignItems:"center",gap:5}}><SLSysChip system={d.system}/><SLConfChip state={d.conformance} small/></span>)}
-                  </div>
-                  <span style={{color:T.textMuted,flexShrink:0}}>{Ic.chevRight(13)}</span>
-                </div>
-              ))}
-            </div>
-          </SLSection>
-
-          <SLSection title="Every definition found in a tool"
-            note="Harvested from the semantic layers EDG already catalogues. Nothing here was written by EDG — this is what is already out there.">
-            <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
-              <div style={{maxWidth:280,flex:1,minWidth:190}}><Input2 value={q} onChange={e=>setQ(e.target.value)} placeholder="Search…" icon={Ic.search(13)}/></div>
-              <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                {[{k:"all",l:"All"},...Object.entries(SL_CONF).map(([k,c])=>({k,l:c.l}))].map(f=>(
-                  <button key={f.k} onClick={()=>setConfFilter(f.k)}
-                    style={{padding:"6px 11px",borderRadius:7,border:`1px solid ${confFilter===f.k?T.accent:T.border}`,background:confFilter===f.k?T.accentDim:T.bgSurface,color:confFilter===f.k?T.text:T.textSub,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-                    {f.l} {f.k!=="all" && <span style={{color:T.textMuted}}>{vendor.filter(v=>v.conformance===f.k).length}</span>}
-                  </button>
-                ))}
+        {/* Model header */}
+        <div style={{flexShrink:0,padding:"18px 28px 0",background:T.bgSurface,borderBottom:`1px solid ${T.border}`}}>
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16,marginBottom:12}}>
+            <div style={{minWidth:0,maxWidth:820}}>
+              <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",marginBottom:5}}>
+                <span style={{fontSize:18,fontWeight:700,color:T.text}}>{mdl.name}</span>
+                <SLStatusChip status={mdl.status}/>
+                {mdl.lastPublished
+                  ? <span style={{fontSize:10.5,color:T.textMuted}}>published {mdl.lastPublished}</span>
+                  : <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>never published</span>}
               </div>
+              <div style={{fontSize:12,color:T.textSub,lineHeight:1.55}}>{mdl.desc}</div>
             </div>
-            <div style={{display:"flex",flexDirection:"column",gap:9}}>
-              {vendor.filter(v=>(confFilter==="all"||v.conformance===confFilter) && (!q||v.object.toLowerCase().includes(q.toLowerCase())||v.loc.toLowerCase().includes(q.toLowerCase()))).map(v=>{
-                const m = v.mappedTo ? metrics.find(x=>x.id===v.mappedTo) : null;
-                const e = v.mapKind==="entity" ? entities.find(x=>x.id===v.mappedTo) : null;
-                return (
-                  <div key={v.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",marginBottom:7}}>
-                      <SLSysChip system={v.system}/>
-                      <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{v.object}</span>
-                      <span style={{fontSize:11,color:T.textMuted}}>{v.objType}</span>
-                      <SLConfChip state={v.conformance}/>
-                      <span style={{marginLeft:"auto",fontSize:10.5,color:T.textMuted}}>{v.loc} · seen {v.lastSeen}</span>
+            <div style={{display:"flex",gap:8,flexShrink:0}}>
+              <Btn ghost small icon={Ic.edit(12)} onClick={startEdit}>Edit</Btn>
+              <Btn variant="primary" small icon={Ic.plus(12)} onClick={()=>setBuilderOpen(true)}>Add metric</Btn>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:26,flexWrap:"wrap",marginBottom:14}}>
+            {[["Domain",mdl.domain],["Owner",mdl.owner],["Steward",mdl.steward],
+              ["Entities",String(st.entities)],["Metrics",`${st.metrics} · ${st.certified} certified`],
+              ["Publishes to",(mdl.targets||[]).map(t=>(SL_PLATFORMS[t]||{}).label||t).join(", ")||"—"],
+              ["Tools disagree",String(st.disagree)]].map(([k,v])=>(
+              <div key={k}><div style={{fontSize:10,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{k}</div>
+              <div style={{fontSize:12.5,color:k==="Tools disagree"&&st.disagree?T.amber:T.text,fontWeight:600,marginTop:3}}>{v}</div></div>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:3}}>
+            {TABS.map(t=>(
+              <button key={t.k} onClick={()=>{setTab(t.k);setQ("");}}
+                style={{padding:"9px 14px",background:"transparent",border:"none",borderBottom:`2px solid ${tab===t.k?T.accent:"transparent"}`,color:tab===t.k?T.text:T.textMuted,fontSize:12.5,fontWeight:tab===t.k?700:600,cursor:"pointer"}}>{t.l}</button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:"22px 28px"}}>
+
+          {tab==="overview" && <>
+            <SLSection title="The model"
+              note="Entities are the things you count, and the grain says what one row means. Relationships are how they connect — a metric can only be sliced by a dimension it can reach.">
+              <SLModelCanvas entities={mEnts} rels={mRels} metrics={mMetrics} selected={selEnt} onSelect={setSelEnt}/>
+            </SLSection>
+
+            {selEnt && (()=>{
+              const e = mEnts.find(x=>x.id===selEnt); if(!e) return null;
+              const used = mMetrics.filter(m=>m.entity===e.id);
+              const conn = mRels.filter(r=>r.from===e.id||r.to===e.id);
+              return (
+                <SLSection title={e.name} note={e.desc}>
+                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,padding:"16px 18px"}}>
+                    <div style={{display:"flex",gap:26,flexWrap:"wrap",marginBottom:14}}>
+                      {[["Grain",`one row per ${e.key}`],["Table",e.table],["Domain",e.domain],["Owner",e.owner],["Time columns",e.timeDims.join(", ")],["Metrics",String(used.length)]].map(([k,v])=>(
+                        <div key={k}><div style={{fontSize:10,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{k}</div>
+                        <div style={{fontSize:12.5,color:T.text,fontWeight:600,marginTop:3}}>{v}</div></div>
+                      ))}
                     </div>
-                    <div style={{fontFamily:"ui-monospace,monospace",fontSize:11.5,color:T.textSub,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,padding:"8px 11px",marginBottom:8,overflowX:"auto"}}>{v.expr}</div>
-                    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                      <span style={{fontSize:11.5,color:T.textSub,flex:1,minWidth:240,lineHeight:1.55}}>{v.note}</span>
-                      {m && <button onClick={()=>{setSelId(m.id);setMTab("copies");}} style={{fontSize:11.5,fontWeight:600,color:T.accent,background:"transparent",border:"none",cursor:"pointer"}}>Mapped to {m.name} →</button>}
-                      {e && <span style={{fontSize:11.5,color:T.textMuted}}>Mapped to entity {e.name}</span>}
-                      {!v.mappedTo && <Btn small onClick={()=>setMapFor(v)}>Claim this</Btn>}
+                    <div style={{fontSize:11,color:T.green,marginBottom:14}}>✓ Key evidence — {e.evidence}</div>
+                    <div style={{fontSize:11.5,fontWeight:700,color:T.textSub,marginBottom:7}}>WHERE IT LIVES ON EACH PLATFORM</div>
+                    <div style={{display:"flex",flexDirection:"column",gap:5,marginBottom:conn.length?16:0}}>
+                      {Object.entries(e.bindings||{}).map(([k,v])=>(
+                        <div key={k} style={{display:"flex",gap:12,alignItems:"center",fontSize:11.5}}>
+                          <span style={{minWidth:84,fontWeight:600,color:T.text}}>{(SL_PLATFORMS[k]||{}).label||k}</span>
+                          <span style={{fontFamily:"ui-monospace,monospace",color:v==="—"?T.textMuted:T.textSub}}>{v}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {conn.length>0 && <>
+                      <div style={{fontSize:11.5,fontWeight:700,color:T.textSub,marginBottom:7}}>RELATIONSHIPS</div>
+                      {conn.map(r=>{
+                        const fr=mEnts.find(x=>x.id===r.from), to=mEnts.find(x=>x.id===r.to);
+                        return (
+                          <div key={r.id} style={{padding:"9px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6}}>
+                            <div style={{fontSize:12,fontWeight:600,color:T.text}}>{fr&&fr.name} → {to&&to.name} <span style={{color:T.textMuted,fontWeight:400}}>· {r.fromKey} = {r.toKey} · many to one</span></div>
+                            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{r.note}</div>
+                          </div>
+                        );
+                      })}
+                    </>}
+                    {used.length>0 && <div style={{marginTop:14}}>
+                      <div style={{fontSize:11.5,fontWeight:700,color:T.textSub,marginBottom:7}}>METRICS AT THIS GRAIN</div>
+                      <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                        {used.map(m=><button key={m.id} onClick={()=>{setSelId(m.id);setMTab("definition");}}
+                          style={{fontSize:11.5,fontWeight:600,color:T.text,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,padding:"5px 10px",cursor:"pointer"}}>{m.name}</button>)}
+                      </div>
+                    </div>}
+                  </div>
+                </SLSection>
+              );
+            })()}
+
+            <SLSection title="Where this model can be published"
+              note="Computed from each platform's capability profile against the metrics in this model. Adding a platform is one profile — this table needs no edit.">
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {SL_PLAT_LIST.map(p=>{
+                  const results = mMetrics.map(m=>slCompilability(m, p.k, mRels));
+                  const worst = results.some(r=>r.level==="unsupported") ? "unsupported"
+                              : results.some(r=>r.level==="partial") ? "partial" : "full";
+                  const L = SL_LEVELS[worst];
+                  const on = (mdl.targets||[]).includes(p.k);
+                  const bad = results.filter(r=>r.level!=="full").length;
+                  return (
+                    <div key={p.k} style={{display:"flex",gap:11,alignItems:"center",padding:"11px 14px",background:T.bgSurface,border:`1px solid ${on?T.accent+"44":T.border}`,borderRadius:9,flexWrap:"wrap"}}>
+                      <span style={{fontSize:12,fontWeight:700,color:T.text,minWidth:84}}>{p.label}</span>
+                      {on && <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}44`}}>A target</span>}
+                      <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,background:L.bg,color:L.c,border:`1px solid ${L.c}33`}}>{L.l}</span>
+                      <span style={{fontSize:11,color:T.textMuted,flex:1,minWidth:200}}>
+                        {mMetrics.length===0 ? "No metrics in this model yet."
+                          : bad===0 ? `All ${mMetrics.length} metrics compile cleanly.`
+                          : `${bad} of ${mMetrics.length} metric${mMetrics.length===1?"":"s"} lose something. ${p.note}`}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </SLSection>
+          </>}
+
+          {tab==="metrics" && <>
+            <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
+              <div style={{maxWidth:320,flex:1,minWidth:200}}><Input2 value={q} onChange={e=>setQ(e.target.value)} placeholder="Search metrics…" icon={Ic.search(13)}/></div>
+              <Btn small icon={Ic.plus(12)} onClick={()=>setBuilderOpen(true)}>Add metric</Btn>
+            </div>
+            {mMetrics.length===0 && <div style={{padding:"36px 20px",textAlign:"center",background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:11}}>
+              <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:4}}>No metrics yet</div>
+              <div style={{fontSize:12,color:T.textMuted,marginBottom:14}}>A model is a set of agreed numbers over a shared grain. Add the first one.</div>
+              <Btn variant="primary" small icon={Ic.plus(12)} onClick={()=>setBuilderOpen(true)}>Add metric</Btn>
+            </div>}
+            <div style={{display:"flex",flexDirection:"column",gap:9}}>
+              {mMetrics.filter(m=>!q||m.name.toLowerCase().includes(q.toLowerCase())||(m.definition||"").toLowerCase().includes(q.toLowerCase())).map(m=>{
+                const copies = vendor.filter(v=>v.mappedTo===m.id);
+                const bad = copies.filter(c=>c.conformance!=="conformant").length;
+                return (
+                  <div key={m.id} onClick={()=>{setSelId(m.id);setMTab("definition");}}
+                    style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 17px",cursor:"pointer"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",marginBottom:6}}>
+                      <span style={{fontSize:13.5,fontWeight:700,color:T.text}}>{m.name}</span>
+                      <SLStatusChip status={m.status}/><SLTypeChip type={m.type}/>
+                      {!m.termId && <span style={{fontSize:10.5,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.amberDim,color:T.amber,border:`1px solid ${T.amber}35`}}>no term</span>}
+                      <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>{m.owner}</span>
+                    </div>
+                    <div style={{marginBottom:8}}><SLSentenceView metric={m} size={12.5}/></div>
+                    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                      {copies.length===0
+                        ? <span style={{fontSize:11,color:T.textMuted}}>No tool defines this yet</span>
+                        : <><span style={{fontSize:11,color:T.textMuted}}>{copies.length} tool cop{copies.length===1?"y":"ies"}</span>
+                            {bad>0 && <span style={{fontSize:11,fontWeight:600,color:T.amber}}>· {bad} disagree{bad===1?"s":""}</span>}
+                            {copies.map(c=><SLSysChip key={c.id} system={c.system}/>)}</>}
                     </div>
                   </div>
                 );
               })}
             </div>
-          </SLSection>
-        </>}
+          </>}
+
+          {tab==="alignment" && <>
+            <SLSection title="Where the tools disagree"
+              note="Every number in this model that more than one tool defines, and how many copies are out of step. Read-only — it needs no write access to anything.">
+              {dis.length===0
+                ? <div style={{padding:"26px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>Nothing in this model is defined in more than one tool.</div>
+                : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                    {dis.map((r,i)=>(
+                      <div key={r.metric.id} style={{borderBottom:i<dis.length-1?`1px solid ${T.border}`:"none",display:"flex",alignItems:"center",gap:12,padding:"13px 16px",cursor:"pointer",flexWrap:"wrap"}}
+                        onClick={()=>{setSelId(r.metric.id);setMTab("copies");}}>
+                        <div style={{flex:1,minWidth:180}}>
+                          <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap"}}>
+                            <span style={{fontSize:13,fontWeight:700,color:T.text}}>{r.metric.name}</span>
+                            <SLStatusChip status={r.metric.status}/>
+                          </div>
+                          <div style={{fontSize:11.5,color:T.textMuted,marginTop:3}}>
+                            {r.total} definition{r.total===1?"":"s"} across {new Set(r.defs.map(d=>d.system)).size} tool{new Set(r.defs.map(d=>d.system)).size===1?"":"s"}
+                            {r.disagree>0 && <span style={{color:T.amber,fontWeight:600}}> · {r.disagree} out of step</span>}
+                          </div>
+                        </div>
+                        <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}}>
+                          {r.defs.map(d=><span key={d.id} style={{display:"flex",alignItems:"center",gap:5}}><SLSysChip system={d.system}/><SLConfChip state={d.conformance} small/></span>)}
+                        </div>
+                        <span style={{color:T.textMuted,flexShrink:0}}>{Ic.chevRight(13)}</span>
+                      </div>
+                    ))}
+                  </div>}
+            </SLSection>
+
+            <SLSection title="Every definition behind this model"
+              note="Harvested from the tools EDG already catalogues. Nothing here was written by EDG — this is what is already out there.">
+              <div style={{display:"flex",gap:5,marginBottom:12,flexWrap:"wrap"}}>
+                {[{k:"all",l:"All"},...Object.entries(SL_CONF).map(([k,c])=>({k,l:c.l}))].map(f=>(
+                  <button key={f.k} onClick={()=>setConfFilter(f.k)}
+                    style={{padding:"6px 11px",borderRadius:7,border:`1px solid ${confFilter===f.k?T.accent:T.border}`,background:confFilter===f.k?T.accentDim:T.bgSurface,color:confFilter===f.k?T.text:T.textSub,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+                    {f.l} <span style={{color:T.textMuted}}>{f.k==="all"?mVendor.length:mVendor.filter(v=>v.conformance===f.k).length}</span>
+                  </button>
+                ))}
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:9}}>
+                {mVendor.filter(v=>confFilter==="all"||v.conformance===confFilter).map(v=>{
+                  const m = metrics.find(x=>x.id===v.mappedTo);
+                  return (
+                    <div key={v.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",marginBottom:7}}>
+                        <SLSysChip system={v.system}/>
+                        <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{v.object}</span>
+                        <span style={{fontSize:11,color:T.textMuted}}>{v.objType}</span>
+                        <SLConfChip state={v.conformance}/>
+                        <span style={{marginLeft:"auto",fontSize:10.5,color:T.textMuted}}>{v.loc} · seen {v.lastSeen}</span>
+                      </div>
+                      <div style={{fontFamily:"ui-monospace,monospace",fontSize:11.5,color:T.textSub,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,padding:"8px 11px",marginBottom:8,overflowX:"auto"}}>{v.expr}</div>
+                      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                        <span style={{fontSize:11.5,color:T.textSub,flex:1,minWidth:240,lineHeight:1.55}}>{v.note}</span>
+                        {m && <button onClick={()=>{setSelId(m.id);setMTab("copies");}} style={{fontSize:11.5,fontWeight:600,color:T.accent,background:"transparent",border:"none",cursor:"pointer"}}>Mapped to {m.name} →</button>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </SLSection>
+
+            {unclaimed.length>0 && <SLSection title="Unclaimed definitions"
+              note="Found in a tool, belonging to no metric and owned by nobody. Claim one into this model if it belongs here.">
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {unclaimed.map(v=>(
+                  <div key={v.id} style={{display:"flex",alignItems:"center",gap:11,padding:"12px 15px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,flexWrap:"wrap"}}>
+                    <SLSysChip system={v.system}/>
+                    <div style={{flex:1,minWidth:180}}>
+                      <div style={{fontSize:12.5,fontWeight:700,color:T.text}}>{v.object}</div>
+                      <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{v.loc} · {v.objType}</div>
+                    </div>
+                    <span style={{fontSize:11.5,color:T.textSub,maxWidth:320,lineHeight:1.5}}>{v.note}</span>
+                    <Btn small onClick={()=>setMapFor(v)}>Claim this</Btn>
+                  </div>
+                ))}
+              </div>
+            </SLSection>}
+          </>}
+        </div>
+
+        {/* Edit the model */}
+        {editing && draft && (
+          <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.45)"}} onClick={()=>setEditing(false)}>
+            <div className="slideInRight" onClick={e=>e.stopPropagation()}
+              style={{position:"absolute",top:0,right:0,bottom:0,width:520,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
+              <div style={{flexShrink:0,padding:"16px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>Edit model</div>
+                <button onClick={()=>setEditing(false)} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
+              </div>
+              <div style={{flex:1,overflowY:"auto",padding:"18px 22px"}}>
+                <SLField label="Name"><Input2 value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})}/></SLField>
+                <SLField label="What it is for"><Input2 multiline rows={3} value={draft.desc} onChange={e=>setDraft({...draft,desc:e.target.value})}/></SLField>
+                <div style={{display:"flex",gap:12}}>
+                  <div style={{flex:1}}><SLField label="Domain"><SLSelect value={draft.domain} onChange={e=>setDraft({...draft,domain:e.target.value})} options={["Finance","Commerce","Product","Marketing"]}/></SLField></div>
+                  <div style={{flex:1}}><SLField label="Owner"><SLSelect value={draft.owner} onChange={e=>setDraft({...draft,owner:e.target.value})} options={["sarah.kim","maya.chen","alex.wu","dev.patel","james.oh"]}/></SLField></div>
+                </div>
+                <SLField label="Steward"><SLSelect value={draft.steward} onChange={e=>setDraft({...draft,steward:e.target.value})} options={["sarah.kim","maya.chen","alex.wu","dev.patel","james.oh"]}/></SLField>
+                <SLField label="Entities" hint="What the model is allowed to count and join across.">
+                  <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                    {entities.map(e=>{
+                      const on=(draft.entityIds||[]).includes(e.id);
+                      return <button key={e.id} onClick={()=>setDraft({...draft, entityIds: on?draft.entityIds.filter(x=>x!==e.id):[...(draft.entityIds||[]),e.id]})}
+                        style={{display:"flex",alignItems:"center",gap:9,padding:"8px 11px",background:on?T.bgActive:T.bgElevated,border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:8,cursor:"pointer",textAlign:"left"}}>
+                        <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?T.accent:T.borderLight}`,background:on?T.accent:"transparent",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on?"✓":""}</span>
+                        <span style={{fontSize:12,fontWeight:600,color:T.text}}>{e.name}</span>
+                        <span style={{fontSize:11,color:T.textMuted}}>one row per {e.key}</span>
+                      </button>;
+                    })}
+                  </div>
+                </SLField>
+                <SLField label="Publishes to" hint="Where this model is compiled and sent. Publishing is always a reviewed change set, never a live write.">
+                  <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                    {SL_PLAT_LIST.filter(p=>p.adapter==="ready").map(p=>{
+                      const on=(draft.targets||[]).includes(p.k);
+                      return <button key={p.k} onClick={()=>setDraft({...draft, targets: on?draft.targets.filter(x=>x!==p.k):[...(draft.targets||[]),p.k]})}
+                        style={{display:"flex",alignItems:"center",gap:9,padding:"8px 11px",background:on?T.bgActive:T.bgElevated,border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:8,cursor:"pointer",textAlign:"left"}}>
+                        <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?T.accent:T.borderLight}`,background:on?T.accent:"transparent",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on?"✓":""}</span>
+                        <span style={{fontSize:12,fontWeight:600,color:T.text}}>{p.label}</span>
+                        <span style={{fontSize:11,color:T.textMuted}}>{p.artifact}</span>
+                      </button>;
+                    })}
+                  </div>
+                </SLField>
+              </div>
+              <div style={{flexShrink:0,padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:9,background:T.bg}}>
+                <Btn ghost onClick={()=>setEditing(false)}>Cancel</Btn>
+                <Btn variant="primary" onClick={saveEdit}>Save</Btn>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <Modal open={!!mapFor} onClose={()=>setMapFor(null)} title="Claim this definition" width={560}>
+          {mapFor && <>
+            <div style={{marginBottom:16,padding:"12px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}><SLSysChip system={mapFor.system}/><span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{mapFor.object}</span></div>
+              <div style={{fontFamily:"ui-monospace,monospace",fontSize:11.5,color:T.textSub}}>{mapFor.expr}</div>
+            </div>
+            <div style={{fontSize:12,color:T.textSub,marginBottom:12,lineHeight:1.55}}>
+              Claiming records that this tool definition is <i>meant to be</i> the metric. It does not assert that it agrees — it enters as <b style={{color:T.amber}}>Disagrees</b> until someone compares them.
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:7,maxHeight:300,overflowY:"auto"}}>
+              {mMetrics.map(m=>(
+                <button key={m.id} onClick={()=>mapVendor(mapFor.id, m.id)}
+                  style={{display:"flex",alignItems:"center",gap:9,padding:"10px 13px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,cursor:"pointer",textAlign:"left"}}>
+                  <span style={{fontSize:12.5,fontWeight:600,color:T.text,flex:1}}>{m.name}</span>
+                  <SLStatusChip status={m.status}/>
+                </button>
+              ))}
+            </div>
+          </>}
+        </Modal>
+
+        <SLBuilderDrawer open={builderOpen} onClose={()=>setBuilderOpen(false)} onSave={saveMetric} metrics={metrics} onToast={onToast}/>
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // MODEL LIST — the front door
+  // ─────────────────────────────────────────────────────────────
+  return (
+    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div style={{flexShrink:0,padding:"18px 28px 16px",background:T.bgSurface,borderBottom:`1px solid ${T.border}`,
+        display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16,flexWrap:"wrap"}}>
+        <div style={{maxWidth:760}}>
+          <div style={{fontSize:17,fontWeight:700,color:T.text}}>Semantic Layer</div>
+          <div style={{fontSize:12,color:T.textMuted,marginTop:3,lineHeight:1.55}}>
+            One definition of every number, in a format that outlives the tools. EDG holds the definition; Snowflake, Databricks, dbt, Power BI and Tableau execute it.
+          </div>
+        </div>
+        <Btn variant="primary" icon={Ic.plus(13)} onClick={()=>setNewMdlOpen(true)}>New model</Btn>
       </div>
 
-      {/* Map an unmanaged vendor definition to a metric */}
-      <Modal open={!!mapFor} onClose={()=>setMapFor(null)} title="Map to a metric" width={560}>
-        {mapFor && <>
-          <div style={{marginBottom:16,padding:"12px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}><SLSysChip system={mapFor.system}/><span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{mapFor.object}</span></div>
-            <div style={{fontFamily:"ui-monospace,monospace",fontSize:11.5,color:T.textSub}}>{mapFor.expr}</div>
-          </div>
-          <div style={{fontSize:12,color:T.textSub,marginBottom:12,lineHeight:1.55}}>
-            Mapping records that this vendor definition is <i>meant to be</i> the metric. It does not assert that it agrees — it enters as <b style={{color:T.amber}}>drifted</b> until someone compares them.
-          </div>
-          <div style={{display:"flex",flexDirection:"column",gap:7,maxHeight:300,overflowY:"auto"}}>
-            {metrics.map(m=>(
-              <button key={m.id} onClick={()=>mapVendor(mapFor.id, m.id)}
-                style={{display:"flex",alignItems:"center",gap:9,padding:"10px 13px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,cursor:"pointer",textAlign:"left"}}>
-                <span style={{fontSize:12.5,fontWeight:600,color:T.text,flex:1}}>{m.name}</span>
-                <SLStatusChip status={m.status}/>
-              </button>
-            ))}
-          </div>
-        </>}
-      </Modal>
+      <div style={{flex:1,overflowY:"auto",padding:"22px 28px"}}>
+        <div style={{display:"flex",gap:10,marginBottom:16,alignItems:"center",flexWrap:"wrap"}}>
+          <div style={{maxWidth:320,flex:1,minWidth:200}}><Input2 value={q} onChange={e=>setQ(e.target.value)} placeholder="Search models…" icon={Ic.search(13)}/></div>
+          <span style={{fontSize:11.5,color:T.textMuted}}>{models.length} model{models.length===1?"":"s"}</span>
+        </div>
 
-      <SLBuilderDrawer open={builderOpen} onClose={()=>setBuilderOpen(false)} onSave={saveMetric} metrics={metrics} onToast={onToast}/>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {models.filter(m=>!q||m.name.toLowerCase().includes(q.toLowerCase())||(m.desc||"").toLowerCase().includes(q.toLowerCase())).map(m=>{
+            const st = statsFor(m);
+            return (
+              <div key={m.id} onClick={()=>{setSelMdl(m.id);setTab("overview");setSelEnt(null);}}
+                style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,padding:"16px 18px",cursor:"pointer"}}>
+                <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",marginBottom:6}}>
+                  <span style={{fontSize:14,fontWeight:700,color:T.text}}>{m.name}</span>
+                  <SLStatusChip status={m.status}/>
+                  {!m.lastPublished && <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>never published</span>}
+                  {st.disagree>0 && <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,background:T.amberDim,color:T.amber,border:`1px solid ${T.amber}35`}}>{st.disagree} tool{st.disagree===1?" disagrees":"s disagree"}</span>}
+                  <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>{m.domain} · {m.owner}</span>
+                </div>
+                <div style={{fontSize:12,color:T.textSub,lineHeight:1.55,marginBottom:11,maxWidth:820}}>{m.desc}</div>
+                <div style={{display:"flex",gap:22,flexWrap:"wrap",alignItems:"center"}}>
+                  {[["Entities",st.entities],["Metrics",st.metrics],["Certified",st.certified],["In your tools",st.copies]].map(([k,v])=>(
+                    <div key={k} style={{display:"flex",alignItems:"baseline",gap:5}}>
+                      <span style={{fontSize:14,fontWeight:700,color:T.text}}>{v}</span>
+                      <span style={{fontSize:11,color:T.textMuted}}>{k}</span>
+                    </div>
+                  ))}
+                  <div style={{marginLeft:"auto",display:"flex",gap:5,flexWrap:"wrap"}}>
+                    {(m.targets||[]).map(t=><SLSysChip key={t} system={t}/>)}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <SLNewModelDrawer open={newMdlOpen} onClose={()=>setNewMdlOpen(false)} onCreate={createModel} entities={entities} onToast={onToast}/>
     </div>
   );
 };
